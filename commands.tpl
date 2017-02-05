@@ -6,12 +6,16 @@ import struct
 
 def {{command.name}}({{ command.input_params|map('attr', 'field')|join(', ') }}):
     """
-    {% for param in input_params %}
-      {{ param.field }} :
+{{ command.description }}
+
+    Parameters
+    ----------
+    {% for param in command.input_params %}
+      {{ param.field }} : integer
           {{ param.description }}
     {% endfor %}
     """
-    struct_args = ({{ command.struct_args|map('repr')|join(', ') }})
+    struct_args = ({{ command.struct_args|join(', ') }})
     return struct.pack('HHHHII', *struct_args)
 
 {% endfor %}
