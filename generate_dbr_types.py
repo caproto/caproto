@@ -31,7 +31,7 @@ for suffix in ['short', 'int', 'float', 'enum', 'long']:
     name = 'dbl_sts_%s' % suffix
     dbr_types[name] = OrderedDict([('status', 'dbr_short'),
                                    ('severity', 'dbr_short'),
-                                   ('value', TYPE_MAP['dbr_%s' % suffix])])
+                                   ('value', 'dbr_%s' % suffix)])
 # Special-case char and double to include RISC_pad.
 dbr_types['dbr_sts_char'] = OrderedDict([('status', 'dbr_short'),
                                          ('severity', 'dbr_short'),

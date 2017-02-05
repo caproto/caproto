@@ -6,6 +6,6 @@ import ctypes
 {% for name, fields in dbr_types.items() %}
 class {{name}}(ctypes.BigEndianStructure):
     _fields_ = [{% for field_name, field_type in fields.items() %}
-        ('{{ field_name }}', {{ field_type }}), {% endfor %}
+        ('{{ field_name }}', {{ field_type }}),{% endfor %}
     ]
 {% endfor %}

@@ -6,86 +6,86 @@ import ctypes
 
 class dbr_int(ctypes.BigEndianStructure):
     _fields_ = [
-        ('value', ctypes.c_ushort), 
+        ('value', ctypes.c_ushort),
     ]
 
 class dbr_float(ctypes.BigEndianStructure):
     _fields_ = [
-        ('value', ctypes.c_float), 
+        ('value', ctypes.c_float),
     ]
 
 class dbr_double(ctypes.BigEndianStructure):
     _fields_ = [
-        ('value', ctypes.c_double), 
+        ('value', ctypes.c_double),
     ]
 
 class dbr_short(ctypes.BigEndianStructure):
     _fields_ = [
-        ('value', ctypes.c_ushort), 
+        ('value', ctypes.c_ushort),
     ]
 
 class dbr_long(ctypes.BigEndianStructure):
     _fields_ = [
-        ('value', ctypes.c_ulong), 
+        ('value', ctypes.c_ulong),
     ]
 
 class dbr_char(ctypes.BigEndianStructure):
     _fields_ = [
-        ('value', ctypes.c_char), 
+        ('value', ctypes.c_char),
     ]
 
 class dbr_enum(ctypes.BigEndianStructure):
     _fields_ = [
-        ('value', ctypes.c_ushort), 
+        ('value', ctypes.c_ushort),
     ]
 
 class dbl_sts_short(ctypes.BigEndianStructure):
     _fields_ = [
-        ('status', dbr_short), 
-        ('severity', dbr_short), 
-        ('value', ctypes.c_ushort), 
+        ('status', dbr_short),
+        ('severity', dbr_short),
+        ('value', dbr_short),
     ]
 
 class dbl_sts_int(ctypes.BigEndianStructure):
     _fields_ = [
-        ('status', dbr_short), 
-        ('severity', dbr_short), 
-        ('value', ctypes.c_ushort), 
+        ('status', dbr_short),
+        ('severity', dbr_short),
+        ('value', dbr_int),
     ]
 
 class dbl_sts_float(ctypes.BigEndianStructure):
     _fields_ = [
-        ('status', dbr_short), 
-        ('severity', dbr_short), 
-        ('value', ctypes.c_float), 
+        ('status', dbr_short),
+        ('severity', dbr_short),
+        ('value', dbr_float),
     ]
 
 class dbl_sts_enum(ctypes.BigEndianStructure):
     _fields_ = [
-        ('status', dbr_short), 
-        ('severity', dbr_short), 
-        ('value', ctypes.c_ushort), 
+        ('status', dbr_short),
+        ('severity', dbr_short),
+        ('value', dbr_enum),
     ]
 
 class dbl_sts_long(ctypes.BigEndianStructure):
     _fields_ = [
-        ('status', dbr_short), 
-        ('severity', dbr_short), 
-        ('value', ctypes.c_ulong), 
+        ('status', dbr_short),
+        ('severity', dbr_short),
+        ('value', dbr_long),
     ]
 
 class dbr_sts_char(ctypes.BigEndianStructure):
     _fields_ = [
-        ('status', dbr_short), 
-        ('severity', dbr_short), 
-        ('RISC_pad', dbr_char), 
-        ('value', dbr_char), 
+        ('status', dbr_short),
+        ('severity', dbr_short),
+        ('RISC_pad', dbr_char),
+        ('value', dbr_char),
     ]
 
 class dbr_sts_double(ctypes.BigEndianStructure):
     _fields_ = [
-        ('status', dbr_short), 
-        ('severity', dbr_short), 
-        ('RISC_pad', dbr_long), 
-        ('value', dbr_long), 
+        ('status', dbr_short),
+        ('severity', dbr_short),
+        ('RISC_pad', dbr_long),
+        ('value', dbr_long),
     ]
