@@ -34,6 +34,19 @@ def is_reserved(param):
     return param.field == 'reserved' or param.description == 'Must be 0.' 
 
 
+def handle_special_cases(command):
+    """
+    Called by parse_commands.
+
+    This is here to separate the special-case manging from the rest of the
+    code.
+    """
+    # These require the 'cid' param to be given twice for some reason.
+    if command.name in ('CA_PROTO_SEARCH_REQ', 'CA_PROTO_NOT_FOUND_RESP'):
+        command = command._replace(input_params=command.input_params[:-1])
+    return command
+
+
 def parse_commands(h2):
     """
     Parse HTML describing CA request/response spec into namedtuples.
@@ -93,6 +106,7 @@ def parse_commands(h2):
                        for p in params]
         command = Command('{}_{}'.format(name, suffix),
                           description, input_params, struct_args)
+        command = handle_special_cases(command)
         commands.append(command)
     return commands
 

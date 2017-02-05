@@ -60,7 +60,7 @@ def CA_PROTO_VERSION_RESP(version):
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_SEARCH_REQ(payload_size, reply, version, cid, cid):
+def CA_PROTO_SEARCH_REQ(payload_size, reply, version, cid):
     """
     Searches for a given channel name.
     Sent over UDP or TCP.
@@ -78,9 +78,6 @@ def CA_PROTO_SEARCH_REQ(payload_size, reply, version, cid, cid):
     
       version : integer
           Client minor protocol version number.
-    
-      cid : integer
-          Client allocated CID.
     
       cid : integer
           Client allocated CID.
@@ -118,7 +115,7 @@ def CA_PROTO_SEARCH_RESP(payload_size, data_type, sid, cid):
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_NOT_FOUND_RESP(reply_flag, version, cid, cid):
+def CA_PROTO_NOT_FOUND_RESP(reply_flag, version, cid):
     """
     Indicates that a channel with requested name does not exist.
     Sent in response to CA_PROTO_SEARCH
@@ -134,9 +131,6 @@ def CA_PROTO_NOT_FOUND_RESP(reply_flag, version, cid, cid):
     
       version : integer
           Client minor protocol version number.
-    
-      cid : integer
-          CID of the channel.
     
       cid : integer
           CID of the channel.
