@@ -30,28 +30,64 @@ def validate(params):
         raise ValueError("table should have six rows")
 
 
-def parse_command(h2):
+def is_reserved(param):
+    return param.field == 'reserved' or param.description == 'Must be 0.' 
+
+
+def parse_commands(h2):
     """
-    Parse HTML describing a CA command into a namedtuple.
+    Parse HTML describing CA request/response spec into namedtuples.
     """
+    # Grab the description under the h2 heading for use in the docstring.
     raw_desc = h2.find_next(string='Description: ').parent.parent.text
     description = '\n'.join(raw_desc.replace('\t\t\t', '    ').split('\n')[1:])
-    table = h2.find_next('table')
-    rows = table.find_all('tr')
-    params = []
-    for row in rows[1:]:  # exclude header row
-        field_td, val_td, desc_td = row.find_all('td')
-        field = field_td.find('tt').text.replace(' ', '_').lower()
-        val = val_td.find('tt').text
-        desc = desc_td.text
-        params.append(Param(field, val, desc))
-    validate(params)
-    name = COMMAND_NAME_PATTERN.match(params[0].description).group(1)
-    input_params = [p for p in params[1:] if p.field != 'reserved']
-    struct_args = [p.field
-                   if p in input_params else int(p.value)
-                   for p in params]
-    return Command(name, description, input_params, struct_args)
+
+    # Select the <table> tags between this <h2> and the next </h2>.
+    next_h2 = h2.find_next('h2')
+    tables = h2.find_all_next('table')[:-len(next_h2.find_all_next('table'))]
+
+    # Figure out which tables are associated with 'Request' vs 'Response'.
+    # Ignore tables about 'Compatibility' with various versions of EPICS.
+    request_spec = []
+    response_spec = []
+    for table in tables:
+        table_title = table.previous_sibling.find('span').text
+        if table_title == 'Compatibility':
+            continue
+        h3_text = table.find_previous('h3').text
+        if 'Request' in h3_text:
+            request_spec.append(table)
+        elif 'Response' in h3_text:
+            response_spec.append(table)
+        else:
+            raise ValueError("expected 'Request' or 'Response' in h3text")
+
+    # Prase the tables under the headings 'Request' and 'Response' into
+    # namedtuples. Some have only one of these headings, or neither, so this
+    # may result in a list of 0, 1, or 2 commands.
+    commands = []
+    for suffix, tables in (('REQ', request_spec), ('RESP', response_spec)):
+        if not tables:
+            continue
+        table = tables[0]  # Ignore Payload table for now.
+        rows = table.find_all('tr')
+        params = []
+        for row in rows[1:]:  # exclude header row
+            field_td, val_td, desc_td = row.find_all('td')
+            field = field_td.find('tt').text.replace(' ', '_').lower()
+            val = val_td.find('tt').text
+            desc = desc_td.text
+            params.append(Param(field, val, desc))
+        validate(params)
+        name = COMMAND_NAME_PATTERN.match(params[0].description).group(1)
+        input_params = [p for p in params[1:] if not is_reserved(p)]
+        struct_args = [p.field
+                       if p in input_params else int(p.value)
+                       for p in params]
+        command = Command('{}_{}'.format(name, suffix),
+                          description, input_params, struct_args)
+        commands.append(command)
+    return commands
 
 
 JINJA_ENV = Environment(loader=FileSystemLoader(getpath('.')))
@@ -65,7 +101,10 @@ def parse_section(h1):
     """
     next_h1 = h1.find_next('h1')
     h2s = h1.find_all_next('h2')[:-len(next_h1.find_all_next('h2'))]
-    return [parse_command(h2) for h2 in h2s]
+    commands = []
+    for h2 in h2s:
+        commands.extend(parse_commands(h2))
+    return commands
 
 
 def write_commands(path=None):
@@ -75,10 +114,10 @@ def write_commands(path=None):
     with open('CAproto.html') as f:
         soup = BeautifulSoup(f.read(), 'html.parser')
     commands = []
-    for id in ('secCommandsShared',
-               'secCommandsUDP',
-               'secCommandsTCP'):
-        h1 = soup.find(id=id)
+    for _id in ('secCommandsShared',
+                'secCommandsUDP',
+                'secCommandsTCP'):
+        h1 = soup.find(id=_id)
         commands.extend(parse_section(h1))
     if path is None:
         path = getpath('.')
