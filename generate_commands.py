@@ -112,7 +112,6 @@ def parse_commands(h2):
 
 
 JINJA_ENV = Environment(loader=FileSystemLoader(getpath('.')))
-# JINJA_ENV.filters['repr'] = repr
 template = JINJA_ENV.get_template('commands.tpl')
 
 
