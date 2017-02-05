@@ -68,9 +68,16 @@ def parse_commands(h2):
     commands = []
     for suffix, tables in (('REQ', request_spec), ('RESP', response_spec)):
         if not tables:
+            # There is no spec for this.
             continue
-        table = tables[0]  # Ignore Payload table for now.
-        rows = table.find_all('tr')
+        if len(tables) == 1:
+            # There is a header spec but no payload for this command.
+            header_table, = tables
+        elif len(tables) == 2:
+            header_table, payload_table = tables
+        else:
+            raise ValueError("expected at most two tables per <h3>")
+        rows = header_table.find_all('tr')
         params = []
         for row in rows[1:]:  # exclude header row
             field_td, val_td, desc_td = row.find_all('td')
