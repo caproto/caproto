@@ -1,0 +1,2538 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html xml:lang="en"><head><title>Channel Access</title><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"></meta><meta content="CosyDoc 2.1.8, Apache Software Foundation 1" name="generator"></meta><style type="text/css">
+/* ==========================[ General Styles ]========================== */
+body {
+	font-family: verdana, tahoma, arial, helvetica, sans-serif;
+	font-size: small;
+	text-align: left;
+	
+	background-repeat: repeat-y;
+	background-position: center;
+	background-color: white;
+	color: black;
+	margin-left: 5%;
+	margin-right: 5%;
+}
+
+img {
+	border-width: 0px;
+}
+
+table {
+	margin-left: 1%;
+	width: 98%;
+}
+
+/* Cells that carry content (notices, warnings, ...). */
+td.content {
+	width: 100%;
+}
+
+/* ==========================[ Heading Styles ]========================== */
+h1, h2, h3, h4, h5, h6,
+h1 a:visited, h2 a:visited, h3 a:visited,
+h4 a:visited, h5 a:visited, h6 a:visited,
+h1 a, h2 a, h3 a,
+h4 a, h5 a, h6 a {
+	color: black;
+	margin-top: 2em;
+	margin-bottom: 1em;
+	text-decoration: none;
+}
+
+h1 {
+	color: #003c8c;
+	font-size: x-large;
+	font-weight: bold;
+	text-align: center;
+	border-bottom: #888 2px solid;
+	padding-bottom: 10px;
+}
+
+h2 {
+	padding-bottom: 5px;
+	font-size: medium;
+	font-weight: bold;
+	border-bottom: #bbb 2px solid;
+}
+
+h3 {
+	font-size: medium;
+	font-weight: normal;
+	font-style: italic;
+}
+
+h4 {
+	font-size: small;
+	font-weight: bold;
+}
+
+h5 {
+	font-size: small;
+	font-weight: bolder;
+}
+
+h6 {
+	font-size: small;
+	font-weight: bold;
+	font-style: italic;
+}
+
+h1 a, h2 a, h3 a,
+h4 a, h5 a, h6 a {
+	color: #003c8c;
+}
+
+h1.toc, h2.toc, h3.toc, h4.toc, h5.toc, h6.toc {
+	text-align: left;
+	font-size: small;
+	color: #003c8c;
+	margin-right: 0%;
+	margin-bottom: 0%;
+}
+
+h1.toc {
+	margin-left: 3ex;
+	margin-top: 6px;
+	border-bottom: black 1px solid;
+	padding-bottom: 1px;
+	font-weight: bold;
+}
+
+h2.toc {
+	margin-left: 6ex;
+	margin-top: 2px;
+	border-bottom: #bbb 1px solid;
+	font-size: x-small;
+}
+
+h3.toc {
+	margin-left: 9ex;
+	margin-top: 2px;
+	font-size: x-small;
+	font-weight: bold;
+	font-style: normal;
+}
+
+h4.toc {
+	margin-left: 15ex;
+	margin-top: 2px;
+	font-size: xx-small;
+	font-weight: normal;
+}
+
+h5.toc {
+	margin-left: 18ex;
+	margin-top: 1px;
+	font-size: xx-small;
+	font-weight: normal;
+}
+
+h6.toc {
+	margin-left: 21ex;
+	margin-top: 1px;
+	font-size: xx-small;
+	font-weight: normal;
+}
+
+/* ============================[ Paragraphs ]============================ */
+p {
+	margin-bottom: 0.5em;
+	margin-top: 0.5em;
+	text-align: justify;
+}
+
+
+/* ==============================[ Notice ]============================== */
+table.notice,
+table.warning {
+	margin-top: 0.5em;
+	margin-bottom: 0.5em;
+}
+
+table tr td.icon {
+	text-align: center;
+	vertical-align: middle;
+	width: 20px;
+}
+
+table.warning tr td {
+	border-left-color: red;
+	border-top-color: red;
+}
+
+table.warning {
+	border-right-color: red;
+	border-bottom-color: red;
+}
+
+table.notice tr td,
+table.warning tr td {
+	padding-top: 0.5ex;
+	padding-bottom: 0.5ex;
+	padding-left: 1ex;
+	padding-right: 1ex;
+	margin: 0;
+	vertical-align: middle;
+}
+
+p.figure {
+	text-align: center;
+	margin-top: 2ex;
+}
+
+p.caption {
+	text-align: center;
+	margin-bottom: 1.5ex;
+}
+
+p.comment {
+	color: red;
+	margin-left: 10%;
+	margin-right: 10%;
+}
+
+p.warning {
+	background-color: #E0E0E0;
+	color: black;
+}
+
+p.warning tr td {
+	border-width: 0.02cm;
+	border-color: red;
+}
+
+p.notice {
+	background-color: #F0F0F0;
+	color: black;
+}
+
+p.notice tr td {
+	border-width: 0.02cm;
+	border-color: black;
+}
+
+/* ===========================[ Table Styles ]=========================== */
+table {
+	border-left: 1px solid gray;
+	border-top: 1px solid gray;
+	border-bottom: 1px solid black;
+	border-right: 1px solid black;
+}
+
+table.code,
+table.table {
+	margin-top: 1.5ex;
+	margin-bottom: 1.5ex;
+}
+
+th {
+	border-left: 1px solid black;
+	border-top: 1px solid black;
+	border-bottom: 1px solid gray;
+	border-right: 1px solid gray;
+	text-align: left;
+	color: black;
+	background-color: #D8D8E8;
+	padding-left: 0.5ex;
+	padding-right: 0.5ex;
+	padding-top: 0.25ex;
+	padding-bottom: 0.25ex;
+}
+
+td {
+	border-left: 1px solid black;
+	border-top: 1px solid black;
+	border-bottom: 1px solid gray;
+	border-right: 1px solid gray;
+	padding-left: 0.5ex;
+	padding-right: 0.5ex;
+	padding-top: 0.25ex;
+	padding-bottom: 0.25ex;
+}
+
+th.caption {
+	text-align: center;
+	font-weight: normal;
+	background-color: #CACAD4; 
+}
+
+span.progress-bar-done {
+    background-color: #A52A2A;
+	border: 1px solid black;
+}
+
+span.progress-bar-remaining {
+	border: 1px solid black;
+	border-left: none;
+}
+
+/* ---------------------------[ Frame Table ]---------------------------- */
+table#frame {
+	border: none;
+	margin: 0;
+	padding: 0;
+}
+
+td#checkpoints {
+	border: none;
+}
+
+td#history {
+	border: none;
+}
+
+td#cosyline {
+	padding: 0;
+	border: none;
+	text-align: right;
+	background-image: url('http://epics.cosylab.com/images/CosyLine.png');
+}
+
+td#content {
+	border-top: none;
+	border-right: none;
+	border-bottom: none;
+	border-left: none;
+	color: black;
+	padding-left: 0.5ex;
+	padding-right: 0.5ex;
+	padding-top: 0ex;
+}
+
+/* -------------------------------[ Menu ]------------------------------- */
+td#menu {
+	vertical-align: top;
+	color: black;
+	background-color: #E0E0E0;
+	border-top: none;
+	border-left: none;
+	border-bottom: none;
+	border-right: 1px solid gray;
+	padding-left: 0ex;
+	padding-right: 0ex;
+	width: 200px;
+}
+
+p#menu-title {
+	background-color: #CE2B25;
+	color: white;
+	font-weight: bold;
+}
+
+p.menu-group {
+	background-color: #CE2B25;
+	color: white;
+	padding-top: 1ex;
+	font-weight: bold;
+}
+
+td#menu p {
+	margin-top: 0;
+	margin-bottom: 0;
+	margin-left: 0;
+	border-bottom: 1px solid gray;
+}
+
+td#menu p a {
+	text-decoration: none;
+}
+
+td#menu p a:hover {
+	color: black;
+	display: block;
+}
+
+td#menu ul {
+	list-style-type: none;
+	padding: 0;
+}
+
+td#menu ul li ul {
+	list-style-type: none;
+	padding-left: 2ex;
+}
+
+td#menu li {
+	font-weight: normal;
+}
+
+td#menu li.group {
+	font-weight: bold;
+	margin-top: 1em;
+}
+
+td#menu li.group ul {
+	padding: 0;
+}
+
+/* ----------------------------[ Checkpoints ]--------------------------- */
+td.cpCheckbox {
+	width: 3ex;
+	text-align: center;
+}
+
+/* -----------------------[ Document Header Table ]---------------------- */
+table.title,
+table.header {
+	border: none;
+}
+
+table.title tr th,
+table.title tr td {
+	background-color: transparent;
+	border: none;
+}
+
+table.title tr th {
+	width: 100%;
+}
+
+table.header tr th,
+table.header tr td {
+	background-color: transparent;
+	text-align: left;
+	font-weight: normal;
+	border-right: none;
+	border-left: none;
+	border-bottom: none;
+	border-top: #bbb 1px solid;
+}
+
+table.header tr td {
+	font-style: italic;
+}
+
+p#title {
+	text-align: center;
+	font-size: xx-large;
+	font-family: palatino linotype, garamond, serif;
+	padding-bottom: 20px;
+	border-bottom: #ce2b25 2px solid;
+}
+
+p#subject {
+	text-align: center;
+	font-size: x-large;
+	font-family: amyriad web, verdana, tahoma, arial, helvetica, sans-serif;
+	padding-bottom: 50px;
+}
+
+table.header tr th#copyright {
+	text-align: left;
+	font-size: x-small;
+	border-top: #bbb 1px solid;
+	padding-top: 10px;
+}
+
+/* ----------------------[ Document History Table ]---------------------- */
+tr.reviewAccepted,
+.statusGreen {
+	background: #D0FFD0;
+	color: black;
+}
+
+tr.reviewRejected,
+.statusRed {
+	background: #FFD0D0;
+	color: black;
+}
+
+.statusUnknown {
+	background: #F0F080;
+	color: black;
+}
+
+table.document-history {
+}
+
+table.document-history tr.retire {
+	background: lightgray;
+}
+
+table.document-history tr td.revision,
+table.document-history tr td.date,
+table.document-history tr td.author {
+	text-align: center;
+	vertical-align: middle;
+	padding-left: 0.5ex;
+	padding-right: 0.5ex;
+}
+
+table.document-history tr td.section-modification-00,
+table.document-history tr td.modification-00 {
+	border-top: 1px dashed black;
+	border-bottom: none;
+	vertical-align: middle;
+}
+
+table.document-history tr td.section-modification-01,
+table.document-history tr td.modification-01 {
+	border-top: 1px dashed black;
+	vertical-align: middle;
+}
+
+table.document-history tr td.section-modification-10,
+table.document-history tr td.modification-10 {
+	border-bottom: none;
+	vertical-align: middle;
+}
+
+table.document-history tr td.section-modification-11,
+table.document-history tr td.modification-11 {
+	vertical-align: middle;
+}
+
+table.document-history tr td.section-modification-00,
+table.document-history tr td.section-modification-01,
+table.document-history tr td.section-modification-10,
+table.document-history tr td.section-modification-11 {
+	text-align: center;
+}
+
+td.author {
+	width: 20ex;
+}
+
+/* ===============================[ Code ]=============================== */
+table.code tr td {
+	background: #F0F0F0;
+	color: black;
+	padding: 0;
+}
+
+table.code tr th {
+	text-align: center;
+	font-weight: normal;
+}
+
+table.code tr td pre {
+	overflow: auto;
+	margin-top: 0.5ex;
+	margin-bottom: 0.5ex;
+	margin-left: 1ex;
+	margin-right: 1ex;
+}
+
+/* ===============================[ Lists ]============================== */
+ol, ul {
+}
+
+li {
+	text-align: justify;
+}
+
+/* =============================[ Hyperlinks ]=========================== */
+h1 a:hover, h2 a:hover, h3 a:hover,
+h4 a:hover, h5 a:hover, h6 a:hover,
+a:hover {
+	color: black;
+	text-decoration: underline;
+}
+
+a.reference {
+	vertical-align: text-top;
+	font-size: x-small;
+}
+
+.equation tr td {
+	border-width: 0;
+}
+
+span.menu {
+	color: white;
+	background: #787996;
+	font-family: tahoma, sans-serif;
+	font-size: x-small;
+}
+
+span.gui {
+	border-left-width: 0.025cm;
+	border-top-width: 0.025cm;
+	border-right-width: 0.04cm;
+	border-bottom-width: 0.04cm;
+	border-style: solid;
+	font-family: tahoma, sans-serif;
+	font-size: x-small;
+}
+
+span.keystroke {
+	border-style: groove;
+	border-color: #E0E0E0;
+	font-family: tahoma, sans-serif;
+	font-size: x-small;
+}
+
+span.emphasis {
+	font-style: italic;
+}
+
+span.bold {
+	font-weight: bold;
+}
+
+span.underline {
+	text-decoration: underline;
+}
+
+tt.filename {
+	font-family: tahoma, sans-serif;
+	font-weight: bold;
+}
+
+tt.availability {
+	font-family: tahoma, sans-serif;
+	font-weight: normal;
+}
+
+tt.keyword {
+	font-weight: bold;
+}
+
+tt.command {
+	font-family: tahoma, sans-serif;
+	font-weight: bold;
+}
+
+p.description {
+	text-align: center;
+	margin-top: 0cm;
+}
+
+td.center {
+	text-align: center;
+	vertical-align: middle;
+}
+
+/* ===============================[ Printer ]============================ */
+
+@media print {
+	body {
+		font-family: serif;
+	}
+}
+</style><script type="text/javascript">
+/*
+ * A workaround for Microsoft IE7 bug where getAttribute doesn't work as it should.
+ */
+var getAttribute;
+if(navigator.appName == "Microsoft Internet Explorer") {
+	getAttribute = getAttributeIE7;
+} else {
+	getAttribute = getAttributeOK;
+}
+
+// standards compliant browser -- just use provided getAttribute
+function getAttributeOK(node, attr) {
+	return node.getAttribute(attr);
+}
+
+// IE7 -- iterate through all the attributes and get the one requested
+function getAttributeIE7(node, attr) {
+	for(j = 0; j < node.attributes.length; ++j) {
+		var a = node.attributes[j];
+		if(a.nodeName == attr) {
+			return a.nodeValue;
+		}
+	}
+	return null;
+}
+
+/*
+ * Scripts for sending e-mail.
+ */
+function mailTo(part2, part1) {
+	window.location.href = "mailto:" + part1 + "@" + part2;
+}
+
+/*
+ * 'Rotate': support for rotatable portions of HTML.
+ */
+
+// a hash table that stores an array of texts for every rotatable portion
+var rotates = new Array();
+
+// initialize rotatable portions
+function rotateInit() {
+	var elems = document.getElementsByTagName("div");
+	var i;
+	for(i = 0; i < elems.length; ++i) {
+		var elem = elems[i];
+		// portions are defined in <div class="rotate"> tags
+		if(getAttribute(elem, "class") != "rotate") {
+			continue;
+		}
+		
+		var htmls = new Array();
+		rotates[elem.id] = htmls;
+		var j = 0;
+		// texts are all child nodes
+		while(true) {
+			var child = elem.childNodes[j];
+			if(child == null) {
+				break;
+			}
+			if(child.nodeType == 1 /* element or tag */) {
+				htmls.push(child.innerHTML);
+			}
+			elem.removeChild(child);
+		}
+		
+		// set the click handler
+		elem.onclick = onRotateClick;
+		
+		// set the default text for the rotatable portion
+		elem.innerHTML = htmls[0];
+	}
+}
+
+// click handler for a rotatable portion
+function onRotateClick(evt) {
+	var tmp;
+	if(evt == null) {
+		// IE 7
+		tmp = event.srcElement;
+	} else {
+		//everybody else
+		tmp = evt.target;
+	}
+	var elem2 = null;
+	while(tmp != null) {
+		// don't treat hyperlink clicks
+		if(tmp.nodeName == "A") {
+			return;
+		}
+		// find the <div class="rotate"> parent
+		if((tmp.nodeName == "DIV") && (getAttribute(tmp, "class") == "rotate")) {
+			elem2 = tmp;
+			break;
+		}
+		tmp = tmp.parentNode;
+	}
+	if(elem2 == null) {
+		return;
+	}
+	
+	// get the texts for the rotate
+	var htmls2 = rotates[elem2.id];
+	
+	// set the next text in the list
+	var x = htmls2.shift();
+	htmls2.push(x);
+	elem2.innerHTML = htmls2[0];
+}</script></head>
+<body onload="javascript:rotateInit();">
+<table id="frame" cellspacing="0"><tr><td id="content">
+<table cellspacing="0" class="title"><tr>
+<td><img src="/epics/icons/logo101.gif" alt="EPICS"></img></td>
+<th><p id="title">Channel Access</p><p id="subject">Protocol Specification</p></th></tr></table>
+<div class="rotate" id="rotHeader">
+    <div>
+        [ Click here to show document header. ]</div>
+    <div>
+        <table cellspacing="0" class="header">
+            <tr><th>Project:</th><td>JCA-Common</td></tr>
+            <tr><th>Document Owner:</th><td><a href="javascript:mailTo(&quot;cosylab.com&quot;,&quot;lists-ca-spec&quot;);">Channel Access Specification Mailing List</a></td></tr>
+            <tr><th>Status:</th><td>Released</td></tr>
+            <tr><th>Availability:</th><td><tt class="availability">cosyjava:/JCA-Common/Documentation/CAproto.html</tt></td></tr>
+            <tr><th>Creation:</th><td>2003-12-12 (<a href="javascript:mailTo(&quot;cosylab.com&quot;,&quot;klemen.zagar&quot;);">Klemen Žagar</a>)</td></tr>
+            <tr><th>Last Modification:</th><td>2008-02-07 (<a href="javascript:mailTo(&quot;cosylab.com&quot;,&quot;matej.sekoranja&quot;);">Matej Šekoranja</a>)</td></tr>
+            <tr><th id="copyright" colspan="2">Copyright © 2003-2004 Cosylab d.o.o.<br></br></th></tr>
+            </table>
+
+        <h2>License</h2>
+        <p>This document is distributed under the terms of the <a href="http://www.fsf.org/licenses/fdl.html">GNU Free Documentation License, version 1.2</a>.</p>
+
+        <h2>Scope</h2>
+        <p>This document is a specification of the EPICS Channel Access (CA) protocol.
+        Structure of messages exchanged between communicating nodes is defined, as well as semantics of the exchange.
+        The documentation is focused on version 4.11 of the CA protocol, which comes with EPICS 3.14.</p>
+
+        <h2 id="secAudience">Audience</h2>
+        <p>The audience of this document are all developers who need to work with CA at the network layer, without the use of higher-level application programming interfaces.</p>
+        </div>
+</div>
+
+<h2 id="toc">Table of Contents</h2>
+<div class="rotate" id="rotContents">
+    <div>
+        [ Click here to show Table of Contents. ]</div>
+    <div>
+        <h1 class="toc"><a href="CAproto.html#secIntroduction">1. Introduction</a></h1><h2 class="toc"><a href="CAproto.html#secRequirements">1.1. Implementation Requirements</a></h2><h2 class="toc"><a href="CAproto.html#secBasicConcepts">1.2. Basic Concepts</a></h2><h3 class="toc"><a href="CAproto.html#secPVs">1.2.1. Process Variables</a></h3><h3 class="toc"><a href="CAproto.html#secChannels">1.2.2. Channels</a></h3><h3 class="toc"><a href="CAproto.html#secMonitors">1.2.3. Monitors</a></h3><h3 class="toc"><a href="CAproto.html#secClientLibrary">1.2.4. Channel Access Client Library</a></h3><h3 class="toc"><a href="CAproto.html#secRepeater">1.2.5. Repeater</a></h3><h3 class="toc"><a href="CAproto.html#secBeacons">1.2.6. Server Beacons</a></h3><h3 class="toc"><a href="CAproto.html#secVirtualCircuit">1.2.7. Virtual Circuit</a></h3><h3 class="toc"><a href="CAproto.html#secBuffering">1.2.8. Message Buffering</a></h3><h3 class="toc"><a href="CAproto.html#secVersions">1.2.9. Version compatibility</a></h3><h3 class="toc"><a href="CAproto.html#secExceptions">1.2.10. Exceptions</a></h3><h2 class="toc"><a href="CAproto.html#secOverallOperation">1.3. Overall Operation</a></h2><h1 class="toc"><a href="CAproto.html#secTypes">2. Data Types</a></h1><h1 class="toc"><a href="CAproto.html#secMessages">3. Messages</a></h1><h2 class="toc"><a href="CAproto.html#secMessageStructure">3.1. Message Structure</a></h2><h3 class="toc"><a href="CAproto.html#secHeader">3.1.1. Header</a></h3><h3 class="toc"><a href="CAproto.html#secPayload">3.1.2. Payload</a></h3><h2 class="toc"><a href="CAproto.html#secMessageIdentifiers">3.2. Message Identifiers</a></h2><h3 class="toc"><a href="CAproto.html#secCID">3.2.1. CID - Client ID</a></h3><h3 class="toc"><a href="CAproto.html#secSID">3.2.2. SID - Server ID</a></h3><h3 class="toc"><a href="CAproto.html#secSubscriptionID">3.2.3. Subscription ID</a></h3><h3 class="toc"><a href="CAproto.html#secIOID">3.2.4. IOID</a></h3><h1 class="toc"><a href="CAproto.html#secCommandsShared">4. Commands (TCP and UDP)</a></h1><h2 class="toc"><a href="CAproto.html#secCA_PROTO_VERSION">4.0. <tt class="identifier">CA_PROTO_VERSION</tt></a></h2><h3 class="toc"><a href="CAproto.html#secCA_PROTO_VERSIONRequest">4.0.1. Request</a></h3><h3 class="toc"><a href="CAproto.html#secCA_PROTO_VERSIONResponse">4.0.2. Response</a></h3><h2 class="toc"><a href="CAproto.html#secCA_PROTO_SEARCH">4.6. <tt class="identifier">CA_PROTO_SEARCH</tt></a></h2><h3 class="toc"><a href="CAproto.html#secCA_PROTO_SEARCHRequest">4.6.1. Request</a></h3><h3 class="toc"><a href="CAproto.html#secCA_PROTO_SEARCHResponse">4.6.2. Response</a></h3><h2 class="toc"><a href="CAproto.html#secCA_PROTO_NOT_FOUND">4.14. <tt class="identifier">CA_PROTO_NOT_FOUND</tt></a></h2><h3 class="toc"><a href="CAproto.html#secCA_PROTO_NOT_FOUNDResponse">4.14.1. Response</a></h3><h2 class="toc"><a href="CAproto.html#secCA_PROTO_ECHO">4.23. <tt class="identifier">CA_PROTO_ECHO</tt></a></h2><h3 class="toc"><a href="CAproto.html#secCA_PROTO_ECHORequest">4.23.1. Request</a></h3><h3 class="toc"><a href="CAproto.html#secCA_PROTO_ECHOResponse">4.23.2. Response</a></h3><h1 class="toc"><a href="CAproto.html#secCommandsUDP">5. Commands (UDP)</a></h1><h2 class="toc"><a href="CAproto.html#secCA_PROTO_RSRV_IS_UP">5.13. <tt class="identifier">CA_PROTO_RSRV_IS_UP</tt></a></h2><h3 class="toc"><a href="CAproto.html#secCA_PROTO_RSRV_IS_UPResponse">5.13.1. Response</a></h3><h2 class="toc"><a href="CAproto.html#secCA_REPEATER_CONFIRM">5.17. <tt class="identifier">CA_REPEATER_CONFIRM</tt></a></h2><h3 class="toc"><a href="CAproto.html#secCA_REPEATER_CONFIRMResponse">5.17.1. Response</a></h3><h2 class="toc"><a href="CAproto.html#secCA_REPEATER_REGISTER">5.24. <tt class="identifier">CA_REPEATER_REGISTER</tt></a></h2><h3 class="toc"><a href="CAproto.html#secCA_REPEATER_REGISTERRequest">5.24.1. Request</a></h3><h1 class="toc"><a href="CAproto.html#secCommandsTCP">6. Commands (TCP)</a></h1><h2 class="toc"><a href="CAproto.html#secCA_PROTO_EVENT_ADD">6.1. <tt class="identifier">CA_PROTO_EVENT_ADD</tt></a></h2><h3 class="toc"><a href="CAproto.html#secCA_PROTO_EVENT_ADDRequest">6.1.1. Request</a></h3><h3 class="toc"><a href="CAproto.html#secCA_PROTO_EVENT_ADDResponse">6.1.2. Response</a></h3><h2 class="toc"><a href="CAproto.html#secCA_PROTO_EVENT_CANCEL">6.2. <tt class="identifier">CA_PROTO_EVENT_CANCEL</tt></a></h2><h3 class="toc"><a href="CAproto.html#secCA_PROTO_EVENT_CANCELRequest">6.2.1. Request</a></h3><h3 class="toc"><a href="CAproto.html#secCA_PROTO_EVENT_CANCELResponse">6.2.2. Response</a></h3><h2 class="toc"><a href="CAproto.html#secCA_PROTO_READ">6.3. <tt class="identifier">CA_PROTO_READ</tt></a></h2><h3 class="toc"><a href="CAproto.html#secCA_PROTO_READRequest">6.3.1. Request</a></h3><h3 class="toc"><a href="CAproto.html#secCA_PROTO_READResponse">6.3.2. Response</a></h3><h2 class="toc"><a href="CAproto.html#secCA_PROTO_WRITE">6.4. <tt class="identifier">CA_PROTO_WRITE</tt></a></h2><h3 class="toc"><a href="CAproto.html#secCA_PROTO_WRITERequest">6.4.1. Request</a></h3><h2 class="toc"><a href="CAproto.html#secCA_PROTO_SNAPSHOT">6.5. <tt class="identifier">CA_PROTO_SNAPSHOT</tt></a></h2><h2 class="toc"><a href="CAproto.html#secCA_PROTO_BUILD">6.7. <tt class="identifier">CA_PROTO_BUILD</tt></a></h2><h2 class="toc"><a href="CAproto.html#secCA_PROTO_EVENTS_OFF">6.8. <tt class="identifier">CA_PROTO_EVENTS_OFF</tt></a></h2><h3 class="toc"><a href="CAproto.html#secCA_PROTO_EVENTS_OFFRequest">6.8.1. Request</a></h3><h2 class="toc"><a href="CAproto.html#secCA_PROTO_EVENTS_ON">6.9. <tt class="identifier">CA_PROTO_EVENTS_ON</tt></a></h2><h3 class="toc"><a href="CAproto.html#secCA_PROTO_EVENTS_ONRequest">6.9.1. Request</a></h3><h2 class="toc"><a href="CAproto.html#secCA_PROTO_READ_SYNC">6.10. <tt class="identifier">CA_PROTO_READ_SYNC</tt></a></h2><h3 class="toc"><a href="CAproto.html#secCA_PROTO_READ_SYNCRequest">6.10.1. Request</a></h3><h2 class="toc"><a href="CAproto.html#secCA_PROTO_ERROR">6.11. <tt class="identifier">CA_PROTO_ERROR</tt></a></h2><h3 class="toc"><a href="CAproto.html#secCA_PROTO_ERRORResponse">6.11.1. Response</a></h3><h2 class="toc"><a href="CAproto.html#secCA_PROTO_CLEAR_CHANNEL">6.12. <tt class="identifier">CA_PROTO_CLEAR_CHANNEL</tt></a></h2><h3 class="toc"><a href="CAproto.html#secCA_PROTO_CLEAR_CHANNELRequest">6.12.1. Request</a></h3><h3 class="toc"><a href="CAproto.html#secCA_PROTO_CLEAR_CHANNELResponse">6.12.2. Response</a></h3><h2 class="toc"><a href="CAproto.html#secCA_PROTO_READ_NOTIFY">6.15. <tt class="identifier">CA_PROTO_READ_NOTIFY</tt></a></h2><h3 class="toc"><a href="CAproto.html#secCA_PROTO_READ_NOTIFYRequest">6.15.1. Request</a></h3><h3 class="toc"><a href="CAproto.html#secCA_PROTO_READ_NOTIFYResponse">6.15.2. Response</a></h3><h2 class="toc"><a href="CAproto.html#secCA_PROTO_READ_BUILD">6.16. <tt class="identifier">CA_PROTO_READ_BUILD</tt></a></h2><h3 class="toc"><a href="CAproto.html#secCA_PROTO_READ_BUILDRequest">6.16.1. Request</a></h3><h2 class="toc"><a href="CAproto.html#secCA_PROTO_CREATE_CHAN">6.18. <tt class="identifier">CA_PROTO_CREATE_CHAN</tt></a></h2><h3 class="toc"><a href="CAproto.html#secCA_PROTO_CREATE_CHANRequest">6.18.1. Request</a></h3><h3 class="toc"><a href="CAproto.html#secCA_PROTO_CREATE_CHANResponse">6.18.2. Response</a></h3><h2 class="toc"><a href="CAproto.html#secCA_PROTO_WRITE_NOTIFY">6.19. <tt class="identifier">CA_PROTO_WRITE_NOTIFY</tt></a></h2><h3 class="toc"><a href="CAproto.html#secCA_PROTO_WRITE_NOTIFYRequest">6.19.1. Request</a></h3><h3 class="toc"><a href="CAproto.html#secCA_PROTO_WRITE_NOTIFYResponse">6.19.2. Response</a></h3><h2 class="toc"><a href="CAproto.html#secCA_PROTO_CLIENT_NAME">6.20. <tt class="identifier">CA_PROTO_CLIENT_NAME</tt></a></h2><h3 class="toc"><a href="CAproto.html#secCA_PROTO_CLIENT_NAMERequest">6.20.1. Request</a></h3><h2 class="toc"><a href="CAproto.html#secCA_PROTO_HOST_NAME">6.21. <tt class="identifier">CA_PROTO_HOST_NAME</tt></a></h2><h3 class="toc"><a href="CAproto.html#secCA_PROTO_HOST_NAMERequest">6.21.1. Request</a></h3><h2 class="toc"><a href="CAproto.html#secCA_PROTO_ACCESS_RIGHTS">6.22. <tt class="identifier">CA_PROTO_ACCESS_RIGHTS</tt></a></h2><h3 class="toc"><a href="CAproto.html#secCA_PROTO_ACCESS_RIGHTSResponse">6.22.1. Response</a></h3><h2 class="toc"><a href="CAproto.html#secCA_PROTO_SIGNAL">6.25. <tt class="identifier">CA_PROTO_SIGNAL</tt></a></h2><h2 class="toc"><a href="CAproto.html#secCA_PROTO_CREATE_CH_FAIL">6.26. <tt class="identifier">CA_PROTO_CREATE_CH_FAIL</tt></a></h2><h3 class="toc"><a href="CAproto.html#secCA_PROTO_CREATE_CH_FAILResponse">6.26.1. Response</a></h3><h2 class="toc"><a href="CAproto.html#secCA_PROTO_SERVER_DISCONN">6.27. <tt class="identifier">CA_PROTO_SERVER_DISCONN</tt></a></h2><h3 class="toc"><a href="CAproto.html#secCA_PROTO_SERVER_DISCONNResponse">6.27.1. Response</a></h3><h1 class="toc"><a href="CAproto.html#secPayloadDataTypes">7. Payload Data Types</a></h1><h2 class="toc"><a href="CAproto.html#secDBR_STS_STRING">7.7. <tt class="identifier">DBR_STS_STRING</tt></a></h2><h2 class="toc"><a href="CAproto.html#secDBR_STS_SHORT">7.8. <tt class="identifier">DBR_STS_SHORT</tt></a></h2><h2 class="toc"><a href="CAproto.html#secDBR_STS_FLOAT">7.9. <tt class="identifier">DBR_STS_FLOAT</tt></a></h2><h2 class="toc"><a href="CAproto.html#secDBR_STS_ENUM">7.10. <tt class="identifier">DBR_STS_ENUM</tt></a></h2><h2 class="toc"><a href="CAproto.html#secDBR_STS_CHAR">7.11. <tt class="identifier">DBR_STS_CHAR</tt></a></h2><h2 class="toc"><a href="CAproto.html#secDBR_STS_LONG">7.12. <tt class="identifier">DBR_STS_LONG</tt></a></h2><h2 class="toc"><a href="CAproto.html#secDBR_STS_DOUBLE">7.13. <tt class="identifier">DBR_STS_DOUBLE</tt></a></h2><h2 class="toc"><a href="CAproto.html#secDBR_TIME_STRING">7.14. <tt class="identifier">DBR_TIME_STRING</tt></a></h2><h2 class="toc"><a href="CAproto.html#secDBR_TIME_SHORT">7.15. <tt class="identifier">DBR_TIME_SHORT</tt></a></h2><h2 class="toc"><a href="CAproto.html#secDBR_TIME_FLOAT">7.16. <tt class="identifier">DBR_TIME_FLOAT</tt></a></h2><h2 class="toc"><a href="CAproto.html#secDBR_TIME_ENUM">7.17. <tt class="identifier">DBR_TIME_ENUM</tt></a></h2><h2 class="toc"><a href="CAproto.html#secDBR_TIME_CHAR">7.18. <tt class="identifier">DBR_TIME_CHAR</tt></a></h2><h2 class="toc"><a href="CAproto.html#secDBR_TIME_LONG">7.19. <tt class="identifier">DBR_TIME_LONG</tt></a></h2><h2 class="toc"><a href="CAproto.html#secDBR_TIME_DOUBLE">7.20. <tt class="identifier">DBR_TIME_DOUBLE</tt></a></h2><h2 class="toc"><a href="CAproto.html#secDBR_GR_STRING">7.21. <tt class="identifier">DBR_GR_STRING</tt></a></h2><h2 class="toc"><a href="CAproto.html#secDBR_GR_SHORT">7.22. <tt class="identifier">DBR_GR_SHORT</tt></a></h2><h2 class="toc"><a href="CAproto.html#secDBR_GR_INT">7.22. <tt class="identifier">DBR_GR_INT</tt></a></h2><h2 class="toc"><a href="CAproto.html#secDBR_GR_FLOAT">7.23. <tt class="identifier">DBR_GR_FLOAT</tt></a></h2><h2 class="toc"><a href="CAproto.html#secDBR_GR_ENUM">7.24. <tt class="identifier">DBR_GR_ENUM</tt></a></h2><h2 class="toc"><a href="CAproto.html#secDBR_GR_CHAR">7.25. <tt class="identifier">DBR_GR_CHAR</tt></a></h2><h2 class="toc"><a href="CAproto.html#secDBR_GR_LONG">7.26. <tt class="identifier">DBR_GR_LONG</tt></a></h2><h2 class="toc"><a href="CAproto.html#secDBR_GR_DOUBLE">7.27. <tt class="identifier">DBR_GR_DOUBLE</tt></a></h2><h2 class="toc"><a href="CAproto.html#secDBR_CTRL_STRING">7.28. <tt class="identifier">DBR_CTRL_STRING</tt></a></h2><h2 class="toc"><a href="CAproto.html#secDBR_CTRL_SHORT">7.29. <tt class="identifier">DBR_CTRL_SHORT</tt></a></h2><h2 class="toc"><a href="CAproto.html#secDBR_CTRL_INT">7.29. <tt class="identifier">DBR_CTRL_INT</tt></a></h2><h2 class="toc"><a href="CAproto.html#secDBR_CTRL_FLOAT">7.30. <tt class="identifier">DBR_CTRL_FLOAT</tt></a></h2><h2 class="toc"><a href="CAproto.html#secDBR_CTRL_ENUM">7.31. <tt class="identifier">DBR_CTRL_ENUM</tt></a></h2><h2 class="toc"><a href="CAproto.html#secDBR_CTRL_CHAR">7.32. <tt class="identifier">DBR_CTRL_CHAR</tt></a></h2><h2 class="toc"><a href="CAproto.html#secDBR_CTRL_LONG">7.33. <tt class="identifier">DBR_CTRL_LONG</tt></a></h2><h2 class="toc"><a href="CAproto.html#secDBR_CTRL_DOUBLE">7.34. <tt class="identifier">DBR_CTRL_DOUBLE</tt></a></h2><h1 class="toc"><a href="CAproto.html#secConstants">8. Constants</a></h1><h2 class="toc"><a href="CAproto.html#secPorts">8.1. Port numbers</a></h2><h2 class="toc"><a href="CAproto.html#secConstantsOperations">8.2. Representation of constants</a></h2><h2 class="toc"><a href="CAproto.html#secMask">8.3. Monitor Mask</a></h2><h2 class="toc"><a href="CAproto.html#secReplyFlag">8.4. Search Reply Flag</a></h2><h2 class="toc"><a href="CAproto.html#secAccessRights">8.5. Access Rights</a></h2><h1 class="toc"><a href="CAproto.html#secExampleMessage">9. Example message</a></h1><h1 class="toc"><a href="CAproto.html#secVirtualCircuitLifeCycle">10. Virtual Circuit Operation</a></h1><h2 class="toc"><a href="CAproto.html#secVirtualCircuitE">10.1. Establishing virtual circuit</a></h2><h2 class="toc"><a href="CAproto.html#secModesOfOperation">10.2. Basic mode of operation</a></h2><h2 class="toc"><a href="CAproto.html#secVCUnresponsive">10.3. Detecting virtual circuit unresponsiveness</a></h2><h2 class="toc"><a href="CAproto.html#secChannelLifeCycle">10.4. Channel life-cycle</a></h2><h2 class="toc"><a href="CAproto.html#secConnectingChannel">10.5. Connecting a Channel</a></h2><h2 class="toc"><a href="CAproto.html#secReadAndWrite">10.6. Read and Write operations</a></h2><h2 class="toc"><a href="CAproto.html#secSubscriptionsMonitors">10.7. Subscriptions and Monitors</a></h2><h2 class="toc"><a href="CAproto.html#secConnectionEvents">10.8. Connection events</a></h2><h2 class="toc"><a href="CAproto.html#secClosingChannel">10.9. Closing the channel</a></h2><h1 class="toc"><a href="CAproto.html#secRepeaterOperation">11. Repeater Operation</a></h1><h2 class="toc"><a href="CAproto.html#secRepeaterRole">11.1. Role</a></h2><h2 class="toc"><a href="CAproto.html#secRepeaterStartup">11.2. Startup</a></h2><h2 class="toc"><a href="CAproto.html#secClientDetection">11.3. Client detection</a></h2><h2 class="toc"><a href="CAproto.html#secRepeaterFanOut">11.4. Operation</a></h2><h2 class="toc"><a href="CAproto.html#secRepeaterShutdown">11.5. Shutdown</a></h2><h1 class="toc"><a href="CAproto.html#secServerBeacons">12. Server Beacons</a></h1><h1 class="toc"><a href="CAproto.html#secReturnCodes">13. Return Codes</a></h1><h1 class="toc"><a href="CAproto.html#secExampleConversation">14. Example conversation</a></h1><br></br><h1 class="toc"><a href="CAproto.html#glossary">Glossary of Terms</a></h1><h1 class="toc"><a href="CAproto.html#references">References</a></h1><h1 class="toc"><a href="CAproto.html#documentHistory">Document History</a></h1>
+        <h2>How to Read This Document</h2>
+        <p>This document's meta-information (authors, revision history, table of contents, ...) can be found above.
+        What follows below is the body of the document.
+        The body is composed of several sections, which may be further composed of subsections.</p>
+        <p>Typographical styles are used to denote entities of different kinds.
+        For a full list of entities and their respective typographic conventions, please refer to the <a href="http://epics.cosylab.com/cosycvs/CosyDoc/cosydocs/DOC-CosyDoc.html#secSchemaContentStyles">Styles section of the XML Documentation</a> document.</p>
+        </div>
+</div>
+
+<h1><a id="secIntroduction" href="CAproto.html#toc">1. Introduction</a></h1>
+	<h2><a id="secRequirements" href="CAproto.html#toc">1.1. Implementation Requirements</a></h2>
+		<p>
+			The key words &quot;MUST&quot;, &quot;MUST NOT&quot;, &quot;REQUIRED&quot;, &quot;SHALL&quot;, &quot;SHALL NOT&quot;, &quot;SHOULD&quot;, &quot;SHOULD NOT&quot;, &quot;RECOMMENDED&quot;, &quot;MAY&quot;, &quot;OPTIONAL&quot; in this document are to be interpreted as described in <a href="http://www.ietf.org/rfc/rfc2119.txt">RFC 2119: Key words for use in RFCs to Indicate Requirement Levels</a><a class="reference" href="CAproto.html#refRFC2119">[3]</a>.
+		</p>
+		<p>
+			An implementation is not compliant if it fails to satisfy one or more of the MUST or REQUIRED level requirements for the protocols it implements.
+			An implementation that satisfies all the MUST or REQUIRED level and all the SHOULD level requirements for its protocols is said to be &quot;unconditionally compliant&quot;;
+			one that satisfies all the MUST level requirements but not all the SHOULD level requirements for its protocols is said to be &quot;conditionally compliant.&quot;
+		</p>
+		<p>
+			This document is based on the original CA protocol implementation that accompanies EPICS.
+			Wherever the MAY, OPTIONAL or RECOMMENDED is specified, it implies that experience has shown such behaviour to improve either performance, portability or memory consumption.
+		</p>
+		<p>
+			A protocol implementation that is not unconditionally compliant MUST NOT be used in any production environment or used with EPICS databases controling physical devices.
+		</p>
+	
+	<h2><a id="secBasicConcepts" href="CAproto.html#toc">1.2. Basic Concepts</a></h2>
+	
+			<h3><a id="secPVs" href="CAproto.html#toc">1.2.1. Process Variables</a></h3>
+				<p>
+					A Process Variable (PV) is representation of a single value within an EPICS host.
+				</p>
+			
+			<h3><a id="secChannels" href="CAproto.html#toc">1.2.2. Channels</a></h3>
+				<p>
+					A channel is created whenever a PV is connected using CA.
+				</p>
+				<p>
+					From implementation point of view, a channel is a connection, established over virtual circuit, between server and client through which a single PV is accessed.
+					Both the client and the server will provide a way of uniquely identifying channels.
+					These identifiers are explained in section <a href="CAproto.html#secMessageIdentifiers">Message Identifiers
+					(3.2.)</a>.
+				</p>
+			
+			<h3><a id="secMonitors" href="CAproto.html#toc">1.2.3. Monitors</a></h3>
+				<p>
+					A monitor is created on a channel as a means of registering for asynchronous change notifications.
+					CA protocol defines the subscription mechanism through which clients register for notifications.
+					These changes will then be provided through monitor object or callback, depending on implementation and environment.
+					Monitors may be filtered to receive only a subset of events, such as value or alarm changes.
+					Several different monitors may be created for each channel.
+				</p>
+			
+			<h3><a id="secClientLibrary" href="CAproto.html#toc">1.2.4. Channel Access Client Library</a></h3>
+				<p>
+					A client library implements channel access protocol and exposes it through a programmer-friendly API.
+					How the protocol and its mechanisms are implemented in the library depends on the programming language and no specific requirements are made with respect to this.
+				</p>
+			
+			<h3><a id="secRepeater" href="CAproto.html#toc">1.2.5. Repeater</a></h3>
+				<p>
+					Repeater is a standalone process that allows several clients on one machine to share a predefined UDP port for recieving broadcast messages.
+					Broadcast messages are sent without prior knowledge of which port the CA clients and hosts are listening at, so predefined port numbers are used.
+					Since most network stack implementations do not allow multiple clients to listen on the same port, repeater is installed to listen on a single port, used for broadcast notifications.
+					Repeater will fan-out unmodified incoming datagram messages to all the clients on the same host, that have previously registered with the repeater.
+				</p>
+				<p>
+					Typically, a client library will attempt to register with the repeater during startup.
+					If repeater cannot be found or is not available, the library will attempt to spawn a new repeater process.
+					Repeater and client communicate using a minimal set of messages over UDP.
+				</p>
+			
+			<h3><a id="secBeacons" href="CAproto.html#toc">1.2.6. Server Beacons</a></h3>
+				<p>
+					Server beacons are simple protocol messages that allow servers to broadcast their availability.
+					These messages are sent out periodically to announce their presence.
+					Additionally, these beacons are used to restore virtual circuits that have lost connections.
+				</p>
+			
+			<h3><a id="secVirtualCircuit" href="CAproto.html#toc">1.2.7. Virtual Circuit</a></h3>
+				<p>
+					Channel Access protocol is designed to minimize resources used on both client and server.
+					Virtual circuits minimize number of TCP connections used between clients and servers.
+					Each client will have exactly one active and open TCP connection to an individual server, regardless of how many channels it accesses over it.
+					This helps to ensure that servers do not get overwhelmed by too many connections.
+				</p>
+				<p>
+					The life-cycle of a virtual circuit is defined in section <a href="CAproto.html#secVirtualCircuitLifeCycle">Virtual Circuit Operation
+					(10.)</a>.
+				</p>
+			
+			<h3><a id="secBuffering" href="CAproto.html#toc">1.2.8. Message Buffering</a></h3>
+				<p>
+					When sending packets over network, channel access allows huge savings to be made by grouping individual messages in a single TCP packet.
+					This is performed by maintaining per virtual circuit buffers that collect all outgoing messages.
+					These buffers are flushed upon application's explicit request.
+					This mechanism is independent of the TCP/IP stack, which maintains its own send queue and defines a maximum frame size.
+					Messages sent over virtual circuit may be larger than this and will not always be aligned on frame boundary.
+					Implementation should also be aware that messages received may not yet be available entirely or will be split over several TCP frames.
+				</p>
+			
+			<h3><a id="secVersions" href="CAproto.html#toc">1.2.9. Version compatibility</a></h3>
+				<p>
+					Certain aspects of Channel Access protocol have changed between releases.
+					In this document, Channel Access versions are identified using <tt class="identifier">CA_VXYY</tt>, where <tt class="identifier">X</tt> represents single-digit major version number and <tt class="identifier">YY</tt> represents a single- or double-digit minor version number.
+					Stating that a feature is available in <tt class="identifier">CA_VXYY</tt> implies that any client supporting version <tt class="identifier">XYY</tt> must support the feature.
+					Implementation must be backward compatible with all versions up to and including its declared supported minor version number.
+				</p>
+				<p>
+					Example: CA_V43, denotes version 4.3 (major version 4, minor version 3).
+				</p>
+				<p>
+					Currently, all protocol definitions are assumed to have major version 4.
+					Minor version ranges from 1 through 11.
+				</p>
+			
+			<h3><a id="secExceptions" href="CAproto.html#toc">1.2.10. Exceptions</a></h3>
+				<p>
+					This document uses the concept of exceptions to refer to the mechanism of reporting errors that occur during command request execution.
+					An exception defines reporting of error condition on the server.
+					This can occur either due to client problem or due to some unexpected condition on the server (such as running out of resources).
+					Exceptions are reported either within the command's response or using a specialized message.
+					Actual form and method (response or asynhronously received message) depends on circumstances where the exception occurs.
+					Individual commands and messages determine which method is used.
+				</p>
+			
+		
+	<h2><a id="secOverallOperation" href="CAproto.html#toc">1.3. Overall Operation</a></h2>
+		<p>
+			This section is intended as a quick overview of channel access functionality and behaviour.
+			For more information, please refer to <a href="http://www.aps.anl.gov/epics/modules/base/R3-14/5-docs/CAref.html">Channel Access Reference Manual</a><a class="reference" href="CAproto.html#refCAReference">[1]</a>.
+		</p>
+		<p>
+			The goal of channel access (CA) is to provide remote access to records and fields managed by <b><i><a id="term:IOC" href="CAproto.html#glossary">IOC</a></i></b>, including search and discovery of hosts and minimal flow contol.
+			Protocol itself is designed to provide minimal overhead and maximize network throughput for transfer of large number of small data packets.
+			Additionaly, implementation overhead of the protocol can be kept very small, to allow operation with limited resources.
+		</p>
+		<p>
+			All commands and events in CA are encapsulated in predefined messages, which can be sent in one of three forms:
+		</p>
+		<ul>
+			<li>
+			  As a <span class="bold">beacon</span>, which requires no confirmation.
+			  Used for host discovery and keep-alive notification. 
+			</li>
+			<li>
+			As a <span class="bold">request/response pair</span>.
+			Most commands use this method.
+			</li>
+			<li>
+				As a <span class="bold">subscriber notification</span>, where the client registers with the host and receives updates.
+				Event notification uses this method to report value changes.
+			</li>
+		</ul>
+		<p>
+			Communication between server and client is performed by sending command messages over UDP and TCP.
+			Client will use UDP to search for hosts and PVs, server will use them to notify its startup and shutdown.
+			Once client requests a specific <b><i><a id="term:PV" href="CAproto.html#glossary">PV</a></i></b> (by specifying its name), UDP message will be broadcast to either a subnet or a list of predefined addresses, and the server which hosts requested PV will respond.
+		</p>
+		<p>
+			Data exchange between client and server is performed over TCP.
+			After locating the PV, the client will establish a TCP connection to the server.
+			If more that one PV is found to be on the same server, client will use existing TCP connection.
+			Reusable TCP connection between client and server is called <b><i><a id="term:Virtualcircuit" href="CAproto.html#glossary">Virtual circuit</a></i></b>.
+		</p>
+		<p>
+			Once a virtual circuit is established or already available, channels can be created to PVs. 
+		</p>
+
+		<p>
+			Let's assume the following setup of PVs and hosts:
+		</p>
+		<ul>
+			<li>PV &quot;A&quot; is located on host IOC1.</li>
+			<li>PV &quot;B&quot; is located on host IOC2.</li>
+			<li>PV &quot;C&quot; does not exist on either host.</li>
+			<li>PV &quot;D&quot; is located both hosts, IOC1 and IOC2.</li>
+		</ul>
+		
+		<p>
+			A typical scenario would be similar to this:
+		</p>
+		<ol>
+			<li>
+				User application starts and initializes channel access client library.
+				During initialization, client library might spawn a new repeater process or register with an existing one.
+				If successful, the library is ready to start using the channel access.
+			</li>
+			<li>
+				Application will start searching for PVs named &quot;A&quot;, &quot;B&quot;, &quot;C&quot; and &quot;D&quot;.
+				Client will send UDP search packets with &quot;A&quot;, &quot;B&quot;, &quot;C&quot; and &quot;D&quot; PV names, and wait for an application-specified amount of time.
+				To which network hosts (broadcast or specific IP) these packets are actually sent depends on configuration of the client.
+			</li>
+			<li>
+				All hosts that receive this message will check their database and if they know about any of these PV names, they will respond using UDP search response message.
+				Thus, IOC1 will respond with &quot;A&quot; and &quot;D&quot;, whereas IOC2 will respond with &quot;B&quot; and &quot;D&quot;.
+			</li>
+			<li>
+				For each search packet sent, the client will wait for a predefined ammount of time or until response is received.
+			</li>
+			<li>
+				In this case (assuming no packet loss in the network), the client will establish a virtual circuit (TCP connection) to IOC1 and IOC2.
+				PV &quot;C&quot; will be assumed to be unavailable at this point and will be ignored.
+				Since &quot;D&quot; is located on both hosts, client will be unable to distinguish between them.
+				First response received will be considered to be proper answer and any additional responses will be considered erroneous and reported to user.
+			</li>
+			<li>
+				Once virtual circuits are established, client can access values of &quot;A&quot;, &quot;B&quot; and &quot;D&quot;.
+				From now on, all messages for either of the PVs will be sent via a corresponding virtual circuit.
+			</li>
+			<li>
+				If virtual circuit looses TCP connection or the host disconnects, client will notify application appropriately.
+				Client will also listen for server beacon messages (sent whenever IOC host starts), to be able to restore any lost connections. 
+				Beacons are also used to detect when a host stops responding. 
+			</li>
+			<li>
+				Once the application is done using the channel access library, it will gracefully close any open connections.
+			</li>
+		</ol>
+	
+
+		<h1><a id="secTypes" href="CAproto.html#toc">2. Data Types</a></h1>
+	
+	
+	
+	
+	<p>
+		This section defines all primitive data types employed by the CA, as well as their C/C++ equivalents.
+		These data types are referred to in the subsequent sections.
+	</p>
+	<table class="table" cellspacing="0">
+		<tr class="even">
+			<th>Type Name</th>
+			<th>C/C++</th>
+			<th>Description</th>
+		</tr>
+		<tr class="even">
+			<td class="center"><tt class="identifier">BYTE</tt></td>
+			<td class="center"><tt class="identifier">char</tt></td>
+			<td>Signed 8-bit integer.</td>
+		</tr>
+		<tr class="even">
+			<td class="center"><tt class="identifier">UBYTE</tt></td>
+			<td class="center"><tt class="identifier">unsigned char</tt></td>
+			<td>Unsigned 8-bit integer.</td>
+		</tr>
+		<tr class="even">
+			<td class="center"><tt class="identifier">INT16</tt></td>
+			<td class="center"><tt class="identifier">short</tt></td>
+			<td>Signed 16-bit integer.</td>
+		</tr>
+		<tr class="even">
+			<td class="center"><tt class="identifier">UINT16</tt></td>
+			<td class="center"><tt class="identifier">unsigned short</tt></td>
+			<td>Unsigned 16-bit integer.</td>
+		</tr>
+		<tr class="even">
+			<td class="center"><tt class="identifier">INT32</tt></td>
+			<td class="center"><tt class="identifier">int</tt></td>
+			<td>Signed 32-bit integer.</td>
+		</tr>
+		<tr class="even">
+			<td class="center"><tt class="identifier">UINT32</tt></td>
+			<td class="center"><tt class="identifier">unsigned int</tt></td>
+			<td>Unsigned 32-bit integer.</td>
+		</tr>
+		<tr class="even">
+			<td class="center"><tt class="identifier">FLOAT</tt></td>
+			<td class="center"><tt class="identifier">float</tt></td>
+			<td>IEEE 32-bit float.</td>
+		</tr>
+		<tr class="even">
+			<td class="center"><tt class="identifier">DOUBLE</tt></td>
+			<td class="center"><tt class="identifier">double</tt></td>
+			<td>IEEE 64-bit float.</td>
+		</tr>
+		<tr class="even">
+			<td class="center"><tt class="identifier">STRING[n]</tt></td>
+			<td class="center"><tt class="identifier">char[]</tt></td>
+			<td>Array of <tt class="identifier">UBYTE</tt>s. If [n] is specified, it indicates maximum allowed number of characters in this string including (if neccessary) termination character.</td>
+		</tr>
+		<tr class="even">
+			<td class="center"><tt class="identifier">TIMESTAMP</tt></td>
+			<td class="center"><tt class="identifier">None</tt></td>
+			<td>Timestamp represented with two UINT32 values. First is number of seconds since 0000 Jan 1, 1990. Second is number of nanoseconds within second</td>
+		</tr>
+	</table>
+	<p>
+		All values are transmitted over the network in big-endian (network) order.
+		For example: <tt class="identifier">UINT32</tt> 3145 (<tt class="identifier">0x00000C49</tt>) would be sent over the network represented as <tt class="identifier">00 00 0C 49</tt>.
+	</p>
+
+		<h1><a id="secMessages" href="CAproto.html#toc">3. Messages</a></h1>
+	
+	
+	
+	
+			<h2><a id="secMessageStructure" href="CAproto.html#toc">3.1. Message Structure</a></h2>
+				<p>
+					All channel access messages are composed of a <span class="bold">header</span>, followed by the <span class="bold">payload</span>.
+				</p>
+				<p>
+					Header is always present.
+					Its structure is fixed, and contains predefined fields.
+					At the very least, this will be command ID and payload size.
+					Other header fields may carry command-specific meaning.
+					If a field is not used within a certain message, its value must be 0 (0x00).
+				</p>
+				<p>
+					Payload is a sequence of bytes, which are command and version dependent.
+					Implementation is required to provide proper payload with respect to individual command specification.
+				</p>
+				<p>
+					Total size of an individual message is limited.
+					With CA versions older than <tt class="identifier">CA_V49</tt>, the maximum message size is limited to 16384 (<tt class="identifier">0x4000</tt>) bytes.
+					Out of these, header has a fixed size of 16 (<tt class="identifier">0x10</tt>) bytes, with the payload having a maximum size of 16368 (<tt class="identifier">0x3ff0</tt>) bytes.
+				</p>
+				<p>
+					Versions <tt class="identifier">CA_V49</tt> and higher may use the <span class="bold">extended message form</span>, which allows for larger payloads.
+					The extended message form is indicated by the header fields <tt class="identifier">Payload Size</tt> and <tt class="identifier">Data Count</tt> being set to <tt class="identifier">0xffff</tt> and <tt class="identifier">0</tt>, respectively.
+					Real payload size and data count are then given as <tt class="identifier">UINT32</tt> type values immediately following the header.
+					Maximum message size is limited by 32-bit unsigned integer representation, 4294967295 (<tt class="identifier">0xffffffff</tt>).
+					Maximum payload size is limited to 4294967255 (<tt class="identifier">0xffffffe7</tt>).
+				</p>
+				<p>
+					Extended message form should only be used if payload size actualy exceeds the pre-<tt class="identifier">CA_V49</tt> message size limit of 16368 bytes.
+				</p>
+				<h3><a id="secHeader" href="CAproto.html#toc">3.1.1. Header</a></h3>
+					<img src="CAproto/message_headers.png" alt="Image: CAproto/message_headers.png" width="329" height="478"></img>
+					<p>
+						Names of header fields are based on their most common use.
+						Certain messages will use individual fields for purposes other than those described here.
+						These variations are documented for each message individually.
+						All of values in header are unsigned integers.
+					</p>
+					<p>
+						The common header present in all messages is structured as follows:
+					</p>
+					<table class="table" cellspacing="0">
+						<tr class="even">
+							<th>Parameter</th>
+							<th>Type</th>
+							<th>Description</th>
+						</tr>
+						<tr class="even">
+							<td><tt class="identifier">Command</tt></td>
+							<td><tt class="identifier">UINT16</tt></td>
+							<td>
+								Identifier of the command this message requests.
+								The meaning of other header fields and the payload depends on the command.
+							</td>
+						</tr>
+						<tr class="even">
+							<td><tt class="identifier">Payload Size</tt></td>
+							<td><tt class="identifier">UINT16</tt></td>
+							<td>
+								Size of the payload (in bytes).
+								Must not exceed <tt class="identifier">0x4000</tt>.
+								Value of <tt class="identifier">0xFFFF</tt> indicates extended message.
+							</td>
+						</tr>
+						<tr class="even">
+							<td><tt class="identifier">Data Type</tt></td>
+							<td><tt class="identifier">UINT16</tt></td>
+							<td>
+								Identifier of the data type carried in the payload.
+								Data types are defined in section <a href="CAproto.html#secPayloadDataTypes">Payload Data Types
+					(7.)</a>.
+							</td>
+						</tr>
+						<tr class="even">
+							<td><tt class="identifier">Data Count</tt></td>
+							<td><tt class="identifier">UINT16</tt></td>
+							<td>Number of elements in the payload.</td>
+						</tr>
+						<tr class="even">
+							<td><tt class="identifier">Parameter 1</tt></td>
+							<td><tt class="identifier">UINT32</tt></td>
+							<td>Command dependent parameter.</td>
+						</tr>
+						<tr class="even">
+							<td><tt class="identifier">Parameter 2</tt></td>
+							<td><tt class="identifier">UINT32</tt></td>
+							<td>Command dependent parameter.</td>
+						</tr>
+					</table>
+					<p>
+						The extended message header (<tt class="identifier">CA_V49</tt> and newer) has the following structure:
+					</p>
+					<table class="table" cellspacing="0">
+						<tr class="even">
+							<th>Parameter</th>
+							<th>Type</th>
+							<th>Description</th>
+						</tr>
+						<tr class="even">
+							<td><tt class="identifier">Command</tt></td>
+							<td><tt class="identifier">UINT16</tt></td>
+							<td>
+								Identifier of the command this message requests.
+								The meaning of other header fields and the payload depends on the command.
+							</td>
+						</tr>
+						<tr class="even">
+							<td><tt class="identifier">0xFFFF</tt></td>
+							<td><tt class="identifier">UINT16</tt></td>
+							<td>
+								Extended message marker.
+							</td>
+						</tr>
+						<tr class="even">
+							<td><tt class="identifier">Data Type</tt></td>
+							<td><tt class="identifier">UINT16</tt></td>
+							<td>
+								Identifier of the data type carried in the payload.
+								Data types are defined in section <a href="CAproto.html#secPayloadDataTypes">Payload Data Types
+					(7.)</a>.
+							</td>
+						</tr>
+						<tr class="even">
+							<td><tt class="identifier">0x0000</tt></td>
+							<td><tt class="identifier">UINT16</tt></td>
+							<td>
+								Extended message marker.
+							</td>
+						</tr>
+						<tr class="even">
+							<td><tt class="identifier">Parameter 1</tt></td>
+							<td><tt class="identifier">UINT32</tt></td>
+							<td>Command dependent parameter.</td>
+						</tr>
+						<tr class="even">
+							<td><tt class="identifier">Parameter 2</tt></td>
+							<td><tt class="identifier">UINT32</tt></td>
+							<td>Command dependent parameter.</td>
+						</tr>
+						<tr class="even">
+							<td><tt class="identifier">Payload Size</tt></td>
+							<td><tt class="identifier">UINT32</tt></td>
+							<td>Size of the payload (in bytes).</td>
+						</tr>
+						<tr class="even">
+							<td><tt class="identifier">Data Count</tt></td>
+							<td><tt class="identifier">UINT32</tt></td>
+							<td>Number of elements in the payload.</td>
+						</tr>
+					</table>
+
+					
+				
+				<h3><a id="secPayload" href="CAproto.html#toc">3.1.2. Payload</a></h3>
+					<p>
+						The structure of the payload depends on the type of the message.
+						The size of the payload matches the <tt class="identifier">Payload Size</tt> header field.
+					</p>
+					<table cellspacing="0" class="notice"><tr><td class="icon"><img src="CAproto/Notice.gif" alt="notice"></img></td><td class="content">
+						If the payload size is not a multiple of 8, zero-padding must be performed to achieve 8-byte alignment.
+					</td></tr></table>
+				
+			
+			
+			<h2><a id="secMessageIdentifiers" href="CAproto.html#toc">3.2. Message Identifiers</a></h2>
+				<p>
+					Some fields in messages serve as identifiers, which must be properly handled by the implementation.
+					These fields serve as identification tokens in asynchronous communication and must be unique within the context of the client library.
+					Recommended scheme for allocating these values is to create them sequentially starting at 0.
+					All IDs are represented with <tt class="identifier">UINT32</tt>.
+				</p>
+				<p>
+					Overflow must be anticipated!
+					Although it is unlikely that an application will need more than 2<sup>32</sup> different channel IDs, such an overflow can occur with the IOID identifier (see below).
+				</p>
+				<h3><a id="secCID" href="CAproto.html#toc">3.2.1. CID - Client ID</a></h3>
+					<p>
+						CID identifies individual channel within client library context.
+						When a message requires the CID, this value must be passed.
+						CID for a given channel may not change within the lifetime of the channel.
+					</p>
+					<p>
+						Recommended way of allocating CIDs is sequential 0-based indexing.
+						First client library channel reference that is created has value of 0, second 1, etc.
+						Duplicate CIDs within a single active instance of client library are not allowed.
+					</p>
+					<p>
+						CID value is passed to the server when the channel is actually connected.
+					</p>
+					<p>
+						Overflow should be potentially handled, since an application with expected long lifetime and frequent channel allocation and destruction might increase the index frequently.
+						The best way to handle it is to ignore the problem until the first overflow.
+						When that occurs, old CIDs should be no longer relevant, and CID value can be restarted from 0, but excluding any already used values.
+					</p>
+				
+				<h3><a id="secSID" href="CAproto.html#toc">3.2.2. SID - Server ID</a></h3>
+					<p>
+						Performs the same function as CID, but is provided by the server when the channel is connected.
+						SID of channel will never change, unless the channel represented by particular SID is removed from the server during runtime.
+						In that case, the channel will be no longer available.
+					</p>
+					<p>
+						To handle overflows, the same method could be used as for the Client Channel ID.
+					</p>
+				
+				<h3><a id="secSubscriptionID" href="CAproto.html#toc">3.2.3. Subscription ID</a></h3>
+					<p>
+						When a subscription is created on a channel (monitor), a unique subscription ID must be provided.
+						Client library will use this ID to identify different subscriptions on the same channel.
+						This value will allow the client library to dispatch monitors appropriately.
+					</p>
+					<p>
+						Any subscription ID is only valid during the subscription's lifespan.
+						After that, IDs may be reused.
+					</p>
+				
+				<h3><a id="secIOID" href="CAproto.html#toc">3.2.4. IOID</a></h3>
+					<p>
+						Unique ID is given to all read and write messages sent by the client library.
+					</p>
+					<p>
+						ID passed with the request will be returned in the matching response.
+					</p>
+					<p>
+					  Properly handling the wrapping of identifiers is vital to <tt class="identifier">IOID</tt>, since an individual ID is used each time a request is made.
+					</p>
+				
+					
+	
+		
+		<h1><a id="secCommandsShared" href="CAproto.html#toc">4. Commands (TCP and UDP)</a></h1>
+	
+	
+	
+	
+			<p>
+				The following commands are sent as either UDP datagrams or TCP messages.
+				Some of the messages are also used within the context of a Virtual Circuit.
+			</p>
+			<!-- Commented packets are no longer used in for CA_V411-->
+			<h2><a id="secCA_PROTO_VERSION" href="CAproto.html#toc">4.0. <tt class="identifier">CA_PROTO_VERSION</tt></a></h2><p><span class="bold">Command: </span>CA_PROTO_VERSION</p><p><span class="bold">ID: </span><tt class="identifier">0</tt> (<tt class="identifier">0x00</tt>)
+	</p><p><span class="bold">Description: </span>  
+			Exchanges client and server protocol versions and desired circuit priority.
+			This is the first message sent when a new TCP (Virtual Circuit) connection is established.
+			Must be sent before any other exchange between client, server and repeater.
+			The communication is not strictly request response, but will be perceived as such by the implementation.
+			When a new TCP connection is established by the client, CA_PROTO_VERSION is sent.
+			Likewise, the server will accept the connection and send the response form back.
+			Sent over UDP or TCP.
+		</p><h3><a id="secCA_PROTO_VERSIONRequest" href="CAproto.html#toc">4.0.1. Request</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">0</tt></td><td>Command identifier for CA_PROTO_VERSION.</td></tr><tr class="odd"><td><tt class="identifier">Payload size</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">Priority</tt></td><td><tt class="identifier">Desired priority</tt></td><td>Virtual circuit priority.</td></tr><tr class="odd"><td><tt class="identifier">Version</tt></td><td><tt class="identifier">Version number</tt></td><td>Minor protocol version number. Only used when sent over TCP.</td></tr><tr class="even"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr></table><p><span class="bold">Compatibility</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Version</th><th>Comment</th></tr><tr class="even"><td><tt class="identifier">&gt;= CA_V411</tt></td><td>
+				Server will send response immediately after establishing a virtual circuit.
+			</td></tr><tr class="odd"><td><tt class="identifier">&lt; CA_V411</tt></td><td>
+				Message does not include minor version number (it is always 0) and is interpreted as an echo command that carries no data.
+				Version exchange is performed immediately after <a href="CAproto.html#secCA_PROTO_CREATE_CHAN"><tt class="identifier">CA_PROTO_CREATE_CHAN</tt>
+					(6.18.)</a>.
+			</td></tr></table><p><span class="bold">Comments</span></p><ul><li>
+			 Priority indicates the server's dispatch scheduling priority which might be implemented by a circuit dedicated thread's scheduling priority in a preemptive scheduled OS.
+			</li></ul><h3><a id="secCA_PROTO_VERSIONResponse" href="CAproto.html#toc">4.0.2. Response</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">0</tt></td><td>Command identifier for CA_PROTO_VERSION.</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">Priority</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="odd"><td><tt class="identifier">Version</tt></td><td><tt class="identifier">Version number</tt></td><td>Minor protocol version number. Only used when sent over TCP.</td></tr><tr class="even"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr></table><p><span class="bold">Compatibility</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Version</th><th>Comment</th></tr><tr class="even"><td><tt class="identifier">&gt;= CA_V411</tt></td><td>
+				Server will not respond to request, but send response immediately after establishing a virtual circuit.
+			</td></tr><tr class="odd"><td><tt class="identifier">&lt; CA_V411</tt></td><td>
+				Message does not include minor version number (it is always 0).
+			</td></tr></table>
+			<h2><a id="secCA_PROTO_SEARCH" href="CAproto.html#toc">4.6. <tt class="identifier">CA_PROTO_SEARCH</tt></a></h2><p><span class="bold">Command: </span>CA_PROTO_SEARCH</p><p><span class="bold">ID: </span><tt class="identifier">6</tt> (<tt class="identifier">0x06</tt>)
+	</p><p><span class="bold">Description: </span>  
+			Searches for a given channel name.
+			Sent over UDP or TCP.
+		</p><h3><a id="secCA_PROTO_SEARCHRequest" href="CAproto.html#toc">4.6.1. Request</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">6</tt></td><td>Command identifier for CA_PROTO_SEARCH.</td></tr><tr class="odd"><td><tt class="identifier">Payload Size</tt></td><td><tt class="identifier">&gt;= 0</tt></td><td>Padded size of channel name.</td></tr><tr class="even"><td><tt class="identifier">Reply</tt></td><td><tt class="identifier">Reply Flag</tt></td><td><a href="CAproto.html#secReplyFlag">Search Reply Flag
+					(8.4.)</a>, indicating whether failed search response should be returned.</td></tr><tr class="odd"><td><tt class="identifier">Version</tt></td><td><tt class="identifier">Version Number</tt></td><td>Client minor protocol version number.</td></tr><tr class="even"><td><tt class="identifier">CID</tt></td><td><tt class="identifier">Channel CID</tt></td><td>Client allocated CID.</td></tr><tr class="odd"><td><tt class="identifier">CID</tt></td><td><tt class="identifier">Channel CID</tt></td><td>Client allocated CID.</td></tr></table><p><span class="bold">Payload</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Name</th><th>Type</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Channel name</tt></td><td><tt class="identifier">STRING</tt></td><td><tt class="identifier"></tt></td><td>Name of channel to search for.</td></tr></table><p><span class="bold">Comments</span></p><ul><li>
+				Sent as a UDP datagram.
+			</li><li>
+				It is illegal to specify DO_REPLY flag whenever the message is sending as UDP datagram, regardless of whether broadcast or multicast is used.
+			</li><li>
+			  CID will be allocated by the client before this message is sent.
+			</li><li>
+				CID field value is duplicated.
+			</li><li>
+				Reply flag will be generally <tt class="identifier">DONT_REPLY</tt> when searching using broadcast and <tt class="identifier">DO_REPLY</tt> when searching using unicast.
+				When <tt class="identifier">DO_REPLY</tt> is set, server will send a <a href="CAproto.html#secCA_PROTO_NOT_FOUND"><tt class="identifier">CA_PROTO_NOT_FOUND</tt>
+					(4.14.)</a> message indicating it does not have the requested channel.
+			</li></ul><h3><a id="secCA_PROTO_SEARCHResponse" href="CAproto.html#toc">4.6.2. Response</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">6</tt></td><td>Command identifier for CA_PROTO_SEARCH.</td></tr><tr class="odd"><td><tt class="identifier">Payload Size</tt></td><td><tt class="identifier">8</tt></td><td>Payload size is constant.</td></tr><tr class="even"><td><tt class="identifier">Data Type</tt></td><td><tt class="identifier">Port number</tt></td><td>TCP Port number of server that responded.</td></tr><tr class="odd"><td><tt class="identifier">Data Count</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">SID</tt></td><td><tt class="identifier">0xffffffff</tt></td><td>Temporary SID, <a href="CAproto.html#secSID">SID - Server ID
+					(3.2.2.)</a>.</td></tr><tr class="odd"><td><tt class="identifier">CID</tt></td><td><tt class="identifier">Same as request</tt></td><td>Channel CID, <a href="CAproto.html#secCID">CID - Client ID
+					(3.2.1.)</a>.</td></tr></table><p><span class="bold">Payload</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Name</th><th>Type</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Server protocol version</tt></td><td><tt class="identifier">UINT16</tt></td><td><tt class="identifier"></tt></td><td>
+				Server protocol version.
+			</td></tr></table><p><span class="bold">Comments</span></p><ul><li>
+				Received as UDP datagram.
+			</li><li>
+				Client channel ID field value (<tt class="identifier">CID</tt>) is copied from the request.
+			</li><li>
+				Port number of the server indicates on which port the server that replied listens to.
+				This is used in case more than one server share the same IP.
+			</li><li>
+				Server-assigned channel ID will have value of <tt class="identifier">0xffffffff</tt>, since the SID is not known at this time.
+				Real value will be returned when channel is actually created using CA_CREATE_CHAN.
+			</li><li>
+				In CA_V411 the server's IP address is optionally returned in the CID field of the header allowing a CA server to act as a directory service. 
+				If not, then the CID field is set to 0xffffffff. 
+			</li><li>
+				The port number included in the header is the *TCP* port of the server. 
+				Two servers on the same host can share a UDP port number, but not a TCP port number. 
+				Therefore, the port the client needs to connect to in that situation may not be the same as expected if this field in the response is not used.				
+			</li></ul>
+			<h2><a id="secCA_PROTO_NOT_FOUND" href="CAproto.html#toc">4.14. <tt class="identifier">CA_PROTO_NOT_FOUND</tt></a></h2><p><span class="bold">Command: </span>CA_PROTO_NOT_FOUND</p><p><span class="bold">ID: </span><tt class="identifier">14</tt> (<tt class="identifier">0x0E</tt>)
+	</p><p><span class="bold">Description: </span>  
+			Indicates that a channel with requested name does not exist.
+			Sent in response to <a href="CAproto.html#secCA_PROTO_SEARCH"><tt class="identifier">CA_PROTO_SEARCH</tt>
+					(4.6.)</a>, but only when its <tt class="identifier">DO_REPLY</tt> flag was set.
+			Sent over UDP.
+		</p><h3><a id="secCA_PROTO_NOT_FOUNDResponse" href="CAproto.html#toc">4.14.1. Response</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">14</tt></td><td>Command identifier for CA_PROTO_NOT_FOUND.</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">Reply Flag</tt></td><td><tt class="identifier">DO_REPLY</tt></td><td>Same reply flag as in request: always <tt class="identifier">DO_REPLY</tt>.</td></tr><tr class="odd"><td><tt class="identifier">Version</tt></td><td><tt class="identifier">Same as request</tt></td><td>Client minor protocol version number.</td></tr><tr class="even"><td><tt class="identifier">CID</tt></td><td><tt class="identifier">Same as request</tt></td><td>CID of the channel.</td></tr><tr class="odd"><td><tt class="identifier">CID</tt></td><td><tt class="identifier">Same as request</tt></td><td>CID of the channel.</td></tr></table><p><span class="bold">Comments</span></p><ul><li>
+				Contents of the header are copied from the request.
+			</li><li>
+			  CID fields are diplicated.
+			</li><li>
+				Original request payload is not returned with the response.
+			</li></ul>
+			<h2><a id="secCA_PROTO_ECHO" href="CAproto.html#toc">4.23. <tt class="identifier">CA_PROTO_ECHO</tt></a></h2><p><span class="bold">Command: </span>CA_PROTO_ECHO</p><p><span class="bold">ID: </span><tt class="identifier">23</tt> (<tt class="identifier">0x17</tt>)
+	</p><p><span class="bold">Description: </span>  
+			Connection verify used by CA_V43.
+			Sent over TCP.
+		</p><h3><a id="secCA_PROTO_ECHORequest" href="CAproto.html#toc">4.23.1. Request</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">23</tt></td><td>Command identifier for CA_PROTO_ECHO.</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr></table><h3><a id="secCA_PROTO_ECHOResponse" href="CAproto.html#toc">4.23.2. Response</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">23</tt></td><td>Command identifier for CA_PROTO_ECHO.</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr></table>
+		
+		<h1><a id="secCommandsUDP" href="CAproto.html#toc">5. Commands (UDP)</a></h1>
+	
+	
+	
+	
+			<p>
+				The following commands are sent as UDP datagrams.
+			</p>
+			<!-- Commented packets are no longer used in for CA_V411-->
+			<h2><a id="secCA_PROTO_RSRV_IS_UP" href="CAproto.html#toc">5.13. <tt class="identifier">CA_PROTO_RSRV_IS_UP</tt></a></h2><p><span class="bold">Command: </span>CA_PROTO_RSRV_IS_UP</p><p><span class="bold">ID: </span><tt class="identifier">13</tt> (<tt class="identifier">0x0D</tt>)
+	</p><p><span class="bold">Description: </span>  
+			Beacon sent by a server when it becomes available.
+			Beacons are also sent out periodically to announce the server is still alive.
+			Another function of beacons is to allow detection of changes in network topology.
+			Sent over UDP.
+		</p><h3><a id="secCA_PROTO_RSRV_IS_UPResponse" href="CAproto.html#toc">5.13.1. Response</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">13</tt></td><td>Command identifier for CA_PROTO_RSRV_IS_UP.</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">Server port</tt></td><td><tt class="identifier">&gt;= 0</tt></td><td>TCP Port the server is listening on.</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">BeaconID</tt></td><td><tt class="identifier">Sequential integers</tt></td><td>Sequential Beacon ID.</td></tr><tr class="odd"><td><tt class="identifier">Address</tt></td><td><tt class="identifier">0 or IP</tt></td><td>May contain IP address of the server.</td></tr></table><p><span class="bold">Comments</span></p><ul><li>
+				IP field may contain IP of the server.
+				If IP is not present (field <tt class="identifier">Address</tt> value is 0), then IP may be substituted by the receiver of the packet (usually repeater) if it is capable of identifying where this packet came from.
+				Any non-zero address must be interpreted as server's IP address.
+			</li><li>
+			  <tt class="identifier">BeaconID</tt>s are useful in detecting network topology changes.
+				In certain cases, same packet may be routed using two different routes, causing problems with datagrams.
+				If multiple beacons are received from the same server with same <tt class="identifier">BeaconID</tt>, multiple routes are the cause.
+			</li><li>
+				If a server is restarted, it will most likely start sending <tt class="identifier">BeaconID</tt> values from beggining (0).
+				Such situation must be anticipated.
+			</li></ul>
+			<h2><a id="secCA_REPEATER_CONFIRM" href="CAproto.html#toc">5.17. <tt class="identifier">CA_REPEATER_CONFIRM</tt></a></h2><p><span class="bold">Command: </span>CA_REPEATER_CONFIRM</p><p><span class="bold">ID: </span><tt class="identifier">17</tt> (<tt class="identifier">0x11</tt>)
+	</p><p><span class="bold">Description: </span>  
+			Confirms successful client registration with repeater.
+			Sent over UDP.
+		</p><h3><a id="secCA_REPEATER_CONFIRMResponse" href="CAproto.html#toc">5.17.1. Response</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">17</tt></td><td>Command identifier for CA_REPEATER_CONFIRM.</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="odd"><td><tt class="identifier">Repeater address</tt></td><td><tt class="identifier">IP address</tt></td><td>Address with which the registration succeeded.</td></tr></table><p><span class="bold">Comments</span></p><ul><li>
+				Since repeater can bind to different local address, its IP is reported in <tt class="identifier">Repeater address</tt>..
+				This address will be either 0.0.0.0 or 127.0.0.1. 
+			</li></ul>
+			<h2><a id="secCA_REPEATER_REGISTER" href="CAproto.html#toc">5.24. <tt class="identifier">CA_REPEATER_REGISTER</tt></a></h2><p><span class="bold">Command: </span>CA_REPEATER_REGISTER</p><p><span class="bold">ID: </span><tt class="identifier">24</tt> (<tt class="identifier">0x18</tt>)
+	</p><p><span class="bold">Description: </span>  
+			Requests registration with the repeater.
+			Repeater will confirm successful registration using CA_REPEATER_CONFIRM.
+			Sent over TCP.
+		</p><h3><a id="secCA_REPEATER_REGISTERRequest" href="CAproto.html#toc">5.24.1. Request</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">24</tt></td><td>Command identifier for CA_REPEATER_REGISTER</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0</td></tr><tr class="even"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0</td></tr><tr class="even"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0</td></tr><tr class="odd"><td><tt class="identifier">Client IP address</tt></td><td><tt class="identifier">IP address</tt></td><td>IP address on which the client is listening</td></tr></table>
+		
+		<h1><a id="secCommandsTCP" href="CAproto.html#toc">6. Commands (TCP)</a></h1>
+	
+	
+	
+	
+			<p>
+				The following commands are used within the context of Virtual Circuit and are sent using TCP.
+			</p>
+			<!-- Commented packets are no longer used in for CA_V411-->
+			<h2><a id="secCA_PROTO_EVENT_ADD" href="CAproto.html#toc">6.1. <tt class="identifier">CA_PROTO_EVENT_ADD</tt></a></h2><p><span class="bold">Command: </span>CA_PROTO_EVENT_ADD</p><p><span class="bold">ID: </span><tt class="identifier">1</tt> (<tt class="identifier">0x01</tt>)
+	</p><p><span class="bold">Description: </span>  
+			Creates a subscription on a channel, allowing the client to be notified of changes in value.
+			A request will produce at least one response.
+			Sent over TCP.
+		</p><h3><a id="secCA_PROTO_EVENT_ADDRequest" href="CAproto.html#toc">6.1.1. Request</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">1</tt></td><td>Command identifier for CA_PROTO_EVENT_ADD</td></tr><tr class="odd"><td><tt class="identifier">Payload Size</tt></td><td><tt class="identifier">16</tt></td><td>Payload size is constant</td></tr><tr class="even"><td><tt class="identifier">Data Type</tt></td><td><tt class="identifier"></tt></td><td>Desired DBR type of the return value.</td></tr><tr class="odd"><td><tt class="identifier">Data Count</tt></td><td><tt class="identifier">&gt;= 0</tt></td><td>Desired number of elements</td></tr><tr class="even"><td><tt class="identifier">SID</tt></td><td><tt class="identifier">SID of the channel.</tt></td><td>
+				SID of the channel on which to reqister this subscription.
+				See <a href="CAproto.html#secSID">SID - Server ID
+					(3.2.2.)</a>.
+			</td></tr><tr class="odd"><td><tt class="identifier">SubscriptionID</tt></td><td><tt class="identifier">Client provided Subscription ID</tt></td><td>
+				Subscription ID identifying this subscription. 
+				See <a href="CAproto.html#secSubscriptionID">Subscription ID
+					(3.2.3.)</a>.
+			</td></tr></table><p><span class="bold">Payload</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Name</th><th>Type</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Low val</tt></td><td><tt class="identifier">FLOAT32</tt></td><td><tt class="identifier">0.0</tt></td><td>Low value</td></tr><tr class="odd"><td><tt class="identifier">High val</tt></td><td><tt class="identifier">FLOAT32</tt></td><td><tt class="identifier">0.0</tt></td><td>High value</td></tr><tr class="even"><td><tt class="identifier">To val</tt></td><td><tt class="identifier">FLOAT32</tt></td><td><tt class="identifier">0.0</tt></td><td>To value</td></tr><tr class="odd"><td><tt class="identifier">Mask</tt></td><td><tt class="identifier">UINT16</tt></td><td><tt class="identifier">Monitor mask</tt></td><td><a href="CAproto.html#secMask">Mask
+					(8.3.)</a> indicating which events to report</td></tr></table><p><span class="bold">Comments</span></p><ul><li>
+				All payload fields except Mask are initialized to 0 and are present only for backward compatibility.
+			</li><li>
+				Successful subscription will result in an immediate response with the current value.
+				Additional responses will be sent as the change occurs based on the <tt class="identifier">Mask</tt> parameter.
+			</li><li>
+				Mask defines a filter on which events will be sent.
+			</li><li>
+				A subscription should be destroyed when no longer needed to reduce load on server.
+				See <a href="CAproto.html#secCA_PROTO_EVENT_CANCEL"><tt class="identifier">CA_PROTO_EVENT_CANCEL</tt>
+					(6.2.)</a>.
+			</li></ul><h3><a id="secCA_PROTO_EVENT_ADDResponse" href="CAproto.html#toc">6.1.2. Response</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">1</tt></td><td>Command identifier for CA_PROTO_EVENT_ADD</td></tr><tr class="odd"><td><tt class="identifier">Payload Size</tt></td><td><tt class="identifier">&gt;= 0</tt></td><td>Size of the response.</td></tr><tr class="even"><td><tt class="identifier">Data Type</tt></td><td><tt class="identifier">same as request</tt></td><td>Payload data type.</td></tr><tr class="odd"><td><tt class="identifier">Data Count</tt></td><td><tt class="identifier">same as request</tt></td><td>Payload data count.</td></tr><tr class="even"><td><tt class="identifier">Status code</tt></td><td><tt class="identifier">One of ECA codes</tt></td><td><a href="CAproto.html#secReturnCodes">Status code
+					(13.)</a> (<tt class="identifier">ECA_NORMAL</tt> on success).</td></tr><tr class="odd"><td><tt class="identifier">SubscriptionID</tt></td><td><tt class="identifier">same as request</tt></td><td>Subscription ID</td></tr></table><p><span class="bold">Payload</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Name</th><th>Type</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Values</tt></td><td><tt class="identifier">DBR</tt></td><td><tt class="identifier"></tt></td><td>
+				Value stored as DBR type specified in <tt class="identifier">Data Type</tt> field.
+				See <a href="CAproto.html#secPayloadDataTypes">Payload Data Types
+					(7.)</a>.
+			</td></tr></table><p><span class="bold">Comments</span></p><ul><li>
+				Response data type and count match that of the request.
+			</li><li>
+				To confirm successful subscription, first response will be sent immediately.
+				Additional responses will be sent as the change occurs based on mask parameters.
+			</li></ul>
+			<h2><a id="secCA_PROTO_EVENT_CANCEL" href="CAproto.html#toc">6.2. <tt class="identifier">CA_PROTO_EVENT_CANCEL</tt></a></h2><p><span class="bold">Command: </span>CA_PROTO_EVENT_CANCEL</p><p><span class="bold">ID: </span><tt class="identifier">2</tt> (<tt class="identifier">0x02</tt>)
+	</p><p><span class="bold">Description: </span>  
+			Clears event subscription.
+			This message will stop event updates for specified channel.
+			Sent over TCP.
+		</p><h3><a id="secCA_PROTO_EVENT_CANCELRequest" href="CAproto.html#toc">6.2.1. Request</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">2</tt></td><td>Command identifier for CA_PROTO_EVENT_CANCEL.</td></tr><tr class="odd"><td><tt class="identifier">Payload Size</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">Data Type</tt></td><td><tt class="identifier"></tt></td><td>Same value as in corresponding <a href="CAproto.html#secCA_PROTO_EVENT_ADD"><tt class="identifier">CA_PROTO_EVENT_ADD</tt>
+					(6.1.)</a>.</td></tr><tr class="odd"><td><tt class="identifier">Data Count</tt></td><td><tt class="identifier">&gt;= 0</tt></td><td>Same value as in corresponding <a href="CAproto.html#secCA_PROTO_EVENT_ADD"><tt class="identifier">CA_PROTO_EVENT_ADD</tt>
+					(6.1.)</a>.</td></tr><tr class="even"><td><tt class="identifier">SID</tt></td><td><tt class="identifier">SID of channel</tt></td><td>Same value as in corresponding <a href="CAproto.html#secCA_PROTO_EVENT_ADD"><tt class="identifier">CA_PROTO_EVENT_ADD</tt>
+					(6.1.)</a>.</td></tr><tr class="odd"><td><tt class="identifier">SubscriptionID</tt></td><td><tt class="identifier">Subscription ID</tt></td><td>Same value as in corresponding <a href="CAproto.html#secCA_PROTO_EVENT_ADD"><tt class="identifier">CA_PROTO_EVENT_ADD</tt>
+					(6.1.)</a>.</td></tr></table><p><span class="bold">Comments</span></p><ul><li>
+			  Both SID and SubscriptionID are used to identify which subscription on which monitor to destroy.
+			</li><li>
+				Actual data type and count values are not important, but should be the same as used with corresponding <a href="CAproto.html#secCA_PROTO_EVENT_ADD"><tt class="identifier">CA_PROTO_EVENT_ADD</tt>
+					(6.1.)</a>.
+			</li></ul><h3><a id="secCA_PROTO_EVENT_CANCELResponse" href="CAproto.html#toc">6.2.2. Response</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">1</tt></td><td>Command identifier for CA_PROTO_EVENT_ADD.</td></tr><tr class="odd"><td><tt class="identifier">Payload Size</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">Data Type</tt></td><td><tt class="identifier">Same as request.</tt></td><td>Same value as CA_PROTO_EVENT_ADD request.</td></tr><tr class="odd"><td><tt class="identifier">Data Count</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">SID</tt></td><td><tt class="identifier">Same as request.</tt></td><td>Same value as CA_PROTO_EVENT_ADD request.</td></tr><tr class="odd"><td><tt class="identifier">SubscriptionID</tt></td><td><tt class="identifier">Same as request.</tt></td><td>Same value as CA_PROTO_EVENT_ADD request.</td></tr></table><p><span class="bold">Comments</span></p><ul><li>
+				Notice that the response has <a href="CAproto.html#secCA_PROTO_EVENT_ADD"><tt class="identifier">CA_PROTO_EVENT_ADD</tt>
+					(6.1.)</a> command identifier!
+			</li><li>
+				Regardless of data type and count, this response has no payload.
+			</li></ul>
+			<h2><a id="secCA_PROTO_READ" href="CAproto.html#toc">6.3. <tt class="identifier">CA_PROTO_READ</tt></a></h2><p><span class="bold">Command: </span>CA_PROTO_READ</p><p><span class="bold">ID: </span><tt class="identifier">3</tt> (<tt class="identifier">0x03</tt>)
+	</p><p><span class="bold">Description: </span>  
+		<p>
+		Read value of a channel.
+		Sent over TCP.
+		</p>
+		<p>
+		<span class="bold">Deprecated since protocol version 3.13.</span>
+		</p>
+	</p><h3><a id="secCA_PROTO_READRequest" href="CAproto.html#toc">6.3.1. Request</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">3</tt></td><td>Command identifier for CA_PROTO_READ_NOTIFY.</td></tr><tr class="odd"><td><tt class="identifier">Payload Size</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">Data Type</tt></td><td><tt class="identifier">DBR type</tt></td><td>Desired type of the return value.</td></tr><tr class="odd"><td><tt class="identifier">Data Count</tt></td><td><tt class="identifier">&gt;= 0</tt></td><td>Desired number of elements to read.</td></tr><tr class="even"><td><tt class="identifier">SID</tt></td><td><tt class="identifier">Channel SID</tt></td><td>SID of the channel to read.</td></tr><tr class="odd"><td><tt class="identifier">IOID</tt></td><td><tt class="identifier">Client provided IOID</tt></td><td>IOID of this operation.</td></tr></table><p><span class="bold">Comments</span></p><ul><li>
+			Channel from which to read is identified using SID.
+		</li><li>
+		  Response will contain the same <tt class="identifier">IOID</tt> as the request, making it possible to distinguish multiple responses. 
+		</li></ul><h3><a id="secCA_PROTO_READResponse" href="CAproto.html#toc">6.3.2. Response</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">3</tt></td><td>Command identifier for CA_PROTO_READ_NOTIFY.</td></tr><tr class="odd"><td><tt class="identifier">Payload size</tt></td><td><tt class="identifier">Size of payload</tt></td><td>Size of DBR formatted data in payload.</td></tr><tr class="even"><td><tt class="identifier">Data type</tt></td><td><tt class="identifier">DBR type</tt></td><td>Payload format.</td></tr><tr class="odd"><td><tt class="identifier">Data count</tt></td><td><tt class="identifier">&gt;= 0</tt></td><td>Payload element count.</td></tr><tr class="even"><td><tt class="identifier">SID</tt></td><td><tt class="identifier">Same as request</tt></td><td>SID of the channel.</td></tr><tr class="odd"><td><tt class="identifier">IOID</tt></td><td><tt class="identifier">Same as request</tt></td><td>IOID of this operation.</td></tr></table><p><span class="bold">Payload</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Name</th><th>Type</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">DBR formatted data</tt></td><td><tt class="identifier">DBR</tt></td><td><tt class="identifier">DBR formatted data</tt></td><td>
+			Value stored as DBR type specified in <tt class="identifier">Data type</tt> field.
+			Data count specifies number of elements of DBR value field.
+		</td></tr></table>
+			<h2><a id="secCA_PROTO_WRITE" href="CAproto.html#toc">6.4. <tt class="identifier">CA_PROTO_WRITE</tt></a></h2><p><span class="bold">Command: </span>CA_PROTO_WRITE</p><p><span class="bold">ID: </span><tt class="identifier">4</tt> (<tt class="identifier">0x04</tt>)
+	</p><p><span class="bold">Description: </span>  
+			Writes new channel value.
+			Sent over TCP.
+		</p><h3><a id="secCA_PROTO_WRITERequest" href="CAproto.html#toc">6.4.1. Request</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">4</tt></td><td>Command identifier for CA_PROTO_WRITE</td></tr><tr class="odd"><td><tt class="identifier">Payload size</tt></td><td><tt class="identifier">Size of DBR formatted payload</tt></td><td>Size of padded payload</td></tr><tr class="even"><td><tt class="identifier">Data type</tt></td><td><tt class="identifier">DBR type</tt></td><td>Format of payload</td></tr><tr class="odd"><td><tt class="identifier">Data count</tt></td><td><tt class="identifier">ELEMENT_COUNT</tt></td><td>Number of elements in payload</td></tr><tr class="even"><td><tt class="identifier">SID</tt></td><td><tt class="identifier">SID provided by server</tt></td><td>Server channel ID</td></tr><tr class="odd"><td><tt class="identifier">IOID</tt></td><td><tt class="identifier">Client provided IOID</tt></td><td>Request ID</td></tr></table><p><span class="bold">Payload</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Name</th><th>Type</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">DBR formatted data</tt></td><td><tt class="identifier">DBR</tt></td><td><tt class="identifier">DBR formatted data</tt></td><td>
+				Value stored as DBR type specified in Data type field.
+				Data count specifies number of elements of DBR value field.
+			</td></tr></table><p><span class="bold">Comments</span></p><ul><li>
+				There is no response to this command.
+			</li></ul>
+			<h2><a id="secCA_PROTO_SNAPSHOT" href="CAproto.html#toc">6.5. <tt class="identifier">CA_PROTO_SNAPSHOT</tt></a></h2><p><span class="bold">Command: </span>CA_PROTO_SNAPSHOT</p><p><span class="bold">ID: </span><tt class="identifier">5</tt> (<tt class="identifier">0x05</tt>)
+	</p><p><span class="bold">Description: </span>  
+			Obsolete.
+		</p>
+			<h2><a id="secCA_PROTO_BUILD" href="CAproto.html#toc">6.7. <tt class="identifier">CA_PROTO_BUILD</tt></a></h2><p><span class="bold">Command: </span>CA_PROTO_BUILD</p><p><span class="bold">ID: </span><tt class="identifier">7</tt> (<tt class="identifier">0x07</tt>)
+	</p><p><span class="bold">Description: </span>  
+			Obsolete.
+		</p>
+			<h2><a id="secCA_PROTO_EVENTS_OFF" href="CAproto.html#toc">6.8. <tt class="identifier">CA_PROTO_EVENTS_OFF</tt></a></h2><p><span class="bold">Command: </span>CA_PROTO_EVENTS_OFF</p><p><span class="bold">ID: </span><tt class="identifier">8</tt> (<tt class="identifier">0x08</tt>)
+	</p><p><span class="bold">Description: </span>  
+			Disables a server from sending any subscription updates over this virtual circuit.
+			Sent over TCP.
+			This mechanism is used by clients with slow CPU to prevent congestion when they are unable to handle all updates recived.
+			Effective automated handling of flow control is beyond the scope of this document.
+		</p><h3><a id="secCA_PROTO_EVENTS_OFFRequest" href="CAproto.html#toc">6.8.1. Request</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">8</tt></td><td>Command identifier for CA_PROTO_EVENTS_OFF</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr></table><p><span class="bold">Comments</span></p><ul><li>
+				This request will disable sending of subscription updates on the server to which it is sent.
+			</li><li>
+				Command applies to a single virtual circuit, so having multiple priority virtual circuit connections to the server would only affect the one on which the message is sent. 
+			</li><li>
+				No response will be sent for this request.
+			</li></ul> 
+			<h2><a id="secCA_PROTO_EVENTS_ON" href="CAproto.html#toc">6.9. <tt class="identifier">CA_PROTO_EVENTS_ON</tt></a></h2><p><span class="bold">Command: </span>CA_PROTO_EVENTS_ON</p><p><span class="bold">ID: </span><tt class="identifier">9</tt> (<tt class="identifier">0x09</tt>)
+	</p><p><span class="bold">Description: </span>  
+			Enables the server to resume sending subscription updates for this virtual circuit.
+			Sent over TCP.
+			This mechanism is used by clients with slow CPU to prevent congestion when they are unable to handle all updates recived.
+			Effective automated handling of flow control is beyond the scope of this document.
+		</p><h3><a id="secCA_PROTO_EVENTS_ONRequest" href="CAproto.html#toc">6.9.1. Request</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">9</tt></td><td>Command identifier for CA_PROTO_EVENTS_ON</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr></table><p><span class="bold">Comments</span></p><ul><li>
+				This request will enable sending of subscription updates on the server to which it is sent.
+			</li><li>
+				Command applies to a single virtual circuit, so having multiple priority virtual circuit connections to the server would only affect the one on which the message is sent. 
+			</li><li>
+				No response will be sent for this request.
+			</li></ul> 
+			<h2><a id="secCA_PROTO_READ_SYNC" href="CAproto.html#toc">6.10. <tt class="identifier">CA_PROTO_READ_SYNC</tt></a></h2><p><span class="bold">Command: </span>CA_PROTO_READ_SYNC</p><p><span class="bold">ID: </span><tt class="identifier">10</tt> (<tt class="identifier">0x0A</tt>)
+	</p><p><span class="bold">Description: </span>  
+			<span class="bold">Deprecated since protocol version 3.13.</span>
+		</p><h3><a id="secCA_PROTO_READ_SYNCRequest" href="CAproto.html#toc">6.10.1. Request</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">10</tt></td><td>Command identifier for CA_PROTO_READ_SYNC.</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr></table> 
+			<h2><a id="secCA_PROTO_ERROR" href="CAproto.html#toc">6.11. <tt class="identifier">CA_PROTO_ERROR</tt></a></h2><p><span class="bold">Command: </span>CA_PROTO_ERROR</p><p><span class="bold">ID: </span><tt class="identifier">11</tt> (<tt class="identifier">0x0B</tt>)
+	</p><p><span class="bold">Description: </span>  
+			Sends error message and code.
+			This message is only sent from server to client in response to any request that fails and does not include error code in response.
+			This applies to all asynchronous commands.
+			Error message will contain a copy of original request and textual description of the error.
+			Sent over UDP.
+		</p><h3><a id="secCA_PROTO_ERRORResponse" href="CAproto.html#toc">6.11.1. Response</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">11</tt></td><td>Command identifier for CA_PROTO_ERROR</td></tr><tr class="odd"><td><tt class="identifier">Payload Size</tt></td><td><tt class="identifier"></tt></td><td>Size of the request header that triggered the error plus size of the error message.</td></tr><tr class="even"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">CID</tt></td><td><tt class="identifier">Channel CID</tt></td><td>CID of the channel for which request failed, <a href="CAproto.html#secCID">CID - Client ID
+					(3.2.1.)</a>.</td></tr><tr class="odd"><td><tt class="identifier">Status Code</tt></td><td><tt class="identifier">One of ECA codes</tt></td><td><a href="CAproto.html#secReturnCodes">Error status code
+					(13.)</a>.</td></tr></table><p><span class="bold">Payload</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Name</th><th>Type</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Original Request</tt></td><td><tt class="identifier">Message Header</tt></td><td><tt class="identifier"></tt></td><td>
+				Header of the request that caused the error.
+			</td></tr><tr class="odd"><td><tt class="identifier">Error Message</tt></td><td><tt class="identifier">STRING</tt></td><td><tt class="identifier"></tt></td><td>
+				A null-terminated string conveying the error message.
+			</td></tr></table><p><span class="bold">Comments</span></p><ul><li>
+				Complete exception report is returned.
+				This includes error message code, CID of channel on which the request failed, original request and string description of the message.
+			</li><li>
+				CID value depends on original request and may not actually identify a channel.
+			</li><li>
+				First part of payload is original request header with the same structure as sent.
+				Any payload that was part of this request is not included.
+				Textual error message starts immediately after the header.
+			</li></ul> 
+			<h2><a id="secCA_PROTO_CLEAR_CHANNEL" href="CAproto.html#toc">6.12. <tt class="identifier">CA_PROTO_CLEAR_CHANNEL</tt></a></h2><p><span class="bold">Command: </span>CA_PROTO_CLEAR_CHANNEL</p><p><span class="bold">ID: </span><tt class="identifier">12</tt> (<tt class="identifier">0x0C</tt>)
+	</p><p><span class="bold">Description: </span>  
+			Clears a channel.
+			This command will cause server to release the associated channel resources and no longer accept any requests for this SID/CID.
+		</p><h3><a id="secCA_PROTO_CLEAR_CHANNELRequest" href="CAproto.html#toc">6.12.1. Request</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">12</tt></td><td>Command identifier for CA_PROTO_CLEAR_COMMAND</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">SID</tt></td><td><tt class="identifier">SID of the channel</tt></td><td>SID of channel to clear.</td></tr><tr class="odd"><td><tt class="identifier">CID</tt></td><td><tt class="identifier">CID of the channel</tt></td><td>CID of channel to clear.</td></tr></table><h3><a id="secCA_PROTO_CLEAR_CHANNELResponse" href="CAproto.html#toc">6.12.2. Response</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">12</tt></td><td>Command identifier of CA_PROTO_CLEAR_COMMAND</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">SID</tt></td><td><tt class="identifier">Same as request</tt></td><td>SID of cleared channel.</td></tr><tr class="odd"><td><tt class="identifier">CID</tt></td><td><tt class="identifier">Same as request</tt></td><td>CID of cleared channel.</td></tr></table><p><span class="bold">Comments</span></p><ul><li>
+				Server responds immediately and only then releases channel resources.
+			</li><li>
+				Once a channel with a given SID has been cleared, any request sent with this SID will fail.
+			</li><li>
+				Sent over TCP.
+			</li></ul>
+			<h2><a id="secCA_PROTO_READ_NOTIFY" href="CAproto.html#toc">6.15. <tt class="identifier">CA_PROTO_READ_NOTIFY</tt></a></h2><p><span class="bold">Command: </span>CA_PROTO_READ_NOTIFY</p><p><span class="bold">ID: </span><tt class="identifier">15</tt> (<tt class="identifier">0x0F</tt>)
+	</p><p><span class="bold">Description: </span>  
+		Read value of a channel.
+		Sent over TCP.
+	</p><h3><a id="secCA_PROTO_READ_NOTIFYRequest" href="CAproto.html#toc">6.15.1. Request</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">15</tt></td><td>Command identifier for CA_PROTO_READ_NOTIFY.</td></tr><tr class="odd"><td><tt class="identifier">Payload Size</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">Data Type</tt></td><td><tt class="identifier">DBR type</tt></td><td>Desired type of the return value.</td></tr><tr class="odd"><td><tt class="identifier">Data Count</tt></td><td><tt class="identifier">&gt;= 0</tt></td><td>Desired number of elements to read.</td></tr><tr class="even"><td><tt class="identifier">SID</tt></td><td><tt class="identifier">Channel SID</tt></td><td>SID of the channel to read.</td></tr><tr class="odd"><td><tt class="identifier">IOID</tt></td><td><tt class="identifier">Client provided IOID</tt></td><td>IOID of this operation.</td></tr></table><p><span class="bold">Comments</span></p><ul><li>
+			Channel from which to read is identified using SID.
+		</li><li>
+		  Response will contain the same <tt class="identifier">IOID</tt> as the request, making it possible to distinguish multiple responses. 
+		</li></ul><h3><a id="secCA_PROTO_READ_NOTIFYResponse" href="CAproto.html#toc">6.15.2. Response</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">15</tt></td><td>Command identifier for CA_PROTO_READ_NOTIFY.</td></tr><tr class="odd"><td><tt class="identifier">Payload size</tt></td><td><tt class="identifier">Size of payload</tt></td><td>Size of DBR formatted data in payload.</td></tr><tr class="even"><td><tt class="identifier">Data type</tt></td><td><tt class="identifier">DBR type</tt></td><td>Payload format.</td></tr><tr class="odd"><td><tt class="identifier">Data count</tt></td><td><tt class="identifier">&gt;= 0</tt></td><td>Payload element count.</td></tr><tr class="even"><td><tt class="identifier">SID</tt></td><td><tt class="identifier">Same as request</tt></td><td>SID of the channel.</td></tr><tr class="odd"><td><tt class="identifier">IOID</tt></td><td><tt class="identifier">Same as request</tt></td><td>IOID of this operation.</td></tr></table><p><span class="bold">Payload</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Name</th><th>Type</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">DBR formatted data</tt></td><td><tt class="identifier">DBR</tt></td><td><tt class="identifier">DBR formatted data</tt></td><td>
+			Value stored as DBR type specified in <tt class="identifier">Data type</tt> field.
+			Data count specifies number of elements of DBR value field.
+		</td></tr></table>
+			<h2><a id="secCA_PROTO_READ_BUILD" href="CAproto.html#toc">6.16. <tt class="identifier">CA_PROTO_READ_BUILD</tt></a></h2><p><span class="bold">Command: </span>CA_PROTO_READ_BUILD</p><p><span class="bold">ID: </span><tt class="identifier">16</tt> (<tt class="identifier">0x10</tt>)
+	</p><p><span class="bold">Description: </span>  
+			Obsolete
+		</p><h3><a id="secCA_PROTO_READ_BUILDRequest" href="CAproto.html#toc">6.16.1. Request</a></h3>
+			<h2><a id="secCA_PROTO_CREATE_CHAN" href="CAproto.html#toc">6.18. <tt class="identifier">CA_PROTO_CREATE_CHAN</tt></a></h2><p><span class="bold">Command: </span>CA_PROTO_CREATE_CHAN</p><p><span class="bold">ID: </span><tt class="identifier">18</tt> (<tt class="identifier">0x12</tt>)
+	</p><p><span class="bold">Description: </span>  
+			Requests creation of channel.
+			Server will allocate required resources and return initialized SID.
+			Sent over TCP.
+		</p><h3><a id="secCA_PROTO_CREATE_CHANRequest" href="CAproto.html#toc">6.18.1. Request</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">18</tt></td><td>Command identifier for CA_PROTO_CREATE_CHAN</td></tr><tr class="odd"><td><tt class="identifier">Payload size</tt></td><td><tt class="identifier">Size of payload</tt></td><td>Padded length of channel name.</td></tr><tr class="even"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">CID</tt></td><td><tt class="identifier">Channel CID</tt></td><td>CID of the channel to create.</td></tr><tr class="odd"><td><tt class="identifier">Client version</tt></td><td><tt class="identifier">Version number</tt></td><td>Client minor protocol version.</td></tr></table><p><span class="bold">Payload</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Name</th><th>Type</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Channel name</tt></td><td><tt class="identifier">STRING</tt></td><td><tt class="identifier"></tt></td><td>Name of channel to create.</td></tr></table><p><span class="bold">Comments</span></p><ul><li>
+			  CID sent should be the same as used with CA_PROTO_SEARCH.
+			</li></ul><h3><a id="secCA_PROTO_CREATE_CHANResponse" href="CAproto.html#toc">6.18.2. Response</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">CA_PROTO_CREATE_CHAN</tt></td><td> </td></tr><tr class="odd"><td><tt class="identifier">Payload size</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0</td></tr><tr class="even"><td><tt class="identifier">Data type</tt></td><td><tt class="identifier">DBR type</tt></td><td>Native channel data type</td></tr><tr class="odd"><td><tt class="identifier">Data count</tt></td><td><tt class="identifier">&gt;= 0</tt></td><td>Native channel data count</td></tr><tr class="even"><td><tt class="identifier">CID</tt></td><td><tt class="identifier">Same as request</tt></td><td>Channel client ID</td></tr><tr class="odd"><td><tt class="identifier">SID</tt></td><td><tt class="identifier">SID provided by server</tt></td><td>Channel server ID</td></tr></table><p><span class="bold">Comments</span></p><ul><li>
+			  SID will be associated with CID on the server and will be reused sending certain commands that require it as a parameter.
+			</li><li>
+			  SID will be valid until the channel is cleared using <tt class="identifier">CA_PROTO_CLEAR</tt> or server destroys the PV the channel references.
+			</li></ul>
+			<h2><a id="secCA_PROTO_WRITE_NOTIFY" href="CAproto.html#toc">6.19. <tt class="identifier">CA_PROTO_WRITE_NOTIFY</tt></a></h2><p><span class="bold">Command: </span>CA_PROTO_WRITE_NOTIFY</p><p><span class="bold">ID: </span><tt class="identifier">19</tt> (<tt class="identifier">0x13</tt>)
+	</p><p><span class="bold">Description: </span>  
+			Writes new channel value.
+			Sent over TCP.
+		</p><h3><a id="secCA_PROTO_WRITE_NOTIFYRequest" href="CAproto.html#toc">6.19.1. Request</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">19</tt></td><td>Command identifier for CA_PROTO_WRITE_NOTIFY</td></tr><tr class="odd"><td><tt class="identifier">Payload size</tt></td><td><tt class="identifier">Size of DBR formatted payload</tt></td><td>Size of padded payload</td></tr><tr class="even"><td><tt class="identifier">Data type</tt></td><td><tt class="identifier">DBR type</tt></td><td>Format of payload</td></tr><tr class="odd"><td><tt class="identifier">Data count</tt></td><td><tt class="identifier">ELEMENT_COUNT</tt></td><td>Number of elements in payload</td></tr><tr class="even"><td><tt class="identifier">SID</tt></td><td><tt class="identifier">SID provided by server</tt></td><td>Server channel ID</td></tr><tr class="odd"><td><tt class="identifier">IOID</tt></td><td><tt class="identifier">Client provided IOID</tt></td><td>Request ID</td></tr></table><p><span class="bold">Payload</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Name</th><th>Type</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">DBR formatted data</tt></td><td><tt class="identifier">DBR</tt></td><td><tt class="identifier">DBR formatted data</tt></td><td>
+				Value stored as DBR type specified in Data type field.
+				Data count specifies number of elements of DBR value field.
+			</td></tr></table><h3><a id="secCA_PROTO_WRITE_NOTIFYResponse" href="CAproto.html#toc">6.19.2. Response</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">19</tt></td><td>Command identifier for CA_PROTO_WRITE_NOTIFY</td></tr><tr class="odd"><td><tt class="identifier">Payload size</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0</td></tr><tr class="even"><td><tt class="identifier">Data type</tt></td><td><tt class="identifier">Same as request</tt></td><td>Format of data written</td></tr><tr class="odd"><td><tt class="identifier">Data count</tt></td><td><tt class="identifier">Same as request</tt></td><td>Number of elements written</td></tr><tr class="even"><td><tt class="identifier">Status</tt></td><td><tt class="identifier">Status code</tt></td><td>Status of write success</td></tr><tr class="odd"><td><tt class="identifier">IOID</tt></td><td><tt class="identifier">Same as request</tt></td><td>Request ID</td></tr></table>
+			<h2><a id="secCA_PROTO_CLIENT_NAME" href="CAproto.html#toc">6.20. <tt class="identifier">CA_PROTO_CLIENT_NAME</tt></a></h2><p><span class="bold">Command: </span>CA_PROTO_CLIENT_NAME</p><p><span class="bold">ID: </span><tt class="identifier">20</tt> (<tt class="identifier">0x14</tt>)
+	</p><p><span class="bold">Description: </span>  
+			Sends local username to virtual circuit peer. 
+			This name identifies the user and affects access rights.
+		</p><h3><a id="secCA_PROTO_CLIENT_NAMERequest" href="CAproto.html#toc">6.20.1. Request</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">20</tt></td><td>Command identifier for CA_PROTO_CLIENT_NAME</td></tr><tr class="odd"><td><tt class="identifier">Payload size</tt></td><td><tt class="identifier">&gt;=0</tt></td><td>Length of string in payload</td></tr><tr class="even"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0</td></tr><tr class="even"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0</td></tr></table><p><span class="bold">Payload</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Name</th><th>Type</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">User name</tt></td><td><tt class="identifier">STRING</tt></td><td><tt class="identifier"></tt></td><td>0-terminated username string</td></tr></table><p><span class="bold">Comments</span></p><ul><li>
+				This is a one-way message and will not receive response.
+			</li><li>
+				String in payload must be 0 padded to a length that is multiple of 8.
+			</li><li>
+				Sent over TCP.
+			</li></ul>
+			<h2><a id="secCA_PROTO_HOST_NAME" href="CAproto.html#toc">6.21. <tt class="identifier">CA_PROTO_HOST_NAME</tt></a></h2><p><span class="bold">Command: </span>CA_PROTO_HOST_NAME</p><p><span class="bold">ID: </span><tt class="identifier">21</tt> (<tt class="identifier">0x15</tt>)
+	</p><p><span class="bold">Description: </span>  
+			Sends local host name to virtual circuit peer.
+			This name will affect access rights.
+			Sent over TCP.
+		</p><h3><a id="secCA_PROTO_HOST_NAMERequest" href="CAproto.html#toc">6.21.1. Request</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">21</tt></td><td>Command identifier for CA_PROTO_HOST_NAME.</td></tr><tr class="odd"><td><tt class="identifier">Payload size</tt></td><td><tt class="identifier">Size of payload</tt></td><td>Length of host name string.</td></tr><tr class="even"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr></table><p><span class="bold">Payload</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Name</th><th>Type</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Host name</tt></td><td><tt class="identifier">STRING</tt></td><td><tt class="identifier"></tt></td><td>Client host name.</td></tr></table><p><span class="bold">Comments</span></p><ul><li>
+				This is one-way message and will receive no response.
+			</li></ul>
+			<h2><a id="secCA_PROTO_ACCESS_RIGHTS" href="CAproto.html#toc">6.22. <tt class="identifier">CA_PROTO_ACCESS_RIGHTS</tt></a></h2><p><span class="bold">Command: </span>CA_PROTO_ACCESS_RIGHTS</p><p><span class="bold">ID: </span><tt class="identifier">22</tt> (<tt class="identifier">0x16</tt>)
+	</p><p><span class="bold">Description: </span>  
+			Notifies of access rights for a channel.
+			This value is determined based on host and client name and may change during runtime.
+			Client cannot change access rights nor can it explicitly query its value, so last received value must be stored.
+		</p><h3><a id="secCA_PROTO_ACCESS_RIGHTSResponse" href="CAproto.html#toc">6.22.1. Response</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">22</tt></td><td>Command identifier for CA_PROTO_ACCESS_RIGHTS.</td></tr><tr class="odd"><td><tt class="identifier">Payload size</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0.</td></tr><tr class="even"><td><tt class="identifier">CID</tt></td><td><tt class="identifier">Channel CID</tt></td><td>Channel affected by change.</td></tr><tr class="odd"><td><tt class="identifier">Access Rights</tt></td><td><tt class="identifier">Access Rights</tt></td><td><a href="CAproto.html#secAccessRights">Access rights
+					(8.5.)</a> for given channel.</td></tr></table><p><span class="bold">Comments</span></p><ul><li>
+				Access Rights affect CA_PROTO_READ_NOTIFY, CA_PROTO_WRITE_NOTIFY and CA_PROTO_WRITE.
+			</li><li>
+				CA_PROTO_ACCESS_RIGHTS will be sent immediately after a channel is created using CA_PROTO_CREATE_CHAN.
+				If they change during runtime, this message sent to report new value.
+			</li><li>
+				Changes are only sent to currently connected channels, since it requires valid CID.
+			</li><li>
+				Sent over TCP.
+			</li></ul>
+			<h2><a id="secCA_PROTO_SIGNAL" href="CAproto.html#toc">6.25. <tt class="identifier">CA_PROTO_SIGNAL</tt></a></h2><p><span class="bold">Command: </span>CA_PROTO_SIGNAL</p><p><span class="bold">ID: </span><tt class="identifier">25</tt> (<tt class="identifier">0x19</tt>)
+	</p><p><span class="bold">Description: </span>  
+			Obsolete.
+		</p>
+			<h2><a id="secCA_PROTO_CREATE_CH_FAIL" href="CAproto.html#toc">6.26. <tt class="identifier">CA_PROTO_CREATE_CH_FAIL</tt></a></h2><p><span class="bold">Command: </span>CA_PROTO_CREATE_CH_FAIL</p><p><span class="bold">ID: </span><tt class="identifier">26</tt> (<tt class="identifier">0x1A</tt>)
+	</p><p><span class="bold">Description: </span>  
+			Reports that channel creation failed.
+			This response is sent to when channel creation in CA_PROTO_CREATE_CHAN fails.
+		</p><h3><a id="secCA_PROTO_CREATE_CH_FAILResponse" href="CAproto.html#toc">6.26.1. Response</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">26</tt></td><td>Command identifier for CA_PROTO_CREATE_CH_FAIL</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0</td></tr><tr class="even"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0</td></tr><tr class="even"><td><tt class="identifier">CID</tt></td><td><tt class="identifier">Same as request</tt></td><td>Client channel ID</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0</td></tr></table><p><span class="bold">Comments</span></p><ul><li>
+				Sent over TCP.
+			</li></ul>
+			<h2><a id="secCA_PROTO_SERVER_DISCONN" href="CAproto.html#toc">6.27. <tt class="identifier">CA_PROTO_SERVER_DISCONN</tt></a></h2><p><span class="bold">Command: </span>CA_PROTO_SERVER_DISCONN</p><p><span class="bold">ID: </span><tt class="identifier">27</tt> (<tt class="identifier">0x1B</tt>)
+	</p><p><span class="bold">Description: </span>  
+			Notifies the client that server has disconnected the channel.
+			This may be since the channel has been destroyed on server.
+			Sent over TCP.
+		</p><h3><a id="secCA_PROTO_SERVER_DISCONNResponse" href="CAproto.html#toc">6.27.1. Response</a></h3><p><span class="bold">Header</span></p><table class="table" cellspacing="0"><tr class="odd"><th>Field</th><th>Value</th><th>Description</th></tr><tr class="even"><td><tt class="identifier">Command</tt></td><td><tt class="identifier">27</tt></td><td>Command identifier for CA_PROTO_SERVER_DISCONN</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0</td></tr><tr class="even"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0</td></tr><tr class="even"><td><tt class="identifier">CID</tt></td><td><tt class="identifier">CID provided by client</tt></td><td>CID that was provided during CA_PROTO_CREATE_CHAN</td></tr><tr class="odd"><td><tt class="identifier">Reserved</tt></td><td><tt class="identifier">0</tt></td><td>Must be 0</td></tr></table>
+		
+		<h1><a id="secPayloadDataTypes" href="CAproto.html#toc">7. Payload Data Types</a></h1>
+	
+	
+	
+	
+			<p>
+				Channel access defines special structures to transferring data.
+				Main reason is efficiency, since in many cases more than one value can be transferred.
+				These types are organized in typed hierarchies with loose inheritance.
+				There are seven basic data types: DBR_STRING, DBR_SHORT, DBR_INT, DBR_FLOAT, DBR_ENUM, DBR_CHAR, DBR_LONG and DBR_DOUBLE.
+				Each of these types can be represented as an array, if the corresponding field in header indicates that.
+			</p>
+			<p>
+				Additional to basic data types, structured types allow access to more than one value within the same record.
+				These structures are status (STS), time stamp (TIME), graphic (GR) and control (CTRL).
+				All these structures contain value as the last field.
+			</p>
+			<p>
+				Status structure adds alarm severity. 
+				Time stamp structures extends the status structure by adding time stamp of the value.
+				Graphic extends status structure by providing alarm limits, units and precision.
+				Control structure extends graphic by adding control limits.
+			</p>
+			<p>
+				Following is the list of all structures as transmitted over network.
+			</p>
+			<h2><a id="secDBR_STS_STRING" href="CAproto.html#toc">7.7. <tt class="identifier">DBR_STS_STRING</tt></a></h2><p><span class="bold">Type: </span>DBR_STS_STRING</p><p><span class="bold">ID: </span><tt class="identifier">7</tt> (<tt class="identifier">0x07</tt>)
+	</p><p><span class="bold">Description: </span>  
+			DBR_STS structure for string type.
+		</p>
+			<h2><a id="secDBR_STS_SHORT" href="CAproto.html#toc">7.8. <tt class="identifier">DBR_STS_SHORT</tt></a></h2><p><span class="bold">Type: </span>DBR_STS_SHORT</p><p><span class="bold">ID: </span><tt class="identifier">8</tt> (<tt class="identifier">0x08</tt>)
+	</p><p><span class="bold">Description: </span>  
+		DBR_STS structure for UINT16 type.
+		May be referred to as DBR_STS_INT.
+	</p>
+			<h2><a id="secDBR_STS_FLOAT" href="CAproto.html#toc">7.9. <tt class="identifier">DBR_STS_FLOAT</tt></a></h2><p><span class="bold">Type: </span>DBR_STS_FLOAT</p><p><span class="bold">ID: </span><tt class="identifier">9</tt> (<tt class="identifier">0x09</tt>)
+	</p><p><span class="bold">Description: </span>  
+		DBR_STS structure for FLOAT type.
+	</p>
+			<h2><a id="secDBR_STS_ENUM" href="CAproto.html#toc">7.10. <tt class="identifier">DBR_STS_ENUM</tt></a></h2><p><span class="bold">Type: </span>DBR_STS_ENUM</p><p><span class="bold">ID: </span><tt class="identifier">10</tt> (<tt class="identifier">0x0A</tt>)
+	</p><p><span class="bold">Description: </span>  
+		DBR_STS structure for ENUM type.
+	</p>
+			<h2><a id="secDBR_STS_CHAR" href="CAproto.html#toc">7.11. <tt class="identifier">DBR_STS_CHAR</tt></a></h2><p><span class="bold">Type: </span>DBR_STS_CHAR</p><p><span class="bold">ID: </span><tt class="identifier">11</tt> (<tt class="identifier">0x0B</tt>)
+	</p><p><span class="bold">Description: </span>  
+		DBR_STS structure for CHAR type.
+	</p>
+			<h2><a id="secDBR_STS_LONG" href="CAproto.html#toc">7.12. <tt class="identifier">DBR_STS_LONG</tt></a></h2><p><span class="bold">Type: </span>DBR_STS_LONG</p><p><span class="bold">ID: </span><tt class="identifier">12</tt> (<tt class="identifier">0x0C</tt>)
+	</p><p><span class="bold">Description: </span>  
+		DBR_STS structure for LONG type.
+	</p>
+			<h2><a id="secDBR_STS_DOUBLE" href="CAproto.html#toc">7.13. <tt class="identifier">DBR_STS_DOUBLE</tt></a></h2><p><span class="bold">Type: </span>DBR_STS_DOUBLE</p><p><span class="bold">ID: </span><tt class="identifier">13</tt> (<tt class="identifier">0x0D</tt>)
+	</p><p><span class="bold">Description: </span>  
+		DBR_STS structure for LONG type.
+	</p>
+
+			<h2><a id="secDBR_TIME_STRING" href="CAproto.html#toc">7.14. <tt class="identifier">DBR_TIME_STRING</tt></a></h2><p><span class="bold">Type: </span>DBR_TIME_STRING</p><p><span class="bold">ID: </span><tt class="identifier">14</tt> (<tt class="identifier">0x0E</tt>)
+	</p><p><span class="bold">Description: </span>  
+			DBR_TIME structure for string type.
+		</p>
+			<h2><a id="secDBR_TIME_SHORT" href="CAproto.html#toc">7.15. <tt class="identifier">DBR_TIME_SHORT</tt></a></h2><p><span class="bold">Type: </span>DBR_TIME_SHORT</p><p><span class="bold">ID: </span><tt class="identifier">15</tt> (<tt class="identifier">0x0F</tt>)
+	</p><p><span class="bold">Description: </span>  
+		DBR_TIME structure for UINT16 type.
+		May be referred to as DBR_TIME_INT.
+	</p>
+			<h2><a id="secDBR_TIME_FLOAT" href="CAproto.html#toc">7.16. <tt class="identifier">DBR_TIME_FLOAT</tt></a></h2><p><span class="bold">Type: </span>DBR_TIME_FLOAT</p><p><span class="bold">ID: </span><tt class="identifier">16</tt> (<tt class="identifier">0x10</tt>)
+	</p><p><span class="bold">Description: </span>  
+		DBR_TIME structure for FLOAT type.
+	</p>
+			<h2><a id="secDBR_TIME_ENUM" href="CAproto.html#toc">7.17. <tt class="identifier">DBR_TIME_ENUM</tt></a></h2><p><span class="bold">Type: </span>DBR_TIME_ENUM</p><p><span class="bold">ID: </span><tt class="identifier">17</tt> (<tt class="identifier">0x11</tt>)
+	</p><p><span class="bold">Description: </span>  
+		DBR_TIME structure for ENUM type.
+	</p>
+			<h2><a id="secDBR_TIME_CHAR" href="CAproto.html#toc">7.18. <tt class="identifier">DBR_TIME_CHAR</tt></a></h2><p><span class="bold">Type: </span>DBR_TIME_CHAR</p><p><span class="bold">ID: </span><tt class="identifier">18</tt> (<tt class="identifier">0x12</tt>)
+	</p><p><span class="bold">Description: </span>  
+			DBR_TIME structure for CHAR type.
+		</p>
+			<h2><a id="secDBR_TIME_LONG" href="CAproto.html#toc">7.19. <tt class="identifier">DBR_TIME_LONG</tt></a></h2><p><span class="bold">Type: </span>DBR_TIME_LONG</p><p><span class="bold">ID: </span><tt class="identifier">19</tt> (<tt class="identifier">0x13</tt>)
+	</p><p><span class="bold">Description: </span>  
+		DBR_TIME structure for LONG type.
+	</p>
+			<h2><a id="secDBR_TIME_DOUBLE" href="CAproto.html#toc">7.20. <tt class="identifier">DBR_TIME_DOUBLE</tt></a></h2><p><span class="bold">Type: </span>DBR_TIME_DOUBLE</p><p><span class="bold">ID: </span><tt class="identifier">20</tt> (<tt class="identifier">0x14</tt>)
+	</p><p><span class="bold">Description: </span>  
+		DBR_TIME structure for DOUBLE type.
+	</p>
+			
+			<h2><a id="secDBR_GR_STRING" href="CAproto.html#toc">7.21. <tt class="identifier">DBR_GR_STRING</tt></a></h2><p><span class="bold">Type: </span>DBR_GR_STRING</p><p><span class="bold">ID: </span><tt class="identifier">21</tt> (<tt class="identifier">0x15</tt>)
+	</p><p><span class="bold">Description: </span>  
+			DBR_GR structure for string type.
+		</p>
+			<h2><a id="secDBR_GR_SHORT" href="CAproto.html#toc">7.22. <tt class="identifier">DBR_GR_SHORT</tt></a></h2><p><span class="bold">Type: </span>DBR_GR_SHORT</p><p><span class="bold">ID: </span><tt class="identifier">22</tt> (<tt class="identifier">0x16</tt>)
+	</p><p><span class="bold">Description: </span>  
+			DBR_GR structure for short type.
+		</p>
+			<h2><a id="secDBR_GR_INT" href="CAproto.html#toc">7.22. <tt class="identifier">DBR_GR_INT</tt></a></h2><p><span class="bold">Type: </span>DBR_GR_INT</p><p><span class="bold">ID: </span><tt class="identifier">22</tt> (<tt class="identifier">0x16</tt>)
+	</p><p><span class="bold">Description: </span>  
+			DBR_GR structure for int type.
+		</p>
+			<h2><a id="secDBR_GR_FLOAT" href="CAproto.html#toc">7.23. <tt class="identifier">DBR_GR_FLOAT</tt></a></h2><p><span class="bold">Type: </span>DBR_GR_FLOAT</p><p><span class="bold">ID: </span><tt class="identifier">23</tt> (<tt class="identifier">0x17</tt>)
+	</p><p><span class="bold">Description: </span>  
+			DBR_GR structure for float type.
+		</p>
+			<h2><a id="secDBR_GR_ENUM" href="CAproto.html#toc">7.24. <tt class="identifier">DBR_GR_ENUM</tt></a></h2><p><span class="bold">Type: </span>DBR_GR_ENUM</p><p><span class="bold">ID: </span><tt class="identifier">24</tt> (<tt class="identifier">0x18</tt>)
+	</p><p><span class="bold">Description: </span>  
+			DBR_GR structure for ENUM type.
+		</p>
+			<h2><a id="secDBR_GR_CHAR" href="CAproto.html#toc">7.25. <tt class="identifier">DBR_GR_CHAR</tt></a></h2><p><span class="bold">Type: </span>DBR_GR_CHAR</p><p><span class="bold">ID: </span><tt class="identifier">25</tt> (<tt class="identifier">0x19</tt>)
+	</p><p><span class="bold">Description: </span>  
+			DBR_GR structure for char type (UINT8 representation).
+		</p>
+			<h2><a id="secDBR_GR_LONG" href="CAproto.html#toc">7.26. <tt class="identifier">DBR_GR_LONG</tt></a></h2><p><span class="bold">Type: </span>DBR_GR_LONG</p><p><span class="bold">ID: </span><tt class="identifier">26</tt> (<tt class="identifier">0x1A</tt>)
+	</p><p><span class="bold">Description: </span>  
+			DBR_GR structure for long type (INT32 representation).
+		</p>
+			<h2><a id="secDBR_GR_DOUBLE" href="CAproto.html#toc">7.27. <tt class="identifier">DBR_GR_DOUBLE</tt></a></h2><p><span class="bold">Type: </span>DBR_GR_DOUBLE</p><p><span class="bold">ID: </span><tt class="identifier">27</tt> (<tt class="identifier">0x1B</tt>)
+	</p><p><span class="bold">Description: </span>  
+			DBR_GR structure for double type.
+		</p>
+			
+			<h2><a id="secDBR_CTRL_STRING" href="CAproto.html#toc">7.28. <tt class="identifier">DBR_CTRL_STRING</tt></a></h2><p><span class="bold">Type: </span>DBR_CTRL_STRING</p><p><span class="bold">ID: </span><tt class="identifier">28</tt> (<tt class="identifier">0x1C</tt>)
+	</p><p><span class="bold">Description: </span>  
+			DBR_CTRL structure for string type.
+		</p>
+			<h2><a id="secDBR_CTRL_SHORT" href="CAproto.html#toc">7.29. <tt class="identifier">DBR_CTRL_SHORT</tt></a></h2><p><span class="bold">Type: </span>DBR_CTRL_SHORT</p><p><span class="bold">ID: </span><tt class="identifier">29</tt> (<tt class="identifier">0x1D</tt>)
+	</p><p><span class="bold">Description: </span>  
+			DBR_CTRL structure for short type.
+		</p>
+			<h2><a id="secDBR_CTRL_INT" href="CAproto.html#toc">7.29. <tt class="identifier">DBR_CTRL_INT</tt></a></h2><p><span class="bold">Type: </span>DBR_CTRL_INT</p><p><span class="bold">ID: </span><tt class="identifier">29</tt> (<tt class="identifier">0x1D</tt>)
+	</p><p><span class="bold">Description: </span>  
+			DBR_CTRL structure for INT16 type.
+		</p>
+			<h2><a id="secDBR_CTRL_FLOAT" href="CAproto.html#toc">7.30. <tt class="identifier">DBR_CTRL_FLOAT</tt></a></h2><p><span class="bold">Type: </span>DBR_CTRL_FLOAT</p><p><span class="bold">ID: </span><tt class="identifier">30</tt> (<tt class="identifier">0x1E</tt>)
+	</p><p><span class="bold">Description: </span>  
+			DBR_CTRL structure for float type.
+		</p>
+			<h2><a id="secDBR_CTRL_ENUM" href="CAproto.html#toc">7.31. <tt class="identifier">DBR_CTRL_ENUM</tt></a></h2><p><span class="bold">Type: </span>DBR_CTRL_ENUM</p><p><span class="bold">ID: </span><tt class="identifier">31</tt> (<tt class="identifier">0x1F</tt>)
+	</p><p><span class="bold">Description: </span>  
+			DBR_CTRL structure for ENUM type.
+		</p>
+			<h2><a id="secDBR_CTRL_CHAR" href="CAproto.html#toc">7.32. <tt class="identifier">DBR_CTRL_CHAR</tt></a></h2><p><span class="bold">Type: </span>DBR_CTRL_CHAR</p><p><span class="bold">ID: </span><tt class="identifier">32</tt> (<tt class="identifier">0x20</tt>)
+	</p><p><span class="bold">Description: </span>  
+			DBR_CTRL structure for char type (UINT8 representation).
+		</p>
+			<h2><a id="secDBR_CTRL_LONG" href="CAproto.html#toc">7.33. <tt class="identifier">DBR_CTRL_LONG</tt></a></h2><p><span class="bold">Type: </span>DBR_CTRL_LONG</p><p><span class="bold">ID: </span><tt class="identifier">33</tt> (<tt class="identifier">0x21</tt>)
+	</p><p><span class="bold">Description: </span>  
+			DBR_CTRL structure for INT32 type.
+		</p>
+			<h2><a id="secDBR_CTRL_DOUBLE" href="CAproto.html#toc">7.34. <tt class="identifier">DBR_CTRL_DOUBLE</tt></a></h2><p><span class="bold">Type: </span>DBR_CTRL_DOUBLE</p><p><span class="bold">ID: </span><tt class="identifier">34</tt> (<tt class="identifier">0x22</tt>)
+	</p><p><span class="bold">Description: </span>  
+			DBR_CTRL structure for DOUBLE type.
+		</p>
+		
+		<h1><a id="secConstants" href="CAproto.html#toc">8. Constants</a></h1>
+	
+	
+	
+	
+<h2><a id="secPorts" href="CAproto.html#toc">8.1. Port numbers</a></h2>
+	<p>
+		Although there is no requirement as to which port numbers are used by either servers or clients, there are some standard values which must be used as defaults, unless overriden by application.
+	</p>
+	<p>
+		Port numbers are dependant on protocol versions and are calculated using the folowing definitions:
+	</p>
+	<p>
+		<tt class="identifier"><span class="bold">CA_PORT_BASE</span> = 5056</tt>
+	</p>
+	<p>
+		<tt class="identifier"><span class="bold">CA_SERVER_PORT</span> = CA_PORT_BASE + MAJOR_PROTOCOL_VERSION * 2</tt>
+	</p>
+	<p>
+		<tt class="identifier"><span class="bold">CA_REPEATER_PORT</span> = CA_PORT_BASE + MAJOR_PROTOCOL_VERSION * 2 + 1</tt>
+	</p>
+	<p>
+		Based on protocol version described in this document (4.11), port numbers used are <span class="bold"><tt class="identifier">CA_SERVER_PORT = 5064</tt></span> and <span class="bold"><tt class="identifier">CA_REPEATER_PORT = 5065</tt></span>. 
+	</p>
+	<p>
+		Since registration of port numbers with IANA and in the interest of compatibility, the version numbers are unlikely to change.
+		Therefore, the port numbers described here (5064 and 5065) may be considered final. 
+	</p>
+
+	
+	<h2><a id="secConstantsOperations" href="CAproto.html#toc">8.2. Representation of constants</a></h2>
+		<p>
+			This section lists various constants, their types and values used by protocol.
+		</p>
+		<p>
+			Some constants can be combined using logical OR operation.
+			
+			Example: Monitor mask of DBE_VALUE and DBE_ALARM are combined using (DBE_VALUE or DBE_ALARM) resulting in (1 or 4 == 5).
+		</p>
+		<p>
+			To query the whether certain value is present in such combined value, and operation is used.
+			Example: to query whether DBE_ALARM of monitor mask is set, (DBE_VALUE and MASK &gt; 0) will return 0 if DBE_VALUE is not present, otherwise DBE_ALARM is present.
+		</p>
+	
+	<h2><a id="secMask" href="CAproto.html#toc">8.3. Monitor Mask</a></h2>
+		<p>
+			Indicates which changes to the value should be reported back to client library.
+			Different values can be combined using logical OR operation.
+		</p>
+		<p>
+			<span class="bold">Type: </span> not defined, depends on the field it is in (usually UINT16)
+		</p>
+		<ul>
+			<li>
+			  DBE_VALUE - value 1 (0x01) - Value change events are reported. 
+			  Value changes take into consideration a dead band within which the value changes are not reported.</li>
+			<li>DBE_LOG - value 2 (0x02) - Log events are reported. 
+			Similiar to DBR_VALUE, DBE_LOG defines a different dead band value that determines frequency of updates.</li>
+			<li>DBE_ALARM - value 4 (0x04) - Alarm events are reported whenever alarm value of the channel changes.</li>
+		</ul>
+	
+	<h2><a id="secReplyFlag" href="CAproto.html#toc">8.4. Search Reply Flag</a></h2>
+		<p>
+			Indicates whether server should reply to failed search messages.
+			If a server does not know about channel name, it has the option of replying to request or ignoring it.
+			Usually, servers contacted through address list will receive request for reply.
+		</p>
+		<p>
+			<span class="bold">Type: </span> not defined, depends on the field it is in (usually UINT16).
+		</p>
+		<ul>
+			<li>DO_REPLY - value 10 (0x0a) - Server should reply to failed search requests.</li>
+			<li>DONT_REPLY - value 5 (0x05) - Server should ignore failed requests.</li>
+		</ul>
+	
+
+	<h2><a id="secAccessRights" href="CAproto.html#toc">8.5. Access Rights</a></h2>
+		<p>
+			Defines access rights for a given channel.
+			Accss rights are defined as logicaly ORred value of allowed access.
+		</p>
+		<p>
+			<span class="bold">Type: </span> not defined, depends on the field it is in (usually UINT16).
+		</p>
+		<ul>
+			<li>CA_PROTO_ACCESS_RIGHT_READ - value 1 (0x01) - Read access is allowed</li>
+			<li>CA_PROTO_ACCESS_RIGHT_WRITE - value 2 (0x02) - Write access is allowed.</li>
+		</ul>
+		<p>
+			As a reference, the following values are valid.
+		</p>
+		<ul>
+			<li>0 - No access</li>
+			<li>1 - Read access only</li>
+			<li>2 - Write access only</li>
+			<li>3 - Read and write access</li>
+		</ul>
+	
+
+		<h1><a id="secExampleMessage" href="CAproto.html#toc">9. Example message</a></h1>
+	
+	
+	
+	
+			<p>
+				This example shows construction of messages.
+				For details of individual structures, see message and data type reference (CA_PROTO_READ_NOTIFY and DBR_GR_INT16).
+			</p>
+			<p>
+				A client will send CA_PROTO_READ_NOTIFY message with the following contents.
+			</p>
+			<ul>
+				<li>Data type: DBR_GR_INT16</li>
+				<li>Element count: 5</li>
+				<li>Server ID: 22 (obtained during channel creation)</li>
+				<li>Sequence ID: 56 (each read or write request increases value by one)</li>
+			</ul>
+			<p>
+				The messsage would be represented as follows:
+			</p>
+			<table cellspacing="0" class="code"><tr><td class="content"><pre xml:lang="xml">
+00 0F (command) 00 00 (payload size) 00 16 (data type) 00 05 (element count)
+00 00 00 16 (server ID) 00 00 00 38 (sequence ID)
+			</pre></td></tr></table>
+			<p>
+				Server would respond with success and return requested value with individual DBR_GR_INT16 fields having the following values.
+			</p>
+			<ul>
+				<li>Status: ECA_NORMAL </li>
+				<li>Severity: NO_ALARM (0)</li>
+			</ul>
+			<table cellspacing="0" class="code"><tr><td class="content"><pre xml:lang="xml">
+00 0f (command) 00 20 (payload size) 00 16 (data type) 00 05 (element count)
+00 00 00 16 (server ID) 00 00 00 38 (sequence ID) 
+00 05  00 02  43 6f 75 6e 74 73 00 00  00 0a  00 00
+00 08  00 06  00 04  00 02  00 00  00 00  00 00 00 00
+    8      6      4      2      0      0      0     0
+			</pre></td></tr></table>
+		
+		<h1><a id="secVirtualCircuitLifeCycle" href="CAproto.html#toc">10. Virtual Circuit Operation</a></h1>
+	
+	
+	
+	
+			<img src="CAproto/vc_schematic_small.png" alt="Image: CAproto/vc_schematic_small.png" width="640" height="443"></img>	
+	
+			<h2><a id="secVirtualCircuitE" href="CAproto.html#toc">10.1. Establishing virtual circuit</a></h2>
+				<p>
+					Virtual circuit is a TCP connection between a client and a server.
+					Each virtual circuit has an associated priority, which can be used by server to prioritize requests depending on current load.
+					An independent circuit for each priority level selected by the client might be used because it allows for preemptive prioritized dispatch scheduling in the server when the OS supports that, and also allows specifying the networks scheduling priority when the router and or LAN support that.
+					Regardless of how many channels are handled by either client or server, each client-server pair will be connected with exactly one TCP connection for each priority level.
+					This level is specified when creating a virtual circuit.
+				</p>
+				<p>
+					When establishing a virtual circuit, a simple handshake will be performed.
+					Client will open a TCP connection to the server.
+					After that, it sends <a href="CAproto.html#secCA_PROTO_VERSION"><tt class="identifier">CA_PROTO_VERSION</tt>
+					(4.0.)</a>, <a href="CAproto.html#secCA_PROTO_CLIENT_NAME"><tt class="identifier">CA_PROTO_CLIENT_NAME</tt>
+					(6.20.)</a> and <a href="CAproto.html#secCA_PROTO_HOST_NAME"><tt class="identifier">CA_PROTO_HOST_NAME</tt>
+					(6.21.)</a> messages.
+					If server accepts all the supplied parameters and the client and host are permitted to connect, the server will respond with <a href="CAproto.html#secCA_PROTO_VERSION"><tt class="identifier">CA_PROTO_VERSION</tt>
+					(4.0.)</a>.
+					After that, client may start sending requests.
+				</p>
+				<p>
+					Virtual circuit will remain active as long as there is at least one channel active.
+					If the TCP connection is lost, all channels using this circuit must be notified.
+				</p>
+			
+			<h2><a id="secModesOfOperation" href="CAproto.html#toc">10.2. Basic mode of operation</a></h2>
+				<p>
+					In most basic role, the client will send requests to the server and await one or more responses, or in some special cases, no response will be expected.
+					For each type of request, one of three events will occur:
+				</p>
+				<ul>
+					<li>Matching response will be received</li>
+					<li>Error response will be received by client indicating either user or client error</li>
+					<li>The client will receive no response, and one was expected.</li>
+					<li>Network failure occurs</li>
+				</ul>
+				<p>
+					When a matching response is received, the operation has completed successfully. 
+					Any result returned will report any applicable return information.
+					Client library will then notify the client about completion.
+				</p>
+				<p>
+					If a request fails and server could handle this failure, <a href="CAproto.html#secCA_PROTO_ERROR"><tt class="identifier">CA_PROTO_ERROR</tt>
+					(6.11.)</a> response will be received or error code is received in response, depending on the request sent.
+					This response contains original request header, error code and text description of error.
+				</p>
+				<p>
+					Although servers are designed to always return a response, in some cases this will not occur.
+					An unlikely case is that a server has failed or stopped responding.
+					A more common case is broadcast search, where no replies are sent to search messages.
+					The later case is designed to not overload the network by sending failure notifications.
+					This however does not allow client library to determine, whether a search has failed, or the server load is simply too high and the response will arrive later.
+					In this case, client library may assume that search yielded no results and notify on search failure.
+					Regardless of this, should any such response arrive late, the client must be notified.
+				</p>
+				<p>
+					In case of network failure, two situations should be anticipated.
+					One is TCP connection loss for a virtual circuit.
+					Virtual circuit has mechanisms for dealing with such case and should attempt to restore the connection itself.
+					Repeater has no such mechanisms, since it depends on reliability of UDP protocol.
+					There will be in most cases no way for repeater to determine, whether the packets sent actually arrive at destination.
+					Repeater can however verify the clients registered with it, by attempting to bind to their port.
+					If binding succeeds, the client no longer exists.
+					Alternate way is using connected UDP sockets and checking ICMP destination unreachable error. 
+				</p>
+			
+			<h2><a id="secVCUnresponsive" href="CAproto.html#toc">10.3. Detecting virtual circuit unresponsiveness</a></h2>
+				<p>
+					During virtual circuit life-time, the circuit may become unresponsive.
+					Since this is tightly related to network availability and server load, determining actual cause for unresponsiveness is difficult.
+					Basic criteria on which unresponsiveness should be determined are:
+				</p>
+				<ul>
+					<li>No beacon received from server in expected time period</li>
+					<li>No response received from server for a predetermined ammount of time (usually 30 seconds)</li>
+					<li>Server does not immediatelly respond to <a href="CAproto.html#secCA_PROTO_ECHO"><tt class="identifier">CA_PROTO_ECHO</tt>
+					(4.23.)</a></li>
+				</ul>
+				<p>
+					Behaviour of virtual circuit implementation under such conditions is undefined.
+					Experience has shown however, that virtual circuit should not be disconnected when it becomes unresponsive, since this negatively impacts network performance under load.					
+				</p>
+			
+			<h2><a id="secChannelLifeCycle" href="CAproto.html#toc">10.4. Channel life-cycle</a></h2>
+				<img src="CAproto/connection_states.png" alt="Image: CAproto/connection_states.png" width="307" height="323"></img>
+				<p>
+				  A channel discussed here is based on two levels.
+					One is channel as seen from client application, the other is channel implementation in client library.
+					This difference will be pointed out where applicable.
+				</p>
+				<p>
+					When a channel is created by client application, it is initialized in NEVER_CONN state.
+					This indicates that channel is currently being connected for the first time.
+					If connection process fails, channel moves into FAILED state and is not usable.
+					Connection proccess within the client library will attempt to connect the channel repeatedly.
+					Intervals between consecutive attempts should be increased, before finally giving up and determining the channel cannot be connected and signaling FAILED state.
+					A total number of attempts can be on the order of 100.
+				</p>
+				<p>
+					When connection is established, the channel will signal to client with CONN_UP event and changing its state to connected.
+				</p>
+				<p>
+					Should the virtual circuit connection be lost, CONN_DOWN event will change channel state to disconnected.
+					Whenever virtual circuit is reconnected, the channel state is restored to connected.
+					Note that reconnection process follows the same rules as initial process.
+					It is also possible, that the PV will move between the servers, but client application should not be aware of such internal changes to channel.
+				</p>
+				<p>
+					Once client application is done using the channel, it will be closed and its state moved changed to CLOSED.
+					After that, this channel can no longer be used.
+				</p>
+				<p>
+					Detailed description of channel operations is outlined below.
+				</p>
+			
+			<h2><a id="secConnectingChannel" href="CAproto.html#toc">10.5. Connecting a Channel</a></h2>
+				<p>
+					Connection of a channel is a two phase process.
+					First, server that hosts channel with a given name must be located.
+					Second, client and server must both register a connection.
+				</p>
+				<p>
+					Before connection, client library allocates CID identifier that will be used to reference new channel.
+					Next it sends <a href="CAproto.html#secCA_PROTO_SEARCH"><tt class="identifier">CA_PROTO_SEARCH</tt>
+					(4.6.)</a> with channel name request via broadcast and/or to address list.
+					Each server that receives such message checks to see if it knows about this name.
+					If it does, response to <a href="CAproto.html#secCA_PROTO_SEARCH"><tt class="identifier">CA_PROTO_SEARCH</tt>
+					(4.6.)</a> is sent back to client.
+					If not, the server checks if reply field of request is DO_REPLY and responds with <a href="CAproto.html#secCA_PROTO_NOT_FOUND"><tt class="identifier">CA_PROTO_NOT_FOUND</tt>
+					(4.14.)</a>, otherwise does nothing.
+				</p>
+				<p>
+					Client library may receive more than one response.
+					In this case, first response should be used and others rejected.
+					The cause of multiple responses is same PV hosted on multiple different hosts.
+					Client or server has no method of knowing which PV is 'right'.
+					Multiple responses should be reported by the client to the application or user.
+				</p>
+				<p>
+					After extracting server address and port, client library checks to see if this server is already known and connected via virtual circuit.
+					If not, virtual circuit is established.
+					Any requests sent through this channel will use this circuit.
+				</p>
+				<p>
+					For this it sends <a href="CAproto.html#secCA_PROTO_CREATE_CHAN"><tt class="identifier">CA_PROTO_CREATE_CHAN</tt>
+					(6.18.)</a> request with channels CID and channel name.
+					Server will respond with <a href="CAproto.html#secCA_PROTO_CREATE_CHAN"><tt class="identifier">CA_PROTO_CREATE_CHAN</tt>
+					(6.18.)</a> response which will provide channel type, data count and server identifier SID.
+					In case the channel could not be created, error message will be returned.
+				</p>
+				<p>
+					Having initialized both CID and SID and registered the channel with the server, this channel is ready for use.
+					Client library should store these values for further use.
+				</p>
+			
+			<h2><a id="secReadAndWrite" href="CAproto.html#toc">10.6. Read and Write operations</a></h2>
+				<p>
+					Read and write operations require the channel to be properly initialized and connected and its virtual circuit to be active.
+					These operations use <a href="CAproto.html#secCA_PROTO_READ_NOTIFY"><tt class="identifier">CA_PROTO_READ_NOTIFY</tt>
+					(6.15.)</a> and <a href="CAproto.html#secCA_PROTO_WRITE_NOTIFY"><tt class="identifier">CA_PROTO_WRITE_NOTIFY</tt>
+					(6.19.)</a> messages.
+				</p>
+				<p>
+					To read a value from a channel client library will create a <a href="CAproto.html#secCA_PROTO_READ_NOTIFY"><tt class="identifier">CA_PROTO_READ_NOTIFY</tt>
+					(6.15.)</a> request.
+					This request will contain desired data type and data count parameters which may differ from channels native type as obtained during connect.
+					Additionally, IOID is stored in request to provide unique identification.
+					Channel that is used will be identified by SID that was obtained during channel creation.
+					No payload is sent with request.
+				</p>
+				<p>
+					After server processes the message reponse is either valid <a href="CAproto.html#secCA_PROTO_READ_NOTIFY"><tt class="identifier">CA_PROTO_READ_NOTIFY</tt>
+					(6.15.)</a> response or <a href="CAproto.html#secCA_PROTO_ERROR"><tt class="identifier">CA_PROTO_ERROR</tt>
+					(6.11.)</a> to indicate error.
+					In case of success, response contains same field values as request, but has additional payload.
+					This payload is formatted as requested data type with desired number of elements.
+				</p>
+				<p>
+					Write operation is performed identically with payload roles reversed.
+					Here the request will contain payload with DBR formatted value to write and response will have no payload.
+				</p>
+			
+			<h2><a id="secSubscriptionsMonitors" href="CAproto.html#toc">10.7. Subscriptions and Monitors</a></h2>
+				<p>
+					Client creates monitors by registering a subscription on a channel.
+					This causes server to notify subscribers of value changes.
+				</p>
+				<p>
+					Subscriptions are created by first allocating unique Subscription ID.
+					This identifier is used to uniquely identify various subscriptions.
+					Next, <a href="CAproto.html#secCA_PROTO_EVENT_ADD"><tt class="identifier">CA_PROTO_EVENT_ADD</tt>
+					(6.1.)</a> request is created using SID and Subscription ID.
+					Data type and data count indicate desired value format in response.
+					Additional information is provided in payload as specified in <a href="CAproto.html#secCA_PROTO_EVENT_ADD"><tt class="identifier">CA_PROTO_EVENT_ADD</tt>
+					(6.1.)</a> reference.
+				</p>
+				<p>
+					First <a href="CAproto.html#secCA_PROTO_EVENT_ADD"><tt class="identifier">CA_PROTO_EVENT_ADD</tt>
+					(6.1.)</a> response is received immediatelly to confirm successful subscription.
+					If error occurs, <a href="CAproto.html#secCA_PROTO_ERROR"><tt class="identifier">CA_PROTO_ERROR</tt>
+					(6.11.)</a> response is received.
+				</p>
+				<p>
+					Responses arrive asynchronously until client cancels the subscription using <a href="CAproto.html#secCA_PROTO_EVENT_ADD"><tt class="identifier">CA_PROTO_EVENT_ADD</tt>
+					(6.1.)</a> response and payload containing DBR formatted value.
+					If server is shutdown during this time, events will no longer arrive, but the subscription will not be cancelled.
+					Once the server is restarted, client library will reestablish the subscription silently without notifying client application.
+				</p>
+				<p>
+					Subscription is cancelled by sending <a href="CAproto.html#secCA_PROTO_EVENT_CANCEL"><tt class="identifier">CA_PROTO_EVENT_CANCEL</tt>
+					(6.2.)</a> request with relevant parameters identical to those in original <a href="CAproto.html#secCA_PROTO_EVENT_ADD"><tt class="identifier">CA_PROTO_EVENT_ADD</tt>
+					(6.1.)</a> request that created the subscription.
+					Successful cancelation is confirmed by <a href="CAproto.html#secCA_PROTO_EVENT_ADD"><tt class="identifier">CA_PROTO_EVENT_ADD</tt>
+					(6.1.)</a> response without payload.
+				</p>
+				<p>
+					Cancelling the subscription while the server is down should be handled by cancelling the subscription locally and not reestablishing it once the server is up again.
+				</p>
+			
+			<h2><a id="secConnectionEvents" href="CAproto.html#toc">10.8. Connection events</a></h2>
+				<p>
+					If a virtual circuit is disconnected (server goes down or stops sending beacons), any connected channels that use this circuit should be notified.
+					There is no direct way to reconnect the channel from client side, but this will be done by the library.
+					Once the circuit is reestablished, client application is notified of status change for all channels.
+					Even if a channel is reported to be disconnect as a result of virtual circuit failure, the channel is not closed.
+					The only way a channel connection is actually closed is by explicitly closing it using <a href="CAproto.html#secCA_PROTO_CLEAR_CHANNEL"><tt class="identifier">CA_PROTO_CLEAR_CHANNEL</tt>
+					(6.12.)</a> thereby invalidating its resources.
+				</p>
+			
+			<h2><a id="secClosingChannel" href="CAproto.html#toc">10.9. Closing the channel</a></h2>
+				<p>
+					Channel is closed by sending <a href="CAproto.html#secCA_PROTO_CLEAR_CHANNEL"><tt class="identifier">CA_PROTO_CLEAR_CHANNEL</tt>
+					(6.12.)</a> request.
+					Regardless of whether response confirmes closing or reports an error, CID and SID associated with the channel are no longer valid.
+					Any resources still available to the client application are considered invalid.
+					A channel that was cleared may no longer be reconnected.
+				</p>
+			
+		
+		<h1><a id="secRepeaterOperation" href="CAproto.html#toc">11. Repeater Operation</a></h1>
+	
+	
+	
+
+
+	<img src="CAproto/rep_schematic_small.png" alt="Image: CAproto/rep_schematic_small.png" width="640" height="360"></img>
+	<h2><a id="secRepeaterRole" href="CAproto.html#toc">11.1. Role</a></h2>
+	<p>
+		Simple demonstration of repeater operation. 
+		A repeater will be used both on client and server side to forward incoming UDP requests to multiple clients and/or server on same host.
+		Each host or client will then respond on its own.
+	</p>
+	
+	<p>
+	  Since role of the repeater is related to host, not the client, its implementation must be independant from individual client instance or process.
+		Repeater must not stop operation until all clients depending on it registered with it have shut down.
+	</p>
+	
+	
+	<h2><a id="secRepeaterStartup" href="CAproto.html#toc">11.2. Startup</a></h2>
+		<p>
+			Each client must check for presence of repeater on startup, before any access to EPICS hosts is made.
+			This check is made by attempting to bind to CA_REPEATER_PORT.
+			If binding fails, the client may assume the repeater is already running and may attempt to register.
+			This is done by sending CA_REPEATER_REGISTER datagram to CA_REPEATER_PORT.
+			If repeater is already active, it will respond with CA_REPEATER_CONFIRM datagram back to client, otherwise the client can assume, the repeater is invalid, the process bound to the port is not even a repeater or that some unknown error occured.
+			In this case, client will spawn new repeater and attempt registration again.
+			Attempt to detect the repeater and register should be made several times with some reasonable delay to avoid any transient unresponsiveness that might occur.
+		</p>
+		<p>
+			After the client has received registration confirmation from the repeater, it should keep listening for messages from the repeater.
+			Any broadcasts sent by servers will be received by the repeater and forwarded to registered clients.
+		</p>
+	
+	
+	<h2><a id="secClientDetection" href="CAproto.html#toc">11.3. Client detection</a></h2>
+		<p>
+			The repeater tests to see if its clients exist by periodically attempting to bind to their ports. 
+			If unsuccessful when attempting to bind to the client's port, then the repeater concludes that the client no longer exists. 
+			A technique using connected UDP sockets and ICMP destination unreachable can also used. 
+			If a client is determined to no longer be present then the repeater un-registers that client and no longer sends messages to it.
+		</p>
+	
+	
+	<h2><a id="secRepeaterFanOut" href="CAproto.html#toc">11.4. Operation</a></h2>
+		<p>
+			Each message, the repeater receives, must be forwarded to local clients, to the address provided during registration.
+			No assumption should be made about existence or state of clients.
+		</p>
+	
+
+	<h2><a id="secRepeaterShutdown" href="CAproto.html#toc">11.5. Shutdown</a></h2>
+		<p>
+			Repeater should not shutdown on its own, if it does, there should be no active clients registered with it.
+		</p>
+	
+
+		<h1><a id="secServerBeacons" href="CAproto.html#toc">12. Server Beacons</a></h1>
+	
+	
+	
+	
+			<p>
+				Each EPICS server will send beacons periodically to report it is still active.
+				Beacon messages will contain server's IP and port, as well as sequential beacon ID.
+				Beacons will be broadcast and sent to servers address list.
+			</p>
+			<p>
+				When a server becomes active, it will immediately start sending beacons with an increasing delay.
+				Time between beacons will start at 0.02 seconds.
+				After each beacon is sent, this time is doubled.
+				Maximum delay between beacons will be limited by server specified parameter, but is commonly 15 seconds.
+			</p>
+			<p>
+				If a beacon is not received within expected time, virtual circuits connected to this server should be notified and virtual circuit must handle this situation. 	
+			</p>
+		
+		<h1><a id="secReturnCodes" href="CAproto.html#toc">13. Return Codes</a></h1>
+
+	<p>
+		This section covers return codes and exceptions that can occur during CA command processing.
+		In general, exceptions will be used to report various events to the application.
+		Return codes are predefined values for conditions that can occur, where as exceptions are actually reported.
+		Apart from exceptions that occur on server or due to network transport, additional error conditions may be reported on the client side as local exceptions.
+	</p>
+	<p>
+		Implementation is required to handle all return codes.
+		Local exceptions should be thrown whenever implied, but only if such exception is reasonable within the scope of implementation.
+		Certain local exceptions that deal with state dependent exception must always be provided.
+	</p>
+	<p>
+		<span class="bold">Naming convention:</span>
+		All return codes defined within the scope of CA are listed with all capitals, with underscore character (_) replacing spaces.
+		Additionally, all exception names are prefixed with string ECA_.
+	</p>
+	<p>
+		Return codes are represented as UINT16.
+		First 3 least signifficant bits indicate severity, remaining 13 bits are return code ID.
+	</p>
+	<p>
+		Return codes are communicated in the protocol by the CA_PROTO_READ_NOTIFY, CA_PROTO_WRITE_NOTIFY, monitor subscription responses, and the CA_PROTO_ERROR responses.
+	</p>
+
+	<table class="table" cellspacing="0"><tr class="odd"><th>Code</th><th>Severity</th><th>ID</th><th>Value</th><th>
+Description
+		</th></tr><tr class="even"><td><tt class="identifier">ECA_NORMAL</tt></td><td><tt class="identifier">CA_K_SUCCESS</tt></td><td>0</td><td>1</td><td>
+Normal successful completion
+		</td></tr><tr class="odd"><td><tt class="identifier">ECA_MAXIOC</tt></td><td><tt class="identifier">CA_K_ERROR</tt></td><td>1</td><td>10</td><td>
+Maximum simultaneous IOC connections exceeded
+		</td></tr><tr class="even"><td><tt class="identifier">ECA_UKNHOST</tt></td><td><tt class="identifier">CA_K_ERROR</tt></td><td>2</td><td>18</td><td>
+Unknown internet host
+		</td></tr><tr class="odd"><td><tt class="identifier">ECA_UKNSERV</tt></td><td><tt class="identifier">CA_K_ERROR</tt></td><td>3</td><td>26</td><td>
+Unknown internet service
+		</td></tr><tr class="even"><td><tt class="identifier">ECA_SOCK</tt></td><td><tt class="identifier">CA_K_ERROR</tt></td><td>4</td><td>34</td><td>
+Unable to allocate a new socket
+		</td></tr><tr class="odd"><td><tt class="identifier">ECA_CONN</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>5</td><td>40</td><td>
+Unable to connect to internet host or service
+		</td></tr><tr class="even"><td><tt class="identifier">ECA_ALLOCMEM</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>6</td><td>48</td><td>
+Unable to allocate additional dynamic memory
+		</td></tr><tr class="odd"><td><tt class="identifier">ECA_UKNCHAN</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>7</td><td>56</td><td>
+Unknown IO channel
+		</td></tr><tr class="even"><td><tt class="identifier">ECA_UKNFIELD</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>8</td><td>64</td><td>
+Record field specified inappropriate for channel specified
+		</td></tr><tr class="odd"><td><tt class="identifier">ECA_TOLARGE</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>9</td><td>72</td><td>
+The requested data transfer is greater than available memory or EPICS_CA_MAX_ARRAY_BYTES
+		</td></tr><tr class="even"><td><tt class="identifier">ECA_TIMEOUT</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>10</td><td>80</td><td>
+User specified timeout on IO operation expired
+		</td></tr><tr class="odd"><td><tt class="identifier">ECA_NOSUPPORT</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>11</td><td>88</td><td>
+Sorry, that feature is planned but not supported at this time
+		</td></tr><tr class="even"><td><tt class="identifier">ECA_STRTOBIG</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>12</td><td>96</td><td>
+The supplied string is unusually large
+		</td></tr><tr class="odd"><td><tt class="identifier">ECA_DISCONNCHID</tt></td><td><tt class="identifier">CA_K_ERROR</tt></td><td>13</td><td>106</td><td>
+The request was ignored because the specified channel is disconnected
+		</td></tr><tr class="even"><td><tt class="identifier">ECA_BADTYPE</tt></td><td><tt class="identifier">CA_K_ERROR</tt></td><td>14</td><td>114</td><td>
+The data type specifed is invalid
+		</td></tr><tr class="odd"><td><tt class="identifier">ECA_CHIDNOTFND</tt></td><td><tt class="identifier">CA_K_INFO</tt></td><td>15</td><td>123</td><td>
+Remote Channel not found
+		</td></tr><tr class="even"><td><tt class="identifier">ECA_CHIDRETRY</tt></td><td><tt class="identifier">CA_K_INFO</tt></td><td>16</td><td>131</td><td>
+Unable to locate all user specified channels
+		</td></tr><tr class="odd"><td><tt class="identifier">ECA_INTERNAL</tt></td><td><tt class="identifier">CA_K_FATAL</tt></td><td>17</td><td>142</td><td>
+Channel Access Internal Failure
+		</td></tr><tr class="even"><td><tt class="identifier">ECA_DBLCLFAIL</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>18</td><td>144</td><td>
+The requested local DB operation failed
+		</td></tr><tr class="odd"><td><tt class="identifier">ECA_GETFAIL</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>19</td><td>152</td><td>
+Channel read request failed
+		</td></tr><tr class="even"><td><tt class="identifier">ECA_PUTFAIL</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>20</td><td>160</td><td>
+Channel write request failed
+		</td></tr><tr class="odd"><td><tt class="identifier">ECA_ADDFAIL</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>21</td><td>168</td><td>
+Channel subscription request failed
+		</td></tr><tr class="even"><td><tt class="identifier">ECA_BADCOUNT</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>22</td><td>176</td><td>
+Invalid element count requested
+		</td></tr><tr class="odd"><td><tt class="identifier">ECA_BADSTR</tt></td><td><tt class="identifier">CA_K_ERROR</tt></td><td>23</td><td>186</td><td>
+Invalid string
+		</td></tr><tr class="even"><td><tt class="identifier">ECA_DISCONN</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>24</td><td>192</td><td>
+Virtual circuit disconnect		
+		</td></tr><tr class="odd"><td><tt class="identifier">ECA_DBLCHNL</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>25</td><td>200</td><td>
+Identical process variable name on multiple servers
+		</td></tr><tr class="even"><td><tt class="identifier">ECA_EVDISALLOW</tt></td><td><tt class="identifier">CA_K_ERROR</tt></td><td>26</td><td>210</td><td>
+Request inappropriate within subscription (monitor) update callback
+		</td></tr><tr class="odd"><td><tt class="identifier">ECA_BUILDGET</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>27</td><td>216</td><td>
+Database value get for that channel failed during channel search
+		</td></tr><tr class="even"><td><tt class="identifier">ECA_NEEDSFP</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>28</td><td>224</td><td>
+Unable to initialize without the vxWorks VX_FP_TASK task option set
+		</td></tr><tr class="odd"><td><tt class="identifier">ECA_OVEVFAIL</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>29</td><td>232</td><td>
+Event queue overflow has prevented first pass event after event add
+		</td></tr><tr class="even"><td><tt class="identifier">ECA_BADMONID</tt></td><td><tt class="identifier">CA_K_ERROR</tt></td><td>30</td><td>242</td><td>
+Bad event subscription (monitor) identifier
+		</td></tr><tr class="odd"><td><tt class="identifier">ECA_NEWADDR</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>31</td><td>248</td><td>
+Remote channel has new network address
+		</td></tr><tr class="even"><td><tt class="identifier">ECA_NEWCONN</tt></td><td><tt class="identifier">CA_K_INFO</tt></td><td>32</td><td>259</td><td>
+New or resumed network connection
+		</td></tr><tr class="odd"><td><tt class="identifier">ECA_NOCACTX</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>33</td><td>264</td><td>
+Specified task isnt a member of a CA context
+		</td></tr><tr class="even"><td><tt class="identifier">ECA_DEFUNCT</tt></td><td><tt class="identifier">CA_K_FATAL</tt></td><td>34</td><td>278</td><td>
+Attempt to use defunct CA feature failed		
+		</td></tr><tr class="odd"><td><tt class="identifier">ECA_EMPTYSTR</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>35</td><td>280</td><td>
+The supplied string is empty
+		</td></tr><tr class="even"><td><tt class="identifier">ECA_NOREPEATER</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>36</td><td>288</td><td>
+Unable to spawn the CA repeater thread- auto reconnect will fail
+		</td></tr><tr class="odd"><td><tt class="identifier">ECA_NOCHANMSG</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>37</td><td>296</td><td>
+No channel id match for search reply- search reply ignored
+		</td></tr><tr class="even"><td><tt class="identifier">ECA_DLCKREST</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>38</td><td>304</td><td>
+Reseting dead connection- will try to reconnect
+		</td></tr><tr class="odd"><td><tt class="identifier">ECA_SERVBEHIND</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>39</td><td>312</td><td>
+Server (IOC) has fallen behind or is not responding- still waiting
+		</td></tr><tr class="even"><td><tt class="identifier">ECA_NOCAST</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>40</td><td>320</td><td>
+No internet interface with broadcast available
+		</td></tr><tr class="odd"><td><tt class="identifier">ECA_BADMASK</tt></td><td><tt class="identifier">CA_K_ERROR</tt></td><td>41</td><td>330</td><td>
+Invalid event selection mask
+		</td></tr><tr class="even"><td><tt class="identifier">ECA_IODONE</tt></td><td><tt class="identifier">CA_K_INFO</tt></td><td>42</td><td>339</td><td>
+IO operations have completed
+		</td></tr><tr class="odd"><td><tt class="identifier">ECA_IOINPROGRESS</tt></td><td><tt class="identifier">CA_K_INFO</tt></td><td>43</td><td>347</td><td>
+IO operations are in progress
+		</td></tr><tr class="even"><td><tt class="identifier">ECA_BADSYNCGRP</tt></td><td><tt class="identifier">CA_K_ERROR</tt></td><td>44</td><td>354</td><td>
+Invalid synchronous group identifier
+		</td></tr><tr class="odd"><td><tt class="identifier">ECA_PUTCBINPROG</tt></td><td><tt class="identifier">CA_K_ERROR</tt></td><td>45</td><td>362</td><td>
+Put callback timed out
+		</td></tr><tr class="even"><td><tt class="identifier">ECA_NORDACCESS</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>46</td><td>368</td><td>
+Read access denied
+		</td></tr><tr class="odd"><td><tt class="identifier">ECA_NOWTACCESS</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>47</td><td>376</td><td>
+Write access denied
+		</td></tr><tr class="even"><td><tt class="identifier">ECA_ANACHRONISM</tt></td><td><tt class="identifier">CA_K_ERROR</tt></td><td>48</td><td>386</td><td>
+Requested feature is no longer supported
+		</td></tr><tr class="odd"><td><tt class="identifier">ECA_NOSEARCHADDR</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>49</td><td>392</td><td>
+Empty PV search address list
+		</td></tr><tr class="even"><td><tt class="identifier">ECA_NOCONVERT</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>50</td><td>400</td><td>
+No reasonable data conversion between client and server types
+		</td></tr><tr class="odd"><td><tt class="identifier">ECA_BADCHID</tt></td><td><tt class="identifier">CA_K_ERROR</tt></td><td>51</td><td>410</td><td>
+Invalid channel identifier
+		</td></tr><tr class="even"><td><tt class="identifier">ECA_BADFUNCPTR</tt></td><td><tt class="identifier">CA_K_ERROR</tt></td><td>52</td><td>418</td><td>
+Invalid function pointer
+		</td></tr><tr class="odd"><td><tt class="identifier">ECA_ISATTACHED</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>53</td><td>424</td><td>
+Thread is already attached to a client context
+		</td></tr><tr class="even"><td><tt class="identifier">ECA_UNAVAILINSERV</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>54</td><td>432</td><td>
+Not supported by attached service
+		</td></tr><tr class="odd"><td><tt class="identifier">ECA_CHANDESTROY</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>55</td><td>440</td><td>
+User destroyed channel
+		</td></tr><tr class="even"><td><tt class="identifier">ECA_BADPRIORITY</tt></td><td><tt class="identifier">CA_K_ERROR</tt></td><td>56</td><td>450</td><td>
+Invalid channel priority
+		</td></tr><tr class="odd"><td><tt class="identifier">ECA_NOTTHREADED</tt></td><td><tt class="identifier">CA_K_ERROR</tt></td><td>57</td><td>458</td><td>
+Preemptive callback not enabled - additional threads may not join context
+		</td></tr><tr class="even"><td><tt class="identifier">ECA_16KARRAYCLIENT</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>58</td><td>464</td><td>
+Client's protocol revision does not support transfers exceeding 16k bytes
+		</td></tr><tr class="odd"><td><tt class="identifier">ECA_CONNSEQTMO</tt></td><td><tt class="identifier">CA_K_WARNING</tt></td><td>59</td><td>472</td><td>
+Virtual circuit connection sequence aborted
+		</td></tr></table>
+
+		<h1><a id="secExampleConversation" href="CAproto.html#toc">14. Example conversation</a></h1>
+	
+	
+	
+	
+			<p>
+				This is example conversation between client and server.
+				Client first establishes TCP connection to the server and immediately requests creation of a channel.
+				After server aknowledges channel creation, client reads the value of the channel twice.
+				First as a single string value and second as a DBR_GR_INT16 type.
+				After the response to both queries has been received, the channel is destroyed.
+			</p>
+			<table cellspacing="0" class="code"><tr><td class="content"><pre xml:lang="xml">
+Client to Server
+<span class="bold">CA_PROTO_VERSION (handshake)</span>
+00 00  00 00  00 00  00 0b  00 00 00 00  00 00 00 00
+    0      0      0     11            0            0
+<span class="bold">CA_PROTO_CLIENT_NAME (handshake)</span>
+00 14  00 08  00 00  00 00  00 00 00 00  00 00 00 00  61 70 75 63 65 6c 6a 00
+   20      8      8      0            0            0   a  p  u  c  e  l  j \0
+<span class="bold">CA_PROTO_HOST_NAME (handshake)</span>
+00 15  00 08  00 00  00 00  00 00 00 00  00 00 00 00  63 73 6c 30 36 00 00 00
+   21      8      0      0            0            0   c  s  l  0  6 \0 \0 \0
+<span class="bold">CA_PROTO_CREATE_CHAN (request)</span>
+00 12  00 18  00 00  00 00  00 00 00 01  00 00 00 0b
+   18     24      0      0            1           11
+61 70 75 63 65 6c 6a 3a  61 69 45 78 61 6d 70 6c 65 31 00 00 00 00 00 00
+ a  p  u  c  e  l  j  :   a  i  E  x  a  m  p  l  e  1 \0 \0 \0 \0 \0 \0
+
+Server to Client
+<span class="bold">CA_PROTO_ACCESS_RIGHTS (handshake)</span>
+00 16  00 00  00 00  00 00  00 00 00 01  00 00 00 03
+   22      0      0      0            1            3
+<span class="bold">CA_PROTO_CREATE_CHAN (response)</span>
+00 12  00 00  00 06  00 01  00 00 00 01  00 00 00 04
+   18      0      6      1            1            4
+	 
+Client to Server
+<span class="bold">CA_PROTO_READ_NOTIFY (request)</span>
+00 0f  00 00  00 00  00 01  00 00 00 04  00 00 00 01
+   15      0      0      1            4            1
+<span class="bold">CA_PROTO_READ_NOTIFY (request)</span>
+00 0f  00 00  00 16  00 01  00 00 00 04  00 00 00 02
+   15      0     22      1            4           02
+
+Server to Client
+<span class="bold">CA_PROTO_READ_NOTIFY (response)</span>
+00 0f  00 08  00 00  00 01  00 00 00 01  00 00 00 01  30 00 00 00 00 06 00 01
+   15      8      0      1            1            1   0
+<span class="bold">CA_PROTO_READ_NOTIFY (response)</span>
+00 0f  00 20  00 16  00 01  00 00 00 01  00 00 00 02 
+   15     32     22      1            1           02
+00 05  00 02  43 6f 75 6e 74 73 00 00  00 0a  00 00
+    5      2   C  o  u  n  t  s \0 \0     10      0
+00 08  00 06  00 04  00 02  00 00  00 00  00 00 00 00
+    8      6      4      2      0      0      0     0
+
+<span class="bold">Client to Server</span>
+CA_PROTO_CLEAR_CHANNEL (request)
+00 0c  00 00  00 00  00 00  00 00 00 04  00 00 00 01
+   12      0      0      0            4            1
+	 
+Server to Client
+<span class="bold">CA_PROTO_CLEAR_CHANNEL (response)</span>
+00 0c  00 00  00 00  00 00  00 00 00 04  00 00 00 01
+   12      0      0      0            4            1
+			</pre></td></tr></table>
+
+<h1 id="glossary"><a href="CAproto.html#toc">Glossary of Terms</a></h1>
+<table class="table" cellspacing="0">
+<tr class="odd"><th>Term</th><th>Definition</th></tr>
+<tr class="even"><td><a href="CAproto.html#term:IOC"><span class="bold">IOC</span></a></td><td>Input/Output Controller.</td></tr>
+<tr class="odd"><td><a href="CAproto.html#term:PV"><span class="bold">PV</span></a></td><td>Process variable.</td></tr>
+<tr class="even"><td><a href="CAproto.html#term:Virtualcircuit"><span class="bold">Virtual circuit</span></a></td><td>Reusable TCP connection between client and server, through which all PVs hosted by the server can be conveyed to the client.</td></tr></table>
+
+<div class="rotate" id="rotFooter">
+    <div>
+        [ Click here to show document footer. ]
+        </div>
+    <div>
+        <h1 id="documentHistory"><a href="CAproto.html#toc">Document History</a></h1>
+        <table cellspacing="0" class="document-history"><tr><th>Revision</th><th>Date</th><th>Author</th><th>Section</th><th>Modification</th></tr><tr><td class="revision" rowspan="1">1.0</td><td class="date" rowspan="1">2003-12-12</td><td class="author" rowspan="1"><a href="javascript:mailTo(&quot;cosylab.com&quot;,&quot;klemen.zagar&quot;);">Klemen Žagar</a></td><td class="section-modification-11">all</td><td class="modification-11">Created.</td></tr><tr><td class="revision" rowspan="1">1.1</td><td class="date" rowspan="1">2004-01-08</td><td class="author" rowspan="1"><a href="javascript:mailTo(&quot;cosylab.com&quot;,&quot;ales.pucelj&quot;);">Aleš Pucelj</a></td><td class="section-modification-11">all</td><td class="modification-11">Finalized structure.</td></tr>
+        <tr class="reviewRejected"><td class="revision" rowspan="1"></td><td class="date" rowspan="1">2004-01-10</td><td class="author" rowspan="1"><a href="javascript:mailTo(&quot;cosylab.com&quot;,&quot;matej.sekoranja&quot;);">Matej Šekoranja</a></td><td class="section-modification-11">all</td><td class="modification-11">Review.</td></tr>
+        <tr><td class="revision" rowspan="1">1.2</td><td class="date" rowspan="1">2004-04-19</td><td class="author" rowspan="1"><a href="javascript:mailTo(&quot;cosylab.com&quot;,&quot;ales.pucelj&quot;);">Aleš Pucelj</a></td><td class="section-modification-11">all</td><td class="modification-11">Draft completed.</td></tr><tr><td class="revision" rowspan="1">1.3</td><td class="date" rowspan="1">2004-05-31</td><td class="author" rowspan="1"><a href="javascript:mailTo(&quot;cosylab.com&quot;,&quot;ales.pucelj&quot;);">Aleš Pucelj</a></td><td class="section-modification-11">all</td><td class="modification-11">Matej's comments considered (after <span class="emphasis">Channel Access for Java</span> implementation).</td></tr>
+        <tr class="reviewAccepted"><td class="revision" rowspan="1"></td><td class="date" rowspan="1">2004-06-01</td><td class="author" rowspan="1"><a href="javascript:mailTo(&quot;cosylab.com&quot;,&quot;matej.sekoranja&quot;);">Matej Šekoranja</a></td><td class="section-modification-11">all</td><td class="modification-11">Review.</td></tr>
+        <tr class="release"><td class="revision" rowspan="1"></td><td class="date" rowspan="1">2004-08-12</td><td class="author" rowspan="1"><a href="javascript:mailTo(&quot;cosylab.com&quot;,&quot;klemen.zagar&quot;);">Klemen Žagar</a></td><td class="section-modification-11">all</td><td><b>Released</b></td></tr>
+        <tr><td class="revision" rowspan="1">1.4</td><td class="date" rowspan="1">2008-02-07</td><td class="author" rowspan="1"><a href="javascript:mailTo(&quot;cosylab.com&quot;,&quot;matej.sekoranja&quot;);">Matej Šekoranja</a></td><td class="section-modification-11">all</td><td class="modification-11">Description of CA_PROTO_READ and CA_PROTO_READ_SYNC added.</td></tr>
+        <tr class="release"><td class="revision" rowspan="1"></td><td class="date" rowspan="1">2008-02-07</td><td class="author" rowspan="1"><a href="javascript:mailTo(&quot;cosylab.com&quot;,&quot;klemen.zagar&quot;);">Klemen Žagar</a></td><td class="section-modification-11">all</td><td><b>Released</b></td></tr></table>
+
+        <h1 id="references"><a href="CAproto.html#toc">References</a></h1>
+        <table cellspacing="0"><tr><th>ID</th><th>Author</th><th>Reference</th><th>Revision</th><th>Date</th><th>Publisher</th></tr>
+        <tr><td id="refCAReference">1</td><td>Jeffrey O. Hill</td><td><a href="http://www.aps.anl.gov/epics/modules/base/R3-14/5-docs/CAref.html">Channel Access Reference Manual</a></td><td>R3.14</td><td>2003</td><td></td></tr>
+        <tr><td id="refJCA">2</td><td></td><td><a href="http://www.aps.anl.gov/bcda/jca/">Java Channel Access</a></td><td>2.0.1</td><td>2003</td><td></td></tr>
+        <tr><td id="refRFC2119">3</td><td>Bradner, S.</td><td><a href="http://www.ietf.org/rfc/rfc2119.txt">RFC 2119: Key words for use in RFCs to Indicate Requirement Levels</a></td><td></td><td>1997-03</td><td></td></tr></table>
+        </div>
+    </div>
+</td></tr>
+
+<tr><td id="cosyline"><img src="CAproto/Cosylab.png" alt="Cosylab"></img></td></tr></table>
+</body></html>
