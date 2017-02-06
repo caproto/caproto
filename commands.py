@@ -3,12 +3,12 @@
 import ctypes
 
 class MessageHeader(ctypes.BigEndianStructure):
-    _fields_ = [("command", ctypes.c_uint8),
-                ("payload_size", ctypes.c_uint8),
-                ("data_type", ctypes.c_uint8),
-                ("data_count", ctypes.c_uint8),
-                ("parameter1", ctypes.c_uint16),
-                ("parameter2", ctypes.c_uint16),
+    _fields_ = [("command", ctypes.c_uint16),
+                ("payload_size", ctypes.c_uint16),
+                ("data_type", ctypes.c_uint16),
+                ("data_count", ctypes.c_uint16),
+                ("parameter1", ctypes.c_uint32),
+                ("parameter2", ctypes.c_uint32),
                ]
 
 
