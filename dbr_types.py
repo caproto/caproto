@@ -1,3 +1,6 @@
+# Manually written with reference to:
+# http://www.aps.anl.gov/epics/base/R3-16/0-docs/CAproto/index.html#payload-data-types
+# https://github.com/epics-base/epics-base/blob/813166128eae1240cdd643869808abe1c4621321/src/ca/client/db_access.h
 import ctypes
 
 
@@ -489,7 +492,9 @@ class DBR_GR_DOUBLE(ctypes.BigEndianStructure):
         ('value', dbr_double),
     ]
 
+
 # DBR_GR_STRING (28) is not implemented by EPICS.
+
 
 class DBR_CTRL_INT(ctypes.BigEndianStructure):
     DBR_ID = 29
@@ -731,3 +736,5 @@ class DBR_CLASS_NAME(ctypes.BigEndianStructure):
 DBR_SHORT = DBR_INT
 DBR_STS_SHORT = DBR_STS_INT
 DBR_TIME_SHORT = DBR_TIME_INT
+DBR_GR_SHORT = DBR_GR_INT
+DBR_CTRL_SHORT = DBR_CTRL_INT
