@@ -719,8 +719,8 @@ class DBR_STSACK_STRING(ctypes.BigEndianStructure):
     _fields_ = [
         ('status', dbr_short),
         ('severity', dbr_short),
-        ('severity', dbr_short),
-        ('severity', dbr_short),
+        ('ackt', dbr_ushort),
+        ('acks', dbr_ushort),
         ('value', 40 * dbr_char),
     ]
 
@@ -730,7 +730,6 @@ class DBR_CLASS_NAME(ctypes.BigEndianStructure):
     _fields_ = [
         ('value', dbr_ushort),
     ]
-
 
 
 DBR_SHORT = DBR_INT
