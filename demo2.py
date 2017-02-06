@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 import socket
 import os
 import getpass
@@ -5,35 +6,83 @@ import getpass
 
 host = os.environ['DOCKER0_IP']
 sock = socket.create_connection((host, 5064))
+=======
+import time
+import socket
+import os
+import getpass
+import math
+
+def padded_len(s):
+    return 8 * math.ceil(len(s) / 8)
+    
+
+host = os.environ['DOCKER0_IP']
+port = 5064
+sock = socket.create_connection((host, port))
 
 # Send CA_PROTO_VERSION and listen for the server's reply.
 CLIENT_VERSION = 13
 req = CA_PROTO_VERSION_REQ(priority=1, version=CLIENT_VERSION)
 print(sock.sendall(bytes(req)))
-response = MessageHeader()
-sock.recv_into(response)
-print('Server protocol version:', response.data_count)
+response1 = MessageHeader()
+sock.recv_into(response1)
+print('Server protocol version:', response1.data_count)
 
 # Announce hostname and username.
 hostname = socket.gethostname()
-header = bytes(CA_PROTO_HOST_NAME_REQ(len(hostname)))
-payload = bytes(DBR_STRING(hostname.encode()))
+header = bytes(CA_PROTO_HOST_NAME_REQ(pl))
+pl = padded_len(hostname)
+payload = bytes(DBR_STRING(hostname.encode()))[:pl]
 print(sock.sendall(header + payload))
 # There is no response.
 username = getpass.getuser()
-header = bytes(CA_PROTO_CLIENT_NAME_REQ(len(hostname)))
-payload = bytes(DBR_STRING(hostname.encode()))
+header = bytes(CA_PROTO_CLIENT_NAME_REQ(pl))
+pl = padded_len(hostname)
+payload = bytes(DBR_STRING(hostname.encode()))[:pl]
 print(sock.sendall(header + payload))
 # There is no response.
 
-# Create a new channel
-cid = 9
-pv = "XF:31IDA-OP{Tbl-Ax:X1}Mtr"
-header = CA_PROTO_SEARCH_REQ(25 * 8, 10, CLIENT_VERSION, 4)
-# header = CA_PROTO_CREATE_CHAN_REQ(25 * 8, cid, CLIENT_VERSION)
+# Search.
+try:
+    cid += 1
+except NameError:
+    cid = 1
+pv = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
+pl = padded_len(pv)
+header = CA_PROTO_SEARCH_REQ(pl, 10, CLIENT_VERSION, cid)
 payload = DBR_STRING(pv.encode())
-print(header.command)
-msg = bytes(header) + bytes(payload)
+msg = bytes(header) + bytes(payload)[:pl]
+sock.sendall(msg)
+response2 = MessageHeader()
+sock.recv_into(response2)
+print('response command:', response2.command)
+
+# Create a new channel.
+print(cid == response2.parameter2)
+# sample payload as previous
+header = CA_PROTO_CREATE_CHAN_REQ(pl, cid, CLIENT_VERSION)
+msg = bytes(header) + bytes(payload)[:pl]
 print(msg)
 sock.sendall(msg)
-print(sock.recv(1024))
+response3 = MessageHeader()
+sock.recv_into(response3)
+print('response command:', response3.command)
+response4 = MessageHeader()
+sock.recv_into(response4)
+print('response command:', response4.command)
+sid = response4.parameter2
+
+try:
+    ioid += ioid
+except NameError:
+    ioid = 1
+
+# Read.
+header = CA_PROTO_READ_NOTIFY_REQ(DBR_FLOAT.DBR_ID, 1, sid, ioid)
+sock.sendall(header)
+response5 = MessageHeader()
+sock.recv_into(response5)
+print(response5.command)
+res_payload5 = DBR_FLOAT()
+sock.recv_into(res_payload5)
