@@ -1,4 +1,9 @@
 # Generate Python ctypes Structures to store EPICS data types.
+# Based on http://www.aps.anl.gov/epics/base/R3-16/0-docs/CAproto/index.html
+# excerpts from which are given in comments below.
+
+# Also see
+# https://github.com/epics-base/epics-base/blob/813166128eae1240cdd643869808abe1c4621321/src/ca/client/db_access.h
 import os
 from collections import namedtuple, OrderedDict
 from jinja2 import Environment, FileSystemLoader
@@ -13,91 +18,202 @@ JINJA_ENV = Environment(loader=FileSystemLoader(getpath('.')))
 template = JINJA_ENV.get_template('dbr_types.tpl')
 
 
-TYPE_MAP = {# 'dbr_string': 'ctypes.c_char_p',  # deal with these separately
-            'dbr_short': 'ctypes.c_ushort',
-            'dbr_int': 'ctypes.c_ushort',
-            'dbr_float': 'ctypes.c_float',
-            'dbr_enum': 'ctypes.c_ushort',  # Where do the enum strings go?
-            'dbr_char': 'ctypes.c_char',  # Is this the right char type?
-            'dbr_long': 'ctypes.c_ulong',
-            'dbr_double': 'ctypes.c_double',
-           }
+TYPE_MAP = OrderedDict([
+    ('STRING', '40 * ctypes.c_char'),
+    ('INT',    'ctypes.c_ushort'),
+    ('FLOAT',  'ctypes.c_float'),
+    ('ENUM',   'ctypes.c_ushort'),  # Where do the enum strings go?
+    ('CHAR',   'ctypes.c_char'),  # Is this the right char type?
+    ('LONG',   'ctypes.c_long'),
+    ('DOUBLE', 'ctypes.c_double'),
+    ])
+
 
 
 dbr_types = OrderedDict()
-for name, _type in TYPE_MAP.items():
-    dbr_types[name] = OrderedDict([('value', _type)])
-for suffix in ['short', 'int', 'float', 'enum', 'long']:
-    name = 'dbl_sts_%s' % suffix
-    dbr_types[name] = OrderedDict([('status', 'dbr_short'),
-                                   ('severity', 'dbr_short'),
-                                   ('value', 'dbr_%s' % suffix)])
-# Special-case char and double to include RISC_pad.
-dbr_types['dbr_sts_char'] = OrderedDict([('status', 'dbr_short'),
-                                         ('severity', 'dbr_short'),
-                                         ('RISC_pad', 'dbr_char'),
-                                         ('value', 'dbr_char')])
-dbr_types['dbr_sts_double'] = OrderedDict([('status', 'dbr_short'),
-                                           ('severity', 'dbr_short'),
-                                           ('RISC_pad', 'dbr_long'),
-                                           ('value', 'dbr_long')])
-# Additional structure for a string status and ack field
-#dbr_types['dbr_stsack_string'] = OrderedDict([('status', 'dbr_short'),
-#                                              ('severity', 'dbr_short'),
-#                                              ('ackt', 'dbr_short'),
-#                                              ('acks', 'dbr_short'),
-#                                              ('value', 'dbr_string')])
+
+# the basic types
+for i, (suffix, _type) in enumerate(TYPE_MAP.items()):
+    name = 'DBR_%s' % suffix
+    dbr_id = i
+    dbr_types[(dbr_id, name)] = OrderedDict([('value', _type)])
+
+# From documentation at
+# http://www.aps.anl.gov/epics/base/R3-16/0-docs/CAproto/index.html
+# 
+# struct metaSTS {
+#     epicsInt16 status;
+#     epicsInt16 severity;
+# };
+for i, suffix in enumerate(TYPE_MAP):
+    name = 'DBR_STS_%s' % suffix
+    dbr_id = i + len(TYPE_MAP)
+    dbr_types[(dbr_id, name)] = OrderedDict([
+        ('status', 'ctypes.c_short'),
+        ('severity', 'ctypes.c_short'),
+        ('value', TYPE_MAP[suffix])])
+
+# struct metaTIME {
+#     epicsInt16 status;
+#     epicsInt16 severity;
+#     epicsInt32 secondsSinceEpoch;
+#     epicsUInt32 nanoSeconds;
+# };
+for i, suffix in enumerate(TYPE_MAP):
+    name = 'DBR_TIME_%s' % suffix
+    dbr_id = i + 2 * len(TYPE_MAP)
+    dbr_types[(dbr_id, name)] = OrderedDict([
+        ('status', 'ctypes.c_short'),
+        ('severity', 'ctypes.c_short'),
+        # Note that the EPICS Epoch is 1990-01-01T00:00:00Z. This is 631152000
+        # seconds after the POSIX Epoch of 1970-01-01T00:00:00Z.
+        ('secondsSinceEpoch', 'ctypes.c_long'),
+        ('nanoSeconds', 'ctypes.c_ulong'),
+        ('value', TYPE_MAP[suffix])])
+
+# This is a guess based on the documentation for GR_INT, shown below.
+dbr_types[(21, 'DBR_GR_STRING')] = OrderedDict([
+     ('status', 'ctypes.c_short'),
+     ('severity', 'ctypes.c_short'),
+     ('units', '8 * ctypes.c_char'),
+     ('upper_display_limit', 'ctypes.c_short'),
+     ('lower_display_limit', 'ctypes.c_short'),
+     ('upper_alarm_limit', 'ctypes.c_short'),
+     ('upper_warning_limit', 'ctypes.c_short'),
+     ('lower_warning_limit', 'ctypes.c_short'),
+     ('lower_alarm_limit', 'ctypes.c_short'),
+     # Note weird ordering of these last two entries.
+     ('value', TYPE_MAP['STRING'])])
 
 
-# TODO many more, documented below
+# struct metaGR_INT {
+#         epicsInt16 status;
+#         epicsInt16 severity;
+#         char units[8];
+#         epicsInt16 upper_display_limit;
+#         epicsInt16 lower_display_limit;
+#         epicsInt16 upper_alarm_limit;
+#         epicsInt16 upper_warning_limit;
+#         epicsInt16 lower_warning_limit;
+#         epicsInt16 lower_alarm_limit;
+# };
+dbr_types[(22, 'DBR_GR_INT')] = OrderedDict([
+    ('status', 'ctypes.c_short'),
+    ('severity', 'ctypes.c_short'),
+    ('units', '8 * ctypes.c_char'),
+    ('upper_display_limit', 'ctypes.c_short'),
+    ('lower_display_limit', 'ctypes.c_short'),
+    ('upper_alarm_limit', 'ctypes.c_short'),
+    ('upper_warning_limit', 'ctypes.c_short'),
+    ('lower_warning_limit', 'ctypes.c_short'),
+    ('lower_alarm_limit', 'ctypes.c_short'),
+    # Note weird ordering of these last two entries.
+    ('value', TYPE_MAP['STRING'])])
 
-"""
-from http://ladd00.triumf.ca/~olchansk/midas/db__access_8h_source.html
 
-00319 /* values returned for each field type
-00320  *    DBR_STRING  returns a NULL terminated string
-00321  * DBR_SHORT   returns an unsigned short
-00322  * DBR_INT     returns an unsigned short
-00323  * DBR_FLOAT   returns an IEEE floating point value
-00324  * DBR_ENUM returns an unsigned short which is the enum item
-00325  * DBR_CHAR returns an unsigned char
-00326  * DBR_LONG returns an unsigned long
-00327  * DBR_DOUBLE  returns a double precision floating point number
-00328  * DBR_STS_STRING returns a string status structure (dbr_sts_string)
-00329  * DBR_STS_SHORT  returns a short status structure (dbr_sts_short)
-00330  * DBR_STS_INT returns a short status structure (dbr_sts_int)
-00331  * DBR_STS_FLOAT  returns a float status structure (dbr_sts_float)
-00332  * DBR_STS_ENUM   returns an enum status structure (dbr_sts_enum)
-00333  * DBR_STS_CHAR   returns a char status structure (dbr_sts_char)
-00334  * DBR_STS_LONG   returns a long status structure (dbr_sts_long)
-00335  * DBR_STS_DOUBLE returns a double status structure (dbr_sts_double)
-00336  * DBR_TIME_STRING   returns a string time structure (dbr_time_string)
-00337  * DBR_TIME_SHORT returns a short time structure (dbr_time_short)
-00338  * DBR_TIME_INT   returns a short time structure (dbr_time_short)
-00339  * DBR_TIME_FLOAT returns a float time structure (dbr_time_float)
-00340  * DBR_TIME_ENUM  returns an enum time structure (dbr_time_enum)
-00341  * DBR_TIME_CHAR  returns a char time structure (dbr_time_char)
-00342  * DBR_TIME_LONG  returns a long time structure (dbr_time_long)
-00343  * DBR_TIME_DOUBLE   returns a double time structure (dbr_time_double)
-00344  * DBR_GR_STRING  returns a graphic string structure (dbr_gr_string)
-00345  * DBR_GR_SHORT   returns a graphic short structure (dbr_gr_short)
-00346  * DBR_GR_INT  returns a graphic short structure (dbr_gr_int)
-00347  * DBR_GR_FLOAT   returns a graphic float structure (dbr_gr_float)
-00348  * DBR_GR_ENUM returns a graphic enum structure (dbr_gr_enum)
-00349  * DBR_GR_CHAR returns a graphic char structure (dbr_gr_char)
-00350  * DBR_GR_LONG returns a graphic long structure (dbr_gr_long)
-00351  * DBR_GR_DOUBLE  returns a graphic double structure (dbr_gr_double)
-00352  * DBR_CTRL_STRING   returns a control string structure (dbr_ctrl_int)
-00353  * DBR_CTRL_SHORT returns a control short structure (dbr_ctrl_short)
-00354  * DBR_CTRL_INT   returns a control short structure (dbr_ctrl_int)
-00355  * DBR_CTRL_FLOAT returns a control float structure (dbr_ctrl_float)
-00356  * DBR_CTRL_ENUM  returns a control enum structure (dbr_ctrl_enum)
-00357  * DBR_CTRL_CHAR  returns a control char structure (dbr_ctrl_char)
-00358  * DBR_CTRL_LONG  returns a control long structure (dbr_ctrl_long)
-00359  * DBR_CTRL_DOUBLE   returns a control double structure (dbr_ctrl_double)
-00360  */
-"""
+# struct metaGR_FLOAT {
+#         epicsInt16 status;
+#         epicsInt16 severity;
+#         epicsInt16 precision;
+#         epicsInt16 padding;
+#         char units[8];
+#     epicsFloat32 upper_display_limit;
+#     epicsFloat32 lower_display_limit;
+#     epicsFloat32 upper_alarm_limit;
+#     epicsFloat32 upper_warning_limit;
+#     epicsFloat32 lower_warning_limit;
+#     epicsFloat32 lower_alarm_limit;
+# };
+dbr_types[(23, 'DBR_GR_FLOAT')] = OrderedDict([
+    ('status', 'ctypes.c_short'),
+    ('severity', 'ctypes.c_short'),
+    ('preicison', 'ctypes.c_short'),
+    ('padding', 'ctypes.c_short'),
+    ('units', '8 * ctypes.c_char'),
+    ('upper_display_limit', 'ctypes.c_short'),
+    ('lower_display_limit', 'ctypes.c_short'),
+    ('upper_alarm_limit', 'ctypes.c_short'),
+    ('upper_warning_limit', 'ctypes.c_short'),
+    ('lower_warning_limit', 'ctypes.c_short'),
+    ('lower_alarm_limit', 'ctypes.c_short'),
+    # Note weird ordering of these last two entries.
+    ('value', TYPE_MAP['FLOAT'])])
 
+# struct metaGR_ENUM {
+#     epicsInt16 status;
+#     epicsInt16 severity;
+#     epicsInt16 number_of_string_used;
+#     char strings[16][26];
+# };
+dbr_types[(24, 'DBR_GR_ENUM')] = OrderedDict([
+    ('status', 'ctypes.c_short'),
+    ('severity', 'ctypes.c_short'),
+    ('number_of_string_used', 'ctypes.c_short'),
+    ('strings', '16 * 26 * ctypes.c_char'),
+    ('value', TYPE_MAP['ENUM'])])
+
+# struct metaGR_INT {
+#         epicsInt16 status;
+#         epicsInt16 severity;
+#         char units[8];
+#         epicsInt8 upper_display_limit;
+#         epicsInt8 lower_display_limit;
+#     epicsInt8 upper_alarm_limit;
+#         epicsInt8 upper_warning_limit;
+#         epicsInt8 lower_warning_limit;
+#         epicsInt8 lower_alarm_limit;
+# };
+dbr_types[(25, 'DBR_GR_CHAR')] = OrderedDict([
+    ('status', 'ctypes.c_short'),
+    ('severity', 'ctypes.c_short'),
+    ('units', '8 * ctypes.c_char'),
+    ('upper_display_limit', 'ctypes.c_char'),
+    ('lower_display_limit', 'ctypes.c_char'),
+    ('upper_alarm_limit', 'ctypes.c_char'),
+    ('upper_warning_limit', 'ctypes.c_char'),
+    ('lower_warning_limit', 'ctypes.c_char'),
+    ('lower_alarm_limit', 'ctypes.c_char'),
+    # Note weird ordering of these last two entries.
+    ('value', TYPE_MAP['STRING'])])
+
+dbr_types[(26, 'DBR_GR_LONG')] = OrderedDict([
+    ('status', 'ctypes.c_short'),
+    ('severity', 'ctypes.c_short'),
+    ('units', '8 * ctypes.c_char'),
+    ('upper_display_limit', 'ctypes.c_long'),
+    ('lower_display_limit', 'ctypes.c_long'),
+    ('upper_alarm_limit', 'ctypes.c_long'),
+    ('upper_warning_limit', 'ctypes.c_long'),
+    ('lower_warning_limit', 'ctypes.c_long'),
+    ('lower_alarm_limit', 'ctypes.c_long'),
+    # Note weird ordering of these last two entries.
+    ('value', TYPE_MAP['LONG'])])
+
+# struct metaGR_FLOAT {
+#     epicsInt16 status;
+#     epicsInt16 severity;
+#     epicsInt16 precision;
+#     epicsInt16 padding;
+#     char units[8];
+#     epicsFloat64 upper_display_limit;
+#     epicsFloat64 lower_display_limit;
+#     epicsFloat64 upper_alarm_limit;
+#     epicsFloat64 upper_warning_limit;
+#     epicsFloat64 lower_warning_limit;
+#     epicsFloat64 lower_alarm_limit;
+# };
+dbr_types[(27, 'DBR_GR_DOUBLE')] = OrderedDict([
+    ('status', 'ctypes.c_short'),
+    ('severity', 'ctypes.c_short'),
+    ('units', '8 * ctypes.c_char'),
+    ('upper_display_limit', 'ctypes.c_double'),
+    ('lower_display_limit', 'ctypes.c_double'),
+    ('upper_alarm_limit', 'ctypes.c_double'),
+    ('upper_warning_limit', 'ctypes.c_double'),
+    ('lower_warning_limit', 'ctypes.c_double'),
+    ('lower_alarm_limit', 'ctypes.c_double'),
+    # Note weird ordering of these last two entries.
+    ('value', TYPE_MAP['DOUBLE'])])
 
 def write_dbr_types(path=None):
     """

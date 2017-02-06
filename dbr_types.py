@@ -4,88 +4,196 @@ import ctypes
 
 
 
-class dbr_int(ctypes.BigEndianStructure):
+class DBR_STRING(ctypes.BigEndianStructure):
+    DBR_ID = 0
+    _fields_ = [
+        ('value', 40 * ctypes.c_char),
+    ]
+
+
+class DBR_INT(ctypes.BigEndianStructure):
+    DBR_ID = 1
     _fields_ = [
         ('value', ctypes.c_ushort),
     ]
 
-class dbr_float(ctypes.BigEndianStructure):
+
+class DBR_FLOAT(ctypes.BigEndianStructure):
+    DBR_ID = 2
     _fields_ = [
         ('value', ctypes.c_float),
     ]
 
-class dbr_double(ctypes.BigEndianStructure):
-    _fields_ = [
-        ('value', ctypes.c_double),
-    ]
 
-class dbr_short(ctypes.BigEndianStructure):
+class DBR_ENUM(ctypes.BigEndianStructure):
+    DBR_ID = 3
     _fields_ = [
         ('value', ctypes.c_ushort),
     ]
 
-class dbr_long(ctypes.BigEndianStructure):
-    _fields_ = [
-        ('value', ctypes.c_ulong),
-    ]
 
-class dbr_char(ctypes.BigEndianStructure):
+class DBR_CHAR(ctypes.BigEndianStructure):
+    DBR_ID = 4
     _fields_ = [
         ('value', ctypes.c_char),
     ]
 
-class dbr_enum(ctypes.BigEndianStructure):
+
+class DBR_LONG(ctypes.BigEndianStructure):
+    DBR_ID = 5
     _fields_ = [
+        ('value', ctypes.c_ulong),
+    ]
+
+
+class DBR_DOUBLE(ctypes.BigEndianStructure):
+    DBR_ID = 6
+    _fields_ = [
+        ('value', ctypes.c_double),
+    ]
+
+
+class DBR_STS_STRING(ctypes.BigEndianStructure):
+    DBR_ID = 7
+    _fields_ = [
+        ('status', ctypes.c_short),
+        ('severity', ctypes.c_short),
+        ('value', 40 * ctypes.c_char),
+    ]
+
+
+class DBR_STS_INT(ctypes.BigEndianStructure):
+    DBR_ID = 8
+    _fields_ = [
+        ('status', ctypes.c_short),
+        ('severity', ctypes.c_short),
         ('value', ctypes.c_ushort),
     ]
 
-class dbl_sts_short(ctypes.BigEndianStructure):
+
+class DBR_STS_FLOAT(ctypes.BigEndianStructure):
+    DBR_ID = 9
     _fields_ = [
-        ('status', dbr_short),
-        ('severity', dbr_short),
-        ('value', dbr_short),
+        ('status', ctypes.c_short),
+        ('severity', ctypes.c_short),
+        ('value', ctypes.c_float),
     ]
 
-class dbl_sts_int(ctypes.BigEndianStructure):
+
+class DBR_STS_ENUM(ctypes.BigEndianStructure):
+    DBR_ID = 10
     _fields_ = [
-        ('status', dbr_short),
-        ('severity', dbr_short),
-        ('value', dbr_int),
+        ('status', ctypes.c_short),
+        ('severity', ctypes.c_short),
+        ('value', ctypes.c_ushort),
     ]
 
-class dbl_sts_float(ctypes.BigEndianStructure):
+
+class DBR_STS_CHAR(ctypes.BigEndianStructure):
+    DBR_ID = 11
     _fields_ = [
-        ('status', dbr_short),
-        ('severity', dbr_short),
-        ('value', dbr_float),
+        ('status', ctypes.c_short),
+        ('severity', ctypes.c_short),
+        ('value', ctypes.c_char),
     ]
 
-class dbl_sts_enum(ctypes.BigEndianStructure):
+
+class DBR_STS_LONG(ctypes.BigEndianStructure):
+    DBR_ID = 12
     _fields_ = [
-        ('status', dbr_short),
-        ('severity', dbr_short),
-        ('value', dbr_enum),
+        ('status', ctypes.c_short),
+        ('severity', ctypes.c_short),
+        ('value', ctypes.c_ulong),
     ]
 
-class dbl_sts_long(ctypes.BigEndianStructure):
+
+class DBR_STS_DOUBLE(ctypes.BigEndianStructure):
+    DBR_ID = 13
     _fields_ = [
-        ('status', dbr_short),
-        ('severity', dbr_short),
-        ('value', dbr_long),
+        ('status', ctypes.c_short),
+        ('severity', ctypes.c_short),
+        ('value', ctypes.c_double),
     ]
 
-class dbr_sts_char(ctypes.BigEndianStructure):
+
+class DBR_TIME_STRING(ctypes.BigEndianStructure):
+    DBR_ID = 14
     _fields_ = [
-        ('status', dbr_short),
-        ('severity', dbr_short),
-        ('RISC_pad', dbr_char),
-        ('value', dbr_char),
+        ('status', ctypes.c_short),
+        ('severity', ctypes.c_short),
+        ('secondsSinceEpoch', ctypes.c_long),
+        ('nanoSeconds', ctypes.c_ulong),
+        ('value', 40 * ctypes.c_char),
     ]
 
-class dbr_sts_double(ctypes.BigEndianStructure):
+
+class DBR_TIME_INT(ctypes.BigEndianStructure):
+    DBR_ID = 15
     _fields_ = [
-        ('status', dbr_short),
-        ('severity', dbr_short),
-        ('RISC_pad', dbr_long),
-        ('value', dbr_long),
+        ('status', ctypes.c_short),
+        ('severity', ctypes.c_short),
+        ('secondsSinceEpoch', ctypes.c_long),
+        ('nanoSeconds', ctypes.c_ulong),
+        ('value', ctypes.c_ushort),
     ]
+
+
+class DBR_TIME_FLOAT(ctypes.BigEndianStructure):
+    DBR_ID = 16
+    _fields_ = [
+        ('status', ctypes.c_short),
+        ('severity', ctypes.c_short),
+        ('secondsSinceEpoch', ctypes.c_long),
+        ('nanoSeconds', ctypes.c_ulong),
+        ('value', ctypes.c_float),
+    ]
+
+
+class DBR_TIME_ENUM(ctypes.BigEndianStructure):
+    DBR_ID = 17
+    _fields_ = [
+        ('status', ctypes.c_short),
+        ('severity', ctypes.c_short),
+        ('secondsSinceEpoch', ctypes.c_long),
+        ('nanoSeconds', ctypes.c_ulong),
+        ('value', ctypes.c_ushort),
+    ]
+
+
+class DBR_TIME_CHAR(ctypes.BigEndianStructure):
+    DBR_ID = 18
+    _fields_ = [
+        ('status', ctypes.c_short),
+        ('severity', ctypes.c_short),
+        ('secondsSinceEpoch', ctypes.c_long),
+        ('nanoSeconds', ctypes.c_ulong),
+        ('value', ctypes.c_char),
+    ]
+
+
+class DBR_TIME_LONG(ctypes.BigEndianStructure):
+    DBR_ID = 19
+    _fields_ = [
+        ('status', ctypes.c_short),
+        ('severity', ctypes.c_short),
+        ('secondsSinceEpoch', ctypes.c_long),
+        ('nanoSeconds', ctypes.c_ulong),
+        ('value', ctypes.c_ulong),
+    ]
+
+
+class DBR_TIME_DOUBLE(ctypes.BigEndianStructure):
+    DBR_ID = 20
+    _fields_ = [
+        ('status', ctypes.c_short),
+        ('severity', ctypes.c_short),
+        ('secondsSinceEpoch', ctypes.c_long),
+        ('nanoSeconds', ctypes.c_ulong),
+        ('value', ctypes.c_double),
+    ]
+
+
+
+DBR_SHORT = DBR_INT
+DBR_STS_SHORT = DBR_STS_INT
+DBR_TIME_SHORT = DBR_TIME_INT

@@ -3,9 +3,16 @@
 import ctypes
 
 
-{% for name, fields in dbr_types.items() %}
-class {{name}}(ctypes.BigEndianStructure):
+{% for labels, fields in dbr_types.items() %}
+class {{labels[1]}}(ctypes.BigEndianStructure):
+    DBR_ID = {{labels[0]}}
     _fields_ = [{% for field_name, field_type in fields.items() %}
         ('{{ field_name }}', {{ field_type }}),{% endfor %}
     ]
+
 {% endfor %}
+
+DBR_SHORT = DBR_INT
+DBR_STS_SHORT = DBR_STS_INT
+DBR_TIME_SHORT = DBR_TIME_INT
+DBR_GR_SHORT = DBR_GR_INT
