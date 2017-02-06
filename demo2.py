@@ -1,12 +1,3 @@
-<<<<<<< Updated upstream
-import socket
-import os
-import getpass
-
-
-host = os.environ['DOCKER0_IP']
-sock = socket.create_connection((host, 5064))
-=======
 import time
 import socket
 import os
@@ -31,8 +22,8 @@ print('Server protocol version:', response1.data_count)
 
 # Announce hostname and username.
 hostname = socket.gethostname()
-header = bytes(CA_PROTO_HOST_NAME_REQ(pl))
 pl = padded_len(hostname)
+header = bytes(CA_PROTO_HOST_NAME_REQ(pl))
 payload = bytes(DBR_STRING(hostname.encode()))[:pl]
 print(sock.sendall(header + payload))
 # There is no response.
@@ -43,7 +34,7 @@ payload = bytes(DBR_STRING(hostname.encode()))[:pl]
 print(sock.sendall(header + payload))
 # There is no response.
 
-# Search.
+# Create a new channel
 try:
     cid += 1
 except NameError:
@@ -58,7 +49,6 @@ response2 = MessageHeader()
 sock.recv_into(response2)
 print('response command:', response2.command)
 
-# Create a new channel.
 print(cid == response2.parameter2)
 # sample payload as previous
 header = CA_PROTO_CREATE_CHAN_REQ(pl, cid, CLIENT_VERSION)
@@ -78,7 +68,6 @@ try:
 except NameError:
     ioid = 1
 
-# Read.
 header = CA_PROTO_READ_NOTIFY_REQ(DBR_FLOAT.DBR_ID, 1, sid, ioid)
 sock.sendall(header)
 response5 = MessageHeader()
@@ -86,3 +75,4 @@ sock.recv_into(response5)
 print(response5.command)
 res_payload5 = DBR_FLOAT()
 sock.recv_into(res_payload5)
+print(res_payload5.value)
