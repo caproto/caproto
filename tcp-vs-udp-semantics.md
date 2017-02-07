@@ -2,7 +2,16 @@
 
 *in which a humble experimental physicist teaches himself networking basics*
 
+Setup:
+
+```python
+import socket
+hostname = 'localhost'
+port = 10000
+```
+
 ## TCP
+
 
 Server and client each create a TCP/IP socket.
 
@@ -55,7 +64,13 @@ conn.sendall(b'reply_message')
 Client receives the reply from its socket.
 
 ```python
-reply = client_socket.recv(1024)  # some number of bytes
+reply = client_sock.recv(1024)  # some number of bytes
+```
+
+```python
+conn.close()
+client_sock.close()
+server_sock.close()
 ```
 
 ## UDP
@@ -100,4 +115,11 @@ And using the same 'receive' semantics as the server, the client receives it.
 ```python
 
 (reply, (host, port)) = client_sock.recvfrom(1024)
+```
+
+Cleanup:
+
+```
+client_sock.close()
+server_sock.close()
 ```
