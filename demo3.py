@@ -81,9 +81,9 @@ tcp_sock1 = socket.create_connection((host, TCP_PORT))
 # user to manage the mapping between hosts and sockets. Something like this
 # is convenient for our purposes, but again this part is ocmpletely up to the
 # user:
-sockets = {'HOST_A', tcp_sock1}
+sockets = {'HOST_A': tcp_sock1}
 send = lambda host, bytes_to_send: sockets[host].sendall(bytes_to_send)
-recv = lambda host, byte_count: return sockets[host].recv(byte_count)
+recv = lambda host, byte_count: sockets[host].recv(byte_count)
 send(host, bytes_to_send)
 ca.recv(recv(host, 1024))
 
@@ -97,6 +97,8 @@ send(*chan3.create())
 # chan1.state == chan3.state == ca.NEEDS_CREATE_CHANNEL_REPLY
 
 ca.recv(recv(chan1.host, 1024))
+# chan1._sid == <server-generated id>
+# chan2._sid == <server-generated id>
 # chan1.state == chan3.state == ca.READY
 
 
@@ -106,6 +108,8 @@ ca.recv(recv(chan1.host, 1024))
 send(*chan1.read(ca.DBR_FLOAT, 1))  # desired data type and count
 send(*chan3.read(ca.DBR_FLOAT, 1))
 # chan1.state == chan3.state == ca.READY
+# A CA_PROTO_READ_NOTIFY command includes a client-generated "IOID" that will
+# be echoed by the server in its reply. `Channel.read()` stashes it in state.
 # chan1.unanswered_ioids == [1]
 # chan3.unanswered_ioids == [2]
 ca.recv(recv(chan1.host, 1024))
