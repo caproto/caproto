@@ -104,14 +104,14 @@ ca.recv(recv(chan1.host, 1024))
 
 # The method Channel.read() encodes CA_PROTO_READ_NOTIFY.
 send(*chan1.read(ca.DBR_FLOAT, 1))  # desired data type and count
-send(*chan2.read(ca.DBR_FLOAT, 1))
-# chan1.state == chan2.state == ca.READY
+send(*chan3.read(ca.DBR_FLOAT, 1))
+# chan1.state == chan3.state == ca.READY
 # chan1.unanswered_ioids == [1]
-# chan2.unanswered_ioids == [2]
+# chan3.unanswered_ioids == [2]
 ca.recv(recv(chan1.host, 1024))
-# chan1.unanswered_ioids == chan2.unanswered_ioids == []
+# chan1.unanswered_ioids == chan3.unanswered_ioids == []
 data1 = chan1.value
-data2 = chan2.value
+data3 = chan3.value
 
 # The method Channel.write() encodes CA_PROTO_WRITE_NOTIFY.
 send(*chan1.write(ca.DBR_FLOAT(3.14)))
