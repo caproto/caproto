@@ -19,6 +19,7 @@ pv2 = "XF:31IDA-OP{Tbl-Ax:X3}Mtr.VAL"
 
 udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
+ctx = caproto.Context()
 
 ### REGISTER WITH A CA REPEATER ###
 
@@ -34,9 +35,9 @@ repeater_ip = ca.repeater_confirm(bytes_received)
 
 ### CREATE SOME CHANNELS ###
 
-chan1 = ca.Channel(pv1)
-chan2 = ca.Channel(pv2)
-chan3 = ca.Channel(pv3)
+chan1 = ctx.Channel(pv1)
+chan2 = ctx.Channel(pv2)
+chan3 = ctx.Channel(pv3)
 # chan1.state == chan2.state == chan3.state == ca.BROADCAST_SEARCH
 # chan1.circuit is chan2.circuit is chan3.circuit is None
 
@@ -50,7 +51,7 @@ addr, bytes_received = udp_sock.recv(1024)
 # We may get an answer from 0 or more servers for each channel. The answers do
 # not necessarily arrive in order or at all.
 
-ca.recv_broadcast(addr, bytes_received)  # parses bytes, updates some state
+ctx.recv_broadcast(addr, bytes_received)  # parses bytes, updates some state
 # Suppose we received replies regarding chan1 and chan3 and that they are on
 # the same host, HOST_A.
 # chan1.state == chan3.state == ca.CONNECT_CIRCUIT
@@ -61,10 +62,10 @@ ca.recv_broadcast(addr, bytes_received)  # parses bytes, updates some state
 chan1.read()   # raises UninitializedCircuitError
 
 # A 'VirtualCircuit' is a notion from EPICS, a mapping of hosts to channels
-# (PVs) with an associated 'priority'. A module level singleton keeps track of
+# (PVs) with an associated 'priority'. The Context `ctx` keeps track of
 # them:
-# ca._VIRTUAL_CIRCUITS == [{'host': 'HOST_A', 'state': 'UNINITALIZED'}]
-# ca._CHANNELS = {<chan1>: <vc1>, <chan3>: <vc1>}
+# ctx._VIRTUAL_CIRCUITS == [{'host': 'HOST_A', 'state': 'UNINITALIZED'}]
+# ctx._CHANNELS = {<chan1>: <vc1>, <chan3>: <vc1>}
 
 # The method `VirtualCircuit.connect()` encodes CA_PROTO_VERSION,
 # CA_PROTO_HOST_NAME, and CA_PROTO_CLIENT_NAME.
@@ -85,10 +86,10 @@ sockets = {'HOST_A': tcp_sock1}
 send = lambda host, bytes_to_send: sockets[host].sendall(bytes_to_send)
 recv = lambda host, byte_count: sockets[host].recv(byte_count)
 send(host, bytes_to_send)
-ca.recv(recv(host, 1024))
+ctx.recv(recv(host, 1024))
 
 # Having received confirmation from the host, now:
-# ca._VIRTUAL_CIRCUITS == [{'host': 'HOST_A', 'state': 'CONNECTED'}]
+# ctx._VIRTUAL_CIRCUITS == [{'host': 'HOST_A', 'state': 'CONNECTED'}]
 # chan1.state == chan3.state == ca.CREATE_CHANNEL
 
 # The method `Channel.create` encodes CA_PROTO_CREATE_CHAN.
@@ -96,7 +97,7 @@ send(*chan1.create())
 send(*chan3.create())
 # chan1.state == chan3.state == ca.NEEDS_CREATE_CHANNEL_REPLY
 
-ca.recv(recv(chan1.host, 1024))
+ctx.recv(recv(chan1.host, 1024))
 # chan1._sid == <server-generated id>
 # chan2._sid == <server-generated id>
 # chan1.state == chan3.state == ca.READY
@@ -112,16 +113,16 @@ send(*chan3.read(ca.DBR_FLOAT, 1))
 # be echoed by the server in its reply. `Channel.read()` stashes it in state.
 # chan1.unanswered_ioids == [1]
 # chan3.unanswered_ioids == [2]
-ca.recv(recv(chan1.host, 1024))
+ctx.recv(recv(chan1.host, 1024))
 # chan1.unanswered_ioids == chan3.unanswered_ioids == []
 data1 = chan1.value
 data3 = chan3.value
 
 # The method Channel.write() encodes CA_PROTO_WRITE_NOTIFY.
-send(*chan1.write(ca.DBR_FLOAT(3.14)))
+send(*chan1.write(ctx.DBR_FLOAT(3.14)))
 # chan1.state == ca.READY
 # chan1.unanswered_ioids == [3]
-ca.recv(recv(chan1.host, 1024))
+ctx.recv(recv(chan1.host, 1024))
 # chan1.unanswered_ioids == []
 write_status = chan1.write_status
 
@@ -129,13 +130,13 @@ write_status = chan1.write_status
 send(*chan1.monitor(ca.DBR_FLOAT, 1))  # desired data type and count
 # chan1.state == ca.MONITORING
 # chan1.subscription_id == 1
-ca.recv(recv(chan1.host, 1024))
+ctx.recv(recv(chan1.host, 1024))
 send(*chan1.unmonitor())
 # chan1.state = ca.READY
 # chan1.subscription_id = None
 
-# Notice that because all replies are routed through the global function
-# `ca.recv` it's OK if unrelated messages from monitoring one channel are
+# Notice that because all replies are routed through the Context, as in
+# `ctx.recv`, it's OK if unrelated messages from monitoring one channel are
 # interspersed messages from reading or writing to another from the same host.
 
 # In the event that a connection is dropped, the state about VirtualCircuits
