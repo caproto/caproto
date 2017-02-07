@@ -100,15 +100,39 @@ ca.recv(recv(chan1.host, 1024))
 # chan1.state == chan3.state == ca.READY
 
 
-### USE THE CHANNEL ###
+### USE THE CHANNELS ###
 
 # The method Channel.read() encodes CA_PROTO_READ_NOTIFY.
-send(*chan1.read())
-data = recv(chan1.host, 1024)
+send(*chan1.read(ca.DBR_FLOAT, 1))  # desired data type and count
+send(*chan2.read(ca.DBR_FLOAT, 1))
+# chan1.state == chan2.state == ca.READY
+# chan1.unanswered_ioids == [1]
+# chan2.unanswered_ioids == [2]
+ca.recv(recv(chan1.host, 1024))
+# chan1.unanswered_ioids == chan2.unanswered_ioids == []
+data1 = chan1.value
+data2 = chan2.value
 
-# The method Channel.read() encodes CA_PROTO_WRITE_NOTIFY.
+# The method Channel.write() encodes CA_PROTO_WRITE_NOTIFY.
 send(*chan1.write(ca.DBR_FLOAT(3.14)))
-status = recv(chan1.host, 1024)
+# chan1.state == ca.READY
+# chan1.unanswered_ioids == [3]
+ca.recv(recv(chan1.host, 1024))
+# chan1.unanswered_ioids == []
+write_status = chan1.write_status
+
+# The method Channel.monitor() encodes CA_PROTO_EVENT_ADD
+send(*chan1.monitor(ca.DBR_FLOAT, 1))  # desired data type and count
+# chan1.state == ca.MONITORING
+# chan1.subscription_id == 1
+ca.recv(recv(chan1.host, 1024))
+send(*chan1.unmonitor())
+# chan1.state = ca.READY
+# chan1.subscription_id = None
+
+# Notice that because all replies are routed through the global function
+# `ca.recv` it's OK if unrelated messages from monitoring one channel are
+# interspersed messages from reading or writing to another from the same host.
 
 # In the event that a connection is dropped, the state about VirtualCircuits
 # allows us to notify all relevant channels.
