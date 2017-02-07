@@ -45,7 +45,7 @@ bytes_to_broadcast = chan1.broadcast() + chan2.broadcast() + chan3.broadcast()
 # chan1.state == chan2.state == chan3.state == ca.NEEDS_BROADCAST_SEARCH_REPLY
 # chan1.circuit is chan2.circuit is chan3.circuit is None
 
-udp_sock.sendto(bytes_to_broadcast(repeater_ip, CA_REPEATER_PORT))
+udp_sock.sendto(bytes_to_broadcast, (repeater_ip, CA_REPEATER_PORT))
 addr, bytes_received = udp_sock.recv(1024)
 # We may get an answer from 0 or more servers for each channel. The answers do
 # not necessarily arrive in order or at all.
