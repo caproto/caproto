@@ -66,9 +66,9 @@ chan1.read()   # raises UninitializedCircuitError
 # ca._VIRTUAL_CIRCUITS == [{'host': 'HOST_A', 'state': 'UNINITALIZED'}]
 # ca._CHANNELS = {<chan1>: <vc1>, <chan3>: <vc1>}
 
-# The method `VirtualCircuit.initialize()` encodes CA_PROTO_VERSION,
+# The method `VirtualCircuit.connect()` encodes CA_PROTO_VERSION,
 # CA_PROTO_HOST_NAME, and CA_PROTO_CLIENT_NAME.
-host, bytes_to_send = chan1.circuit.connect()
+host, bytes_to_send = chan1.circuit.connect()  # ('HOST_A', <bytes>)
 
 # Because chan1 and chan3 are on the same circuit, we only need to do this
 # once, as we can verify by checking the channels' state.
