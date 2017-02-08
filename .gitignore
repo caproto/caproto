@@ -1,0 +1,3 @@
+*.swp
+caproto/__pycache__
+caproto.egg-info

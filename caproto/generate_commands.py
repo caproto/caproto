@@ -42,7 +42,7 @@ def handle_special_cases(command):
     code.
     """
     # These require the 'cid' param to be given twice for some reason.
-    if command.name in ('CA_PROTO_SEARCH_REQ', 'CA_PROTO_NOT_FOUND_RESP'):
+    if command.name in ('SearchRequest', 'NotFoundResponse'):
         command = command._replace(input_params=command.input_params[:-1])
     return command
 
@@ -85,8 +85,10 @@ def parse_commands(h2):
             continue
         if len(tables) == 1:
             # There is a header spec but no payload for this command.
+            has_payload = False
             header_table, = tables
         elif len(tables) == 2:
+            has_payload = True
             header_table, payload_table = tables
         else:
             raise ValueError("expected at most two tables per <h3>")
@@ -100,11 +102,15 @@ def parse_commands(h2):
             params.append(Param(field, val, desc))
         validate(params)
         name = COMMAND_NAME_PATTERN.match(params[0].description).group(1)
+        if name.startswith('CA_PROTO'):
+            name = name[len('CA_PROTO'):]
+        name = name.title().replace('_', '')
+        if has_payload:
+            print(name)
         input_params = [p for p in params[1:] if not is_reserved(p)]
         struct_args = [p.field
                        if p in input_params else int(p.value)
                        for p in params]
-        name = name.lstrip('CA_PROTO').replace('_', '')
         command = Command('{}{}'.format(name, suffix),
                           description, input_params, struct_args)
         command = handle_special_cases(command)

@@ -12,6 +12,19 @@ class MessageHeader(ctypes.BigEndianStructure):
                ]
 
 
+class ExtendedMessageHeader(ctypes.BigEndianStructure):
+    _fields_ = [("command", ctypes.c_uint16),
+                ("marker1", ctypes.c_uint16),
+                ("data_type", ctypes.c_uint16),
+                ("marker2", ctypes.c_uint16),
+                ("parameter1", ctypes.c_uint32),
+                ("parameter2", ctypes.c_uint32),
+                ("payload_size", ctypes.c_uint32),
+                ("data_count", ctypes.c_uint32),
+               ]
+
+
+
 {% for command in commands %}
 def {{command.name}}({{ command.input_params|map('attr', 'field')|join(', ') }}):
     """

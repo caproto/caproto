@@ -1,10 +1,17 @@
 # A bring-your-own-I/O implementation of Channel Access
 # in the spirit of http://sans-io.readthedocs.io/
+import math
 import ctypes
+import itertools
 from io import BytesIO
-from collections import defaultdict
-# from .commands import *
+from collections import defaultdict, deque
+from .commands import *
+from .dbr_types import *
 
+
+CLIENT_VERSION = 13
+DO_REPLY = 10
+NO_REPLY = 5
 
 # This sentinel code is copied, with thanks and admiration, from h11,
 # which is released under an MIT license.
@@ -34,7 +41,7 @@ sentinels = ("CHANNEL VIRTUAL_CIRCUIT "
              "READY SUBSCRIBED CONNECTED UNINITIALIZED DISCONNECTED "
              # responses
              "NEEDS_DATA SearchResponse VersionResponse "
-             "CreateChannelResponse".split())
+             "CreateChanResponse".split())
 for token in sentinels:
     globals()[token] = make_sentinel(token)
 
@@ -42,28 +49,6 @@ for token in sentinels:
 def padded_len(s):
     "Length of a (byte)string rounded up to the nearest multiple of 8."
     return 8 * math.ceil(len(s) / 8)
-
-
-class MessageHeader(ctypes.BigEndianStructure):
-    _fields_ = [("command", ctypes.c_uint16),
-                ("payload_size", ctypes.c_uint16),
-                ("data_type", ctypes.c_uint16),
-                ("data_count", ctypes.c_uint16),
-                ("parameter1", ctypes.c_uint32),
-                ("parameter2", ctypes.c_uint32),
-               ]
-
-
-class ExtendedMessageHeader(ctypes.BigEndianStructure):
-    _fields_ = [("command", ctypes.c_uint16),
-                ("marker1", ctypes.c_uint16),
-                ("data_type", ctypes.c_uint16),
-                ("marker2", ctypes.c_uint16),
-                ("parameter1", ctypes.c_uint32),
-                ("parameter2", ctypes.c_uint32),
-                ("payload_size", ctypes.c_uint32),
-                ("data_count", ctypes.c_uint32),
-               ]
 
 
 _MessageHeaderSize = ctypes.sizeof(MessageHeader)
@@ -177,12 +162,18 @@ class Client:
         self._channels[cid] = channel
         # If this Client has searched for this name and already knows its
         # host, skip the Search step and create a circuit.
-        if name in self._names:
-            circuit = self._circuits[(self._names[name], priority)]
+        # if name in self._names:
+        #     circuit = self._circuits[(self._names[name], priority)]
+        size = padded_len(name)
+        header = SearchRequest(size, NO_REPLY, CLIENT_VERSION, cid)
+        payload = DBR_STRING(name.encode())
+        msg = bytes(header) + bytes(payload)[:size]
+        self._datagram_outbox.append(msg)
+        return channel
 
     def send_datagram(self):
         "Return bytes to broadcast over UDP socket."
-        return self._datagram_output.popleft() 
+        return self._datagram_outbox.popleft() 
 
     def recv_datagram(self, byteslike):
         "Inject bytes that were received via UDP broadcast."
@@ -218,18 +209,11 @@ class Channel:
 
     def next_request(self):
         # Do this logic based on a `state` explicit advanced by the Client.
-        if self._circuit is None:
-            return SearchRequest(NO_REPLY, CLIENT_VERSION, cid, self.name)
-        elif self._cli[circuit] != CONNECTED:
+        if self._cli[circuit] != CONNECTED:
             return self.circuit, VersionRequest(self.priority, CLIENT_VERSION)
         elif self.sid is None:
             return self.circuit, CreateRequest(cid, CLIENT_VERSION, self.name)
         return None
-        # Should all these requests get routed to the client?
-        # If so, what about 'read' and 'write' requests too?
-        # Maybe just the former (because they are related to connection management)
-        # but leave the latter to be manually handled by users because they invole
-        # inputs?
      
     def read(self, data_type=None, data_count=None):
         if data_type is None:
@@ -252,39 +236,39 @@ class Channel:
 EVENT_TRIGGERED_TRANSITIONS = {
     CHANNEL: {
         BROADCAST_SEARCH: {
-            Search: NEEDS_BROADCAST_SEARCH_REPLY
+            SearchRequest: NEEDS_BROADCAST_SEARCH_RESPONSE
         },
-        NEEDS_BROADCAST_SEARCH_RESPOSE: {
+        NEEDS_BROADCAST_SEARCH_RESPONSE: {
             SearchResponse: CONNECT_CIRCUIT
         },
         CONNECT_CIRCUIT: {
-            Version: NEEDS_CONNECT_CIRCUIT_RESPONSE
+            VersionRequest: NEEDS_CONNECT_CIRCUIT_RESPONSE
         },
         NEEDS_CONNECT_CIRCUIT_RESPONSE: {
             VersionResponse: CREATE_CHANNEL
         },
         CREATE_CHANNEL: {
-            CreateChannel: NEEDS_CREATE_CHANNEL_RESPONSE
+            CreateChanRequest: NEEDS_CREATE_CHANNEL_RESPONSE
         },
         NEEDS_CREATE_CHANNEL_RESPONSE: {
-            CreateChannelResponse: READY
+            CreateChanResponse: READY
         },
         READY: {
-            Subscribe: SUBSCRIBED
+            EventAddRequest: SUBSCRIBED
         },
         SUBSCRIBED: {
-            Unsubscribe: READY
+            EventCancelRequest: READY
         },
     },
     VIRTUAL_CIRCUIT: {
         UNINITIALIZED: {
-            Version: NEEDS_CONNECT_CIRCUIT_RESPONSE
+            VersionRequest: NEEDS_CONNECT_CIRCUIT_RESPONSE
         },
         NEEDS_CONNECT_CIRCUIT_RESPONSE: {
             VersionResponse: CONNECTED
         },
         CONNECTED: {
-            ClearChannel: DISCONNECTED
+            ClearChannelRequest: DISCONNECTED
         },
         DISCONNECTED: {
             VersionResponse: CONNECTED
