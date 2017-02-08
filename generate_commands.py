@@ -79,7 +79,7 @@ def parse_commands(h2):
     # namedtuples. Some have only one of these headings, or neither, so this
     # may result in a list of 0, 1, or 2 commands.
     commands = []
-    for suffix, tables in (('REQ', request_spec), ('RESP', response_spec)):
+    for suffix, tables in (('Request', request_spec), ('Response', response_spec)):
         if not tables:
             # There is no spec for this.
             continue
@@ -104,7 +104,8 @@ def parse_commands(h2):
         struct_args = [p.field
                        if p in input_params else int(p.value)
                        for p in params]
-        command = Command('{}_{}'.format(name, suffix),
+        name = name.lstrip('CA_PROTO').replace('_', '')
+        command = Command('{}{}'.format(name, suffix),
                           description, input_params, struct_args)
         command = handle_special_cases(command)
         commands.append(command)

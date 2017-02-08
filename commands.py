@@ -3,17 +3,17 @@
 import ctypes
 
 class MessageHeader(ctypes.BigEndianStructure):
-    _fields_ = [("command", ctypes.c_uint16),
-                ("payload_size", ctypes.c_uint16),
-                ("data_type", ctypes.c_uint16),
-                ("data_count", ctypes.c_uint16),
-                ("parameter1", ctypes.c_uint32),
-                ("parameter2", ctypes.c_uint32),
+    _fields_ = [("command", ctypes.c_uint8),
+                ("payload_size", ctypes.c_uint8),
+                ("data_type", ctypes.c_uint8),
+                ("data_count", ctypes.c_uint8),
+                ("parameter1", ctypes.c_uint16),
+                ("parameter2", ctypes.c_uint16),
                ]
 
 
 
-def CA_PROTO_VERSION_REQ(priority, version):
+def VERSIONRequest(priority, version):
     """
     Exchanges client and server protocol versions and desired circuit priority.
     This is the first message sent when a new TCP (Virtual Circuit) connection is established.
@@ -38,7 +38,7 @@ def CA_PROTO_VERSION_REQ(priority, version):
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_VERSION_RESP(version):
+def VERSIONResponse(version):
     """
     Exchanges client and server protocol versions and desired circuit priority.
     This is the first message sent when a new TCP (Virtual Circuit) connection is established.
@@ -60,7 +60,7 @@ def CA_PROTO_VERSION_RESP(version):
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_SEARCH_REQ(payload_size, reply, version, cid):
+def SEARCHRequest(payload_size, reply, version, cid, cid):
     """
     Searches for a given channel name.
     Sent over UDP or TCP.
@@ -82,12 +82,15 @@ def CA_PROTO_SEARCH_REQ(payload_size, reply, version, cid):
       cid : integer
           Client allocated CID.
     
+      cid : integer
+          Client allocated CID.
+    
     """
     struct_args = (6, payload_size, reply, version, cid, cid)
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_SEARCH_RESP(payload_size, data_type, sid, cid):
+def SEARCHResponse(payload_size, data_type, sid, cid):
     """
     Searches for a given channel name.
     Sent over UDP or TCP.
@@ -115,7 +118,7 @@ def CA_PROTO_SEARCH_RESP(payload_size, data_type, sid, cid):
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_NOT_FOUND_RESP(reply_flag, version, cid):
+def NOTFOUNDResponse(reply_flag, version, cid, cid):
     """
     Indicates that a channel with requested name does not exist.
     Sent in response to CA_PROTO_SEARCH
@@ -135,12 +138,15 @@ def CA_PROTO_NOT_FOUND_RESP(reply_flag, version, cid):
       cid : integer
           CID of the channel.
     
+      cid : integer
+          CID of the channel.
+    
     """
     struct_args = (14, 0, reply_flag, version, cid, cid)
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_ECHO_REQ():
+def ECHORequest():
     """
     Connection verify used by CA_V43.
     Sent over TCP.
@@ -154,7 +160,7 @@ def CA_PROTO_ECHO_REQ():
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_ECHO_RESP():
+def ECHOResponse():
     """
     Connection verify used by CA_V43.
     Sent over TCP.
@@ -168,7 +174,7 @@ def CA_PROTO_ECHO_RESP():
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_RSRV_IS_UP_RESP(server_port, beaconid, address):
+def SRVISUPResponse(server_port, beaconid, address):
     """
     Beacon sent by a server when it becomes available.
     Beacons are also sent out periodically to announce the server is still alive.
@@ -193,7 +199,7 @@ def CA_PROTO_RSRV_IS_UP_RESP(server_port, beaconid, address):
     return MessageHeader(*struct_args)
 
 
-def CA_REPEATER_CONFIRM_RESP(repeater_address):
+def EPEATERCONFIRMResponse(repeater_address):
     """
     Confirms successful client registration with repeater.
     Sent over UDP.
@@ -210,7 +216,7 @@ def CA_REPEATER_CONFIRM_RESP(repeater_address):
     return MessageHeader(*struct_args)
 
 
-def CA_REPEATER_REGISTER_REQ(client_ip_address):
+def EPEATERREGISTERRequest(client_ip_address):
     """
     Requests registration with the repeater.
     Repeater will confirm successful registration using CA_REPEATER_CONFIRM.
@@ -228,7 +234,7 @@ def CA_REPEATER_REGISTER_REQ(client_ip_address):
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_EVENT_ADD_REQ(payload_size, data_type, data_count, sid, subscriptionid):
+def EVENTADDRequest(payload_size, data_type, data_count, sid, subscriptionid):
     """
     Creates a subscription on a channel, allowing the client to be notified of changes in value.
     A request will produce at least one response.
@@ -266,7 +272,7 @@ def CA_PROTO_EVENT_ADD_REQ(payload_size, data_type, data_count, sid, subscriptio
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_EVENT_ADD_RESP(payload_size, data_type, data_count, status_code, subscriptionid):
+def EVENTADDResponse(payload_size, data_type, data_count, status_code, subscriptionid):
     """
     Creates a subscription on a channel, allowing the client to be notified of changes in value.
     A request will produce at least one response.
@@ -297,7 +303,7 @@ def CA_PROTO_EVENT_ADD_RESP(payload_size, data_type, data_count, status_code, su
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_EVENT_CANCEL_REQ(data_type, data_count, sid, subscriptionid):
+def EVENTCANCELRequest(data_type, data_count, sid, subscriptionid):
     """
     Clears event subscription.
     This message will stop event updates for specified channel.
@@ -328,7 +334,7 @@ def CA_PROTO_EVENT_CANCEL_REQ(data_type, data_count, sid, subscriptionid):
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_EVENT_ADD_RESP(data_type, sid, subscriptionid):
+def EVENTADDResponse(data_type, sid, subscriptionid):
     """
     Clears event subscription.
     This message will stop event updates for specified channel.
@@ -352,7 +358,7 @@ def CA_PROTO_EVENT_ADD_RESP(data_type, sid, subscriptionid):
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_READ_NOTIFY_REQ(data_type, data_count, sid, ioid):
+def EADNOTIFYRequest(data_type, data_count, sid, ioid):
     """
 
 		Read value of a channel.
@@ -383,7 +389,7 @@ Deprecated since protocol version 3.13.
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_READ_NOTIFY_RESP(payload_size, data_type, data_count, sid, ioid):
+def EADNOTIFYResponse(payload_size, data_type, data_count, sid, ioid):
     """
 
 		Read value of a channel.
@@ -417,7 +423,7 @@ Deprecated since protocol version 3.13.
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_WRITE_REQ(payload_size, data_type, data_count, sid, ioid):
+def WRITERequest(payload_size, data_type, data_count, sid, ioid):
     """
     Writes new channel value.
     Sent over TCP.
@@ -446,7 +452,7 @@ def CA_PROTO_WRITE_REQ(payload_size, data_type, data_count, sid, ioid):
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_EVENTS_OFF_REQ():
+def EVENTSOFFRequest():
     """
     Disables a server from sending any subscription updates over this virtual circuit.
     Sent over TCP.
@@ -462,7 +468,7 @@ def CA_PROTO_EVENTS_OFF_REQ():
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_EVENTS_ON_REQ():
+def EVENTSONRequest():
     """
     Enables the server to resume sending subscription updates for this virtual circuit.
     Sent over TCP.
@@ -478,7 +484,7 @@ def CA_PROTO_EVENTS_ON_REQ():
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_READ_SYNC_REQ():
+def EADSYNCRequest():
     """
 Deprecated since protocol version 3.13.
 
@@ -491,7 +497,7 @@ Deprecated since protocol version 3.13.
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_ERROR_RESP(payload_size, cid, status_code):
+def ERRORResponse(payload_size, cid, status_code):
     """
     Sends error message and code.
     This message is only sent from server to client in response to any request that fails and does not include error code in response.
@@ -519,7 +525,7 @@ def CA_PROTO_ERROR_RESP(payload_size, cid, status_code):
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_CLEAR_COMMAND_REQ(sid, cid):
+def LEARCOMMANDRequest(sid, cid):
     """
     Clears a channel.
     This command will cause server to release the associated channel resources and no longer accept any requests for this SID/CID.
@@ -539,7 +545,7 @@ def CA_PROTO_CLEAR_COMMAND_REQ(sid, cid):
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_CLEAR_COMMAND_RESP(sid, cid):
+def LEARCOMMANDResponse(sid, cid):
     """
     Clears a channel.
     This command will cause server to release the associated channel resources and no longer accept any requests for this SID/CID.
@@ -559,7 +565,7 @@ def CA_PROTO_CLEAR_COMMAND_RESP(sid, cid):
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_READ_NOTIFY_REQ(data_type, data_count, sid, ioid):
+def EADNOTIFYRequest(data_type, data_count, sid, ioid):
     """
 		Read value of a channel.
 		Sent over TCP.
@@ -585,7 +591,7 @@ def CA_PROTO_READ_NOTIFY_REQ(data_type, data_count, sid, ioid):
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_READ_NOTIFY_RESP(payload_size, data_type, data_count, sid, ioid):
+def EADNOTIFYResponse(payload_size, data_type, data_count, sid, ioid):
     """
 		Read value of a channel.
 		Sent over TCP.
@@ -614,7 +620,7 @@ def CA_PROTO_READ_NOTIFY_RESP(payload_size, data_type, data_count, sid, ioid):
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_CREATE_CHAN_REQ(payload_size, cid, client_version):
+def EATECHANRequest(payload_size, cid, client_version):
     """
     Requests creation of channel.
     Server will allocate required resources and return initialized SID.
@@ -638,7 +644,7 @@ def CA_PROTO_CREATE_CHAN_REQ(payload_size, cid, client_version):
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_CREATE_CHAN_RESP(payload_size, data_type, data_count, cid, sid):
+def EATECHANResponse(payload_size, data_type, data_count, cid, sid):
     """
     Requests creation of channel.
     Server will allocate required resources and return initialized SID.
@@ -668,7 +674,7 @@ def CA_PROTO_CREATE_CHAN_RESP(payload_size, data_type, data_count, cid, sid):
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_WRITE_NOTIFY_REQ(payload_size, data_type, data_count, sid, ioid):
+def WRITENOTIFYRequest(payload_size, data_type, data_count, sid, ioid):
     """
     Writes new channel value.
     Sent over TCP.
@@ -697,7 +703,7 @@ def CA_PROTO_WRITE_NOTIFY_REQ(payload_size, data_type, data_count, sid, ioid):
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_WRITE_NOTIFY_RESP(payload_size, data_type, data_count, status, ioid):
+def WRITENOTIFYResponse(payload_size, data_type, data_count, status, ioid):
     """
     Writes new channel value.
     Sent over TCP.
@@ -726,7 +732,7 @@ def CA_PROTO_WRITE_NOTIFY_RESP(payload_size, data_type, data_count, status, ioid
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_CLIENT_NAME_REQ(payload_size):
+def LIENTNAMERequest(payload_size):
     """
     Sends local username to virtual circuit peer. 
     This name identifies the user and affects access rights.
@@ -743,7 +749,7 @@ def CA_PROTO_CLIENT_NAME_REQ(payload_size):
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_HOST_NAME_REQ(payload_size):
+def HOSTNAMERequest(payload_size):
     """
     Sends local host name to virtual circuit peer.
     This name will affect access rights.
@@ -761,7 +767,7 @@ def CA_PROTO_HOST_NAME_REQ(payload_size):
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_ACCESS_RIGHTS_RESP(cid, access_rights):
+def ESSRIGHTSResponse(cid, access_rights):
     """
     Notifies of access rights for a channel.
     This value is determined based on host and client name and may change during runtime.
@@ -783,7 +789,7 @@ def CA_PROTO_ACCESS_RIGHTS_RESP(cid, access_rights):
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_CREATE_CH_FAIL_RESP(cid):
+def EATECHFAILResponse(cid):
     """
     Reports that channel creation failed.
     This response is sent to when channel creation in CA_PROTO_CREATE_CHAN fails.
@@ -800,7 +806,7 @@ def CA_PROTO_CREATE_CH_FAIL_RESP(cid):
     return MessageHeader(*struct_args)
 
 
-def CA_PROTO_SERVER_DISCONN_RESP(cid):
+def SERVERDISCONNResponse(cid):
     """
     Notifies the client that server has disconnected the channel.
     This may be since the channel has been destroyed on server.

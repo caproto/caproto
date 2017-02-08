@@ -1,9 +1,9 @@
 # A bring-your-own-I/O implementation of Channel Access
 # in the spirit of http://sans-io.readthedocs.io/
-import cyptes
+import ctypes
 from io import BytesIO
 from collections import defaultdict
-from .commands import *
+# from .commands import *
 
 
 # This sentinel code is copied, with thanks and admiration, from h11,
@@ -23,9 +23,10 @@ class _SentinelBase(type):
 
 def make_sentinel(name):
     cls = _SentinelBase(name, (_SentinelBase,), {})
-    cls.__class__ = cls return cls
+    cls.__class__ = cls
+    return cls
 
-sentinels = ("CHANNEL VIRTUAL_CIRCUIT"
+sentinels = ("CHANNEL VIRTUAL_CIRCUIT "
              # states
              "BROADCAST_SEARCH NEEDS_BROADCAST_SEARCH_RESPONSE "
              "CONNECT_CIRCUIT NEEDS_CONNECT_CIRCUIT_RESPONSE "
@@ -39,6 +40,7 @@ for token in sentinels:
 
 
 def padded_len(s):
+    "Length of a (byte)string rounded up to the nearest multiple of 8."
     return 8 * math.ceil(len(s) / 8)
 
 
@@ -52,7 +54,7 @@ class MessageHeader(ctypes.BigEndianStructure):
                ]
 
 
-class ExtendedMessageHeader(BigEndianStructure):
+class ExtendedMessageHeader(ctypes.BigEndianStructure):
     _fields_ = [("command", ctypes.c_uint16),
                 ("marker1", ctypes.c_uint16),
                 ("data_type", ctypes.c_uint16),
@@ -94,32 +96,20 @@ class Server:
         return SearchResponse(...)
 
 
-class Client:
-    "An object encapsulating the state of an EPICS Client."
-    def __init__(self):
-        self._names = {}  # map known names to known hosts
-        # map (host, priority) to circuit state
-        self._circuits = defaultdict(lambda: UNINITIALIZED)
-        self._channels = {}  # map cid to Channel
+class VirtualCircuit:
+    def __init__(self, host, priority):
+        self.host = host
+        self.priority = host
+        self._state = UNINITIALIZED
         self._data = bytearray()
-        self._cid_counter = itertools.count(0)
-
-    def new_channel(self, name, priority=0):
-        cid = next(self._cid_counter)
-        if name in self._names:
-            circuit = self._circuits[(self._names[name], priority)]
-        else:
-            circuit = None
-        channel = Channel(name, circuit, cid, name, priority)
-        self._channels[cid] = channel
 
     def send(self, command):
-        if type(command) is 
+        ...
 
-    def recv(self, byteslike):
+    def recv(self, bytes_like):
         self._data += byteslike
 
-    def next_command(self):
+    def process_next_response(self):
         header_size = _MessageHeaderSize
         if len(self._data) >= header_size:
             header = MessageHeader.from_buffer(self._data)
@@ -127,7 +117,7 @@ class Client:
             return NEEDS_DATA
         if extend_header(header):
             header_size = _ExtendedMessageHeaderSize
-            if len(self._data) >= header_size
+            if len(self._data) >= header_size:
                 header = ExtendedMessageHeader.from_buffer(self._data)
             else:
                 return NEEDS_DATA
@@ -163,19 +153,44 @@ class Client:
             circuit = (command.host, chan.priority)
             chan.connect(circuit)
         elif type(command) is VersionResponse:
-            self._handle_circuit_ambiguity()
-            self._circuits[(host, ????)] = CONNECTED
+            # self._circuits[(host, ????)] = CONNECTED
+            pass
         elif type(command) is CreateResponse:
             chan = self._channels[command.cid]
             chan.create(command.data_type, command.data_count, sid)
-    
-    def _handle_circuit_ambiguity(self):
-        # If two CA_PROTO_VERSION requests with different priority values are
-        # sent to the same server and only one response comes back, the
-        # protocol provides no way for us to tell which request it is in
-        # response to. The response contains only the 'version' value, which is
-        # the same. We have to wait for *all* relevant responses in order to know
-        # that any particular one has been answered.
+
+
+class Client:
+    "An object encapsulating the state of an EPICS Client."
+    def __init__(self):
+        self._names = {}  # map known names to known hosts
+        self._circuits = {}  # map (host, priority) to VirtualCircuit
+        self._channels = {}  # map cid to Channel
+        self._cid_counter = itertools.count(0)
+        self._datagram_inbox = deque()
+        self._datagram_outbox = deque()
+
+    def new_channel(self, name, priority=0):
+        cid = next(self._cid_counter)
+        circuit = None
+        channel = Channel(name, circuit, cid, name, priority)
+        self._channels[cid] = channel
+        # If this Client has searched for this name and already knows its
+        # host, skip the Search step and create a circuit.
+        if name in self._names:
+            circuit = self._circuits[(self._names[name], priority)]
+
+    def send_datagram(self):
+        "Return bytes to broadcast over UDP socket."
+        return self._datagram_output.popleft() 
+
+    def recv_datagram(self, byteslike):
+        "Inject bytes that were received via UDP broadcast."
+        self._datagram_inbox.append(byteslike)
+
+    def next_event(self):
+        "Process injected bytes."
+        command 
 
 
 class Channel:
@@ -189,6 +204,7 @@ class Channel:
         self.native_data_type = None
         self.native_data_count = None
         self.sid = None
+        self._requests = deque()
 
     def connect(self, circuit):
         "Called by the Client when we have a VirtualCircuit for this Channel."
@@ -205,54 +221,73 @@ class Channel:
         if self._circuit is None:
             return SearchRequest(NO_REPLY, CLIENT_VERSION, cid, self.name)
         elif self._cli[circuit] != CONNECTED:
-            return VersionRequest(self.priority, CLIENT_VERSION)
+            return self.circuit, VersionRequest(self.priority, CLIENT_VERSION)
         elif self.sid is None:
-            return CreateRequest(cid, CLIENT_VERSION, self.name)
+            return self.circuit, CreateRequest(cid, CLIENT_VERSION, self.name)
         return None
+        # Should all these requests get routed to the client?
+        # If so, what about 'read' and 'write' requests too?
+        # Maybe just the former (because they are related to connection management)
+        # but leave the latter to be manually handled by users because they invole
+        # inputs?
      
     def read(self, data_type=None, data_count=None):
         if data_type is None:
             data_type = self.native_data_type
         if data_count is None:
             data_count = self.native_data_count
-        return ReadRequest(...)
+        return self.circuit, ReadRequest(...)
 
     def write(self, data):
-        return WriteRequest(...)
+        return self.circuit, WriteRequest(...)
 
     def subscribe(self, data_type=None, data_count=None):
         if data_type is None:
             data_type = self.native_data_type
         if data_count is None:
             data_count = self.native_data_count
-        return SubscribeRequest(...)
+        return self.circuit, SubscribeRequest(...)
 
 
 EVENT_TRIGGERED_TRANSITIONS = {
     CHANNEL: {
-        BROADCAST_SERACH: {
+        BROADCAST_SEARCH: {
             Search: NEEDS_BROADCAST_SEARCH_REPLY
-        }
+        },
         NEEDS_BROADCAST_SEARCH_RESPOSE: {
             SearchResponse: CONNECT_CIRCUIT
-        }
+        },
         CONNECT_CIRCUIT: {
             Version: NEEDS_CONNECT_CIRCUIT_RESPONSE
-        }
+        },
         NEEDS_CONNECT_CIRCUIT_RESPONSE: {
             VersionResponse: CREATE_CHANNEL
-        }
+        },
         CREATE_CHANNEL: {
             CreateChannel: NEEDS_CREATE_CHANNEL_RESPONSE
-        }
+        },
         NEEDS_CREATE_CHANNEL_RESPONSE: {
             CreateChannelResponse: READY
-        }
+        },
         READY: {
             Subscribe: SUBSCRIBED
-        }
+        },
         SUBSCRIBED: {
             Unsubscribe: READY
-        }
+        },
+    },
+    VIRTUAL_CIRCUIT: {
+        UNINITIALIZED: {
+            Version: NEEDS_CONNECT_CIRCUIT_RESPONSE
+        },
+        NEEDS_CONNECT_CIRCUIT_RESPONSE: {
+            VersionResponse: CONNECTED
+        },
+        CONNECTED: {
+            ClearChannel: DISCONNECTED
+        },
+        DISCONNECTED: {
+            VersionResponse: CONNECTED
+        },
     }
 }
