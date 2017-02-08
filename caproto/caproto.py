@@ -5,8 +5,8 @@ import ctypes
 import itertools
 from io import BytesIO
 from collections import defaultdict, deque
-from .commands import *
-from .dbr_types import *
+from ._messages import *
+from ._dbr_types import *
 
 
 CLIENT_VERSION = 13
