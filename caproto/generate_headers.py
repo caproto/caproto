@@ -31,7 +31,9 @@ def validate(params):
 
 
 def is_reserved(param):
-    return param.field == 'reserved' or param.description == 'Must be 0.' 
+    return (param.field == 'reserved' or
+            param.description == 'Must be 0.'
+            or 'Payload size is constant' in param.description)
 
 
 def handle_special_cases(command):
@@ -105,14 +107,14 @@ def parse_commands(h2):
         if name.startswith('CA_PROTO'):
             name = name[len('CA_PROTO'):]
         name = name.title().replace('_', '')
-        if has_payload:
-            print(name)
         input_params = [p for p in params[1:] if not is_reserved(p)]
         struct_args = [p.field
                        if p in input_params else int(p.value)
                        for p in params]
         command = Command('{}{}'.format(name, suffix),
                           description, input_params, struct_args)
+        if has_payload:
+            print('{}{}'.format(name, suffix))
         command = handle_special_cases(command)
         commands.append(command)
     return commands

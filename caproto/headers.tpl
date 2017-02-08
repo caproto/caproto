@@ -25,24 +25,8 @@ class ExtendedMessageHeader(ctypes.BigEndianStructure):
                ]
 
 
-class Message:
-    def __init__(self, header, payload=None):
-        if payload is None:
-            if header.payload_size != 0:
-                raise ValueError("header.payload_size {} > 0 but payload is "
-                                 "is None.".format(header.payload_size))
-        elif header.payload_size != len(payload):
-            raise ValueError("header.payload_size {} != len(payload) {}"
-                             "".format(header.payload_size, payload))
-        self.header = header
-        self.payload = payload
-
-    def __bytes__(self):
-        return bytes(self.header) + bytes(self.payload)
-
-
 {% for command in commands %}
-def {{command.name}}({{ command.input_params|map('attr', 'field')|join(', ') }}):
+def {{command.name}}Header({{ command.input_params|map('attr', 'field')|join(', ') }}):
     """
     Construct a ``MessageHeader`` for a {{command.name}} command.
 

@@ -8,6 +8,9 @@ MAX_UNITS_SIZE = 8
 MAX_ENUM_STRING_SIZE = 26
 MAX_ENUM_STATES = 16
 
+DO_REPLY = 10
+NO_REPLY = 5
+
 
 dbr_string = 40 * ctypes.c_char  # epicsOldString
 dbr_char = ctypes.c_char # epicsUint8

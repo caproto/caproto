@@ -10,9 +10,6 @@ from .dbr_types import *
 
 
 CLIENT_VERSION = 13
-DO_REPLY = 10
-NO_REPLY = 5
-
 # This sentinel code is copied, with thanks and admiration, from h11,
 # which is released under an MIT license.
 #
