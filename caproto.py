@@ -23,8 +23,7 @@ class _SentinelBase(type):
 
 def make_sentinel(name):
     cls = _SentinelBase(name, (_SentinelBase,), {})
-    cls.__class__ = cls
-    return cls
+    cls.__class__ = cls return cls
 
 sentinels = ("CHANNEL VIRTUAL_CIRCUIT"
              # states
@@ -37,6 +36,10 @@ sentinels = ("CHANNEL VIRTUAL_CIRCUIT"
              "CreateChannelResponse".split())
 for token in sentinels:
     globals()[token] = make_sentinel(token)
+
+
+def padded_len(s):
+    return 8 * math.ceil(len(s) / 8)
 
 
 class MessageHeader(ctypes.BigEndianStructure):
@@ -73,7 +76,26 @@ def extend_header(header):
     return header.payload_size == 0xFFFF and header.data_count == 0
 
 
-class Context:
+class Server:
+    "An object encapsulating the state of an EPICS Server."
+    def __init__(self):
+        self._sid_counter = itertools.count(0)
+
+    def new_sid(self):
+        return next(self._sid_counter)
+
+    def version(self):
+        return VersionResponse(...)
+
+    def create_channel(self, name, cid):
+        return CreateResponse(..., sid)
+
+    def search(self, name):
+        return SearchResponse(...)
+
+
+class Client:
+    "An object encapsulating the state of an EPICS Client."
     def __init__(self):
         self._names = {}  # map known names to known hosts
         # map (host, priority) to circuit state
@@ -137,71 +159,73 @@ class Context:
             return
         elif type(command) is SearchResponse:
             chan = self._channels[command.cid]
-            ctx._names[chan.name] = command.host
+            cli._names[chan.name] = command.host
             circuit = (command.host, chan.priority)
             chan.connect(circuit)
-        elif type(command) is ConnectResponse:
+        elif type(command) is VersionResponse:
+            self._handle_circuit_ambiguity()
             self._circuits[(host, ????)] = CONNECTED
         elif type(command) is CreateResponse:
             chan = self._channels[command.cid]
-            chan.complete(command.data_type, command.data_count, sid)
+            chan.create(command.data_type, command.data_count, sid)
+    
+    def _handle_circuit_ambiguity(self):
+        # If two CA_PROTO_VERSION requests with different priority values are
+        # sent to the same server and only one response comes back, the
+        # protocol provides no way for us to tell which request it is in
+        # response to. The response contains only the 'version' value, which is
+        # the same. We have to wait for *all* relevant responses in order to know
+        # that any particular one has been answered.
 
 
 class Channel:
-    def __init__(self, context, circuit, cid, name, priority=0):
-        self._ctx = context
+    "An object encapsulating the state of the EPICS Channel on a Client."
+    def __init__(self, client, circuit, cid, name, priority=0):
+        self._cli = client
         self._circuit = circuit
-        self._cid = cid
+        self.cid = cid
         self.name = name
         self.priority = priority
-
-    def complete(self, native_data_type, native_data_count, sid):
-        self._native_data_type = native_data_type
-        self._native_data_count = native_data_count
-        self._sid = sid
-
-    @property
-    def state(self):
-        if self._circuit is None:
-            ...???
-
-    def next_request(self):
-        # put all the SearchRequest, ConnectRequest stuff in here instead of
-        # giving them separate names?
-        # or go read h11 again until this makes sense.
-     
-    def SearchRequest(self):
-        return Search(self.name)
-
-    def ConnectRequest(self):
-        return ConnectRequest(*self._circuit)
+        self.native_data_type = None
+        self.native_data_count = None
+        self.sid = None
 
     def connect(self, circuit):
+        "Called by the Client when we have a VirtualCircuit for this Channel."
         self._circuit = circuit
 
-    def CreateRequest(self):
-        return CreateRequest(*
+    def create(self, native_data_type, native_data_count, sid):
+        "Called by the Client when the Server gives this Channel an ID."
+        self.native_data_type = native_data_type
+        self.native_data_count = native_data_count
+        self.sid = sid
 
-    def create(self):
-        return Create(...)
-
+    def next_request(self):
+        # Do this logic based on a `state` explicit advanced by the Client.
+        if self._circuit is None:
+            return SearchRequest(NO_REPLY, CLIENT_VERSION, cid, self.name)
+        elif self._cli[circuit] != CONNECTED:
+            return VersionRequest(self.priority, CLIENT_VERSION)
+        elif self.sid is None:
+            return CreateRequest(cid, CLIENT_VERSION, self.name)
+        return None
+     
     def read(self, data_type=None, data_count=None):
         if data_type is None:
-            data_type = self._native_data_type
+            data_type = self.native_data_type
         if data_count is None:
-            data_count = self._native_data_count
-        return Read(...)
+            data_count = self.native_data_count
+        return ReadRequest(...)
 
     def write(self, data):
-        return Write(...)
+        return WriteRequest(...)
 
     def subscribe(self, data_type=None, data_count=None):
         if data_type is None:
-            data_type = self._native_data_type
+            data_type = self.native_data_type
         if data_count is None:
-            data_count = self._native_data_count
-        return Subscribe(...)
-
+            data_count = self.native_data_count
+        return SubscribeRequest(...)
 
 
 EVENT_TRIGGERED_TRANSITIONS = {
