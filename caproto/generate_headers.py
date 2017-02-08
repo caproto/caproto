@@ -119,7 +119,7 @@ def parse_commands(h2):
 
 
 JINJA_ENV = Environment(loader=FileSystemLoader(getpath('.')))
-template = JINJA_ENV.get_template('commands.tpl')
+template = JINJA_ENV.get_template('headers.tpl')
 
 
 def parse_section(h1):
@@ -136,7 +136,7 @@ def parse_section(h1):
 
 def write_commands(path=None):
     """
-    Generate commands.py from commands.tpl and CAproto.html
+    Generate headers.py from headers.tpl and CAproto.html
     """
     with open('CAproto.html') as f:
         soup = BeautifulSoup(f.read(), 'html.parser')
@@ -148,7 +148,7 @@ def write_commands(path=None):
         commands.extend(parse_section(h1))
     if path is None:
         path = getpath('.')
-    with open(os.path.join(path, 'commands.py'), 'w') as f:
+    with open(os.path.join(path, 'headers.py'), 'w') as f:
         f.write(template.render(commands=commands))
 
 

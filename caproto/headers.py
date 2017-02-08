@@ -12,6 +12,7 @@ class MessageHeader(ctypes.BigEndianStructure):
                ]
 
 
+
 class ExtendedMessageHeader(ctypes.BigEndianStructure):
     _fields_ = [("command", ctypes.c_uint16),
                 ("marker1", ctypes.c_uint16),
@@ -23,6 +24,21 @@ class ExtendedMessageHeader(ctypes.BigEndianStructure):
                 ("data_count", ctypes.c_uint32),
                ]
 
+
+class Message:
+    def __init__(self, header, payload=None):
+        if payload is None:
+            if header.payload_size != 0:
+                raise ValueError("header.payload_size {} > 0 but payload is "
+                                 "is None.".format(header.payload_size))
+        elif header.payload_size != len(payload):
+            raise ValueError("header.payload_size {} != len(payload) {}"
+                             "".format(header.payload_size, payload))
+        self.header = header
+        self.payload = payload
+
+    def __bytes__(self):
+        return bytes(self.header) + bytes(self.payload)
 
 
 

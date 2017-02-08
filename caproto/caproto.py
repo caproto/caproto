@@ -166,8 +166,8 @@ class Client:
         #     circuit = self._circuits[(self._names[name], priority)]
         size = padded_len(name)
         header = SearchRequest(size, NO_REPLY, CLIENT_VERSION, cid)
-        payload = DBR_STRING(name.encode())
-        msg = bytes(header) + bytes(payload)[:size]
+        payload = bytes(DBR_STRING(name.encode()))[:size]
+        msg = Message(header, payload)
         self._datagram_outbox.append(msg)
         return channel
 
