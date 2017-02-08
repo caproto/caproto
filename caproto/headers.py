@@ -697,7 +697,7 @@ def CreateChanRequestHeader(payload_size, cid, client_version):
     return MessageHeader(*struct_args)
 
 
-def CreateChanResponseHeader(payload_size, data_type, data_count, cid, sid):
+def CreateChanResponseHeader(data_type, data_count, cid, sid):
     """
     Construct a ``MessageHeader`` for a CreateChanResponse command.
 
@@ -708,9 +708,6 @@ def CreateChanResponseHeader(payload_size, data_type, data_count, cid, sid):
 
     Parameters
     ----------
-    
-      payload_size : integer
-          Must be 0
     
       data_type : integer
           Native channel data type
@@ -725,7 +722,7 @@ def CreateChanResponseHeader(payload_size, data_type, data_count, cid, sid):
           Channel server ID
     
     """
-    struct_args = (18, payload_size, data_type, data_count, cid, sid)
+    struct_args = (18, 0, data_type, data_count, cid, sid)
     return MessageHeader(*struct_args)
 
 
@@ -760,7 +757,7 @@ def WriteNotifyRequestHeader(payload_size, data_type, data_count, sid, ioid):
     return MessageHeader(*struct_args)
 
 
-def WriteNotifyResponseHeader(payload_size, data_type, data_count, status, ioid):
+def WriteNotifyResponseHeader(data_type, data_count, status, ioid):
     """
     Construct a ``MessageHeader`` for a WriteNotifyResponse command.
 
@@ -770,9 +767,6 @@ def WriteNotifyResponseHeader(payload_size, data_type, data_count, status, ioid)
 
     Parameters
     ----------
-    
-      payload_size : integer
-          Must be 0
     
       data_type : integer
           Format of data written
@@ -787,7 +781,7 @@ def WriteNotifyResponseHeader(payload_size, data_type, data_count, status, ioid)
           Request ID
     
     """
-    struct_args = (19, payload_size, data_type, data_count, status, ioid)
+    struct_args = (19, 0, data_type, data_count, status, ioid)
     return MessageHeader(*struct_args)
 
 

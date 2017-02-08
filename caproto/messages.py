@@ -11,6 +11,23 @@ def ensure_bytes(s):
         raise TypeError("expected str or bytes")
 
 
+def padded_string_payload(name):
+    name = ensure_bytes(name)
+    size = padded_len(name)
+    payload = bytes(DBR_STRING(name))[:size]
+    return size, payload
+
+
+def data_payload(values, data_count, data_type):
+    size = data_count * ctypes.sizeof(data_type)
+    if data_count != 1:
+        assert data_count == len(values)
+        payload = b''.join(map(bytes, values))
+    else:
+        payload = bytes(values)
+    return size, payload
+
+
 class Message:
     def __init__(self, header, payload=None):
         if payload is None:
@@ -27,7 +44,7 @@ class Message:
         return bytes(self.header) + bytes(self.payload)
 
 
-class VersionRequest(Message);
+class VersionRequest(Message):
     def __init__(self, priority, version):
         header = VersionRequestHeader(priority, version)
         super()(header, None)
@@ -41,10 +58,8 @@ class VersionResponse(Message):
 
 class SearchRequest(Message):
     def __init__(self, name, cid, version):
-        name = ensure_bytes(name)
-        size = padded_len(name)
+        size, payload = padded_string_payload(name)
         header = SearchRequestHeader(size, NO_REPLY, version, cid)
-        payload = bytes(DBR_STRING(name))[:size]
         super()(header, payload)
 
 
@@ -87,7 +102,7 @@ class CaRepeaterRegisterRequestHeader(Message):
 
 class EventAddRequest(Messsage):
     def __init__(self, data_type, data_count, sid, subscriptionid, low,
-                 high, to, mask)
+                 high, to, mask):
         header = EventAddRequestHeader(data_type, data_count, sid,
                                        subscriptionid, low, high, to, mask)
         payload_list = (DBR_FLOAT(low), DBR_FLOAT(high), DBR_FLOAT(to),
@@ -97,14 +112,11 @@ class EventAddRequest(Messsage):
 
 
 class EventAddResponse(Message):
-    def __init__(self, values, data_type, status_code, subscriptionid):
+    def __init__(self, values, data_type, data_count,
+                 status_code, subscriptionid):
+        size, payload = data_payload(values)
         header = EventAddResponseHeader(size, data_type, data_count,
                                         status_code, subscriptionid)
-        data_count = len(values)
-        size = data_count * ctypes.sizeof(data_type)
-        header = ReadNotifyResponseHeader(size, data_type, data_count, sid,
-                                          ioid)
-        payload = b''.join(map(bytes, values))
         super()(header, payload)
 
 
@@ -129,18 +141,116 @@ class ReadNotifyRequest(Message):
 
 class ReadNotifyResponse(Message):
     def __init__(self, values, data_type, sid, ioid):
-        data_count = len(values)
-        size = data_count * ctypes.sizeof(data_type)
+        size, payload = data_payload(values)
         header = ReadNotifyResponseHeader(size, data_type, data_count, sid,
                                           ioid)
-        payload = b''.join(map(bytes, values))
         super()(header, payload)
 
 
-WriteRequest
-ErrorResponse
-ReadNotifyResponse
-CreateChanRequest
-WriteNotifyRequest
-ClientNameRequest
-HostNameRequest
+class WriteRequest(Message):
+    def __init__(self, values, data_type, sid, ioid):
+        size, payload = data_payload(values)
+        header = WriteRequestHeader(size, data_type, data_count, sid, ioid)
+        super()(header, payload)
+
+
+class EventsOffRequest(Message):
+    def __init__(self):
+        super()(EventsOffRequestHeader(), None)
+
+
+class EventsOnRequest(Message):
+    def __init__(self):
+        super()(EventsOnRequestHeader(), None)
+
+
+class ReadSyncRequestRequest(Message):
+    def __init__(self):
+        super()(ReadSyncRequestRequestHeader(), None)
+
+
+class ErrorResponse(Message):
+    def __init__(self, original_request, cid, status_code, error_message):
+        _error_message = DBR_STRING(ensure_bytes(error_message))
+        payload = bytes(original_request) + _error_message
+        size = len(payload)
+        header = ErrorResponseHeader(size, cid, status_code)
+        super()(header, payload)
+
+
+class ClearChannelRequest(Message):
+    def __init__(self, sid, cid):
+        super()(ClearChannelRequestHeader(sid, cid), None)
+
+
+class ClearChannelResponse(Message):
+    def __init__(self, sid, cid):
+        super()(ClearChannelResponseHeader(sid, cid), None)
+
+
+class ReadNotifyRequest(Message):
+    def __init__(self, data_type, data_count, sid, ioid):
+        header = ReadNotifyRequestHeader(data_type, data_count, sid, ioid)
+        super()(header, None)
+
+    
+class ReadNotifyResponse(Message):
+    def __init__(self, values, data_type, data_count, sid, ioid):
+        size, payload = data_payload(values)
+        header = ReadNotifyRequest(size, data_type, data_count, sid, ioid)
+        super()(header, payload)
+
+
+class CreateChanRequest(Message):
+    def __init__(self, name, cid, version):
+        size, payload = padded_string_payload(name)
+        header = CreateChanRequestHeader(size, cid, version)
+        super()(header, payload)
+
+class CreateChanResponse(Message):
+    def __init__(self, data_type, data_count, cid, sid):
+        header = CreateChanResponseHeader(data_type, data_count, cid, sid)
+        super()(header, None)
+
+
+class WriteNotifyRequest(Message):
+    def __init__(self, values, data_type, data_count, status, ioid):
+        size, payload = data_payload(values)
+        header = WriteNotifyRequest(size, data_type, data_count, status, ioid)
+        super()(header, payload)
+
+
+class WriteNotifyResponse(Message):
+    def __init__(self, data_type, data_count, status, ioid):
+        header = WriteNotifyResponse(data_type, data_count, status, ioid)
+        super()(header, None)
+
+
+class ClientNameRequest(Message):
+    def __init__(self, name):
+        size, payload = padded_string_payload(name)
+        header = ClientNameRequestHeader(size)
+        super()(header, payload)
+
+
+class HostNameRequest(Message):
+    def __init__(self, name):
+        size, payload = padded_string_payload(name)
+        header = HostNameRequestHeader(size)
+        super()(header, payload)
+
+
+class AccessRightsResponse(Message):
+    def __init__(self, cid, access_rights):
+        header = AccessRightsResponseHeader(cid, access_rights)
+        super()(header, None)
+
+
+class CreateChFailResponse(Message):
+    def __init__(self, cid):
+        super()(CreateChFailResponseHeader(cid), None)
+
+
+class ServerDisconnResponse(Message):
+    def __init__(self, cid):
+        super()(ServerDisconnResponseHeader(cid), None)
