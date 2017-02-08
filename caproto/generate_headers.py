@@ -138,7 +138,7 @@ def parse_section(h1):
 
 def write_commands(path=None):
     """
-    Generate headers.py from headers.tpl and CAproto.html
+    Generate _headers.py from headers.tpl and CAproto.html
     """
     with open('CAproto.html') as f:
         soup = BeautifulSoup(f.read(), 'html.parser')
@@ -150,7 +150,7 @@ def write_commands(path=None):
         commands.extend(parse_section(h1))
     if path is None:
         path = getpath('.')
-    with open(os.path.join(path, 'headers.py'), 'w') as f:
+    with open(os.path.join(path, '_headers.py'), 'w') as f:
         f.write(template.render(commands=commands))
 
 
