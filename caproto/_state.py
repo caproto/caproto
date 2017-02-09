@@ -19,15 +19,13 @@ def make_sentinel(name):
     cls.__class__ = cls
     return cls
 
-sentinels = ("CHANNEL VIRTUAL_CIRCUIT "
+sentinels = ("CLIENT SERVER"
              # states
-             "BROADCAST_SEARCH NEEDS_BROADCAST_SEARCH_RESPONSE "
-             "CONNECT_CIRCUIT NEEDS_CONNECT_CIRCUIT_RESPONSE "
-             "CREATE_CHANNEL NEEDS_CREATE_CHANNEL_RESPONSE "
-             "READY SUBSCRIBED CONNECTED UNINITIALIZED DISCONNECTED "
-             # responses
-             "NEEDS_DATA SearchResponse VersionResponse "
-             "CreateChanResponse".split())
+             "SEND_SEARCH_REQUEST AWAIT_SEARCH_RESPONSE "
+             "SEND_SEARCH_RESPONSE "
+             "SEND_VERSION_REQUEST AWAIT_VERSION_RESPONSE "
+             "SEND_VERSION_RESPONSE "
+             "CONNECTED DISCONNECTED IDLE ERROR".split())
 for token in sentinels:
     globals()[token] = make_sentinel(token)
 
@@ -40,58 +38,99 @@ class LocalProtocolError(ChannelAccessProtocolError):
     ...
 
 
-EVENT_TRIGGERED_TRANSITIONS = {
-    CHANNEL: {
-        BROADCAST_SEARCH: {
-            SearchRequest: NEEDS_BROADCAST_SEARCH_RESPONSE
+COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
+    CLIENT: {
+        SEND_SEARCH: {
+            SearchRequest: AWAIT_SEARCH_RESPONSE,
+            ErrorResponse: ERROR,
         },
-        NEEDS_BROADCAST_SEARCH_RESPONSE: {
-            SearchResponse: CONNECT_CIRCUIT
+        AWAIT_SEARCH_RESPONSE: {
+            SearchResponse: SEND_VERSION_REQUEST,
+            ErrorResponse: ERROR,
         },
-        CREATE_CHANNEL: {
-            CreateChanRequest: NEEDS_CREATE_CHANNEL_RESPONSE
+        SEND_VERSION_REQUEST: {
+            VersionRequest: AWAIT_VERSION_RESPOSE,
+            ErrorResponse: ERROR,
         },
-        NEEDS_CREATE_CHANNEL_RESPONSE: {
-            CreateChanResponse: READY
-        },
-        READY: {
-            EventAddRequest: SUBSCRIBED
-        },
-        SUBSCRIBED: {
-            EventCancelRequest: READY
-        },
-    },
-    VIRTUAL_CIRCUIT: {
-        UNINITIALIZED: {
-            VersionRequest: NEEDS_CONNECT_CIRCUIT_RESPONSE
-        },
-        NEEDS_CONNECT_CIRCUIT_RESPONSE: {
-            VersionResponse: CONNECTED
+        AWAIT_VERSION_RESPOSE: {
+            VersionResponse: CONNECTED,
+            ErrorResponse: ERROR,
         },
         CONNECTED: {
-            ClearChannelRequest: DISCONNECTED
+            ErrorResponse: ERROR,
         },
-        DISCONNECTED: {
-            VersionResponse: CONNECTED
+        ERROR: {},
+    },
+    SERVER: {
+        IDLE: {
+            SearchRequest: SEND_SEARCH_RESPONSE,
+            VersionRequest: SEND_VERSION_REQUEST,
         },
-    }
+        SEND_SEARCH_RESPONSE: {
+            SearchResponse: IDLE,
+        },
+        SEND_VERSION_REQUEST: {
+            VersionRespose: CONNECTED,
+        }
+        CONNECTED: {},  # VirtualCircuits can only be closed by timeout.
+    },
 }
 
 
-class ClientState:
-    def __init__(self):
-        self.role = CHANNEL
-        self.state = BROADCAST_SEARCH
-    
-    def process_event(self, event):
-        self._fire_event_triggered_transitions(self.role, type(event))
+COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
+    CLIENT: {
+        SEND_CREATE_CHAN_REQUEST: {
+            CreateChanRequest: AWAIT_CREATE_CHAN_RESPONSE,
+            ErrorResponse: ERROR,
+        },
+        AWAIT_CREATE_CHAN_RESPONSE: {
+            CreateChanResponse: CONNECTED,
+            ErrorResponse: ERROR,
+        },
+        CONNECTED: {
+            ClearChannelRequest: DISCONNECTED,
+            ServerDisconn: DISCONNECTED
+            ErrorResponse: ERROR,
+        },
+        ERROR: {}, 
+    },
+    SERVER: {
+        IDLE: {
+            CreateChanRequest: SEND_CREATE_CHAN_RESPONSE,
+        },
+        SEND_CREATE_CHAN_RESPONSE: {
+            CreatChanResponse: CONNECTED,
+            # HostNameRequest and ClientNameRequest may arrive before or
+            # after response to connection is sent.
+            HostNameRequest: SEND_CREATE_CHAN_RESPONSE,
+            ClientNameRequest: SEND_CREATE_CHAN_RESPONSE,
+        },
+        CONNECTED: {
+            ClearChannelRequest: IDLE,
+            HostNameRequest: CONNECTED,
+            ClientNameRequest: CONNECTED,
+            ReadNotifyRequest: CONNECTED,
+            WriteNotifyRequest: CONNECTED,
+            EventAddRequest: CONNECTED,  # TODO a subscription state machine?
+        },
+    },
+}
 
-    def _fire_event_triggered_transitions(self, role, event_type):
+
+class CircuitState:
+    def __init__(self, role):
+        self.role = role
+        self.states = {CLIENT: SEND_SEARCH, SERVER: UNINITIALIZED}
+    
+    def process_command(self, role, command_type):
+        self._fire_event_triggered_transitions(role, command_type)
+
+    def _fire_event_triggered_transitions(self, role, command_type):
         state = self.state
         try:
-            new_state = EVENT_TRIGGERED_TRANSITIONS[role][state][event_type]
+            new_state = EVENT_TRIGGERED_TRANSITIONS[role][state][command_type]
         except KeyError:
             raise LocalProtocolError(
-                "can't handle event type {} when role={} and state={}"
+                "can't handle command type {} when role={} and state={}"
                 .format(event_type.__name__, role, self.state))
         self.state = new_state

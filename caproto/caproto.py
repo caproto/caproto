@@ -1,53 +1,15 @@
 # A bring-your-own-I/O implementation of Channel Access
 # in the spirit of http://sans-io.readthedocs.io/
-import math
 import ctypes
 import itertools
 from io import BytesIO
 from collections import defaultdict, deque
 from ._messages import *
 from ._dbr_types import *
+from ._state import *
 
 
 CLIENT_VERSION = 13
-# This sentinel code is copied, with thanks and admiration, from h11,
-# which is released under an MIT license.
-#
-# Sentinel values
-#
-# - Inherit identity-based comparison and hashing from object
-# - Have a nice repr
-# - Have a *bonus property*: type(sentinel) is sentinel
-#
-# The bonus property is useful if you want to take the return value from
-# next_event() and do some sort of dispatch based on type(event).
-class _SentinelBase(type):
-    def __repr__(self):
-        return self.__name__
-
-def make_sentinel(name):
-    cls = _SentinelBase(name, (_SentinelBase,), {})
-    cls.__class__ = cls
-    return cls
-
-sentinels = ("CHANNEL VIRTUAL_CIRCUIT "
-             # states
-             "BROADCAST_SEARCH NEEDS_BROADCAST_SEARCH_RESPONSE "
-             "CONNECT_CIRCUIT NEEDS_CONNECT_CIRCUIT_RESPONSE "
-             "CREATE_CHANNEL NEEDS_CREATE_CHANNEL_RESPONSE "
-             "READY SUBSCRIBED CONNECTED UNINITIALIZED DISCONNECTED "
-             # responses
-             "NEEDS_DATA SearchResponse VersionResponse "
-             "CreateChanResponse".split())
-for token in sentinels:
-    globals()[token] = make_sentinel(token)
-
-
-def padded_len(s):
-    "Length of a (byte)string rounded up to the nearest multiple of 8."
-    return 8 * math.ceil(len(s) / 8)
-
-
 _MessageHeaderSize = ctypes.sizeof(MessageHeader)
 _ExtendedMessageHeaderSize = ctypes.sizeof(ExtendedMessageHeader)
 
@@ -143,6 +105,7 @@ class VirtualCircuit:
 
 
 class Client:
+    PROTOCOL_VERSION = 13
     "An object encapsulating the state of an EPICS Client."
     def __init__(self):
         self._names = {}  # map known names to known hosts
@@ -151,6 +114,7 @@ class Client:
         self._cid_counter = itertools.count(0)
         self._datagram_inbox = deque()
         self._datagram_outbox = deque()
+        self._awaiting_response = set()
 
     def new_channel(self, name, priority=0):
         cid = next(self._cid_counter)
@@ -161,24 +125,24 @@ class Client:
         # host, skip the Search step and create a circuit.
         # if name in self._names:
         #     circuit = self._circuits[(self._names[name], priority)]
-        size = padded_len(name)
-        header = SearchRequest(size, NO_REPLY, CLIENT_VERSION, cid)
-        payload = bytes(DBR_STRING(name.encode()))[:size]
-        msg = Message(header, payload)
+        msg = SearchRequest(name, cid, self.PROTOCOL_VERSION)
         self._datagram_outbox.append(msg)
         return channel
 
     def send_datagram(self):
         "Return bytes to broadcast over UDP socket."
-        return self._datagram_outbox.popleft() 
+        # TODO What to raise or return when outbox is empty?
+        msg = self._datagram_outbox.popleft() 
+        self._cstate.process_event(msg)
+        return msg
 
-    def recv_datagram(self, byteslike):
-        "Inject bytes that were received via UDP broadcast."
-        self._datagram_inbox.append(byteslike)
+    def recv_datagram(self, byteslike, address):
+        "Cache but do not process bytes that were received via UDP broadcast."
+        self._datagram_inbox.append((byteslike, (host, port)))
 
     def next_event(self):
-        "Process injected bytes."
-        command 
+        "Process cached received bytes."
+        address, msg = self._datagram_index.popleft()
 
 
 class Channel:
@@ -228,47 +192,3 @@ class Channel:
         if data_count is None:
             data_count = self.native_data_count
         return self.circuit, SubscribeRequest(...)
-
-
-EVENT_TRIGGERED_TRANSITIONS = {
-    CHANNEL: {
-        BROADCAST_SEARCH: {
-            SearchRequest: NEEDS_BROADCAST_SEARCH_RESPONSE
-        },
-        NEEDS_BROADCAST_SEARCH_RESPONSE: {
-            SearchResponse: CONNECT_CIRCUIT
-        },
-        CONNECT_CIRCUIT: {
-            VersionRequest: NEEDS_CONNECT_CIRCUIT_RESPONSE
-        },
-        NEEDS_CONNECT_CIRCUIT_RESPONSE: {
-            VersionResponse: CREATE_CHANNEL
-        },
-        CREATE_CHANNEL: {
-            CreateChanRequest: NEEDS_CREATE_CHANNEL_RESPONSE
-        },
-        NEEDS_CREATE_CHANNEL_RESPONSE: {
-            CreateChanResponse: READY
-        },
-        READY: {
-            EventAddRequest: SUBSCRIBED
-        },
-        SUBSCRIBED: {
-            EventCancelRequest: READY
-        },
-    },
-    VIRTUAL_CIRCUIT: {
-        UNINITIALIZED: {
-            VersionRequest: NEEDS_CONNECT_CIRCUIT_RESPONSE
-        },
-        NEEDS_CONNECT_CIRCUIT_RESPONSE: {
-            VersionResponse: CONNECTED
-        },
-        CONNECTED: {
-            ClearChannelRequest: DISCONNECTED
-        },
-        DISCONNECTED: {
-            VersionResponse: CONNECTED
-        },
-    }
-}

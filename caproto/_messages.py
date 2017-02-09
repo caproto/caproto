@@ -1,3 +1,4 @@
+import math
 from ._headers import *
 from ._dbr_types import *
 
@@ -9,6 +10,11 @@ def ensure_bytes(s):
         return s.encode()
     else:
         raise TypeError("expected str or bytes")
+
+
+def padded_len(s):
+    "Length of a (byte)string rounded up to the nearest multiple of 8."
+    return 8 * math.ceil(len(s) / 8)
 
 
 def padded_string_payload(name):
@@ -47,60 +53,64 @@ class Message:
 class VersionRequest(Message):
     def __init__(self, priority, version):
         header = VersionRequestHeader(priority, version)
-        super()(header, None)
+        super().__init__(header, None)
 
 
 class VersionResponse(Message):
     def __init__(self, version):
         header = VersionResponseHeader(version)
-        super()(header, None)
+        super().__init__(header, None)
 
 
 class SearchRequest(Message):
     def __init__(self, name, cid, version):
         size, payload = padded_string_payload(name)
         header = SearchRequestHeader(size, NO_REPLY, version, cid)
-        super()(header, payload)
+        super().__init__(header, payload)
 
 
 class SearchResponse(Message):
     def __init__(self, port, sid, cid, version):
         header = SearchResponseHeader(port, sid, cid)
         payload = bytes(DBR_INT(version))
-        super()(header, payload)
+        super().__init__(header, payload)
 
 
 class NotFoundResponse(Message):
     def __init__(self, version, cid):
         header = NotFoundResponseHeader(DO_REPLY, version, cid)
-        super()(header, None)
+        super().__init__(header, None)
 
 
-class EchoRequest(Messsage):
+class EchoRequest(Message):
     def __init__(self):
-        super()(EchoRequestHeader(), None)
+        super().__init__(EchoRequestHeader(), None)
 
 
 class EchoResponse(Message):
     def __init__(self):
-        super()(EchoResponseHeader(), None)
+        super().__init__(EchoResponseHeader(), None)
 
 
 class RsrvIsUpResponse(Message):
     def __init__(self, server_port, beacon_id, address):
-        super()(RsrvIsUpResponseHeader(server_port, beacon_id, address), None)
+        header = RsrvIsUpResponseHeader(server_port, beacon_id, address)
+        super().__init__(header, None)
 
 
 class CaRepeaterConfirmResponseHeader(Message):
     def __init__(self, repeater_address):
-        super()(CaRepeaterConfirmResponseHeader(repeater_address), None)
+        header = CaRepeaterConfirmResponseHeader(repeater_address)
+        super().__init__(header, None)
 
 
 class CaRepeaterRegisterRequestHeader(Message):
     def __init__(self, client_ip_address):
-        super()(CaRepeaterRegisterRequestHeader(client_ip_address), None)
+        header = CaRepeaterRegisterRequestHeader(client_ip_address)
+        super().__init__(header, None)
 
-class EventAddRequest(Messsage):
+
+class EventAddRequest(Message):
     def __init__(self, data_type, data_count, sid, subscriptionid, low,
                  high, to, mask):
         header = EventAddRequestHeader(data_type, data_count, sid,
@@ -108,7 +118,7 @@ class EventAddRequest(Messsage):
         payload_list = (DBR_FLOAT(low), DBR_FLOAT(high), DBR_FLOAT(to),
                         DBR_INT(mask))
         payload = b''.join(map(bytes, payload_list))
-        super()(header, payload)
+        super().__init__(header, payload)
 
 
 class EventAddResponse(Message):
@@ -117,26 +127,26 @@ class EventAddResponse(Message):
         size, payload = data_payload(values)
         header = EventAddResponseHeader(size, data_type, data_count,
                                         status_code, subscriptionid)
-        super()(header, payload)
+        super().__init__(header, payload)
 
 
 class EventCancelRequest(Message):
     def __init__(self, data_type, data_count, sid, subscriptionid):
         header = EventCancelRequestHeader(data_type, data_count, sid,
                                           subscriptionid)
-        super()(header, None)
+        super().__init__(header, None)
 
 
 class EventCancelResponse(Message):
     def __init__(self, data_type, sid, subscriptionid):
         header = EventCancelResponseHeader(data_type, sid, subscriptionid)
-        super()(header, None)
+        super().__init__(header, None)
 
 
 class ReadNotifyRequest(Message):
     def __init__(self, data_type, data_count, sid, ioid):
         header = ReadNotifyRequestHeader(data_type, data_count, sid, ioid)
-        super()(header, None)
+        super().__init__(header, None)
 
 
 class ReadNotifyResponse(Message):
@@ -144,29 +154,29 @@ class ReadNotifyResponse(Message):
         size, payload = data_payload(values)
         header = ReadNotifyResponseHeader(size, data_type, data_count, sid,
                                           ioid)
-        super()(header, payload)
+        super().__init__(header, payload)
 
 
 class WriteRequest(Message):
     def __init__(self, values, data_type, sid, ioid):
         size, payload = data_payload(values)
         header = WriteRequestHeader(size, data_type, data_count, sid, ioid)
-        super()(header, payload)
+        super().__init__(header, payload)
 
 
 class EventsOffRequest(Message):
     def __init__(self):
-        super()(EventsOffRequestHeader(), None)
+        super().__init__(EventsOffRequestHeader(), None)
 
 
 class EventsOnRequest(Message):
     def __init__(self):
-        super()(EventsOnRequestHeader(), None)
+        super().__init__(EventsOnRequestHeader(), None)
 
 
 class ReadSyncRequestRequest(Message):
     def __init__(self):
-        super()(ReadSyncRequestRequestHeader(), None)
+        super().__init__(ReadSyncRequestRequestHeader(), None)
 
 
 class ErrorResponse(Message):
@@ -175,82 +185,82 @@ class ErrorResponse(Message):
         payload = bytes(original_request) + _error_message
         size = len(payload)
         header = ErrorResponseHeader(size, cid, status_code)
-        super()(header, payload)
+        super().__init__(header, payload)
 
 
 class ClearChannelRequest(Message):
     def __init__(self, sid, cid):
-        super()(ClearChannelRequestHeader(sid, cid), None)
+        super().__init__(ClearChannelRequestHeader(sid, cid), None)
 
 
 class ClearChannelResponse(Message):
     def __init__(self, sid, cid):
-        super()(ClearChannelResponseHeader(sid, cid), None)
+        super().__init__(ClearChannelResponseHeader(sid, cid), None)
 
 
 class ReadNotifyRequest(Message):
     def __init__(self, data_type, data_count, sid, ioid):
         header = ReadNotifyRequestHeader(data_type, data_count, sid, ioid)
-        super()(header, None)
+        super().__init__(header, None)
 
     
 class ReadNotifyResponse(Message):
     def __init__(self, values, data_type, data_count, sid, ioid):
         size, payload = data_payload(values)
         header = ReadNotifyRequest(size, data_type, data_count, sid, ioid)
-        super()(header, payload)
+        super().__init__(header, payload)
 
 
 class CreateChanRequest(Message):
     def __init__(self, name, cid, version):
         size, payload = padded_string_payload(name)
         header = CreateChanRequestHeader(size, cid, version)
-        super()(header, payload)
+        super().__init__(header, payload)
 
 class CreateChanResponse(Message):
     def __init__(self, data_type, data_count, cid, sid):
         header = CreateChanResponseHeader(data_type, data_count, cid, sid)
-        super()(header, None)
+        super().__init__(header, None)
 
 
 class WriteNotifyRequest(Message):
     def __init__(self, values, data_type, data_count, status, ioid):
         size, payload = data_payload(values)
         header = WriteNotifyRequest(size, data_type, data_count, status, ioid)
-        super()(header, payload)
+        super().__init__(header, payload)
 
 
 class WriteNotifyResponse(Message):
     def __init__(self, data_type, data_count, status, ioid):
         header = WriteNotifyResponse(data_type, data_count, status, ioid)
-        super()(header, None)
+        super().__init__(header, None)
 
 
 class ClientNameRequest(Message):
     def __init__(self, name):
         size, payload = padded_string_payload(name)
         header = ClientNameRequestHeader(size)
-        super()(header, payload)
+        super().__init__(header, payload)
 
 
 class HostNameRequest(Message):
     def __init__(self, name):
         size, payload = padded_string_payload(name)
         header = HostNameRequestHeader(size)
-        super()(header, payload)
+        super().__init__(header, payload)
 
 
 class AccessRightsResponse(Message):
     def __init__(self, cid, access_rights):
         header = AccessRightsResponseHeader(cid, access_rights)
-        super()(header, None)
+        super().__init__(header, None)
 
 
 class CreateChFailResponse(Message):
     def __init__(self, cid):
-        super()(CreateChFailResponseHeader(cid), None)
+        super().__init__(CreateChFailResponseHeader(cid), None)
 
 
 class ServerDisconnResponse(Message):
     def __init__(self, cid):
-        super()(ServerDisconnResponseHeader(cid), None)
+        super().__init__(ServerDisconnResponseHeader(cid), None)

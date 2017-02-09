@@ -5,17 +5,17 @@
 import caproto as ca
 cli = ca.Client()
 chan1 = cli.Channel(pv1)
-# chan1.circuit = {'state': (SEND_SEARCH, UNINITIALIZED)}
+# chan1.circuit = {'state': (SEND_SEARCH, IDLE)}
 # srv.circuits = []
 cli.send_broadcast(SearchRequest(...))
-# chan1.circuit = {'state': (SEND_SEARCH, UNINITIALIZED)}
+# chan1.circuit = {'state': (SEND_SEARCH, SEND_SEARCH_RESPONSE)}
 # srv.circuits = []
 srv.recv_broadcast((data, address))
 event = srv.next_event()  # -> SearchRequest(...)
-# chan1.circuit = {'state': (AWAITING_SEARCH_RESPONSE, UNINITIALIZED)}
+# chan1.circuit = {'state': (AWAITING_SEARCH_RESPONSE, SEND_SEARCH_RESPONSE)}
 # srv.circuits = []
 srv.send_broadcast(SearchResponse(...))
-# chan1.circuit = {'state': (AWAITING_SEARCH_RESPONSE, UNINITIALIZED)}
+# chan1.circuit = {'state': (AWAITING_SEARCH_RESPONSE, SEND_SEARCH_RESPONSE)}
 # srv.circuits = []
 cli.recv_broadcast((data, address))
 event = cli.next_event()  # -> SearchResponse(...)
