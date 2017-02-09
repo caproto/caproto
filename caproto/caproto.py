@@ -150,15 +150,16 @@ class Client:
             # Update the state machine of the pertinent Channel.
             cid = command.header.parameter2
             chan = self._channels[cid]
-            chan._state.process_command(role, type(command))
+            chan._state.process_command(self.our_role, type(command))
+            chan._state.process_command(self.their_role, type(command))
         elif isinstance(command, SearchResponse):
             # Update the state machine of the pertinent Channel.
             chan = self._channels[command.header.parameter2]
-            chan._state.process_command(role, type(command))
+            chan._state.process_command(self.our_role, type(command))
+            chan._state.process_command(self.their_role, type(command))
             # Identify an existing VirtcuitCircuit with the right address and
             # priority, or create one.
-            cli._names[chan.name] = command.address
-            host, port 
+            self._names[chan.name] = command.address
             key = (command.address, chan.priority)
             try:
                 circuit = self._circuits[key]
