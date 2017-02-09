@@ -4,7 +4,7 @@ import ctypes
 import itertools
 from io import BytesIO
 from collections import defaultdict, deque
-from ._messages import *
+from ._commands import *
 from ._dbr_types import *
 from ._state import *
 

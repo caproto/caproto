@@ -1,4 +1,4 @@
-from ._messages import *
+from ._commands import *
 # This sentinel code is copied, with thanks and admiration, from h11,
 # which is released under an MIT license.
 #
