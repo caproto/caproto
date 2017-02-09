@@ -19,12 +19,14 @@ def make_sentinel(name):
     cls.__class__ = cls
     return cls
 
-sentinels = ("CLIENT SERVER"
+sentinels = ("CLIENT SERVER "
              # states
              "SEND_SEARCH_REQUEST AWAIT_SEARCH_RESPONSE "
              "SEND_SEARCH_RESPONSE "
              "SEND_VERSION_REQUEST AWAIT_VERSION_RESPONSE "
              "SEND_VERSION_RESPONSE "
+             "SEND_CREATE_CHAN_REQUEST AWAIT_CREATE_CHAN_RESPONSE "
+             "SEND_CREATE_CHAN_RESPONSE "
              "CONNECTED DISCONNECTED IDLE ERROR".split())
 for token in sentinels:
     globals()[token] = make_sentinel(token)
@@ -40,7 +42,7 @@ class LocalProtocolError(ChannelAccessProtocolError):
 
 COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
     CLIENT: {
-        SEND_SEARCH: {
+        SEND_SEARCH_REQUEST: {
             SearchRequest: AWAIT_SEARCH_RESPONSE,
             ErrorResponse: ERROR,
         },
@@ -49,10 +51,10 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
             ErrorResponse: ERROR,
         },
         SEND_VERSION_REQUEST: {
-            VersionRequest: AWAIT_VERSION_RESPOSE,
+            VersionRequest: AWAIT_VERSION_RESPONSE,
             ErrorResponse: ERROR,
         },
-        AWAIT_VERSION_RESPOSE: {
+        AWAIT_VERSION_RESPONSE: {
             VersionResponse: CONNECTED,
             ErrorResponse: ERROR,
         },
@@ -70,8 +72,8 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
             SearchResponse: IDLE,
         },
         SEND_VERSION_REQUEST: {
-            VersionRespose: CONNECTED,
-        }
+            VersionResponse: CONNECTED,
+        },
         CONNECTED: {},  # VirtualCircuits can only be closed by timeout.
     },
 }
@@ -89,7 +91,7 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
         },
         CONNECTED: {
             ClearChannelRequest: DISCONNECTED,
-            ServerDisconn: DISCONNECTED
+            ServerDisconnResponse: DISCONNECTED,
             ErrorResponse: ERROR,
         },
         ERROR: {}, 
@@ -99,7 +101,7 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
             CreateChanRequest: SEND_CREATE_CHAN_RESPONSE,
         },
         SEND_CREATE_CHAN_RESPONSE: {
-            CreatChanResponse: CONNECTED,
+            CreateChanResponse: CONNECTED,
             # HostNameRequest and ClientNameRequest may arrive before or
             # after response to connection is sent.
             HostNameRequest: SEND_CREATE_CHAN_RESPONSE,

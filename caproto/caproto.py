@@ -133,14 +133,14 @@ class Client:
         "Return bytes to broadcast over UDP socket."
         # TODO What to raise or return when outbox is empty?
         msg = self._datagram_outbox.popleft() 
-        self._cstate.process_event(msg)
+        self._cstate.process_command(msg)
         return msg
 
     def recv_datagram(self, byteslike, address):
         "Cache but do not process bytes that were received via UDP broadcast."
         self._datagram_inbox.append((byteslike, (host, port)))
 
-    def next_event(self):
+    def next_command(self):
         "Process cached received bytes."
         address, msg = self._datagram_index.popleft()
 
