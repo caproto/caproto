@@ -1,3 +1,4 @@
+import caproto as ca
 import socket
 
 
@@ -5,16 +6,18 @@ CA_REPEATER_PORT = 5065
 pv = "XF:31IDA-OP{Tbl-Ax:X1}Mtr"
 
 
-sbcast_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM,
-                            socket.IPPROTO_UDP)
-sbcast_sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
-send_bcast = lambda msg: sock.sendto(msg, ('', CA_REPEATER_PORT))
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
+send_bcast = lambda msg: sock.sendto(bytes(msg), ('', CA_REPEATER_PORT))
+recv_bcast = lambda: sock.recvfrom(4096)
 
-rbcast_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM,
-                            socket.IPPROTO_UDP)
-rbcast_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-rbcast_sock.bind(('', CA_REPEATER_PORT))
-mreq = struct.pack("4sl", socket.inet_aton(MCAST_GRP), socket.INADDR_ANY)
-rbcast_sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+# Send data
+ip = socket.gethostbyname(socket.gethostname())
+reg_command = ca.RepeaterRegisterRequest(ip)
+print("Sending", reg_command)
+send_bcast(reg_command)
 
-recv_bcast = lambda: rbcast_sock.recv(10240)
+# Receive response
+print('waiting to receive')
+data, address = recv_bcast()
+print('received "%s"' % data)

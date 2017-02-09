@@ -184,17 +184,18 @@ class RsrvIsUpResponse(Message):
         super().__init__(header, None)
 
 
-class CaRepeaterConfirmResponseHeader(Message):
+class RepeaterConfirmResponse(Message):
     ID = 17
     def __init__(self, repeater_address):
         header = CaRepeaterConfirmResponseHeader(repeater_address)
         super().__init__(header, None)
 
 
-class CaRepeaterRegisterRequestHeader(Message):
+class RepeaterRegisterRequest(Message):
     ID = 24
     def __init__(self, client_ip_address):
-        header = CaRepeaterRegisterRequestHeader(client_ip_address)
+        ip = int(client_ip_address.replace('.', ''))
+        header = CaRepeaterRegisterRequestHeader(ip)
         super().__init__(header, None)
 
 
