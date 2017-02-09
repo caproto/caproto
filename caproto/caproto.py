@@ -48,6 +48,10 @@ class VirtualCircuit:
         self.priority = priority
         self._state = CircuitState()
         self._data = bytearray()
+        self._channels = {}
+
+    def add_channel(self, channel):
+        self._channels[channel.cid] = channel
 
     def send(self, command):
         self._process_command(self.our_role, command)
@@ -58,8 +62,15 @@ class VirtualCircuit:
 
     def _process_command(self, role, command):
         # All commands go through here.
-        self._state.process_command(self.our_role, type(command))
-        self._state.process_command(self.their_role, type(command))
+        if isinstance(command, (CreateChanResponse, CreateChanRequest)):
+            # Update the state machine of the pertinent Channel.
+            cid = command.header.parameter1
+            chan = self._channels[cid]
+            chan._state.process_command(self.our_role, type(command))
+            chan._state.process_command(self.their_role, type(command))
+        else:
+            self._state.process_command(self.our_role, type(command))
+            self._state.process_command(self.their_role, type(command))
 
     def next_command(self):
         header_size = _MessageHeaderSize
@@ -177,6 +188,8 @@ class Channel:
     def circuit(self, circuit):
         if self._circuit is None:
             self._circuit = circuit
+            circuit.add_channel(self)
+            self._state.couple_circuit(circuit)
         else:
             raise RuntimeError("circuit may only be set once")
 

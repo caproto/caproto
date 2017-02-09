@@ -24,7 +24,7 @@ def make_sentinel(name):
 sentinels = ("CLIENT SERVER "
              # states
              "SEND_SEARCH_REQUEST AWAIT_SEARCH_RESPONSE "
-             "SEND_SEARCH_RESPONSE "
+             "SEND_SEARCH_RESPONSE NEED_CIRCUIT "
              "SEND_VERSION_REQUEST AWAIT_VERSION_RESPONSE "
              "SEND_VERSION_RESPONSE "
              "SEND_CREATE_CHAN_REQUEST AWAIT_CREATE_CHAN_RESPONSE "
@@ -88,7 +88,7 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
             ErrorResponse: ERROR,
         },
         AWAIT_SEARCH_RESPONSE: {
-            SearchResponse: SEND_VERSION_REQUEST,
+            SearchResponse: NEED_CIRCUIT,  # escape via state-based transition
             ErrorResponse: ERROR,
         },
         SEND_CREATE_CHAN_REQUEST: {
@@ -139,11 +139,17 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
     },
 }
 
+STATE_TRIGGERED_TRANSITIONS = {
+    # (CHANNEL_STATE, CIRCUIT_STATE)
+    CLIENT: {
+        (NEED_CIRCUIT, CONNECTED): (SEND_CREATE_CHAN_REQUEST, CONNECTED),
+    },
+    SERVER: {
+    }
+}
+
 
 class _BaseState:
-    def process_command(self, role, command_type):
-        self._fire_command_triggered_transitions(role, command_type)
-
     def _fire_command_triggered_transitions(self, role, command_type):
         state = self.states[role]
         try:
@@ -157,9 +163,29 @@ class _BaseState:
 
 class ChannelState(_BaseState):
     TRANSITIONS = COMMAND_TRIGGERED_CHANNEL_TRANSITIONS
+    STT = STATE_TRIGGERED_TRANSITIONS
 
     def __init__(self):
         self.states = {CLIENT: SEND_SEARCH_REQUEST, SERVER: IDLE}
+        # At __init__ time we do not know whether there is already a circuit
+        # we can use for this channel or if we will need to create a new one.
+        self.circuit_state = None
+
+    def couple_circuit(self, circuit):
+        self.circuit_state = circuit._state
+
+    def _fire_state_triggered_transitions(self):
+        new = self.STT[CLIENT].get((self.states[CLIENT],
+                                    self.circuit_state.states[CLIENT]))
+        if new is not None:
+            self.states[CLIENT], self.circuit_state.states[CLIENT] = new
+
+    def process_command(self, role, command_type):
+        if self.circuit_state is not None:
+            self._fire_state_triggered_transitions()
+        self._fire_command_triggered_transitions(role, command_type)
+        if self.circuit_state is not None:
+            self._fire_state_triggered_transitions()
     
 
 class CircuitState(_BaseState):
@@ -167,3 +193,6 @@ class CircuitState(_BaseState):
 
     def __init__(self):
         self.states = {CLIENT: SEND_VERSION_REQUEST, SERVER: IDLE}
+
+    def process_command(self, role, command_type):
+        self._fire_command_triggered_transitions(role, command_type)

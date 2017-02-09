@@ -43,3 +43,16 @@ print('chan1.circuit state:', chan1.circuit._state.states)
 print("Send ClientNameRequest")
 chan1.circuit.send(ca.ClientNameRequest(getpass.getuser()))
 print('chan1.circuit state:', chan1.circuit._state.states)
+
+print("--- Channel Phase ---")
+# This cid and sid came from the SearchResponse! Capture that state.
+print('chan1 state:', chan1._state.states)
+chan1.circuit.send(ca.CreateChanRequest(PV1, 0, PROTOCOL_VERSION))
+print('chan1 state:', chan1._state.states)
+
+print('Receive and process CreateChanResponse')
+response = bytes(ca.CreateChanResponse(ca.DBR_INT.DBR_ID, 1, 0, 0))
+chan1.circuit.recv(response)
+command = chan1.circuit.next_command()
+print(command)
+print('chan1 state:', chan1._state.states)
