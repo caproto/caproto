@@ -18,6 +18,9 @@ def ensure_bytes(s):
 
 def padded_len(s):
     "Length of a (byte)string rounded up to the nearest multiple of 8."
+    if len(s) > 40:
+        raise ValueError("EPICS imposes a 40-character limit on strings. The "
+                         "string {!r} is {} characteris.".format(s, len(s)))
     return 8 * math.ceil(len(s) / 8)
 
 
