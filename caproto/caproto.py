@@ -9,14 +9,6 @@ from ._dbr_types import *
 from ._state import *
 
 
-CLIENT_VERSION = 13
-_MessageHeaderSize = ctypes.sizeof(MessageHeader)
-_ExtendedMessageHeaderSize = ctypes.sizeof(ExtendedMessageHeader)
-
-def parse_command_response(header):
-    ...    
-
-
 class VirtualCircuit:
     def __init__(self, address, priority):
         self.our_role = CLIENT
@@ -50,29 +42,8 @@ class VirtualCircuit:
             self._state.process_command(self.their_role, type(command))
 
     def next_command(self):
-        header_size = _MessageHeaderSize
-        # We need at least one header's worth of bytes to interpret anything.
-        if len(self._data) < header_size:
-            return NEEDS_DATA
-        header = MessageHeader.from_buffer(self._data)
-        # Looks for sentinels that mark this as an "extended header".
-        if header.payload_size == 0xFFFF and header.data_count == 0:
-            header_size = _ExtendedMessageHeaderSize
-            # Do we have enough bytes to interpret the extended header?
-            if len(self._data) < header_size:
-                return NEEDS_DATA
-            header = ExtendedMessageHeader.from_buffer(self._data)
-        total_size = header_size + header.payload_size
-        # Do we have all the bytes in the payload?
-        if len(self._data) < total_size:
-            return NEEDS_DATA
-        # Receive the buffer (zero-copy).
-        _class = Commands[str(self.their_role)][header.command]
-        payload_bytes = self._data[header_size:total_size]
-        command = _class.from_wire(header, payload_bytes)
+        self._data, command = read_from_bytestream(self._data, self.their_role)
         self._process_command(self.our_role, command)
-        # Advance the buffer.
-        self._data = self._data[total_size:]
         return command
 
 
@@ -134,7 +105,7 @@ class Connections:
     def next_command(self):
         "Process cached received bytes."
         byteslike, (host, port) = self._datagram_inbox.popleft()
-        command = read_bytes(byteslike, self.their_role)
+        command = read_datagram(byteslike, self.their_role)
         # For UDP, monkey-patch the address on as well.
         command.address = (host, port)
         self._process_command(self.their_role, command)
@@ -198,14 +169,6 @@ class Channel:
         self.native_data_count = native_data_count
         self.sid = sid
 
-    def next_request(self):
-        # Do this logic based on a `state` explicit advanced by the Client.
-        if self._cli[circuit] != CONNECTED:
-            return self.circuit, VersionRequest(self.priority, CLIENT_VERSION)
-        elif self.sid is None:
-            return self.circuit, CreateRequest(cid, CLIENT_VERSION, self.name)
-        return None
-     
     def read(self, data_type=None, data_count=None):
         if data_type is None:
             data_type = self.native_data_type

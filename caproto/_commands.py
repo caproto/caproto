@@ -38,6 +38,40 @@ def data_payload(values, data_count, data_type):
     return size, payload
 
 
+def read_datagram(data, role):
+    "Parse bytes from one datagram into an instance of the pertinent Command."
+    barray = bytearray(data)
+    header = MessageHeader.from_buffer(barray)
+    payload_bytes = barray[_MessageHeaderSize:]
+    _class = Commands[str(role)][header.command]
+    return _class.from_wire(header, payload_bytes)
+
+
+def read_from_bytestream(data, role):
+    header_size = _MessageHeaderSize
+    # We need at least one header's worth of bytes to interpret anything.
+    if len(data) < header_size:
+        return NEEDS_DATA
+    header = MessageHeader.from_buffer(data)
+    # Looks for sentinels that mark this as an "extended header".
+    if header.payload_size == 0xFFFF and header.data_count == 0:
+        header_size = _ExtendedMessageHeaderSize
+        # Do we have enough bytes to interpret the extended header?
+        if len(data) < header_size:
+            return NEEDS_DATA
+        header = ExtendedMessageHeader.from_buffer(data)
+    total_size = header_size + header.payload_size
+    # Do we have all the bytes in the payload?
+    if len(data) < total_size:
+        return NEEDS_DATA
+    # Receive the buffer (zero-copy).
+    _class = Commands[str(role)][header.command]
+    payload_bytes = data[header_size:total_size]
+    command = _class.from_wire(header, payload_bytes)
+    # Advance the buffer.
+    return data[total_size:], command
+
+
 class Message:
     ID = None  # to be overriden by subclass
 
@@ -82,15 +116,6 @@ class Message:
 
     def __bytes__(self):
         return bytes(self.header) + bytes(self.payload or b'')
-
-
-def read_bytes(byteslike, role):
-    """Parse bytes into an instance of the pertinent Command."""
-    barray = bytearray(byteslike)
-    header = MessageHeader.from_buffer(barray)
-    payload_bytes = barray[_MessageHeaderSize:]
-    _class = Commands[str(role)][header.command]
-    return _class.from_wire(header, payload_bytes)
 
 
 class VersionRequest(Message):
