@@ -42,16 +42,24 @@ class Server:
 
 class VirtualCircuit:
     def __init__(self, address, priority):
+        self.our_role = CLIENT
+        self.their_role = SERVER
         self.address = address
         self.priority = priority
         self._state = CircuitState()
         self._data = bytearray()
 
     def send(self, command):
-        ...
+        self._process_command(self.our_role, command)
+        return command
 
-    def recv(self, bytes_like):
+    def recv(self, byteslike):
         self._data += byteslike
+
+    def _process_command(self, role, command):
+        # All commands go through here.
+        self._state.process_command(self.our_role, type(command))
+        self._state.process_command(self.their_role, type(command))
 
     def next_command(self):
         header_size = _MessageHeaderSize
@@ -65,38 +73,16 @@ class VirtualCircuit:
                 header = ExtendedMessageHeader.from_buffer(self._data)
             else:
                 return NEEDS_DATA
-        payload = None
+        payload_bytes = b''
         if header.payload_size > 0:
             payload = []
             total_size = header_size + header.payload_size
-            if len(self._data) >= total_size:
-                dbr_struct = DBR_TYPES[header.data_type]
-                dbr_size = ctypes.sizeof(dbr_struct)
-                start = header_size
-                stop = header_size + dbr_size
-                for i in enumerate(header.data_count):
-                    chunk = self._data[start:stop]
-                    payload.append(dbr_struct.from_buffer(chunk))
-                    start += dbr_size
-                    stop += dbr_size
-            else:
+            if len(self._data) < total_size:
                 return NEEDS_DATA
-            self._data = self._data[total_size:]
-        else:
-            self._data = self._data[header_size:]
-        command = parse_command(header, payload)
-        self._update_states(self, command)
+        _class = Commands[str(self.their_role)][header.command]
+        command = _class.from_wire(header, payload_bytes)
+        self._process_command(self.our_role, command)
         return command
-
-    def _update_states(self, command):
-        if type(command) is NEEDS_DATA:
-            return
-        elif type(command) is VersionResponse:
-            # self._circuits[(host, ????)] = CONNECTED
-            pass
-        elif type(command) is CreateResponse:
-            chan = self._channels[command.cid]
-            chan.create(command.data_type, command.data_count, sid)
 
 
 class Client:
@@ -166,7 +152,7 @@ class Client:
             except KeyError:
                 circuit = VirtualCircuit(*key)
                 self._circuits[key] = circuit
-            chan.assign_circuit(circuit)
+            chan.circuit = circuit
 
 
 class Channel:
@@ -183,9 +169,16 @@ class Channel:
         self.sid = None
         self._requests = deque()
 
-    def assign_circuit(self, circuit):
-        "Called by the Client when we have a VirtualCircuit for this Channel."
-        self._circuit = circuit
+    @property
+    def circuit(self):
+        return self._circuit
+
+    @circuit.setter
+    def circuit(self, circuit):
+        if self._circuit is None:
+            self._circuit = circuit
+        else:
+            raise RuntimeError("circuit may only be set once")
 
     def create(self, native_data_type, native_data_count, sid):
         "Called by the Client when the Server gives this Channel an ID."

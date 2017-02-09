@@ -62,8 +62,16 @@ class Message:
 
     @classmethod
     def from_wire(cls, header, payload_bytes):
+        """
+        Use header.dbr_type to pack payload bytes into the right strucutre.
+
+        Some Command types allocate a different meaning to the header.dbr_type
+        field, and these override this method in their subclass.
+        """
+        if not payload_bytes:
+            return cls.from_components(header, None)
         dbr_type = DBR_TYPES[header.data_type]
-        payload = dbr_type.from_buffer(payload_bytes)
+        return cls.from_components(header, dbr_type.from_buffer(payload_bytes))
 
     @classmethod
     def from_components(cls, header, payload):
@@ -73,7 +81,7 @@ class Message:
         return instance
 
     def __bytes__(self):
-        return bytes(self.header) + bytes(self.payload)
+        return bytes(self.header) + bytes(self.payload or b'')
 
 
 def read_bytes(byteslike, role):

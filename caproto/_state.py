@@ -58,17 +58,24 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
         },
         CONNECTED: {
             ErrorResponse: ERROR,
+            HostNameRequest: CONNECTED,
+            ClientNameRequest: CONNECTED,
+            # VirtualCircuits can only be closed by timeout.
         },
         ERROR: {},
     },
     SERVER: {
         IDLE: {
-            VersionRequest: SEND_VERSION_REQUEST,
+            VersionRequest: SEND_VERSION_RESPONSE,
         },
-        SEND_VERSION_REQUEST: {
+        SEND_VERSION_RESPONSE: {
             VersionResponse: CONNECTED,
         },
-        CONNECTED: {},  # VirtualCircuits can only be closed by timeout.
+        CONNECTED: {
+            HostNameRequest: CONNECTED,
+            ClientNameRequest: CONNECTED,
+            # VirtualCircuits can only be closed by timeout.
+        },
     },
 }
 
@@ -96,6 +103,12 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
             ClearChannelRequest: DISCONNECTED,
             ServerDisconnResponse: DISCONNECTED,
             ErrorResponse: ERROR,
+            ReadNotifyRequest: CONNECTED,
+            WriteNotifyRequest: CONNECTED,
+            EventAddRequest: CONNECTED,
+            ReadNotifyResponse: CONNECTED,
+            WriteNotifyResponse: CONNECTED,
+            EventAddResponse: CONNECTED,
         },
         ERROR: {}, 
     },
@@ -116,11 +129,12 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
         },
         CONNECTED: {
             ClearChannelRequest: IDLE,
-            HostNameRequest: CONNECTED,
-            ClientNameRequest: CONNECTED,
             ReadNotifyRequest: CONNECTED,
             WriteNotifyRequest: CONNECTED,
             EventAddRequest: CONNECTED,  # TODO a subscription state machine?
+            ReadNotifyResponse: CONNECTED,
+            WriteNotifyResponse: CONNECTED,
+            EventAddResponse: CONNECTED,
         },
     },
 }
