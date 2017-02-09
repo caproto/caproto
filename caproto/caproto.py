@@ -17,9 +17,6 @@ def parse_command_response(header):
     ...    
 
 
-def extend_header(header):
-    "Return True if header should be extended."
-    return header.payload_size == 0xFFFF and header.data_count == 0
 
 
 class Server:
@@ -74,25 +71,28 @@ class VirtualCircuit:
 
     def next_command(self):
         header_size = _MessageHeaderSize
-        if len(self._data) >= header_size:
-            header = MessageHeader.from_buffer(self._data)
-        else:
+        # We need at least one header's worth of bytes to interpret anything.
+        if len(self._data) < header_size:
             return NEEDS_DATA
-        if extend_header(header):
+        header = MessageHeader.from_buffer(self._data)
+        # Looks for sentinels that mark this as an "extended header".
+        if header.payload_size == 0xFFFF and header.data_count == 0:
             header_size = _ExtendedMessageHeaderSize
-            if len(self._data) >= header_size:
-                header = ExtendedMessageHeader.from_buffer(self._data)
-            else:
+            # Do we have enough bytes to interpret the extended header?
+            if len(self._data) < header_size:
                 return NEEDS_DATA
-        payload_bytes = b''
-        if header.payload_size > 0:
-            payload = []
-            total_size = header_size + header.payload_size
-            if len(self._data) < total_size:
-                return NEEDS_DATA
+            header = ExtendedMessageHeader.from_buffer(self._data)
+        total_size = header_size + header.payload_size
+        # Do we have all the bytes in the payload?
+        if len(self._data) < total_size:
+            return NEEDS_DATA
+        # Receive the buffer (zero-copy).
         _class = Commands[str(self.their_role)][header.command]
+        payload_bytes = self._data[header_size:total_size]
         command = _class.from_wire(header, payload_bytes)
         self._process_command(self.our_role, command)
+        # Advance the buffer.
+        self._data = self._data[total_size:]
         return command
 
 
