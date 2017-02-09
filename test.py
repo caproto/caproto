@@ -8,7 +8,7 @@ SERVER_PORT = 6000
 PROTOCOL_VERSION = 13
 
 
-cli = ca.Client()
+cli = ca.Peer(our_role=ca.CLIENT)
 chan1 = cli.new_channel(PV1)
 print('chan1 state:', chan1._state.states)
 print('Send SearchRequest')

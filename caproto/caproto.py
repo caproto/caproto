@@ -17,26 +17,6 @@ def parse_command_response(header):
     ...    
 
 
-
-
-class Server:
-    "An object encapsulating the state of an EPICS Server."
-    def __init__(self):
-        self._sid_counter = itertools.count(0)
-
-    def new_sid(self):
-        return next(self._sid_counter)
-
-    def version(self):
-        return VersionResponse(...)
-
-    def create_channel(self, name, cid):
-        return CreateResponse(..., sid)
-
-    def search(self, name):
-        return SearchResponse(...)
-
-
 class VirtualCircuit:
     def __init__(self, address, priority):
         self.our_role = CLIENT
@@ -96,13 +76,32 @@ class VirtualCircuit:
         return command
 
 
-class Client:
-    "An object encapsulating the state of an EPICS Client."
+class Peer:
+    """An object encapsulating the state of an EPICS Client or EPICS Server.
+
+    This tracks the state of:
+    - one Client and all its connected Servers,
+    - or one Server and all its connected Clients
+
+    It sees all outgoing bytes before they are sent over a socket and receives
+    all incoming bytes after they are received from a socket. it verifies that
+    all incoming and outgoing commands abide by the Channel Access protocol,
+    and it updates an internal state machine representing the state of all
+    CA channels and CA virtual circuits.
+
+    It may also be used to compose valid commands using a pleasant Python API
+    and to decode incomming bytestreams into these same kinds of objects.
+    """
     PROTOCOL_VERSION = 13
 
-    def __init__(self):
-        self.our_role = CLIENT
-        self.their_role = SERVER
+    def __init__(self, our_role):
+        if our_role not in (SERVER, CLIENT):
+            raise ValueError('role must be caproto.SERVER or caproto.CLIENT')
+        self.our_role = our_role
+        if our_role is CLIENT:
+            self.their_role = SERVER
+        else:
+            self.their_role = CLIENT
         self._names = {}  # map known names to (host, port)
         self._circuits = {}  # keyed by (address, priority)
         self._channels = {}  # map cid to Channel
