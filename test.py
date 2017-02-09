@@ -1,6 +1,6 @@
 import socket
 import getpass
-import caproto.caproto as ca
+import caproto as ca
 
 PV1 = 'pv1'
 SERVER_HOST = 'localhost'

@@ -9,6 +9,9 @@ from ._dbr_types import *
 from ._state import *
 
 
+__all__ = ['VirtualCircuit', 'Connections', 'Channel']
+
+
 class VirtualCircuit:
     def __init__(self, address, priority):
         self.our_role = CLIENT
