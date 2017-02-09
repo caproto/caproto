@@ -41,10 +41,10 @@ class Server:
 
 
 class VirtualCircuit:
-    def __init__(self, host, priority):
-        self.host = host
-        self.priority = host
-        self._state = UNINITIALIZED
+    def __init__(self, address, priority):
+        self.address = address
+        self.priority = priority
+        self._state = CircuitState()
         self._data = bytearray()
 
     def send(self, command):
@@ -53,7 +53,7 @@ class VirtualCircuit:
     def recv(self, bytes_like):
         self._data += byteslike
 
-    def process_next_response(self):
+    def next_command(self):
         header_size = _MessageHeaderSize
         if len(self._data) >= header_size:
             header = MessageHeader.from_buffer(self._data)
@@ -91,11 +91,6 @@ class VirtualCircuit:
     def _update_states(self, command):
         if type(command) is NEEDS_DATA:
             return
-        elif type(command) is SearchResponse:
-            chan = self._channels[command.cid]
-            cli._names[chan.name] = command.host
-            circuit = (command.host, chan.priority)
-            chan.connect(circuit)
         elif type(command) is VersionResponse:
             # self._circuits[(host, ????)] = CONNECTED
             pass
@@ -105,16 +100,18 @@ class VirtualCircuit:
 
 
 class Client:
-    PROTOCOL_VERSION = 13
     "An object encapsulating the state of an EPICS Client."
+    PROTOCOL_VERSION = 13
+
     def __init__(self):
-        self._names = {}  # map known names to known hosts
-        self._circuits = {}  # map (host, priority) to VirtualCircuit
+        self.our_role = CLIENT
+        self.their_role = SERVER
+        self._names = {}  # map known names to (host, port)
+        self._circuits = {}  # keyed by (address, priority)
         self._channels = {}  # map cid to Channel
         self._cid_counter = itertools.count(0)
         self._datagram_inbox = deque()
-        self._datagram_outbox = deque()
-        self._awaiting_response = set()
+        # self._datagram_outbox = deque()
 
     def new_channel(self, name, priority=0):
         cid = next(self._cid_counter)
@@ -126,23 +123,49 @@ class Client:
         # if name in self._names:
         #     circuit = self._circuits[(self._names[name], priority)]
         msg = SearchRequest(name, cid, self.PROTOCOL_VERSION)
-        self._datagram_outbox.append(msg)
+        # self._datagram_outbox.append(msg)
         return channel
 
-    def send_datagram(self):
+    def send_broadcast(self, command):
         "Return bytes to broadcast over UDP socket."
-        # TODO What to raise or return when outbox is empty?
-        msg = self._datagram_outbox.popleft() 
-        self._cstate.process_command(msg)
-        return msg
+        self._process_command(self.our_role, command)
+        return command
 
-    def recv_datagram(self, byteslike, address):
+    def recv_broadcast(self, byteslike, address):
         "Cache but do not process bytes that were received via UDP broadcast."
-        self._datagram_inbox.append((byteslike, (host, port)))
+        self._datagram_inbox.append((byteslike, address))
 
     def next_command(self):
         "Process cached received bytes."
-        address, msg = self._datagram_index.popleft()
+        byteslike, (host, port) = self._datagram_inbox.popleft()
+        command = read_bytes(byteslike, self.their_role)
+        # For UDP, monkey-patch the address on as well.
+        command.address = (host, port)
+        self._process_command(self.their_role, command)
+        return command
+
+    def _process_command(self, role, command):
+        # All commands go through here.
+        if isinstance(command, SearchRequest):
+            # Update the state machine of the pertinent Channel.
+            cid = command.header.parameter2
+            chan = self._channels[cid]
+            chan._state.process_command(role, type(command))
+        elif isinstance(command, SearchResponse):
+            # Update the state machine of the pertinent Channel.
+            chan = self._channels[command.header.parameter2]
+            chan._state.process_command(role, type(command))
+            # Identify an existing VirtcuitCircuit with the right address and
+            # priority, or create one.
+            cli._names[chan.name] = command.address
+            host, port 
+            key = (command.address, chan.priority)
+            try:
+                circuit = self._circuits[key]
+            except KeyError:
+                circuit = VirtualCircuit(*key)
+                self._circuits[key] = circuit
+            chan.assign_circuit(circuit)
 
 
 class Channel:
@@ -153,12 +176,13 @@ class Channel:
         self.cid = cid
         self.name = name
         self.priority = priority
+        self._state = ChannelState()
         self.native_data_type = None
         self.native_data_count = None
         self.sid = None
         self._requests = deque()
 
-    def connect(self, circuit):
+    def assign_circuit(self, circuit):
         "Called by the Client when we have a VirtualCircuit for this Channel."
         self._circuit = circuit
 

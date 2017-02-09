@@ -1,4 +1,6 @@
 from ._commands import *
+
+
 # This sentinel code is copied, with thanks and admiration, from h11,
 # which is released under an MIT license.
 #
@@ -40,16 +42,12 @@ class LocalProtocolError(ChannelAccessProtocolError):
     ...
 
 
+class RemoteProtocolError(ChannelAccessProtocolError):
+    ...
+
+
 COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
     CLIENT: {
-        SEND_SEARCH_REQUEST: {
-            SearchRequest: AWAIT_SEARCH_RESPONSE,
-            ErrorResponse: ERROR,
-        },
-        AWAIT_SEARCH_RESPONSE: {
-            SearchResponse: SEND_VERSION_REQUEST,
-            ErrorResponse: ERROR,
-        },
         SEND_VERSION_REQUEST: {
             VersionRequest: AWAIT_VERSION_RESPONSE,
             ErrorResponse: ERROR,
@@ -65,11 +63,7 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
     },
     SERVER: {
         IDLE: {
-            SearchRequest: SEND_SEARCH_RESPONSE,
             VersionRequest: SEND_VERSION_REQUEST,
-        },
-        SEND_SEARCH_RESPONSE: {
-            SearchResponse: IDLE,
         },
         SEND_VERSION_REQUEST: {
             VersionResponse: CONNECTED,
@@ -81,6 +75,15 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
 
 COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
     CLIENT: {
+        # Remove SEARCH from the state machine entirely?
+        SEND_SEARCH_REQUEST: {
+            SearchRequest: AWAIT_SEARCH_RESPONSE,
+            ErrorResponse: ERROR,
+        },
+        AWAIT_SEARCH_RESPONSE: {
+            SearchResponse: SEND_VERSION_REQUEST,
+            ErrorResponse: ERROR,
+        },
         SEND_CREATE_CHAN_REQUEST: {
             CreateChanRequest: AWAIT_CREATE_CHAN_RESPONSE,
             ErrorResponse: ERROR,
@@ -98,7 +101,11 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
     },
     SERVER: {
         IDLE: {
+            SearchRequest: SEND_SEARCH_RESPONSE,
             CreateChanRequest: SEND_CREATE_CHAN_RESPONSE,
+        },
+        SEND_SEARCH_RESPONSE: {
+            SearchResponse: IDLE,
         },
         SEND_CREATE_CHAN_RESPONSE: {
             CreateChanResponse: CONNECTED,
@@ -119,20 +126,30 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
 }
 
 
-class CircuitState:
-    def __init__(self, role):
-        self.role = role
-        self.states = {CLIENT: SEND_SEARCH, SERVER: UNINITIALIZED}
-    
+class _BaseState:
     def process_command(self, role, command_type):
-        self._fire_event_triggered_transitions(role, command_type)
+        self._fire_command_triggered_transitions(role, command_type)
 
-    def _fire_event_triggered_transitions(self, role, command_type):
-        state = self.state
+    def _fire_command_triggered_transitions(self, role, command_type):
+        state = self.states[role]
         try:
-            new_state = EVENT_TRIGGERED_TRANSITIONS[role][state][command_type]
+            new_state = self.TRANSITIONS[role][state][command_type]
         except KeyError:
             raise LocalProtocolError(
                 "can't handle command type {} when role={} and state={}"
-                .format(event_type.__name__, role, self.state))
-        self.state = new_state
+                .format(command_type.__name__, role, self.states[role]))
+        self.states[role] = new_state
+
+
+class ChannelState(_BaseState):
+    TRANSITIONS = COMMAND_TRIGGERED_CHANNEL_TRANSITIONS
+
+    def __init__(self):
+        self.states = {CLIENT: SEND_SEARCH_REQUEST, SERVER: IDLE}
+    
+
+class CircuitState(_BaseState):
+    TRANSITIONS = COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS
+
+    def __init__(self):
+        self.states = {CLIENT: SEND_VERSION_REQUEST, SERVER: IDLE}

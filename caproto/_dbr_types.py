@@ -740,3 +740,7 @@ DBR_STS_SHORT = DBR_STS_INT
 DBR_TIME_SHORT = DBR_TIME_INT
 DBR_GR_SHORT = DBR_GR_INT
 DBR_CTRL_SHORT = DBR_CTRL_INT
+
+
+_all_types = [c for c in globals() if hasattr(c, 'DBR_ID')]
+DBR_TYPES = sorted(_all_types, key=lambda c: c.DBR_ID)

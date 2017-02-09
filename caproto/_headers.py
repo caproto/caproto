@@ -129,7 +129,7 @@ def SearchResponseHeader(data_type, sid, cid):
 					(3.2.1.).
     
     """
-    struct_args = (6, 8, data_type, 0, sid, cid)
+    struct_args = (6, 2, data_type, 0, sid, cid)
     return MessageHeader(*struct_args)
 
 
