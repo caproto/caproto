@@ -76,8 +76,8 @@ class VirtualCircuit:
         return command
 
 
-class Peer:
-    """An object encapsulating the state of an EPICS Client or EPICS Server.
+class Connections:
+    """An object encapsulating the state of Channel Access connections.
 
     This tracks the state of:
     - one Client and all its connected Servers,
