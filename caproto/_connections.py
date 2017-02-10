@@ -21,10 +21,11 @@ class VirtualCircuit:
         self.priority = priority
         self._state = CircuitState()
         self._data = bytearray()
-        self._channels = {}
+        self._channels_cid = {}
+        self._channels_sid = {}
 
     def add_channel(self, channel):
-        self._channels[channel.cid] = channel
+        self._channels_cid[channel.cid] = channel
 
     def send(self, command):
         self._process_command(self.our_role, command)
@@ -35,10 +36,22 @@ class VirtualCircuit:
 
     def _process_command(self, role, command):
         # All commands go through here.
-        if isinstance(command, (CreateChanResponse, CreateChanRequest)):
+        if isinstance(command, CreateChanRequest):
             # Update the state machine of the pertinent Channel.
             cid = command.header.parameter1
-            chan = self._channels[cid]
+            chan = self._channels_cid[cid]
+            chan._state.process_command(self.our_role, type(command))
+            chan._state.process_command(self.their_role, type(command))
+        elif isinstance(command, CreateChanResponse):
+            chan = self._channels_cid[command.cid]
+            chan.native_data_type = command.data_type 
+            chan.native_data_count = command.data_count
+            chan.sid = command.sid
+            self._channels_sid[chan.sid] = chan
+            chan._state.process_command(self.our_role, type(command))
+            chan._state.process_command(self.their_role, type(command))
+        elif isinstance(command, (ReadNotifyRequest, ReadNotifyResponse)):
+            chan = self._channels_sid[command.sid]
             chan._state.process_command(self.our_role, type(command))
             chan._state.process_command(self.their_role, type(command))
         else:
@@ -169,12 +182,6 @@ class Channel:
             self._state.couple_circuit(circuit)
         else:
             raise RuntimeError("circuit may only be set once")
-
-    def create(self, native_data_type, native_data_count, sid):
-        "Called by the Client when the Server gives this Channel an ID."
-        self.native_data_type = native_data_type
-        self.native_data_count = native_data_count
-        self.sid = sid
 
     def read(self, data_type=None, data_count=None):
         if data_type is None:
