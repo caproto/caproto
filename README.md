@@ -15,3 +15,23 @@ received. The networking may be synchronous, threaded, asynchronous.
 The aim is to provide a complete, reusable implementation of the Channel Access
 protocol in Python which can be wrapped in whichever network library you like
 best.
+
+## TO DO
+
+* [x] Read and write to motorsim
+* [ ] Subscribe to motorsim (EventAdd, EventCancel) and finish
+  ``Channel.subscribe`` convenience method.
+* [ ] Fix the socket logic at the top of `test_with_motorsim.py` to talk to
+  CARepeater over TCP.
+* [ ] Write a standalone script that acts as a CARepeater so we can test without
+  libca installed.
+* [ ] Use caproto as a server that responds to caget/pyepics.
+* [ ] Refactor state machine that Circuit state reaches out and updates Channel
+  state if a state-based transition applies.
+* [ ] Once "caproto as a server" works, revisit `_state.py` and simplify.
+* [ ] Accessing values as ``dbr_instance.value`` is clumsy. Change the API for
+  simple types.
+* [ ] Make DBR <-> Python type conversion as automatic and smooth as possible
+  without limiting user control.
+* [ ] Sphinx docs
+* [ ] graphviz of state machines
