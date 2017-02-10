@@ -35,8 +35,8 @@ class VirtualCircuit:
         self.priority = priority
         self._state = CircuitState()
         self._data = bytearray()
-        self._channels_cid = {}
-        self._channels_sid = {}
+        self.channels_cid = {}
+        self.channels_sid = {}
         self._ioids = {}
         # This is only used by the convenience methods, to auto-generate ioid.
         self._ioid_counter = itertools.count(0)
@@ -88,9 +88,9 @@ class VirtualCircuit:
             if isinstance(command, (ReadNotifyRequest, WriteNotifyRequest)):
                 # Identify the Channel based on its sid.
                 ioid, sid = command.ioid, command.sid
-                chan = self._channels_sid[sid]
+                chan = self.channels_sid[sid]
                 # Stash the ioid for later reference.
-                chan = self._ioids[ioid] = self._channels_sid[sid]
+                chan = self._ioids[ioid] = self.channels_sid[sid]
             elif isinstance(command, (ReadNotifyResponse,
                                       WriteNotifyResponse)):
                 # Identify the Channel based on its ioid.
@@ -98,7 +98,7 @@ class VirtualCircuit:
             else:
                 # In all other cases, the Command gives us a cid.
                 cid = command.cid
-                chan = self._channels_cid[cid]
+                chan = self.channels_cid[cid]
 
             # Update the state machine of the pertinent Channel.
             chan._state.process_command(self.our_role, type(command))
@@ -110,7 +110,7 @@ class VirtualCircuit:
                 chan.native_data_type = command.data_type 
                 chan.native_data_count = command.data_count
                 chan.sid = command.sid
-                self._channels_sid[chan.sid] = chan
+                self.channels_sid[chan.sid] = chan
         # Otherwise, this Command affects the state of this circuit, not a
         # specific Channel.
         else:
@@ -126,7 +126,7 @@ class VirtualCircuit:
     def add_channel(self, channel):
         # This is called by the Hub when a SearchRequest is processed that
         # associates some Channel with this circuit.
-        self._channels_cid[channel.cid] = channel
+        self.channels_cid[channel.cid] = channel
 
 
 class Hub:
@@ -154,8 +154,8 @@ class Hub:
         else:
             self.their_role = CLIENT
         self._names = {}  # map known Channel names to (host, port)
-        self._circuits = {}  # keyed by ((host, port), priority)
-        self._channels = {}  # map cid to Channel
+        self.circuits = {}  # keyed by ((host, port), priority)
+        self.channels = {}  # map cid to Channel
         self._datagram_inbox = deque()  # datagrams to be parsed into Commands
         self._parsed_commands = deque()  # parsed Commands to be processed
         # This is only used by the convenience methods, to auto-generate a cid.
@@ -199,14 +199,20 @@ class Hub:
     def _process_command(self, role, command):
         # All commands go through here.
         if isinstance(command, SearchRequest):
-            # Update the state machine of the pertinent Channel.
-            cid = command.header.parameter2
-            chan = self._channels[cid]
+            cid = command.cid
+            try:
+                # If the user instantiated a Channel for this cid, then it is
+                # already registered with the Hub.
+                chan = self.channels[cid]
+            except KeyError:
+                # The user has not instantiated a Channel for this cid.
+                # Create one.
+                chan = Channel(self, None, cid, command.name, command.priority)
             chan._state.process_command(self.our_role, type(command))
             chan._state.process_command(self.their_role, type(command))
         elif isinstance(command, SearchResponse):
             # Update the state machine of the pertinent Channel.
-            chan = self._channels[command.header.parameter2]
+            chan = self.channels[command.header.parameter2]
             chan._state.process_command(self.our_role, type(command))
             chan._state.process_command(self.their_role, type(command))
             # Identify an existing VirtcuitCircuit with the right address and
@@ -214,10 +220,10 @@ class Hub:
             self._names[chan.name] = command.address
             key = (command.address, chan.priority)
             try:
-                circuit = self._circuits[key]
+                circuit = self.circuits[key]
             except KeyError:
                 circuit = VirtualCircuit(*key)
-                self._circuits[key] = circuit
+                self.circuits[key] = circuit
             chan.circuit = circuit
             circuit.add_channel(chan)
 
@@ -242,12 +248,12 @@ class Hub:
         # If this Client has searched for this name and already knows its
         # host, skip the Search step and create a circuit.
         # if name in self._names:
-        #     circuit = self._circuits[(self._names[name], priority)]
+        #     circuit = self.circuits[(self._names[name], priority)]
         return channel
 
     def add_channel(self, channel):
         # called by Channel.__init__ to register Channel with Hub
-        self._channels[channel.cid] = channel
+        self.channels[channel.cid] = channel
 
 
 class Channel:
