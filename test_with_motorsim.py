@@ -26,6 +26,7 @@ send_bcast(reg_command)
 print('waiting to receive')
 data, address = recv_bcast()
 print('received', ca.read_datagram(data, address, ca.SERVER))
+sock.close()
 
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
@@ -76,14 +77,13 @@ send(chan1.circuit, ca.HostNameRequest(OUR_HOSTNAME))
 send(chan1.circuit, ca.ClientNameRequest(OUR_USERNAME))
 send(chan1.circuit, ca.CreateChanRequest(name=pv1, cid=chan1.cid, version=13))
 recv(chan1.circuit)
-try:
-    send(chan1.circuit, ca.ReadNotifyRequest(data_type=2, data_count=1,
-                                            sid=chan1.sid,
-                                            ioid=1))
-    bytes_received = sockets[chan1.circuit].recv(4096)
-    raise Exception
-    # recv(chan1.circuit)
-    send(chan1.circuit, ca.ClearChannelRequest(chan1.sid, chan1.cid))
-    recv(chan1.circuit)
-finally:
-    sock.close()
+send(chan1.circuit, ca.ReadNotifyRequest(data_type=2, data_count=1,
+                                        sid=chan1.sid,
+                                        ioid=1))
+bytes_received = sockets[chan1.circuit].recv(4096)
+# recv(chan1.circuit)
+send(chan1.circuit, ca.ClearChannelRequest(chan1.sid, chan1.cid))
+recv(chan1.circuit)
+
+sockets[chan1.circuit].close()
+sock.close()

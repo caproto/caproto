@@ -52,7 +52,6 @@ class VirtualCircuit:
             chan._state.process_command(self.our_role, type(command))
             chan._state.process_command(self.their_role, type(command))
         elif isinstance(command, (ReadNotifyRequest, ReadNotifyResponse)):
-            print('>>>', command)
             chan = self._channels_sid[command.sid]
             chan._state.process_command(self.our_role, type(command))
             chan._state.process_command(self.their_role, type(command))
