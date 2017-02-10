@@ -2,7 +2,16 @@
 # Do not modify this file directly.
 import ctypes
 
-class MessageHeader(ctypes.BigEndianStructure):
+class _BaseMessageHeader(ctypes.BigEndianStructure):
+    # just to define a nice repr
+    def __repr__(self):
+        d = {field: getattr(self, field) for field, _type in self._fields_}
+        formatted_args = ", ".join(["{}={}".format(k, v)
+                                    for k, v in d.items()])
+        return "{}({})".format(type(self).__name__, formatted_args)
+
+
+class MessageHeader(_BaseMessageHeader):
     _fields_ = [("command", ctypes.c_uint16),
                 ("payload_size", ctypes.c_uint16),
                 ("data_type", ctypes.c_uint16),
@@ -12,8 +21,7 @@ class MessageHeader(ctypes.BigEndianStructure):
                ]
 
 
-
-class ExtendedMessageHeader(ctypes.BigEndianStructure):
+class ExtendedMessageHeader(_BaseMessageHeader):
     _fields_ = [("command", ctypes.c_uint16),
                 ("marker1", ctypes.c_uint16),
                 ("data_type", ctypes.c_uint16),
@@ -23,7 +31,6 @@ class ExtendedMessageHeader(ctypes.BigEndianStructure):
                 ("payload_size", ctypes.c_uint32),
                 ("data_count", ctypes.c_uint32),
                ]
-
 
 
 def VersionRequestHeader(priority, version):
