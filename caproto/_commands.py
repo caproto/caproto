@@ -1,3 +1,5 @@
+import struct
+import socket
 import math
 from ._headers import *
 from ._dbr_types import *
@@ -194,8 +196,9 @@ class RepeaterConfirmResponse(Message):
 class RepeaterRegisterRequest(Message):
     ID = 24
     def __init__(self, client_ip_address):
-        ip = int(client_ip_address.replace('.', ''))
-        header = CaRepeaterRegisterRequestHeader(ip)
+        encoded_ip = socket.inet_pton(socket.AF_INET, client_ip_address)
+        int_encoded_ip, = struct.unpack('i', encoded_ip)  # bytes -> int
+        header = CaRepeaterRegisterRequestHeader(int_encoded_ip)
         super().__init__(header, None)
 
 
