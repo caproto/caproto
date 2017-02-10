@@ -107,6 +107,8 @@ class VirtualCircuit:
         return next(self._ioid_counter)
 
     def add_channel(self, channel):
+        # This is called by the Hub when a SearchRequest is processed that
+        # associates some Channel with this circuit.
         self._channels_cid[channel.cid] = channel
 
 
@@ -200,6 +202,7 @@ class Hub:
                 circuit = VirtualCircuit(*key)
                 self._circuits[key] = circuit
             chan.circuit = circuit
+            circuit.add_channel(chan)
 
     def new_cid(self):
         # This is used by the convenience methods. It does not update any
@@ -228,7 +231,6 @@ class Hub:
     def add_channel(self, channel):
         # called by Channel.__init__ to register Channel with Hub
         self._channels[channel.cid] = channel
-
 
 
 class Channel:
@@ -279,7 +281,6 @@ class Channel:
         # name is processed.
         if self._circuit is None:
             self._circuit = circuit
-            circuit.add_channel(self)
             self._state.couple_circuit(circuit)
         else:
             raise RuntimeError("circuit may only be set once")
