@@ -56,8 +56,8 @@ def {{command.name}}Header({{ command.input_params|map('attr', 'field')|join(', 
     Parameters
     ----------
     {% for param in command.input_params %}
-      {{ param.field }} : integer
-          {{ param.description }}
+    {{ param.field }} : integer
+        {{ param.description }}
     {% endfor %}
     """
     struct_args = ({{ command.struct_args|join(', ') }})

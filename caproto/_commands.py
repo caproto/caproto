@@ -1,3 +1,4 @@
+import inspect
 import struct
 import socket
 import math
@@ -132,6 +133,13 @@ class Message:
     def __bytes__(self):
         return bytes(self.header) + bytes(self.payload or b'')
 
+    def __repr__(self):
+        signature = inspect.signature(type(self))
+        d = {arg: getattr(self, arg) for arg in signature.parameters}
+        formatted_args = ", ".join(["{}={}".format(k, v)
+                                    for k, v in d.items()])
+        return "{}({})".format(type(self).__name__, formatted_args)
+
 
 class VersionRequest(Message):
     ID = 0
@@ -139,6 +147,9 @@ class VersionRequest(Message):
     def __init__(self, priority, version):
         header = VersionRequestHeader(priority, version)
         super().__init__(header, None)
+
+    priority = property(lambda self: self.header.data_type)
+    version = property(lambda self: self.header.data_count)
 
 
 class VersionResponse(Message):
@@ -148,6 +159,9 @@ class VersionResponse(Message):
         header = VersionResponseHeader(version)
         super().__init__(header, None)
 
+    version = property(lambda self: self.header.data_count)
+    struct_args = (0, 0, 0, version, 0, 0)
+
 
 class SearchRequest(Message):
     ID = 6
@@ -156,6 +170,12 @@ class SearchRequest(Message):
         size, payload = padded_string_payload(name)
         header = SearchRequestHeader(size, NO_REPLY, version, cid)
         super().__init__(header, payload)
+
+    payload_size = property(lambda self: self.header.payload_size)
+    reply = property(lambda self: self.header.data_type)
+    version = property(lambda self: self.header.data_count)
+    cid = property(lambda self: self.header.parameter1)
+    name = property(lambda self: self.payload)
 
 
 class SearchResponse(Message):
@@ -173,6 +193,11 @@ class SearchResponse(Message):
         payload = DBR_INT.from_buffer(payload_bytes)
         return cls.from_components(header, payload)
 
+    port = property(lambda self: self.header.data_type)
+    sid = property(lambda self: self.header.parameter1)
+    cid = property(lambda self: self.header.parameter2)
+    version = property(lambda self: int(self.payload.value))
+
 
 class NotFoundResponse(Message):
     ID = 14
@@ -180,6 +205,10 @@ class NotFoundResponse(Message):
     def __init__(self, version, cid):
         header = NotFoundResponseHeader(DO_REPLY, version, cid)
         super().__init__(header, None)
+
+    reply_flag = property(lambda self: self.header.data_type)
+    version = property(lambda self: self.header.data_count)
+    cid = property(lambda self: self.header.parameter1)
 
 
 class EchoRequest(Message):
@@ -203,23 +232,31 @@ class RsrvIsUpResponse(Message):
         header = RsrvIsUpResponseHeader(server_port, beacon_id, address)
         super().__init__(header, None)
 
+    server_port = property(lambda self: self.header.data_type)
+    beaconid = property(lambda self: self.header.parameter1)
+    address = property(lambda self: self.header.parameter2)
+
 
 class RepeaterConfirmResponse(Message):
     ID = 17
     HAS_PAYLOAD = False
     def __init__(self, repeater_address):
-        header = CaRepeaterConfirmResponseHeader(repeater_address)
+        header = RepeaterConfirmResponseHeader(repeater_address)
         super().__init__(header, None)
+
+    repeater_address = property(lambda self: self.header.parameter2)
 
 
 class RepeaterRegisterRequest(Message):
     ID = 24
-    HAS_PAYLOAD = True
+    HAS_PAYLOAD = False
     def __init__(self, client_ip_address):
         encoded_ip = socket.inet_pton(socket.AF_INET, client_ip_address)
         int_encoded_ip, = struct.unpack('i', encoded_ip)  # bytes -> int
-        header = CaRepeaterRegisterRequestHeader(int_encoded_ip)
+        header = RepeaterRegisterRequestHeader(int_encoded_ip)
         super().__init__(header, None)
+
+    client_ip_address = property(lambda self: self.header.parameter2)
 
 
 class EventAddRequest(Message):
@@ -234,6 +271,11 @@ class EventAddRequest(Message):
         payload = b''.join(map(bytes, payload_list))
         super().__init__(header, payload)
 
+    data_type = property(lambda self: self.header.data_type)
+    data_count = property(lambda self: self.header.data_count)
+    sid = property(lambda self: self.header.parameter1)
+    subscriptionid = property(lambda self: self.header.parameter2)
+
 
 class EventAddResponse(Message):
     ID = 1
@@ -245,6 +287,12 @@ class EventAddResponse(Message):
                                         status_code, subscriptionid)
         super().__init__(header, payload)
 
+    payload_size = property(lambda self: self.header.payload_size)
+    data_type = property(lambda self: self.header.data_type)
+    data_count = property(lambda self: self.header.data_count)
+    status_code = property(lambda self: self.header.parameter1)
+    subscriptionid = property(lambda self: self.header.parameter2)
+
 
 class EventCancelRequest(Message):
     ID = 2
@@ -254,6 +302,11 @@ class EventCancelRequest(Message):
                                           subscriptionid)
         super().__init__(header, None)
 
+    data_type = property(lambda self: self.header.data_type)
+    data_count = property(lambda self: self.header.data_count)
+    sid = property(lambda self: self.header.parameter1)
+    subscriptionid = property(lambda self: self.header.parameter2)
+
 
 class EventCancelResponse(Message):
     ID = 2
@@ -261,6 +314,10 @@ class EventCancelResponse(Message):
     def __init__(self, data_type, sid, subscriptionid):
         header = EventCancelResponseHeader(data_type, sid, subscriptionid)
         super().__init__(header, None)
+
+    data_type = property(lambda self: self.header.data_type)
+    sid = property(lambda self: self.header.parameter1)
+    subscriptionid = property(lambda self: self.header.parameter2)
 
 
 class ReadRequest(Message):
@@ -271,6 +328,11 @@ class ReadRequest(Message):
         header = ReadNotifyRequestHeader(data_type, data_count, sid, ioid)
         super().__init__(header, None)
 
+    data_type = property(lambda self: self.header.data_type)
+    data_count = property(lambda self: self.header.data_count)
+    sid = property(lambda self: self.header.parameter1)
+    ioid = property(lambda self: self.header.parameter2)
+
 
 class ReadResponse(Message):
     "Deprecated: See also ReadNotifyResponse"
@@ -279,6 +341,12 @@ class ReadResponse(Message):
     def __init__(self, data_type, data_count, sid, ioid):
         header = ReadRequestHeader(data_type, data_count, sid, ioid)
         super().__init__(header, None)
+
+    payload_size = property(lambda self: self.header.payload_size)
+    data_type = property(lambda self: self.header.data_type)
+    data_count = property(lambda self: self.header.data_count)
+    sid = property(lambda self: self.header.parameter1)
+    ioid = property(lambda self: self.header.parameter2)
     
 
 class WriteRequest(Message):
@@ -289,6 +357,12 @@ class WriteRequest(Message):
         size, payload = data_payload(values)
         header = WriteRequestHeader(size, data_type, data_count, sid, ioid)
         super().__init__(header, payload)
+
+    payload_size = property(lambda self: self.header.payload_size)
+    data_type = property(lambda self: self.header.data_type)
+    data_count = property(lambda self: self.header.data_count)
+    sid = property(lambda self: self.header.parameter1)
+    ioid = property(lambda self: self.header.parameter2)
 
 
 class EventsOffRequest(Message):
@@ -323,12 +397,19 @@ class ErrorResponse(Message):
         header = ErrorResponseHeader(size, cid, status_code)
         super().__init__(header, payload)
 
+    payload_size = property(lambda self: self.header.payload_size)
+    cid = property(lambda self: self.header.parameter1)
+    status_code = property(lambda self: self.header.parameter2)
+
 
 class ClearChannelRequest(Message):
     ID = 12
     HAS_PAYLOAD = False
     def __init__(self, sid, cid):
         super().__init__(ClearChannelRequestHeader(sid, cid), None)
+
+    sid = property(lambda self: self.header.parameter1)
+    cid = property(lambda self: self.header.parameter2)
 
 
 class ClearChannelResponse(Message):
@@ -337,6 +418,9 @@ class ClearChannelResponse(Message):
     def __init__(self, sid, cid):
         super().__init__(ClearChannelResponseHeader(sid, cid), None)
 
+    sid = property(lambda self: self.header.parameter1)
+    cid = property(lambda self: self.header.parameter2)
+
 
 class ReadNotifyRequest(Message):
     ID = 15
@@ -344,6 +428,11 @@ class ReadNotifyRequest(Message):
     def __init__(self, data_type, data_count, sid, ioid):
         header = ReadNotifyRequestHeader(data_type, data_count, sid, ioid)
         super().__init__(header, None)
+
+    data_type = property(lambda self: self.header.data_type)
+    data_count = property(lambda self: self.header.data_count)
+    sid = property(lambda self: self.header.parameter1)
+    ioid = property(lambda self: self.header.parameter2)
 
     
 class ReadNotifyResponse(Message):
@@ -354,6 +443,12 @@ class ReadNotifyResponse(Message):
         header = ReadNotifyRequest(size, data_type, data_count, sid, ioid)
         super().__init__(header, payload)
 
+    payload_size = property(lambda self: self.header.payload_size)
+    data_type = property(lambda self: self.header.data_type)
+    data_count = property(lambda self: self.header.data_count)
+    sid = property(lambda self: self.header.parameter1)
+    ioid = property(lambda self: self.header.parameter2)
+
 
 class CreateChanRequest(Message):
     ID = 18
@@ -363,12 +458,22 @@ class CreateChanRequest(Message):
         header = CreateChanRequestHeader(size, cid, version)
         super().__init__(header, payload)
 
+    payload_size = property(lambda self: self.header.payload_size)
+    cid = property(lambda self: self.header.parameter1)
+    client_version = property(lambda self: self.header.parameter2)
+    name = property(lambda self: self.payload)
+
 class CreateChanResponse(Message):
     ID = 18
     HAS_PAYLOAD = False
     def __init__(self, data_type, data_count, cid, sid):
         header = CreateChanResponseHeader(data_type, data_count, cid, sid)
         super().__init__(header, None)
+
+    data_type = property(lambda self: self.header.data_type)
+    data_count = property(lambda self: self.header.data_count)
+    cid = property(lambda self: self.header.parameter1)
+    sid = property(lambda self: self.header.parameter2)
 
 
 class WriteNotifyRequest(Message):
@@ -379,6 +484,12 @@ class WriteNotifyRequest(Message):
         header = WriteNotifyRequest(size, data_type, data_count, status, ioid)
         super().__init__(header, payload)
 
+    payload_size = property(lambda self: self.header.payload_size)
+    data_type = property(lambda self: self.header.data_type)
+    data_count = property(lambda self: self.header.data_count)
+    sid = property(lambda self: self.header.parameter1)
+    ioid = property(lambda self: self.header.parameter2)
+
 
 class WriteNotifyResponse(Message):
     ID = 19
@@ -386,6 +497,11 @@ class WriteNotifyResponse(Message):
     def __init__(self, data_type, data_count, status, ioid):
         header = WriteNotifyResponse(data_type, data_count, status, ioid)
         super().__init__(header, None)
+
+    data_type = property(lambda self: self.header.data_type)
+    data_count = property(lambda self: self.header.data_count)
+    status = property(lambda self: self.header.parameter1)
+    ioid = property(lambda self: self.header.parameter2)
 
 
 class ClientNameRequest(Message):
@@ -396,6 +512,9 @@ class ClientNameRequest(Message):
         header = ClientNameRequestHeader(size)
         super().__init__(header, payload)
 
+    payload_size = property(lambda self: self.header.payload_size)
+    name = property(lambda self: self.payload)
+
 
 class HostNameRequest(Message):
     ID = 21
@@ -405,6 +524,9 @@ class HostNameRequest(Message):
         header = HostNameRequestHeader(size)
         super().__init__(header, payload)
 
+    payload_size = property(lambda self: self.header.payload_size)
+    name = property(lambda self: self.payload)
+
 
 class AccessRightsResponse(Message):
     ID = 22
@@ -413,6 +535,9 @@ class AccessRightsResponse(Message):
         header = AccessRightsResponseHeader(cid, access_rights)
         super().__init__(header, None)
 
+    cid = property(lambda self: self.header.parameter1)
+    access_rights = property(lambda self: self.header.parameter2)
+
 
 class CreateChFailResponse(Message):
     ID = 26
@@ -420,12 +545,16 @@ class CreateChFailResponse(Message):
     def __init__(self, cid):
         super().__init__(CreateChFailResponseHeader(cid), None)
 
+    cid = property(lambda self: self.header.parameter1)
+
 
 class ServerDisconnResponse(Message):
     ID = 27
     HAS_PAYLOAD = False
     def __init__(self, cid):
         super().__init__(ServerDisconnResponseHeader(cid), None)
+
+    cid = property(lambda self: self.header.parameter1)
 
 
 _classes = [obj for obj in globals().values() if isinstance(obj, type)]

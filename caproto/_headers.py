@@ -2,6 +2,7 @@
 # Do not modify this file directly.
 import ctypes
 
+
 class _BaseMessageHeader(ctypes.BigEndianStructure):
     # just to define a nice repr
     def __repr__(self):
@@ -12,6 +13,12 @@ class _BaseMessageHeader(ctypes.BigEndianStructure):
 
 
 class MessageHeader(_BaseMessageHeader):
+    """
+    A Structure for the Header of a Channel Access command.
+
+    The specification is documented at:
+    http://www.aps.anl.gov/epics/base/R3-16/0-docs/CAproto/index.html#_messages
+    """
     _fields_ = [("command", ctypes.c_uint16),
                 ("payload_size", ctypes.c_uint16),
                 ("data_type", ctypes.c_uint16),
@@ -22,6 +29,12 @@ class MessageHeader(_BaseMessageHeader):
 
 
 class ExtendedMessageHeader(_BaseMessageHeader):
+    """
+    A Structure for the Extended Header of a Channel Access command.
+
+    The specification is documented at:
+    http://www.aps.anl.gov/epics/base/R3-16/0-docs/CAproto/index.html#_messages
+    """
     _fields_ = [("command", ctypes.c_uint16),
                 ("marker1", ctypes.c_uint16),
                 ("data_type", ctypes.c_uint16),
@@ -31,6 +44,7 @@ class ExtendedMessageHeader(_BaseMessageHeader):
                 ("payload_size", ctypes.c_uint32),
                 ("data_count", ctypes.c_uint32),
                ]
+
 
 
 def VersionRequestHeader(priority, version):
@@ -49,11 +63,11 @@ def VersionRequestHeader(priority, version):
     Parameters
     ----------
     
-      priority : integer
-          Virtual circuit priority.
+    priority : integer
+        Virtual circuit priority.
     
-      version : integer
-          Minor protocol version number. Only used when sent over TCP.
+    version : integer
+        Minor protocol version number. Only used when sent over TCP.
     
     """
     struct_args = (0, 0, priority, version, 0, 0)
@@ -76,11 +90,10 @@ def VersionResponseHeader(version):
     Parameters
     ----------
     
-      version : integer
-          Minor protocol version number. Only used when sent over TCP.
+    version : integer
+        Minor protocol version number. Only used when sent over TCP.
     
     """
-    struct_args = (0, 0, 0, version, 0, 0)
     return MessageHeader(*struct_args)
 
 
@@ -95,18 +108,18 @@ def SearchRequestHeader(payload_size, reply, version, cid):
     Parameters
     ----------
     
-      payload_size : integer
-          Padded size of channel name.
+    payload_size : integer
+        Padded size of channel name.
     
-      reply : integer
-          Search Reply Flag
+    reply : integer
+        Search Reply Flag
 					(8.4.), indicating whether failed search response should be returned.
     
-      version : integer
-          Client minor protocol version number.
+    version : integer
+        Client minor protocol version number.
     
-      cid : integer
-          Client allocated CID.
+    cid : integer
+        Client allocated CID.
     
     """
     struct_args = (6, payload_size, reply, version, cid, cid)
@@ -124,15 +137,15 @@ def SearchResponseHeader(data_type, sid, cid):
     Parameters
     ----------
     
-      data_type : integer
-          TCP Port number of server that responded.
+    data_type : integer
+        TCP Port number of server that responded.
     
-      sid : integer
-          Temporary SID, SID - Server ID
+    sid : integer
+        Temporary SID, SID - Server ID
 					(3.2.2.).
     
-      cid : integer
-          Channel CID, CID - Client ID
+    cid : integer
+        Channel CID, CID - Client ID
 					(3.2.1.).
     
     """
@@ -153,14 +166,14 @@ def NotFoundResponseHeader(reply_flag, version, cid):
     Parameters
     ----------
     
-      reply_flag : integer
-          Same reply flag as in request: always DO_REPLY.
+    reply_flag : integer
+        Same reply flag as in request: always DO_REPLY.
     
-      version : integer
-          Client minor protocol version number.
+    version : integer
+        Client minor protocol version number.
     
-      cid : integer
-          CID of the channel.
+    cid : integer
+        CID of the channel.
     
     """
     struct_args = (14, 0, reply_flag, version, cid, cid)
@@ -212,23 +225,23 @@ def RsrvIsUpResponseHeader(server_port, beaconid, address):
     Parameters
     ----------
     
-      server_port : integer
-          TCP Port the server is listening on.
+    server_port : integer
+        TCP Port the server is listening on.
     
-      beaconid : integer
-          Sequential Beacon ID.
+    beaconid : integer
+        Sequential Beacon ID.
     
-      address : integer
-          May contain IP address of the server.
+    address : integer
+        May contain IP address of the server.
     
     """
     struct_args = (13, 0, server_port, 0, beaconid, address)
     return MessageHeader(*struct_args)
 
 
-def CaRepeaterConfirmResponseHeader(repeater_address):
+def RepeaterConfirmResponseHeader(repeater_address):
     """
-    Construct a ``MessageHeader`` for a CaRepeaterConfirmResponse command.
+    Construct a ``MessageHeader`` for a RepeaterConfirmResponse command.
 
     Confirms successful client registration with repeater.
     Sent over UDP.
@@ -237,17 +250,17 @@ def CaRepeaterConfirmResponseHeader(repeater_address):
     Parameters
     ----------
     
-      repeater_address : integer
-          Address with which the registration succeeded.
+    repeater_address : integer
+        Address with which the registration succeeded.
     
     """
     struct_args = (17, 0, 0, 0, 0, repeater_address)
     return MessageHeader(*struct_args)
 
 
-def CaRepeaterRegisterRequestHeader(client_ip_address):
+def RepeaterRegisterRequestHeader(client_ip_address):
     """
-    Construct a ``MessageHeader`` for a CaRepeaterRegisterRequest command.
+    Construct a ``MessageHeader`` for a RepeaterRegisterRequest command.
 
     Requests registration with the repeater.
     Repeater will confirm successful registration using CA_REPEATER_CONFIRM.
@@ -257,8 +270,8 @@ def CaRepeaterRegisterRequestHeader(client_ip_address):
     Parameters
     ----------
     
-      client_ip_address : integer
-          IP address on which the client is listening
+    client_ip_address : integer
+        IP address on which the client is listening
     
     """
     struct_args = (24, 0, 0, 0, 0, client_ip_address)
@@ -277,21 +290,21 @@ def EventAddRequestHeader(data_type, data_count, sid, subscriptionid):
     Parameters
     ----------
     
-      data_type : integer
-          Desired DBR type of the return value.
+    data_type : integer
+        Desired DBR type of the return value.
     
-      data_count : integer
-          Desired number of elements
+    data_count : integer
+        Desired number of elements
     
-      sid : integer
-          
+    sid : integer
+        
 				SID of the channel on which to reqister this subscription.
 				See SID - Server ID
 					(3.2.2.).
 			
     
-      subscriptionid : integer
-          
+    subscriptionid : integer
+        
 				Subscription ID identifying this subscription. 
 				See Subscription ID
 					(3.2.3.).
@@ -314,21 +327,21 @@ def EventAddResponseHeader(payload_size, data_type, data_count, status_code, sub
     Parameters
     ----------
     
-      payload_size : integer
-          Size of the response.
+    payload_size : integer
+        Size of the response.
     
-      data_type : integer
-          Payload data type.
+    data_type : integer
+        Payload data type.
     
-      data_count : integer
-          Payload data count.
+    data_count : integer
+        Payload data count.
     
-      status_code : integer
-          Status code
+    status_code : integer
+        Status code
 					(13.) (ECA_NORMAL on success).
     
-      subscriptionid : integer
-          Subscription ID
+    subscriptionid : integer
+        Subscription ID
     
     """
     struct_args = (1, payload_size, data_type, data_count, status_code, subscriptionid)
@@ -347,20 +360,20 @@ def EventCancelRequestHeader(data_type, data_count, sid, subscriptionid):
     Parameters
     ----------
     
-      data_type : integer
-          Same value as in corresponding CA_PROTO_EVENT_ADD
+    data_type : integer
+        Same value as in corresponding CA_PROTO_EVENT_ADD
 					(6.1.).
     
-      data_count : integer
-          Same value as in corresponding CA_PROTO_EVENT_ADD
+    data_count : integer
+        Same value as in corresponding CA_PROTO_EVENT_ADD
 					(6.1.).
     
-      sid : integer
-          Same value as in corresponding CA_PROTO_EVENT_ADD
+    sid : integer
+        Same value as in corresponding CA_PROTO_EVENT_ADD
 					(6.1.).
     
-      subscriptionid : integer
-          Same value as in corresponding CA_PROTO_EVENT_ADD
+    subscriptionid : integer
+        Same value as in corresponding CA_PROTO_EVENT_ADD
 					(6.1.).
     
     """
@@ -380,23 +393,22 @@ def EventAddResponseHeader(data_type, sid, subscriptionid):
     Parameters
     ----------
     
-      data_type : integer
-          Same value as CA_PROTO_EVENT_ADD request.
+    data_type : integer
+        Same value as CA_PROTO_EVENT_ADD request.
     
-      sid : integer
-          Same value as CA_PROTO_EVENT_ADD request.
+    sid : integer
+        Same value as CA_PROTO_EVENT_ADD request.
     
-      subscriptionid : integer
-          Same value as CA_PROTO_EVENT_ADD request.
+    subscriptionid : integer
+        Same value as CA_PROTO_EVENT_ADD request.
     
     """
-    struct_args = (1, 0, data_type, 0, sid, subscriptionid)
     return MessageHeader(*struct_args)
 
 
-def ReadNotifyRequestHeader(data_type, data_count, sid, ioid):
+def ReadRequestHeader(data_type, data_count, sid, ioid):
     """
-    Construct a ``MessageHeader`` for a ReadNotifyRequest command.
+    Construct a ``MessageHeader`` for a ReadRequest command.
 
 
 		Read value of a channel.
@@ -410,26 +422,26 @@ Deprecated since protocol version 3.13.
     Parameters
     ----------
     
-      data_type : integer
-          Desired type of the return value.
+    data_type : integer
+        Desired type of the return value.
     
-      data_count : integer
-          Desired number of elements to read.
+    data_count : integer
+        Desired number of elements to read.
     
-      sid : integer
-          SID of the channel to read.
+    sid : integer
+        SID of the channel to read.
     
-      ioid : integer
-          IOID of this operation.
+    ioid : integer
+        IOID of this operation.
     
     """
     struct_args = (3, 0, data_type, data_count, sid, ioid)
     return MessageHeader(*struct_args)
 
 
-def ReadNotifyResponseHeader(payload_size, data_type, data_count, sid, ioid):
+def ReadResponseHeader(payload_size, data_type, data_count, sid, ioid):
     """
-    Construct a ``MessageHeader`` for a ReadNotifyResponse command.
+    Construct a ``MessageHeader`` for a ReadResponse command.
 
 
 		Read value of a channel.
@@ -443,20 +455,20 @@ Deprecated since protocol version 3.13.
     Parameters
     ----------
     
-      payload_size : integer
-          Size of DBR formatted data in payload.
+    payload_size : integer
+        Size of DBR formatted data in payload.
     
-      data_type : integer
-          Payload format.
+    data_type : integer
+        Payload format.
     
-      data_count : integer
-          Payload element count.
+    data_count : integer
+        Payload element count.
     
-      sid : integer
-          SID of the channel.
+    sid : integer
+        SID of the channel.
     
-      ioid : integer
-          IOID of this operation.
+    ioid : integer
+        IOID of this operation.
     
     """
     struct_args = (3, payload_size, data_type, data_count, sid, ioid)
@@ -474,20 +486,20 @@ def WriteRequestHeader(payload_size, data_type, data_count, sid, ioid):
     Parameters
     ----------
     
-      payload_size : integer
-          Size of padded payload
+    payload_size : integer
+        Size of padded payload
     
-      data_type : integer
-          Format of payload
+    data_type : integer
+        Format of payload
     
-      data_count : integer
-          Number of elements in payload
+    data_count : integer
+        Number of elements in payload
     
-      sid : integer
-          Server channel ID
+    sid : integer
+        Server channel ID
     
-      ioid : integer
-          Request ID
+    ioid : integer
+        Request ID
     
     """
     struct_args = (4, payload_size, data_type, data_count, sid, ioid)
@@ -559,15 +571,15 @@ def ErrorResponseHeader(payload_size, cid, status_code):
     Parameters
     ----------
     
-      payload_size : integer
-          Size of the request header that triggered the error plus size of the error message.
+    payload_size : integer
+        Size of the request header that triggered the error plus size of the error message.
     
-      cid : integer
-          CID of the channel for which request failed, CID - Client ID
+    cid : integer
+        CID of the channel for which request failed, CID - Client ID
 					(3.2.1.).
     
-      status_code : integer
-          Error status code
+    status_code : integer
+        Error status code
 					(13.).
     
     """
@@ -586,11 +598,11 @@ def ClearChannelRequestHeader(sid, cid):
     Parameters
     ----------
     
-      sid : integer
-          SID of channel to clear.
+    sid : integer
+        SID of channel to clear.
     
-      cid : integer
-          CID of channel to clear.
+    cid : integer
+        CID of channel to clear.
     
     """
     struct_args = (12, 0, 0, 0, sid, cid)
@@ -608,11 +620,11 @@ def ClearChannelResponseHeader(sid, cid):
     Parameters
     ----------
     
-      sid : integer
-          SID of cleared channel.
+    sid : integer
+        SID of cleared channel.
     
-      cid : integer
-          CID of cleared channel.
+    cid : integer
+        CID of cleared channel.
     
     """
     struct_args = (12, 0, 0, 0, sid, cid)
@@ -630,17 +642,17 @@ def ReadNotifyRequestHeader(data_type, data_count, sid, ioid):
     Parameters
     ----------
     
-      data_type : integer
-          Desired type of the return value.
+    data_type : integer
+        Desired type of the return value.
     
-      data_count : integer
-          Desired number of elements to read.
+    data_count : integer
+        Desired number of elements to read.
     
-      sid : integer
-          SID of the channel to read.
+    sid : integer
+        SID of the channel to read.
     
-      ioid : integer
-          IOID of this operation.
+    ioid : integer
+        IOID of this operation.
     
     """
     struct_args = (15, 0, data_type, data_count, sid, ioid)
@@ -658,20 +670,20 @@ def ReadNotifyResponseHeader(payload_size, data_type, data_count, sid, ioid):
     Parameters
     ----------
     
-      payload_size : integer
-          Size of DBR formatted data in payload.
+    payload_size : integer
+        Size of DBR formatted data in payload.
     
-      data_type : integer
-          Payload format.
+    data_type : integer
+        Payload format.
     
-      data_count : integer
-          Payload element count.
+    data_count : integer
+        Payload element count.
     
-      sid : integer
-          SID of the channel.
+    sid : integer
+        SID of the channel.
     
-      ioid : integer
-          IOID of this operation.
+    ioid : integer
+        IOID of this operation.
     
     """
     struct_args = (15, payload_size, data_type, data_count, sid, ioid)
@@ -690,14 +702,14 @@ def CreateChanRequestHeader(payload_size, cid, client_version):
     Parameters
     ----------
     
-      payload_size : integer
-          Padded length of channel name.
+    payload_size : integer
+        Padded length of channel name.
     
-      cid : integer
-          CID of the channel to create.
+    cid : integer
+        CID of the channel to create.
     
-      client_version : integer
-          Client minor protocol version.
+    client_version : integer
+        Client minor protocol version.
     
     """
     struct_args = (18, payload_size, 0, 0, cid, client_version)
@@ -716,17 +728,17 @@ def CreateChanResponseHeader(data_type, data_count, cid, sid):
     Parameters
     ----------
     
-      data_type : integer
-          Native channel data type
+    data_type : integer
+        Native channel data type
     
-      data_count : integer
-          Native channel data count
+    data_count : integer
+        Native channel data count
     
-      cid : integer
-          Channel client ID
+    cid : integer
+        Channel client ID
     
-      sid : integer
-          Channel server ID
+    sid : integer
+        Channel server ID
     
     """
     struct_args = (18, 0, data_type, data_count, cid, sid)
@@ -744,20 +756,20 @@ def WriteNotifyRequestHeader(payload_size, data_type, data_count, sid, ioid):
     Parameters
     ----------
     
-      payload_size : integer
-          Size of padded payload
+    payload_size : integer
+        Size of padded payload
     
-      data_type : integer
-          Format of payload
+    data_type : integer
+        Format of payload
     
-      data_count : integer
-          Number of elements in payload
+    data_count : integer
+        Number of elements in payload
     
-      sid : integer
-          Server channel ID
+    sid : integer
+        Server channel ID
     
-      ioid : integer
-          Request ID
+    ioid : integer
+        Request ID
     
     """
     struct_args = (19, payload_size, data_type, data_count, sid, ioid)
@@ -775,17 +787,17 @@ def WriteNotifyResponseHeader(data_type, data_count, status, ioid):
     Parameters
     ----------
     
-      data_type : integer
-          Format of data written
+    data_type : integer
+        Format of data written
     
-      data_count : integer
-          Number of elements written
+    data_count : integer
+        Number of elements written
     
-      status : integer
-          Status of write success
+    status : integer
+        Status of write success
     
-      ioid : integer
-          Request ID
+    ioid : integer
+        Request ID
     
     """
     struct_args = (19, 0, data_type, data_count, status, ioid)
@@ -803,8 +815,8 @@ def ClientNameRequestHeader(payload_size):
     Parameters
     ----------
     
-      payload_size : integer
-          Length of string in payload
+    payload_size : integer
+        Length of string in payload
     
     """
     struct_args = (20, payload_size, 0, 0, 0, 0)
@@ -823,8 +835,8 @@ def HostNameRequestHeader(payload_size):
     Parameters
     ----------
     
-      payload_size : integer
-          Length of host name string.
+    payload_size : integer
+        Length of host name string.
     
     """
     struct_args = (21, payload_size, 0, 0, 0, 0)
@@ -843,11 +855,11 @@ def AccessRightsResponseHeader(cid, access_rights):
     Parameters
     ----------
     
-      cid : integer
-          Channel affected by change.
+    cid : integer
+        Channel affected by change.
     
-      access_rights : integer
-          Access rights
+    access_rights : integer
+        Access rights
 					(8.5.) for given channel.
     
     """
@@ -866,8 +878,8 @@ def CreateChFailResponseHeader(cid):
     Parameters
     ----------
     
-      cid : integer
-          Client channel ID
+    cid : integer
+        Client channel ID
     
     """
     struct_args = (26, 0, 0, 0, cid, 0)
@@ -886,8 +898,8 @@ def ServerDisconnResponseHeader(cid):
     Parameters
     ----------
     
-      cid : integer
-          CID that was provided during CA_PROTO_CREATE_CHAN
+    cid : integer
+        CID that was provided during CA_PROTO_CREATE_CHAN
     
     """
     struct_args = (27, 0, 0, 0, cid, 0)

@@ -15,7 +15,7 @@ def getpath(*args):
     return os.path.abspath(os.path.join(os.path.dirname(__file__), *args))
 
 
-Param = namedtuple('Param', ['field', 'value', 'description'])
+Param = namedtuple('Param', ['standard_name', 'field', 'value', 'description'])
 Command = namedtuple('Command', ['name', 'description',
                                  'input_params', 'struct_args'])
 
@@ -96,16 +96,20 @@ def parse_commands(h2):
             raise ValueError("expected at most two tables per <h3>")
         rows = header_table.find_all('tr')
         params = []
-        for row in rows[1:]:  # exclude header row
+        STANDARD_NAMES = ('command payload_size data_type data_count '
+                          'parameter1 parameter 2').split()
+        for row, sn in zip(rows[1:], STANDARD_NAMES):  # exclude header row
             field_td, val_td, desc_td = row.find_all('td')
             field = field_td.find('tt').text.replace(' ', '_').lower()
             val = val_td.find('tt').text
             desc = desc_td.text
-            params.append(Param(field, val, desc))
+            params.append(Param(sn, field, val, desc))
         validate(params)
         name = COMMAND_NAME_PATTERN.match(params[0].description).group(1)
         if name.startswith('CA_PROTO'):
             name = name[len('CA_PROTO'):]
+        if name.startswith('CA_'):
+            name = name[len('CA_'):]
         name = name.title().replace('_', '')
         input_params = [p for p in params[1:] if not is_reserved(p)]
         struct_args = [p.field
@@ -113,8 +117,6 @@ def parse_commands(h2):
                        for p in params]
         command = Command('{}{}'.format(name, suffix),
                           description, input_params, struct_args)
-        if has_payload:
-            print('{}{}'.format(name, suffix))
         command = handle_special_cases(command)
         commands.append(command)
     return commands
