@@ -41,19 +41,35 @@ class VirtualCircuit:
         # This is only used by the convenience methods, to auto-generate ioid.
         self._ioid_counter = itertools.count(0)
 
-    def new_ioid(self):
-        # TODO Be more clever and reuse abandoned ioids; avoid overrunning.
-        return next(self._ioid_counter)
-
-    def add_channel(self, channel):
-        self._channels_cid[channel.cid] = channel
-
     def send(self, command):
+        """
+        Convert a high-level Command into bytes that can be sent to the peer,
+        while updating our internal state machine.
+        """
         self._process_command(self.our_role, command)
         return bytes(command)
 
     def recv(self, byteslike):
+        """
+        Add data received over TCP to our internal recieve buffer.
+
+        This does not actually do any processing on the data, just stores
+        it. To trigger processing, you have to call :meth:`next_command`.
+        """
         self._data += byteslike
+
+    def next_command(self):
+        """
+        Parse the next Command out of our internal receive buffer, update our
+        internal state machine, and return it.
+
+        Returns a :class:`Command` object or a special constant,
+        :data:`NEED_DATA`.
+        """
+        self._data, command = read_from_bytestream(self._data, self.their_role)
+        if type(command) is not NEED_DATA:
+            self._process_command(self.our_role, command)
+        return command
 
     def _process_command(self, role, command):
         # All commands go through here.
@@ -84,11 +100,14 @@ class VirtualCircuit:
             self._state.process_command(self.our_role, type(command))
             self._state.process_command(self.their_role, type(command))
 
-    def next_command(self):
-        self._data, command = read_from_bytestream(self._data, self.their_role)
-        if type(command) is not NEED_DATA:
-            self._process_command(self.our_role, command)
-        return command
+    def new_ioid(self):
+        # This is used by the convenience methods. It does not update any
+        # important state.
+        # TODO Be more clever and reuse abandoned ioids; avoid overrunning.
+        return next(self._ioid_counter)
+
+    def add_channel(self, channel):
+        self._channels_cid[channel.cid] = channel
 
 
 class Hub:
@@ -123,45 +142,31 @@ class Hub:
         # This is only used by the convenience methods, to auto-generate a cid.
         self._cid_counter = itertools.count(0)
 
-    def new_cid(self):
-        # TODO Be more clever and reuse abandoned cids; avoid overrunning.
-        return next(self._cid_counter)
-
-    def new_channel(self, name, priority=0):
-        """
-        A convenience method: instantiate a new :class:`Channel`.
-
-        You are not required to use this method; you can also role your own
-        :class:`Channel`. The Hub state will not be updated until a
-        :class:`SearchResponse` for this :class:`Channel` is processed.
-
-        This is equivalent to:
-
-        ``Channel(<Hub>, None, <UNIQUE_INTEGER>, name, priority)``
-        """
-        # This method does not change any state other than the cid counter,
-        # which is neither important nor coupled to anything else.
-        cid = self.new_cid()
-        circuit = None
-        channel = Channel(name, circuit, cid, name, priority)
-        self._channels[cid] = channel
-        # If this Client has searched for this name and already knows its
-        # host, skip the Search step and create a circuit.
-        # if name in self._names:
-        #     circuit = self._circuits[(self._names[name], priority)]
-        return channel
-
     def send_broadcast(self, command):
-        "Return bytes to broadcast over UDP socket."
+        """
+        Convert a high-level Command into bytes that can be broadcast over UDP,
+        while updating our internal state machine.
+        """
         self._process_command(self.our_role, command)
         return bytes(command)
 
     def recv_broadcast(self, byteslike, address):
-        "Cache but do not process bytes that were received via UDP broadcast."
+        """
+        Add data from a UDP broadcast to our internal recieve buffer.
+
+        This does not actually do any processing on the data, just stores
+        it. To trigger processing, you have to call :meth:`next_command`.
+        """
         self._datagram_inbox.append((byteslike, address))
 
     def next_command(self):
-        "Process cached received bytes."
+        """
+        Parse the next Command out of our internal receive buffer, update our
+        internal state machine, and return it.
+
+        Returns a :class:`Command` object or a special constant,
+        :data:`NEED_DATA`.
+        """
         if not self._parsed_commands:
             if not self._datagram_inbox:
                 return NEED_DATA
@@ -196,6 +201,35 @@ class Hub:
                 self._circuits[key] = circuit
             chan.circuit = circuit
 
+    def new_cid(self):
+        # This is used by the convenience methods. It does not update any
+        # important state.
+        # TODO Be more clever and reuse abandoned cids; avoid overrunning.
+        return next(self._cid_counter)
+
+    def new_channel(self, name, priority=0):
+        """
+        A convenience method: instantiate a new :class:`Channel`.
+
+        This method does not update any important state. It is equivalent to:
+        ``Channel(<Hub>, None, <UNIQUE_INT>, name, priority)``
+        """
+        # This method does not change any state other than the cid counter,
+        # which is neither important nor coupled to anything else.
+        cid = self.new_cid()
+        circuit = None
+        channel = Channel(self, circuit, cid, name, priority)
+        # If this Client has searched for this name and already knows its
+        # host, skip the Search step and create a circuit.
+        # if name in self._names:
+        #     circuit = self._circuits[(self._names[name], priority)]
+        return channel
+
+    def add_channel(self, channel):
+        # called by Channel.__init__ to register Channel with Hub
+        self._channels[channel.cid] = channel
+
+
 
 class Channel:
     """An object encapsulating the state of the EPICS Channel on a Client.
@@ -205,6 +239,18 @@ class Channel:
 
     A Channel will be assigned to a VirtualCircuit (corresponding to one
     client--server TCP connection), which is may share with other Channels.
+
+    Parameters
+    ----------
+    hub : :class:`Hub`
+    circuit : None or :class:VirtualCircuit`
+    cid : integer
+        unique Channel ID
+    name : string
+        Channnel name (PV)
+    priority : integer
+        Controls priority given to this channel by the server. Must be between
+        0 (lowest priority) and 99 (highest), inclusive.
     """
     def __init__(self, hub, circuit, cid, name, priority=0):
         self._hub = hub
@@ -213,6 +259,10 @@ class Channel:
         self.name = name
         self.priority = priority  # on [0, 99]
         self._state = ChannelState()
+        # The Channel maybe not have a circuit yet, but it always needs to be
+        # registered by a Hub. When the Hub processes a SearchResponse, it will
+        # know which Channel instance is being referred to.
+        self._hub.add_channel(self)
         # These are updated when the circuit processes CreateChanResponse.
         self.native_data_type = None
         self.native_data_count = None
@@ -248,6 +298,9 @@ class Channel:
         """
         A convenience method: generate a valid :class:`ReadNotifyRequest`.
 
+        This method does not update any important state. It is equivalent to:
+        ``ReadNotifyRequest(data_type, data_count, <self.sid>, <UNIQUE_INT>)``
+
         Returns
         -------
         circuit, ReadNotifyRequest
@@ -263,6 +316,9 @@ class Channel:
     def write(self, data):
         """
         A convenience method: generate a valid :class:`WriteNotifyRequest`.
+
+        This method does not update any important state. It is equivalent to:
+        ``WriteNotifyRequest(data, data_type, data_count, <self.sid>, <UNIQUE_INT>)``
 
         Parameters
         ----------
