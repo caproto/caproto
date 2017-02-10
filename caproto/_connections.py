@@ -27,7 +27,7 @@ class VirtualCircuit:
 
     def send(self, command):
         self._process_command(self.our_role, command)
-        return command
+        return bytes(command)
 
     def recv(self, byteslike):
         self._data += byteslike
@@ -99,7 +99,7 @@ class Connections:
     def send_broadcast(self, command):
         "Return bytes to broadcast over UDP socket."
         self._process_command(self.our_role, command)
-        return command
+        return bytes(command)
 
     def recv_broadcast(self, byteslike, address):
         "Cache but do not process bytes that were received via UDP broadcast."
