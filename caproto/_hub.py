@@ -262,8 +262,9 @@ class Channel:
         self.priority = priority  # on [0, 99]
         self._state = ChannelState()
         # The Channel maybe not have a circuit yet, but it always needs to be
-        # registered by a Hub. When the Hub processes a SearchResponse, it will
-        # know which Channel instance is being referred to.
+        # registered by a Hub. When the Hub processes a SearchResponse
+        # regarding this Channel, it will includes this Channel's cid,
+        # which the Hub can use to identify this Channel instance.
         self._hub.add_channel(self)
         # These are updated when the circuit processes CreateChanResponse.
         self.native_data_type = None
