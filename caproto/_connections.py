@@ -81,7 +81,7 @@ class Connections:
         self._channels = {}  # map cid to Channel
         self._cid_counter = itertools.count(0)
         self._datagram_inbox = deque()
-        # self._datagram_outbox = deque()
+        self._parsed_commands = deque()
 
     def new_channel(self, name, priority=0):
         cid = next(self._cid_counter)
@@ -93,7 +93,6 @@ class Connections:
         # if name in self._names:
         #     circuit = self._circuits[(self._names[name], priority)]
         msg = SearchRequest(name, cid, self.PROTOCOL_VERSION)
-        # self._datagram_outbox.append(msg)
         return channel
 
     def send_broadcast(self, command):
@@ -107,10 +106,11 @@ class Connections:
 
     def next_command(self):
         "Process cached received bytes."
-        byteslike, (host, port) = self._datagram_inbox.popleft()
-        command = read_datagram(byteslike, self.their_role)
-        # For UDP, monkey-patch the address on as well.
-        command.address = (host, port)
+        if not self._parsed_commands:
+            byteslike, address = self._datagram_inbox.popleft()
+            commands = read_datagram(byteslike, address, self.their_role)
+            self._parsed_commands.extend(commands)
+        command = self._parsed_commands.popleft()
         self._process_command(self.their_role, command)
         return command
 

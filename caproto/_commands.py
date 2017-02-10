@@ -43,13 +43,23 @@ def data_payload(values, data_count, data_type):
     return size, payload
 
 
-def read_datagram(data, role):
-    "Parse bytes from one datagram into an instance of the pertinent Command."
+def read_datagram(data, address, role):
+    "Parse bytes from one datagram into one or more commands."
     barray = bytearray(data)
-    header = MessageHeader.from_buffer(barray)
-    payload_bytes = barray[_MessageHeaderSize:]
-    _class = Commands[str(role)][header.command]
-    return _class.from_wire(header, payload_bytes)
+    commands = []
+    while barray:
+        header = MessageHeader.from_buffer(barray)
+        barray = barray[_MessageHeaderSize:]
+        _class = Commands[str(role)][header.command]
+        if _class.HAS_PAYLOAD:
+            payload_bytes = barray[:header.payload_size]
+            barray = barray[header.payload_size:]
+        else:
+            payload_bytes = None
+        command = _class.from_wire(header, payload_bytes)
+        command.address = address  # (host, port)
+        commands.append(command)
+    return commands
 
 
 def read_from_bytestream(data, role):
@@ -107,7 +117,7 @@ class Message:
         Some Command types allocate a different meaning to the header.dbr_type
         field, and these override this method in their subclass.
         """
-        if not payload_bytes:
+        if not cls.HAS_PAYLOAD:
             return cls.from_components(header, None)
         dbr_type = DBR_TYPES[header.data_type]
         return cls.from_components(header, dbr_type.from_buffer(payload_bytes))
@@ -125,6 +135,7 @@ class Message:
 
 class VersionRequest(Message):
     ID = 0
+    HAS_PAYLOAD = False
     def __init__(self, priority, version):
         header = VersionRequestHeader(priority, version)
         super().__init__(header, None)
@@ -132,6 +143,7 @@ class VersionRequest(Message):
 
 class VersionResponse(Message):
     ID = 0
+    HAS_PAYLOAD = False
     def __init__(self, version):
         header = VersionResponseHeader(version)
         super().__init__(header, None)
@@ -139,6 +151,7 @@ class VersionResponse(Message):
 
 class SearchRequest(Message):
     ID = 6
+    HAS_PAYLOAD = True
     def __init__(self, name, cid, version):
         size, payload = padded_string_payload(name)
         header = SearchRequestHeader(size, NO_REPLY, version, cid)
@@ -147,6 +160,7 @@ class SearchRequest(Message):
 
 class SearchResponse(Message):
     ID = 6
+    HAS_PAYLOAD = True
     def __init__(self, port, sid, cid, version):
         header = SearchResponseHeader(port, sid, cid)
         payload = bytes(DBR_INT(version))
@@ -162,6 +176,7 @@ class SearchResponse(Message):
 
 class NotFoundResponse(Message):
     ID = 14
+    HAS_PAYLOAD = False
     def __init__(self, version, cid):
         header = NotFoundResponseHeader(DO_REPLY, version, cid)
         super().__init__(header, None)
@@ -169,18 +184,21 @@ class NotFoundResponse(Message):
 
 class EchoRequest(Message):
     ID = 23
+    HAS_PAYLOAD = False
     def __init__(self):
         super().__init__(EchoRequestHeader(), None)
 
 
 class EchoResponse(Message):
     ID = 23
+    HAS_PAYLOAD = False
     def __init__(self):
         super().__init__(EchoResponseHeader(), None)
 
 
 class RsrvIsUpResponse(Message):
     ID = 13
+    HAS_PAYLOAD = False
     def __init__(self, server_port, beacon_id, address):
         header = RsrvIsUpResponseHeader(server_port, beacon_id, address)
         super().__init__(header, None)
@@ -188,6 +206,7 @@ class RsrvIsUpResponse(Message):
 
 class RepeaterConfirmResponse(Message):
     ID = 17
+    HAS_PAYLOAD = False
     def __init__(self, repeater_address):
         header = CaRepeaterConfirmResponseHeader(repeater_address)
         super().__init__(header, None)
@@ -195,6 +214,7 @@ class RepeaterConfirmResponse(Message):
 
 class RepeaterRegisterRequest(Message):
     ID = 24
+    HAS_PAYLOAD = True
     def __init__(self, client_ip_address):
         encoded_ip = socket.inet_pton(socket.AF_INET, client_ip_address)
         int_encoded_ip, = struct.unpack('i', encoded_ip)  # bytes -> int
@@ -204,6 +224,7 @@ class RepeaterRegisterRequest(Message):
 
 class EventAddRequest(Message):
     ID = 1
+    HAS_PAYLOAD = True
     def __init__(self, data_type, data_count, sid, subscriptionid, low,
                  high, to, mask):
         header = EventAddRequestHeader(data_type, data_count, sid,
@@ -216,6 +237,7 @@ class EventAddRequest(Message):
 
 class EventAddResponse(Message):
     ID = 1
+    HAS_PAYLOAD = True
     def __init__(self, values, data_type, data_count,
                  status_code, subscriptionid):
         size, payload = data_payload(values)
@@ -226,6 +248,7 @@ class EventAddResponse(Message):
 
 class EventCancelRequest(Message):
     ID = 2
+    HAS_PAYLOAD = False
     def __init__(self, data_type, data_count, sid, subscriptionid):
         header = EventCancelRequestHeader(data_type, data_count, sid,
                                           subscriptionid)
@@ -234,23 +257,34 @@ class EventCancelRequest(Message):
 
 class EventCancelResponse(Message):
     ID = 2
+    HAS_PAYLOAD = False
     def __init__(self, data_type, sid, subscriptionid):
         header = EventCancelResponseHeader(data_type, sid, subscriptionid)
         super().__init__(header, None)
 
 
-
 class ReadRequest(Message):
     "Deprecated: See also ReadNotifyRequest"
     ID = 3
+    HAS_PAYLOAD = False
     def __init__(self, data_type, data_count, sid, ioid):
         header = ReadNotifyRequestHeader(data_type, data_count, sid, ioid)
         super().__init__(header, None)
 
 
+class ReadResponse(Message):
+    "Deprecated: See also ReadNotifyResponse"
+    ID = 3
+    HAS_PAYLOAD = True
+    def __init__(self, data_type, data_count, sid, ioid):
+        header = ReadRequestHeader(data_type, data_count, sid, ioid)
+        super().__init__(header, None)
+    
+
 class WriteRequest(Message):
     "Deprecated: See also WriteNotifyRequest"
     ID = 4
+    HAS_PAYLOAD = True
     def __init__(self, values, data_type, sid, ioid):
         size, payload = data_payload(values)
         header = WriteRequestHeader(size, data_type, data_count, sid, ioid)
@@ -259,12 +293,14 @@ class WriteRequest(Message):
 
 class EventsOffRequest(Message):
     ID = 8
+    HAS_PAYLOAD = False
     def __init__(self):
         super().__init__(EventsOffRequestHeader(), None)
 
 
 class EventsOnRequest(Message):
     ID = 9
+    HAS_PAYLOAD = False
     def __init__(self):
         super().__init__(EventsOnRequestHeader(), None)
 
@@ -272,12 +308,14 @@ class EventsOnRequest(Message):
 class ReadSyncRequestRequest(Message):
     "Deprecated: See also ReadNotifyRequest"
     ID = 10
+    HAS_PAYLOAD = False
     def __init__(self):
         super().__init__(ReadSyncRequestRequestHeader(), None)
 
 
 class ErrorResponse(Message):
     ID = 11
+    HAS_PAYLOAD = True
     def __init__(self, original_request, cid, status_code, error_message):
         _error_message = DBR_STRING(ensure_bytes(error_message))
         payload = bytes(original_request) + _error_message
@@ -288,18 +326,21 @@ class ErrorResponse(Message):
 
 class ClearChannelRequest(Message):
     ID = 12
+    HAS_PAYLOAD = False
     def __init__(self, sid, cid):
         super().__init__(ClearChannelRequestHeader(sid, cid), None)
 
 
 class ClearChannelResponse(Message):
     ID = 12
+    HAS_PAYLOAD = False
     def __init__(self, sid, cid):
         super().__init__(ClearChannelResponseHeader(sid, cid), None)
 
 
 class ReadNotifyRequest(Message):
     ID = 15
+    HAS_PAYLOAD = False
     def __init__(self, data_type, data_count, sid, ioid):
         header = ReadNotifyRequestHeader(data_type, data_count, sid, ioid)
         super().__init__(header, None)
@@ -307,6 +348,7 @@ class ReadNotifyRequest(Message):
     
 class ReadNotifyResponse(Message):
     ID = 15
+    HAS_PAYLOAD = True
     def __init__(self, values, data_type, data_count, sid, ioid):
         size, payload = data_payload(values)
         header = ReadNotifyRequest(size, data_type, data_count, sid, ioid)
@@ -315,6 +357,7 @@ class ReadNotifyResponse(Message):
 
 class CreateChanRequest(Message):
     ID = 18
+    HAS_PAYLOAD = True
     def __init__(self, name, cid, version):
         size, payload = padded_string_payload(name)
         header = CreateChanRequestHeader(size, cid, version)
@@ -322,6 +365,7 @@ class CreateChanRequest(Message):
 
 class CreateChanResponse(Message):
     ID = 18
+    HAS_PAYLOAD = False
     def __init__(self, data_type, data_count, cid, sid):
         header = CreateChanResponseHeader(data_type, data_count, cid, sid)
         super().__init__(header, None)
@@ -329,6 +373,7 @@ class CreateChanResponse(Message):
 
 class WriteNotifyRequest(Message):
     ID = 19
+    HAS_PAYLOAD = True
     def __init__(self, values, data_type, data_count, status, ioid):
         size, payload = data_payload(values)
         header = WriteNotifyRequest(size, data_type, data_count, status, ioid)
@@ -337,6 +382,7 @@ class WriteNotifyRequest(Message):
 
 class WriteNotifyResponse(Message):
     ID = 19
+    HAS_PAYLOAD = False
     def __init__(self, data_type, data_count, status, ioid):
         header = WriteNotifyResponse(data_type, data_count, status, ioid)
         super().__init__(header, None)
@@ -344,6 +390,7 @@ class WriteNotifyResponse(Message):
 
 class ClientNameRequest(Message):
     ID = 20
+    HAS_PAYLOAD = True
     def __init__(self, name):
         size, payload = padded_string_payload(name)
         header = ClientNameRequestHeader(size)
@@ -352,6 +399,7 @@ class ClientNameRequest(Message):
 
 class HostNameRequest(Message):
     ID = 21
+    HAS_PAYLOAD = True
     def __init__(self, name):
         size, payload = padded_string_payload(name)
         header = HostNameRequestHeader(size)
@@ -360,6 +408,7 @@ class HostNameRequest(Message):
 
 class AccessRightsResponse(Message):
     ID = 22
+    HAS_PAYLOAD = False
     def __init__(self, cid, access_rights):
         header = AccessRightsResponseHeader(cid, access_rights)
         super().__init__(header, None)
@@ -367,12 +416,14 @@ class AccessRightsResponse(Message):
 
 class CreateChFailResponse(Message):
     ID = 26
+    HAS_PAYLOAD = False
     def __init__(self, cid):
         super().__init__(CreateChFailResponseHeader(cid), None)
 
 
 class ServerDisconnResponse(Message):
     ID = 27
+    HAS_PAYLOAD = False
     def __init__(self, cid):
         super().__init__(ServerDisconnResponseHeader(cid), None)
 
