@@ -1,5 +1,9 @@
-# A bring-your-own-I/O implementation of Channel Access
-# in the spirit of http://sans-io.readthedocs.io/
+# This module defines two classes that encapsulate key abstractions in
+# Channel Access: Channels and VirtualCircuits. Each VirtualCircuit is a
+# companion to a (user-managed) TCP socket, updating its state in response to
+# incoming and outgoing TCP bytestreams. A third class, the Hub, owns these
+# VirtualCircuits and spawns new ones as needed. The Hub updates its state in
+# response to incoming and outgoing UDP datagrams.
 import ctypes
 import itertools
 from io import BytesIO
