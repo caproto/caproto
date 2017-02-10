@@ -10,9 +10,6 @@ from ._state import *
 from ._utils import *
 
 
-__all__ = ['VirtualCircuit', 'Connections', 'Channel']
-
-
 DEFAULT_PROTOCOL_VERSION = 13
 
 

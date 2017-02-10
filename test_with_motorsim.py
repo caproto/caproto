@@ -36,7 +36,7 @@ send_bcast = lambda msg: sock.sendto(bytes(msg), ('', CA_SERVER_PORT))
 recv_bcast = lambda: sock.recvfrom(4096)
 
  
-cli = ca.Connections(our_role=ca.CLIENT)
+cli = ca.Hub(our_role=ca.CLIENT)
 chan1 = cli.new_channel(pv1)
 bytes_to_send = cli.send_broadcast(ca.VersionRequest(0, 13))
 bytes_to_send += cli.send_broadcast(ca.SearchRequest(pv1, 0, 13))
