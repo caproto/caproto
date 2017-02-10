@@ -2,18 +2,39 @@
 # Do not modify this file directly.
 import ctypes
 
-class MessageHeader(ctypes.BigEndianStructure):
-    _fields_ = [("command", ctypes.c_uint8),
-                ("payload_size", ctypes.c_uint8),
-                ("data_type", ctypes.c_uint8),
-                ("data_count", ctypes.c_uint8),
-                ("parameter1", ctypes.c_uint16),
-                ("parameter2", ctypes.c_uint16),
+
+class _BaseMessageHeader(ctypes.BigEndianStructure):
+    # just to define a nice repr
+    def __repr__(self):
+        d = {field: getattr(self, field) for field, _type in self._fields_}
+        formatted_args = ", ".join(["{}={}".format(k, v)
+                                    for k, v in d.items()])
+        return "{}({})".format(type(self).__name__, formatted_args)
+
+
+class MessageHeader(_BaseMessageHeader):
+    """
+    A Structure for the Header of a Channel Access command.
+
+    The specification is documented at:
+    http://www.aps.anl.gov/epics/base/R3-16/0-docs/CAproto/index.html#_messages
+    """
+    _fields_ = [("command", ctypes.c_uint16),
+                ("payload_size", ctypes.c_uint16),
+                ("data_type", ctypes.c_uint16),
+                ("data_count", ctypes.c_uint16),
+                ("parameter1", ctypes.c_uint32),
+                ("parameter2", ctypes.c_uint32),
                ]
 
 
+class ExtendedMessageHeader(_BaseMessageHeader):
+    """
+    A Structure for the Extended Header of a Channel Access command.
 
-class ExtendedMessageHeader(ctypes.BigEndianStructure):
+    The specification is documented at:
+    http://www.aps.anl.gov/epics/base/R3-16/0-docs/CAproto/index.html#_messages
+    """
     _fields_ = [("command", ctypes.c_uint16),
                 ("marker1", ctypes.c_uint16),
                 ("data_type", ctypes.c_uint16),
