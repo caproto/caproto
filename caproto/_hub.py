@@ -73,29 +73,46 @@ class VirtualCircuit:
 
     def _process_command(self, role, command):
         # All commands go through here.
+
+        # Commands that refer to a specific Channel as opposed to a Circuit:
         if isinstance(command, (ClearChannelRequest, ClearChannelResponse,
-                                CreateChanRequest)):
+                                CreateChanRequest, CreateChanResponse,
+                                ReadNotifyRequest, ReadNotifyResponse,
+                                WriteNotifyRequest, WriteNotifyResponse,
+                                EventAddRequest, EventAddResponse,
+                                EventCancelRequest, EventCancelResponse,
+                                ServerDisconnResponse,)):
+            # Identify which Channel this Command is referring to. We have to
+            # do this in one of a couple different ways depenending on the
+            # Command.
+            if isinstance(command, (ReadNotifyRequest, WriteNotifyRequest)):
+                # Identify the Channel based on its sid.
+                ioid, sid = command.ioid, command.sid
+                chan = self._channels_sid[sid]
+                # Stash the ioid for later reference.
+                chan = self._ioids[ioid] = self._channels_sid[sid]
+            elif isinstance(command, (ReadNotifyResponse,
+                                      WriteNotifyResponse)):
+                # Identify the Channel based on its ioid.
+                chan = self._ioids[command.ioid]
+            else:
+                # In all other cases, the Command gives us a cid.
+                cid = command.cid
+                chan = self._channels_cid[cid]
+
             # Update the state machine of the pertinent Channel.
-            cid = command.cid
-            chan = self._channels_cid[cid]
             chan._state.process_command(self.our_role, type(command))
             chan._state.process_command(self.their_role, type(command))
-        elif isinstance(command, CreateChanResponse):
-            chan = self._channels_cid[command.cid]
-            chan.native_data_type = command.data_type 
-            chan.native_data_count = command.data_count
-            chan.sid = command.sid
-            self._channels_sid[chan.sid] = chan
-            chan._state.process_command(self.our_role, type(command))
-            chan._state.process_command(self.their_role, type(command))
-        elif isinstance(command, (ReadNotifyRequest, WriteNotifyRequest)):
-            chan = self._ioids[command.ioid] = self._channels_sid[command.sid]
-            chan._state.process_command(self.our_role, type(command))
-            chan._state.process_command(self.their_role, type(command))
-        elif isinstance(command, (ReadNotifyResponse, WriteNotifyResponse)):
-            chan = self._ioids[command.ioid]
-            chan._state.process_command(self.our_role, type(command))
-            chan._state.process_command(self.their_role, type(command))
+
+            # Finally, if this is a CreateChanResponse, stash what the server
+            # tells us about this Channel.
+            if isinstance(command, CreateChanResponse):
+                chan.native_data_type = command.data_type 
+                chan.native_data_count = command.data_count
+                chan.sid = command.sid
+                self._channels_sid[chan.sid] = chan
+        # Otherwise, this Command affects the state of this circuit, not a
+        # specific Channel.
         else:
             self._state.process_command(self.our_role, type(command))
             self._state.process_command(self.their_role, type(command))
