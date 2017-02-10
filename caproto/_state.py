@@ -58,7 +58,7 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
             ErrorResponse: ERROR,
         },
         CONNECTED: {
-            ClearChannelRequest: DISCONNECTED,
+            ClearChannelRequest: MUST_CLOSE,
             ServerDisconnResponse: DISCONNECTED,
             ErrorResponse: ERROR,
             ReadNotifyRequest: CONNECTED,
@@ -68,12 +68,16 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
             WriteNotifyResponse: CONNECTED,
             EventAddResponse: CONNECTED,
         },
+        MUST_CLOSE: {
+            ClearChannelResponse: DISCONNECTED,
+        },
         ERROR: {}, 
     },
     SERVER: {
         IDLE: {
             SearchRequest: SEND_SEARCH_RESPONSE,
             CreateChanRequest: SEND_CREATE_CHAN_RESPONSE,
+            ClearChannelResponse: IDLE,
         },
         SEND_SEARCH_RESPONSE: {
             SearchResponse: IDLE,

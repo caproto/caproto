@@ -36,9 +36,10 @@ class VirtualCircuit:
 
     def _process_command(self, role, command):
         # All commands go through here.
-        if isinstance(command, CreateChanRequest):
+        if isinstance(command, (ClearChannelRequest, ClearChannelResponse,
+                                CreateChanRequest)):
             # Update the state machine of the pertinent Channel.
-            cid = command.header.parameter1
+            cid = command.cid
             chan = self._channels_cid[cid]
             chan._state.process_command(self.our_role, type(command))
             chan._state.process_command(self.their_role, type(command))
@@ -51,6 +52,7 @@ class VirtualCircuit:
             chan._state.process_command(self.our_role, type(command))
             chan._state.process_command(self.their_role, type(command))
         elif isinstance(command, (ReadNotifyRequest, ReadNotifyResponse)):
+            print('>>>', command)
             chan = self._channels_sid[command.sid]
             chan._state.process_command(self.our_role, type(command))
             chan._state.process_command(self.their_role, type(command))

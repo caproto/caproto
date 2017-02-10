@@ -295,6 +295,7 @@ class EventAddResponse(Message):
     data_count = property(lambda self: self.header.data_count)
     status_code = property(lambda self: self.header.parameter1)
     subscriptionid = property(lambda self: self.header.parameter2)
+    values = property(lambda self: self.payload)
 
 
 class EventCancelRequest(Message):
@@ -366,6 +367,7 @@ class WriteRequest(Message):
     data_count = property(lambda self: self.header.data_count)
     sid = property(lambda self: self.header.parameter1)
     ioid = property(lambda self: self.header.parameter2)
+    values = property(lambda self: self.payload)
 
 
 class EventsOffRequest(Message):
@@ -451,6 +453,7 @@ class ReadNotifyResponse(Message):
     data_count = property(lambda self: self.header.data_count)
     sid = property(lambda self: self.header.parameter1)
     ioid = property(lambda self: self.header.parameter2)
+    values = property(lambda self: self.payload)
 
 
 class CreateChanRequest(Message):
@@ -492,6 +495,7 @@ class WriteNotifyRequest(Message):
     data_count = property(lambda self: self.header.data_count)
     sid = property(lambda self: self.header.parameter1)
     ioid = property(lambda self: self.header.parameter2)
+    values = property(lambda self: self.payload)
 
 
 class WriteNotifyResponse(Message):

@@ -76,6 +76,9 @@ send(chan1.circuit, ca.HostNameRequest(OUR_HOSTNAME))
 send(chan1.circuit, ca.ClientNameRequest(OUR_USERNAME))
 send(chan1.circuit, ca.CreateChanRequest(name=pv1, cid=chan1.cid, version=13))
 recv(chan1.circuit)
-send(chan1.circuit, ca.ReadNotifyRequest(ca.DBR_FLOAT.DBR_ID, 1, command.sid,
-                                         chan1.cid))
+send(chan1.circuit, ca.ReadNotifyRequest(ca.DBR_FLOAT.DBR_ID, data_count=1,
+                                         sid=chan1.sid,
+                                         ioid=1))
+recv(chan1.circuit)
+send(chan1.circuit, ca.ClearChannelRequest(chan1.sid, chan1.cid))
 recv(chan1.circuit)

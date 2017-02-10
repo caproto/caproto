@@ -27,7 +27,7 @@ sentinels = ("CLIENT SERVER "
              "SEND_VERSION_RESPONSE "
              "SEND_CREATE_CHAN_REQUEST AWAIT_CREATE_CHAN_RESPONSE "
              "SEND_CREATE_CHAN_RESPONSE "
-             "CONNECTED DISCONNECTED IDLE ERROR".split())
+             "CONNECTED MUST_CLOSE DISCONNECTED IDLE ERROR".split())
 for token in sentinels:
     globals()[token] = make_sentinel(token)
 
