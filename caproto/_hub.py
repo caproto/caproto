@@ -1,5 +1,4 @@
-# This module defines two classes that encapsulate key abstractions in
-# Channel Access: Channels and VirtualCircuits. Each VirtualCircuit is a
+# This module defines two classes that encapsulate key abstractions in # Channel Access: Channels and VirtualCircuits. Each VirtualCircuit is a
 # companion to a (user-managed) TCP socket, updating its state in response to
 # incoming and outgoing TCP bytestreams. A third class, the Hub, owns these
 # VirtualCircuits and spawns new ones as needed. The Hub updates its state in
@@ -35,8 +34,8 @@ class VirtualCircuit:
         self.priority = priority
         self._state = CircuitState()
         self._data = bytearray()
-        self.channels_cid = {}
-        self.channels_sid = {}
+        self.channels = {}
+        self._channels_sid = {}
         self._ioids = {}
         # This is only used by the convenience methods, to auto-generate ioid.
         self._ioid_counter = itertools.count(0)
@@ -74,7 +73,8 @@ class VirtualCircuit:
     def _process_command(self, role, command):
         # All commands go through here.
 
-        # Commands that refer to a specific Channel as opposed to a Circuit:
+        # Filter for Commands that are pertinent to a specific Channel, as
+        # opposed to the Circuit as a whole:
         if isinstance(command, (ClearChannelRequest, ClearChannelResponse,
                                 CreateChanRequest, CreateChanResponse,
                                 ReadNotifyRequest, ReadNotifyResponse,
@@ -88,9 +88,7 @@ class VirtualCircuit:
             if isinstance(command, (ReadNotifyRequest, WriteNotifyRequest)):
                 # Identify the Channel based on its sid.
                 ioid, sid = command.ioid, command.sid
-                chan = self.channels_sid[sid]
-                # Stash the ioid for later reference.
-                chan = self._ioids[ioid] = self.channels_sid[sid]
+                chan = self._channels_sid[sid]
             elif isinstance(command, (ReadNotifyResponse,
                                       WriteNotifyResponse)):
                 # Identify the Channel based on its ioid.
@@ -98,21 +96,27 @@ class VirtualCircuit:
             else:
                 # In all other cases, the Command gives us a cid.
                 cid = command.cid
-                chan = self.channels_cid[cid]
+                chan = self.channels[cid]
 
             # Update the state machine of the pertinent Channel.
+            # If this is not a valid command, the state machine will raise
+            # here.
             chan._state.process_command(self.our_role, type(command))
             chan._state.process_command(self.their_role, type(command))
 
-            # Finally, if this is a CreateChanResponse, stash what the server
-            # tells us about this Channel.
-            if isinstance(command, CreateChanResponse):
+            # If we got this far, the state machine has validated this Command.
+            # Update other Channel and Circuit state..
+            if isinstance(command, (ReadNotifyRequest, WriteNotifyRequest)):
+                # Stash the ioid for later reference.
+                self._ioids[ioid] = chan
+            elif isinstance(command, CreateChanResponse):
                 chan.native_data_type = command.data_type 
                 chan.native_data_count = command.data_count
                 chan.sid = command.sid
-                self.channels_sid[chan.sid] = chan
+                self._channels_sid[chan.sid] = chan
+
         # Otherwise, this Command affects the state of this circuit, not a
-        # specific Channel.
+        # specific Channel. Run the circuit's state machine.
         else:
             self._state.process_command(self.our_role, type(command))
             self._state.process_command(self.their_role, type(command))
@@ -126,7 +130,7 @@ class VirtualCircuit:
     def add_channel(self, channel):
         # This is called by the Hub when a SearchRequest is processed that
         # associates some Channel with this circuit.
-        self.channels_cid[channel.cid] = channel
+        self.channels[channel.cid] = channel
 
 
 class Hub:
@@ -285,8 +289,8 @@ class Channel:
         self.priority = priority  # on [0, 99]
         self._state = ChannelState()
         # The Channel maybe not have a circuit yet, but it always needs to be
-        # registered by a Hub. When the Hub processes a SearchResponse
-        # regarding this Channel, it will includes this Channel's cid,
+        # registered by a Hub. When the Hub processes a SearchRequest Command
+        # regarding this Channel, that Command includes this Channel's cid,
         # which the Hub can use to identify this Channel instance.
         self._hub.add_channel(self)
         # These are updated when the circuit processes CreateChanResponse.
