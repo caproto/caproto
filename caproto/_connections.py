@@ -7,6 +7,7 @@ from collections import defaultdict, deque
 from ._commands import *
 from ._dbr_types import *
 from ._state import *
+from ._utils import *
 
 
 __all__ = ['VirtualCircuit', 'Connections', 'Channel']
@@ -46,7 +47,8 @@ class VirtualCircuit:
 
     def next_command(self):
         self._data, command = read_from_bytestream(self._data, self.their_role)
-        self._process_command(self.our_role, command)
+        if type(command) is not NEED_DATA:
+            self._process_command(self.our_role, command)
         return command
 
 
@@ -107,6 +109,8 @@ class Connections:
     def next_command(self):
         "Process cached received bytes."
         if not self._parsed_commands:
+            if not self._datagram_inbox:
+                return NEED_DATA
             byteslike, address = self._datagram_inbox.popleft()
             commands = read_datagram(byteslike, address, self.their_role)
             self._parsed_commands.extend(commands)

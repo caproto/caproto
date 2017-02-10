@@ -4,6 +4,7 @@ import socket
 import math
 from ._headers import *
 from ._dbr_types import *
+from ._utils import *
 
 
 _MessageHeaderSize = ctypes.sizeof(MessageHeader)
@@ -51,7 +52,7 @@ def read_datagram(data, address, role):
     while barray:
         header = MessageHeader.from_buffer(barray)
         barray = barray[_MessageHeaderSize:]
-        _class = Commands[str(role)][header.command]
+        _class = Commands[role][header.command]
         if _class.HAS_PAYLOAD:
             payload_bytes = barray[:header.payload_size]
             barray = barray[header.payload_size:]
@@ -67,21 +68,21 @@ def read_from_bytestream(data, role):
     header_size = _MessageHeaderSize
     # We need at least one header's worth of bytes to interpret anything.
     if len(data) < header_size:
-        return NEEDS_DATA
+        return data, NEED_DATA
     header = MessageHeader.from_buffer(data)
     # Looks for sentinels that mark this as an "extended header".
     if header.payload_size == 0xFFFF and header.data_count == 0:
         header_size = _ExtendedMessageHeaderSize
         # Do we have enough bytes to interpret the extended header?
         if len(data) < header_size:
-            return NEEDS_DATA
+            return data, NEED_DATA
         header = ExtendedMessageHeader.from_buffer(data)
     total_size = header_size + header.payload_size
     # Do we have all the bytes in the payload?
     if len(data) < total_size:
-        return NEEDS_DATA
+        return data, NEED_DATA
     # Receive the buffer (zero-copy).
-    _class = Commands[str(role)][header.command]
+    _class = Commands[role][header.command]
     payload_bytes = data[header_size:total_size]
     command = _class.from_wire(header, payload_bytes)
     # Advance the buffer.
@@ -560,7 +561,7 @@ class ServerDisconnResponse(Message):
 _classes = [obj for obj in globals().values() if isinstance(obj, type)]
 _commands = [_class for _class in _classes if issubclass(_class, Message)]
 Commands = {}
-Commands['CLIENT'] = {_class.ID: _class for _class in _commands
-                      if _class.__name__.endswith('Request')}
-Commands['SERVER'] = {_class.ID: _class for _class in _commands
-                      if _class.__name__.endswith('Response')}
+Commands[CLIENT] = {_class.ID: _class for _class in _commands
+                    if _class.__name__.endswith('Request')}
+Commands[SERVER] = {_class.ID: _class for _class in _commands
+                    if _class.__name__.endswith('Response')}
