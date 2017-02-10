@@ -1,7 +1,10 @@
 import caproto as ca
 import socket
+import getpass
 
 
+OUR_HOSTNAME = socket.gethostname()
+OUR_USERNAME = getpass.getuser()
 CA_REPEATER_PORT = 5065
 CA_SERVER_PORT = 5064
 pv1 = "XF:31IDA-OP{Tbl-Ax:X1}Mtr"
@@ -17,12 +20,12 @@ ip = socket.gethostbyname(socket.gethostname())
 print('our ip', ip)
 reg_command = ca.RepeaterRegisterRequest(ip)
 print("Sending", reg_command)
-send_bcast(bytes(reg_command))
+send_bcast(reg_command)
 
 # Receive response
 print('waiting to receive')
 data, address = recv_bcast()
-print('received "%s"' % data)
+print('received', ca.read_datagram(data, address, ca.SERVER))
 
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
@@ -43,3 +46,36 @@ command = cli.next_command()
 print('received', command)
 command = cli.next_command()
 print('received', command)
+
+# Make a dict to hold our tcp sockets.
+sockets = {}
+sockets[chan1.circuit] = socket.create_connection(chan1.circuit.address)
+
+def send(circuit, command):
+    print('sending', command)
+    bytes_to_send = circuit.send(command)
+    sockets[circuit].send(bytes_to_send)
+
+def recv(circuit):
+    bytes_received = sockets[circuit].recv(4096)
+    print('received', len(bytes_received), 'bytes')
+    circuit.recv(bytes_received)
+    commands = []
+    while True:
+        command = circuit.next_command()
+        if type(command) is ca.NEED_DATA:
+            break
+        print('parsed', command)
+        commands.append(command)
+    return commands
+
+
+send(chan1.circuit, ca.VersionRequest(priority=0, version=13))
+recv(chan1.circuit)
+send(chan1.circuit, ca.HostNameRequest(OUR_HOSTNAME))
+send(chan1.circuit, ca.ClientNameRequest(OUR_USERNAME))
+send(chan1.circuit, ca.CreateChanRequest(name=pv1, cid=chan1.cid, version=13))
+recv(chan1.circuit)
+send(chan1.circuit, ca.ReadNotifyRequest(ca.DBR_FLOAT.DBR_ID, 1, command.sid,
+                                         chan1.cid))
+recv(chan1.circuit)
