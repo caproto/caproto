@@ -5,14 +5,20 @@ from ._utils import *
 COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
     CLIENT: {
         SEND_VERSION_REQUEST: {
+            EchoRequest: SEND_VERSION_REQUEST,
+            EchoResponse: SEND_VERSION_REQUEST,
             VersionRequest: AWAIT_VERSION_RESPONSE,
             ErrorResponse: ERROR,
         },
         AWAIT_VERSION_RESPONSE: {
+            EchoRequest: AWAIT_VERSION_RESPONSE,
+            EchoResponse: AWAIT_VERSION_RESPONSE,
             VersionResponse: CONNECTED,
             ErrorResponse: ERROR,
         },
         CONNECTED: {
+            EchoRequest: CONNECTED,
+            EchoResponse: CONNECTED,
             ErrorResponse: ERROR,
             HostNameRequest: CONNECTED,
             ClientNameRequest: CONNECTED,
@@ -24,11 +30,17 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
     SERVER: {
         IDLE: {
             VersionRequest: SEND_VERSION_RESPONSE,
+            EchoRequest: IDLE,
+            EchoResponse: IDLE,
         },
         SEND_VERSION_RESPONSE: {
             VersionResponse: CONNECTED,
+            EchoRequest: SEND_VERSION_RESPONSE,
+            EchoResponse: SEND_VERSION_RESPONSE,
         },
         CONNECTED: {
+            EchoRequest: CONNECTED,
+            EchoResponse: CONNECTED,
             HostNameRequest: CONNECTED,
             ClientNameRequest: CONNECTED,
             AccessRightsResponse: CONNECTED,
