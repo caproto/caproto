@@ -146,6 +146,8 @@ class VersionRequest(Message):
     ID = 0
     HAS_PAYLOAD = False
     def __init__(self, priority, version):
+        if not (0 <= priority < 100):
+            raise ValueError("Expecting 0 < priority < 100")
         header = VersionRequestHeader(priority, version)
         super().__init__(header, None)
 
