@@ -1,3 +1,4 @@
+from caproto import *
 import time
 import socket
 import os
@@ -8,13 +9,13 @@ def padded_len(s):
     return 8 * math.ceil(len(s) / 8)
     
 
-host = os.environ['DOCKER0_IP']
+host = 'localhost'
 port = 5064
 sock = socket.create_connection((host, port))
 
 # Send CA_PROTO_VERSION and listen for the server's reply.
 CLIENT_VERSION = 13
-req = CA_PROTO_VERSION_REQ(priority=1, version=CLIENT_VERSION)
+req = VersionRequest(priority=1, version=CLIENT_VERSION)
 print(sock.sendall(bytes(req)))
 response1 = MessageHeader()
 sock.recv_into(response1)
@@ -23,12 +24,12 @@ print('Server protocol version:', response1.data_count)
 # Announce hostname and username.
 hostname = socket.gethostname()
 pl = padded_len(hostname)
-header = bytes(CA_PROTO_HOST_NAME_REQ(pl))
+header = bytes(HostNameRequestHeader(pl))
 payload = bytes(DBR_STRING(hostname.encode()))[:pl]
 print(sock.sendall(header + payload))
 # There is no response.
 username = getpass.getuser()
-header = bytes(CA_PROTO_CLIENT_NAME_REQ(pl))
+header = bytes(ClientNameRequestHeader(pl))
 pl = padded_len(hostname)
 payload = bytes(DBR_STRING(hostname.encode()))[:pl]
 print(sock.sendall(header + payload))
@@ -41,7 +42,7 @@ except NameError:
     cid = 1
 pv = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
 pl = padded_len(pv)
-header = CA_PROTO_SEARCH_REQ(pl, 10, CLIENT_VERSION, cid)
+header = SearchRequestHeader(pl, 10, CLIENT_VERSION, cid)
 payload = DBR_STRING(pv.encode())
 msg = bytes(header) + bytes(payload)[:pl]
 sock.sendall(msg)
@@ -51,7 +52,7 @@ print('response command:', response2.command)
 
 print(cid == response2.parameter2)
 # sample payload as previous
-header = CA_PROTO_CREATE_CHAN_REQ(pl, cid, CLIENT_VERSION)
+header = CreateChanRequestHeader(pl, cid, CLIENT_VERSION)
 msg = bytes(header) + bytes(payload)[:pl]
 print(msg)
 sock.sendall(msg)
@@ -68,7 +69,8 @@ try:
 except NameError:
     ioid = 1
 
-header = CA_PROTO_READ_NOTIFY_REQ(DBR_FLOAT.DBR_ID, 1, sid, ioid)
+print('sid', sid)
+header = ReadNotifyRequestHeader(DBR_FLOAT.DBR_ID, 1, sid, ioid)
 sock.sendall(header)
 response5 = MessageHeader()
 sock.recv_into(response5)

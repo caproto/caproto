@@ -7,7 +7,7 @@ OUR_HOSTNAME = socket.gethostname()
 OUR_USERNAME = getpass.getuser()
 CA_REPEATER_PORT = 5065
 CA_SERVER_PORT = 5064
-pv1 = "XF:31IDA-OP{Tbl-Ax:X1}Mtr"
+pv1 = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
 
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
@@ -76,9 +76,14 @@ send(chan1.circuit, ca.HostNameRequest(OUR_HOSTNAME))
 send(chan1.circuit, ca.ClientNameRequest(OUR_USERNAME))
 send(chan1.circuit, ca.CreateChanRequest(name=pv1, cid=chan1.cid, version=13))
 recv(chan1.circuit)
-send(chan1.circuit, ca.ReadNotifyRequest(ca.DBR_FLOAT.DBR_ID, data_count=1,
-                                         sid=chan1.sid,
-                                         ioid=1))
-recv(chan1.circuit)
-send(chan1.circuit, ca.ClearChannelRequest(chan1.sid, chan1.cid))
-recv(chan1.circuit)
+try:
+    send(chan1.circuit, ca.ReadNotifyRequest(data_type=2, data_count=1,
+                                            sid=chan1.sid,
+                                            ioid=1))
+    bytes_received = sockets[chan1.circuit].recv(4096)
+    raise Exception
+    # recv(chan1.circuit)
+    send(chan1.circuit, ca.ClearChannelRequest(chan1.sid, chan1.cid))
+    recv(chan1.circuit)
+finally:
+    sock.close()
