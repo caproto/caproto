@@ -1,4 +1,5 @@
 import caproto as ca
+import time
 import socket
 import getpass
 
@@ -79,9 +80,21 @@ send(chan1.circuit, ca.CreateChanRequest(name=pv1, cid=chan1.cid, version=13))
 recv(chan1.circuit)
 send(chan1.circuit, ca.ReadNotifyRequest(data_type=2, data_count=1,
                                         sid=chan1.sid,
-                                        ioid=1))
-bytes_received = sockets[chan1.circuit].recv(4096)
-# recv(chan1.circuit)
+                                        ioid=12))
+commands, = recv(chan1.circuit)
+print(commands.values.value)
+request = ca.WriteNotifyRequest(data_type=2, data_count=1,
+                                sid=chan1.sid,
+                                ioid=13, values=3)
+
+send(chan1.circuit, request)
+recv(chan1.circuit)
+time.sleep(2)
+send(chan1.circuit, ca.ReadNotifyRequest(data_type=2, data_count=1,
+                                         sid=chan1.sid,
+                                         ioid=14))
+recv(chan1.circuit)
+print(commands.values.value)
 send(chan1.circuit, ca.ClearChannelRequest(chan1.sid, chan1.cid))
 recv(chan1.circuit)
 

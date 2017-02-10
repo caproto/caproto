@@ -23,6 +23,7 @@ class VirtualCircuit:
         self._data = bytearray()
         self._channels_cid = {}
         self._channels_sid = {}
+        self._ioids = {}
 
     def add_channel(self, channel):
         self._channels_cid[channel.cid] = channel
@@ -51,8 +52,12 @@ class VirtualCircuit:
             self._channels_sid[chan.sid] = chan
             chan._state.process_command(self.our_role, type(command))
             chan._state.process_command(self.their_role, type(command))
-        elif isinstance(command, (ReadNotifyRequest, ReadNotifyResponse)):
-            chan = self._channels_sid[command.sid]
+        elif isinstance(command, (ReadNotifyRequest, WriteNotifyRequest)):
+            chan = self._ioids[command.ioid] = self._channels_sid[command.sid]
+            chan._state.process_command(self.our_role, type(command))
+            chan._state.process_command(self.their_role, type(command))
+        elif isinstance(command, (ReadNotifyResponse, WriteNotifyResponse)):
+            chan = self._ioids[command.ioid]
             chan._state.process_command(self.our_role, type(command))
             chan._state.process_command(self.their_role, type(command))
         else:

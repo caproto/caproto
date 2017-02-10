@@ -36,12 +36,16 @@ def padded_string_payload(name):
 
 
 def data_payload(values, data_count, data_type):
-    size = data_count * ctypes.sizeof(data_type)
+    size = data_count * ctypes.sizeof(DBR_TYPES[data_type])
     if data_count != 1:
         assert data_count == len(values)
         payload = b''.join(map(bytes, values))
     else:
-        payload = bytes(values)
+        payload = bytes(DBR_TYPES[data_type](values))
+    # Payloads must be zeropadded to have a size that is a multiple of 8.
+    if size % 8 != 0:
+        size = 8 * math.ceil(size/8)
+        payload = payload.ljust(8, b'\x00')
     return size, payload
 
 
@@ -285,7 +289,7 @@ class EventAddResponse(Message):
     HAS_PAYLOAD = True
     def __init__(self, values, data_type, data_count,
                  status_code, subscriptionid):
-        size, payload = data_payload(values)
+        size, payload = data_payload(values, data_count, data_type)
         header = EventAddResponseHeader(size, data_type, data_count,
                                         status_code, subscriptionid)
         super().__init__(header, payload)
@@ -358,7 +362,7 @@ class WriteRequest(Message):
     ID = 4
     HAS_PAYLOAD = True
     def __init__(self, values, data_type, sid, ioid):
-        size, payload = data_payload(values)
+        size, payload = data_payload(values, data_count, data_type)
         header = WriteRequestHeader(size, data_type, data_count, sid, ioid)
         super().__init__(header, payload)
 
@@ -443,15 +447,16 @@ class ReadNotifyRequest(Message):
 class ReadNotifyResponse(Message):
     ID = 15
     HAS_PAYLOAD = True
-    def __init__(self, values, data_type, data_count, sid, ioid):
-        size, payload = data_payload(values)
-        header = ReadNotifyRequest(size, data_type, data_count, sid, ioid)
+    def __init__(self, values, data_type, data_count, status, ioid):
+        size, payload = data_payload(values, data_count, data_type)
+        header = ReadNotifyRequestHeader(size, data_type, data_count, status,
+                                         ioid)
         super().__init__(header, payload)
 
     payload_size = property(lambda self: self.header.payload_size)
     data_type = property(lambda self: self.header.data_type)
     data_count = property(lambda self: self.header.data_count)
-    sid = property(lambda self: self.header.parameter1)
+    status = property(lambda self: self.header.parameter1)
     ioid = property(lambda self: self.header.parameter2)
     values = property(lambda self: self.payload)
 
@@ -485,9 +490,10 @@ class CreateChanResponse(Message):
 class WriteNotifyRequest(Message):
     ID = 19
     HAS_PAYLOAD = True
-    def __init__(self, values, data_type, data_count, status, ioid):
-        size, payload = data_payload(values)
-        header = WriteNotifyRequest(size, data_type, data_count, status, ioid)
+    def __init__(self, values, data_type, data_count, sid, ioid):
+        size, payload = data_payload(values, data_count, data_type)
+        header = WriteNotifyRequestHeader(size, data_type, data_count, sid,
+                                          ioid)
         super().__init__(header, payload)
 
     payload_size = property(lambda self: self.header.payload_size)
@@ -502,7 +508,7 @@ class WriteNotifyResponse(Message):
     ID = 19
     HAS_PAYLOAD = False
     def __init__(self, data_type, data_count, status, ioid):
-        header = WriteNotifyResponse(data_type, data_count, status, ioid)
+        header = WriteNotifyResponseHeader(data_type, data_count, status, ioid)
         super().__init__(header, None)
 
     data_type = property(lambda self: self.header.data_type)

@@ -743,4 +743,6 @@ DBR_CTRL_SHORT = DBR_CTRL_INT
 
 
 _all_types = [c for c in globals().values() if hasattr(c, 'DBR_ID')]
-DBR_TYPES = sorted(_all_types, key=lambda c: c.DBR_ID)
+DBR_TYPES = {}
+for t in _all_types:
+    DBR_TYPES[t.DBR_ID] = t
