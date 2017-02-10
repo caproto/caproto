@@ -216,12 +216,11 @@ class Hub:
             chan._state.process_command(self.their_role, type(command))
         elif isinstance(command, SearchResponse):
             # Update the state machine of the pertinent Channel.
-            chan = self.channels[command.header.parameter2]
+            chan = self.channels[command.cid]
             chan._state.process_command(self.our_role, type(command))
             chan._state.process_command(self.their_role, type(command))
             # Identify an existing VirtcuitCircuit with the right address and
             # priority, or create one.
-            self._names[chan.name] = command.address
             key = (command.address, chan.priority)
             try:
                 circuit = self.circuits[key]
@@ -230,6 +229,10 @@ class Hub:
                 self.circuits[key] = circuit
             chan.circuit = circuit
             circuit.add_channel(chan)
+            # Separately, stash the address where we found this name. This
+            # information might remain useful beyond the lifecycle of the
+            # circuit.
+            self._names[chan.name] = command.address
 
     def new_cid(self):
         # This is used by the convenience methods. It does not update any
