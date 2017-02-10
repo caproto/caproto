@@ -1,3 +1,22 @@
+# This module contains high-level "command" objects, one for each CA command.
+# A command wraps together a ``MessageHeader`` from _headers.py with a payload
+# of raw bytes (if applicable). It provides a more user-friendly __init__ that
+# accepts standard Python types and handles details like type conversation and
+# bit-padding. For every argument to the __init__ there is a corresponding
+# property to allow high-level introspection of a command. There are also
+# ``header`` and ``payload`` attributes for lower-level introspection. Finally,
+# the command objects support ``__bytes__``, encoding them for sending over the
+# wire.
+
+# A command class may be instantiated in one of two ways:
+# 1. For sending: by passing user-friendly inputs to ``__init__``.
+# 2. For receiving: by passing a datagram or bytestream to the functions
+#    ``read_datagram`` and `read_bytestream`` respectively. These identify the
+#    command type and instiate the appropriate class from bytes using
+#    ``__new__``.
+#
+# (1) is typically done by the user. (2) is typically done by calling the
+# ``next_command`` method of a :class:`Hub` or a :class:`VirtualCircuit`.
 import inspect
 import struct
 import socket

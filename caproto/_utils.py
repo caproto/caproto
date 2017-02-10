@@ -1,3 +1,7 @@
+# This module defines sentinels used in the state machine and elsewhere, such
+# as NEED_DATA, CLIENT, SERVER, AWAITING_SEARCH_RESPONSE, etc.
+# It also defines some custom Exceptions. That is all.
+
 # This sentinel code is copied, with thanks and admiration, from h11,
 # which is released under an MIT license.
 #
