@@ -201,7 +201,7 @@ class SearchRequest(Message):
     reply = property(lambda self: self.header.data_type)
     version = property(lambda self: self.header.data_count)
     cid = property(lambda self: self.header.parameter1)
-    name = property(lambda self: self.payload.rstrip(b'\x00'))
+    name = property(lambda self: bytes(self.payload).rstrip(b'\x00'))
 
 
 class SearchResponse(Message):
@@ -491,7 +491,7 @@ class CreateChanRequest(Message):
     payload_size = property(lambda self: self.header.payload_size)
     cid = property(lambda self: self.header.parameter1)
     version = property(lambda self: self.header.parameter2)
-    name = property(lambda self: self.payload.rstrip(b'\x00'))
+    name = property(lambda self: bytes(self.payload).rstrip(b'\x00'))
 
 class CreateChanResponse(Message):
     ID = 18
@@ -545,7 +545,7 @@ class ClientNameRequest(Message):
         super().__init__(header, payload)
 
     payload_size = property(lambda self: self.header.payload_size)
-    name = property(lambda self: self.payload.rstrip(b'\x00'))
+    name = property(lambda self: bytes(self.payload).rstrip(b'\x00'))
 
 
 class HostNameRequest(Message):
@@ -557,7 +557,7 @@ class HostNameRequest(Message):
         super().__init__(header, payload)
 
     payload_size = property(lambda self: self.header.payload_size)
-    name = property(lambda self: self.payload.rstrip(b'\x00'))
+    name = property(lambda self: bytes(self.payload).rstrip(b'\x00'))
 
 
 class AccessRightsResponse(Message):

@@ -211,7 +211,9 @@ class Hub:
             except KeyError:
                 # The user has not instantiated a Channel for this cid.
                 # Create one.
-                chan = Channel(self, None, cid, command.name, command.priority)
+                # TO DO What happens with priority here???
+                # I guess add it later.
+                chan = Channel(self, None, cid, command.name, priority=0)
             chan._state.process_command(self.our_role, type(command))
             chan._state.process_command(self.their_role, type(command))
         elif isinstance(command, SearchResponse):
