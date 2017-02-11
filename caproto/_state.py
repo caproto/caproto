@@ -75,10 +75,12 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
             ErrorResponse: ERROR,
             ReadNotifyRequest: CONNECTED,
             WriteNotifyRequest: CONNECTED,
-            EventAddRequest: CONNECTED,
             ReadNotifyResponse: CONNECTED,
             WriteNotifyResponse: CONNECTED,
+            EventAddRequest: CONNECTED,
+            EventCancelRequest: CONNECTED,
             EventAddResponse: CONNECTED,
+            EventCancelResponse: CONNECTED,
         },
         MUST_CLOSE: {
             ClearChannelResponse: DISCONNECTED,
@@ -105,10 +107,12 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
             ClearChannelRequest: IDLE,
             ReadNotifyRequest: CONNECTED,
             WriteNotifyRequest: CONNECTED,
-            EventAddRequest: CONNECTED,  # TODO a subscription state machine?
             ReadNotifyResponse: CONNECTED,
             WriteNotifyResponse: CONNECTED,
+            EventAddRequest: CONNECTED,
+            EventCancelRequest: CONNECTED,
             EventAddResponse: CONNECTED,
+            EventCancelResponse: CONNECTED,
         },
     },
 }
