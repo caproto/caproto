@@ -244,16 +244,18 @@ class Hub:
 
     def new_channel(self, name, priority=0):
         """
-        A convenience method: instantiate a new :class:`Channel`.
+        A convenience method: instantiate a new :class:`ClientChannel` or
+        :class:`ServerChannel`, corresponding to :attr:`our_role`.
 
         This method does not update any important state. It is equivalent to:
-        ``Channel(<Hub>, None, <UNIQUE_INT>, name, priority)``
+        ``<ChannelClass>(<Hub>, None, <UNIQUE_INT>, name, priority)``
         """
         # This method does not change any state other than the cid counter,
         # which is neither important nor coupled to anything else.
         cid = self.new_cid()
         circuit = None
-        channel = Channel(self, circuit, cid, name, priority)
+        _class = {CLIENT: ClientChannel, SERVER: ServerChannel}[self.our_role]
+        channel = _class(self, circuit, cid, name, priority)
         # If this Client has searched for this name and already knows its
         # host, skip the Search step and create a circuit.
         # if name in self._names:
@@ -265,27 +267,10 @@ class Hub:
         self.channels[channel.cid] = channel
 
 
-class Channel:
-    """An object encapsulating the state of the EPICS Channel on a Client.
-    
-    A Channel may be created as soon as the desired ``name`` is known, maybe
-    before the server providing that name is located.
-
-    A Channel will be assigned to a VirtualCircuit (corresponding to one
-    client--server TCP connection), which is may share with other Channels.
-
-    Parameters
-    ----------
-    hub : :class:`Hub`
-    circuit : None or :class:VirtualCircuit`
-    cid : integer
-        unique Channel ID
-    name : string
-        Channnel name (PV)
-    priority : integer
-        Controls priority given to this channel by the server. Must be between
-        0 (lowest priority) and 99 (highest), inclusive.
-    """
+class _BaseChannel:
+    # This is subclassed by ClientChannel and ServerChannel, which merely add
+    # convenience methods that compose valid commands. They do not mutate any
+    # _BaseChannel state. All the critical code is here in the base class.
     def __init__(self, hub, circuit, cid, name, priority=0):
         self._hub = hub
         self._circuit = circuit  # may be None at __init__ time
@@ -318,6 +303,28 @@ class Channel:
         else:
             raise RuntimeError("circuit may only be set once")
 
+
+class ClientChannel(_BaseChannel):
+    """An object encapsulating the state of the EPICS Channel on a Client.
+
+    A Channel may be created as soon as the desired ``name`` is known, maybe
+    before the server providing that name is located.
+
+    A Channel will be assigned to a VirtualCircuit (corresponding to one
+    client--server TCP connection), which is may share with other Channels.
+
+    Parameters
+    ----------
+    hub : :class:`Hub`
+    circuit : None or :class:VirtualCircuit`
+    cid : integer
+        unique Channel ID
+    name : string
+        Channnel name (PV)
+    priority : integer
+        Controls priority given to this channel by the server. Must be between
+        0 (lowest priority) and 99 (highest), inclusive.
+    """
     def search(self):
         """
         A convenience method: generate a valid :class:`SearchRequest`.
@@ -373,3 +380,39 @@ class Channel:
         if data_count is None:
             data_count = self.native_data_count
         return self.circuit, SubscribeRequest(...)
+
+
+class ServerChannel(_BaseChannel):
+    """An object encapsulating the state of the EPICS Channel on a Server.
+
+    A Channel will be assigned to a VirtualCircuit (corresponding to one
+    client--server TCP connection), which is may share with other Channels
+    to that same Client.
+
+    Parameters
+    ----------
+    hub : :class:`Hub`
+    circuit : None or :class:VirtualCircuit`
+    cid : integer
+        unique Channel ID
+    name : string
+        Channnel name (PV)
+    priority : integer
+        Controls priority given to this channel by the server. Must be between
+        0 (lowest priority) and 99 (highest), inclusive.
+    """
+    def search_response(self):
+        # TO DO
+        ...
+
+    def read_response(self):
+        # TO DO
+        ...
+
+    def write_response(self):
+        # TO DO
+        ...
+
+    def subscribe_response(self):
+        # TO DO
+        ...
