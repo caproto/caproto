@@ -78,6 +78,28 @@ send(chan1.circuit, ca.HostNameRequest(OUR_HOSTNAME))
 send(chan1.circuit, ca.ClientNameRequest(OUR_USERNAME))
 send(chan1.circuit, ca.CreateChanRequest(name=pv1, cid=chan1.cid, version=13))
 recv(chan1.circuit)
+
+_, event_req = chan1.subscribe()
+
+send(chan1.circuit, event_req)
+subscriptionid = event_req.subscriptionid
+commands, = recv(chan1.circuit)
+
+try:
+    print('Monitoring until Ctrl-C is hit')
+    while True:
+        commands, = recv(chan1.circuit)
+        print(commands)
+except KeyboardInterrupt:
+    pass
+
+
+_, cancel_req = chan1.unsubscribe(subscriptionid)
+
+send(chan1.circuit, cancel_req)
+commands, = recv(chan1.circuit)
+print(commands)
+
 send(chan1.circuit, ca.ReadNotifyRequest(data_type=2, data_count=1,
                                         sid=chan1.sid,
                                         ioid=12))

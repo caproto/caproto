@@ -6,7 +6,7 @@
 import ctypes
 import itertools
 from io import BytesIO
-from collections import defaultdict, deque
+from collections import defaultdict, deque, namedtuple
 from ._commands import *
 from ._dbr_types import *
 from ._state import *
@@ -14,6 +14,8 @@ from ._utils import *
 
 
 DEFAULT_PROTOCOL_VERSION = 13
+
+SubscriptionInfo = namedtuple('SubscriptionInfo', 'chan data_type')
 
 
 class VirtualCircuit:
@@ -37,6 +39,7 @@ class VirtualCircuit:
         self.channels = {}
         self._channels_sid = {}
         self._ioids = {}
+        self._subinfo = {}
         # This is only used by the convenience methods, to auto-generate ioid.
         self._ioid_counter = itertools.count(0)
 
@@ -93,6 +96,10 @@ class VirtualCircuit:
                                       WriteNotifyResponse)):
                 # Identify the Channel based on its ioid.
                 chan = self._ioids[command.ioid]
+            elif isinstance(command, (EventAddRequest, EventAddResponse,
+                                      EventCancelRequest, EventCancelResponse)):
+                # Identify the Channel based on its subscriptionid
+                chan = self._subinfo[command.subscriptionid].chan
             else:
                 # In all other cases, the Command gives us a cid.
                 cid = command.cid
@@ -110,7 +117,7 @@ class VirtualCircuit:
                 # Stash the ioid for later reference.
                 self._ioids[ioid] = chan
             elif isinstance(command, CreateChanResponse):
-                chan.native_data_type = command.data_type 
+                chan.native_data_type = command.data_type
                 chan.native_data_count = command.data_count
                 chan.sid = command.sid
                 self._channels_sid[chan.sid] = chan
@@ -146,7 +153,7 @@ class Hub:
     CA channels and CA virtual circuits.
 
     It may also be used to compose valid commands using a pleasant Python API
-    and to decode incomming bytestreams into these same kinds of objects.
+    and to decode incoming bytestreams into these same kinds of objects.
     """
 
     def __init__(self, our_role):
@@ -164,6 +171,7 @@ class Hub:
         self._parsed_commands = deque()  # parsed Commands to be processed
         # This is only used by the convenience methods, to auto-generate a cid.
         self._cid_counter = itertools.count(0)
+        self._sub_counter = itertools.count(0)
 
     def send_broadcast(self, command):
         """
@@ -373,13 +381,27 @@ class ClientChannel(_BaseChannel):
         return self.circuit, ReadNotifyRequest(data, data_type, data_count,
                                                self.sid, ioid)
 
-    def subscribe(self, data_type=None, data_count=None):
-        # TO DO
+    def subscribe(self, data_type=None, data_count=None, low=0.0, high=0.0,
+                  to=0.0, mask=None):
         if data_type is None:
             data_type = self.native_data_type
         if data_count is None:
             data_count = self.native_data_count
-        return self.circuit, SubscribeRequest(...)
+        if mask is None:
+            mask = DBE_VALUE | DBE_ALARM | DBE_PROPERTY
+
+        # TODO: hub-wide sub counter...
+        subscriptionid = next(self._hub._sub_counter)
+        self.circuit._subinfo[subscriptionid] = SubscriptionInfo(chan=self,
+                                                                 data_type=data_type)
+        return self.circuit, EventAddRequest(data_type, data_count, self.sid,
+                                             subscriptionid, low, high, to,
+                                             mask)
+
+    def unsubscribe(self, subscriptionid):
+        sub_info = self.circuit._subinfo[subscriptionid]
+        return self.circuit, EventCancelRequest(sub_info.data_type, self.sid,
+                                                subscriptionid)
 
 
 class ServerChannel(_BaseChannel):

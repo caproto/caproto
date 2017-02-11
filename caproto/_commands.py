@@ -291,11 +291,19 @@ class EventAddRequest(Message):
     def __init__(self, data_type, data_count, sid, subscriptionid, low,
                  high, to, mask):
         header = EventAddRequestHeader(data_type, data_count, sid,
-                                       subscriptionid, low, high, to, mask)
+                                       subscriptionid)
+        padding = b'\0\0'
         payload_list = (DBR_FLOAT(low), DBR_FLOAT(high), DBR_FLOAT(to),
-                        DBR_INT(mask))
+                        DBR_INT(mask), padding)
+
         payload = b''.join(map(bytes, payload_list))
         super().__init__(header, payload)
+
+        # TODO: this is strictly for debug output
+        self.low = low
+        self.high = high
+        self.to = to
+        self.mask = mask
 
     data_type = property(lambda self: self.header.data_type)
     data_count = property(lambda self: self.header.data_count)
@@ -324,9 +332,8 @@ class EventAddResponse(Message):
 class EventCancelRequest(Message):
     ID = 2
     HAS_PAYLOAD = False
-    def __init__(self, data_type, data_count, sid, subscriptionid):
-        header = EventCancelRequestHeader(data_type, data_count, sid,
-                                          subscriptionid)
+    def __init__(self, data_type, sid, subscriptionid):
+        header = EventCancelRequestHeader(data_type, 0, sid, subscriptionid)
         super().__init__(header, None)
 
     data_type = property(lambda self: self.header.data_type)

@@ -11,6 +11,11 @@ MAX_ENUM_STATES = 16
 DO_REPLY = 10
 NO_REPLY = 5
 
+DBE_VALUE = 1
+DBE_ARCHIVE = 2
+DBE_LOG = DBE_ARCHIVE
+DBE_ALARM = 4
+DBE_PROPERTY = 8
 
 dbr_string = 40 * ctypes.c_char  # epicsOldString
 dbr_char = ctypes.c_char # epicsUint8
