@@ -15,8 +15,6 @@ from ._utils import *
 
 DEFAULT_PROTOCOL_VERSION = 13
 
-SubscriptionInfo = namedtuple('SubscriptionInfo', 'chan data_type')
-
 
 class VirtualCircuit:
     """
@@ -88,22 +86,70 @@ class VirtualCircuit:
             # Identify which Channel this Command is referring to. We have to
             # do this in one of a couple different ways depenending on the
             # Command.
-            if isinstance(command, (ReadNotifyRequest, WriteNotifyRequest)):
+            if isinstance(command, (ReadNotifyRequest, WriteNotifyRequest,
+                                    EventAddRequest)):
                 # Identify the Channel based on its sid.
-                ioid, sid = command.ioid, command.sid
-                chan = self._channels_sid[sid]
+                sid = command.sid
+                try:
+                    chan = self._channels_sid[sid]
+                except KeyError:
+                    err = self._get_exception(command)
+                    raise err("Unknown Channel sid {!r}".format(command.sid))
             elif isinstance(command, (ReadNotifyResponse,
                                       WriteNotifyResponse)):
                 # Identify the Channel based on its ioid.
-                chan = self._ioids[command.ioid]
-            elif isinstance(command, (EventAddRequest, EventAddResponse,
+                try:
+                    chan = self._ioids[command.ioid]
+                except KeyError:
+                    err = self._get_exception(command)
+                    raise err("Unknown Channel ioid {!r}".format(command.ioid))
+            elif isinstance(command, (EventAddResponse,
                                       EventCancelRequest, EventCancelResponse)):
                 # Identify the Channel based on its subscriptionid
-                chan = self._subinfo[command.subscriptionid].chan
+                try:
+                    subinfo = self._subinfo[command.subscriptionid]
+                except KeyError:
+                    _err = self._get_exception(command)
+                    raise _err("Unrecognized subscriptionid {!r}"
+                               "".format(subscriptionid))
+                chan = self._channels_sid[subinfo.sid]
             else:
                 # In all other cases, the Command gives us a cid.
                 cid = command.cid
                 chan = self.channels[cid]
+
+            # Do some additional validation on commands related to an existing
+            # subscription.
+            if isinstance(command, (EventAddResponse, EventCancelRequest,
+                                    EventCancelResponse)):
+                # Verify data_type matches the one in the original request.
+                subinfo = self._subinfo[command.subscriptionid]
+                if subinfo.data_type != command.data_type:
+                    err = self._get_exception(command)
+                    raise err("The data_type in {!r} does not match the "
+                                "data_type in the original EventAddRequest "
+                                "for this subscriptionid, {!r}."
+                                "".format(command, subinfo.data_type))
+            if isinstance(command, (EventAddResponse,)):
+                # Verify data_count matches the one in the original request.
+                # NOTE The docs say that EventCancelRequest should echo the
+                # original data_count too, but in fact it seems to be 0.
+                subinfo = self._subinfo[command.subscriptionid]
+                if subinfo.data_count != command.data_count:
+                    err = self._get_exception(command)
+                    raise err("The data_count in {!r} does not match the "
+                                "data_count in the original EventAddRequest "
+                                "for this subscriptionid, {!r}."
+                                "".format(command, subinfo.data_count))
+            if isinstance(command, (EventCancelRequest, EventCancelResponse)):
+                # Verify sid matches the one in the original request.
+                subinfo = self._subinfo[command.subscriptionid]
+                if subinfo.sid != command.sid:
+                    err = self._get_exception(command)
+                    raise err("The sid in {!r} does not match the sid in "
+                                "in the original EventAddRequest for this "
+                                "subscriptionid, {!r}."
+                                "".format(command, subinfo.sid))
 
             # Update the state machine of the pertinent Channel.
             # If this is not a valid command, the state machine will raise
@@ -112,21 +158,56 @@ class VirtualCircuit:
             chan._state.process_command(self.their_role, type(command))
 
             # If we got this far, the state machine has validated this Command.
-            # Update other Channel and Circuit state..
+            # Update other Channel and Circuit state.
             if isinstance(command, (ReadNotifyRequest, WriteNotifyRequest)):
                 # Stash the ioid for later reference.
-                self._ioids[ioid] = chan
+                self._ioids[command.ioid] = chan
             elif isinstance(command, CreateChanResponse):
                 chan.native_data_type = command.data_type
                 chan.native_data_count = command.data_count
                 chan.sid = command.sid
                 self._channels_sid[chan.sid] = chan
+            elif isinstance(command, EventAddRequest):
+                # We will use the info in this command later to validate that
+                # {EventAddResponse, EventCancelRequest, EventCancelResponse}
+                # send or received in the future are valid.
+                self._subinfo[command.subscriptionid] = command
+            elif isinstance(command, EventCancelResponse):
+                self._subinfo.pop(subscriptionid)
 
         # Otherwise, this Command affects the state of this circuit, not a
         # specific Channel. Run the circuit's state machine.
         else:
             self._state.process_command(self.our_role, type(command))
             self._state.process_command(self.their_role, type(command))
+
+    def _get_exception(self, command):
+        """
+        Return a (Local|Remote)ProtocolError depending on which
+        command this and which role this Hub is playing.
+
+        Note that this method does not raise; it is up to the caller to raise.
+        """
+        if isinstance(command, (EventCancelRequest,
+                                ReadNotifyRequest,
+                                WriteNotifyRequest)):
+            party_at_fault = CLIENT
+        elif isinstance(command, (EventCancelResponse,
+                                  EventAddResponse,
+                                  ReadNotifyResponse,
+                                  WriteNotifyResponse)):
+            party_at_fault = SERVER
+        if self.our_role == party_at_fault:
+            _class = LocalProtocolError
+        else:
+            _class =  RemoteProtocolError
+        return _class
+
+    def new_subscriptionid(self):
+        # This is used by the convenience methods. It does not update any
+        # important state.
+        # TODO Be more clever and reuse abandoned ids; avoid overrunning.
+        return next(self._sub_counter)
 
     def new_ioid(self):
         # This is used by the convenience methods. It does not update any
@@ -171,7 +252,6 @@ class Hub:
         self._parsed_commands = deque()  # parsed Commands to be processed
         # This is only used by the convenience methods, to auto-generate a cid.
         self._cid_counter = itertools.count(0)
-        self._sub_counter = itertools.count(0)
 
     def send_broadcast(self, command):
         """
@@ -389,18 +469,21 @@ class ClientChannel(_BaseChannel):
             data_count = self.native_data_count
         if mask is None:
             mask = DBE_VALUE | DBE_ALARM | DBE_PROPERTY
-
-        # TODO: hub-wide sub counter...
-        subscriptionid = next(self._hub._sub_counter)
-        self.circuit._subinfo[subscriptionid] = SubscriptionInfo(chan=self,
-                                                                 data_type=data_type)
+        subscriptionid = self.circuit.new_subscriptionid()
         return self.circuit, EventAddRequest(data_type, data_count, self.sid,
                                              subscriptionid, low, high, to,
                                              mask)
 
     def unsubscribe(self, subscriptionid):
-        sub_info = self.circuit._subinfo[subscriptionid]
-        return self.circuit, EventCancelRequest(sub_info.data_type, self.sid,
+        try:
+            sub_info = self.circuit._subinfo[subscriptionid]
+        except KeyError:
+            raise KeyError("No current subscription has id {!r}"
+                           "".format(subscriptionid))
+        if sub_info.sid != self.sid:
+            raise ValueError("This subscription is for a different Channel.")
+        return self.circuit, EventCancelRequest(sub_info.data_type,
+                                                self.sid,
                                                 subscriptionid)
 
 
