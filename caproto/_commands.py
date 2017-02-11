@@ -328,6 +328,14 @@ class EventAddResponse(Message):
     subscriptionid = property(lambda self: self.header.parameter2)
     values = property(lambda self: self.payload)
 
+    @classmethod
+    def from_wire(cls, header, payload_bytes):
+        if not payload_bytes:
+            print('EventAdd with an empty payload!')
+            return cls.from_components(header, None)
+        dbr_type = DBR_TYPES[header.data_type]
+        return cls.from_components(header, dbr_type.from_buffer(payload_bytes))
+
 
 class EventCancelRequest(Message):
     ID = 2
