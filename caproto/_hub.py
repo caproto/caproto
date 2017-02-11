@@ -34,12 +34,13 @@ class VirtualCircuit:
         self.priority = priority
         self._state = CircuitState()
         self._data = bytearray()
-        self.channels = {}
-        self._channels_sid = {}
-        self._ioids = {}
-        self._subinfo = {}
-        # This is only used by the convenience methods, to auto-generate ioid.
+        self.channels = {}  # map cid to Channel
+        self._channels_sid = {}  # map sid to Channel
+        self._ioids = {}  # map ioid to Channel
+        self._subinfo = {}  # map subscriptionid to stashed EventAdd command
+        # There are only used by the convenience methods, to auto-generate ids.
         self._ioid_counter = itertools.count(0)
+        self._sub_counter = itertools.count(0)
 
     def send(self, command):
         """
