@@ -404,12 +404,12 @@ class Hub:
             try:
                 # Maybe the user has manually instantiated a Channel instance
                 # with this cid. This is typically (but not necessarily) the
-                # case if we are a CLIENT but never the case if we are a
+                # case if we are a CLIENT. It is never the case if we are a
                 # SERVER.
                 chan = self.channels[cid]
             except KeyError:
-                # If we don't have one, make one. It will be accessible via
-                # self.channels.
+                # If here, we don't yet have a Channel for this cid. Make one.
+                # It will be accessible via self.channels.
                 chan = self.new_channel(name=command.name, cid=cid)
             chan._state.process_command(self.our_role, type(command))
             chan._state.process_command(self.their_role, type(command))
