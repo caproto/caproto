@@ -97,7 +97,7 @@ def read_datagram(data, address, role):
         else:
             payload_bytes = None
         command = _class.from_wire(header, payload_bytes)
-        command.address = address  # (host, port)
+        command.sender_address = address  # (host, port)
         commands.append(command)
     return commands
 
@@ -138,6 +138,7 @@ def read_from_bytestream(data, role):
 class Message:
     ID = None  # integer, to be overriden by subclass
     DIRECTION = None  # REQUEST or RESPONSE; set at the end of this module
+    sender_address = None  # set for the read_datagram function
 
     def __init__(self, header, payload=None):
         if payload is None:
