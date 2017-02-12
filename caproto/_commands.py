@@ -114,7 +114,8 @@ def read_from_bytestream(data, role):
 
 
 class Message:
-    ID = None  # to be overriden by subclass
+    ID = None  # integer, to be overriden by subclass
+    DIRECTION = None  # REQUEST or RESPONSE; set at the end of this module
 
     def __init__(self, header, payload=None):
         if payload is None:
