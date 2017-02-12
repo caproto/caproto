@@ -188,7 +188,7 @@ class Message:
     def __repr__(self):
         signature = inspect.signature(type(self))
         d = [(arg, getattr(self, arg)) for arg in signature.parameters]
-        formatted_args = ", ".join(["{}={}".format(k, v)
+        formatted_args = ", ".join(["{!s}={!r}".format(k, v)
                                     for k, v in d])
         return "{}({})".format(type(self).__name__, formatted_args)
 
