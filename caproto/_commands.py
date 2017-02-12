@@ -190,7 +190,6 @@ class VersionResponse(Message):
         super().__init__(header, None)
 
     version = property(lambda self: self.header.data_count)
-    struct_args = (0, 0, 0, version, 0, 0)
 
 
 class SearchRequest(Message):

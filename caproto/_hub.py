@@ -925,12 +925,18 @@ class ServerChannel(_BaseChannel):
         # TODO How does CA actually work? It seems to break its spec.
         ...
 
-def _get_exception(role, command):
+def _get_exception(our_role, command):
     """
     Return a (Local|Remote)ProtocolError depending on which command this is and
     which role we are playing.
 
     Note that this method does not raise; it is up to the caller to raise.
+
+    Parameters
+    ----------
+    our_role: CLIENT or SERVER
+    command : Message
+        We will test whether it is a REQUEST or RESPONSE.
     """
     # TO DO Give commands an attribute so we can easily check whether one
     # is a Request or a Response
@@ -938,7 +944,7 @@ def _get_exception(role, command):
         party_at_fault = CLIENT
     elif command.DIRECTION is RESPONSE:
         party_at_fault = SERVER
-    if self.our_role is party_at_fault:
+    if our_role is party_at_fault:
         _class = LocalProtocolError
     else:
         _class =  RemoteProtocolError

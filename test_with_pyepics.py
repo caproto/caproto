@@ -36,10 +36,11 @@ while True:
     command = srv.next_command()
     print('received', command)
 
+    res1 = ca.VersionResponse(0)
     response = ca.SearchResponse(CA_SERVER_PORT, 1, command.cid,
                                  ca.DEFAULT_PROTOCOL_VERSION)
     response.address = server_address  # patching over a problem in _hub.py
-    bytes_to_send = srv.send_broadcast(response)
+    bytes_to_send = srv.send_broadcast(res1, response)
     ### This raises Can't assign to requested address.
     sent = sock.sendto(bytes_to_send, address)
     print('sent %s bytes back to %s' % (sent, address))
