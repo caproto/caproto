@@ -315,6 +315,10 @@ class VirtualCircuitProxy:
         return self._circuit.channels
 
     @property
+    def bound(self):
+        return self.__circuit is not None
+
+    @property
     def _subinfo(self):
         # TODO Provide a public access for this on VirtualCircuit.
         return self._circuit._subinfo
