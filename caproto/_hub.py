@@ -8,6 +8,10 @@ import ctypes
 import itertools
 from io import BytesIO
 from collections import defaultdict, deque, namedtuple
+import getpass
+import socket
+# N.B. We do no networking whatsoever in caproto. We only use socket for
+# socket.gethostname() to give a nice default for a HostNameRequest command.
 from ._commands import *
 from ._dbr_types import *
 from ._state import *
@@ -15,6 +19,8 @@ from ._utils import *
 
 
 DEFAULT_PROTOCOL_VERSION = 13
+OUR_HOSTNAME = socket.gethostname()
+OUR_USERNAME = getpass.getuser()
 
 
 class VirtualCircuit:
@@ -486,7 +492,8 @@ class _BaseChannel:
         self.sid = None
 
     def _fill_defaults(self, data_type, data_count):
-        # Boilerplate filling `None` default arg with actual default value.
+        # Boilerplate used in many convenience methods:
+        # Replace `None` default arg with actual default value.
         if data_type is None:
             data_type = self.native_data_type
         if data_count is None:
@@ -527,9 +534,58 @@ class ClientChannel(_BaseChannel):
     name : string
         Channnel name (PV)
     """
-    def version(self, priority):
+
+    def version_broadcast(self, priority):
+        """
+        A convenience method: generate a valid :class:`VersionRequest`.
+
+        This method does not update any important state. The command only has
+        an effect if it is passed to the :meth:`send` method of the Hub.
+
+        Note that, unlike most the other :class:`ClientChannel` convenience
+        mehtods, this does not return a VirtualCircuit. It should be passed to
+        ``Hub.send_broadcast`` and broadcast over UDP.
+
+
+        Parameters
+        ----------
+        priority : integer or None
+            May be used by the server to prioritize requests when under high
+            load. Lowest priority is 0; highest is 99.
+
+        Returns
+        -------
+        VersionRequest
+
+        See Also
+        --------
+        :meth:`version_broadcast`
+        """
+        command = VersionRequest(DEFAULT_PROTOCOL_VERSION, priority)
+        return command
+
+    def search_broadcast(self):
         """
         A convenience method: generate a valid :class:`SearchRequest`.
+
+        This method does not update any important state. The command only has
+        an effect if it is passed to the :meth:`send_broadcast` method of the
+        Hub.
+
+        Note that, unlike most the other :class:`ClientChannel` convenience
+        mehtods, this does not return a VirtualCircuit. It should be passed to
+        ``Hub.send_broadcast`` and broadcast over UDP.
+
+        Returns
+        -------
+        SearchRequest
+        """
+        command = SearchRequest(self.name, self.cid, DEFAULT_PROTOCOL_VERSION)
+        return command
+
+    def version(self, priority):
+        """
+        A convenience method: generate a valid :class:`VersionRequest`.
 
         This method does not update any important state. The command only has
         an effect if it is passed to the :meth:`send` method of the
@@ -543,29 +599,74 @@ class ClientChannel(_BaseChannel):
 
         Returns
         -------
-        VirtualCircuit, SearchRequest
-        """
-        command = VersionRequest(DEFAULT_PROTOCOL_VERSION, priority)
-        return self.circuit, command
+        VirtualCircuit, VersionRequest
 
-    def search(self):
+        See Also
+        --------
+        :meth:`version_broadcast`
         """
-        A convenience method: generate a valid :class:`SearchRequest`.
+        return self.circuit, self.version_broadcast(priority)
+
+    def host_name(self, host_name=OUR_HOSTNAME):
+        """
+        A convenience method: generate a valid :class:`HostNameRequest`.
 
         This method does not update any important state. The command only has
-        an effect if it is passed to the :meth:`send_broadcast` method of the
-        Hub.
-
-        Note that, unlike all the other :class:`ClientChannel` convenience
-        mehtods, this does not return a VirtualCircuit. It should be passed to
-        ``Hub.send_broadcast`` and broadcast over UDP.
+        an effect if it is passed to the :meth:`send` method of the
+        corresponding :class:`VirtualCircuit`.
 
         Returns
         -------
-        SearchRequest
+        VirtualCircuit, HostNameRequest
         """
-        command = SearchRequest(self.name, self.cid, DEFAULT_PROTOCOL_VERSION)
-        return command
+        command = HostNameRequest(host_name)
+        return self.circuit, command
+
+    def client_name(self, client_name=OUR_USERNAME):
+        """
+        A convenience method: generate a valid :class:`ClientNameRequest`.
+
+        This method does not update any important state. The command only has
+        an effect if it is passed to the :meth:`send` method of the
+        corresponding :class:`VirtualCircuit`.
+
+        Returns
+        -------
+        VirtualCircuit, ClientNameRequest
+        """
+        command = ClientNameRequest(client_name)
+        return self.circuit, command
+
+    def create(self):
+        """
+        A convenience method: generate a valid :class:`CreateChanRequest`.
+
+        This method does not update any important state. The command only has
+        an effect if it is passed to the :meth:`send` method of the
+        corresponding :class:`VirtualCircuit`.
+
+        Returns
+        -------
+        VirtualCircuit, CreateChanRequest
+        """
+        command = CreateChanRequest(self.name, self.cid,
+                                    DEFAULT_PROTOCOL_VERSION)
+        return self.circuit, command
+
+    def clear(self):
+        """
+        A convenience method: generate a valid :class:`ClearChannelRequest`.
+
+        This method does not update any important state. The command only has
+        an effect if it is passed to the :meth:`send` method of the
+        corresponding :class:`VirtualCircuit`.
+
+        Returns
+        -------
+        VirtualCircuit, ClearChannelRequest
+        """
+        command = ClearChannelRequest(self.sid, self.cid)
+        return self.circuit, command
 
     def read(self, data_type=None, data_count=None):
         """
@@ -584,7 +685,7 @@ class ClientChannel(_BaseChannel):
         command = ReadNotifyRequest(data_type, data_count, self.sid, ioid)
         return self.circuit, command
 
-    def write(self, data, data_type, data_count):
+    def write(self, data, data_type=None, data_count=None):
         """
         A convenience method: generate a valid :class:`WriteNotifyRequest`.
 
@@ -602,8 +703,7 @@ class ClientChannel(_BaseChannel):
         """
         data_type, data_count = self._fill_defaults(data_type, data_count)
         ioid = self.circuit.new_ioid()
-        command = ReadNotifyRequest(data, data_type, data_count, self.sid,
-                                    ioid)
+        command = ReadNotifyRequest(data_type, data_count, self.sid, ioid)
         return self.circuit, command
 
     def subscribe(self, data_type=None, data_count=None, low=0.0, high=0.0,
@@ -676,7 +776,30 @@ class ServerChannel(_BaseChannel):
     name : string
         Channnel name (PV)
     """
-    def search_response(self):
+    def version_broadcast_response(self):
+        """
+        A convenience method: generate a valid :class:`VersionRespone`.
+
+        This method does not update any important state. The command only has
+        an effect if it is passed to the :meth:`send_broadcast` method of the
+        Hub.
+
+        Note that, unlike all the other :class:`ServerChannel` convenience
+        mehtods, this does not return a VirtualCircuit. It should be passed to
+        ``Hub.send_broadcast`` and broadcast over UDP.
+
+        Returns
+        -------
+        VersionResponse
+
+        See Also
+        --------
+        :meth:`version_response`
+        """
+        comamnd = VersionResponse(DEFAULT_PROTOCOL_VERSION)
+        return command
+
+    def search_broadcast_response(self):
         """
         A convenience method: generate a valid :class:`SearchRespone`.
 
@@ -697,6 +820,54 @@ class ServerChannel(_BaseChannel):
         comamnd = SearchResponse(port=port, sid=0xffffffff, cid=self.cid,
                                  version=DEFAULT_PROTOCOL_VERSION)
         return command
+
+    def version_reponse(self, version):
+        """
+        A convenience method: generate a valid :class:`VersionResponse`.
+
+        This method does not update any important state. The command only has
+        an effect if it is passed to the :meth:`send` method of the
+        corresponding :class:`VirtualCircuit`.
+
+        Returns
+        -------
+        VirtualCircuit, VersionResponse
+
+        See Also
+        --------
+        :meth:`version_broadcast_response`
+        """
+        return self.circuit, self.version_broadcast_response(version)
+
+    def create_response(self, data_type, data_count, sid):
+        """
+        A convenience method: generate a valid :class:`CreateChanResponse`.
+
+        This method does not update any important state. The command only has
+        an effect if it is passed to the :meth:`send` method of the
+        corresponding :class:`VirtualCircuit`.
+
+        Returns
+        -------
+        VirtualCircuit, CreateChanResponse
+        """
+        command = CreateChanResponse(data_type, data_count, self.cid, sid)
+        return self.circuit, command
+
+    def clear(self):
+        """
+        A convenience method: generate a valid :class:`ClearChannelResponse`.
+
+        This method does not update any important state. The command only has
+        an effect if it is passed to the :meth:`send` method of the
+        corresponding :class:`VirtualCircuit`.
+
+        Returns
+        -------
+        VirtualCircuit, ClearChannelResponse
+        """
+        command = ClearChannelResponse(self.sid, self.cid)
+        return self.circuit, command
 
     def read_response(self, values, ioid, data_type=None, data_count=None,
                       status=1):

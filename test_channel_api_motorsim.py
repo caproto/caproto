@@ -35,11 +35,11 @@ sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
 send_bcast = lambda msg: sock.sendto(bytes(msg), ('', CA_SERVER_PORT))
 recv_bcast = lambda: sock.recvfrom(4096)
 
- 
+
 cli = ca.Hub(our_role=ca.CLIENT)
 chan1 = cli.new_channel(pv1)
-bytes_to_send = cli.send_broadcast(ca.VersionRequest(0, 13))
-bytes_to_send += cli.send_broadcast(ca.SearchRequest(pv1, 0, 13))
+bytes_to_send = cli.send_broadcast(chan1.version_broadcast(priority=0),
+                                   chan1.search_broadcast())
 print('searching for %s' % pv1)
 send_bcast(bytes_to_send)
 bytes_received, address = recv_bcast()
@@ -72,11 +72,11 @@ def recv(circuit):
     return commands
 
 
-send(chan1.circuit, ca.VersionRequest(priority=0, version=13))
+send(*chan1.version(priority=0))
 recv(chan1.circuit)
-send(chan1.circuit, ca.HostNameRequest(OUR_HOSTNAME))
-send(chan1.circuit, ca.ClientNameRequest(OUR_USERNAME))
-send(chan1.circuit, ca.CreateChanRequest(name=pv1, cid=chan1.cid, version=13))
+send(*chan1.host_name())
+send(*chan1.client_name())
+send(*chan1.create())
 recv(chan1.circuit)
 
 _, event_req = chan1.subscribe()
@@ -100,24 +100,16 @@ send(chan1.circuit, cancel_req)
 commands, = recv(chan1.circuit)
 print(commands)
 
-send(chan1.circuit, ca.ReadNotifyRequest(data_type=2, data_count=1,
-                                        sid=chan1.sid,
-                                        ioid=12))
+send(*chan1.read())
 commands, = recv(chan1.circuit)
 print(commands.values.value)
-request = ca.WriteNotifyRequest(data_type=2, data_count=1,
-                                sid=chan1.sid,
-                                ioid=13, values=3)
-
-send(chan1.circuit, request)
+send(*chan1.write(3))
 recv(chan1.circuit)
 time.sleep(2)
-send(chan1.circuit, ca.ReadNotifyRequest(data_type=2, data_count=1,
-                                         sid=chan1.sid,
-                                         ioid=14))
+send(*chan1.read())
 recv(chan1.circuit)
 print(commands.values.value)
-send(chan1.circuit, ca.ClearChannelRequest(chan1.sid, chan1.cid))
+send(*chan1.clear())
 recv(chan1.circuit)
 
 sockets[chan1.circuit].close()
