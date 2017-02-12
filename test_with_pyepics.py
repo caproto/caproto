@@ -18,32 +18,46 @@ pv1 = "XF:31IDA-FAKE-PV"
 server_address = ('192.168.1.255', CA_SERVER_PORT)  # obtained via tshark
 print('starting up on %s port %s' % server_address)
 # Create a UDP socket
+sock2 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+sock2.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+sock2.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.bind(server_address)
 
+sock3 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock3.bind((OUR_IP, 5064))
+
 srv = ca.Hub(our_role=ca.SERVER)
 
-while True:
-    print('\nwaiting to receive message')
-    data, address = sock.recvfrom(1024)
+print('\nwaiting to receive message')
+data, address = sock.recvfrom(1024)
 
-    print('received %s bytes from %s' % (len(data), address))
-    print(data)
-    srv.recv_broadcast(data, address)
-    print('datagram', data, address)
-    command = srv.next_command()
-    print('received', command)
-    command = srv.next_command()
-    print('received', command)
+print('received %s bytes from %s' % (len(data), address))
+print(data)
+srv.recv_broadcast(data, address)
+print('datagram', data, address)
+command = srv.next_command()
+print('received', command)
+command = srv.next_command()
+print('received', command)
 
-    res1 = ca.VersionResponse(0)
-    response = ca.SearchResponse(CA_SERVER_PORT, 1, command.cid,
-                                 ca.DEFAULT_PROTOCOL_VERSION)
-    response.address = server_address  # patching over a problem in _hub.py
-    bytes_to_send = srv.send_broadcast(res1, response)
-    ### This raises Can't assign to requested address.
-    sent = sock.sendto(bytes_to_send, address)
-    print('sent %s bytes back to %s' % (sent, address))
+res1 = ca.VersionResponse(0)
+response = ca.SearchResponse(CA_SERVER_PORT, 1, command.cid,
+                                ca.DEFAULT_PROTOCOL_VERSION)
+response.address = server_address  # patching over a problem in _hub.py
+bytes_to_send = srv.send_broadcast(res1, response)
+### This raises Can't assign to requested address.
+sent = sock2.sendto(bytes_to_send, address)  #(OUR_IP, 5064))
+print('sent %s bytes back to %s' % (sent, (OUR_IP, 5065)))
+
+print('waiting to accept')
+sock3.listen(1)
+connection, client_address = sock3.accept()
+print('accept')
+circuit = ca.VirtualCircuitProxy(connection)
+bytes_received = sock3.recv(1024)
+circuit.recv()
+
 #
 # sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
 # sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
