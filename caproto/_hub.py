@@ -343,7 +343,8 @@ class Hub:
 
     def __init__(self, our_role):
         if our_role not in (SERVER, CLIENT):
-            raise ValueError('role must be caproto.SERVER or caproto.CLIENT')
+            raise CaprotoValueError("role must be caproto.SERVER or "
+                                    "caproto.CLIENT")
         self.our_role = our_role
         if our_role is CLIENT:
             self.their_role = SERVER
