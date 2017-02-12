@@ -481,6 +481,14 @@ class _BaseChannel:
         self.native_data_count = None
         self.sid = None
 
+    def _fill_defaults(self, data_type, data_count):
+        # Boilerplate filling `None` default arg with actual default value.
+        if data_type is None:
+            data_type = self.native_data_type
+        if data_count is None:
+            data_count = self.native_data_count
+        return data_type, data_count
+
     @property
     def circuit(self):
         return self._circuit
@@ -519,6 +527,10 @@ class ClientChannel(_BaseChannel):
         """
         A convenience method: generate a valid :class:`SearchRequest`.
 
+        This method does not update any important state. The command only has
+        an effect if it is passed to the :meth:`send` method of the
+        corresponding :class:`VirtualCircuit`.
+
         Parameters
         ----------
         priority : integer or None
@@ -536,38 +548,45 @@ class ClientChannel(_BaseChannel):
         """
         A convenience method: generate a valid :class:`SearchRequest`.
 
+        This method does not update any important state. The command only has
+        an effect if it is passed to the :meth:`send_broadcast` method of the
+        Hub.
+
+        Note that, unlike all the other :class:`ClientChannel` convenience
+        mehtods, this does not return a VirtualCircuit. It should be passed to
+        ``Hub.send_broadcast`` and broadcast over UDP.
+
         Returns
         -------
-        VirtualCircuit, SearchRequest
+        SearchRequest
         """
         command = SearchRequest(self.name, self.cid, DEFAULT_PROTOCOL_VERSION)
-        return self.circuit, command
+        return command
 
     def read(self, data_type=None, data_count=None):
         """
         A convenience method: generate a valid :class:`ReadNotifyRequest`.
 
-        This method does not update any important state. It is equivalent to:
-        ``ReadNotifyRequest(data_type, data_count, <self.sid>, <UNIQUE_INT>)``
+        This method does not update any important state. The command only has
+        an effect if it is passed to the :meth:`send` method of the
+        corresponding :class:`VirtualCircuit`.
 
         Returns
         -------
         VirtualCircuit, ReadNotifyRequest
         """
-        if data_type is None:
-            data_type = self.native_data_type
-        if data_count is None:
-            data_count = self.native_data_count
+        data_type, data_count = self._fill_defaults(data_type, data_count)
         ioid = self.circuit.new_ioid()
         command = ReadNotifyRequest(data_type, data_count, self.sid, ioid)
         return self.circuit, command
 
-    def write(self, data):
+    def write(self, data, data_type, data_count):
         """
         A convenience method: generate a valid :class:`WriteNotifyRequest`.
 
-        This method does not update any important state. It is equivalent to:
-        ``WriteNotifyRequest(data, data_type, data_count, <self.sid>, <UNIQUE_INT>)``
+        This method does not update any important state. The command only has
+        an effect if it is passed to the :meth:`send` method of the
+        corresponding :class:`VirtualCircuit`.
 
         Parameters
         ----------
@@ -577,6 +596,7 @@ class ClientChannel(_BaseChannel):
         -------
         VirtualCircuit, WriteNotifyRequest
         """
+        data_type, data_count = self._fill_defaults(data_type, data_count)
         ioid = self.circuit.new_ioid()
         command = ReadNotifyRequest(data, data_type, data_count, self.sid,
                                     ioid)
@@ -587,11 +607,9 @@ class ClientChannel(_BaseChannel):
         """
         A convenience method: generate a valid :class:`EventAddRequest`.
 
-        This method does not update any important state. It is equivalent to:
-        ```
-        EventAddRequest(data, data_type, data_count, <self.sid>, <UNIQUE_INT>,
-                        low, high, to, mask)
-        ```
+        This method does not update any important state. The command only has
+        an effect if it is passed to the :meth:`send` method of the
+        corresponding :class:`VirtualCircuit`.
 
         Parameters
         ----------
@@ -601,10 +619,7 @@ class ClientChannel(_BaseChannel):
         -------
         VirtualCircuit, EventAddRequest
         """
-        if data_type is None:
-            data_type = self.native_data_type
-        if data_count is None:
-            data_count = self.native_data_count
+        data_type, data_count = self._fill_defaults(data_type, data_count)
         if mask is None:
             mask = DBE_VALUE | DBE_ALARM | DBE_PROPERTY
         subscriptionid = self.circuit.new_subscriptionid()
@@ -616,10 +631,9 @@ class ClientChannel(_BaseChannel):
         """
         A convenience method: generate a valid :class:`EventAddRequest`.
 
-        This method does not update any important state. It is equivalent to:
-        ```
-        EventAddRequest(data_type, <self.sid>, <subscriptionid>)
-        ```
+        This method does not update any important state. The command only has
+        an effect if it is passed to the :meth:`send` method of the
+        corresponding :class:`VirtualCircuit`.
 
         Parameters
         ----------
@@ -660,29 +674,91 @@ class ServerChannel(_BaseChannel):
     """
     def search_response(self):
         """
-        A convenience method: generate a valid :class:`SearchRequest`.
+        A convenience method: generate a valid :class:`SearchRespone`.
 
-        This method does not mutate any state: it merely composes a valid
-        comamnd. The command must be passed to
+        This method does not update any important state. The command only has
+        an effect if it is passed to the :meth:`send_broadcast` method of the
+        Hub.
+
+        Note that, unlike all the other :class:`ServerChannel` convenience
+        mehtods, this does not return a VirtualCircuit. It should be passed to
+        ``Hub.send_broadcast`` and broadcast over UDP.
 
         Returns
         -------
-        VirtualCircuit, SearchRequest
+        SearchResponse
         """
         host, port = self.circuit.address
-        comamnd = SearchResponse(version=DEFAULT_PROTOCOL_VERSION,
-                                 port=5064, cid=0, sid=0xffffffff)
-        # TO DO
-        ...
+        # The sid part of the SearchResponse spec is deprecated.
+        comamnd = SearchResponse(port=port, sid=0xffffffff, cid=self.cid,
+                                 version=DEFAULT_PROTOCOL_VERSION)
+        return command
 
-    def read_response(self):
-        # TO DO
-        ...
+    def read_response(self, values, ioid, data_type=None, data_count=None,
+                      status=1):
+        """
+        A convenience method: generate a valid :class:`ReadNotifyResponse`.
 
-    def write_response(self):
-        # TO DO
-        ...
+        This method does not update any important state. The command only has
+        an effect if it is passed to the :meth:`send` method of the
+        corresponding :class:`VirtualCircuit`.
 
-    def subscribe_response(self):
-        # TO DO
+        Returns
+        -------
+        VirtualCircuit, ReadNotifyResponse
+        """
+        data_type, data_count = self._fill_defaults(data_type, data_count)
+        command = ReadNotifyResponse(values, data_type, data_count, status,
+                                     ioid)
+        return self.circuit, command
+
+    def write_response(self, ioid, data_type=None, data_count=None, status=1):
+        """
+        A convenience method: generate a valid :class:`WriteNotifyResponse`.
+
+        This method does not update any important state. The command only has
+        an effect if it is passed to the :meth:`send` method of the
+        corresponding :class:`VirtualCircuit`.
+
+        Returns
+        -------
+        VirtualCircuit, WriteNotifyResponse
+        """
+        data_type, data_count = self._fill_defaults(data_type, data_count)
+        command = WriteNotifyResponse(data_type, data_count, status, ioid)
+        return self.circuit, command
+
+    def subscribe_response(self, values, subscriptionid, data_type=None,
+                           data_count=None, status_code=32):
+        """
+        A convenience method: generate a valid :class:`EventAddResponse`.
+
+        This method does not update any important state. The command only has
+        an effect if it is passed to the :meth:`send` method of the
+        corresponding :class:`VirtualCircuit`.
+
+        Returns
+        -------
+        VirtualCircuit, EventAddResponse
+        """
+        # TODO It's unclear what the status_code means here.
+        data_type, data_count = self._fill_defaults(data_type, data_count)
+        command = EventAddResponse(values, data_type, data_count, status_code,
+                                   subscriptionid)
+        return self.circuit, command
+
+    def unsubscribe_response(self, subscriptionid, data_type=None,
+                             data_count=None):
+        """
+        A convenience method: generate a valid :class:`EventCancelResponse`.
+
+        This method does not update any important state. The command only has
+        an effect if it is passed to the :meth:`send` method of the
+        corresponding :class:`VirtualCircuit`.
+
+        Returns
+        -------
+        VirtualCircuit, EventCancelResponse
+        """
+        # TODO How does CA actually work? It seems to break its spec.
         ...
