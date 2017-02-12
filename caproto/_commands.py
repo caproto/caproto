@@ -36,14 +36,15 @@ def ensure_bytes(s):
     elif isinstance(s, str):
         return s.encode()
     else:
-        raise TypeError("expected str or bytes")
+        raise CaprotoTypeError("expected str or bytes")
 
 
 def padded_len(s):
     "Length of a (byte)string rounded up to the nearest multiple of 8."
     if len(s) > 40:
-        raise ValueError("EPICS imposes a 40-character limit on strings. The "
-                         "string {!r} is {} characteris.".format(s, len(s)))
+        raise CaprotoValueError("EPICS imposes a 40-character limit on "
+                                "strings. The " "string {!r} is {} "
+                                "characters.".format(s, len(s)))
     return 8 * math.ceil(len(s) / 8)
 
 
@@ -118,15 +119,17 @@ class Message:
     def __init__(self, header, payload=None):
         if payload is None:
             if header.payload_size != 0:
-                raise ValueError("header.payload_size {} > 0 but payload is "
-                                 "is None.".format(header.payload_size))
+                raise CaprotoValueError("header.payload_size {} > 0 but "
+                                        "payload is None."
+                                        "".format(header.payload_size))
         elif header.payload_size != len(payload):
-            raise ValueError("header.payload_size {} != len(payload) {}"
-                             "".format(header.payload_size, payload))
+            raise CaprotoValueError("header.payload_size {} != len(payload) {}"
+                                    "".format(header.payload_size, payload))
         if header.command != self.ID:
-            raise TypeError("A {} must have a header with header.command == "
-                            "{}, not {}.".format(type(self), self.ID,
-                                                 header.commmand))
+            raise CaprotoTypeError("A {} must have a header with "
+                                   "header.command = {}, not {}."
+                                   "".format(type(self), self.ID,
+                                             header.commmand))
         self.header = header
         self.payload = payload
 
@@ -170,7 +173,7 @@ class VersionRequest(Message):
     HAS_PAYLOAD = False
     def __init__(self, priority, version):
         if not (0 <= priority < 100):
-            raise ValueError("Expecting 0 < priority < 100")
+            raise CaprotoValueError("Expecting 0 < priority < 100")
         header = VersionRequestHeader(priority, version)
         super().__init__(header, None)
 

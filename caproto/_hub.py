@@ -1,4 +1,5 @@
-# This module defines two classes that encapsulate key abstractions in # Channel Access: Channels and VirtualCircuits. Each VirtualCircuit is a
+# This module defines two classes that encapsulate key abstractions in
+# Channel Access: Channels and VirtualCircuits. Each VirtualCircuit is a
 # companion to a (user-managed) TCP socket, updating its state in response to
 # incoming and outgoing TCP bytestreams. A third class, the Hub, owns these
 # VirtualCircuits and spawns new ones as needed. The Hub updates its state in
@@ -471,21 +472,38 @@ class ClientChannel(_BaseChannel):
         if mask is None:
             mask = DBE_VALUE | DBE_ALARM | DBE_PROPERTY
         subscriptionid = self.circuit.new_subscriptionid()
-        return self.circuit, EventAddRequest(data_type, data_count, self.sid,
-                                             subscriptionid, low, high, to,
-                                             mask)
+        command = EventAddRequest(data_type, data_count, self.sid,
+                                  subscriptionid, low, high, to, mask)
+        return self.circuit, command
 
     def unsubscribe(self, subscriptionid):
+        """
+        A convenience method: generate a valid :class:`EventAddRequest`.
+
+        This method does not update any important state. It is equivalent to:
+        ```
+        EventAddRequest(data_type, <self.sid>, <subscriptionid>)
+        ```
+
+        Parameters
+        ----------
+        data : object
+
+        Returns
+        -------
+        VirtualCircuit, EventAddRequest
+        """
         try:
             sub_info = self.circuit._subinfo[subscriptionid]
         except KeyError:
-            raise KeyError("No current subscription has id {!r}"
-                           "".format(subscriptionid))
+            raise CaprotoKeyError("No current subscription has id {!r}"
+                                  "".format(subscriptionid))
         if sub_info.sid != self.sid:
-            raise ValueError("This subscription is for a different Channel.")
-        return self.circuit, EventCancelRequest(sub_info.data_type,
-                                                self.sid,
-                                                subscriptionid)
+            raise CaprotoValueError("This subscription is for a different "
+                                    "Channel.")
+        command = EventCancelRequest(sub_info.data_type, self.sid,
+                                     subscriptionid)
+        return self.circuit, command
 
 
 class ServerChannel(_BaseChannel):

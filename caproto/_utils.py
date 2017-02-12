@@ -36,7 +36,14 @@ for token in sentinels:
     globals()[token] = make_sentinel(token)
 
 
-class ChannelAccessProtocolError(Exception):
+class CaprotoError(Exception):
+    # All exceptions raised by this codebase inherit from this.
+    ...
+
+
+class ChannelAccessProtocolError(CaprotoError):
+    # Any error resulting from sending or receiving a command will raise (a
+    # subclass of) this error and never any other error.
     ...
 
 
@@ -45,4 +52,20 @@ class LocalProtocolError(ChannelAccessProtocolError):
 
 
 class RemoteProtocolError(ChannelAccessProtocolError):
+    ...
+
+
+class UninitializedVirtualCircuit(CaprotoError):
+    ...
+
+
+class CaprotoKeyError(KeyError, CaprotoError):
+    ...
+
+
+class CaprotoValueError(ValueError, CaprotoError):
+    ...
+
+
+class CaprotoTypeError(TypeError, CaprotoError):
     ...
