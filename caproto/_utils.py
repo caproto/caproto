@@ -22,8 +22,9 @@ def make_sentinel(name):
     cls.__class__ = cls
     return cls
 
-sentinels = ("CLIENT SERVER "
-             "NEED_DATA "
+sentinels = ("CLIENT SERVER " # roles
+             "RESPONSE REQUEST "  # directions
+             "NEED_DATA "  # special sentinel for read_* functions
              # states
              "SEND_SEARCH_REQUEST AWAIT_SEARCH_RESPONSE "
              "SEND_SEARCH_RESPONSE NEED_CIRCUIT "

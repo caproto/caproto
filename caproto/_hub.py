@@ -104,7 +104,7 @@ class VirtualCircuit:
                 try:
                     chan = self._channels_sid[sid]
                 except KeyError:
-                    err = self._get_exception(command)
+                    err = get_exception(self.our_role, command)
                     raise err("Unknown Channel sid {!r}".format(command.sid))
             elif isinstance(command, (ReadNotifyResponse,
                                       WriteNotifyResponse)):
@@ -112,7 +112,7 @@ class VirtualCircuit:
                 try:
                     chan = self._ioids[command.ioid]
                 except KeyError:
-                    err = self._get_exception(command)
+                    err = get_exception(self.our_role, command)
                     raise err("Unknown Channel ioid {!r}".format(command.ioid))
             elif isinstance(command, (EventAddResponse,
                                       EventCancelRequest, EventCancelResponse)):
@@ -120,7 +120,7 @@ class VirtualCircuit:
                 try:
                     subinfo = self._subinfo[command.subscriptionid]
                 except KeyError:
-                    _err = self._get_exception(command)
+                    _err = get_exception(self.our_role, command)
                     raise _err("Unrecognized subscriptionid {!r}"
                                "".format(subscriptionid))
                 chan = self._channels_sid[subinfo.sid]
@@ -136,7 +136,7 @@ class VirtualCircuit:
                 # Verify data_type matches the one in the original request.
                 subinfo = self._subinfo[command.subscriptionid]
                 if subinfo.data_type != command.data_type:
-                    err = self._get_exception(command)
+                    err = get_exception(self.our_role, command)
                     raise err("The data_type in {!r} does not match the "
                                 "data_type in the original EventAddRequest "
                                 "for this subscriptionid, {!r}."
@@ -147,7 +147,7 @@ class VirtualCircuit:
                 # original data_count too, but in fact it seems to be 0.
                 subinfo = self._subinfo[command.subscriptionid]
                 if subinfo.data_count != command.data_count:
-                    err = self._get_exception(command)
+                    err = get_exception(self.our_role, command)
                     raise err("The data_count in {!r} does not match the "
                                 "data_count in the original EventAddRequest "
                                 "for this subscriptionid, {!r}."
@@ -156,7 +156,7 @@ class VirtualCircuit:
                 # Verify sid matches the one in the original request.
                 subinfo = self._subinfo[command.subscriptionid]
                 if subinfo.sid != command.sid:
-                    err = self._get_exception(command)
+                    err = get_exception(self.our_role, command)
                     raise err("The sid in {!r} does not match the sid in "
                                 "in the original EventAddRequest for this "
                                 "subscriptionid, {!r}."
@@ -196,36 +196,10 @@ class VirtualCircuit:
         # ensure that we are not getting contradictory information.
         if isinstance(command, VersionRequest):
             if self.priority != command.priority:
-                err = self._get_exception(command)
+                err = _get_exception(self.our_role, command)
                 raise("priority {} does not match previously set priority "
                       "of {} for this circuit".format(command.priority,
                                                       priority))
-
-    def _get_exception(self, command):
-        """
-        Return a (Local|Remote)ProtocolError depending on which
-        command this and which role this Hub is playing.
-
-        Note that this method does not raise; it is up to the caller to raise.
-        """
-        # TO DO Give commands an attribute so we can easily check whether one
-        # is a Request or a Response
-        if isinstance(command, (EventCancelRequest,
-                                ReadNotifyRequest,
-                                WriteNotifyRequest,
-                                VersionRequest)):
-            party_at_fault = CLIENT
-        elif isinstance(command, (EventCancelResponse,
-                                  EventAddResponse,
-                                  ReadNotifyResponse,
-                                  WriteNotifyResponse,
-                                  VersionResponse)):
-            party_at_fault = SERVER
-        if self.our_role == party_at_fault:
-            _class = LocalProtocolError
-        else:
-            _class =  RemoteProtocolError
-        return _class
 
     def new_subscriptionid(self):
         # This is used by the convenience methods. It does not update any
@@ -279,7 +253,7 @@ class VirtualCircuitProxy:
             if isinstance(command, VersionRequest):
                 self._bind_circuit(command.priority)
             else:
-                err = self._get_exception(command)
+                err = _get_exception(command, self.our_role)
                 raise err("This circuit must be initialized with a "
                           "VersionRequest.")
         self.__circuit._process_command(self.our_role, command)
@@ -364,6 +338,7 @@ class Hub:
         self.circuits = {}  # keyed by ((host, port), priority)
         self.channels = {}  # map cid to Channel
         self._datagram_inbox = deque()  # datagrams to be parsed into Commands
+        self._history = []  # commands parsed so far from current datagram
         self._parsed_commands = deque()  # parsed Commands to be processed
         # This is only used by the convenience methods, to auto-generate a cid.
         self._cid_counter = itertools.count(0)
@@ -375,8 +350,9 @@ class Hub:
         state machine.
         """
         bytes_to_send = b''
+        history = []
         for command in commands:
-            self._process_command(self.our_role, command)
+            history = self._process_command(self.our_role, command, history)
             bytes_to_send += bytes(command)
         return bytes_to_send
 
@@ -400,16 +376,21 @@ class Hub:
         if not self._parsed_commands:
             if not self._datagram_inbox:
                 return NEED_DATA
+            self._history.clear()
             byteslike, address = self._datagram_inbox.popleft()
             commands = read_datagram(byteslike, address, self.their_role)
             self._parsed_commands.extend(commands)
         command = self._parsed_commands.popleft()
-        self._process_command(self.their_role, command)
+        self._process_command(self.their_role, command, self._history)
         return command
 
-    def _process_command(self, role, command):
+    def _process_command(self, role, command, history):
         # All commands go through here.
         if isinstance(command, SearchRequest):
+            if VersionRequest not in map(type, history):
+                err = _get_exception(self, command)
+                raise err("A broadcasted SearchRequest must be preceded by a "
+                          "VersionRequest in the same datagram.")
             cid = command.cid
             try:
                 # Maybe the user has manually instantiated a Channel instance
@@ -424,6 +405,10 @@ class Hub:
             chan._state.process_command(self.our_role, type(command))
             chan._state.process_command(self.their_role, type(command))
         elif isinstance(command, SearchResponse):
+            if VersionResponse not in map(type, history):
+                err = _get_exception(self, command)
+                raise err("A broadcasted SearchResponse must be preceded by a "
+                          "VersionResponse in the same datagram.")
             # Update the state machine of the pertinent Channel.
             chan = self.channels[command.cid]
             chan._state.process_command(self.our_role, type(command))
@@ -438,6 +423,8 @@ class Hub:
             # information might remain useful beyond the lifecycle of the
             # circuit.
             self._names[chan.name] = command.address
+        history.append(command)
+        return history
 
     def new_cid(self):
         # This is used by the convenience methods. It does not update any
@@ -937,3 +924,22 @@ class ServerChannel(_BaseChannel):
         """
         # TODO How does CA actually work? It seems to break its spec.
         ...
+
+def _get_exception(role, command):
+    """
+    Return a (Local|Remote)ProtocolError depending on which command this is and
+    which role we are playing.
+
+    Note that this method does not raise; it is up to the caller to raise.
+    """
+    # TO DO Give commands an attribute so we can easily check whether one
+    # is a Request or a Response
+    if command.DIRECTION is REQUEST:
+        party_at_fault = CLIENT
+    elif command.DIRECTION is RESPONSE:
+        party_at_fault = SERVER
+    if self.our_role is party_at_fault:
+        _class = LocalProtocolError
+    else:
+        _class =  RemoteProtocolError
+    return _class

@@ -614,3 +614,7 @@ Commands[CLIENT] = {_class.ID: _class for _class in _commands
                     if _class.__name__.endswith('Request')}
 Commands[SERVER] = {_class.ID: _class for _class in _commands
                     if _class.__name__.endswith('Response')}
+for command in Commands[CLIENT].values():
+    command.DIRECTION = REQUEST
+for command in Commands[SERVER].values():
+    command.DIRECTION = RESPONSE
