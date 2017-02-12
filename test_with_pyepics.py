@@ -53,10 +53,36 @@ print('sent %s bytes back to %s' % (sent, (OUR_IP, 5065)))
 print('waiting to accept')
 sock3.listen(1)
 connection, client_address = sock3.accept()
-print('accept')
-circuit = ca.VirtualCircuitProxy(connection)
-bytes_received = sock3.recv(1024)
-circuit.recv()
+print('accepted')
+circuit = srv.new_circuit(client_address)
+
+# # Make a dict to hold our tcp sockets.
+sockets = {}
+sockets[circuit] = connection
+def send(circuit, command):
+    print('sending', command)
+    bytes_to_send = circuit.send(command)
+    sockets[circuit].send(bytes_to_send)
+
+def recv(circuit):
+    bytes_received = sockets[circuit].recv(4096)
+    print('received', len(bytes_received), 'bytes')
+    circuit.recv(bytes_received)
+    bytes_received = sockets[circuit].recv(4096)
+    print('received', len(bytes_received), 'bytes')
+    circuit.recv(bytes_received)
+    commands = []
+    while True:
+        command = circuit.next_command()
+        if type(command) is ca.NEED_DATA:
+            break
+        print('parsed', command)
+        commands.append(command)
+    return commands
+#
+recv(circuit)
+recv(circuit)
+recv(circuit)
 
 #
 # sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
@@ -96,28 +122,6 @@ circuit.recv()
 # print('received', command)
 # command = cli.next_command()
 # print('received', command)
-#
-# # Make a dict to hold our tcp sockets.
-# sockets = {}
-# sockets[chan1.circuit] = socket.create_connection(chan1.circuit.address)
-#
-# def send(circuit, command):
-#     print('sending', command)
-#     bytes_to_send = circuit.send(command)
-#     sockets[circuit].send(bytes_to_send)
-#
-# def recv(circuit):
-#     bytes_received = sockets[circuit].recv(4096)
-#     print('received', len(bytes_received), 'bytes')
-#     circuit.recv(bytes_received)
-#     commands = []
-#     while True:
-#         command = circuit.next_command()
-#         if type(command) is ca.NEED_DATA:
-#             break
-#         print('parsed', command)
-#         commands.append(command)
-#     return commands
 #
 #
 # send(chan1.circuit, ca.VersionRequest(priority=0, version=13))
