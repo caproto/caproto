@@ -822,7 +822,7 @@ class ServerChannel(_BaseChannel):
         comamnd = VersionResponse(DEFAULT_PROTOCOL_VERSION)
         return command
 
-    def search_broadcast_response(self):
+    def search_broadcast_response(self, sid=None):
         """
         A convenience method: generate a valid :class:`SearchRespone`.
 
@@ -838,9 +838,12 @@ class ServerChannel(_BaseChannel):
         -------
         SearchResponse
         """
+        if sid is None:
+            sid = host
         host, port = self.circuit.address
+        print(host, port)
         # The sid part of the SearchResponse spec is deprecated.
-        comamnd = SearchResponse(port=port, sid=0xffffffff, cid=self.cid,
+        command = SearchResponse(port=port, sid=host, cid=self.cid,
                                  version=DEFAULT_PROTOCOL_VERSION)
         return command
 

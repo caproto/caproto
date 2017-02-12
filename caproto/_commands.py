@@ -235,7 +235,11 @@ class SearchResponse(Message):
     ID = 6
     HAS_PAYLOAD = True
     def __init__(self, port, sid, cid, version):
-        header = SearchResponseHeader(port, sid, cid)
+        encoded_ip = socket.inet_pton(socket.AF_INET, sid)
+        int_encoded_ip, = struct.unpack('i', encoded_ip)  # bytes -> int
+        header = SearchResponseHeader(data_type=port,
+                                      sid=int_encoded_ip,
+                                      cid=cid)
         payload = bytes(DBR_INT(version))
         super().__init__(header, payload)
 
@@ -247,8 +251,14 @@ class SearchResponse(Message):
         payload = DBR_INT.from_buffer(payload_bytes)
         return cls.from_components(header, payload)
 
+    @property
+    def sid(self):
+        # for CA version >= 4.11
+        int_encoded_ip = self.header.parameter1
+        encoded_ip = struct.pack('i', int_encoded_ip)  # int -> bytes
+        return socket.inet_ntop(socket.AF_INET, encoded_ip)
+
     port = property(lambda self: self.header.data_type)
-    sid = property(lambda self: self.header.parameter1)
     cid = property(lambda self: self.header.parameter2)
     version = property(lambda self: int(self.payload.value))
 
@@ -310,7 +320,11 @@ class RepeaterRegisterRequest(Message):
         header = RepeaterRegisterRequestHeader(int_encoded_ip)
         super().__init__(header, None)
 
-    client_ip_address = property(lambda self: self.header.parameter2)
+    @property
+    def client_ip_address(self):
+        int_encoded_ip = self.header.parameter2
+        encoded_ip = struct.pack('i', int_encoded_ip)  # int -> bytes
+        return socket.inet_ntop(socket.AF_INET, encoded_ip)
 
 
 class EventAddRequest(Message):
