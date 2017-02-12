@@ -490,9 +490,6 @@ class Hub:
         #     circuit = self.circuits[(self._names[name], priority)]
         return channel
 
-    def new_circuit(self, address):
-        return VirtualCircuitProxy(self, address)
-
 
 class _BaseChannel:
     # This is subclassed by ClientChannel and ServerChannel, which merely add
