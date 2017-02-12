@@ -362,13 +362,17 @@ class Hub:
         # This is only used by the convenience methods, to auto-generate a cid.
         self._cid_counter = itertools.count(0)
 
-    def send_broadcast(self, command):
+    def send_broadcast(self, *commands):
         """
-        Convert a high-level Command into bytes that can be broadcast over UDP,
-        while updating our internal state machine.
+        Convert one or more high-level Commands into bytes that may be
+        broadcast together in one UDP datagram while updating our internal
+        state machine.
         """
-        self._process_command(self.our_role, command)
-        return bytes(command)
+        bytes_to_send = b''
+        for command in commands:
+            self._process_command(self.our_role, command)
+            bytes_to_send += bytes(command)
+        return bytes_to_send
 
     def recv_broadcast(self, byteslike, address):
         """
