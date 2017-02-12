@@ -450,16 +450,28 @@ class Hub:
             chan = self.channels[command.cid]
             chan._state.process_command(self.our_role, type(command))
             chan._state.process_command(self.their_role, type(command))
+            # Get the address for the VirtualCircuit that TCP
+            # communication about this Channel should take place on.
+            if self.our_role is CLIENT:
+                # Our end of the circuit should hold the address of the server.
+                if command.header.parameter1 == 0xffffffff:
+                    adddress = command.sender_address
+                else:
+                    address = command.sid, command.port
+            else:
+                # Our end of the circuit should hold the address of the client.
+                address = command.sender_address
             # We now know the Channel's address so we can assign it to a
             # VirtualCircuitProxy. We will not know the Channel's priority
             # until we see a VersionRequest, hence the *Proxy* in
             # VirtualCircuitProxy.
-            circuit = VirtualCircuitProxy(self, command.address)
+            circuit = VirtualCircuitProxy(self, address)
+            self.circuits[address] = circuit
             chan.circuit = circuit
             # Separately, stash the address where we found this name. This
             # information might remain useful beyond the lifecycle of the
             # circuit.
-            self._names[chan.name] = command.address
+            self._names[chan.name] = address
         history.append(command)
         return history
 

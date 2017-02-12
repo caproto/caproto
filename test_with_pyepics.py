@@ -7,58 +7,56 @@ import getpass
 
 OUR_HOSTNAME = socket.gethostname()
 OUR_USERNAME = getpass.getuser()
-OUR_IP = socket.gethostbyname(socket.gethostname())
-print(OUR_IP)
+our_ip = socket.gethostbyname(socket.gethostname())
+print('our_ip', our_ip)
 CA_REPEATER_PORT = 5065
 CA_SERVER_PORT = 5064
 pv1 = "XF:31IDA-FAKE-PV"
 
-# server_address = (OUR_HOSTNAME, CA_SERVER_PORT)
-# server_address = (OUR_IP, CA_SERVER_PORT)
-server_address = ('192.168.1.255', CA_SERVER_PORT)  # obtained via tshark
-print('starting up on %s port %s' % server_address)
+udp_address = ('192.168.1.255', CA_SERVER_PORT)  # obtained via tshark
+tcp_address = (our_ip, CA_SERVER_PORT)
 # Create a UDP socket
 sock2 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock2.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 sock2.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-sock.bind(server_address)
+sock.bind(udp_address)
 
 sock3 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-sock3.bind((OUR_IP, 5064))
+sock3.bind(tcp_address)
 
 srv = ca.Hub(our_role=ca.SERVER)
 
 print('\nwaiting to receive message')
-data, address = sock.recvfrom(1024)
+data, client_udp_address = sock.recvfrom(1024)
 
-print('received %s bytes from %s' % (len(data), address))
+print('received %s bytes from %s' % (len(data), client_udp_address))
 print(data)
-srv.recv_broadcast(data, address)
-print('datagram', data, address)
+srv.recv_broadcast(data, client_udp_address)
+print('datagram', data, client_udp_address)
 command = srv.next_command()
 print('received', command)
 command = srv.next_command()
 print('received', command)
 
 res1 = ca.VersionResponse(0)
-response = ca.SearchResponse(CA_SERVER_PORT, 1, command.cid,
-                                ca.DEFAULT_PROTOCOL_VERSION)
-response.address = server_address  # patching over a problem in _hub.py
+h, p = tcp_address
+print("HOST", h)
+response = ca.SearchResponse(CA_SERVER_PORT, h, command.cid,
+                             ca.DEFAULT_PROTOCOL_VERSION)
 bytes_to_send = srv.send_broadcast(res1, response)
-### This raises Can't assign to requested address.
-sent = sock2.sendto(bytes_to_send, address)  #(OUR_IP, 5064))
-print('sent %s bytes back to %s' % (sent, (OUR_IP, 5065)))
+sent = sock2.sendto(bytes_to_send, client_udp_address)
+print('sent %s bytes back to %s' % (sent, client_udp_address))
 
 print('waiting to accept')
 sock3.listen(1)
 connection, client_address = sock3.accept()
 print('accepted')
-circuit = srv.new_circuit(client_address)
+
 
 # # Make a dict to hold our tcp sockets.
 sockets = {}
-sockets[circuit] = connection
+sockets[srv.circuits[client_address]] = client_address
 def send(circuit, command):
     print('sending', command)
     bytes_to_send = circuit.send(command)
