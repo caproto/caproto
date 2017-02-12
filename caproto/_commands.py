@@ -39,6 +39,19 @@ def ensure_bytes(s):
         raise CaprotoTypeError("expected str or bytes")
 
 
+def from_buffer(dbr_type, buffer):
+    "Wraps dbr_type.from_buffer and special-case strings."
+    if dbr_type is DBR_STRING:
+        _len = len(buffer)
+        if _len > 40:
+            raise CaprotoValueError("EPICS imposes a 40-character limit on "
+                                    "strings. The " "string {!r} is {} "
+                                    "characters.".format(buffer, _len))
+        if _len < 40:
+            buffer = buffer.ljust(40, b'\x00')
+    return dbr_type.from_buffer(buffer)
+
+
 def padded_len(s):
     "Length of a (byte)string rounded up to the nearest multiple of 8."
     if len(s) > 40:
@@ -65,7 +78,7 @@ def data_payload(values, data_count, data_type):
     # Payloads must be zeropadded to have a size that is a multiple of 8.
     if size % 8 != 0:
         size = 8 * math.ceil(size/8)
-        payload = payload.ljust(8, b'\x00')
+        payload = payload.ljust(size, b'\x00')
     return size, payload
 
 
@@ -77,9 +90,10 @@ def read_datagram(data, address, role):
         header = MessageHeader.from_buffer(barray)
         barray = barray[_MessageHeaderSize:]
         _class = Commands[role][header.command]
+        payload_size = header.payload_size
         if _class.HAS_PAYLOAD:
             payload_bytes = barray[:header.payload_size]
-            barray = barray[header.payload_size:]
+            barray = barray[payload_size:]
         else:
             payload_bytes = None
         command = _class.from_wire(header, payload_bytes)
@@ -101,12 +115,20 @@ def read_from_bytestream(data, role):
         if len(data) < header_size:
             return data, NEED_DATA
         header = ExtendedMessageHeader.from_buffer(data)
-    total_size = header_size + header.payload_size
+    _class = Commands[role][header.command]
+    payload_size = header.payload_size
+
+    # SPECIAL CASE TO WORK AROUND libca bug
+    if _class is CreateChanRequest:
+        if header.payload_size == 0:
+            payload_size = 16 
+    # END SPECIAL CASE
+
+    total_size = header_size + payload_size
     # Do we have all the bytes in the payload?
     if len(data) < total_size:
         return data, NEED_DATA
     # Receive the buffer (zero-copy).
-    _class = Commands[role][header.command]
     payload_bytes = data[header_size:total_size]
     command = _class.from_wire(header, payload_bytes)
     # Advance the buffer.
@@ -149,7 +171,8 @@ class Message:
         if not cls.HAS_PAYLOAD:
             return cls.from_components(header, None)
         dbr_type = DBR_TYPES[header.data_type]
-        return cls.from_components(header, dbr_type.from_buffer(payload_bytes))
+        payload_struct = from_buffer(dbr_type, payload_bytes)
+        return cls.from_components(header, payload_struct)
 
     @classmethod
     def from_components(cls, header, payload):
@@ -218,7 +241,8 @@ class SearchResponse(Message):
     @classmethod
     def from_wire(cls, header, payload_bytes):
         # For SearchResponse, the header.data_type is use for something other
-        # than data type, so the base payload parser will fail.
+        # than data type, so the base payload parser will fail and we need this
+        # custom one.
         payload = DBR_INT.from_buffer(payload_bytes)
         return cls.from_components(header, payload)
 
@@ -333,11 +357,15 @@ class EventAddResponse(Message):
 
     @classmethod
     def from_wire(cls, header, payload_bytes):
+        # SPECIAL CASE TO WORK AROUND libca BUG
+        # libca seems to response to EventCancelRequest with an
+        # EventAddResponse with an empty payload.
+        # END SPECIAL CASE
         if not payload_bytes:
             print('EventAdd with an empty payload!')
             return cls.from_components(header, None)
-        dbr_type = DBR_TYPES[header.data_type]
-        return cls.from_components(header, dbr_type.from_buffer(payload_bytes))
+        payload_struct = from_buffer(dbr_type, payload_bytes)
+        return cls.from_components(header, payload_struct)
 
 
 class EventCancelRequest(Message):
