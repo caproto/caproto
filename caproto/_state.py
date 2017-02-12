@@ -147,23 +147,23 @@ class ChannelState(_BaseState):
         self.states = {CLIENT: SEND_SEARCH_REQUEST, SERVER: IDLE}
         # At __init__ time we do not know whether there is already a circuit
         # we can use for this channel or if we will need to create a new one.
-        self.circuit_state = None
+        self.circuit = None
 
     def couple_circuit(self, circuit):
-        self.circuit_state = circuit._state
+        self.circuit = circuit
 
     def _fire_state_triggered_transitions(self):
+        if not hasattr(self.circuit, '_state'):
+            return
         new = self.STT[CLIENT].get((self.states[CLIENT],
-                                    self.circuit_state.states[CLIENT]))
+                                    self.circuit._state.states[CLIENT]))
         if new is not None:
-            self.states[CLIENT], self.circuit_state.states[CLIENT] = new
+            self.states[CLIENT], self.circuit._state.states[CLIENT] = new
 
     def process_command(self, role, command_type):
-        if self.circuit_state is not None:
-            self._fire_state_triggered_transitions()
+        self._fire_state_triggered_transitions()
         self._fire_command_triggered_transitions(role, command_type)
-        if self.circuit_state is not None:
-            self._fire_state_triggered_transitions()
+        self._fire_state_triggered_transitions()
     
 
 class CircuitState(_BaseState):
