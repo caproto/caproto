@@ -192,6 +192,9 @@ class Message:
                                     for k, v in d])
         return "{}({})".format(type(self).__name__, formatted_args)
 
+    def __len__(self):
+        return len(bytes(self))
+
 
 class VersionRequest(Message):
     ID = 0
