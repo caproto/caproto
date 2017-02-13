@@ -258,9 +258,12 @@ class SearchResponse(Message):
         encoded_ip = struct.pack('I', int_encoded_ip)  # int -> bytes
         return socket.inet_ntop(socket.AF_INET, encoded_ip)
 
+    @property
+    def version(self):
+        return DBR_INT.from_buffer(bytearray(self.payload)).value
+
     port = property(lambda self: self.header.data_type)
     cid = property(lambda self: self.header.parameter2)
-    version = property(lambda self: int(self.payload.value))
 
 
 class NotFoundResponse(Message):
