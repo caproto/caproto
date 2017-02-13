@@ -140,15 +140,16 @@ class Message:
     DIRECTION = None  # REQUEST or RESPONSE; set at the end of this module
     sender_address = None  # set for the read_datagram function
 
-    def __init__(self, header, payload=None):
-        if payload is None:
+    def __init__(self, header, payload=None, validate_payload=True):
+        if validate_payload and payload is None:
             if header.payload_size != 0:
                 raise CaprotoValueError("header.payload_size {} > 0 but "
                                         "payload is None."
                                         "".format(header.payload_size))
-        elif header.payload_size != len(payload):
+        elif validate_payload and header.payload_size != len(payload):
             raise CaprotoValueError("header.payload_size {} != len(payload) {}"
-                                    "".format(header.payload_size, payload))
+                                    "".format(header.payload_size,
+                                              len(payload)))
         if header.command != self.ID:
             raise CaprotoTypeError("A {} must have a header with "
                                    "header.command = {}, not {}."
