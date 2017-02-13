@@ -119,9 +119,9 @@ def read_from_bytestream(data, role):
     payload_size = header.payload_size
 
     # SPECIAL CASE TO WORK AROUND libca bug
-    if _class is CreateChanRequest:
-        if header.payload_size == 0:
-            payload_size = 16 
+    # if _class is CreateChanRequest:
+    #     if header.payload_size == 0:
+    #         payload_size = 16
     # END SPECIAL CASE
 
     total_size = header_size + payload_size
