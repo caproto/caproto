@@ -6,9 +6,8 @@ import ctypes
 class _BaseMessageHeader(ctypes.BigEndianStructure):
     # just to define a nice repr
     def __repr__(self):
-        d = {field: getattr(self, field) for field, _type in self._fields_}
-        formatted_args = ", ".join(["{}={}".format(k, v)
-                                    for k, v in d.items()])
+        d = [(field, getattr(self, field)) for field, _type in self._fields_]
+        formatted_args = ", ".join(["{!s}={!r}".format(k, v) for k, v in d])
         return "{}({})".format(type(self).__name__, formatted_args)
 
 
