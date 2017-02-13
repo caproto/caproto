@@ -229,6 +229,14 @@ class VirtualCircuit:
         # TODO Be more clever and reuse abandoned ioids; avoid overrunning.
         return next(self._ioid_counter)
 
+    @property
+    def address(self):
+        if self.our_role is CLIENT:
+            return self.host, self.port
+        else:
+            raise TypeError("Only a CLIENT-side VirtualCircuit has a complete "
+                            "address. A SERVER-side only has a port.")
+
 
 class VirtualCircuitProxy:
     """
@@ -314,6 +322,18 @@ class VirtualCircuitProxy:
         else:
             return self.__circuit
 
+    @property
+    def bound(self):
+        return self.__circuit is not None
+
+    @property
+    def address(self):
+        if self.our_role is CLIENT:
+            return self.host, self.port
+        else:
+            raise TypeError("Only a CLIENT-side VirtualCircuit has a complete "
+                            "address. A SERVER-side only has a port.")
+
     # Define pass-through methods for every public method of VirtualCircuit.
     def new_subscriptionid(self):
         __doc__ = self._circuit.new_subscriptionid.__doc__
@@ -330,10 +350,6 @@ class VirtualCircuitProxy:
     @property
     def channels(self):
         return self._circuit.channels
-
-    @property
-    def bound(self):
-        return self.__circuit is not None
 
     @property
     def _subinfo(self):
