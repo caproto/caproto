@@ -34,9 +34,10 @@ class VirtualCircuit:
     received over the socket should be passed to :meth:`recv`. Any data sent
     over the socket should first be passed through :meth:`send`.
     """
-    def __init__(self, hub, address, priority, data):
+    def __init__(self, hub, host, port, priority, data):
         self._hub = hub
-        self.address = address
+        self.host = host
+        self.port = port
         self.priority = priority
         self._state = CircuitState()
         self._data = data
@@ -85,8 +86,14 @@ class VirtualCircuit:
         return command
 
     def _process_command(self, role, command):
-        # All commands go through here.
+        """
+        All comands go through here.
 
+        Parameters
+        ----------
+        role : CLIENT or SERVER
+        command : Message
+        """
         # Filter for Commands that are pertinent to a specific Channel, as
         # opposed to the Circuit as a whole:
         if isinstance(command, (ClearChannelRequest, ClearChannelResponse,
@@ -238,29 +245,35 @@ class VirtualCircuit:
                             "address. A SERVER-side only has a port.")
 
 
-class VirtualCircuitProxy:
+class _BaseVirtualCircuitProxy:
     """
     For that awkward moment when you know the address of a circuit but you
     don't yet know the prioirty, so you can't know whether this can use an
     existing TCP connection or needs a new one.
+
+    Parameters
+    ----------
+    hub : Hub
+    host : string
     """
-    def __init__(self, hub, address):
+    def __init__(self, hub, host):
         self._hub = hub
-        self.address = address
+        self.host = host
         self.our_role = self._hub.our_role
         self.their_role = self._hub.their_role
         self.__circuit = None
         self._data = bytearray()  # will get handed off to VirtualCircuit
 
     def _bind_circuit(self, priority):
-        # Identify an existing VirtcuitCircuit with the right address and
+        # Identify an existing VirtcuitCircuit with the right host and
         # priority, or create one.
-        key = (self.address, priority)
+        key = (self.host, priority)
         try:
             circuit = self._hub.circuits[key]
         except KeyError:
             circuit = VirtualCircuit(hub=self._hub,
-                                     address=self.address,
+                                     host=self.host,
+                                     port=self.port,
                                      priority=priority, data=self._data)
 
             self._hub.circuits[key] = circuit
@@ -271,14 +284,14 @@ class VirtualCircuitProxy:
         Convert a high-level Command into bytes that can be sent to the peer,
         while updating our internal state machine.
         """
-        if self.__circuit is None:
+        if not self.bound:
             if isinstance(command, VersionRequest):
                 self._bind_circuit(command.priority)
             else:
                 err = _get_exception(command, self.our_role)
                 raise err("This circuit must be initialized with a "
                           "VersionRequest.")
-        self.__circuit._process_command(self.our_role, command)
+        self.circuit._process_command(self.our_role, command)
         return bytes(command)
 
     def recv(self, byteslike):
@@ -288,10 +301,10 @@ class VirtualCircuitProxy:
         This does not actually do any processing on the data, just stores
         it. To trigger processing, you have to call :meth:`next_command`.
         """
-        if self.__circuit is None:
+        if not self.bound:
             self._data += byteslike
         else:
-            return self.__circuit.recv(byteslike)
+            return self.circuit.recv(byteslike)
 
     def next_command(self):
         """
@@ -301,7 +314,7 @@ class VirtualCircuitProxy:
         Returns a :class:`Command` object or a special constant,
         :data:`NEED_DATA`.
         """
-        if self.__circuit is None:
+        if not self.bound:
             self._data, command = read_from_bytestream(self._data,
                                                        self.their_role)
             if type(command) is not NEED_DATA:
@@ -311,12 +324,12 @@ class VirtualCircuitProxy:
                     err = _get_exception(command, self.our_role)
                     raise err("This circuit must be initialized with a "
                             "VersionRequest.")
-                self._circuit._process_command(self.our_role, command)
+                self.circuit._process_command(self.our_role, command)
         else:
-            return self._circuit.next_command()
+            return self.circuit.next_command()
 
     @property
-    def _circuit(self):
+    def circuit(self):
         if self.__circuit is None:
             text = ("A VersionRequest command must be sent through this "
                     "VirtualCircuitProxy to bind it to a VirtualCircuit "
@@ -329,40 +342,43 @@ class VirtualCircuitProxy:
     def bound(self):
         return self.__circuit is not None
 
-    @property
-    def address(self):
-        if self.our_role is CLIENT:
-            return self.host, self.port
-        else:
-            raise TypeError("Only a CLIENT-side VirtualCircuit has a complete "
-                            "address. A SERVER-side only has a port.")
-
     # Define pass-through methods for every public method of VirtualCircuit.
     def new_subscriptionid(self):
-        __doc__ = self._circuit.new_subscriptionid.__doc__
-        return self._circuit.new_subscriptionid()
+        __doc__ = self.circuit.new_subscriptionid.__doc__
+        return self.circuit.new_subscriptionid()
 
     def new_ioid(self):
-        __doc__ = self._circuit.new_ioid.__doc__
-        return self._circuit.new_ioid()
+        __doc__ = self.circuit.new_ioid.__doc__
+        return self.circuit.new_ioid()
 
     @property
     def priority(self):
-        return self._circuit.priority
+        return self.circuit.priority
 
     @property
     def channels(self):
-        return self._circuit.channels
+        return self.circuit.channels
 
     @property
     def _subinfo(self):
         # TODO Provide a public access for this on VirtualCircuit.
-        return self._circuit._subinfo
+        return self.circuit._subinfo
 
     @property
     def _state(self):
         # TODO Remove this once _state.py is refactored properly.
-        return self._circuit._state
+        return self.circuit._state
+
+
+class ServerVirtualCircuitProxy(_BaseVirtualCircuitProxy):
+    ...
+
+
+class ClientVirtualCircuitProxy(_BaseVirtualCircuitProxy):
+    def __init__(self, hub, host, port):
+        super().__init__(hub, host)
+        self.port = port
+        self.address = self.host, self.port
 
 
 class Hub:
@@ -396,6 +412,7 @@ class Hub:
         self._datagram_inbox = deque()  # datagrams to be parsed into Commands
         self._history = []  # commands parsed so far from current datagram
         self._parsed_commands = deque()  # parsed Commands to be processed
+        self._search_request_origins = {}  # map cid to host
         # This is only used by the convenience methods, to auto-generate a cid.
         self._cid_counter = itertools.count(0)
 
@@ -470,6 +487,9 @@ class Hub:
                 chan = self.new_channel(name=command.name, cid=cid)
             chan._state.process_command(self.our_role, type(command))
             chan._state.process_command(self.their_role, type(command))
+            if self.our_role is SERVER:
+                host, _ = command.sender_address
+                self._search_request_origins[command.cid] = host
         elif isinstance(command, SearchResponse):
             if VersionResponse not in map(type, history):
                 err = _get_exception(self, command)
@@ -482,25 +502,30 @@ class Hub:
             # Get the address for the VirtualCircuit that TCP
             # communication about this Channel should take place on.
             if self.our_role is CLIENT:
-                # Our end of the circuit should hold the address of the server.
+                # A CLIENT's circuit should hold the address of the server.
                 if command.header.parameter1 == 0xffffffff:
-                    adddress = command.sender_address
+                    host, port = command.sender_address
                 else:
-                    address = command.sid, command.port
+                    host, port = command.sid, command.port
+                proxy = ClientVirtualCircuitProxy(self, host, port)
             else:
-                # Our end of the circuit should hold the address of the client.
-                address = command.sender_address
+                # A SERVER's circuit should hold the host of the client.
+                # We don't need the client's port, and we don't have a clean
+                # way to get it.
+                host = self._search_request_origins[chan.cid]
+                proxy = ServerVirtualCircuitProxy(self, host)
             # We now know the Channel's address so we can assign it to a
             # VirtualCircuitProxy. We will not know the Channel's priority
             # until we see a VersionRequest, hence the *Proxy* in
             # VirtualCircuitProxy.
-            circuit = VirtualCircuitProxy(self, address)
-            self.circuits[address] = circuit
-            chan.circuit = circuit
+            chan.circuit_proxy = proxy
+            print('proxy', chan.circuit_proxy)
             # Separately, stash the address where we found this name. This
             # information might remain useful beyond the lifecycle of the
             # circuit.
-            self._names[chan.name] = address
+            self._names[chan.name] = host
+            # TODO Let the state machine take care of this...
+            chan._state._fire_state_triggered_transitions()
         history.append(command)
 
     def new_cid(self):
@@ -535,14 +560,14 @@ class _BaseChannel:
     # This is subclassed by ClientChannel and ServerChannel, which merely add
     # convenience methods that compose valid commands. They do not mutate any
     # _BaseChannel state. All the critical code is here in the base class.
-    def __init__(self, hub, circuit, cid, name):
+    def __init__(self, hub, circuit_proxy, cid, name):
         self._hub = hub
-        self._circuit = circuit  # may be None at __init__ time
+        self._circuit_proxy = circuit_proxy # may be None at __init__ time
         self.cid = cid
         self.name = name
         self._state = ChannelState()
         # The Channel maybe not have a circuit yet, but it always needs to be
-        # registered by a Hub. When the Hub processes a SearchRequest Command
+        # registered by a Hub. When the Hub processes a SearchResponse Command
         # regarding this Channel, that Command includes this Channel's cid,
         # which the Hub can use to identify this Channel instance.
         hub.channels[cid] = self
@@ -562,16 +587,26 @@ class _BaseChannel:
 
     @property
     def circuit(self):
-        return self._circuit
+        if self.circuit_proxy is None:
+            return None
+        if not self.circuit_proxy.bound:
+            return self.circuit_proxy
+        else:
+            self._state._fire_state_triggered_transitions()
+            return self.circuit_proxy.circuit
 
-    @circuit.setter
-    def circuit(self, circuit):
+    @property
+    def circuit_proxy(self):
+        return self._circuit_proxy
+
+    @circuit_proxy.setter
+    def circuit_proxy(self, circuit_proxy):
         # The hub assigns a VirtualCircuit to this Channel.
         # This occurs when a :class:`SearchResponse` locating the Channel's
         # name is processed.
-        if self._circuit is None:
-            self._circuit = circuit
-            self._state.couple_circuit(circuit)
+        if self._circuit_proxy is None:
+            self._circuit_proxy = circuit_proxy
+            self._state.couple_circuit(circuit_proxy)
         else:
             raise RuntimeError("circuit may only be set once")
 
