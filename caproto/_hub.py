@@ -589,11 +589,7 @@ class _BaseChannel:
     def circuit(self):
         if self.circuit_proxy is None:
             return None
-        if not self.circuit_proxy.bound:
-            return self.circuit_proxy
-        else:
-            self._state._fire_state_triggered_transitions()
-            return self.circuit_proxy.circuit
+        return self.circuit_proxy
 
     @property
     def circuit_proxy(self):

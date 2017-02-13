@@ -51,14 +51,17 @@ print('received', command)
 
 # Make a dict to hold our tcp sockets.
 sockets = {}
-sockets[chan1.circuit] = socket.create_connection(chan1.circuit.address)
 
-def send(circuit, command):
+def send(proxy, command):
     print('sending', command)
-    bytes_to_send = circuit.send(command)
+    bytes_to_send = proxy.send(command)
+    circuit = proxy.circuit
+    if circuit not in sockets:
+        sockets[circuit] = socket.create_connection(circuit.address)
     sockets[circuit].send(bytes_to_send)
 
-def recv(circuit):
+def recv(proxy):
+    circuit = proxy.circuit
     bytes_received = sockets[circuit].recv(4096)
     print('received', len(bytes_received), 'bytes')
     circuit.recv(bytes_received)
@@ -72,6 +75,7 @@ def recv(circuit):
 
 
 send(*chan1.version(priority=0))
+print('sent version request')
 recv(chan1.circuit)
 send(*chan1.host_name())
 send(*chan1.client_name())
@@ -111,5 +115,5 @@ print(commands.values.value)
 send(*chan1.clear())
 recv(chan1.circuit)
 
-sockets[chan1.circuit].close()
+sockets[chan1.circuit_proxy.circuit].close()
 sock.close()
