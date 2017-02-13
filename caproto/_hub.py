@@ -288,7 +288,10 @@ class VirtualCircuitProxy:
         This does not actually do any processing on the data, just stores
         it. To trigger processing, you have to call :meth:`next_command`.
         """
-        self._data += byteslike
+        if self.__circuit is None:
+            self._data += byteslike
+        else:
+            return self.__circuit.recv(byteslike)
 
     def next_command(self):
         """
