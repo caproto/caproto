@@ -656,7 +656,7 @@ class ClientChannel(_BaseChannel):
         --------
         :meth:`version_broadcast`
         """
-        command = VersionRequest(DEFAULT_PROTOCOL_VERSION, priority)
+        command = VersionRequest(priority, DEFAULT_PROTOCOL_VERSION)
         return command
 
     def search_broadcast(self):
