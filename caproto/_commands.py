@@ -321,7 +321,7 @@ class RepeaterRegisterRequest(Message):
     ID = 24
     HAS_PAYLOAD = False
     def __init__(self, client_ip_address):
-        encoded_ip = socket.inet_pton(socket.AF_INET, client_ip_address)
+        encoded_ip = socket.inet_pton(socket.AF_INET, str(client_ip_address))
         int_encoded_ip, = struct.unpack('I', encoded_ip)  # bytes -> int
         header = RepeaterRegisterRequestHeader(int_encoded_ip)
         super().__init__(header, None)
