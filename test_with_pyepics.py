@@ -79,79 +79,42 @@ def recv(proxy):
 print('initial receipt')
 bytes_received = connection.recv(4096)
 print('received', len(bytes_received), 'bytes')
+print(bytes_received)
+# TODO Unify VirtualCircuit Client/Server.
 proxy = ca.ServerVirtualCircuitProxy(srv, client_address[0])
 proxy.recv(bytes_received)
+ver_com = proxy.next_command()
+print('parsed', ver_com)
+assert type(ver_com) is ca.VersionRequest
+bytes_to_send = proxy.send(ca.VersionResponse(13))
+connection.sendall(bytes_to_send)
+
+print(proxy.bound)
 print('parsed', proxy.next_command())
 print('normal operation')
+bytes_to_send = proxy.send(ca.AccessRightsResponse(cid=1, access_rights=3))
+connection.sendall(bytes_to_send)
+bytes_to_send = proxy.send(ca.CreateChanResponse(data_type=1, data_count=1,
+                                                 cid=1, sid=1))
+connection.sendall(bytes_to_send)
+#assert type(recv(proxy)[0]) is ca.ReadSyncRequest
+#assert type(recv(proxy)[0]) is ca.ReadNotifyRequest
+done = False
+while not done:
+    print("HELLO")
+    commands = recv(proxy)
+    print(commands)
+    for command in commands:
+        print(command)
+        if type(command) is ca.ReadNotifyRequest:
+            done = True
+            break
+    if done:
+        break
+p = (19, 1, 1, 1, 0, 15)  # DBR_TIME_INT args
+read_res = ca.ReadNotifyResponse(p, 15, 1, 1, 1)
+print('will send response', read_res)
+bytes_to_send = proxy.send(read_res)
+connection.sendall(bytes_to_send)
+print('sent')
 recv(proxy)
-recv(proxy)
-recv(proxy)
-
-#
-# sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-# sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
-# send_bcast = lambda msg: sock.sendto(bytes(msg), ('', CA_SERVER_PORT))
-# recv_bcast = lambda: sock.recvfrom(4096)
-#
-# # Send data
-# ip = socket.gethostbyname(socket.gethostname())
-# print('our ip', ip)
-# reg_command = ca.RepeaterRegisterRequest(ip)
-# print("Sending", reg_command)
-# send_bcast(reg_command)
-#
-# # Receive response
-# print('waiting to receive')
-# data, address = recv_bcast()
-# print('received', ca.read_datagram(data, address, ca.SERVER))
-# sock.close()
-#
-#
-# sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-# sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
-# send_bcast = lambda msg: sock.sendto(bytes(msg), ('', CA_SERVER_PORT))
-# recv_bcast = lambda: sock.recvfrom(4096)
-#
-#
-# cli = ca.Hub(our_role=ca.CLIENT)
-# chan1 = cli.new_channel(pv1)
-# bytes_to_send = cli.send_broadcast(ca.VersionRequest(0, 13))
-# bytes_to_send += cli.send_broadcast(ca.SearchRequest(pv1, 0, 13))
-# print('searching for %s' % pv1)
-# send_bcast(bytes_to_send)
-# bytes_received, address = recv_bcast()
-# cli.recv_broadcast(bytes_received, address)
-# command = cli.next_command()
-# print('received', command)
-# command = cli.next_command()
-# print('received', command)
-#
-#
-# send(chan1.circuit, ca.VersionRequest(priority=0, version=13))
-# recv(chan1.circuit)
-# send(chan1.circuit, ca.HostNameRequest(OUR_HOSTNAME))
-# send(chan1.circuit, ca.ClientNameRequest(OUR_USERNAME))
-# send(chan1.circuit, ca.CreateChanRequest(name=pv1, cid=chan1.cid, version=13))
-# recv(chan1.circuit)
-# send(chan1.circuit, ca.ReadNotifyRequest(data_type=2, data_count=1,
-#                                         sid=chan1.sid,
-#                                         ioid=12))
-# commands, = recv(chan1.circuit)
-# print(commands.values.value)
-# request = ca.WriteNotifyRequest(data_type=2, data_count=1,
-#                                 sid=chan1.sid,
-#                                 ioid=13, values=3)
-#
-# send(chan1.circuit, request)
-# recv(chan1.circuit)
-# time.sleep(2)
-# send(chan1.circuit, ca.ReadNotifyRequest(data_type=2, data_count=1,
-#                                          sid=chan1.sid,
-#                                          ioid=14))
-# recv(chan1.circuit)
-# print(commands.values.value)
-# send(chan1.circuit, ca.ClearChannelRequest(chan1.sid, chan1.cid))
-# recv(chan1.circuit)
-#
-# sockets[chan1.circuit].close()
-# sock.close()

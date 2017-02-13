@@ -472,7 +472,7 @@ class EventsOnRequest(Message):
         super().__init__(EventsOnRequestHeader(), None)
 
 
-class ReadSyncRequestRequest(Message):
+class ReadSyncRequest(Message):
     "Deprecated: See also ReadNotifyRequest"
     ID = 10
     HAS_PAYLOAD = False
@@ -527,14 +527,14 @@ class ReadNotifyRequest(Message):
     sid = property(lambda self: self.header.parameter1)
     ioid = property(lambda self: self.header.parameter2)
 
-    
+
 class ReadNotifyResponse(Message):
     ID = 15
     HAS_PAYLOAD = True
     def __init__(self, values, data_type, data_count, status, ioid):
         size, payload = data_payload(values, data_count, data_type)
-        header = ReadNotifyRequestHeader(size, data_type, data_count, status,
-                                         ioid)
+        header = ReadNotifyResponseHeader(size, data_type, data_count, status,
+                                          ioid)
         super().__init__(header, payload)
 
     payload_size = property(lambda self: self.header.payload_size)

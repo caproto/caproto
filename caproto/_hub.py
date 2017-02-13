@@ -113,7 +113,7 @@ class VirtualCircuit:
                 try:
                     chan = self._channels_sid[sid]
                 except KeyError:
-                    err = get_exception(self.our_role, command)
+                    err = _get_exception(self.our_role, command)
                     raise err("Unknown Channel sid {!r}".format(command.sid))
             elif isinstance(command, (ReadNotifyResponse,
                                       WriteNotifyResponse)):
@@ -121,7 +121,7 @@ class VirtualCircuit:
                 try:
                     chan = self._ioids[command.ioid]
                 except KeyError:
-                    err = get_exception(self.our_role, command)
+                    err = _get_exception(self.our_role, command)
                     raise err("Unknown Channel ioid {!r}".format(command.ioid))
             elif isinstance(command, (EventAddResponse,
                                       EventCancelRequest, EventCancelResponse)):
@@ -129,7 +129,7 @@ class VirtualCircuit:
                 try:
                     subinfo = self._subinfo[command.subscriptionid]
                 except KeyError:
-                    err = get_exception(self.our_role, command)
+                    err = _get_exception(self.our_role, command)
                     raise err("Unrecognized subscriptionid {!r}"
                               "".format(subscriptionid))
                 chan = self._channels_sid[subinfo.sid]
@@ -157,7 +157,7 @@ class VirtualCircuit:
                 # Verify data_type matches the one in the original request.
                 subinfo = self._subinfo[command.subscriptionid]
                 if subinfo.data_type != command.data_type:
-                    err = get_exception(self.our_role, command)
+                    err = _get_exception(self.our_role, command)
                     raise err("The data_type in {!r} does not match the "
                                 "data_type in the original EventAddRequest "
                                 "for this subscriptionid, {!r}."
@@ -168,7 +168,7 @@ class VirtualCircuit:
                 # original data_count too, but in fact it seems to be 0.
                 subinfo = self._subinfo[command.subscriptionid]
                 if subinfo.data_count != command.data_count:
-                    err = get_exception(self.our_role, command)
+                    err = _get_exception(self.our_role, command)
                     raise err("The data_count in {!r} does not match the "
                                 "data_count in the original EventAddRequest "
                                 "for this subscriptionid, {!r}."
@@ -177,7 +177,7 @@ class VirtualCircuit:
                 # Verify sid matches the one in the original request.
                 subinfo = self._subinfo[command.subscriptionid]
                 if subinfo.sid != command.sid:
-                    err = get_exception(self.our_role, command)
+                    err = _get_exception(self.our_role, command)
                     raise err("The sid in {!r} does not match the sid in "
                                 "in the original EventAddRequest for this "
                                 "subscriptionid, {!r}."
@@ -325,6 +325,7 @@ class _BaseVirtualCircuitProxy:
                     raise err("This circuit must be initialized with a "
                             "VersionRequest.")
                 self.circuit._process_command(self.our_role, command)
+            return command
         else:
             return self.circuit.next_command()
 
