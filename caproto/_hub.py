@@ -406,9 +406,9 @@ class Hub:
         state machine.
         """
         bytes_to_send = b''
-        history = []
+        history = []  # commands sent as part of this datagram
         for command in commands:
-            history = self._process_command(self.our_role, command, history)
+            self._process_command(self.our_role, command, history)
             bytes_to_send += bytes(command)
         return bytes_to_send
 
@@ -441,6 +441,16 @@ class Hub:
         return command
 
     def _process_command(self, role, command, history):
+        """
+        All comands go through here.
+
+        Parameters
+        ----------
+        role : CLIENT or SERVER
+        command : Message
+        history : list
+            Mutated; command is appended at the end.
+        """
         # All commands go through here.
         if isinstance(command, SearchRequest):
             if VersionRequest not in map(type, history):
@@ -492,7 +502,6 @@ class Hub:
             # circuit.
             self._names[chan.name] = address
         history.append(command)
-        return history
 
     def new_cid(self):
         # This is used by the convenience methods. It does not update any
