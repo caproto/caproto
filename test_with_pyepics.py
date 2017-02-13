@@ -7,20 +7,17 @@ import getpass
 
 OUR_HOSTNAME = socket.gethostname()
 OUR_USERNAME = getpass.getuser()
-our_ip = socket.gethostbyname(socket.gethostname())
-print('our_ip', our_ip)
+OUR_IP = our_ip = '10.2.229.216'
 CA_REPEATER_PORT = 5065
 CA_SERVER_PORT = 5064
 pv1 = "XF:31IDA-FAKE-PV"
 
-udp_address = ('192.168.1.255', CA_SERVER_PORT)  # obtained via tshark
-tcp_address = (our_ip, CA_SERVER_PORT)
+tcp_address = ('0.0.0.0', CA_SERVER_PORT)
 # Create a UDP socket
-sock2 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-sock2.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-sock2.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-sock.bind(udp_address)
+udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+udp_sock.bind(('0.0.0.0', 5064))
 
 sock3 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sock3.bind(tcp_address)
@@ -28,7 +25,7 @@ sock3.bind(tcp_address)
 srv = ca.Hub(our_role=ca.SERVER)
 
 print('\nwaiting to receive message')
-data, client_udp_address = sock.recvfrom(1024)
+data, client_udp_address = udp_sock.recvfrom(1024)
 
 print('received %s bytes from %s' % (len(data), client_udp_address))
 print(data)
@@ -39,13 +36,16 @@ print('received', command)
 command = srv.next_command()
 print('received', command)
 
-res1 = ca.VersionResponse(0)
+res1 = ca.VersionResponse(13)
 h, p = tcp_address
 print("HOST", h)
-response = ca.SearchResponse(CA_SERVER_PORT, h, command.cid,
-                             ca.DEFAULT_PROTOCOL_VERSION)
+#response = ca.SearchResponse(CA_SERVER_PORT, 13, command.cid,
+#                             ca.DEFAULT_PROTOCOL_VERSION)
+response_hdr = ca.MessageHeader(6, 2, 1, 1, 1, 1)
+response = bytes(response_hdr) + bytes(ca.DBR_INT(13))
+print('sending', res1, response)
 bytes_to_send = srv.send_broadcast(res1, response)
-sent = sock2.sendto(bytes_to_send, client_udp_address)
+sent = udp_sock.sendto(bytes_to_send, client_udp_address)
 print('sent %s bytes back to %s' % (sent, client_udp_address))
 
 print('waiting to accept')
@@ -68,6 +68,7 @@ def recv(proxy):
     circuit.recv(bytes_received)
     commands = []
     while True:
+        print(len(circuit._data))
         command = circuit.next_command()
         if type(command) is ca.NEED_DATA:
             break
