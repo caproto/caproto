@@ -56,17 +56,14 @@ print('accepted')
 
 # # Make a dict to hold our tcp sockets.
 sockets = {}
-sockets[srv.circuits[client_address]] = client_address
-def send(circuit, command):
+def send(proxy, command):
     print('sending', command)
     bytes_to_send = circuit.send(command)
-    sockets[circuit].send(bytes_to_send)
+    connection.sendall(bytes_to_send)
 
-def recv(circuit):
-    bytes_received = sockets[circuit].recv(4096)
-    print('received', len(bytes_received), 'bytes')
-    circuit.recv(bytes_received)
-    bytes_received = sockets[circuit].recv(4096)
+def recv(proxy):
+    circuit = proxy.circuit
+    bytes_received = connection.recv(4096)
     print('received', len(bytes_received), 'bytes')
     circuit.recv(bytes_received)
     commands = []
@@ -77,10 +74,18 @@ def recv(circuit):
         print('parsed', command)
         commands.append(command)
     return commands
-#
-recv(circuit)
-recv(circuit)
-recv(circuit)
+
+# First receive directly into the proxy.
+print('initial receipt')
+bytes_received = connection.recv(4096)
+print('received', len(bytes_received), 'bytes')
+proxy = ca.ServerVirtualCircuitProxy(srv, client_address[0])
+proxy.recv(bytes_received)
+print('parsed', proxy.next_command())
+print('normal operation')
+recv(proxy)
+recv(proxy)
+recv(proxy)
 
 #
 # sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
