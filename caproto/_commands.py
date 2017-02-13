@@ -74,7 +74,7 @@ def data_payload(values, data_count, data_type):
         assert data_count == len(values)
         payload = b''.join(map(bytes, values))
     else:
-        payload = bytes(DBR_TYPES[data_type](values))
+        payload = bytes(DBR_TYPES[data_type](*values))
     # Payloads must be zeropadded to have a size that is a multiple of 8.
     if size % 8 != 0:
         size = 8 * math.ceil(size/8)

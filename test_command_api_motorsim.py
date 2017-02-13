@@ -11,13 +11,16 @@ CA_SERVER_PORT = 5064
 pv1 = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
 
 
+
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
 sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
 send_bcast = lambda msg: sock.sendto(bytes(msg), ('', CA_REPEATER_PORT))
 recv_bcast = lambda: sock.recvfrom(4096)
 
 # Send data
-ip = socket.gethostbyname(socket.gethostname())
+# ip = socket.gethostbyname(socket.gethostname())
+ip = '127.0.0.1'
+# ip = '.'.join(OUR_IP.split('.')[:-1] + ['255'])
 print('our ip', ip)
 reg_command = ca.RepeaterRegisterRequest(ip)
 print("Sending", reg_command)
@@ -109,7 +112,7 @@ commands, = recv(chan1.circuit)
 print(commands.values.value)
 request = ca.WriteNotifyRequest(data_type=2, data_count=1,
                                 sid=chan1.sid,
-                                ioid=13, values=3)
+                                ioid=13, values=(4,))
 
 send(chan1.circuit, request)
 recv(chan1.circuit)
