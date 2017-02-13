@@ -244,16 +244,8 @@ class SearchResponse(Message):
         header = SearchResponseHeader(data_type=port,
                                       sid=int_encoded_ip,
                                       cid=cid)
-        payload = bytes(DBR_INT(version))
+        payload = (2 * b'\x00') + bytes(DBR_INT(version)) + (4 * b'\x00')
         super().__init__(header, payload)
-
-    @classmethod
-    def from_wire(cls, header, payload_bytes):
-        # For SearchResponse, the header.data_type is use for something other
-        # than data type, so the base payload parser will fail and we need this
-        # custom one.
-        payload = DBR_INT.from_buffer(payload_bytes)
-        return cls.from_components(header, payload)
 
     @property
     def sid(self):
@@ -264,7 +256,7 @@ class SearchResponse(Message):
 
     @property
     def version(self):
-        return DBR_INT.from_buffer(bytearray(self.payload)).value
+        return DBR_INT.from_buffer(bytearray(self.payload)[2:4]).value
 
     port = property(lambda self: self.header.data_type)
     cid = property(lambda self: self.header.parameter2)

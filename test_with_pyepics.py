@@ -34,10 +34,8 @@ command = srv.next_command()
 
 res1 = ca.VersionResponse(13)
 h, p = tcp_address
-#response = ca.SearchResponse(CA_SERVER_PORT, OUR_IP,
-#                             ca.DEFAULT_PROTOCOL_VERSION)
-response_hdr = ca.MessageHeader(6, 8, 1, 1, 1, 1)
-response = bytes(response_hdr) + bytes(ca.DBR_INT(13)).ljust(8, b'\x00')
+response = ca.SearchResponse(CA_SERVER_PORT, OUR_IP, 1,
+                             ca.DEFAULT_PROTOCOL_VERSION)
 bytes_to_send = srv.send_broadcast(res1, response)
 sent = udp_sock.sendto(bytes_to_send, client_udp_address)
 
