@@ -8,6 +8,7 @@ import ctypes
 import itertools
 from io import BytesIO
 from collections import defaultdict, deque, namedtuple
+import logging
 import getpass
 import socket
 # N.B. We do no networking whatsoever in caproto. We only use socket for
@@ -51,6 +52,7 @@ class VirtualCircuit:
         # Copy these (immutable) hub attributes for convenience.
         self.our_role = hub.our_role
         self.their_role = hub.their_role
+        self.log = self._hub.log
 
     def add_channel(self, channel):
         self.channels[channel.cid] = channel
@@ -61,6 +63,7 @@ class VirtualCircuit:
         while updating our internal state machine.
         """
         self._process_command(self.our_role, command)
+        self.log.debug("Serializing %r", command)
         return bytes(command)
 
     def recv(self, byteslike):
@@ -80,9 +83,15 @@ class VirtualCircuit:
         Returns a :class:`Command` object or a special constant,
         :data:`NEED_DATA`.
         """
+        len_data = len(self._data)
         self._data, command = read_from_bytestream(self._data, self.their_role)
         if type(command) is not NEED_DATA:
             self._process_command(self.our_role, command)
+            self.log.debug("Parsed %d/%d cached bytes into %r.",
+                           len(command), len_data, command)
+        else:
+            self.log.debug("%d bytes are cached. Need more bytes to parse "
+                           "next command.", len(self._data))
         return command
 
     def _process_command(self, role, command):
@@ -263,6 +272,7 @@ class _BaseVirtualCircuitProxy:
         self.their_role = self._hub.their_role
         self.__circuit = None
         self._data = bytearray()  # will get handed off to VirtualCircuit
+        self.log = self._hub.log
 
     def _bind_circuit(self, priority):
         # Identify an existing VirtcuitCircuit with the right host and
@@ -292,6 +302,7 @@ class _BaseVirtualCircuitProxy:
                 raise err("This circuit must be initialized with a "
                           "VersionRequest.")
         self.circuit._process_command(self.our_role, command)
+        self.log.debug("Serializing %r", command)
         return bytes(command)
 
     def recv(self, byteslike):
@@ -301,6 +312,7 @@ class _BaseVirtualCircuitProxy:
         This does not actually do any processing on the data, just stores
         it. To trigger processing, you have to call :meth:`next_command`.
         """
+        self.log.debug("Received %d bytes into cache.", len(byteslike))
         if not self.bound:
             self._data += byteslike
         else:
@@ -323,7 +335,7 @@ class _BaseVirtualCircuitProxy:
                 else:
                     err = _get_exception(command, self.our_role)
                     raise err("This circuit must be initialized with a "
-                            "VersionRequest.")
+                              "VersionRequest.")
                 self.circuit._process_command(self.our_role, command)
             return command
         else:
@@ -417,6 +429,8 @@ class Hub:
         self._search_request_origins = {}  # map cid to host
         # This is only used by the convenience methods, to auto-generate a cid.
         self._cid_counter = itertools.count(0)
+        logger_name = "caproto.Hub"
+        self.log = logging.getLogger(logger_name)
 
     def send_broadcast(self, *commands):
         """
@@ -426,7 +440,10 @@ class Hub:
         """
         bytes_to_send = b''
         history = []  # commands sent as part of this datagram
-        for command in commands:
+        self.log.debug("Serializing %d commands into one datagram",
+                       len(commands))
+        for i, command in enumerate(commands):
+            self.log.debug("%d of %d %r", 1 + i, len(commands), command)
             self._process_command(self.our_role, command, history)
             bytes_to_send += bytes(command)
         return bytes_to_send
@@ -438,6 +455,8 @@ class Hub:
         This does not actually do any processing on the data, just stores
         it. To trigger processing, you have to call :meth:`next_command`.
         """
+        logging.debug("Received datagram from %r with %d bytes.",
+                      address, len(byteslike))
         self._datagram_inbox.append((byteslike, address))
 
     def next_command(self):
@@ -454,7 +473,14 @@ class Hub:
             self._history.clear()
             byteslike, address = self._datagram_inbox.popleft()
             commands = read_datagram(byteslike, address, self.their_role)
+            self.log.debug("Parsed %d commands from first datagram in queue.",
+                           len(commands))
+            for i, command in enumerate(commands):
+                self.log.debug("%d of %d: %r", i, len(commands), command)
             self._parsed_commands.extend(commands)
+        self.log.debug(("Returning 1 of %d commands from the datagram most "
+                        "recently parsed. %d more datagrams are cached."),
+                        len(self._parsed_commands), len(self._datagram_inbox))
         command = self._parsed_commands.popleft()
         self._process_command(self.their_role, command, self._history)
         return command
