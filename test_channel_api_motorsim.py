@@ -67,7 +67,6 @@ def recv(circuit):
         command = circuit.next_command()
         if type(command) is ca.NEED_DATA:
             break
-        print('parsed', command)
         commands.append(command)
     return commands
 

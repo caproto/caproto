@@ -41,6 +41,7 @@ chan1 = cli.new_channel(pv1)
 bytes_to_send = cli.send_broadcast(ca.VersionRequest(0, 13),
                                    ca.SearchRequest(pv1, 0, 13))
 print('searching for %s' % pv1)
+print('sending', bytes_to_send)
 send_bcast(bytes_to_send)
 bytes_received, address = recv_bcast()
 cli.recv_broadcast(bytes_received, address)
@@ -62,6 +63,7 @@ def recv(circuit):
     bytes_received = sockets[circuit].recv(4096)
     print('received', len(bytes_received), 'bytes')
     circuit.recv(bytes_received)
+    print('received into circuit')
     commands = []
     while True:
         command = circuit.next_command()
