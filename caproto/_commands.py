@@ -555,6 +555,7 @@ class CreateChanRequest(Message):
     version = property(lambda self: self.header.parameter2)
     name = property(lambda self: bytes(self.payload).rstrip(b'\x00'))
 
+
 class CreateChanResponse(Message):
     ID = 18
     HAS_PAYLOAD = False

@@ -143,7 +143,7 @@ class VirtualCircuit:
                     err = _get_exception(self.our_role, command)
                     raise err("Cannot process CreateChanRequest for cid={!r} "
                               "until a SearchRequest for that cid is "
-                              "broadcast.")
+                              "broadcast.".format(command.cid))
                 # TODO Validate that this channel has not already been Created
             else:
                 # In all other cases, the Command gives us a cid.
@@ -371,6 +371,7 @@ class _BaseVirtualCircuitProxy:
 
 
 class ServerVirtualCircuitProxy(_BaseVirtualCircuitProxy):
+    port = None
     ...
 
 
