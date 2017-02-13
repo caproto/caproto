@@ -379,6 +379,7 @@ class EventAddResponse(Message):
         if not payload_bytes:
             print('EventAdd with an empty payload!')
             return cls.from_components(header, None)
+        dbr_type = DBR_TYPES[header.data_type]
         payload_struct = from_buffer(dbr_type, payload_bytes)
         return cls.from_components(header, payload_struct)
 
