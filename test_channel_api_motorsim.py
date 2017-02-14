@@ -18,15 +18,11 @@ recv_bcast = lambda: sock.recvfrom(4096)
 
 # Send data
 ip = socket.gethostbyname(socket.gethostname())
-print('our ip', ip)
 reg_command = ca.RepeaterRegisterRequest(ip)
-print("Sending", reg_command)
 send_bcast(reg_command)
 
 # Receive response
-print('waiting to receive')
 data, address = recv_bcast()
-print('received', ca.read_datagram(data, address, ca.SERVER))
 sock.close()
 
 
@@ -37,23 +33,20 @@ recv_bcast = lambda: sock.recvfrom(4096)
 
 
 cli = ca.Hub(our_role=ca.CLIENT)
+cli.log.setLevel('DEBUG')
 chan1 = cli.new_channel(pv1)
 bytes_to_send = cli.send_broadcast(chan1.version_broadcast(priority=0),
                                    chan1.search_broadcast())
-print('searching for %s' % pv1)
 send_bcast(bytes_to_send)
 bytes_received, address = recv_bcast()
 cli.recv_broadcast(bytes_received, address)
 command = cli.next_command()
-print('received', command)
 command = cli.next_command()
-print('received', command)
 
 # Make a dict to hold our tcp sockets.
 sockets = {}
 
 def send(proxy, command):
-    print('sending', command)
     bytes_to_send = proxy.send(command)
     circuit = proxy.circuit
     if circuit not in sockets:
@@ -63,7 +56,6 @@ def send(proxy, command):
 def recv(proxy):
     circuit = proxy.circuit
     bytes_received = sockets[circuit].recv(4096)
-    print('received', len(bytes_received), 'bytes')
     circuit.recv(bytes_received)
     commands = []
     while True:
@@ -75,7 +67,6 @@ def recv(proxy):
 
 
 send(*chan1.version(priority=0))
-print('sent version request')
 recv(chan1.circuit)
 send(*chan1.host_name())
 send(*chan1.client_name())
@@ -92,7 +83,6 @@ try:
     print('Monitoring until Ctrl-C is hit')
     while True:
         commands, = recv(chan1.circuit)
-        print(commands)
 except KeyboardInterrupt:
     pass
 
@@ -101,17 +91,14 @@ _, cancel_req = chan1.unsubscribe(subscriptionid)
 
 send(chan1.circuit, cancel_req)
 commands, = recv(chan1.circuit)
-print(commands)
 
 send(*chan1.read())
 commands, = recv(chan1.circuit)
-print(commands.values.value)
 send(*chan1.write(3))
 recv(chan1.circuit)
 time.sleep(2)
 send(*chan1.read())
 recv(chan1.circuit)
-print(commands.values.value)
 send(*chan1.clear())
 recv(chan1.circuit)
 
