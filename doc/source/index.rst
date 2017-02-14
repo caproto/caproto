@@ -2,19 +2,21 @@
 caproto: a pure-Python Channel Access protocol library
 ******************************************************
 
-This is a "bring your own I/O" implementation of the Channel Access protocol in
+This is a "bring your own I/O" implementation of the
+`EPICS <http://www.aps.anl.gov/epics/>`_ Channel Access protocol in
 Python.
 
 This project is inspired by the broad effort in the Python community to write
 `sans-I/O implementations of network protocols <http://sans-io.readthedocs.io/>`_.
 Caproto manages the coupled state of an EPICS Client or Server, its
-VirtualCircuits, and Channels; it interprets received UDP and TCP messages;
-and it can compose valid messages to be sent. But, crucially, it
-performs no I/O itself. It merely processes and validates incoming and outgoing
-messsages and tracks client and server state. The developer using caproto is in
-complete control over when and how bytes are actually transmitted and received.
-The transport may be synchronous, threaded, asynchronous, etc. Caproto is
-unopinionated about this.
+VirtualCircuits, and Channels; it interprets received UDP and TCP messages and
+exposes them (zero-copy) as higher-level objects;
+using these same objects, it can compose valid messages to be sent. But,
+crucially, it performs no I/O itself. It merely processes and validates
+incoming and outgoing messsages and tracks client and server state. The
+developer using caproto is in complete control over when and how bytes are
+actually transmitted and received.  The transport may be synchronous, threaded,
+asynchronous, etc. Caproto is unopinionated about this.
 
 Why do this?
 ============

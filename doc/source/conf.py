@@ -1,4 +1,5 @@
 import caproto
+import sphinx_rtd_theme
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
@@ -41,6 +42,8 @@ extensions = [
     'sphinx.ext.githubpages',
     'numpydoc',
 ]
+
+autosummary_generate = True
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -130,13 +133,13 @@ todo_include_todos = False
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'alabaster'
+html_theme = 'sphinx_rtd_theme'
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
 # documentation.
 #
-# html_theme_options = {}
+html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
 
 # Add any paths that contain custom themes here, relative to this directory.
 # html_theme_path = []
