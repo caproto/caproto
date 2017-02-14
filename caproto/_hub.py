@@ -303,7 +303,8 @@ class _BaseVirtualCircuitProxy:
         Convert a high-level Command into bytes that can be sent to the peer,
         while updating our internal state machine.
         """
-        if not self.bound:
+        if commands and not self.bound:
+            command, *commands = commands
             if isinstance(command, VersionRequest):
                 self._bind_circuit(command.priority)
             else:
