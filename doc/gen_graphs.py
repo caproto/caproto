@@ -1,8 +1,8 @@
 '''
 Generate graphviz graphs from transitions in caproto._state
 '''
-import sys
 import graphviz as gv
+from collections import defaultdict
 from caproto import _state as state
 
 
@@ -16,13 +16,22 @@ def create_transition_graph(d, role, format_):
         node_name = to_node_name(node)
         graph.node(node_name, label=node_name)
 
+    self_transitions = defaultdict(lambda: [])
+
     for source, transitions in d.items():
         source_name = to_node_name(source)
         for received, dest in transitions.items():
             dest_name = to_node_name(dest)
-            graph.edge(source_name, dest_name,
-                       label=to_node_name(received))
+            received_name = to_node_name(received)
+            if source_name == dest_name:
+                self_transitions[source_name].append(received_name)
+                continue
 
+            graph.edge(source_name, dest_name,
+                       label=received_name)
+
+    for node_name, received_list in self_transitions.items():
+        graph.edge(node_name, node_name, label=' / '.join(received_list))
     return graph
 
 
