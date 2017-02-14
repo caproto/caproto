@@ -48,7 +48,7 @@ print('Accepted TCP')
 # # Make a dict to hold our tcp sockets.
 sockets = {}
 def send(proxy, command):
-    bytes_to_send = circuit.send(command)
+    bytes_to_send = proxy.circuit.send(command)
     connection.sendall(bytes_to_send)
 
 def recv(proxy):
@@ -69,34 +69,24 @@ bytes_received = connection.recv(4096)
 # TODO Unify VirtualCircuit Client/Server.
 proxy = ca.ServerVirtualCircuitProxy(srv, client_address[0])
 proxy.recv(bytes_received)
-ver_com = proxy.next_command()
-assert type(ver_com) is ca.VersionRequest
-bytes_to_send = proxy.send(ca.VersionResponse(13))
-connection.sendall(bytes_to_send)
-
-print(proxy.bound)
+proxy.next_command()
+proxy.next_command()
+proxy.next_command()
 proxy.next_command()
 print('normal operation')
-bytes_to_send = proxy.send(ca.AccessRightsResponse(cid=1, access_rights=3))
-connection.sendall(bytes_to_send)
-bytes_to_send = proxy.send(ca.CreateChanResponse(data_type=1, data_count=1,
-                                                 cid=1, sid=1))
-connection.sendall(bytes_to_send)
-#assert type(recv(proxy)[0]) is ca.ReadSyncRequest
-#assert type(recv(proxy)[0]) is ca.ReadNotifyRequest
-done = False
-while not done:
-    commands = recv(proxy)
-    print(commands)
-    for command in commands:
-        print(command)
-        if type(command) is ca.ReadNotifyRequest:
-            done = True
-            break
-    if done:
-        break
-p = (19, 1, 1, 1, 0, 15)  # DBR_TIME_INT args
-read_res = ca.ReadNotifyResponse(p, 15, 1, 1, 1)
-bytes_to_send = proxy.send(read_res)
+bytes_to_send = proxy.send(ca.VersionResponse(13),
+                           ca.AccessRightsResponse(cid=1, access_rights=3),
+                           ca.CreateChanResponse(data_type=1, data_count=1, cid=1, sid=1))
 connection.sendall(bytes_to_send)
 recv(proxy)
+#assert type(recv(proxy)[0]) is ca.ReadSyncRequest
+#assert type(recv(proxy)[0]) is ca.ReadNotifyRequest
+time.sleep(0.5)
+recv(proxy)
+p = (19, 1, 1, 1, 0, 15)  # DBR_TIME_INT args
+send(proxy, ca.ReadNotifyResponse(p, 15, 1, 1, 1))
+recv(proxy)
+proxy.next_command()
+proxy.next_command()
+proxy.next_command()
+proxy.next_command()

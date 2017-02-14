@@ -57,14 +57,18 @@ class VirtualCircuit:
     def add_channel(self, channel):
         self.channels[channel.cid] = channel
 
-    def send(self, command):
+    def send(self, *commands):
         """
-        Convert a high-level Command into bytes that can be sent to the peer,
-        while updating our internal state machine.
+        Convert one or more high-level Commands into bytes that may be
+        broadcast together in one TCP packet while updating our internal
+        state machine.
         """
-        self._process_command(self.our_role, command)
-        self.log.debug("Serializing %r", command)
-        return bytes(command)
+        bytes_to_send = b''
+        for command in commands:
+            self._process_command(self.our_role, command)
+            self.log.debug("Serializing %r", command)
+            bytes_to_send += bytes(command)
+        return bytes_to_send
 
     def recv(self, byteslike):
         """
@@ -289,7 +293,12 @@ class _BaseVirtualCircuitProxy:
             self._hub.circuits[key] = circuit
         self.__circuit = circuit
 
-    def send(self, command):
+    def send(self, *commands):
+        """
+        Convert one or more high-level Commands into bytes that may be
+        broadcast together in one TCP packet while updating our internal
+        state machine.
+        """
         """
         Convert a high-level Command into bytes that can be sent to the peer,
         while updating our internal state machine.
@@ -301,9 +310,12 @@ class _BaseVirtualCircuitProxy:
                 err = _get_exception(command, self.our_role)
                 raise err("This circuit must be initialized with a "
                           "VersionRequest.")
-        self.circuit._process_command(self.our_role, command)
-        self.log.debug("Serializing %r", command)
-        return bytes(command)
+        bytes_to_send = b''
+        for command in commands:
+            self.circuit._process_command(self.our_role, command)
+            self.log.debug("Serializing %r", command)
+            bytes_to_send += bytes(command)
+        return bytes_to_send
 
     def recv(self, byteslike):
         """
