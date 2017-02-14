@@ -63,8 +63,13 @@ The design of this library was inspired by
 principles and many of its clever tricks. h11 is distributed under an MIT
 license.
 
+And of course many resources from the EPICS developer community were
+indispensible. See :doc:`references`.
+
 .. toctree::
    :maxdepth: 2
 
-   references
+   basics
    api
+   examples
+   references
