@@ -237,9 +237,17 @@ class SearchResponse(Message):
         header = SearchResponseHeader(data_type=port,
                                       sid=int_encoded_ip,
                                       cid=cid)
-        # undocumented bit pattern
+        # Pad a uint16 to fill 8 bytes.
         payload = bytes(DBR_INT(version)).ljust(8, b'\x00')
         super().__init__(header, payload)
+
+    @classmethod
+    def from_wire(cls, header, payload_bytes):
+        # Special-case to handle the fact that data_type field is not the data
+        # type. (It's used to hold the server port, unrelated to the payload.)
+        if not payload_bytes:
+            return cls.from_components(header, None)
+        return cls.from_components(header, payload_bytes)
 
     @property
     def sid(self):
