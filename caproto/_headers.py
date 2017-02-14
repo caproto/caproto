@@ -93,7 +93,7 @@ def VersionResponseHeader(version):
         Minor protocol version number. Only used when sent over TCP.
     
     """
-    struct_args = (0, 0, 0, version, 0, 0)
+    struct_args = (0, 0, 1, version, 1, 0)
     return MessageHeader(*struct_args)
 
 
