@@ -34,8 +34,7 @@ command = srv.next_command()
 
 res1 = ca.VersionResponse(13)
 h, p = tcp_address
-response = ca.SearchResponse(CA_SERVER_PORT, OUR_IP, 1,
-                             ca.DEFAULT_PROTOCOL_VERSION)
+response = ca.SearchResponse(CA_SERVER_PORT, '255.255.255.255', 1, 13)
 bytes_to_send = srv.send_broadcast(res1, response)
 sent = udp_sock.sendto(bytes_to_send, client_udp_address)
 
@@ -76,17 +75,10 @@ proxy.next_command()
 print('normal operation')
 bytes_to_send = proxy.send(ca.VersionResponse(13),
                            ca.AccessRightsResponse(cid=1, access_rights=3),
-                           ca.CreateChanResponse(data_type=1, data_count=1, cid=1, sid=1))
+                           ca.CreateChanResponse(data_type=2, data_count=1, cid=1, sid=1))
 connection.sendall(bytes_to_send)
 recv(proxy)
-#assert type(recv(proxy)[0]) is ca.ReadSyncRequest
-#assert type(recv(proxy)[0]) is ca.ReadNotifyRequest
-time.sleep(0.5)
-recv(proxy)
-p = (19, 1, 1, 1, 0, 15)  # DBR_TIME_INT args
-send(proxy, ca.ReadNotifyResponse(p, 15, 1, 1, 1))
-recv(proxy)
 proxy.next_command()
-proxy.next_command()
-proxy.next_command()
+send(proxy, ca.ReadNotifyResponse((3.14,), 2, 1, 1, 1))
+# send(proxy, ca.ClearChannelResponse(1, 1))
 proxy.next_command()
