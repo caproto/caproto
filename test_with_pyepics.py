@@ -7,7 +7,6 @@ import getpass
 
 OUR_HOSTNAME = socket.gethostname()
 OUR_USERNAME = getpass.getuser()
-OUR_IP = our_ip = '10.2.229.216'
 CA_REPEATER_PORT = 5065
 CA_SERVER_PORT = 5064
 pv1 = "XF:31IDA-FAKE-PV"
@@ -43,6 +42,7 @@ sock3.listen(1)
 connection, client_address = sock3.accept()
 print('Accepted TCP')
 
+sock3.close()
 
 # # Make a dict to hold our tcp sockets.
 sockets = {}

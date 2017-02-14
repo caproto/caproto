@@ -36,4 +36,4 @@ best.
   state if a state-based transition applies.
 * [ ] Write a standalone script that acts as a CARepeater so we can test without
 * [ ] Sphinx docs
-* [ ] graphviz of state machines
+* [x] graphviz of state machines (TODO improve)
