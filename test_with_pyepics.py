@@ -66,7 +66,7 @@ def recv(proxy):
 print('initial receipt')
 bytes_received = connection.recv(4096)
 # TODO Unify VirtualCircuit Client/Server.
-proxy = ca.ServerVirtualCircuitProxy(srv, client_address[0])
+proxy = ca.VirtualCircuitProxy(srv, client_address)
 proxy.recv(bytes_received)
 proxy.next_command()
 proxy.next_command()

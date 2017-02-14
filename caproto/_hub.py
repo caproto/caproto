@@ -35,10 +35,9 @@ class VirtualCircuit:
     received over the socket should be passed to :meth:`recv`. Any data sent
     over the socket should first be passed through :meth:`send`.
     """
-    def __init__(self, hub, host, port, priority, data):
+    def __init__(self, hub, address, priority, data):
         self._hub = hub
-        self.host = host
-        self.port = port
+        self.address = address
         self.priority = priority
         self._state = CircuitState()
         self._data = data
@@ -249,29 +248,28 @@ class VirtualCircuit:
         # TODO Be more clever and reuse abandoned ioids; avoid overrunning.
         return next(self._ioid_counter)
 
-    @property
-    def address(self):
-        if self.our_role is CLIENT:
-            return self.host, self.port
-        else:
-            raise TypeError("Only a CLIENT-side VirtualCircuit has a complete "
-                            "address. A SERVER-side only has a port.")
 
-
-class _BaseVirtualCircuitProxy:
+class VirtualCircuitProxy:
     """
     For that awkward moment when you know the address of a circuit but you
-    don't yet know the prioirty, so you can't know whether this can use an
-    existing TCP connection or needs a new one.
+    don't yet know the prioirty
+    
+    As a CLIENT, until you know the 'priority', you can't know whether this can
+    use an existing circuit or will need a new one (and a new corresponding TCP
+    connection, managed by the user.
+
+    As a SERVER, you create one of these directly, in reponse to an incoming
+    request to accept a TCP connection. But you still don't bind the proxy to a
+    VirtualCircuit until you know the 'priority'.
 
     Parameters
     ----------
     hub : Hub
     host : string
     """
-    def __init__(self, hub, host):
+    def __init__(self, hub, address):
         self._hub = hub
-        self.host = host
+        self.address = address
         self.our_role = self._hub.our_role
         self.their_role = self._hub.their_role
         self.__circuit = None
@@ -286,8 +284,7 @@ class _BaseVirtualCircuitProxy:
             circuit = self._hub.circuits[key]
         except KeyError:
             circuit = VirtualCircuit(hub=self._hub,
-                                     host=self.host,
-                                     port=self.port,
+                                     address=self.address,
                                      priority=priority, data=self._data)
 
             self._hub.circuits[key] = circuit
@@ -394,18 +391,6 @@ class _BaseVirtualCircuitProxy:
     def _state(self):
         # TODO Remove this once _state.py is refactored properly.
         return self.circuit._state
-
-
-class ServerVirtualCircuitProxy(_BaseVirtualCircuitProxy):
-    port = None
-    ...
-
-
-class ClientVirtualCircuitProxy(_BaseVirtualCircuitProxy):
-    def __init__(self, hub, host, port):
-        super().__init__(hub, host)
-        self.port = port
-        self.address = self.host, self.port
 
 
 class Hub:
@@ -545,10 +530,10 @@ class Hub:
             if self.our_role is CLIENT:
                 # A CLIENT's circuit should hold the address of the server.
                 if command.header.parameter1 == 0xffffffff:
-                    host, port = command.sender_address
+                    address = command.sender_address
                 else:
-                    host, port = command.sid, command.port
-                proxy = ClientVirtualCircuitProxy(self, host, port)
+                    address = command.sid, command.port
+                proxy = VirtualCircuitProxy(self, address)
             else:
                 # A SERVER's circuit should hold the host of the client.
                 # We don't need the client's port, and we don't have a clean
