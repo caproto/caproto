@@ -244,7 +244,8 @@ class SearchResponse(Message):
         header = SearchResponseHeader(data_type=port,
                                       sid=int_encoded_ip,
                                       cid=cid)
-        payload = (2 * b'\x00') + bytes(DBR_INT(version)) + (4 * b'\x00')
+        # undocumented bit pattern
+        payload = bytes(DBR_INT(version)).ljust(8, b'\x00')
         super().__init__(header, payload)
 
     @property
