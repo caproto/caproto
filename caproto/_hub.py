@@ -461,9 +461,9 @@ class Hub:
         self._datagram_inbox = deque()  # datagrams to be parsed into Commands
         self._history = []  # commands parsed so far from current datagram
         self._parsed_commands = deque()  # parsed Commands to be processed
-        self._search_request_origins = {}  # map cid to host
+        eslf._unanswered_search_requests = {}  # map name to cid
         # This is only used by the convenience methods, to auto-generate a cid.
-        self._cid_counter = itertools.count(0)
+        self._channel_id_counter = itertools.count(0)
         logger_name = "caproto.Hub"
         self.log = logging.getLogger(logger_name)
 
@@ -597,11 +597,12 @@ class Hub:
             chan._state._fire_state_triggered_transitions()
         history.append(command)
 
-    def new_cid(self):
+    def new_channel_id(self):
+        "Return a valid value for a cid or sid."
         # This is used by the convenience methods. It does not update any
         # important state.
-        # TODO Be more clever and reuse abandoned cids; avoid overrunning.
-        return next(self._cid_counter)
+        # TODO Be more clever and reuse abandoned ids; avoid overrunning.
+        return next(self._channel_id_counter)
 
     def new_channel(self, name, cid=None):
         """
@@ -615,42 +616,66 @@ class Hub:
         ----------
         name : string
             Channnel name (PV)
-        cid : int, optional
-            If None, a valid (i.e., unused) integer is allocated.
+        cid : int, optional for CLIENT
+            On CLIENT, if None, a valid (i.e., unused) integer is allocated.
         """
-        # This method does not change any state other than the cid counter,
-        # which is neither important nor coupled to anything else.
-        if cid is None:
-            cid = self.new_cid()
-        circuit = None
         _class = {CLIENT: ClientChannel, SERVER: ServerChannel}[self.our_role]
-        channel = _class(self, circuit, cid, name)
+        channel = _class(self, name, cid)
         # If this Client has searched for this name and already knows its
-        # host, skip the Search step and create a circuit.
-        # if name in self._names:
-        #     circuit = self.circuits[(self._names[name], priority)]
+        # host, skip the Search step and create a VirtualCircuitProxy.
         return channel
 
 
-class _BaseChannel:
-    # This is subclassed by ClientChannel and ServerChannel, which merely add
-    # convenience methods that compose valid commands. They do not mutate any
-    # _BaseChannel state. All the critical code is here in the base class.
-    def __init__(self, hub, circuit_proxy, cid, name):
+class ClientChannel(_BaseChannel):
+    """An object encapsulating the state of the EPICS Channel on a Client.
+
+    There are two ways that a ClientChannel may be instantiated:
+
+    (1) The user instantiates a ClientChannel with a name and, optionally, a
+    integer identifier, cid. If no cid is given, a valid one is obtained from
+    an internal counter maintained by the Hub.
+    (2) A SearchResponse is processed by the Hub that refers to a cid not yet
+    seen. A ClientChannel will be implicitly instantiated with the
+    name and cid indicated that SearchResponse command.
+
+    Life-cycle of a ClientChannel:
+
+    * At instantiation time, a ClientChannel is registered with the Hub.
+    * When (if) a SearchResponse with this channel's cid is received and
+    processed by the Hub, we then know the address of its peer. It is
+    assigned a VirtualCircuitProxy.
+    * When (if) a CreateChanREquest with this channel's cid is received and
+    processed by its VirtualCircuitProxy, we then know its priority. Its
+    VirtualCircuitProxy is bound to a VirtualCircuit (corresponding to one
+    client--server TCP connection) which it may share with other Channels.
+    * When a ClearChannelRequest with this channel's cid is received and
+    processed by its VirtualCircuit[Proxy], the ClientChannel cannot be used
+    again.
+
+    Parameters
+    ----------
+    hub : :class:`Hub`
+    name : string
+        Channnel name (PV)
+    cid : integer
+        Unique Channel ID
+    """
+    def __init__(self, hub, name, cid=None):
         self._hub = hub
-        self._circuit_proxy = circuit_proxy # may be None at __init__ time
-        self.cid = cid
         self.name = name
+        if cid is None:
+            cid = hub.new_channel_id()
+        self.cid = cid
+        self.circuit = VirtualCircuitProxy()
         self._state = ChannelState()
-        # The Channel maybe not have a circuit yet, but it always needs to be
-        # registered by a Hub. When the Hub processes a SearchResponse Command
-        # regarding this Channel, that Command includes this Channel's cid,
-        # which the Hub can use to identify this Channel instance.
+        # Register the Channel with the Hub so it knows it recognizes the cid
+        # on a pertinent SearchResponses.
         hub.channels[cid] = self
-        # These are updated when the circuit processes CreateChanResponse.
+        # These will be set when the circuit processes CreateChanResponse.
         self.native_data_type = None
         self.native_data_count = None
         self.sid = None
+        self.cleared = False  # If True, Channel is at end of life.
 
     def _fill_defaults(self, data_type, data_count):
         # Boilerplate used in many convenience methods:
@@ -660,47 +685,6 @@ class _BaseChannel:
         if data_count is None:
             data_count = self.native_data_count
         return data_type, data_count
-
-    @property
-    def circuit(self):
-        if self.circuit_proxy is None:
-            return None
-        return self.circuit_proxy
-
-    @property
-    def circuit_proxy(self):
-        return self._circuit_proxy
-
-    @circuit_proxy.setter
-    def circuit_proxy(self, circuit_proxy):
-        # The hub assigns a VirtualCircuit to this Channel.
-        # This occurs when a :class:`SearchResponse` locating the Channel's
-        # name is processed.
-        if self._circuit_proxy is None:
-            self._circuit_proxy = circuit_proxy
-            self._state.couple_circuit(circuit_proxy)
-        else:
-            raise RuntimeError("circuit may only be set once")
-
-
-class ClientChannel(_BaseChannel):
-    """An object encapsulating the state of the EPICS Channel on a Client.
-
-    A Channel may be created as soon as the desired ``name`` is known, maybe
-    before the server providing that name is located.
-
-    A Channel will be assigned to a VirtualCircuit (corresponding to one
-    client--server TCP connection), which is may share with other Channels.
-
-    Parameters
-    ----------
-    hub : :class:`Hub`
-    circuit : None or :class:VirtualCircuit`
-    cid : integer
-        Unique Channel ID
-    name : string
-        Channnel name (PV)
-    """
 
     def version_broadcast(self, priority):
         """
@@ -976,19 +960,58 @@ class ClientChannel(_BaseChannel):
 class ServerChannel(_BaseChannel):
     """An object encapsulating the state of the EPICS Channel on a Server.
 
-    A Channel will be assigned to a VirtualCircuit (corresponding to one
-    client--server TCP connection), which is may share with other Channels
-    to that same Client.
+    A ServerChannel is instaniated in response to a CreateChanRequest.
+
+    Life-cycle of a ServerChannel:
+
+    * At instantiation time, a ServerChannel is registered with the Hub and
+    assigned a VirtualCircuit (corresponding to one server--client TCP
+    connection) which it may share with other Channels.
+    * When a ClearChannelRequest with this channel's sid is received and
+    processed by its VirtualCircuit, the ServerChannel cannot be used
+    again.
 
     Parameters
     ----------
     hub : :class:`Hub`
-    circuit : None or :class:VirtualCircuit`
-    cid : integer
-        unique Channel ID
     name : string
         Channnel name (PV)
+    cid : integer
+        unique client-side Channel ID
+    native_data_type : a :class:`DBR_TYPE` or its designation integer ID
+        Default Channel Access data type for a reading.
+    native_data_count : integer
+        Default number of values in a reading.
+    sid : integer, optional
+        unique server-side Channel ID
     """
+    def __init__(self, hub, name, cid, native_data_type, native_data_count,
+                 sid=None):
+        self._hub = hub
+        self.name = name
+        self.cid = cid
+        if sid is None:
+            sid = hub.new_channel_id()
+        self.sid = sid
+        self.circuit = VirtualCircuitProxy()
+        self._state = ChannelState()
+        # Register the Channel with the Hub so it knows it recognizes the cid
+        # on a pertinent SearchResponses.
+        hub.channels[cid] = self
+        # These will be set when the circuit processes CreateChanResponse.
+        self.native_data_type = None
+        self.native_data_count = None
+        self.cleared = False  # If True, Channel is at end of life.
+
+    def _fill_defaults(self, data_type, data_count):
+        # Boilerplate used in many convenience methods:
+        # Replace `None` default arg with actual default value.
+        if data_type is None:
+            data_type = self.native_data_type
+        if data_count is None:
+            data_count = self.native_data_count
+        return data_type, data_count
+
     def version_broadcast_response(self):
         """
         A convenience method: generate a valid :class:`VersionRespone`.
@@ -1012,7 +1035,7 @@ class ServerChannel(_BaseChannel):
         comamnd = VersionResponse(DEFAULT_PROTOCOL_VERSION)
         return command
 
-    def search_broadcast_response(self, sid=None):
+    def search_broadcast_response(self, server_host, server_port):
         """
         A convenience method: generate a valid :class:`SearchRespone`.
 
@@ -1028,12 +1051,7 @@ class ServerChannel(_BaseChannel):
         -------
         SearchResponse
         """
-        if sid is None:
-            sid = host
-        host, port = self.circuit.address
-        print(host, port)
-        # The sid part of the SearchResponse spec is deprecated.
-        command = SearchResponse(port=port, sid=host, cid=self.cid,
+        command = SearchResponse(port=server_port, sid=server_host, cid=self.cid,
                                  version=DEFAULT_PROTOCOL_VERSION)
         return command
 
