@@ -55,6 +55,14 @@ How do you know it works?
   found errors in the documentation, we fixed them and submitted a patch
   upstream. (NOTE: Again this is a reminder to submit a patch.)
 
+Acknowledgement
+===============
+
+The design of this library was inspired by
+`h11 <https://h11.readthedocs.io/>`_, to which caproto owes its core design
+principles and many of its clever tricks. h11 is distributed under an MIT
+license.
+
 .. toctree::
    :maxdepth: 2
 
