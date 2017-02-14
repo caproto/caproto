@@ -117,13 +117,6 @@ def read_from_bytestream(data, role):
         header = ExtendedMessageHeader.from_buffer(data)
     _class = Commands[role][header.command]
     payload_size = header.payload_size
-
-    # SPECIAL CASE TO WORK AROUND libca bug
-    # if _class is CreateChanRequest:
-    #     if header.payload_size == 0:
-    #         payload_size = 16
-    # END SPECIAL CASE
-
     total_size = header_size + payload_size
     # Do we have all the bytes in the payload?
     if len(data) < total_size:
