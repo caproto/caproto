@@ -14,8 +14,7 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
             EchoRequest: AWAIT_VERSION_RESPONSE,
             EchoResponse: AWAIT_VERSION_RESPONSE,
             VersionResponse: CONNECTED,
-            ErrorResponse: ERROR,
-        },
+            ErrorResponse: ERROR, },
         CONNECTED: {
             EchoRequest: CONNECTED,
             EchoResponse: CONNECTED,
@@ -164,9 +163,10 @@ class ChannelState(_BaseState):
             self.states[CLIENT], circuit._state.states[CLIENT] = new
 
     def process_command(self, role, command_type):
-        self._fire_state_triggered_transitions()
-        self._fire_command_triggered_transitions(role, command_type)
-        self._fire_state_triggered_transitions()
+        ...
+        #self._fire_state_triggered_transitions()
+        #self._fire_command_triggered_transitions(role, command_type)
+        #self._fire_state_triggered_transitions()
     
 
 class CircuitState(_BaseState):
@@ -176,4 +176,5 @@ class CircuitState(_BaseState):
         self.states = {CLIENT: SEND_VERSION_REQUEST, SERVER: IDLE}
 
     def process_command(self, role, command_type):
-        self._fire_command_triggered_transitions(role, command_type)
+        ...
+        #self._fire_command_triggered_transitions(role, command_type)
