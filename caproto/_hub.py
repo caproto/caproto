@@ -34,6 +34,18 @@ class VirtualCircuit:
     It is a companion to a TCP socket managed by the user. All data
     received over the socket should be passed to :meth:`recv`. Any data sent
     over the socket should first be passed through :meth:`send`.
+
+    Parameters
+    ----------
+    hub : Hub
+    address : tuple
+        ``(host, port)`` as a string and an integer respectively
+    priority : integer or None
+        May be used by the server to prioritize requests when under high
+        load. Lowest priority is 0; highest is 99.
+    data : bytearray
+        data received but not yet processed by the VirtualCircuitProxy before
+        it bound to this Virtual Circuit
     """
     def __init__(self, hub, address, priority, data):
         self._hub = hub
@@ -54,6 +66,13 @@ class VirtualCircuit:
         self.log = self._hub.log
 
     def add_channel(self, channel):
+        """
+        Assign a Channel to this Virtual Circuit.
+
+        Parameters
+        ----------
+        channel : :class:`ServerChannel` or :class:`ClientChannel`
+        """
         self.channels[channel.cid] = channel
 
     def send(self, *commands):
@@ -61,6 +80,11 @@ class VirtualCircuit:
         Convert one or more high-level Commands into bytes that may be
         broadcast together in one TCP packet while updating our internal
         state machine.
+
+        Parameters
+        ----------
+        *commands :
+            any number of :class:`Message` objects
         """
         bytes_to_send = b''
         for command in commands:
@@ -75,6 +99,10 @@ class VirtualCircuit:
 
         This does not actually do any processing on the data, just stores
         it. To trigger processing, you have to call :meth:`next_command`.
+
+        Parameters
+        ----------
+        byteslike : bytes-like
         """
         self._data += byteslike
 
@@ -103,7 +131,7 @@ class VirtualCircuit:
 
         Parameters
         ----------
-        role : CLIENT or SERVER
+        role : ``CLIENT`` or ``SERVER``
         command : Message
         """
         # Filter for Commands that are pertinent to a specific Channel, as
@@ -253,7 +281,7 @@ class VirtualCircuitProxy:
     """
     For that awkward moment when you know the address of a circuit but you
     don't yet know the prioirty
-    
+
     As a CLIENT, until you know the 'priority', you can't know whether this can
     use an existing circuit or will need a new one (and a new corresponding TCP
     connection, managed by the user.
@@ -265,7 +293,8 @@ class VirtualCircuitProxy:
     Parameters
     ----------
     hub : Hub
-    host : string
+    address : tuple
+        ``(host, port)`` as a string and an integer respectively
     """
     def __init__(self, hub, address):
         self._hub = hub
@@ -295,10 +324,11 @@ class VirtualCircuitProxy:
         Convert one or more high-level Commands into bytes that may be
         broadcast together in one TCP packet while updating our internal
         state machine.
-        """
-        """
-        Convert a high-level Command into bytes that can be sent to the peer,
-        while updating our internal state machine.
+
+        Parameters
+        ----------
+        *commands :
+            any number of :class:`Message` objects
         """
         if commands and not self.bound:
             command, *commands = commands
@@ -321,6 +351,10 @@ class VirtualCircuitProxy:
 
         This does not actually do any processing on the data, just stores
         it. To trigger processing, you have to call :meth:`next_command`.
+
+        Parameters
+        ----------
+        byteslike : bytes-like
         """
         self.log.debug("Received %d bytes into cache.", len(byteslike))
         if not self.bound:
@@ -407,8 +441,11 @@ class Hub:
 
     It may also be used to compose valid commands using a pleasant Python API
     and to decode incoming bytestreams into these same kinds of objects.
-    """
 
+    Parameters
+    ----------
+    our_role : CLIENT or SERVER
+    """
     def __init__(self, our_role):
         if our_role not in (SERVER, CLIENT):
             raise CaprotoValueError("role must be caproto.SERVER or "
@@ -435,6 +472,11 @@ class Hub:
         Convert one or more high-level Commands into bytes that may be
         broadcast together in one UDP datagram while updating our internal
         state machine.
+
+        Parameters
+        ----------
+        *commands :
+            any number of :class:`Message` objects
         """
         bytes_to_send = b''
         history = []  # commands sent as part of this datagram
@@ -452,6 +494,12 @@ class Hub:
 
         This does not actually do any processing on the data, just stores
         it. To trigger processing, you have to call :meth:`next_command`.
+
+        Parameters
+        ----------
+        byteslike : bytes-like
+        address : tuple
+            ``(host, port)`` as a string and an integer respectively
         """
         logging.debug("Received datagram from %r with %d bytes.",
                       address, len(byteslike))
@@ -489,10 +537,10 @@ class Hub:
 
         Parameters
         ----------
-        role : CLIENT or SERVER
+        role : ``CLIENT`` or ``SERVER``
         command : Message
         history : list
-            Mutated; command is appended at the end.
+            This input will be mutated: command will be appended at the end.
         """
         # All commands go through here.
         if isinstance(command, SearchRequest):
@@ -567,6 +615,13 @@ class Hub:
 
         This method does not update any important state. It is equivalent to:
         ``<ChannelClass>(<Hub>, None, <UNIQUE_INT>, name)``
+
+        Parameters
+        ----------
+        name : string
+            Channnel name (PV)
+        cid : int, optional
+            If None, a valid (i.e., unused) integer is allocated.
         """
         # This method does not change any state other than the cid counter,
         # which is neither important nor coupled to anything else.
@@ -647,7 +702,7 @@ class ClientChannel(_BaseChannel):
     hub : :class:`Hub`
     circuit : None or :class:VirtualCircuit`
     cid : integer
-        unique Channel ID
+        Unique Channel ID
     name : string
         Channnel name (PV)
     """
@@ -732,6 +787,11 @@ class ClientChannel(_BaseChannel):
         an effect if it is passed to the :meth:`send` method of the
         corresponding :class:`VirtualCircuit`.
 
+        Parameters
+        ----------
+        host_name : string, optional
+            defaults to output of ``socket.gethostname()``
+
         Returns
         -------
         VirtualCircuit, HostNameRequest
@@ -746,6 +806,11 @@ class ClientChannel(_BaseChannel):
         This method does not update any important state. The command only has
         an effect if it is passed to the :meth:`send` method of the
         corresponding :class:`VirtualCircuit`.
+
+        Parameters
+        ----------
+        client_name : string, optional
+            defaults to output of ``getuser.getpass()``
 
         Returns
         -------
@@ -793,6 +858,17 @@ class ClientChannel(_BaseChannel):
         an effect if it is passed to the :meth:`send` method of the
         corresponding :class:`VirtualCircuit`.
 
+        Parameters
+        ----------
+        data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
+            Requested Channel Access data type. Default is the channel's
+            native data type, which can be checked in the Channel's attribute
+            :attr:`native_data_type`.
+        data_count : integer, optional
+            Requested number of values. Default is the channel's native data
+            count, which can be checked in the Channel's attribute
+            :attr:`native_data_count`.
+
         Returns
         -------
         VirtualCircuit, ReadNotifyRequest
@@ -813,6 +889,14 @@ class ClientChannel(_BaseChannel):
         Parameters
         ----------
         data : object
+        data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
+            Requested Channel Access data type. Default is the channel's
+            native data type, which can be checked in the Channel's attribute
+            :attr:`native_data_type`.
+        data_count : integer, optional
+            Requested number of values. Default is the channel's native data
+            count, which can be checked in the Channel's attribute
+            :attr:`native_data_count`.
 
         Returns
         -------
@@ -834,7 +918,22 @@ class ClientChannel(_BaseChannel):
 
         Parameters
         ----------
-        data : object
+        data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
+            Requested Channel Access data type. Default is the channel's
+            native data type, which can be checked in the Channel's attribute
+            :attr:`native_data_type`.
+        data_count : integer, optional
+            Requested number of values. Default is the channel's native data
+            count, which can be checked in the Channel's attribute
+            :attr:`native_data_count`.
+        low : number
+            Default is 0.
+        high : number
+            Default is 0.
+        to : number
+            Default is 0.
+        mask :
+            Default is None.
 
         Returns
         -------
@@ -858,7 +957,9 @@ class ClientChannel(_BaseChannel):
 
         Parameters
         ----------
-        data : object
+        subscriptionid : integer
+            The ``subscriptionid`` that was originally sent in the
+            corresponding :class:`EventAddRequest`.
 
         Returns
         -------
@@ -967,6 +1068,19 @@ class ServerChannel(_BaseChannel):
         an effect if it is passed to the :meth:`send` method of the
         corresponding :class:`VirtualCircuit`.
 
+        Parameters
+        ----------
+        data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
+            Requested Channel Access data type. Default is the channel's
+            native data type, which can be checked in the Channel's attribute
+            :attr:`native_data_type`.
+        data_count : integer, optional
+            Requested number of values. Default is the channel's native data
+            count, which can be checked in the Channel's attribute
+            :attr:`native_data_count`.
+        sid : integer
+            server-allocated sid
+
         Returns
         -------
         VirtualCircuit, CreateChanResponse
@@ -998,6 +1112,21 @@ class ServerChannel(_BaseChannel):
         an effect if it is passed to the :meth:`send` method of the
         corresponding :class:`VirtualCircuit`.
 
+        Parameters
+        ----------
+        values :
+        ioid : integer
+        data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
+            Requested Channel Access data type. Default is the channel's
+            native data type, which can be checked in the Channel's attribute
+            :attr:`native_data_type`.
+        data_count : integer, optional
+            Requested number of values. Default is the channel's native data
+            count, which can be checked in the Channel's attribute
+            :attr:`native_data_count`.
+        status : integer, optional
+            Default is 1 (success).
+
         Returns
         -------
         VirtualCircuit, ReadNotifyResponse
@@ -1015,6 +1144,20 @@ class ServerChannel(_BaseChannel):
         an effect if it is passed to the :meth:`send` method of the
         corresponding :class:`VirtualCircuit`.
 
+        Parameters
+        ----------
+        ioid : integer
+        data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
+            Requested Channel Access data type. Default is the channel's
+            native data type, which can be checked in the Channel's attribute
+            :attr:`native_data_type`.
+        data_count : integer, optional
+            Requested number of values. Default is the channel's native data
+            count, which can be checked in the Channel's attribute
+            :attr:`native_data_count`.
+        status : integer, optional
+            Default is 1 (success).
+
         Returns
         -------
         VirtualCircuit, WriteNotifyResponse
@@ -1031,6 +1174,21 @@ class ServerChannel(_BaseChannel):
         This method does not update any important state. The command only has
         an effect if it is passed to the :meth:`send` method of the
         corresponding :class:`VirtualCircuit`.
+
+        Parameters
+        ----------
+        values :
+        subscriptionid :
+        data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
+            Requested Channel Access data type. Default is the channel's
+            native data type, which can be checked in the Channel's attribute
+            :attr:`native_data_type`.
+        data_count : integer, optional
+            Requested number of values. Default is the channel's native data
+            count, which can be checked in the Channel's attribute
+            :attr:`native_data_count`.
+        status_code : integer, optional
+            Default is 32 (???).
 
         Returns
         -------
@@ -1051,6 +1209,18 @@ class ServerChannel(_BaseChannel):
         an effect if it is passed to the :meth:`send` method of the
         corresponding :class:`VirtualCircuit`.
 
+        Parameters
+        ----------
+        subscriptionid :
+        data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
+            Requested Channel Access data type. Default is the channel's
+            native data type, which can be checked in the Channel's attribute
+            :attr:`native_data_type`.
+        data_count : integer, optional
+            Requested number of values. Default is the channel's native data
+            count, which can be checked in the Channel's attribute
+            :attr:`native_data_count`.
+
         Returns
         -------
         VirtualCircuit, EventCancelResponse
@@ -1067,9 +1237,9 @@ def _get_exception(our_role, command):
 
     Parameters
     ----------
-    our_role: CLIENT or SERVER
+    our_role: ``CLIENT`` or ``SERVER``
     command : Message
-        We will test whether it is a REQUEST or RESPONSE.
+        We will test whether it is a ``REQUEST`` or ``RESPONSE``.
     """
     # TO DO Give commands an attribute so we can easily check whether one
     # is a Request or a Response
