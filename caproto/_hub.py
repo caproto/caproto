@@ -308,7 +308,7 @@ class VirtualCircuitProxy:
     def _bind_circuit(self, priority):
         # Identify an existing VirtcuitCircuit with the right host and
         # priority, or create one.
-        key = (self.host, priority)
+        key = (self.address[0], priority)
         try:
             circuit = self._hub.circuits[key]
         except KeyError:
@@ -577,27 +577,22 @@ class Hub:
             # communication about this Channel should take place on.
             if self.our_role is CLIENT:
                 # A CLIENT's circuit should hold the address of the server.
+                host, port = command.sid, command.port
                 if command.header.parameter1 == 0xffffffff:
                     address = command.sender_address
                 else:
-                    address = command.sid, command.port
+                    address = host, port
                 proxy = VirtualCircuitProxy(self, address)
-            else:
-                # A SERVER's circuit should hold the host of the client.
-                # We don't need the client's port, and we don't have a clean
-                # way to get it.
-                host = self._search_request_origins[chan.cid]
-                proxy = ServerVirtualCircuitProxy(self, host)
+                # Separately, stash the address where we found this name. This
+                # information might remain useful beyond the lifecycle of the
+                # circuit.
+                self._names[chan.name] = host
             # We now know the Channel's address so we can assign it to a
             # VirtualCircuitProxy. We will not know the Channel's priority
             # until we see a VersionRequest, hence the *Proxy* in
             # VirtualCircuitProxy.
             chan.circuit_proxy = proxy
             print('proxy', chan.circuit_proxy)
-            # Separately, stash the address where we found this name. This
-            # information might remain useful beyond the lifecycle of the
-            # circuit.
-            self._names[chan.name] = host
             # TODO Let the state machine take care of this...
             chan._state._fire_state_triggered_transitions()
         history.append(command)
