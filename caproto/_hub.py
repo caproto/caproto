@@ -269,16 +269,29 @@ class VirtualCircuit:
                                                       priority))
 
     def new_subscriptionid(self):
-        # This is used by the convenience methods. It does not update any
-        # important state.
-        # TODO Be more clever and reuse abandoned ids; avoid overrunning.
-        return next(self._sub_counter)
+        """
+        This is used by the convenience methods to obtain an unused integer ID.
+        It does not update any important state.
+        """
+        # Return the next sequential unused id. Wrap back to 0 on overflow.
+        i = next(self._sub_counter)
+        if i == 2**16:
+            self._sub_counter = itertools.count(0)
+        while i in self._sub_commands:
+            i = next(self._sub_counter)
+
 
     def new_ioid(self):
-        # This is used by the convenience methods. It does not update any
-        # important state.
-        # TODO Be more clever and reuse abandoned ioids; avoid overrunning.
-        return next(self._ioid_counter)
+        """
+        This is used by the convenience methods to obtain an unused integer ID.
+        It does not update any important state.
+        """
+        # Return the next sequential unused id. Wrap back to 0 on overflow.
+        i = next(self._ioid_counter)
+        if i == 2**16:
+            self._ioid_counter = itertools.count(0)
+        while i in self._sub_commands:
+            i = next(self._ioid_counter)
 
 
 class VirtualCircuitProxy:
@@ -605,10 +618,12 @@ class Hub:
 
     def new_channel_id(self):
         "Return a valid value for a cid or sid."
-        # This is used by the convenience methods. It does not update any
-        # important state.
-        # TODO Be more clever and reuse abandoned ids; avoid overrunning.
-        return next(self._channel_id_counter)
+        # Return the next sequential unused id. Wrap back to 0 on overflow.
+        i = next(self._channel_id_counter)
+        if i == 2**16:
+            self._channel_id_counter = itertools.count(0)
+        while i in self.channels:
+            i = next(self._channel_id_counter)
 
     def new_channel(self, name, cid=None):
         """
