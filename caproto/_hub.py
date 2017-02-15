@@ -51,6 +51,8 @@ class VirtualCircuit:
         self._hub = hub
         self.address = address
         self.priority = priority
+        # (host, prority) uniquely identifies this circuit
+        self.key = (address[0], priority)
         self._state = CircuitState()
         self._data = data
         self.channels = {}  # map cid to Channel
@@ -414,6 +416,10 @@ class VirtualCircuitProxy:
     @property
     def channels(self):
         return self.circuit.channels
+
+    @property
+    def key(self):
+        return self.circuit.key
 
     @property
     def _subinfo(self):
