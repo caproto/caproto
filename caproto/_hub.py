@@ -46,7 +46,7 @@ class VirtualCircuit:
     data : bytearray
         data received but not yet processed by the VirtualCircuitProxy before
         it bound to this Virtual Circuit
-    data : CircuitState
+    state : CircuitState
         passed in by VirtualCircuitProxy
     """
     def __init__(self, hub, address, priority, data, state):
