@@ -61,7 +61,7 @@ class VirtualCircuit:
         self._state.channels = self.channels
         self._channels_sid = {}  # map sid to Channel
         self._ioids = {}  # map ioid to Channel
-        self._subinfo = {}  # map subscriptionid to stashed EventAdd command
+        self.sub_commands = {}  # map subscriptionid to EventAdd command
         # There are only used by the convenience methods, to auto-generate ids.
         self._ioid_counter = itertools.count(0)
         self._sub_counter = itertools.count(0)
@@ -172,12 +172,12 @@ class VirtualCircuit:
                                       EventCancelRequest, EventCancelResponse)):
                 # Identify the Channel based on its subscriptionid
                 try:
-                    subinfo = self._subinfo[command.subscriptionid]
+                    event_add = self.sub_commands[command.subscriptionid]
                 except KeyError:
                     err = get_exception(self.our_role, command)
                     raise err("Unrecognized subscriptionid {!r}"
                               "".format(subscriptionid))
-                chan = self._channels_sid[subinfo.sid]
+                chan = self._channels_sid[event_add.sid]
             elif isinstance(command, CreateChanRequest):
                 # A Channel instance for this cid may already exist.
                 try:
@@ -196,33 +196,33 @@ class VirtualCircuit:
             if isinstance(command, (EventAddResponse, EventCancelRequest,
                                     EventCancelResponse)):
                 # Verify data_type matches the one in the original request.
-                subinfo = self._subinfo[command.subscriptionid]
-                if subinfo.data_type != command.data_type:
+                event_add = self.sub_commands[command.subscriptionid]
+                if event_add.data_type != command.data_type:
                     err = get_exception(self.our_role, command)
                     raise err("The data_type in {!r} does not match the "
                                 "data_type in the original EventAddRequest "
                                 "for this subscriptionid, {!r}."
-                                "".format(command, subinfo.data_type))
+                                "".format(command, event_add.data_type))
             if isinstance(command, (EventAddResponse,)):
                 # Verify data_count matches the one in the original request.
                 # NOTE The docs say that EventCancelRequest should echo the
                 # original data_count too, but in fact it seems to be 0.
-                subinfo = self._subinfo[command.subscriptionid]
-                if subinfo.data_count != command.data_count:
+                event_add = self.sub_commands[command.subscriptionid]
+                if event_add.data_count != command.data_count:
                     err = get_exception(self.our_role, command)
                     raise err("The data_count in {!r} does not match the "
                                 "data_count in the original EventAddRequest "
                                 "for this subscriptionid, {!r}."
-                                "".format(command, subinfo.data_count))
+                                "".format(command, event_add.data_count))
             if isinstance(command, (EventCancelRequest, EventCancelResponse)):
                 # Verify sid matches the one in the original request.
-                subinfo = self._subinfo[command.subscriptionid]
-                if subinfo.sid != command.sid:
+                event_add = self.sub_commands[command.subscriptionid]
+                if event_add.sid != command.sid:
                     err = get_exception(self.our_role, command)
                     raise err("The sid in {!r} does not match the sid in "
                                 "in the original EventAddRequest for this "
                                 "subscriptionid, {!r}."
-                                "".format(command, subinfo.sid))
+                                "".format(command, event_add.sid))
 
             # Update the state machine of the pertinent Channel.
             # If this is not a valid command, the state machine will raise
@@ -249,9 +249,9 @@ class VirtualCircuit:
                 # We will use the info in this command later to validate that
                 # {EventAddResponse, EventCancelRequest, EventCancelResponse}
                 # send or received in the future are valid.
-                self._subinfo[command.subscriptionid] = command
+                self.sub_commands[command.subscriptionid] = command
             elif isinstance(command, EventCancelResponse):
-                self._subinfo.pop(subscriptionid)
+                self.sub_commands.pop(subscriptionid)
 
         # Otherwise, this Command affects the state of this circuit, not a
         # specific Channel. Run the circuit's state machine.
@@ -428,9 +428,8 @@ class VirtualCircuitProxy:
         return self.circuit.key
 
     @property
-    def _subinfo(self):
-        # TODO Provide a public access for this on VirtualCircuit.
-        return self.circuit._subinfo
+    def sub_commands(self):
+        return self.circuit.sub_commands
 
 
 class Hub:
@@ -665,6 +664,14 @@ class _BaseChannel:
             raise RuntimeError("circuit can only be assigned once")
         self._circuit = virtual_circuit_proxy
         self._state.circuit_state = virtual_circuit_proxy._state
+
+    @property
+    def subscriptions(self):
+        """
+        Get cached EventAdd commands for this channel's active subscriptions.
+        """
+        return {k: v for k, v in self._circuit.sub_commands.items()
+                if v.cid == self.cid}
 
     def _fill_defaults(self, data_type, data_count):
         # Boilerplate used in many convenience methods:
@@ -971,14 +978,14 @@ class ClientChannel(_BaseChannel):
         VirtualCircuit, EventAddRequest
         """
         try:
-            sub_info = self.circuit._subinfo[subscriptionid]
+            event_add = self.circuit.sub_commands[subscriptionid]
         except KeyError:
             raise CaprotoKeyError("No current subscription has id {!r}"
                                   "".format(subscriptionid))
-        if sub_info.sid != self.sid:
+        if event_add.sid != self.sid:
             raise CaprotoValueError("This subscription is for a different "
                                     "Channel.")
-        command = EventCancelRequest(sub_info.data_type, self.sid,
+        command = EventCancelRequest(event_add.data_type, self.sid,
                                      subscriptionid)
         return self.circuit, command
 
