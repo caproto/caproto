@@ -450,8 +450,10 @@ class Hub:
     Parameters
     ----------
     our_role : CLIENT or SERVER
+    protocol_version : integer
+        default is ``DEFAULT_PROTOCOL_VERSION``
     """
-    def __init__(self, our_role):
+    def __init__(self, our_role, protcol_version=DEFAULT_PROTOCOL_VERSION):
         if our_role not in (SERVER, CLIENT):
             raise CaprotoValueError("role must be caproto.SERVER or "
                                     "caproto.CLIENT")
@@ -460,7 +462,8 @@ class Hub:
             self.their_role = SERVER
         else:
             self.their_role = CLIENT
-        self._names = {}  # map known Channel names to (host, port)
+        self.protocol_version = protcol_version
+        self._addresses = {}  # map known Channel names to (host, port)
         self.circuits = {}  # keyed by ((host, port), priority)
         self.channels = {}  # map cid to Channel
         self._datagram_inbox = deque()  # datagrams to be parsed into Commands
@@ -717,9 +720,9 @@ class ClientChannel(_BaseChannel):
 
         Parameters
         ----------
-        priority : integer or None
+        priority : integer, optional
             May be used by the server to prioritize requests when under high
-            load. Lowest priority is 0; highest is 99.
+            load. Lowest priority is 0; highest is 99. Default is 0.
 
         Returns
         -------
@@ -729,7 +732,7 @@ class ClientChannel(_BaseChannel):
         --------
         :meth:`version_broadcast`
         """
-        command = VersionRequest(priority, DEFAULT_PROTOCOL_VERSION)
+        command = VersionRequest(priority, self._hub.protocol_version)
         return command
 
     def search_broadcast(self):
@@ -748,10 +751,11 @@ class ClientChannel(_BaseChannel):
         -------
         SearchRequest
         """
-        command = SearchRequest(self.name, self.cid, DEFAULT_PROTOCOL_VERSION)
+        command = SearchRequest(self.name, self.cid,
+                                self._hub.protocol_version)
         return command
 
-    def version(self, priority):
+    def version(self, priority=0):
         """
         A convenience method: generate a valid :class:`VersionRequest`.
 
@@ -761,9 +765,9 @@ class ClientChannel(_BaseChannel):
 
         Parameters
         ----------
-        priority : integer or None
+        priority : integer, optional
             May be used by the server to prioritize requests when under high
-            load. Lowest priority is 0; highest is 99.
+            load. Lowest priority is 0; highest is 99. Default is 0.
 
         Returns
         -------
@@ -828,7 +832,7 @@ class ClientChannel(_BaseChannel):
         VirtualCircuit, CreateChanRequest
         """
         command = CreateChanRequest(self.name, self.cid,
-                                    DEFAULT_PROTOCOL_VERSION)
+                                    self._hub.protocol_version)
         return self.circuit, command
 
     def clear(self):
@@ -995,10 +999,10 @@ class ServerChannel(_BaseChannel):
         --------
         :meth:`version_response`
         """
-        comamnd = VersionResponse(DEFAULT_PROTOCOL_VERSION)
+        comamnd = VersionResponse(self._hub.protocol_version)
         return command
 
-    def search_broadcast_response(self, server_host, server_port):
+    def search_broadcast_response(self, server_address):
         """
         A convenience method: generate a valid :class:`SearchRespone`.
 
@@ -1010,12 +1014,17 @@ class ServerChannel(_BaseChannel):
         mehtods, this does not return a VirtualCircuit. It should be passed to
         ``Hub.send_broadcast`` and broadcast over UDP.
 
+        Parameters
+        ----------
+        server_address : tuple
+            ``(host, port)`` where server is accepting TCP connections
+
         Returns
         -------
         SearchResponse
         """
-        command = SearchResponse(port=server_port, sid=server_host, cid=self.cid,
-                                 version=DEFAULT_PROTOCOL_VERSION)
+        command = SearchResponse(port=server_port, sid=server_host,
+                                 cid=self.cid, version=version)
         return command
 
     def version_reponse(self, version):
@@ -1090,7 +1099,7 @@ class ServerChannel(_BaseChannel):
 
         Parameters
         ----------
-        values :
+        values : ???
         ioid : integer
         data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
             Requested Channel Access data type. Default is the channel's
