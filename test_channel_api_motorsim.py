@@ -46,15 +46,13 @@ command = cli.next_command()
 # Make a dict to hold our tcp sockets.
 sockets = {}
 
-def send(proxy, command):
-    bytes_to_send = proxy.send(command)
-    circuit = proxy.circuit
+def send(circuit, command):
+    bytes_to_send = circuit.send(command)
     if circuit not in sockets:
         sockets[circuit] = socket.create_connection(circuit.address)
     sockets[circuit].send(bytes_to_send)
 
-def recv(proxy):
-    circuit = proxy.circuit
+def recv(circuit):
     bytes_received = sockets[circuit].recv(4096)
     circuit.recv(bytes_received)
     commands = []
@@ -102,5 +100,5 @@ recv(chan1.circuit)
 send(*chan1.clear())
 recv(chan1.circuit)
 
-sockets[chan1.circuit_proxy.circuit].close()
+sockets[chan1.circuit].close()
 sock.close()
