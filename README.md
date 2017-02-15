@@ -31,9 +31,9 @@ best.
   simple types.
 * [ ] Make DBR <-> Python type conversion as automatic and smooth as possible
   without limiting user control.
-* [ ] Once "caproto as a server" works, revisit `_state.py` and simplify.
+* [x] Once "caproto as a server" works, revisit `_state.py` and simplify.
 * [ ] Refactor state machine that Circuit state reaches out and updates Channel
   state if a state-based transition applies.
 * [ ] Write a standalone script that acts as a CARepeater so we can test without
-* [ ] Sphinx docs
+* [x] Sphinx docs
 * [x] graphviz of state machines (TODO improve)
