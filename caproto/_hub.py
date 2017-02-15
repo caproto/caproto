@@ -174,17 +174,13 @@ class VirtualCircuit:
                               "".format(subscriptionid))
                 chan = self._channels_sid[subinfo.sid]
             elif isinstance(command, CreateChanRequest):
-                # A (Server|Client)Channel will have been craeted for this cid
-                # when the SearchRequest was processed by the Hub, but the
-                # Channel has not yet been claimed by a VirtualCircuit.
+                # A Channel instance for this cid may already exist.
                 try:
                     chan = self._hub.channels[command.cid]
                 except KeyError:
-                    err = _get_exception(self.our_role, command)
-                    raise err("Cannot process CreateChanRequest for cid={!r} "
-                              "until a SearchRequest for that cid is "
-                              "broadcast.".format(command.cid))
-                # TODO Validate that this channel has not already been Created
+                    chan = self._hub.new_channel(name=command.name,
+                                                 cid=command.cid)
+                    chan.circuit = self
             else:
                 # In all other cases, the Command gives us a cid.
                 cid = command.cid
@@ -222,8 +218,6 @@ class VirtualCircuit:
                                 "in the original EventAddRequest for this "
                                 "subscriptionid, {!r}."
                                 "".format(command, subinfo.sid))
-            if isinstance(command, CreateChanRequest):
-                self.add_channel(chan)
 
             # Update the state machine of the pertinent Channel.
             # If this is not a valid command, the state machine will raise
@@ -233,14 +227,19 @@ class VirtualCircuit:
 
             # If we got this far, the state machine has validated this Command.
             # Update other Channel and Circuit state.
-            if isinstance(command, (ReadNotifyRequest, WriteNotifyRequest)):
-                # Stash the ioid for later reference.
-                self._ioids[command.ioid] = chan
+            if isinstance(command, CreateChanRequest):
+                self.add_channel(chan)
             elif isinstance(command, CreateChanResponse):
                 chan.native_data_type = command.data_type
                 chan.native_data_count = command.data_count
                 chan.sid = command.sid
                 self._channels_sid[chan.sid] = chan
+            elif isinstance(command, ClearChannelResponse):
+                self._channels_sid.pop(chan.sid)
+                self.channels.pop(chan.cid)
+            elif isinstance(command, (ReadNotifyRequest, WriteNotifyRequest)):
+                # Stash the ioid for later reference.
+                self._ioids[command.ioid] = chan
             elif isinstance(command, EventAddRequest):
                 # We will use the info in this command later to validate that
                 # {EventAddResponse, EventCancelRequest, EventCancelResponse}
@@ -461,7 +460,7 @@ class Hub:
         self._datagram_inbox = deque()  # datagrams to be parsed into Commands
         self._history = []  # commands parsed so far from current datagram
         self._parsed_commands = deque()  # parsed Commands to be processed
-        eslf._unanswered_search_requests = {}  # map name to cid
+        self._unanswered_searches = []  # search ids (cids)
         # This is only used by the convenience methods, to auto-generate a cid.
         self._channel_id_counter = itertools.count(0)
         logger_name = "caproto.Hub"
@@ -543,58 +542,52 @@ class Hub:
             This input will be mutated: command will be appended at the end.
         """
         # All commands go through here.
-        if isinstance(command, SearchRequest):
+        if isinstance(command, (SearchRequest, SearchRequest)):
             if VersionRequest not in map(type, history):
                 err = _get_exception(self, command)
-                raise err("A broadcasted SearchRequest must be preceded by a "
-                          "VersionRequest in the same datagram.")
-            cid = command.cid
-            try:
-                # Maybe the user has manually instantiated a Channel instance
-                # with this cid. This is typically (but not necessarily) the
-                # case if we are a CLIENT. It is never the case if we are a
-                # SERVER.
-                chan = self.channels[cid]
-            except KeyError:
-                # If here, we don't yet have a Channel for this cid. Make one.
-                # It will be accessible via self.channels.
-                chan = self.new_channel(name=command.name, cid=cid)
-            chan._state.process_command(self.our_role, type(command))
-            chan._state.process_command(self.their_role, type(command))
-            if self.our_role is SERVER:
-                host, _ = command.sender_address
-                self._search_request_origins[command.cid] = host
+                raise err("A broadcasted {!s} must be preceded by a "
+                          "VersionRequest in the same datagram."
+                          "".format(type(command).__name__))
+        if isinstance(command, SearchRequest):
+            self._unanswered_searches.append(command.cid)
         elif isinstance(command, SearchResponse):
-            if VersionResponse not in map(type, history):
-                err = _get_exception(self, command)
-                raise err("A broadcasted SearchResponse must be preceded by a "
-                          "VersionResponse in the same datagram.")
-            # Update the state machine of the pertinent Channel.
-            chan = self.channels[command.cid]
-            chan._state.process_command(self.our_role, type(command))
-            chan._state.process_command(self.their_role, type(command))
-            # Get the address for the VirtualCircuit that TCP
-            # communication about this Channel should take place on.
+            try:
+                self._unanswered_searches.remove(command.cid)
+            except ValueError:
+                err = _get_exception(self.our_role, command)
+                raise err("No SearchRequest we have seen matches this "
+                          "SearchResponse.")
             if self.our_role is CLIENT:
-                # A CLIENT's circuit should hold the address of the server.
-                host, port = command.sid, command.port
+                # Maybe the user has manually instantiated a Channel instance
+                # with this cid. If not, make one.
+                try:
+                    chan = self.channels[command.cid]
+                except KeyError:
+                    chan = self.new_channel(name=command.name,
+                                            cid=command.cid)
+
+                # Update the state machine of the pertinent Channel.
+                chan._state.process_command(self.our_role, type(command))
+                chan._state.process_command(self.their_role, type(command))
+
+                # Get the address that TCP communication about this Channel
+                # should take place on.
                 if command.header.parameter1 == 0xffffffff:
+                    # The CA spec tells us that this sentinel value means we
+                    # should fall back to using the address of the sender of
+                    # the UDP datagram.
                     address = command.sender_address
                 else:
-                    address = host, port
-                proxy = VirtualCircuitProxy(self, address)
+                    address = command.sid, command.port
+                # We now know the Channel's address so we can assign it to a
+                # VirtualCircuitProxy. We will not know the Channel's priority
+                # until we see a VersionRequest, hence the *Proxy* in
+                # VirtualCircuitProxy.
+                chan.circuit = VirtualCircuitProxy(self, address)
                 # Separately, stash the address where we found this name. This
                 # information might remain useful beyond the lifecycle of the
                 # circuit.
-                self._names[chan.name] = host
-            # We now know the Channel's address so we can assign it to a
-            # VirtualCircuitProxy. We will not know the Channel's priority
-            # until we see a VersionRequest, hence the *Proxy* in
-            # VirtualCircuitProxy.
-            chan.circuit_proxy = proxy
-            print('proxy', chan.circuit_proxy)
-            # TODO Let the state machine take care of this...
-            chan._state._fire_state_triggered_transitions()
+                self._addresses[chan.name] = address
         history.append(command)
 
     def new_channel_id(self):
@@ -626,6 +619,50 @@ class Hub:
         return channel
 
 
+class _BaseChannel:
+    # Base class for ClientChannel and ServerChannel, which add convenience
+    # methods for composing requests and repsponses, respectively. All of the
+    # important code is here in the base class.
+    def __init__(self, hub, name, cid=None):
+        print("BOOM")
+        self._hub = hub
+        self.name = name
+        if cid is None:
+            cid = hub.new_channel_id()
+        self.cid = cid
+        self._state = ChannelState()
+        # Register the Channel with the Hub so it knows it recognizes the cid
+        # on a pertinent SearchResponses.
+        hub.channels[cid] = self
+        # This will be set when a SearchResponse is processed.
+        self._circuit = None
+        # These will be set when the circuit processes CreateChanResponse.
+        self.native_data_type = None
+        self.native_data_count = None
+        self.sid = None
+        self.cleared = False  # If True, Channel is at end of life.
+
+    @property
+    def circuit(self):
+        return self._circuit
+
+    @circuit.setter
+    def circuit(self, virtual_circuit_proxy):
+        if self._circuit is not None:
+            raise RuntimeError("circuit can only be assigned once")
+        self._circuit = virtual_circuit_proxy
+
+    def _fill_defaults(self, data_type, data_count):
+        # Boilerplate used in many convenience methods:
+        # Replace `None` default arg with actual default value.
+        if data_type is None:
+            data_type = self.native_data_type
+        if data_count is None:
+            data_count = self.native_data_count
+        return data_type, data_count
+
+
+
 class ClientChannel(_BaseChannel):
     """An object encapsulating the state of the EPICS Channel on a Client.
 
@@ -644,7 +681,7 @@ class ClientChannel(_BaseChannel):
     * When (if) a SearchResponse with this channel's cid is received and
     processed by the Hub, we then know the address of its peer. It is
     assigned a VirtualCircuitProxy.
-    * When (if) a CreateChanREquest with this channel's cid is received and
+    * When (if) a VersionRequest with this channel's cid is received and
     processed by its VirtualCircuitProxy, we then know its priority. Its
     VirtualCircuitProxy is bound to a VirtualCircuit (corresponding to one
     client--server TCP connection) which it may share with other Channels.
@@ -660,33 +697,7 @@ class ClientChannel(_BaseChannel):
     cid : integer
         Unique Channel ID
     """
-    def __init__(self, hub, name, cid=None):
-        self._hub = hub
-        self.name = name
-        if cid is None:
-            cid = hub.new_channel_id()
-        self.cid = cid
-        self.circuit = VirtualCircuitProxy()
-        self._state = ChannelState()
-        # Register the Channel with the Hub so it knows it recognizes the cid
-        # on a pertinent SearchResponses.
-        hub.channels[cid] = self
-        # These will be set when the circuit processes CreateChanResponse.
-        self.native_data_type = None
-        self.native_data_count = None
-        self.sid = None
-        self.cleared = False  # If True, Channel is at end of life.
-
-    def _fill_defaults(self, data_type, data_count):
-        # Boilerplate used in many convenience methods:
-        # Replace `None` default arg with actual default value.
-        if data_type is None:
-            data_type = self.native_data_type
-        if data_count is None:
-            data_count = self.native_data_count
-        return data_type, data_count
-
-    def version_broadcast(self, priority):
+    def version_broadcast(self, priority=0):
         """
         A convenience method: generate a valid :class:`VersionRequest`.
 
@@ -958,60 +969,6 @@ class ClientChannel(_BaseChannel):
 
 
 class ServerChannel(_BaseChannel):
-    """An object encapsulating the state of the EPICS Channel on a Server.
-
-    A ServerChannel is instaniated in response to a CreateChanRequest.
-
-    Life-cycle of a ServerChannel:
-
-    * At instantiation time, a ServerChannel is registered with the Hub and
-    assigned a VirtualCircuit (corresponding to one server--client TCP
-    connection) which it may share with other Channels.
-    * When a ClearChannelRequest with this channel's sid is received and
-    processed by its VirtualCircuit, the ServerChannel cannot be used
-    again.
-
-    Parameters
-    ----------
-    hub : :class:`Hub`
-    name : string
-        Channnel name (PV)
-    cid : integer
-        unique client-side Channel ID
-    native_data_type : a :class:`DBR_TYPE` or its designation integer ID
-        Default Channel Access data type for a reading.
-    native_data_count : integer
-        Default number of values in a reading.
-    sid : integer, optional
-        unique server-side Channel ID
-    """
-    def __init__(self, hub, name, cid, native_data_type, native_data_count,
-                 sid=None):
-        self._hub = hub
-        self.name = name
-        self.cid = cid
-        if sid is None:
-            sid = hub.new_channel_id()
-        self.sid = sid
-        self.circuit = VirtualCircuitProxy()
-        self._state = ChannelState()
-        # Register the Channel with the Hub so it knows it recognizes the cid
-        # on a pertinent SearchResponses.
-        hub.channels[cid] = self
-        # These will be set when the circuit processes CreateChanResponse.
-        self.native_data_type = None
-        self.native_data_count = None
-        self.cleared = False  # If True, Channel is at end of life.
-
-    def _fill_defaults(self, data_type, data_count):
-        # Boilerplate used in many convenience methods:
-        # Replace `None` default arg with actual default value.
-        if data_type is None:
-            data_type = self.native_data_type
-        if data_count is None:
-            data_count = self.native_data_count
-        return data_type, data_count
-
     def version_broadcast_response(self):
         """
         A convenience method: generate a valid :class:`VersionRespone`.
