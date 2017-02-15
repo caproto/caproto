@@ -46,16 +46,19 @@ class VirtualCircuit:
     data : bytearray
         data received but not yet processed by the VirtualCircuitProxy before
         it bound to this Virtual Circuit
+    data : CircuitState
+        passed in by VirtualCircuitProxy
     """
-    def __init__(self, hub, address, priority, data):
+    def __init__(self, hub, address, priority, data, state):
         self._hub = hub
         self.address = address
         self.priority = priority
         # (host, prority) uniquely identifies this circuit
         self.key = (address[0], priority)
-        self._state = CircuitState()
+        self._state = state
         self._data = data
         self.channels = {}  # map cid to Channel
+        self._state.channels = self.channels
         self._channels_sid = {}  # map sid to Channel
         self._ioids = {}  # map ioid to Channel
         self._subinfo = {}  # map subscriptionid to stashed EventAdd command
@@ -155,7 +158,7 @@ class VirtualCircuit:
                 try:
                     chan = self._channels_sid[sid]
                 except KeyError:
-                    err = _get_exception(self.our_role, command)
+                    err = get_exception(self.our_role, command)
                     raise err("Unknown Channel sid {!r}".format(command.sid))
             elif isinstance(command, (ReadNotifyResponse,
                                       WriteNotifyResponse)):
@@ -163,7 +166,7 @@ class VirtualCircuit:
                 try:
                     chan = self._ioids[command.ioid]
                 except KeyError:
-                    err = _get_exception(self.our_role, command)
+                    err = get_exception(self.our_role, command)
                     raise err("Unknown Channel ioid {!r}".format(command.ioid))
             elif isinstance(command, (EventAddResponse,
                                       EventCancelRequest, EventCancelResponse)):
@@ -171,7 +174,7 @@ class VirtualCircuit:
                 try:
                     subinfo = self._subinfo[command.subscriptionid]
                 except KeyError:
-                    err = _get_exception(self.our_role, command)
+                    err = get_exception(self.our_role, command)
                     raise err("Unrecognized subscriptionid {!r}"
                               "".format(subscriptionid))
                 chan = self._channels_sid[subinfo.sid]
@@ -195,7 +198,7 @@ class VirtualCircuit:
                 # Verify data_type matches the one in the original request.
                 subinfo = self._subinfo[command.subscriptionid]
                 if subinfo.data_type != command.data_type:
-                    err = _get_exception(self.our_role, command)
+                    err = get_exception(self.our_role, command)
                     raise err("The data_type in {!r} does not match the "
                                 "data_type in the original EventAddRequest "
                                 "for this subscriptionid, {!r}."
@@ -206,7 +209,7 @@ class VirtualCircuit:
                 # original data_count too, but in fact it seems to be 0.
                 subinfo = self._subinfo[command.subscriptionid]
                 if subinfo.data_count != command.data_count:
-                    err = _get_exception(self.our_role, command)
+                    err = get_exception(self.our_role, command)
                     raise err("The data_count in {!r} does not match the "
                                 "data_count in the original EventAddRequest "
                                 "for this subscriptionid, {!r}."
@@ -215,7 +218,7 @@ class VirtualCircuit:
                 # Verify sid matches the one in the original request.
                 subinfo = self._subinfo[command.subscriptionid]
                 if subinfo.sid != command.sid:
-                    err = _get_exception(self.our_role, command)
+                    err = get_exception(self.our_role, command)
                     raise err("The sid in {!r} does not match the sid in "
                                 "in the original EventAddRequest for this "
                                 "subscriptionid, {!r}."
@@ -260,7 +263,7 @@ class VirtualCircuit:
         # ensure that we are not getting contradictory information.
         if isinstance(command, VersionRequest):
             if self.priority != command.priority:
-                err = _get_exception(self.our_role, command)
+                err = get_exception(self.our_role, command)
                 raise("priority {} does not match previously set priority "
                       "of {} for this circuit".format(command.priority,
                                                       priority))
@@ -301,6 +304,7 @@ class VirtualCircuitProxy:
         self._hub = hub
         self.address = address
         self.our_role = self._hub.our_role
+        self._state = CircuitState()
         self.their_role = self._hub.their_role
         self.__circuit = None
         self._data = bytearray()  # will get handed off to VirtualCircuit
@@ -315,7 +319,9 @@ class VirtualCircuitProxy:
         except KeyError:
             circuit = VirtualCircuit(hub=self._hub,
                                      address=self.address,
-                                     priority=priority, data=self._data)
+                                     priority=priority,
+                                     data=self._data,
+                                     state=self._state)
 
             self._hub.circuits[key] = circuit
         self.__circuit = circuit
@@ -332,11 +338,11 @@ class VirtualCircuitProxy:
             any number of :class:`Message` objects
         """
         if commands and not self.bound:
-            command, *commands = commands
-            if isinstance(command, VersionRequest):
-                self._bind_circuit(command.priority)
+            first_command, *_= commands
+            if isinstance(first_command, VersionRequest):
+                self._bind_circuit(first_command.priority)
             else:
-                err = _get_exception(command, self.our_role)
+                err = get_exception(first_command, self.our_role)
                 raise err("This circuit must be initialized with a "
                           "VersionRequest.")
         bytes_to_send = b''
@@ -378,7 +384,7 @@ class VirtualCircuitProxy:
                 if isinstance(command, VersionRequest):
                     self._bind_circuit(command.priority)
                 else:
-                    err = _get_exception(command, self.our_role)
+                    err = get_exception(command, self.our_role)
                     raise err("This circuit must be initialized with a "
                               "VersionRequest.")
                 self.circuit._process_command(self.our_role, command)
@@ -425,11 +431,6 @@ class VirtualCircuitProxy:
     def _subinfo(self):
         # TODO Provide a public access for this on VirtualCircuit.
         return self.circuit._subinfo
-
-    @property
-    def _state(self):
-        # TODO Remove this once _state.py is refactored properly.
-        return self.circuit._state
 
 
 class Hub:
@@ -551,21 +552,28 @@ class Hub:
             This input will be mutated: command will be appended at the end.
         """
         # All commands go through here.
-        if isinstance(command, (SearchRequest, SearchRequest)):
-            if VersionRequest not in map(type, history):
-                err = _get_exception(self, command)
-                raise err("A broadcasted {!s} must be preceded by a "
-                          "VersionRequest in the same datagram."
-                          "".format(type(command).__name__))
         if isinstance(command, SearchRequest):
+            if VersionRequest not in map(type, history):
+                err = get_exception(self, command)
+                raise err("A broadcasted SearchResponse must be preceded by a "
+                          "VersionResponse in the same datagram.")
             self._unanswered_searches.append(command.cid)
         elif isinstance(command, SearchResponse):
+            if VersionResponse not in map(type, history):
+                err = get_exception(self, command)
+                raise err("A broadcasted SearchResponse must be preceded by a "
+                          "VersionResponse in the same datagram.")
             try:
                 self._unanswered_searches.remove(command.cid)
             except ValueError:
-                err = _get_exception(self.our_role, command)
+                err = get_exception(self.our_role, command)
                 raise err("No SearchRequest we have seen matches this "
                           "SearchResponse.")
+        history.append(command)
+
+        if isinstance(command, SearchRequest):
+            self._unanswered_searches.append(command.cid)
+        elif isinstance(command, SearchResponse):
             if self.our_role is CLIENT:
                 # Maybe the user has manually instantiated a Channel instance
                 # with this cid. If not, make one.
@@ -574,10 +582,6 @@ class Hub:
                 except KeyError:
                     chan = self.new_channel(name=command.name,
                                             cid=command.cid)
-
-                # Update the state machine of the pertinent Channel.
-                chan._state.process_command(self.our_role, type(command))
-                chan._state.process_command(self.their_role, type(command))
 
                 # Get the address that TCP communication about this Channel
                 # should take place on.
@@ -592,12 +596,13 @@ class Hub:
                 # VirtualCircuitProxy. We will not know the Channel's priority
                 # until we see a VersionRequest, hence the *Proxy* in
                 # VirtualCircuitProxy.
-                chan.circuit = VirtualCircuitProxy(self, address)
+                circuit = VirtualCircuitProxy(self, address)
+                chan.circuit = circuit
+
                 # Separately, stash the address where we found this name. This
                 # information might remain useful beyond the lifecycle of the
                 # circuit.
                 self._addresses[chan.name] = address
-        history.append(command)
 
     def new_channel_id(self):
         "Return a valid value for a cid or sid."
@@ -633,7 +638,6 @@ class _BaseChannel:
     # methods for composing requests and repsponses, respectively. All of the
     # important code is here in the base class.
     def __init__(self, hub, name, cid=None):
-        print("BOOM")
         self._hub = hub
         self.name = name
         if cid is None:
@@ -660,6 +664,7 @@ class _BaseChannel:
         if self._circuit is not None:
             raise RuntimeError("circuit can only be assigned once")
         self._circuit = virtual_circuit_proxy
+        self._state.circuit_state = virtual_circuit_proxy._state
 
     def _fill_defaults(self, data_type, data_count):
         # Boilerplate used in many convenience methods:
@@ -1209,28 +1214,3 @@ class ServerChannel(_BaseChannel):
         """
         # TODO How does CA actually work? It seems to break its spec.
         ...
-
-def _get_exception(our_role, command):
-    """
-    Return a (Local|Remote)ProtocolError depending on which command this is and
-    which role we are playing.
-
-    Note that this method does not raise; it is up to the caller to raise.
-
-    Parameters
-    ----------
-    our_role: ``CLIENT`` or ``SERVER``
-    command : Message
-        We will test whether it is a ``REQUEST`` or ``RESPONSE``.
-    """
-    # TO DO Give commands an attribute so we can easily check whether one
-    # is a Request or a Response
-    if command.DIRECTION is REQUEST:
-        party_at_fault = CLIENT
-    elif command.DIRECTION is RESPONSE:
-        party_at_fault = SERVER
-    if our_role is party_at_fault:
-        _class = LocalProtocolError
-    else:
-        _class =  RemoteProtocolError
-    return _class
