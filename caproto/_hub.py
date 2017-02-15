@@ -1045,7 +1045,7 @@ class ServerChannel(_BaseChannel):
         """
         return self.circuit, self.version_broadcast_response(version)
 
-    def create_response(self, data_type, data_count, sid):
+    def create_response(self, native_data_type, native_data_count, sid):
         """
         A convenience method: generate a valid :class:`CreateChanResponse`.
 
@@ -1055,14 +1055,10 @@ class ServerChannel(_BaseChannel):
 
         Parameters
         ----------
-        data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
-            Requested Channel Access data type. Default is the channel's
-            native data type, which can be checked in the Channel's attribute
-            :attr:`native_data_type`.
-        data_count : integer, optional
-            Requested number of values. Default is the channel's native data
-            count, which can be checked in the Channel's attribute
-            :attr:`native_data_count`.
+        native_data_type : a :class:`DBR_TYPE` or its designation integer ID
+            Default Channel Access data type.
+        native_data_count : integer
+            Default number of values
         sid : integer
             server-allocated sid
 
@@ -1070,7 +1066,8 @@ class ServerChannel(_BaseChannel):
         -------
         VirtualCircuit, CreateChanResponse
         """
-        command = CreateChanResponse(data_type, data_count, self.cid, sid)
+        command = CreateChanResponse(native_data_type, native_data_count,
+                                     self.cid, sid)
         return self.circuit, command
 
     def clear(self):
