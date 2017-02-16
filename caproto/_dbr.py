@@ -8,10 +8,9 @@
 #
 
 import ctypes
-import numpy as np
+import os
+from platform import architecture
 from enum import IntEnum
-
-from .utils import (PY64_WINDOWS, decode_bytes)
 
 from ctypes import c_short as short_t
 from ctypes import c_ushort as ushort_t
@@ -25,6 +24,7 @@ from ctypes import c_ubyte as ubyte_t
 from ctypes import c_char as char_t
 from ctypes import c_void_p as void_p
 
+PY64_WINDOWS = (os.name == 'nt' and architecture()[0].startswith('64'))
 if PY64_WINDOWS:
     # Note that Windows needs to be told that chid is 8 bytes for 64-bit,
     # except that Python2 is very weird -- using a 4byte chid for 64-bit, but
@@ -246,7 +246,7 @@ class ControlTypeUnits(ControlTypeBase):
 
     def to_dict(self):
         kwds = super().to_dict()
-        kwds['units'] = decode_bytes(self.units)
+        kwds['units'] = self.units.rstrip(b'\x00')
         return kwds
 
 
@@ -334,14 +334,18 @@ class ConnectionArgs(ctypes.Structure):
                     connected=(self.op == ConnStatus.OP_CONN_UP)
                     )
 
-_numpy_map = {
-    ChType.INT: np.int16,
-    ChType.FLOAT: np.float32,
-    ChType.ENUM: np.uint16,
-    ChType.CHAR: np.uint8,
-    ChType.LONG: np.int32,
-    ChType.DOUBLE: np.float64
-}
+
+try:
+    import numpy as np
+except ImportError:
+    _numpy_map = {
+        ChType.INT: np.int16,
+        ChType.FLOAT: np.float32,
+        ChType.ENUM: np.uint16,
+        ChType.CHAR: np.uint8,
+        ChType.LONG: np.int32,
+        ChType.DOUBLE: np.float64
+    }
 
 
 # map of Epics DBR types to ctypes types

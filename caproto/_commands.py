@@ -22,7 +22,7 @@ import struct
 import socket
 import math
 from ._headers import *
-from ._dbr_types import *
+from ._dbr import *
 from ._utils import *
 
 
