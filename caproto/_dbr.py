@@ -153,6 +153,51 @@ char_types = (ChType.CHAR, ChType.TIME_CHAR, ChType.CTRL_CHAR)
 native_float_types = (ChType.FLOAT, ChType.DOUBLE)
 
 
+class StatusType(ctypes.BigEndianStructure):
+    _fields_ = [('status', short_t),
+                ('severity', short_t)]
+
+
+class StatusString(StatusType):
+    ID = ChannelType.STS_STRING
+    _fields_ = [('value', MAX_STRING_SIZE * char_t)]
+
+
+class StatusShort(StatusType):
+    ID = ChannelType.STS_SHORT
+    _fields_ = [('RISC_pad', short_t),
+                ('value', short_t)]
+
+
+class StatusFloat(StatusType):
+    ID = ChannelType.STS_FLOAT
+    _fields_ = [('value', float_t)]
+
+
+class StatusEnum(StatusType):
+    ID = ChannelType.STS_ENUM
+    _fields_ = [('RISC_pad', short_t),
+                ('value', ushort_t)]
+
+
+class StatusChar(StatusType):
+    ID = ChannelType.STS_CHAR
+    _fields_ = [('RISC_pad0', short_t),
+                ('RISC_pad1', byte_t),
+                ('value', byte_t)]
+
+
+class StatusLong(StatusType):
+    ID = ChannelType.STS_LONG
+    _fields_ = [('value', int_t)]
+
+
+class StatusDouble(StatusType):
+    ID = ChannelType.STS_DOUBLE
+    _fields_ = [('RISC_pad', int_t),
+                ('value', double_t)]
+
+
 class TimeStamp(ctypes.BigEndianStructure):
     "emulate epics timestamp"
     _fields_ = [('secs', uint_t),
@@ -352,13 +397,13 @@ DBR_TYPES = {
     ChType.LONG: be_int_t,
     ChType.DOUBLE: be_double_t,
 
-    ChType.STS_STRING: be_string_t,
-    ChType.STS_INT: be_short_t,
-    ChType.STS_FLOAT: be_float_t,
-    ChType.STS_ENUM: be_ushort_t,
-    ChType.STS_CHAR: be_ubyte_t,
-    ChType.STS_LONG: be_int_t,
-    ChType.STS_DOUBLE: be_double_t,
+    ChType.STS_STRING: StatusString,
+    ChType.STS_INT: StatusShort,
+    ChType.STS_FLOAT: StatusFloat,
+    ChType.STS_ENUM: StatusEnum,
+    ChType.STS_CHAR: StatusChar,
+    ChType.STS_LONG: StatusLong,
+    ChType.STS_DOUBLE: StatusDouble,
 
     ChType.TIME_STRING: TimeString,
     ChType.TIME_INT: TimeShort,
