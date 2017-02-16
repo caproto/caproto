@@ -328,33 +328,6 @@ class CtrlDouble(CtrlLimitsDouble, ControlTypePrecision):
     _fields_ = [('value', double_t)]
 
 
-class EventHandlerArgs(ctypes.Structure):
-    '''event handler arguments'''
-    _fields_ = [('usr', ctypes.py_object),
-                ('chid', chid_t),
-                ('type', long_t),
-                ('count', long_t),
-                ('raw_dbr', void_p),
-                ('status', int_t)]
-
-    def to_dict(self):
-        return dict(ftype=self.type,
-                    count=self.count,
-                    chid=self.chid,
-                    status=self.status,
-                    )
-
-
-class ConnectionArgs(ctypes.Structure):
-    '''connection arguments'''
-    _fields_ = [('chid', chid_t),
-                ('op', long_t)]
-
-    def to_dict(self):
-        return dict(chid=self.chid,
-                    connected=(self.op == ConnStatus.OP_CONN_UP)
-                    )
-
 
 try:
     import numpy as np
