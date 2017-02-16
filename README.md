@@ -25,15 +25,15 @@ best.
   CARepeater over TCP.
   libca installed.
 * [x] Use caproto as a server that responds to caget/pyepics.
+  without limiting user control.
+* [x] Once "caproto as a server" works, revisit `_state.py` and simplify.
+* [x] Refactor state machine that Circuit state reaches out and updates Channel
+  state if a state-based transition applies.
+* [x] Sphinx docs
+* [x] graphviz of state machines (TODO improve)
 * [ ] Add tests that exercise subscribe/unsubscribe on the server side in
-  test_with_pyepics.py.
+  test_server.py.
 * [ ] Accessing values as ``dbr_instance.value`` is clumsy. Change the API for
   simple types.
 * [ ] Make DBR <-> Python type conversion as automatic and smooth as possible
-  without limiting user control.
-* [x] Once "caproto as a server" works, revisit `_state.py` and simplify.
-* [ ] Refactor state machine that Circuit state reaches out and updates Channel
-  state if a state-based transition applies.
 * [ ] Write a standalone script that acts as a CARepeater so we can test without
-* [x] Sphinx docs
-* [x] graphviz of state machines (TODO improve)
