@@ -327,6 +327,22 @@ class RepeaterRegisterRequest(Message):
         return socket.inet_ntop(socket.AF_INET, encoded_ip)
 
 
+class EventAddRequestPayload(ctypes.BigEndianStructure):
+    _fields_ = [('low', float_t),
+                ('high', float_t),
+                ('to', float_t),
+                ('mask', ushort_t),
+                ('__padding__', short_t),
+                ]
+
+    def __init__(self, low=0.0, high=0.0, to=0.0, mask=0):
+        self.low = low
+        self.high = high
+        self.to = to
+        self.mask = mask
+        self.__padding__ = 0
+
+
 class EventAddRequest(Message):
     ID = 1
     HAS_PAYLOAD = True
@@ -334,11 +350,8 @@ class EventAddRequest(Message):
                  high, to, mask):
         header = EventAddRequestHeader(data_type, data_count, sid,
                                        subscriptionid)
-        payload_list = (be_float_t(low), be_float_t(high), be_float_t(to),
-                        be_int_t(mask))
-
-        payload = b''.join(map(bytes, payload_list))
-        super().__init__(header, payload)
+        payload = EventAddRequestPayload(low=low, high=high, to=to, mask=mask)
+        super().__init__(header, bytes(payload))
 
         # TODO: this is strictly for debug output
         self.low = low
@@ -378,8 +391,7 @@ class EventAddResponse(Message):
         if not payload_bytes:
             print('EventAdd with an empty payload!')
             return cls.from_components(header, None)
-        dbr_type = DBR_TYPES[header.data_type]
-        payload_struct = from_buffer(dbr_type, payload_bytes)
+        payload_struct = from_buffer(header.data_type, payload_bytes)
         return cls.from_components(header, payload_struct)
 
 
@@ -435,7 +447,7 @@ class ReadResponse(Message):
     data_count = property(lambda self: self.header.data_count)
     sid = property(lambda self: self.header.parameter1)
     ioid = property(lambda self: self.header.parameter2)
-    
+
 
 class WriteRequest(Message):
     "Deprecated: See also WriteNotifyRequest"
