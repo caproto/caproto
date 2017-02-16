@@ -161,42 +161,49 @@ class StatusType(ctypes.BigEndianStructure):
 
 class StatusString(StatusType):
     ID = ChannelType.STS_STRING
-    _fields_ = [('value', MAX_STRING_SIZE * char_t)]
+    _fields_ = (StatusType._fields_ +
+                [('value', MAX_STRING_SIZE * char_t)])
 
 
 class StatusShort(StatusType):
     ID = ChannelType.STS_SHORT
-    _fields_ = [('RISC_pad', short_t),
-                ('value', short_t)]
+    _fields_ = (StatusType._fields_ +
+                [('RISC_pad', short_t),
+                 ('value', short_t)])
 
 
 class StatusFloat(StatusType):
     ID = ChannelType.STS_FLOAT
-    _fields_ = [('value', float_t)]
+    _fields_ = (StatusType._fields_ +
+                [('value', float_t)])
 
 
 class StatusEnum(StatusType):
     ID = ChannelType.STS_ENUM
-    _fields_ = [('RISC_pad', short_t),
-                ('value', ushort_t)]
+    _fields_ = (StatusType._fields_ +
+                [('RISC_pad', short_t),
+                 ('value', ushort_t)])
 
 
 class StatusChar(StatusType):
     ID = ChannelType.STS_CHAR
-    _fields_ = [('RISC_pad0', short_t),
-                ('RISC_pad1', byte_t),
-                ('value', byte_t)]
+    _fields_ = (StatusType._fields_ +
+                [('RISC_pad0', short_t),
+                 ('RISC_pad1', byte_t),
+                 ('value', byte_t)])
 
 
 class StatusLong(StatusType):
     ID = ChannelType.STS_LONG
-    _fields_ = [('value', int_t)]
+    _fields_ = (StatusType._fields_ +
+                [('value', int_t)])
 
 
 class StatusDouble(StatusType):
     ID = ChannelType.STS_DOUBLE
-    _fields_ = [('RISC_pad', int_t),
-                ('value', double_t)]
+    _fields_ = (StatusType._fields_ +
+                [('RISC_pad', int_t),
+                 ('value', double_t)])
 
 
 class TimeStamp(ctypes.BigEndianStructure):
@@ -225,42 +232,49 @@ class TimeType(ctypes.BigEndianStructure):
 
 class TimeString(TimeType):
     ID = ChannelType.TIME_STRING
-    _fields_ = [('value', MAX_STRING_SIZE * char_t)]
+    _fields_ = (TimeType._fields_ +
+                [('value', MAX_STRING_SIZE * char_t)])
 
 
 class TimeShort(TimeType):
     ID = ChannelType.TIME_SHORT
-    _fields_ = [('RISC_pad', short_t),
-                ('value', short_t)]
+    _fields_ = (TimeType._fields_ +
+                [('RISC_pad', short_t),
+                 ('value', short_t)])
 
 
 class TimeFloat(TimeType):
     ID = ChannelType.TIME_FLOAT
-    _fields_ = [('value', float_t)]
+    _fields_ = (TimeType._fields_ +
+                [('value', float_t)])
 
 
 class TimeEnum(TimeType):
     ID = ChannelType.TIME_ENUM
-    _fields_ = [('RISC_pad', short_t),
-                ('value', ushort_t)]
+    _fields_ = (TimeType._fields_ +
+                [('RISC_pad', short_t),
+                 ('value', ushort_t)])
 
 
 class TimeChar(TimeType):
     ID = ChannelType.TIME_CHAR
-    _fields_ = [('RISC_pad0', short_t),
-                ('RISC_pad1', byte_t),
-                ('value', byte_t)]
+    _fields_ = (TimeType._fields_ +
+                [('RISC_pad0', short_t),
+                 ('RISC_pad1', byte_t),
+                ('value', byte_t)])
 
 
 class TimeLong(TimeType):
     ID = ChannelType.TIME_LONG
-    _fields_ = [('value', int_t)]
+    _fields_ = (TimeType._fields_ +
+                [('value', int_t)])
 
 
 class TimeDouble(TimeType):
     ID = ChannelType.TIME_DOUBLE
-    _fields_ = [('RISC_pad', int_t),
-                ('value', double_t)]
+    _fields_ = (TimeType._fields_ +
+                [('RISC_pad', int_t),
+                 ('value', double_t)])
 
 
 def _create_ctrl_lims(type_):
