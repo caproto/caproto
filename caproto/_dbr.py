@@ -11,6 +11,7 @@ import ctypes
 import os
 from platform import architecture
 from enum import IntEnum
+from collections import namedtuple
 
 from ctypes import c_short as short_t
 from ctypes import c_ushort as ushort_t
@@ -377,6 +378,8 @@ class CtrlDouble(CtrlLimitsDouble, ControlTypePrecision):
 try:
     import numpy as np
 except ImportError:
+    pass
+else:
     _numpy_map = {
         ChType.INT: np.int16,
         ChType.FLOAT: np.float32,
@@ -462,11 +465,42 @@ _native_map = {
     ChType.CTRL_DOUBLE: ChType.DOUBLE,
 }
 
+_named_tuples = {}
+for ch_type in status_types + time_types + control_types:
+    _class = DBR_TYPES[ch_type]
+    tup = namedtuple(ch_type.name, (name for name, _ in _class._fields_))
+    _named_tuples.update({ch_type: tup})
+
 
 def native_type(ftype):
     '''return native field type from TIME or CTRL variant'''
-    global _native_map
     return _native_map[ftype]
+
+
+def native_to_builtin(values, data_type, data_count):
+    assert data_type in native_types
+    if data_count == 1:
+        # Return a built-in Python type.
+        return values.value
+    else:
+        # Return an ndarray.
+        dt = np.dtype(_numpy_map[data_type])
+        dt = dt.newbyteorder('>')
+        return np.frombuffer(values, dtype=dt)
+
+
+def to_builtin(values, data_type, data_count):
+    if data_type in native_types:
+        return native_to_builtin(values, data_type, data_count)
+    else:
+        # Return a namedtuple containing built-in Python types.
+        tup = _named_tuples[ch_type]
+        # Recursively parse the special 'meta' fields, which are all scalar.
+        meta = (to_builtin(getattr(values, name), dtype, 1)
+                for name, dtype in tup._fields)
+        # Parse the value field, which may have data_count > 1.
+        val = native_to_builtin(values, _native_map[data_type], data_count)
+        return tup(*extras, value)
 
 
 def promote_type(ftype, use_time=False, use_ctrl=False):

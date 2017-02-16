@@ -33,7 +33,7 @@ best.
 * [x] graphviz of state machines (TODO improve)
 * [ ] Add tests that exercise subscribe/unsubscribe on the server side in
   test_server.py.
-* [ ] Accessing values as ``dbr_instance.value`` is clumsy. Change the API for
+* [x] Accessing values as ``dbr_instance.value`` is clumsy. Change the API for
   simple types.
 * [ ] Make DBR <-> Python type conversion as automatic and smooth as possible
 * [ ] Write a standalone script that acts as a CARepeater so we can test without
