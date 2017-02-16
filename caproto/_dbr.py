@@ -200,15 +200,16 @@ class StatusLong(StatusType):
 
 
 class StatusDouble(StatusType):
+    # Special case: has RISC_pad field
     ID = ChannelType.STS_DOUBLE
     _fields_ = (StatusType._fields_ +
-                [('RISC_pad', int_t),
+                [('RISC_pad', short_t),
                  ('value', double_t)])
 
 
 class TimeStamp(ctypes.BigEndianStructure):
     "emulate epics timestamp"
-    _fields_ = [('secs', uint_t),
+    _fields_ = [('secs', int_t),
                 ('nsec', uint_t)]
 
     @property
