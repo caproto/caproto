@@ -38,3 +38,8 @@ best.
   test_server.py.
 * [ ] Test read/write of every DBR type.
 * [ ] Write a standalone script that acts as a CARepeater so we can test without
+  libca.
+* [ ] Write an example implementation of a client.
+* [ ] Write an example implementation of a server.
+* [ ] Set up Travis CI.
+* [ ] Publish documentation.
