@@ -342,6 +342,9 @@ class EventAddRequestPayload(ctypes.BigEndianStructure):
         self.mask = mask
         self.__padding__ = 0
 
+    def __len__(self):
+        return len(bytes(self))
+
 
 class EventAddRequest(Message):
     ID = 1
@@ -351,18 +354,22 @@ class EventAddRequest(Message):
         header = EventAddRequestHeader(data_type, data_count, sid,
                                        subscriptionid)
         payload = EventAddRequestPayload(low=low, high=high, to=to, mask=mask)
-        super().__init__(header, bytes(payload))
+        super().__init__(header, payload)
 
-        # TODO: this is strictly for debug output
-        self.low = low
-        self.high = high
-        self.to = to
-        self.mask = mask
+    @classmethod
+    def from_wire(cls, header, payload_bytes):
+        payload_struct = EventAddRequestPayload.from_buffer(payload_bytes)
+        return cls.from_components(header, payload_struct)
 
     data_type = property(lambda self: self.header.data_type)
     data_count = property(lambda self: self.header.data_count)
     sid = property(lambda self: self.header.parameter1)
     subscriptionid = property(lambda self: self.header.parameter2)
+    low = property(lambda self: self.payload.low)
+    high = property(lambda self: self.payload.high)
+    to = property(lambda self: self.payload.to)
+    mask = property(lambda self: self.payload.mask)
+    __padding__ = property(lambda self: self.payload.__padding__)
 
 
 class EventAddResponse(Message):
