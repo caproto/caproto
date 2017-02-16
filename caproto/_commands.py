@@ -39,9 +39,9 @@ def ensure_bytes(s):
         raise CaprotoTypeError("expected str or bytes")
 
 
-def from_buffer(dbr_type, buffer):
+def from_buffer(data_type, buffer):
     "Wraps dbr_type.from_buffer and special-case strings."
-    if dbr_type is DBR_STRING:
+    if data_type == ChannelType.STRING:
         _len = len(buffer)
         if _len > 40:
             raise CaprotoValueError("EPICS imposes a 40-character limit on "
@@ -49,7 +49,7 @@ def from_buffer(dbr_type, buffer):
                                     "characters.".format(buffer, _len))
         if _len < 40:
             buffer = buffer.ljust(40, b'\x00')
-    return dbr_type.from_buffer(buffer)
+    return DBR_TYPES[data_type].from_buffer(buffer)
 
 
 def padded_len(s):
@@ -64,7 +64,7 @@ def padded_len(s):
 def padded_string_payload(name):
     name = ensure_bytes(name)
     size = padded_len(name)
-    payload = bytes(DBR_STRING(name))[:size]
+    payload = bytes(be_string_t(name))[:size]
     return size, payload
 
 
@@ -165,8 +165,7 @@ class Message:
         """
         if not cls.HAS_PAYLOAD:
             return cls.from_components(header, None)
-        dbr_type = DBR_TYPES[header.data_type]
-        payload_struct = from_buffer(dbr_type, payload_bytes)
+        payload_struct = from_buffer(header.data_type, payload_bytes)
         return cls.from_components(header, payload_struct)
 
     @classmethod
@@ -238,7 +237,7 @@ class SearchResponse(Message):
                                       sid=int_encoded_ip,
                                       cid=cid)
         # Pad a uint16 to fill 8 bytes.
-        payload = bytes(DBR_INT(version)).ljust(8, b'\x00')
+        payload = bytes(be_short_t(version)).ljust(8, b'\x00')
         super().__init__(header, payload)
 
     @classmethod
@@ -258,7 +257,7 @@ class SearchResponse(Message):
 
     @property
     def version(self):
-        return DBR_INT.from_buffer(bytearray(self.payload)[2:4]).value
+        return be_short_t.from_buffer(bytearray(self.payload)[2:4]).value
 
     port = property(lambda self: self.header.data_type)
     cid = property(lambda self: self.header.parameter2)
@@ -335,9 +334,8 @@ class EventAddRequest(Message):
                  high, to, mask):
         header = EventAddRequestHeader(data_type, data_count, sid,
                                        subscriptionid)
-        padding = b'\0\0'
-        payload_list = (DBR_FLOAT(low), DBR_FLOAT(high), DBR_FLOAT(to),
-                        DBR_INT(mask), padding)
+        payload_list = (be_float_t(low), be_float_t(high), be_float_t(to),
+                        be_int_t(mask))
 
         payload = b''.join(map(bytes, payload_list))
         super().__init__(header, payload)
@@ -482,7 +480,7 @@ class ErrorResponse(Message):
     ID = 11
     HAS_PAYLOAD = True
     def __init__(self, original_request, cid, status_code, error_message):
-        _error_message = DBR_STRING(ensure_bytes(error_message))
+        _error_message = be_string_t(ensure_bytes(error_message))
         payload = bytes(original_request) + _error_message
         size = len(payload)
         header = ErrorResponseHeader(size, cid, status_code)

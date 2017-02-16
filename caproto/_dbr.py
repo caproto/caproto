@@ -38,10 +38,31 @@ MAX_UNITS_SIZE = 8
 MAX_ENUM_STRING_SIZE = 26
 MAX_ENUM_STATES = 16
 
+DO_REPLY = 10
+NO_REPLY = 5
+
 # EPICS2UNIX_EPOCH = 631173600.0 - time.timezone
 EPICS2UNIX_EPOCH = 631152000.0
 
-string_t = ctypes.c_char * MAX_STRING_SIZE
+def make_bigendian(name, native_type):
+    return type('short_t',
+                (ctypes.BigEndianStructure,),
+                {'_fields_': [('value', native_type)]})
+
+be_short_t = make_bigendian('be_short_t', short_t)
+be_ushort_t = make_bigendian('be_ushort_t', ushort_t)
+be_int_t = make_bigendian('be_int_t', int_t)
+be_uint_t = make_bigendian('be_uint_t', uint_t)
+be_long_t = make_bigendian('be_long_t', long_t)
+be_float_t = make_bigendian('be_float_t', float_t)
+be_double_t = make_bigendian('be_double_t', double_t)
+be_byte_t = make_bigendian('be_byte_t', byte_t)
+be_ubyte_t = make_bigendian('be_ubyte_t', ubyte_t)
+be_char_t = make_bigendian('be_char_t', char_t)
+be_string_t = make_bigendian('be_string_t', char_t * MAX_STRING_SIZE)
+
+
+string_t = char_t * MAX_STRING_SIZE
 # value_offset is set when the CA library connects, indicating the byte offset
 # into the response where the first native type element is
 value_offset = None
@@ -132,7 +153,7 @@ char_types = (ChType.CHAR, ChType.TIME_CHAR, ChType.CTRL_CHAR)
 native_float_types = (ChType.FLOAT, ChType.DOUBLE)
 
 
-class TimeStamp(ctypes.Structure):
+class TimeStamp(ctypes.BigEndianStructure):
     "emulate epics timestamp"
     _fields_ = [('secs', uint_t),
                 ('nsec', uint_t)]
@@ -143,7 +164,7 @@ class TimeStamp(ctypes.Structure):
         return (EPICS2UNIX_EPOCH + self.secs + 1.e-6 * int(1.e-3 * self.nsec))
 
 
-class TimeType(ctypes.Structure):
+class TimeType(ctypes.BigEndianStructure):
     _fields_ = [('status', short_t),
                 ('severity', short_t),
                 ('stamp', TimeStamp)
@@ -157,41 +178,41 @@ class TimeType(ctypes.Structure):
 
 
 class TimeString(TimeType):
-    dbr_type = ChannelType.TIME_STRING
+    ID = ChannelType.TIME_STRING
     _fields_ = [('value', MAX_STRING_SIZE * char_t)]
 
 
 class TimeShort(TimeType):
-    dbr_type = ChannelType.TIME_SHORT
+    ID = ChannelType.TIME_SHORT
     _fields_ = [('RISC_pad', short_t),
                 ('value', short_t)]
 
 
 class TimeFloat(TimeType):
-    dbr_type = ChannelType.TIME_FLOAT
+    ID = ChannelType.TIME_FLOAT
     _fields_ = [('value', float_t)]
 
 
 class TimeEnum(TimeType):
-    dbr_type = ChannelType.TIME_ENUM
+    ID = ChannelType.TIME_ENUM
     _fields_ = [('RISC_pad', short_t),
                 ('value', ushort_t)]
 
 
 class TimeChar(TimeType):
-    dbr_type = ChannelType.TIME_CHAR
+    ID = ChannelType.TIME_CHAR
     _fields_ = [('RISC_pad0', short_t),
                 ('RISC_pad1', byte_t),
                 ('value', byte_t)]
 
 
 class TimeLong(TimeType):
-    dbr_type = ChannelType.TIME_LONG
+    ID = ChannelType.TIME_LONG
     _fields_ = [('value', int_t)]
 
 
 class TimeDouble(TimeType):
-    dbr_type = ChannelType.TIME_DOUBLE
+    ID = ChannelType.TIME_DOUBLE
     _fields_ = [('RISC_pad', int_t),
                 ('value', double_t)]
 
@@ -208,7 +229,7 @@ def _create_ctrl_lims(type_):
                    'lower_ctrl_limit',
                    ]
 
-    class CtrlLims(ctypes.Structure):
+    class CtrlLims(ctypes.BigEndianStructure):
         _fields_ = [(field, type_)
                     for field in field_names
                     ]
@@ -231,7 +252,7 @@ CtrlLimitsFloat = _create_ctrl_lims(float_t)
 CtrlLimitsDouble = _create_ctrl_lims(double_t)
 
 
-class ControlTypeBase(ctypes.Structure):
+class ControlTypeBase(ctypes.BigEndianStructure):
     _fields_ = [('status', short_t),
                 ('severity', short_t),
                 ]
@@ -264,7 +285,7 @@ class ControlTypePrecision(ControlTypeBase):
 
 
 class CtrlEnum(ControlTypeBase):
-    dbr_type = ChannelType.CTRL_ENUM
+    ID = ChannelType.CTRL_ENUM
 
     _fields_ = [('no_str', short_t),
                 ('strs', (char_t * MAX_ENUM_STRING_SIZE) * MAX_ENUM_STATES),
@@ -281,29 +302,29 @@ class CtrlEnum(ControlTypeBase):
 
 
 class CtrlShort(CtrlLimitsShort, ControlTypeUnits):
-    dbr_type = ChannelType.CTRL_SHORT
+    ID = ChannelType.CTRL_SHORT
     _fields_ = [('value', short_t)]
 
 
 class CtrlChar(CtrlLimitsByte, ControlTypeUnits):
-    dbr_type = ChannelType.CTRL_CHAR
+    ID = ChannelType.CTRL_CHAR
     _fields_ = [('RISC_pad', byte_t),
                 ('value', ubyte_t)
                 ]
 
 
 class CtrlLong(CtrlLimitsInt, ControlTypeUnits):
-    dbr_type = ChannelType.CTRL_LONG
+    ID = ChannelType.CTRL_LONG
     _fields_ = [('value', int_t)]
 
 
 class CtrlFloat(CtrlLimitsFloat, ControlTypePrecision):
-    dbr_type = ChannelType.CTRL_FLOAT
+    ID = ChannelType.CTRL_FLOAT
     _fields_ = [('value', float_t)]
 
 
 class CtrlDouble(CtrlLimitsDouble, ControlTypePrecision):
-    dbr_type = ChannelType.CTRL_DOUBLE
+    ID = ChannelType.CTRL_DOUBLE
     _fields_ = [('value', double_t)]
 
 
@@ -349,22 +370,22 @@ except ImportError:
 
 
 # map of Epics DBR types to ctypes types
-_ftype_to_ctype = {
-    ChType.STRING: string_t,
-    ChType.INT: short_t,
-    ChType.FLOAT: float_t,
-    ChType.ENUM: ushort_t,
-    ChType.CHAR: ubyte_t,
-    ChType.LONG: int_t,
-    ChType.DOUBLE: double_t,
+DBR_TYPES = {
+    ChType.STRING: be_string_t,
+    ChType.INT: be_short_t,
+    ChType.FLOAT: be_float_t,
+    ChType.ENUM: be_ushort_t,
+    ChType.CHAR: be_ubyte_t,
+    ChType.LONG: be_int_t,
+    ChType.DOUBLE: be_double_t,
 
-    ChType.STS_STRING: string_t,
-    ChType.STS_INT: short_t,
-    ChType.STS_FLOAT: float_t,
-    ChType.STS_ENUM: ushort_t,
-    ChType.STS_CHAR: ubyte_t,
-    ChType.STS_LONG: int_t,
-    ChType.STS_DOUBLE: double_t,
+    ChType.STS_STRING: be_string_t,
+    ChType.STS_INT: be_short_t,
+    ChType.STS_FLOAT: be_float_t,
+    ChType.STS_ENUM: be_ushort_t,
+    ChType.STS_CHAR: be_ubyte_t,
+    ChType.STS_LONG: be_int_t,
+    ChType.STS_DOUBLE: be_double_t,
 
     ChType.TIME_STRING: TimeString,
     ChType.TIME_INT: TimeShort,
