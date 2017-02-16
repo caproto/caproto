@@ -162,30 +162,15 @@ class ChannelState(_BaseState):
     TRANSITIONS = COMMAND_TRIGGERED_CHANNEL_TRANSITIONS
     STT = STATE_TRIGGERED_TRANSITIONS
 
-    def __init__(self):
+    def __init__(self, circuit_state):
         self.states = {CLIENT: SEND_CREATE_CHAN_REQUEST, SERVER: IDLE}
-        # Same pattern as in _BaseChannel: the VirtualCircuitProxy gets bound
-        # exactly once later.
-        self._circuit_state = None
-
-    @property
-    def circuit_state(self):
-        return self._circuit_state
-
-    @circuit_state.setter
-    def circuit_state(self, circuit_state):
-        if self._circuit_state is not None:
-            raise RuntimeError("circuit_state can only be set once")
-        self._circuit_state = circuit_state
+        self.circuit_state = circuit_state
 
     def _fire_state_triggered_transitions(self, role):
-        if self.circuit_state is None:
-            # No circuit yet -- nothing to do.
-            return
-            new = self.STT[role].get((self.states[role],
-                                        self.circuit_state.states[role]))
-            if new is not None:
-                self.states[role], circuit_state.states[role] = new
+        new = self.STT[role].get((self.states[role],
+                                    self.circuit_state.states[role]))
+        if new is not None:
+            self.states[role], circuit_state.states[role] = new
 
     def process_command(self, role, command_type):
         self._fire_command_triggered_transitions(role, command_type)
@@ -195,19 +180,9 @@ class ChannelState(_BaseState):
 class CircuitState(_BaseState):
     TRANSITIONS = COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS
 
-    def __init__(self):
+    def __init__(self, channels):
         self.states = {CLIENT: SEND_VERSION_REQUEST, SERVER: IDLE}
-        self._channels = None
-
-    @property
-    def channels(self):
-        return self._channels
-
-    @channels.setter
-    def channels(self, channels):
-        if self._channels is not None:
-            raise RuntimeError("channels can only be set once")
-        self._channels = channels
+        self.channels = channels
 
     def process_command(self, role, command_type):
         self._fire_command_triggered_transitions(role, command_type)
