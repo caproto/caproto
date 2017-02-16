@@ -28,7 +28,7 @@ Headers
 DBR Structs
 ===========
 
-.. automodule:: caproto._dbr_types
+.. automodule:: caproto._dbr
 
 Exceptions
 ==========

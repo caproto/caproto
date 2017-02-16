@@ -14,7 +14,6 @@ import socket
 # N.B. We do no networking whatsoever in caproto. We only use socket for
 # socket.gethostname() to give a nice default for a HostNameRequest command.
 from ._commands import *
-from ._dbr_types import *
 from ._state import *
 from ._utils import *
 
