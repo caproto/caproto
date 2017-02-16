@@ -113,7 +113,7 @@ recv(chan1.circuit)
 command = chan1.circuit.next_command()
 assert type(command) is ca.EventAddResponse
 
-send(*chan1.read(data_count=3))
+send(*chan1.read(data_count=3, data_type=15))
 recv(chan1.circuit)
 command = chan1.circuit.next_command()
 assert type(command) is ca.ReadNotifyResponse
