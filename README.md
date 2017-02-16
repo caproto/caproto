@@ -36,4 +36,5 @@ best.
 * [x] Make DBR <-> Python type conversion as automatic and smooth as possible
 * [ ] Add tests that exercise subscribe/unsubscribe on the server side in
   test_server.py.
+* [ ] Test read/write of every DBR type.
 * [ ] Write a standalone script that acts as a CARepeater so we can test without
