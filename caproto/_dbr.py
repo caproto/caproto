@@ -471,6 +471,8 @@ for ch_type in status_types + time_types + control_types:
     tup = namedtuple(ch_type.name, (name for name, _ in _class._fields_))
     _named_tuples.update({ch_type: tup})
 
+_channel_types = ChannelType.__members__.values()
+
 
 def native_type(ftype):
     '''return native field type from TIME or CTRL variant'''
@@ -478,10 +480,13 @@ def native_type(ftype):
 
 
 def native_to_builtin(values, data_type, data_count):
-    assert data_type in native_types
+    assert data_type in native_types or data_type not in _channel_types
     if data_count == 1:
         # Return a built-in Python type.
-        return values.value
+        try:
+            return values.value
+        except AttributeError:
+            return values
     else:
         # Return an ndarray.
         dt = np.dtype(_numpy_map[data_type])
@@ -490,17 +495,20 @@ def native_to_builtin(values, data_type, data_count):
 
 
 def to_builtin(values, data_type, data_count):
-    if data_type in native_types:
+    if data_type in native_types or data_type not in _channel_types:
+        print('native')
         return native_to_builtin(values, data_type, data_count)
     else:
+        print('non')
         # Return a namedtuple containing built-in Python types.
-        tup = _named_tuples[ch_type]
+        tup = _named_tuples[data_type]
         # Recursively parse the special 'meta' fields, which are all scalar.
-        meta = (to_builtin(getattr(values, name), dtype, 1)
-                for name, dtype in tup._fields)
+        meta = [to_builtin(getattr(values, name), dtype, 1)
+                for name, dtype in values._fields_[1:]]
+        print('meta', meta)
         # Parse the value field, which may have data_count > 1.
         val = native_to_builtin(values, _native_map[data_type], data_count)
-        return tup(*extras, value)
+        return tup(*meta, val)
 
 
 def promote_type(ftype, use_time=False, use_ctrl=False):
