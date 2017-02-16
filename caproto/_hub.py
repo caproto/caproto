@@ -747,7 +747,9 @@ class ClientChannel(_BaseChannel):
         """
         data_type, data_count = self._fill_defaults(data_type, data_count)
         if mask is None:
-            mask = DBE_VALUE | DBE_ALARM | DBE_PROPERTY
+            mask = (SubscriptionType.DBE_VALUE |
+                    SubscriptionType.DBE_ALARM |
+                    SubscriptionType.DBE_PROPERTY)
         subscriptionid = self.circuit.new_subscriptionid()
         command = EventAddRequest(data_type, data_count, self.sid,
                                   subscriptionid, low, high, to, mask)
