@@ -31,9 +31,9 @@ best.
   state if a state-based transition applies.
 * [x] Sphinx docs
 * [x] graphviz of state machines (TODO improve)
-* [ ] Add tests that exercise subscribe/unsubscribe on the server side in
-  test_server.py.
 * [x] Accessing values as ``dbr_instance.value`` is clumsy. Change the API for
   simple types.
-* [ ] Make DBR <-> Python type conversion as automatic and smooth as possible
+* [x] Make DBR <-> Python type conversion as automatic and smooth as possible
+* [ ] Add tests that exercise subscribe/unsubscribe on the server side in
+  test_server.py.
 * [ ] Write a standalone script that acts as a CARepeater so we can test without
