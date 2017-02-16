@@ -152,7 +152,7 @@ class _BaseState:
             new_state = self.TRANSITIONS[role][state][command_type]
         except KeyError:
             err =  get_exception(role, command_type)
-            raise LocalProtocolError(
+            raise err(
                 "{} cannot handle command type {} when role={} and state={}"
                 .format(self, command_type.__name__, role, self.states[role]))
         self.states[role] = new_state
