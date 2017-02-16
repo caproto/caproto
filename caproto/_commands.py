@@ -64,7 +64,7 @@ def padded_len(s):
 def padded_string_payload(name):
     name = ensure_bytes(name)
     size = padded_len(name)
-    payload = bytes(be_string_t(name))[:size]
+    payload = bytes(DBR_STRING(name))[:size]
     return size, payload
 
 
@@ -237,7 +237,7 @@ class SearchResponse(Message):
                                       sid=int_encoded_ip,
                                       cid=cid)
         # Pad a uint16 to fill 8 bytes.
-        payload = bytes(be_short_t(version)).ljust(8, b'\x00')
+        payload = bytes(DBR_INT(version)).ljust(8, b'\x00')
         super().__init__(header, payload)
 
     @classmethod
@@ -257,7 +257,7 @@ class SearchResponse(Message):
 
     @property
     def version(self):
-        return be_short_t.from_buffer(bytearray(self.payload)[2:4]).value
+        return DBR_INT.from_buffer(bytearray(self.payload)[2:4]).value
 
     port = property(lambda self: self.header.data_type)
     cid = property(lambda self: self.header.parameter2)
@@ -499,7 +499,7 @@ class ErrorResponse(Message):
     ID = 11
     HAS_PAYLOAD = True
     def __init__(self, original_request, cid, status_code, error_message):
-        _error_message = be_string_t(ensure_bytes(error_message))
+        _error_message = DBR_STRING(ensure_bytes(error_message))
         payload = bytes(original_request) + _error_message
         size = len(payload)
         header = ErrorResponseHeader(size, cid, status_code)
