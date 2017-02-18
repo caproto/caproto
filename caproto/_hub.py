@@ -635,7 +635,7 @@ class ClientChannel(_BaseChannel):
         Parameters
         ----------
         client_name : string, optional
-            defaults to output of ``getuser.getpass()``
+            defaults to output of ``getpass.getuser()``
 
         Returns
         -------
