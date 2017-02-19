@@ -1,5 +1,22 @@
-from ._commands import *
-from ._utils import *
+from ._commands import (AccessRightsResponse, ClearChannelRequest,
+                        ClearChannelResponse, ClientNameRequest,
+                        CreateChanRequest, CreateChanResponse, EchoRequest,
+                        EchoResponse, ErrorResponse, EventAddRequest,
+                        EventAddResponse, EventCancelRequest,
+                        EventCancelResponse, HostNameRequest,
+                        ReadNotifyRequest, ReadNotifyResponse,
+                        ServerDisconnResponse, VersionRequest, VersionResponse,
+                        WriteNotifyRequest, WriteNotifyResponse,
+
+                        )
+from ._utils import (AWAIT_CREATE_CHAN_RESPONSE, AWAIT_VERSION_RESPONSE,
+                     CLIENT, CLOSED, CONNECTED, ERROR, IDLE, MUST_CLOSE,
+                     NEED_CIRCUIT, REQUEST, RESPONSE, SEND_CREATE_CHAN_REQUEST,
+                     SEND_CREATE_CHAN_RESPONSE, SEND_VERSION_REQUEST,
+                     SEND_VERSION_RESPONSE, SERVER,
+
+                     LocalProtocolError, RemoteProtocolError,
+                     )
 
 
 COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
@@ -151,7 +168,7 @@ class _BaseState:
         try:
             new_state = self.TRANSITIONS[role][state][command_type]
         except KeyError:
-            err =  get_exception(role, command_type)
+            err = get_exception(role, command_type)
             raise err(
                 "{} cannot handle command type {} when role={} and state={}"
                 .format(self, command_type.__name__, role, self.states[role]))
@@ -168,9 +185,9 @@ class ChannelState(_BaseState):
 
     def _fire_state_triggered_transitions(self, role):
         new = self.STT[role].get((self.states[role],
-                                    self.circuit_state.states[role]))
+                                  self.circuit_state.states[role]))
         if new is not None:
-            self.states[role], circuit_state.states[role] = new
+            self.states[role], self.circuit_state.states[role] = new
 
     def process_command(self, role, command_type):
         self._fire_command_triggered_transitions(role, command_type)
@@ -213,5 +230,5 @@ def get_exception(our_role, command):
     if our_role is party_at_fault:
         _class = LocalProtocolError
     else:
-        _class =  RemoteProtocolError
+        _class = RemoteProtocolError
     return _class
