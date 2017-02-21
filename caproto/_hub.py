@@ -4,18 +4,30 @@
 # incoming and outgoing TCP bytestreams. A third class, the Hub, owns these
 # VirtualCircuits and spawns new ones as needed. The Hub updates its state in
 # response to incoming and outgoing UDP datagrams.
-import ctypes
 import itertools
-from io import BytesIO
-from collections import defaultdict, deque, namedtuple
+from collections import deque
 import logging
 import getpass
 import socket
 # N.B. We do no networking whatsoever in caproto. We only use socket for
 # socket.gethostname() to give a nice default for a HostNameRequest command.
-from ._commands import *
-from ._state import *
-from ._utils import *
+from ._commands import (ClearChannelRequest, ClearChannelResponse,
+                        ClientNameRequest, CreateChanRequest,
+                        CreateChanResponse, EventAddRequest, EventAddResponse,
+                        EventCancelRequest, EventCancelResponse,
+                        HostNameRequest, ReadNotifyRequest, ReadNotifyResponse,
+                        RepeaterConfirmResponse, RepeaterRegisterRequest,
+                        SearchRequest, SearchResponse, ServerDisconnResponse,
+                        VersionRequest, VersionResponse, WriteNotifyRequest,
+                        WriteNotifyResponse,
+
+                        read_datagram, read_from_bytestream,
+                        )
+from ._state import (ChannelState, CircuitState, get_exception)
+from ._utils import (CLIENT, SERVER, NEED_DATA, CaprotoKeyError,
+                     CaprotoValueError, LocalProtocolError,
+                     )
+from ._dbr import (SubscriptionType, )
 
 
 DEFAULT_PROTOCOL_VERSION = 13
@@ -161,15 +173,15 @@ class VirtualCircuit:
                 except KeyError:
                     err = get_exception(self.our_role, command)
                     raise err("Unknown Channel ioid {!r}".format(command.ioid))
-            elif isinstance(command, (EventAddResponse,
-                                      EventCancelRequest, EventCancelResponse)):
+            elif isinstance(command, (EventAddResponse, EventCancelRequest,
+                                      EventCancelResponse)):
                 # Identify the Channel based on its subscriptionid
                 try:
                     event_add = self.event_add_commands[command.subscriptionid]
                 except KeyError:
                     err = get_exception(self.our_role, command)
                     raise err("Unrecognized subscriptionid {!r}"
-                              "".format(subscriptionid))
+                              "".format(command.subscriptionid))
                 chan = self._channels_sid[event_add.sid]
             elif isinstance(command, CreateChanRequest):
                 # A Channel instance for this cid may already exist.
@@ -194,9 +206,9 @@ class VirtualCircuit:
                 if event_add.data_type != command.data_type:
                     err = get_exception(self.our_role, command)
                     raise err("The data_type in {!r} does not match the "
-                                "data_type in the original EventAddRequest "
-                                "for this subscriptionid, {!r}."
-                                "".format(command, event_add.data_type))
+                              "data_type in the original EventAddRequest "
+                              "for this subscriptionid, {!r}."
+                              "".format(command, event_add.data_type))
             if isinstance(command, (EventAddResponse,)):
                 # Verify data_count matches the one in the original request.
                 # NOTE The docs say that EventCancelRequest should echo the
@@ -205,18 +217,18 @@ class VirtualCircuit:
                 if event_add.data_count != command.data_count:
                     err = get_exception(self.our_role, command)
                     raise err("The data_count in {!r} does not match the "
-                                "data_count in the original EventAddRequest "
-                                "for this subscriptionid, {!r}."
-                                "".format(command, event_add.data_count))
+                              "data_count in the original EventAddRequest "
+                              "for this subscriptionid, {!r}."
+                              "".format(command, event_add.data_count))
             if isinstance(command, (EventCancelRequest, EventCancelResponse)):
                 # Verify sid matches the one in the original request.
                 event_add = self.event_add_commands[command.subscriptionid]
                 if event_add.sid != command.sid:
                     err = get_exception(self.our_role, command)
                     raise err("The sid in {!r} does not match the sid in "
-                                "in the original EventAddRequest for this "
-                                "subscriptionid, {!r}."
-                                "".format(command, event_add.sid))
+                              "in the original EventAddRequest for this "
+                              "subscriptionid, {!r}."
+                              "".format(command, event_add.sid))
 
             # Update the state machine of the pertinent Channel.
             # If this is not a valid command, the state machine will raise
@@ -243,7 +255,7 @@ class VirtualCircuit:
                 # send or received in the future are valid.
                 self.event_add_commands[command.subscriptionid] = command
             elif isinstance(command, EventCancelResponse):
-                self.event_add_commands.pop(subscriptionid)
+                self.event_add_commands.pop(command.subscriptionid)
 
         # Otherwise, this Command affects the state of this circuit, not a
         # specific Channel. Run the circuit's state machine.
@@ -260,7 +272,7 @@ class VirtualCircuit:
                 err = get_exception(self.our_role, command)
                 raise("priority {} does not match previously set priority "
                       "of {} for this circuit".format(command.priority,
-                                                      priority))
+                                                      self.priority))
 
     def new_channel_id(self):
         "Return a valid value for a cid or sid."
@@ -276,7 +288,8 @@ class VirtualCircuit:
         """
         This is used by the convenience methods to obtain an unused integer ID.
         It does not update any important state.
-        """ # Return the next sequential unused id. Wrap back to 0 on overflow.
+        """
+        # Return the next sequential unused id. Wrap back to 0 on overflow.
         i = next(self._sub_counter)
         if i == 2**16:
             self._sub_counter = itertools.count(0)
@@ -393,7 +406,7 @@ class Broadcaster:
             self._parsed_commands.extend(commands)
         self.log.debug(("Returning 1 of %d commands from the datagram most "
                         "recently parsed. %d more datagrams are cached."),
-                        len(self._parsed_commands), len(self._datagram_inbox))
+                       len(self._parsed_commands), len(self._datagram_inbox))
         command = self._parsed_commands.popleft()
         self._process_command(self.their_role, command, self._history)
         return command
@@ -635,7 +648,7 @@ class ClientChannel(_BaseChannel):
         Parameters
         ----------
         client_name : string, optional
-            defaults to output of ``getuser.getpass()``
+            defaults to output of ``getpass.getuser()``
 
         Returns
         -------
