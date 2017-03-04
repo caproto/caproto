@@ -25,6 +25,7 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
             EchoRequest: SEND_VERSION_REQUEST,
             EchoResponse: SEND_VERSION_REQUEST,
             VersionRequest: AWAIT_VERSION_RESPONSE,
+            VersionResponse: CONNECTED,
             ErrorResponse: ERROR,
         },
         AWAIT_VERSION_RESPONSE: {
@@ -42,6 +43,8 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
             HostNameRequest: CONNECTED,
             ClientNameRequest: CONNECTED,
             AccessRightsResponse: CONNECTED,
+            VersionRequest: AWAIT_VERSION_RESPONSE,
+            VersionResponse: CONNECTED,
             ErrorResponse: ERROR,
             # VirtualCircuits can only be closed by timeout.
         },
@@ -49,6 +52,9 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
     },
     SERVER: {
         IDLE: {
+            # C channel access server (rsrv) sends VersionResponse upon
+            # connection
+            VersionResponse: CONNECTED,
             VersionRequest: SEND_VERSION_RESPONSE,
             EchoRequest: IDLE,
             EchoResponse: IDLE,
@@ -65,6 +71,7 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
         },
         CONNECTED: {
             # Host and Client requests may come before or after we connect.
+            VersionRequest: SEND_VERSION_RESPONSE,
             HostNameRequest: CONNECTED,
             ClientNameRequest: CONNECTED,
             AccessRightsResponse: CONNECTED,
