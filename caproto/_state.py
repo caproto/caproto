@@ -92,6 +92,7 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
         },
         AWAIT_CREATE_CHAN_RESPONSE: {
             CreateChanResponse: CONNECTED,
+            AccessRightsResponse: AWAIT_CREATE_CHAN_RESPONSE,
             ErrorResponse: ERROR,
         },
         CONNECTED: {
@@ -126,6 +127,7 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
         },
         SEND_CREATE_CHAN_RESPONSE: {
             CreateChanResponse: CONNECTED,
+            AccessRightsResponse: SEND_CREATE_CHAN_RESPONSE,
             ErrorResponse: ERROR,
         },
         CONNECTED: {

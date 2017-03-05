@@ -11,7 +11,8 @@ import getpass
 import socket
 # N.B. We do no networking whatsoever in caproto. We only use socket for
 # socket.gethostname() to give a nice default for a HostNameRequest command.
-from ._commands import (ClearChannelRequest, ClearChannelResponse,
+from ._commands import (AccessRightsResponse,
+                        ClearChannelRequest, ClearChannelResponse,
                         ClientNameRequest, CreateChanRequest,
                         CreateChanResponse, EventAddRequest, EventAddResponse,
                         EventCancelRequest, EventCancelResponse,
@@ -158,6 +159,7 @@ class VirtualCircuit:
         # opposed to the Circuit as a whole:
         if isinstance(command, (ClearChannelRequest, ClearChannelResponse,
                                 CreateChanRequest, CreateChanResponse,
+                                AccessRightsResponse,
                                 ReadNotifyRequest, ReadNotifyResponse,
                                 WriteNotifyRequest, WriteNotifyResponse,
                                 EventAddRequest, EventAddResponse,
