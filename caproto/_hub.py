@@ -238,8 +238,6 @@ class VirtualCircuit:
             # If we got this far, the state machine has validated this Command.
             # Update other Channel and Circuit state.
             if isinstance(command, CreateChanResponse):
-                chan.native_data_type = command.data_type
-                chan.native_data_count = command.data_count
                 chan.sid = command.sid
                 self._channels_sid[chan.sid] = chan
             elif isinstance(command, ClearChannelResponse):
@@ -590,6 +588,10 @@ class _BaseChannel:
         pass
 
     def _process_command(self, command):
+        if isinstance(command, CreateChanResponse):
+            self.native_data_type = command.data_type
+            self.native_data_count = command.data_count
+
         for role in (self.circuit.our_role, self.circuit.their_role):
             initial_state = self._state[role]
             self._state.process_command_type(role, type(command))
