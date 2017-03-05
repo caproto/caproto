@@ -233,8 +233,8 @@ class VirtualCircuit:
             # Update the state machine of the pertinent Channel.
             # If this is not a valid command, the state machine will raise
             # here.
-            chan._state.process_command(self.our_role, type(command))
-            chan._state.process_command(self.their_role, type(command))
+            chan._process_command(self.our_role, type(command))
+            chan._process_command(self.their_role, type(command))
 
             # If we got this far, the state machine has validated this Command.
             # Update other Channel and Circuit state.
@@ -585,6 +585,17 @@ class _BaseChannel:
         if data_count is None:
             data_count = self.native_data_count
         return data_type, data_count
+
+    def state_changed(self, role, old_state, new_state):
+        '''State changed callback for subclass usage'''
+        pass
+
+    def _process_command(self, role, command):
+        initial_state = self._state[role]
+        self._state.process_command(role, command)
+        new_state = self._state[role]
+        if initial_state is not new_state:
+            self.state_changed(role, initial_state, new_state)
 
 
 class ClientChannel(_BaseChannel):
