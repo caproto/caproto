@@ -266,6 +266,8 @@ class VirtualCircuit:
             elif isinstance(command, EventCancelResponse):
                 self.event_add_commands.pop(command.subscriptionid)
 
+            chan._transition_states()
+
         # Otherwise, this Command affects the state of this circuit, not a
         # specific Channel. Run the circuit's state machine.
         else:
@@ -431,7 +433,6 @@ class Broadcaster:
         history : list
             This input will be mutated: command will be appended at the end.
         """
-        print('processing', command)
         # All commands go through here.
         if isinstance(command, RepeaterRegisterRequest):
             pass
@@ -604,13 +605,21 @@ class _BaseChannel:
             self.native_data_type = command.data_type
             self.native_data_count = command.data_count
 
+        self.state_changes = []
         for role in (self.circuit.our_role, self.circuit.their_role):
             initial_state = self._state[role]
             self._state.process_command_type(role, type(command))
             new_state = self._state[role]
             if initial_state is not new_state:
-                self.state_changed(role, initial_state, new_state,
-                                   command=command)
+                self.state_changes.append((role, initial_state, new_state,
+                                           command))
+
+    def _transition_states(self):
+        state_changes = tuple(self.state_changes)
+        del self.state_changes[:]
+        for role, initial_state, new_state, command in state_changes:
+            self.state_changed(role, initial_state, new_state,
+                               command=command)
 
 
 class ClientChannel(_BaseChannel):
