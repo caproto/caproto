@@ -199,7 +199,7 @@ class ChannelState(_BaseState):
         if new is not None:
             self.states[role], self.circuit_state.states[role] = new
 
-    def process_command(self, role, command_type):
+    def process_command_type(self, role, command_type):
         self._fire_command_triggered_transitions(role, command_type)
         self._fire_state_triggered_transitions(role)
 
@@ -211,7 +211,7 @@ class CircuitState(_BaseState):
         self.states = {CLIENT: SEND_VERSION_REQUEST, SERVER: IDLE}
         self.channels = channels
 
-    def process_command(self, role, command_type):
+    def process_command_type(self, role, command_type):
         self._fire_command_triggered_transitions(role, command_type)
         for chan in self.channels.values():
             chan._state._fire_state_triggered_transitions(role)

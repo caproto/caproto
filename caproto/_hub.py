@@ -233,8 +233,7 @@ class VirtualCircuit:
             # Update the state machine of the pertinent Channel.
             # If this is not a valid command, the state machine will raise
             # here.
-            chan._process_command(self.our_role, type(command))
-            chan._process_command(self.their_role, type(command))
+            chan._process_command(command)
 
             # If we got this far, the state machine has validated this Command.
             # Update other Channel and Circuit state.
@@ -260,8 +259,8 @@ class VirtualCircuit:
         # Otherwise, this Command affects the state of this circuit, not a
         # specific Channel. Run the circuit's state machine.
         else:
-            self._state.process_command(self.our_role, type(command))
-            self._state.process_command(self.their_role, type(command))
+            self._state.process_command_type(self.our_role, type(command))
+            self._state.process_command_type(self.their_role, type(command))
 
         if isinstance(command, VersionRequest):
             if self.priority is None:
@@ -586,16 +585,18 @@ class _BaseChannel:
             data_count = self.native_data_count
         return data_type, data_count
 
-    def state_changed(self, role, old_state, new_state):
+    def state_changed(self, role, old_state, new_state, command=None):
         '''State changed callback for subclass usage'''
         pass
 
-    def _process_command(self, role, command):
-        initial_state = self._state[role]
-        self._state.process_command(role, command)
-        new_state = self._state[role]
-        if initial_state is not new_state:
-            self.state_changed(role, initial_state, new_state)
+    def _process_command(self, command):
+        for role in (self.circuit.our_role, self.circuit.their_role):
+            initial_state = self._state[role]
+            self._state.process_command_type(role, type(command))
+            new_state = self._state[role]
+            if initial_state is not new_state:
+                self.state_changed(role, initial_state, new_state,
+                                   command=command)
 
 
 class ClientChannel(_BaseChannel):
