@@ -170,6 +170,9 @@ class _BaseState:
     def __repr__(self):
         return "<{!s} states={!r}>".format(type(self).__name__, self.states)
 
+    def __getitem__(self, role):
+        return self.states[role]
+
     def _fire_command_triggered_transitions(self, role, command_type):
         state = self.states[role]
         try:
