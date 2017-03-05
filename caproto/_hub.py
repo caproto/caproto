@@ -76,6 +76,16 @@ class VirtualCircuit:
                                "non-None priority at initialization time.")
 
     @property
+    def host(self):
+        '''Peer host name'''
+        return self.address[0]
+
+    @property
+    def port(self):
+        '''Port number'''
+        return self.address[1]
+
+    @property
     def key(self):
         if self.priority is None:
             raise RuntimeError("This VirtualCircuit has not received a "
