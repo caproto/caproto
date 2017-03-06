@@ -95,7 +95,7 @@ subscriptionid = event_req.subscriptionid
 commands, = recv(chan1.circuit)
 
 try:
-    print('Monitoring until Ctrl-C is hit. Meanewhile, use caput to change '
+    print('Monitoring until Ctrl-C is hit. Meanwhile, use caput to change '
           'the value and watch for commands to arrive here.')
     while True:
         commands, = recv(chan1.circuit)
