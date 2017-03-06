@@ -556,12 +556,7 @@ class _BaseChannel:
     def __init__(self, hub, name, address, priority, cid=None):
         self._hub = hub
         self.name = name
-        # Find an existing VirtualCircuit we can use or make a new one.
-        try:
-            circuit = self._hub.circuits[(address, priority)]
-        except KeyError:
-            circuit = VirtualCircuit(hub, address, priority)
-        self.circuit = circuit
+        self.circuit = self._hub.circuits[(address, priority)]
         if cid is None:
             cid = self.circuit.new_channel_id()
         self.cid = cid
