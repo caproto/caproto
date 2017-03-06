@@ -29,14 +29,13 @@ DBE_PROPERTY = 8
 
 string_t = MAX_STRING_SIZE* ctypes.c_char  # epicsOldString
 char_t = ctypes.c_char # epicsUint8
-short_t = ctypes.c_short  # epicsInt16
-ushort_t = ctypes.c_ushort # epicsUInt16
-int_t = ctypes.c_int16  # epicsInt16
+short_t = ctypes.c_int16  # epicsInt16
 ushort_t = ctypes.c_uint16  # epicsUInt16
-long_t = ctypes.c_long  # epicsInt32
-ulong_t = ctypes.c_ulong  # epicsUInt32
+int_t = ctypes.c_int16  # epicsInt16
+long_t = ctypes.c_int32  # epicsInt32
+ulong_t = ctypes.c_uint32  # epicsUInt32
 float_t = ctypes.c_float  # epicsFloat32
-doublt_t = ctypes.c_double # epicsFloat64
+double_t = ctypes.c_double # epicsFloat64
 stsack_string_t = 40 * ctypes.c_char # epicsOldString
 class_name_t = 40 * ctypes.c_char  # epicsOldString
 
@@ -86,7 +85,7 @@ class DBR_LONG(ctypes.BigEndianStructure):
 class DBR_DOUBLE(ctypes.BigEndianStructure):
     DBR_ID = 6
     _fields_ = [
-        ('value', doublt_t),
+        ('value', double_t),
     ]
 
 
@@ -187,14 +186,14 @@ class DBR_STS_DOUBLE(ctypes.BigEndianStructure):
     #     short_t    status;             /* status of value */
     #     short_t    severity;        /* severity of alarm */
     #     long_t    RISC_pad;        /* RISC alignment */
-    #     doublt_t    value;            /* current value */
+    #     double_t    value;            /* current value */
     # };
     DBR_ID = 13
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
         ('RISC_pad', long_t),
-        ('value', doublt_t),
+        ('value', double_t),
     ]
 
 
@@ -210,8 +209,8 @@ class DBR_TIME_STRING(ctypes.BigEndianStructure):
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
-        ('secondsSinceEpoch', long_t),
-        ('nanoSeconds', ulong_t),
+        ('secondsSinceEpoch', ctypes.c_uint32),
+        ('nanoSeconds', ctypes.c_uint32),
         ('value', 40 * char_t),
     ]
 
@@ -229,8 +228,8 @@ class DBR_TIME_INT(ctypes.BigEndianStructure):
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
-        ('secondsSinceEpoch', long_t),
-        ('nanoSeconds', ulong_t),
+        ('secondsSinceEpoch', ctypes.c_uint32),
+        ('nanoSeconds', ctypes.c_uint32),
         ('RISC_pad', short_t),
         ('value', ushort_t),
     ]
@@ -248,8 +247,8 @@ class DBR_TIME_FLOAT(ctypes.BigEndianStructure):
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
-        ('secondsSinceEpoch', long_t),
-        ('nanoSeconds', ulong_t),
+        ('secondsSinceEpoch', ctypes.c_uint32),
+        ('nanoSeconds', ctypes.c_uint32),
         ('value', float_t),
     ]
 
@@ -268,8 +267,8 @@ class DBR_TIME_ENUM(ctypes.BigEndianStructure):
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
-        ('secondsSinceEpoch', long_t),
-        ('nanoSeconds', ulong_t),
+        ('secondsSinceEpoch', ctypes.c_uint32),
+        ('nanoSeconds', ctypes.c_uint32),
         ('RISC_pad', short_t),
         ('value', ushort_t),
     ]
@@ -289,8 +288,8 @@ class DBR_TIME_CHAR(ctypes.BigEndianStructure):
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
-        ('secondsSinceEpoch', long_t),
-        ('nanoSeconds', ulong_t),
+        ('secondsSinceEpoch', ctypes.c_uint32),
+        ('nanoSeconds', ctypes.c_uint32),
         ('RISC_pad0', short_t),
         ('RISC_pad1', char_t),
         ('value', char_t),
@@ -309,8 +308,8 @@ class DBR_TIME_LONG(ctypes.BigEndianStructure):
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
-        ('secondsSinceEpoch', long_t),
-        ('nanoSeconds', ulong_t),
+        ('secondsSinceEpoch', ctypes.c_uint32),
+        ('nanoSeconds', ctypes.c_uint32),
         ('value', long_t),
     ]
 
@@ -322,16 +321,16 @@ class DBR_TIME_DOUBLE(ctypes.BigEndianStructure):
     #     short_t    severity;        /* severity of alarm */
     #     epicsTimeStamp    stamp;            /* time stamp */
     #     long_t    RISC_pad;        /* RISC alignment */
-    #     doublt_t    value;            /* current value */
+    #     double_t    value;            /* current value */
     # };
     DBR_ID = 20
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
-        ('secondsSinceEpoch', long_t),
-        ('nanoSeconds', ulong_t),
+        ('secondsSinceEpoch', ctypes.c_uint32),
+        ('nanoSeconds', ctypes.c_uint32),
         ('RISC_Pad', long_t),
-        ('value', doublt_t),
+        ('value', double_t),
     ]
 
 
@@ -486,13 +485,13 @@ class DBR_GR_DOUBLE(ctypes.BigEndianStructure):
     #     short_t    precision;        /* number of decimal places */
     #     short_t    RISC_pad0;        /* RISC alignment */
     #     char        units[MAX_UNITS_SIZE];    /* units of value */
-    #     doublt_t    upper_disp_limit;    /* upper limit of graph */
-    #     doublt_t    lower_disp_limit;    /* lower limit of graph */
-    #     doublt_t    upper_alarm_limit;
-    #     doublt_t    upper_warning_limit;
-    #     doublt_t    lower_warning_limit;
-    #     doublt_t    lower_alarm_limit;
-    #     doublt_t    value;            /* current value */
+    #     double_t    upper_disp_limit;    /* upper limit of graph */
+    #     double_t    lower_disp_limit;    /* lower limit of graph */
+    #     double_t    upper_alarm_limit;
+    #     double_t    upper_warning_limit;
+    #     double_t    lower_warning_limit;
+    #     double_t    lower_alarm_limit;
+    #     double_t    value;            /* current value */
     # };
     DBR_ID = 27
     _fields_ = [
@@ -501,13 +500,13 @@ class DBR_GR_DOUBLE(ctypes.BigEndianStructure):
         ('precision', short_t),
         ('RISC_pad0', short_t),
         ('units', MAX_UNITS_SIZE * char_t),
-        ('upper_disp_limit', doublt_t),
-        ('lower_disp_limit', doublt_t),
-        ('upper_alarm_limit', doublt_t),
-        ('upper_warning_limit', doublt_t),
-        ('lower_warning_limit', doublt_t),
-        ('lower_alarm_limit', doublt_t),
-        ('value', doublt_t),
+        ('upper_disp_limit', double_t),
+        ('lower_disp_limit', double_t),
+        ('upper_alarm_limit', double_t),
+        ('upper_warning_limit', double_t),
+        ('lower_warning_limit', double_t),
+        ('lower_alarm_limit', double_t),
+        ('value', double_t),
     ]
 
 
@@ -552,7 +551,6 @@ class DBR_CTRL_INT(ctypes.BigEndianStructure):
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
-        ('precision', short_t),
         ('units', MAX_UNITS_SIZE * char_t),
         ('upper_disp_limit', short_t),
         ('lower_disp_limit', short_t),
@@ -699,15 +697,15 @@ class DBR_CTRL_DOUBLE(ctypes.BigEndianStructure):
     #     short_t    precision;        /* number of decimal places */
     #     short_t    RISC_pad0;        /* RISC alignment */
     #     char        units[MAX_UNITS_SIZE];    /* units of value */
-    #     doublt_t    upper_disp_limit;    /* upper limit of graph */
-    #     doublt_t    lower_disp_limit;    /* lower limit of graph */
-    #     doublt_t    upper_alarm_limit;
-    #     doublt_t    upper_warning_limit;
-    #     doublt_t    lower_warning_limit;
-    #     doublt_t    lower_alarm_limit;
-    #     doublt_t    upper_ctrl_limit;    /* upper control limit */
-    #     doublt_t    lower_ctrl_limit;    /* lower control limit */
-    #     doublt_t    value;            /* current value */
+    #     double_t    upper_disp_limit;    /* upper limit of graph */
+    #     double_t    lower_disp_limit;    /* lower limit of graph */
+    #     double_t    upper_alarm_limit;
+    #     double_t    upper_warning_limit;
+    #     double_t    lower_warning_limit;
+    #     double_t    lower_alarm_limit;
+    #     double_t    upper_ctrl_limit;    /* upper control limit */
+    #     double_t    lower_ctrl_limit;    /* lower control limit */
+    #     double_t    value;            /* current value */
     # };
     DBR_ID = 34
     _fields_ = [
@@ -716,15 +714,15 @@ class DBR_CTRL_DOUBLE(ctypes.BigEndianStructure):
         ('precision', short_t),
         ('RISC_pad0', short_t),
         ('units', MAX_UNITS_SIZE * char_t),
-        ('upper_disp_limit', doublt_t),
-        ('lower_disp_limit', doublt_t),
-        ('upper_alarm_limit', doublt_t),
-        ('upper_warning_limit', doublt_t),
-        ('lower_warning_limit', doublt_t),
-        ('lower_alarm_limit', doublt_t),
-        ('upper_ctrl_limit', doublt_t),
-        ('lower_ctrl_limit', doublt_t),
-        ('value', doublt_t),
+        ('upper_disp_limit', double_t),
+        ('lower_disp_limit', double_t),
+        ('upper_alarm_limit', double_t),
+        ('upper_warning_limit', double_t),
+        ('lower_warning_limit', double_t),
+        ('lower_alarm_limit', double_t),
+        ('upper_ctrl_limit', double_t),
+        ('lower_ctrl_limit', double_t),
+        ('value', double_t),
     ]
 
 
