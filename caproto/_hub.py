@@ -226,7 +226,8 @@ class VirtualCircuit:
                 # NOTE The docs say that EventCancelRequest should echo the
                 # original data_count too, but in fact it seems to be 0.
                 event_add = self.event_add_commands[command.subscriptionid]
-                if event_add.data_count != command.data_count:
+                if (event_add.data_count > 0 and
+                        event_add.data_count != command.data_count):
                     err = get_exception(self.our_role, command)
                     raise err("The data_count in {!r} does not match the "
                               "data_count in the original EventAddRequest "
