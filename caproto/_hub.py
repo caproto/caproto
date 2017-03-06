@@ -244,8 +244,9 @@ class VirtualCircuit:
 
             # Update the state machine of the pertinent Channel.
             # If this is not a valid command, the state machine will raise
-            # here.
-            chan._process_command(command)
+            # here. Stash the state transitions in a local var and run the
+            # callbacks at the end.
+            transitions = chan._process_command(command)
 
             # If we got this far, the state machine has validated this Command.
             # Update other Channel and Circuit state.
@@ -266,7 +267,9 @@ class VirtualCircuit:
             elif isinstance(command, EventCancelResponse):
                 self.event_add_commands.pop(command.subscriptionid)
 
-            chan._transition_states()
+            # We are done. Run the Channel state change callbacks.
+            for transition in transitions:
+                chan.state_changed(*transition)
 
         # Otherwise, this Command affects the state of this circuit, not a
         # specific Channel. Run the circuit's state machine.
@@ -284,6 +287,7 @@ class VirtualCircuit:
                 raise("priority {} does not match previously set priority "
                       "of {} for this circuit".format(command.priority,
                                                       self.priority))
+
 
     def new_channel_id(self):
         "Return a valid value for a cid or sid."
@@ -596,7 +600,7 @@ class _BaseChannel:
             data_count = self.native_data_count
         return data_type, data_count
 
-    def state_changed(self, role, old_state, new_state, command=None):
+    def state_changed(self, role, old_state, new_state, command):
         '''State changed callback for subclass usage'''
         pass
 
@@ -605,21 +609,16 @@ class _BaseChannel:
             self.native_data_type = command.data_type
             self.native_data_count = command.data_count
 
-        self.state_changes = []
+        transitions = []
         for role in (self.circuit.our_role, self.circuit.their_role):
             initial_state = self._state[role]
             self._state.process_command_type(role, type(command))
             new_state = self._state[role]
+            # Assemble arguments needed by state_changed, to be called later.
             if initial_state is not new_state:
-                self.state_changes.append((role, initial_state, new_state,
-                                           command))
-
-    def _transition_states(self):
-        state_changes = tuple(self.state_changes)
-        del self.state_changes[:]
-        for role, initial_state, new_state, command in state_changes:
-            self.state_changed(role, initial_state, new_state,
-                               command=command)
+                transition = (role, initial_state, new_state, command)
+                transitions.append(transition)
+        return transitions
 
 
 class ClientChannel(_BaseChannel):
