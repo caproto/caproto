@@ -116,6 +116,13 @@ class Channel:
             event = await self.circuit.get_event()
             await event.wait()
 
+    async def clear(self):
+        "Disconnect this Channel."
+        await self.circuit.send(self.channel.clear()[1])
+        while self.channel._state[ca.CLIENT] == ca.CONNECTED:
+            event = await self.circuit.get_event()
+            await event.wait()
+
     async def read(self, *args, **kwargs):
         _, command = self.channel.read(*args, **kwargs)
         # Stash the ioid to match the response to the request.
@@ -288,6 +295,8 @@ async def main():
     await chan1.write((6,))
     reading = await chan1.read()
     print('reading:', reading)
+    await chan2.clear()
+    await chan1.clear()
     
 if __name__ == '__main__':
     curio.run(main())
