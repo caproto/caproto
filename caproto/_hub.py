@@ -360,6 +360,7 @@ class Broadcaster:
         # track for the Broadcaster. We don't need a full state machine, just
         # one flag to check whether we have yet registered with a repeater.
         self._registered = False
+        self._search_id_counter = itertools.count(0)
         logger_name = "caproto.Broadcaster"
         self.log = logging.getLogger(logger_name)
 
@@ -470,6 +471,15 @@ class Broadcaster:
 
     ### CONVENIENCE METHODS ###
 
+    def new_search_id(self):
+        # Return the next sequential unused id. Wrap back to 0 on overflow.
+        i = next(self._search_id_counter)
+        if i == 2**16:
+            self._search_id_counter = itertools.count(0)
+        while i in self.unanswered_searches:
+            i = next(self._search_id_counter)
+        return i
+
     def search(self, name):
         """
         Generate a valid :class:`VersionRequest` and :class:`SearchRequest`.
@@ -486,8 +496,9 @@ class Broadcaster:
         -------
         (VersionRequest, SearchRequest)
         """
+        cid = self.new_search_id()
         commands = (VersionRequest(0, self.protocol_version),
-                    SearchRequest(name, 0, self.protocol_version))
+                    SearchRequest(name, cid, self.protocol_version))
         return commands
 
     def register(self, ip=OUR_IP):
