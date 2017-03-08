@@ -12,33 +12,38 @@ SERVER_PORT = 5064
 
 
 class Channel:
-    "Wrap caproto.ClientChannel, adding async methods."
+    """Wrap an instance of caproto.ClientChannel and a Client."""
     def __init__(self, client, channel):
         self.client = client
         self.channel = channel
         self.last_reading = None
-        self.stale = False
-        self.subscriptions = collections.deque()
+        self.subscriptionids = collections.deque()
 
     async def wait_for_connection(self):
-        print('wait for connection')
         while not self.channel._state[ca.CLIENT] == ca.CONNECTED:
             event = await self.client.get_event(self.channel.circuit)
-            print('waiting on event')
             await event.wait()
 
     async def read(self, *args, **kwargs):
-        self.client.send(*self.channel.read(*args, **kwargs))
-        while self.stale:
-            await self.client.get_event(self.channel.cricuit)
-        return self.reading
+        stale = True
+        circuit, command = self.channel.read(*args, **kwargs)
+        # Stash the ioid to match the response to the request.
+        self.client.ioids[command.ioid] = self
+        await self.client.send(circuit, command)
+        while stale:
+            event = await self.client.get_event(self.channel.circuit)
+            await event.wait()
+            stale = False
+        return self.last_reading
 
     async def subscribe(self, *args, **kwargs):
-        circuit, event_req = self.channel.subscribe()
-        self.channel.send(circuit, event_req)
-        self.channel.subscriptionid = event_req.subscriptionid
-        while subscriptionid not in self.subscriptions:
-            await self.client.get_event(self.channel.circuit)
+        circuit, command = self.channel.subscribe()
+        # Stash the subscriptionid to match the response to the request.
+        self.client.subscriptionids[command.subscriptionid] = self
+        await self.client.send(circuit, command)
+        while command.subscriptionid not in self.subscriptionids:
+            event = await self.client.get_event(self.channel.circuit)
+            await event.wait()
 
     async def unsubscribe(self, *args, **kwargs):
         self.client.send(*self.channel.unsubscribe(subscriptionid))
@@ -65,11 +70,13 @@ class Client:
         self.unanswered_searches = {}  # map search id (cid) to name
         self.search_results = {}  # map name to address
         self.channels = {}  # map cid to Channel
+        self.ioids = {}  # map ioid to Channel
+        self.subscriptionids = {}  # map subscriptionid to Channel
         self.events = {}  # map (address, priority) to curio.Event
 
     async def send(self, circuit, command):
         """
-        Process a command and tranport it over the TCP socket for this circuit.
+        Process a command and tranport it over the TCP socket for a circuit.
         """
         bytes_to_send = circuit.send(command)
         key = circuit.key
@@ -81,20 +88,24 @@ class Client:
 
     async def recv(self, circuit):
         """
-        Receive bytes over TCP and cache them in the circuit's buffer.
+        Receive bytes over TCP and cache them in a circuit's buffer.
         """
         key = circuit.key
         # circuit.key is (address, priority), which uniquely identifies a Channel
         # Access 'VirtualCircuit'. We have to open one socket per VirtualCircuit.
         if key not in self.tcp_socks:
-            print("NEW SOCKET")
             self.tcp_socks[key] = await socket.create_connection(circuit.address)
-        print('await that socket', self.tcp_socks[key])
         bytes_received = await self.tcp_socks[key].recv(4096)
-        print('done awaiting socket')
         circuit.recv(bytes_received)
 
     async def get_event(self, circuit):
+        """
+        Get a curio.Event that we will 'set' when we process the next command.
+
+        This is a signaling mechanism for notifying all corountines awaiting an
+        incoming command that a new one (maybe the one they are looking for,
+        maybe not) has been processed.
+        """
         try:
             # Some other consumer has already asked for the next command.
             # Don't ask again (yet); just wait for the first request to
@@ -106,25 +117,31 @@ class Client:
             # stash the Event in case any other consumers ask.
             event = curio.Event()
             self.events[circuit.key] = event
-            print('spawning')
             task = await curio.spawn(self.next_command(circuit))
-            print('done spawning')
             return event
 
     async def next_command(self, circuit):
-        print('next')
+        """
+        Process one incoming command.
+
+        1. Receive data from the socket if a full comannd's worth of bytes are
+           not already cached.
+        2. Dispatch to caproto.VirtualCircuit.next_command which validates.
+        3. Update Channel state if applicable.
+        4. Notify all coroutines awaiting a command that a new command has been
+           process and they should check their state for updates.
+        """
         while True:
-            print('call circuit.next_command()')
             command = circuit.next_command()
-            print('done with circuit.next_command()')
             if isinstance(command, ca.NEED_DATA):
-                print('wait for data')
                 await self.recv(circuit)
                 continue
             if isinstance(command, ca.ReadNotifyResponse):
-                self.channels[command.cid].last_reading = command.values
-            print('command', command)
-            print('set')
+                chan = self.ioids[command.ioid]
+                chan.last_reading = command.values
+            elif isinstance(command, ca.EventAddResponse):
+                chan = self.subscriptionids[command.subscriptionid]
+                chan.subscriptionids.append(command.subscriptionid)
             event = self.events.pop(circuit.key)
             await event.set()
 
@@ -154,7 +171,6 @@ class Client:
     async def wait_for_search(self, name):
         "Wait for search response."
         while True:
-            print('SEARCH_RESULTS', self.search_results)
             if name in self.search_results:
                 return
             await self.next_broadcast_command()
@@ -217,18 +233,14 @@ async def main():
     await client.wait_for_search(pv2)
     # Send out connection requests without waiting for responses...
     chan1 = await client.create_channel(pv1)
-    print(chan1.channel.cid)
     chan2 = await client.create_channel(pv2)
-    print
     # ...and then wait for all the responses.
-    print('waiting')
-    await curio.sleep(1)
     await chan1.wait_for_connection()
-    print('done 1')
     await chan2.wait_for_connection()
-    print('done 2')
+    await chan1.read()
+    print('reading:', chan1.last_reading)
+    await chan1.subscribe()
     # reading = await chan1.read()
-    print(reading)
     
 curio.run(main())
 
