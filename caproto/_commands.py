@@ -337,7 +337,7 @@ class RsrvIsUpResponse(Message):
         super().__init__(header, None)
 
     server_port = property(lambda self: self.header.data_type)
-    beaconid = property(lambda self: self.header.parameter1)
+    beacon_id = property(lambda self: self.header.parameter1)
     address = property(lambda self: self.header.parameter2)
 
 
