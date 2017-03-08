@@ -976,7 +976,10 @@ def native_type(ftype):
 def native_to_builtin(value, dtype, data_count):
     if data_count == 1:
         # Return a built-in Python type.
-        return value
+        try:
+            return value.value  # if this is a Structure
+        except AttributeError:
+            return value
     else:
         # Return an ndarray.
         dt = np.dtype(_numpy_map[dtype])
