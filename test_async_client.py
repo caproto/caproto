@@ -20,28 +20,28 @@ SERVER_PORT = 5064
 class VirtualCircuit:
     "Wraps a caproto.VirtualCircuit and adds transport."
     def __init__(self, circuit):
-        self.circuit = circuit
+        self.circuit = circuit  # a caproto.VirtualCircuit
         self.channels = {}  # map cid to Channel
         self.ioids = {}  # map ioid to Channel
         self.subscriptionids = {}  # map subscriptionid to Channel
-        self.event = None
+        self.event = None  # used for signaling consumers about new commands
         self.socket = None
 
     async def create_connection(self):
         self.socket = await socket.create_connection(self.circuit.address)
 
-    async def send(self, command):
+    async def send(self, *commands):
         """
-        Process a command and tranport it over the TCP socket for a circuit.
+        Process a command and tranport it over the TCP socket for this circuit.
         """
         if socket is None:
             raise RuntimeError("must await create_connection() first")
-        bytes_to_send = self.circuit.send(command)
+        bytes_to_send = self.circuit.send(*commands)
         await self.socket.send(bytes_to_send)
 
     async def recv(self):
         """
-        Receive bytes over TCP and cache them in a circuit's buffer.
+        Receive bytes over TCP and cache them in this circuit's buffer.
         """
         if socket is None:
             raise RuntimeError("must await create_connection() first")
@@ -105,10 +105,10 @@ class VirtualCircuit:
 class Channel:
     """Wraps a VirtualCircuit and a caproto.ClientClient."""
     def __init__(self, circuit, channel):
-        self.circuit = circuit
-        self.channel = channel
+        self.circuit = circuit  # a VirtualCircuit
+        self.channel = channel  # a caproto.ClientChannel
         self.last_reading = None
-        self.monitoring_tasks = {}
+        self.monitoring_tasks = {}  # maps subscriptionid to curio.Task
 
     async def wait_for_connection(self):
         """Wait for this Channel to be connected, ready to use.
@@ -197,20 +197,32 @@ class Client:
         sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
         self.udp_sock = sock
 
+        self.registered = False  # refers to RepeaterRegisterRequest
         self.circuits = {}  # map (address, prioirty) to VirtualCircuit
         self.unanswered_searches = {}  # map search id (cid) to name
         self.search_results = {}  # map name to address
+        self.event = None  # used for signaling consumers about new commands
 
-    async def register(self):
-        # Send data
-        command = self.broadcaster.register()
-        bytes_to_send = self.broadcaster.send(command)
-        await self.udp_sock.sendto(bytes_to_send, ('', self.repeater_port))
-        # Receive response
+    async def send(self, port, *commands):
+        """
+        Process a command and tranport it over the UDP socket.
+        """
+        bytes_to_send = self.broadcaster.send(*commands)
+        await self.udp_sock.sendto(bytes_to_send, ('', port))
+
+    async def recv(self):
+        """
+        Receive bytes over TCP and cache them in this circuit's buffer.
+        """
         bytes_received, address = await self.udp_sock.recvfrom(4096)
         self.broadcaster.recv(bytes_received, address)
-        command = self.broadcaster.next_command()
-        assert type(command) is ca.RepeaterConfirmResponse
+
+    async def register(self):
+        "Register this client with the CA Repeater."
+        await self.send(self.repeater_port, self.broadcaster.register())
+        while not self.registered:
+            event = await self.get_event()
+            await event.wait()
 
     async def search(self, name):
         "Generate, process, and the transport a search request."
@@ -219,44 +231,16 @@ class Client:
         ver_command, search_command = self.broadcaster.search(name)
         # Stash the search ID for recognizes the SearchResponse later.
         self.unanswered_searches[search_command.cid] = name
-        bytes_to_send = self.broadcaster.send(ver_command, search_command)
-        await self.udp_sock.sendto(bytes_to_send, ('', self.server_port))
-
-    async def wait_for_search(self, name):
-        "Wait for search response."
-        while True:
-            if name in self.search_results:
-                return
-            await self.next_command()
-
-    async def next_command(self):
-        "Receive and process and next command broadcasted over UDP."
-        while True:
-            command = self.broadcaster.next_command()
-            if isinstance(command, ca.NEED_DATA):
-                bytes_received, address = await self.udp_sock.recvfrom(4096)
-                self.broadcaster.recv(bytes_received, address)
-                continue
-            break
-        if isinstance(command, ca.VersionResponse):
-            # Check that the server version is one we can talk to.
-            assert command.version > 11
-        if isinstance(command, ca.SearchResponse):
-            name = self.unanswered_searches.pop(command.cid, None) 
-            if name is not None:
-                self.search_results[name] = ca.extract_address(command)
-            else:
-                # This is a redundant response, which the spec tell us
-                # we must ignore.
-                pass
-        return command
+        await self.send(self.server_port, ver_command, search_command)
+        # Wait for the SearchResponse.
+        while search_command.cid in self.unanswered_searches:
+            print('waiting')
+            event = await self.get_event()
+            await event.wait()
 
     async def create_channel(self, name, priority=0):
         """
-        Asynchronously request a new channel.
-
-        This immediately return a new Channel object which at first is not
-        connected. Use its ``wait_for_connection`` method.
+        Create a new channel.
         """
         address = self.search_results[name]
         chan = self.hub.new_channel(name, address=address, priority=priority)
@@ -274,9 +258,59 @@ class Client:
                 await circuit.send(chan.client_name()[1])
             await circuit.send(chan.create()[1])
 
+        # Spawn an async task to connect the channel and return a Channel
+        # instance immediately. User can use ``Channel.wait_for_connection()``
+        # to wait for connect() to complete.
         await connect()
         return Channel(circuit, chan)
 
+    async def get_event(self):
+        """
+        Get a curio.Event that we will 'set' when we process the next command.
+
+        This is a signaling mechanism for notifying all corountines awaiting an
+        incoming command that a new one (maybe the one they are looking for,
+        maybe not) has been processed.
+        """
+        if self.event is not None:
+            # Some other consumer has already asked for the next command.
+            # Don't ask again (yet); just wait for the first request to
+            # process.
+            return self.event
+        else:
+            # No other consumers have asked for the next command. Ask, return
+            # an Event that will be set when the command is processed, and
+            # stash the Event in case any other consumers ask.
+            event = curio.Event()
+            self.event = event
+            task = await curio.spawn(self.next_command())
+            return event
+
+    async def next_command(self):
+        "Receive and process and next command broadcasted over UDP."
+        while True:
+            command = self.broadcaster.next_command()
+            if isinstance(command, ca.NEED_DATA):
+                await self.recv()
+                continue
+            break
+        if isinstance(command, ca.RepeaterConfirmResponse):
+            self.registered = True
+        if isinstance(command, ca.VersionResponse):
+            # Check that the server version is one we can talk to.
+            assert command.version > 11
+        if isinstance(command, ca.SearchResponse):
+            name = self.unanswered_searches.pop(command.cid, None)
+            if name is not None:
+                self.search_results[name] = ca.extract_address(command)
+            else:
+                # This is a redundant response, which the spec tell us
+                # we must ignore.
+                pass
+        event = self.event
+        self.event = None
+        await event.set()
+        return command
 
 
 async def main():
@@ -285,12 +319,8 @@ async def main():
 
     client = Client()
     await client.register()
-    # Send out searches to the network without waiting for responses...
     await client.search(pv1)
     await client.search(pv2)
-    # ... and then wait for all the responses.
-    await client.wait_for_search(pv1)
-    await client.wait_for_search(pv2)
     # Send out connection requests without waiting for responses...
     chan1 = await client.create_channel(pv1)
     chan2 = await client.create_channel(pv2)
