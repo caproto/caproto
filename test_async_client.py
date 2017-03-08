@@ -1,4 +1,5 @@
 import sys
+import collections
 import caproto as ca
 import time
 from curio import socket
@@ -17,16 +18,32 @@ class Channel:
         self.channel = channel
         self.last_reading = None
         self.stale = False
+        self.subscriptions = collections.deque()
 
     async def wait_for_connection(self):
+        print('wait for connection')
         while not self.channel._state[ca.CLIENT] == ca.CONNECTED:
-            await self.client.next_command(self.channel.circuit)
+            event = await self.client.get_event(self.channel.circuit)
+            print('waiting on event')
+            await event.wait()
 
     async def read(self, *args, **kwargs):
         self.client.send(*self.channel.read(*args, **kwargs))
         while self.stale:
-            await self.client.next_command(self.channel.cricuit)
+            await self.client.get_event(self.channel.cricuit)
         return self.reading
+
+    async def subscribe(self, *args, **kwargs):
+        circuit, event_req = self.channel.subscribe()
+        self.channel.send(circuit, event_req)
+        self.channel.subscriptionid = event_req.subscriptionid
+        while subscriptionid not in self.subscriptions:
+            await self.client.get_event(self.channel.circuit)
+
+    async def unsubscribe(self, *args, **kwargs):
+        self.client.send(*self.channel.unsubscribe(subscriptionid))
+        while subscriptionid not in self.subscriptions:
+            await self.client.get_event(self.channel.circuit)
 
 
 class Client:
@@ -48,6 +65,7 @@ class Client:
         self.unanswered_searches = {}  # map search id (cid) to name
         self.search_results = {}  # map name to address
         self.channels = {}  # map cid to Channel
+        self.events = {}  # map (address, priority) to curio.Event
 
     async def send(self, circuit, command):
         """
@@ -69,18 +87,47 @@ class Client:
         # circuit.key is (address, priority), which uniquely identifies a Channel
         # Access 'VirtualCircuit'. We have to open one socket per VirtualCircuit.
         if key not in self.tcp_socks:
+            print("NEW SOCKET")
             self.tcp_socks[key] = await socket.create_connection(circuit.address)
-        bytes_received = await self.tcp_socks[circuit.key].recv(4096)
+        print('await that socket', self.tcp_socks[key])
+        bytes_received = await self.tcp_socks[key].recv(4096)
+        print('done awaiting socket')
         circuit.recv(bytes_received)
 
+    async def get_event(self, circuit):
+        try:
+            # Some other consumer has already asked for the next command.
+            # Don't ask again (yet); just wait for the first request to
+            # process.
+            return self.events[circuit.key]
+        except KeyError:
+            # No other consumers have asked for the next command. Ask, return
+            # an Event that will be set when the command is processed, and
+            # stash the Event in case any other consumers ask.
+            event = curio.Event()
+            self.events[circuit.key] = event
+            print('spawning')
+            task = await curio.spawn(self.next_command(circuit))
+            print('done spawning')
+            return event
+
     async def next_command(self, circuit):
+        print('next')
         while True:
+            print('call circuit.next_command()')
             command = circuit.next_command()
+            print('done with circuit.next_command()')
             if isinstance(command, ca.NEED_DATA):
+                print('wait for data')
                 await self.recv(circuit)
                 continue
             if isinstance(command, ca.ReadNotifyResponse):
                 self.channels[command.cid].last_reading = command.values
+            print('command', command)
+            print('set')
+            event = self.events.pop(circuit.key)
+            await event.set()
+
             return command
 
     async def register(self):
@@ -105,7 +152,7 @@ class Client:
         await self.udp_sock.sendto(bytes_to_send, ('', self.server_port))
 
     async def wait_for_search(self, name):
-        "Wait for search result."
+        "Wait for search response."
         while True:
             print('SEARCH_RESULTS', self.search_results)
             if name in self.search_results:
@@ -134,17 +181,24 @@ class Client:
             return command
 
     async def create_channel(self, name, priority=0):
+        """
+        Asynchronously request a new channel.
+
+        This immediately return a new Channel object which at first is not
+        connected. Use its ``wait_for_connection`` method.
+        """
         address = self.search_results[name]
         chan = self.hub.new_channel(name, address=address, priority=priority)
         self.channels[chan.cid] = chan
-        async def connect():
-            await self.send(*chan.version())
-            await self.send(*chan.host_name())
-            await self.send(*chan.client_name())
-            await self.send(*chan.create())
-            await self.recv(chan.circuit)
 
-        task = await curio.spawn(connect())
+        async def connect():
+            if not chan.circuit._state[ca.SERVER] is ca.IDLE:
+                await self.send(*chan.version())
+                await self.send(*chan.host_name())
+                await self.send(*chan.client_name())
+            await self.send(*chan.create())
+
+        await connect()
         return Channel(self, chan)
 
 
@@ -159,34 +213,28 @@ async def main():
     await client.search(pv1)
     await client.search(pv2)
     # ... and then wait for all the responses.
-    print('about to wait')
     await client.wait_for_search(pv1)
     await client.wait_for_search(pv2)
-    print('done waiting')
     # Send out connection requests without waiting for responses...
     chan1 = await client.create_channel(pv1)
+    print(chan1.channel.cid)
     chan2 = await client.create_channel(pv2)
+    print
     # ...and then wait for all the responses.
+    print('waiting')
+    await curio.sleep(1)
     await chan1.wait_for_connection()
+    print('done 1')
     await chan2.wait_for_connection()
-    await chan1.read()
-    print(chan1.reading)
+    print('done 2')
+    # reading = await chan1.read()
+    print(reading)
     
 curio.run(main())
-
-# Create an Channel. This implicitly creates a VirtualCircuit too.
 
 
 #### STOP HERE FOR NOW ###
 sys.exit(0)
-
-_, event_req = chan1.subscribe()
-
-send(chan1.circuit, event_req)
-subscriptionid = event_req.subscriptionid
-recv(chan1.circuit)
-command = chan1.circuit.next_command()
-assert type(command) is ca.EventAddResponse
 
 try:
     print('Monitoring until Ctrl-C is hit')
@@ -197,8 +245,6 @@ try:
 except KeyboardInterrupt:
     pass
 
-
-_, cancel_req = chan1.unsubscribe(subscriptionid)
 
 send(chan1.circuit, cancel_req)
 recv(chan1.circuit)
