@@ -112,6 +112,12 @@ class Channel:
         self.monitoring_tasks = {}
 
     async def wait_for_connection(self):
+        """Wait for this Channel to be connected, ready to use.
+
+        The method ``Client.create_channel`` spawns an asynchronous task to
+        initialize the connection in the fist place. This method waits for it
+        to complete.
+        """
         while not self.channel._state[ca.CLIENT] == ca.CONNECTED:
             event = await self.circuit.get_event()
             await event.wait()
@@ -124,6 +130,11 @@ class Channel:
             await event.wait()
 
     async def read(self, *args, **kwargs):
+        """Request a fresh reading, wait for it, return it and stash it.
+
+        The most recent reading is always available in the ``last_reading``
+        attribute.
+        """
         _, command = self.channel.read(*args, **kwargs)
         # Stash the ioid to match the response to the request.
         ioid = command.ioid
@@ -135,6 +146,7 @@ class Channel:
         return self.last_reading
 
     async def write(self, *args, **kwargs):
+        "Write a new value and await confirmation from the server."
         _, command = self.channel.write(*args, **kwargs)
         # Stash the ioid to match the response to the request.
         ioid = command.ioid
@@ -146,6 +158,7 @@ class Channel:
         return self.last_reading
 
     async def subscribe(self, *args, **kwargs):
+        "Start a new subscription and spawn an async task to receive readings."
         circuit, command = self.channel.subscribe(*args, **kwargs)
         # Stash the subscriptionid to match the response to the request.
         self.circuit.subscriptionids[command.subscriptionid] = self
@@ -160,6 +173,7 @@ class Channel:
             await event.wait()
 
     async def unsubscribe(self, subscriptionid, *args, **kwargs):
+        "Cancel a subscription and await confirmation from the server."
         await self.circuit.send(self.channel.unsubscribe(subscriptionid)[1])
         while subscriptionid in self.circuit.subscriptionids:
             event = await self.circuit.get_event()
@@ -287,6 +301,7 @@ async def main():
     reading = await chan1.read()
     print('reading:', reading)
     await chan1.subscribe()
+    await chan2.read()
     await curio.sleep(1)
     await chan1.unsubscribe(0)
     await chan1.write((5,))
