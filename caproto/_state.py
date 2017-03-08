@@ -220,7 +220,6 @@ class CircuitState(_BaseState):
         self._fire_command_triggered_transitions(role, command_type)
         for chan in self.channels.values():
             chan._state._fire_state_triggered_transitions(role)
-        print(self)
 
 
 def get_exception(our_role, command):
