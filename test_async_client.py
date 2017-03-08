@@ -25,23 +25,7 @@ class VirtualCircuit:
         self.ioids = {}  # map ioid to Channel
         self.subscriptionids = {}  # map subscriptionid to Channel
         self.event = None
-        self._socket = None
-
-    @property
-    def socket(self):
-        # Return a comprehensible error is the socket hasn't been connected.
-        if self._socket is None:
-            raise RuntimeError("must await create_connection() before use")
-        else:
-            return self._socket
-
-    @socket.setter
-    def socket(self, val):
-        # Enforce connecting only once.
-        if self._socket is None:
-            self._socket = val
-        else:
-            raise RuntimeError("can only connect once")
+        self.socket = None
 
     async def create_connection(self):
         self.socket = await socket.create_connection(self.circuit.address)
@@ -50,6 +34,8 @@ class VirtualCircuit:
         """
         Process a command and tranport it over the TCP socket for a circuit.
         """
+        if socket is None:
+            raise RuntimeError("must await create_connection() first")
         bytes_to_send = self.circuit.send(command)
         await self.socket.send(bytes_to_send)
 
@@ -57,6 +43,8 @@ class VirtualCircuit:
         """
         Receive bytes over TCP and cache them in a circuit's buffer.
         """
+        if socket is None:
+            raise RuntimeError("must await create_connection() first")
         bytes_received = await self.socket.recv(4096)
         self.circuit.recv(bytes_received)
 
@@ -284,9 +272,6 @@ async def main():
     print('reading:', chan1.last_reading)
     await chan1.subscribe()
     await curio.sleep(1)
-    print('done sleeping')
-    print(chan1)
-    print(chan1.subscriptionids)
     await chan1.unsubscribe(0)
     # reading = await chan1.read()
     
