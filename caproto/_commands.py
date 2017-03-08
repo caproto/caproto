@@ -547,6 +547,12 @@ class ReadSyncRequest(Message):
         super().__init__(ReadSyncRequestHeader(), None)
 
 
+class _ErrorResponsePayload(ctypes.BigEndianStructure):
+    _fields_ = [
+        ('value', ctypes.c_char * 100),
+    ]
+
+
 class ErrorResponse(Message):
     ID = 11
     HAS_PAYLOAD = True
@@ -561,6 +567,15 @@ class ErrorResponse(Message):
     payload_size = property(lambda self: self.header.payload_size)
     cid = property(lambda self: self.header.parameter1)
     status_code = property(lambda self: self.header.parameter2)
+
+    @classmethod
+    def from_wire(cls, header, payload_bytes):
+        """
+        Override base because payload contains a string >40 characers.
+        """
+        payload_struct = _ErrorResponsePayload.from_buffer(payload_bytes)
+        return cls.from_components(header, payload_struct)
+
 
 
 class ClearChannelRequest(Message):
