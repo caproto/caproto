@@ -283,10 +283,6 @@ class VirtualCircuit:
             self._state.process_command_type(self.their_role, type(command))
 
         if isinstance(command, VersionRequest):
-            if self.priority is None:
-                self.priority = command.priority
-                # Now that we have a priority, register with the hub.
-                self._hub.circuits[(self.address, self.priority)] = self
             if self.priority != command.priority:
                 err = get_exception(self.our_role, command)
                 raise("priority {} does not match previously set priority "
@@ -569,6 +565,7 @@ class _BaseChannel:
             circuit = self._hub.circuits[(address, priority)]
         except KeyError:
             circuit = VirtualCircuit(hub, address, priority)
+            self._hub.circuits[(address, priority)] = circuit
         self.circuit = circuit
         if cid is None:
             cid = self.circuit.new_channel_id()
