@@ -17,7 +17,8 @@ class Channel:
         self.client = client
         self.channel = channel
         self.last_reading = None
-        self.subscriptionids = collections.deque()
+        self.subscriptionids = set()
+        self.monitoring_tasks = {}
 
     async def wait_for_connection(self):
         while not self.channel._state[ca.CLIENT] == ca.CONNECTED:
@@ -37,18 +38,34 @@ class Channel:
         return self.last_reading
 
     async def subscribe(self, *args, **kwargs):
-        circuit, command = self.channel.subscribe()
+        circuit, command = self.channel.subscribe(*args, **kwargs)
         # Stash the subscriptionid to match the response to the request.
         self.client.subscriptionids[command.subscriptionid] = self
         await self.client.send(circuit, command)
         while command.subscriptionid not in self.subscriptionids:
             event = await self.client.get_event(self.channel.circuit)
+            print('wait')
+            await event.wait()
+        print('spawn')
+        task = await curio.spawn(self._monitor())
+        self.monitoring_tasks[command.subscriptionid] = task
+
+    async def _monitor(self):
+        "Apply constant in-bound pressure to a circuit to receive EventAdds."
+        while True:
+            print("MONITOR")
+            event = await self.client.get_event(self.channel.circuit)
             await event.wait()
 
-    async def unsubscribe(self, *args, **kwargs):
-        self.client.send(*self.channel.unsubscribe(subscriptionid))
-        while subscriptionid not in self.subscriptions:
-            await self.client.get_event(self.channel.circuit)
+    async def unsubscribe(self, subscriptionid, *args, **kwargs):
+        print('unsubscribe')
+        await self.client.send(*self.channel.unsubscribe(subscriptionid))
+        print('sent')
+        while subscriptionid not in self.subscriptionids:
+            event = await self.client.get_event(self.channel.circuit)
+            await event
+        task = self.monitoring_tasks[subscriptionid]
+        await task.cancel()
 
 
 class Client:
@@ -141,7 +158,9 @@ class Client:
                 chan.last_reading = command.values
             elif isinstance(command, ca.EventAddResponse):
                 chan = self.subscriptionids[command.subscriptionid]
-                chan.subscriptionids.append(command.subscriptionid)
+                chan.subscriptionids.add(command.subscriptionid)
+            elif isinstance(command, ca.EventCancelResponse):
+                chan.subscriptionids.remove(command.subscriptionid)
             event = self.events.pop(circuit.key)
             await event.set()
 
@@ -240,6 +259,11 @@ async def main():
     await chan1.read()
     print('reading:', chan1.last_reading)
     await chan1.subscribe()
+    await curio.sleep(1)
+    print('done sleeping')
+    print(chan1)
+    print(chan1.subscriptionids)
+    await chan1.unsubscribe(0)
     # reading = await chan1.read()
     
 curio.run(main())

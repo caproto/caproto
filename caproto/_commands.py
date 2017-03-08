@@ -107,6 +107,13 @@ def data_payload(values, data_type, data_count):
     return size, payload
 
 
+def get_command_class(role, header):
+    _class = Commands[role][header.command]
+    # Special case for EventCancelResponse which is coded inconsistently.
+    if role is SERVER and header.command == 1 and header.payload_size == 0:
+        _class = Commands[role][2]
+    return _class
+
 def read_datagram(data, address, role):
     "Parse bytes from one datagram into one or more commands."
     barray = bytearray(data)
@@ -114,7 +121,7 @@ def read_datagram(data, address, role):
     while barray:
         header = MessageHeader.from_buffer(barray)
         barray = barray[_MessageHeaderSize:]
-        _class = Commands[role][header.command]
+        _class = get_command_class(role, header)
         payload_size = header.payload_size
         if _class.HAS_PAYLOAD:
             payload_bytes = barray[:header.payload_size]
@@ -140,7 +147,7 @@ def read_from_bytestream(data, role):
         if len(data) < header_size:
             return data, NEED_DATA
         header = ExtendedMessageHeader.from_buffer(data)
-    _class = Commands[role][header.command]
+    _class = get_command_class(role, header)
     payload_size = header.payload_size
     total_size = header_size + payload_size
     # Do we have all the bytes in the payload?
@@ -428,12 +435,9 @@ class EventAddResponse(Message):
 
     @classmethod
     def from_wire(cls, header, payload_bytes):
-        # SPECIAL CASE TO WORK AROUND libca BUG
-        # libca seems to response to EventCancelRequest with an
+        # libca responds to EventCancelRequest with an
         # EventAddResponse with an empty payload.
-        # END SPECIAL CASE
         if not payload_bytes:
-            print('EventAdd with an empty payload!')
             return cls.from_components(header, None)
         payload_struct = from_buffer(header.data_type, payload_bytes)
         return cls.from_components(header, payload_struct)
@@ -454,6 +458,9 @@ class EventCancelRequest(Message):
 
 
 class EventCancelResponse(Message):
+    # Actually this is coded with the ID = 1 like EventAdd*.
+    # This is the only weird exception so we special-case it in the function
+    # get_command_class.
     ID = 2
     HAS_PAYLOAD = False
 
