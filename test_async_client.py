@@ -1,4 +1,4 @@
-# This is a channel access client implementation using curio.
+# This is a channel access client implemented using curio.
 
 # It builds on the abstractions used in caproto, adding transport and some
 # caches for matching requests with responses.
@@ -88,13 +88,14 @@ class VirtualCircuit:
                 continue
             break
         if isinstance(command, ca.ReadNotifyResponse):
-            chan = self.ioids[command.ioid]
+            chan = self.ioids.pop(command.ioid)
             chan.last_reading = command.values
+        if isinstance(command, ca.WriteNotifyResponse):
+            chan = self.ioids.pop(command.ioid)
         elif isinstance(command, ca.EventAddResponse):
             chan = self.subscriptionids[command.subscriptionid]
-            chan.subscriptionids.add(command.subscriptionid)
         elif isinstance(command, ca.EventCancelResponse):
-            chan.subscriptionids.remove(command.subscriptionid)
+            self.subscriptionids.pop(command.subscriptionid)
         event = self.event
         self.event = None
         await event.set()
@@ -116,15 +117,25 @@ class Channel:
             await event.wait()
 
     async def read(self, *args, **kwargs):
-        stale = True
         _, command = self.channel.read(*args, **kwargs)
         # Stash the ioid to match the response to the request.
-        self.circuit.ioids[command.ioid] = self
+        ioid = command.ioid
+        self.circuit.ioids[ioid] = self
         await self.circuit.send(command)
-        while stale:
+        while ioid in self.circuit.ioids:
             event = await self.circuit.get_event()
             await event.wait()
-            stale = False
+        return self.last_reading
+
+    async def write(self, *args, **kwargs):
+        _, command = self.channel.write(*args, **kwargs)
+        # Stash the ioid to match the response to the request.
+        ioid = command.ioid
+        self.circuit.ioids[ioid] = self
+        await self.circuit.send(command)
+        while ioid in self.circuit.ioids:
+            event = await self.circuit.get_event()
+            await event.wait()
         return self.last_reading
 
     async def subscribe(self, *args, **kwargs):
@@ -132,23 +143,20 @@ class Channel:
         # Stash the subscriptionid to match the response to the request.
         self.circuit.subscriptionids[command.subscriptionid] = self
         await self.circuit.send(command)
-        while command.subscriptionid not in self.subscriptionids:
-            event = await self.circuit.get_event()
-            await event.wait()
         task = await curio.spawn(self._monitor())
         self.monitoring_tasks[command.subscriptionid] = task
 
     async def _monitor(self):
-        "Apply constant in-bound pressure to a circuit to receive EventAdds."
+        "Apply constant suction to receive EventAddResponse commands."
         while True:
             event = await self.circuit.get_event()
             await event.wait()
 
     async def unsubscribe(self, subscriptionid, *args, **kwargs):
         await self.circuit.send(self.channel.unsubscribe(subscriptionid)[1])
-        while subscriptionid not in self.subscriptionids:
+        while subscriptionid in self.circuit.subscriptionids:
             event = await self.circuit.get_event()
-            await event
+            await event.wait()
         task = self.monitoring_tasks[subscriptionid]
         await task.cancel()
 
@@ -250,10 +258,11 @@ class Client:
         return Channel(circuit, chan)
 
 
-pv1 = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
-pv2 = "XF:31IDA-OP{Tbl-Ax:X2}Mtr.VAL"
 
 async def main():
+    pv1 = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
+    pv2 = "XF:31IDA-OP{Tbl-Ax:X2}Mtr.VAL"
+
     client = Client()
     await client.register()
     # Send out searches to the network without waiting for responses...
@@ -268,11 +277,17 @@ async def main():
     # ...and then wait for all the responses.
     await chan1.wait_for_connection()
     await chan2.wait_for_connection()
-    await chan1.read()
-    print('reading:', chan1.last_reading)
+    reading = await chan1.read()
+    print('reading:', reading)
     await chan1.subscribe()
     await curio.sleep(1)
     await chan1.unsubscribe(0)
-    # reading = await chan1.read()
+    await chan1.write((5,))
+    reading = await chan1.read()
+    print('reading:', reading)
+    await chan1.write((6,))
+    reading = await chan1.read()
+    print('reading:', reading)
     
-curio.run(main())
+if __name__ == '__main__':
+    curio.run(main())
