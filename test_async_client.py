@@ -108,7 +108,6 @@ class Channel:
         self.circuit = circuit
         self.channel = channel
         self.last_reading = None
-        self.subscriptionids = set()
         self.monitoring_tasks = {}
 
     async def wait_for_connection(self):
