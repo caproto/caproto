@@ -32,6 +32,7 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
             EchoRequest: AWAIT_VERSION_RESPONSE,
             EchoResponse: AWAIT_VERSION_RESPONSE,
             # Host and Client requests may come before or after we connect.
+            VersionRequest: AWAIT_VERSION_RESPONSE,
             HostNameRequest: AWAIT_VERSION_RESPONSE,
             ClientNameRequest: AWAIT_VERSION_RESPONSE,
             VersionResponse: CONNECTED,
@@ -61,6 +62,7 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
             ErrorResponse: ERROR,
         },
         SEND_VERSION_RESPONSE: {
+            VersionRequest: SEND_VERSION_RESPONSE,
             VersionResponse: CONNECTED,
             EchoRequest: SEND_VERSION_RESPONSE,
             EchoResponse: SEND_VERSION_RESPONSE,
@@ -72,6 +74,7 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
         CONNECTED: {
             # Host and Client requests may come before or after we connect.
             VersionRequest: SEND_VERSION_RESPONSE,
+            VersionResponse: CONNECTED,
             HostNameRequest: CONNECTED,
             ClientNameRequest: CONNECTED,
             AccessRightsResponse: CONNECTED,
