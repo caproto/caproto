@@ -269,7 +269,7 @@ class SearchResponse(Message):
 
     def __init__(self, port, sid, cid, version):
         encoded_ip = socket.inet_pton(socket.AF_INET, sid)
-        int_encoded_ip, = struct.unpack('I', encoded_ip)  # bytes -> int
+        int_encoded_ip, = struct.unpack('!I', encoded_ip)  # bytes -> int
         header = SearchResponseHeader(data_type=port,
                                       sid=int_encoded_ip,
                                       cid=cid)
@@ -289,7 +289,7 @@ class SearchResponse(Message):
     def sid(self):
         # for CA version >= 4.11
         int_encoded_ip = self.header.parameter1
-        encoded_ip = struct.pack('I', int_encoded_ip)  # int -> bytes
+        encoded_ip = struct.pack('!I', int_encoded_ip)  # int -> bytes
         return socket.inet_ntop(socket.AF_INET, encoded_ip)
 
     @property
@@ -345,8 +345,7 @@ class RsrvIsUpResponse(Message):
 
     @property
     def address_string(self):
-        # TODO should be enforcing network-byte order here with > or !
-        addr_bytes = struct.pack('I', self.address)
+        addr_bytes = struct.pack('!I', self.address)
         return socket.inet_ntop(socket.AF_INET, addr_bytes)
 
 
@@ -367,14 +366,14 @@ class RepeaterRegisterRequest(Message):
 
     def __init__(self, client_ip_address):
         encoded_ip = socket.inet_pton(socket.AF_INET, str(client_ip_address))
-        int_encoded_ip, = struct.unpack('I', encoded_ip)  # bytes -> int
+        int_encoded_ip, = struct.unpack('!I', encoded_ip)  # bytes -> int
         header = RepeaterRegisterRequestHeader(int_encoded_ip)
         super().__init__(header, None)
 
     @property
     def client_ip_address(self):
         int_encoded_ip = self.header.parameter2
-        encoded_ip = struct.pack('I', int_encoded_ip)  # int -> bytes
+        encoded_ip = struct.pack('!I', int_encoded_ip)  # int -> bytes
         return socket.inet_ntop(socket.AF_INET, encoded_ip)
 
 
