@@ -34,7 +34,7 @@ class VirtualCircuit:
         """
         Process a command and tranport it over the TCP socket for this circuit.
         """
-        if socket is None:
+        if self.socket is None:
             raise RuntimeError("must await create_connection() first")
         bytes_to_send = self.circuit.send(*commands)
         await self.socket.send(bytes_to_send)
@@ -43,7 +43,7 @@ class VirtualCircuit:
         """
         Receive bytes over TCP and cache them in this circuit's buffer.
         """
-        if socket is None:
+        if self.socket is None:
             raise RuntimeError("must await create_connection() first")
         bytes_received = await self.socket.recv(4096)
         self.circuit.recv(bytes_received)
@@ -341,6 +341,7 @@ async def main():
     print('reading:', reading)
     await chan2.clear()
     await chan1.clear()
-    
+
+
 if __name__ == '__main__':
     curio.run(main())
