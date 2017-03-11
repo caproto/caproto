@@ -343,6 +343,12 @@ class RsrvIsUpResponse(Message):
     beacon_id = property(lambda self: self.header.parameter1)
     address = property(lambda self: self.header.parameter2)
 
+    @property
+    def address_string(self):
+        # TODO should be enforcing network-byte order here with > or !
+        addr_bytes = struct.pack('I', self.address)
+        return socket.inet_ntop(socket.AF_INET, addr_bytes)
+
 
 class RepeaterConfirmResponse(Message):
     ID = 17
