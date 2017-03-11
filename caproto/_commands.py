@@ -114,6 +114,7 @@ def get_command_class(role, header):
         _class = Commands[role][2]
     return _class
 
+
 def read_datagram(data, address, role):
     "Parse bytes from one datagram into one or more commands."
     barray = bytearray(data)
@@ -332,11 +333,13 @@ class RsrvIsUpResponse(Message):
     ID = 13
     HAS_PAYLOAD = False
 
-    def __init__(self, server_port, beacon_id, address):
-        header = RsrvIsUpResponseHeader(server_port, beacon_id, address)
+    def __init__(self, version, server_port, beacon_id, address):
+        header = RsrvIsUpResponseHeader(version, server_port, beacon_id,
+                                        address)
         super().__init__(header, None)
 
-    server_port = property(lambda self: self.header.data_type)
+    version = property(lambda self: self.header.data_type)
+    server_port = property(lambda self: self.header.data_count)
     beacon_id = property(lambda self: self.header.parameter1)
     address = property(lambda self: self.header.parameter2)
 
@@ -771,3 +774,8 @@ for command in Commands[CLIENT].values():
     command.DIRECTION = REQUEST
 for command in Commands[SERVER].values():
     command.DIRECTION = RESPONSE
+
+# TODO special-case, RsrvIsUp is sent from CA Server to Broadcaster server
+Commands[CLIENT][RsrvIsUpResponse.ID] = RsrvIsUpResponse
+Commands[SERVER][RsrvIsUpResponse.ID] = RsrvIsUpResponse
+RsrvIsUpResponse.DIRECTION = REQUEST
