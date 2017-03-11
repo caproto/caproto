@@ -334,6 +334,8 @@ class RsrvIsUpResponse(Message):
     HAS_PAYLOAD = False
 
     def __init__(self, version, server_port, beacon_id, address):
+        # TODO if address is 0, it should be replaced with the remote ip from
+        # the udp packet
         header = RsrvIsUpResponseHeader(version, server_port, beacon_id,
                                         address)
         super().__init__(header, None)
