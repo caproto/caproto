@@ -294,7 +294,7 @@ class SearchResponse(Message):
 
     @property
     def version(self):
-        return DBR_INT.from_buffer(bytearray(self.payload)[2:4]).value
+        return DBR_INT.from_buffer(bytearray(self.payload)[:2]).value
 
     port = property(lambda self: self.header.data_type)
     cid = property(lambda self: self.header.parameter2)
