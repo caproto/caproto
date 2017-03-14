@@ -140,6 +140,6 @@ class Context:
 
 
 if __name__ == '__main__':
-    pvdb = ["asdf"]
+    pvdb = ["pi"]
     ctx = Context('0.0.0.0', SERVER_PORT, pvdb)
     curio.run(ctx.run())
