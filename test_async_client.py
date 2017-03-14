@@ -123,7 +123,7 @@ class Channel:
 
     async def clear(self):
         "Disconnect this Channel."
-        await self.circuit.send(self.channel.clear()[1])
+        await self.circuit.send(self.channel.clear())
         while self.channel._state[ca.CLIENT] == ca.CONNECTED:
             event = await self.circuit.get_event()
             await event.wait()
@@ -134,7 +134,7 @@ class Channel:
         The most recent reading is always available in the ``last_reading``
         attribute.
         """
-        _, command = self.channel.read(*args, **kwargs)
+        command = self.channel.read(*args, **kwargs)
         # Stash the ioid to match the response to the request.
         ioid = command.ioid
         self.circuit.ioids[ioid] = self
@@ -146,7 +146,7 @@ class Channel:
 
     async def write(self, *args, **kwargs):
         "Write a new value and await confirmation from the server."
-        _, command = self.channel.write(*args, **kwargs)
+        command = self.channel.write(*args, **kwargs)
         # Stash the ioid to match the response to the request.
         ioid = command.ioid
         self.circuit.ioids[ioid] = self
@@ -158,7 +158,7 @@ class Channel:
 
     async def subscribe(self, *args, **kwargs):
         "Start a new subscription and spawn an async task to receive readings."
-        circuit, command = self.channel.subscribe(*args, **kwargs)
+        command = self.channel.subscribe(*args, **kwargs)
         # Stash the subscriptionid to match the response to the request.
         self.circuit.subscriptionids[command.subscriptionid] = self
         await self.circuit.send(command)
@@ -173,7 +173,7 @@ class Channel:
 
     async def unsubscribe(self, subscriptionid, *args, **kwargs):
         "Cancel a subscription and await confirmation from the server."
-        await self.circuit.send(self.channel.unsubscribe(subscriptionid)[1])
+        await self.circuit.send(self.channel.unsubscribe(subscriptionid))
         while subscriptionid in self.circuit.subscriptionids:
             event = await self.circuit.get_event()
             await event.wait()
@@ -219,7 +219,8 @@ class Client:
 
     async def register(self):
         "Register this client with the CA Repeater."
-        await self.send(self.repeater_port, self.broadcaster.register())
+        command = self.broadcaster.register('0.0.0.0')
+        await self.send(self.repeater_port, command)
         while not self.registered:
             event = await self.get_event()
             await event.wait()
@@ -253,10 +254,10 @@ class Client:
         async def connect():
             if chan.circuit._state[ca.SERVER] is ca.IDLE:
                 await circuit.create_connection()
-                await circuit.send(chan.version()[1])
-                await circuit.send(chan.host_name()[1])
-                await circuit.send(chan.client_name()[1])
-            await circuit.send(chan.create()[1])
+                await circuit.send(chan.version())
+                await circuit.send(chan.host_name())
+                await circuit.send(chan.client_name())
+            await circuit.send(chan.create())
 
         # Spawn an async task to connect the channel and return a Channel
         # instance immediately. User can use ``Channel.wait_for_connection()``

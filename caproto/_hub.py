@@ -33,9 +33,6 @@ from ._dbr import (SubscriptionType, )
 
 
 DEFAULT_PROTOCOL_VERSION = 13
-OUR_HOSTNAME = socket.gethostname()
-OUR_IP = socket.gethostbyname(OUR_HOSTNAME)
-OUR_USERNAME = getpass.getuser()
 
 
 class VirtualCircuit:
@@ -501,7 +498,7 @@ class Broadcaster:
                     SearchRequest(name, cid, self.protocol_version))
         return commands
 
-    def register(self, ip=OUR_IP):
+    def register(self, ip=None):
         """
         Generate a valid :class:`RepeaterRegisterRequest`.
 
@@ -514,6 +511,9 @@ class Broadcaster:
         -------
         RepeaterRegisterRequest
         """
+        if ip is None:
+            hostname = socket.gethostname()
+            ip = socket.gethostbyname(hostname)
         command = RepeaterRegisterRequest(ip)
         return command
 
@@ -666,13 +666,13 @@ class ClientChannel(_BaseChannel):
 
         Returns
         -------
-        VirtualCircuit, VersionRequest
+        VersionRequest
         """
         command = VersionRequest(version=self._hub.protocol_version,
                                  priority=self.circuit.priority)
-        return self.circuit, command
+        return command
 
-    def host_name(self, host_name=OUR_HOSTNAME):
+    def host_name(self, host_name=None):
         """
         Generate a valid :class:`HostNameRequest`.
 
@@ -683,12 +683,14 @@ class ClientChannel(_BaseChannel):
 
         Returns
         -------
-        VirtualCircuit, HostNameRequest
+        HostNameRequest
         """
+        if host_name is None:
+            host_name = socket.gethostname()
         command = HostNameRequest(host_name)
-        return self.circuit, command
+        return command
 
-    def client_name(self, client_name=OUR_USERNAME):
+    def client_name(self, client_name=None):
         """
         Generate a valid :class:`ClientNameRequest`.
 
@@ -699,10 +701,12 @@ class ClientChannel(_BaseChannel):
 
         Returns
         -------
-        VirtualCircuit, ClientNameRequest
+        ClientNameRequest
         """
+        if client_name is None:
+            client_name = getpass.getuser()
         command = ClientNameRequest(client_name)
-        return self.circuit, command
+        return command
 
     def create(self):
         """
@@ -710,11 +714,11 @@ class ClientChannel(_BaseChannel):
 
         Returns
         -------
-        VirtualCircuit, CreateChanRequest
+        CreateChanRequest
         """
         command = CreateChanRequest(self.name, self.cid,
                                     self._hub.protocol_version)
-        return self.circuit, command
+        return command
 
     def clear(self):
         """
@@ -722,10 +726,10 @@ class ClientChannel(_BaseChannel):
 
         Returns
         -------
-        VirtualCircuit, ClearChannelRequest
+        ClearChannelRequest
         """
         command = ClearChannelRequest(self.sid, self.cid)
-        return self.circuit, command
+        return command
 
     def read(self, data_type=None, data_count=None):
         """
@@ -744,12 +748,12 @@ class ClientChannel(_BaseChannel):
 
         Returns
         -------
-        VirtualCircuit, ReadNotifyRequest
+        ReadNotifyRequest
         """
         data_type, data_count = self._fill_defaults(data_type, data_count)
         ioid = self.circuit.new_ioid()
         command = ReadNotifyRequest(data_type, data_count, self.sid, ioid)
-        return self.circuit, command
+        return command
 
     def write(self, data, data_type=None, data_count=None):
         """
@@ -769,13 +773,13 @@ class ClientChannel(_BaseChannel):
 
         Returns
         -------
-        VirtualCircuit, WriteNotifyRequest
+        WriteNotifyRequest
         """
         data_type, data_count = self._fill_defaults(data_type, data_count)
         ioid = self.circuit.new_ioid()
         command = WriteNotifyRequest(data, data_type, data_count, self.sid,
                                      ioid)
-        return self.circuit, command
+        return command
 
     def subscribe(self, data_type=None, data_count=None, low=0.0, high=0.0,
                   to=0.0, mask=None):
@@ -803,7 +807,7 @@ class ClientChannel(_BaseChannel):
 
         Returns
         -------
-        VirtualCircuit, EventAddRequest
+        EventAddRequest
         """
         data_type, data_count = self._fill_defaults(data_type, data_count)
         if mask is None:
@@ -813,7 +817,7 @@ class ClientChannel(_BaseChannel):
         subscriptionid = self.circuit.new_subscriptionid()
         command = EventAddRequest(data_type, data_count, self.sid,
                                   subscriptionid, low, high, to, mask)
-        return self.circuit, command
+        return command
 
     def unsubscribe(self, subscriptionid):
         """
@@ -827,7 +831,7 @@ class ClientChannel(_BaseChannel):
 
         Returns
         -------
-        VirtualCircuit, EventAddRequest
+        EventAddRequest
         """
         try:
             event_add = self.circuit.event_add_commands[subscriptionid]
@@ -839,7 +843,7 @@ class ClientChannel(_BaseChannel):
                                     "Channel.")
         command = EventCancelRequest(event_add.data_type, self.sid,
                                      subscriptionid)
-        return self.circuit, command
+        return command
 
 
 class ServerChannel(_BaseChannel):
@@ -849,11 +853,11 @@ class ServerChannel(_BaseChannel):
 
         Returns
         -------
-        VirtualCircuit, VersionResponse
+        VersionResponse
         """
 
         command = VersionResponse(self._circuit._hub.protocol_version)
-        return self.circuit, command
+        return command
 
     def create(self, native_data_type, native_data_count, sid):
         """
@@ -870,11 +874,11 @@ class ServerChannel(_BaseChannel):
 
         Returns
         -------
-        VirtualCircuit, CreateChanResponse
+        CreateChanResponse
         """
         command = CreateChanResponse(native_data_type, native_data_count,
                                      self.cid, sid)
-        return self.circuit, command
+        return command
 
     def clear(self):
         """
@@ -882,10 +886,10 @@ class ServerChannel(_BaseChannel):
 
         Returns
         -------
-        VirtualCircuit, ClearChannelResponse
+        ClearChannelResponse
         """
         command = ClearChannelResponse(self.sid, self.cid)
-        return self.circuit, command
+        return command
 
     def read(self, values, ioid, data_type=None, data_count=None, status=1):
         """
@@ -908,12 +912,12 @@ class ServerChannel(_BaseChannel):
 
         Returns
         -------
-        VirtualCircuit, ReadNotifyResponse
+        ReadNotifyResponse
         """
         data_type, data_count = self._fill_defaults(data_type, data_count)
         command = ReadNotifyResponse(values, data_type, data_count, status,
                                      ioid)
-        return self.circuit, command
+        return command
 
     def write(self, ioid, data_type=None, data_count=None, status=1):
         """
@@ -935,11 +939,11 @@ class ServerChannel(_BaseChannel):
 
         Returns
         -------
-        VirtualCircuit, WriteNotifyResponse
+        WriteNotifyResponse
         """
         data_type, data_count = self._fill_defaults(data_type, data_count)
         command = WriteNotifyResponse(data_type, data_count, status, ioid)
-        return self.circuit, command
+        return command
 
     def subscribe(self, values, subscriptionid, data_type=None,
                   data_count=None, status_code=32):
@@ -963,13 +967,13 @@ class ServerChannel(_BaseChannel):
 
         Returns
         -------
-        VirtualCircuit, EventAddResponse
+        EventAddResponse
         """
         # TODO It's unclear what the status_code means here.
         data_type, data_count = self._fill_defaults(data_type, data_count)
         command = EventAddResponse(values, data_type, data_count, status_code,
                                    subscriptionid)
-        return self.circuit, command
+        return command
 
     def unsubscribe(self, subscriptionid, data_type=None, data_count=None):
         """
@@ -989,7 +993,7 @@ class ServerChannel(_BaseChannel):
 
         Returns
         -------
-        VirtualCircuit, EventCancelResponse
+        EventCancelResponse
         """
         # TODO How does CA actually work? It seems to break its spec.
         ...
