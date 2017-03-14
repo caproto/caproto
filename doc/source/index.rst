@@ -8,15 +8,11 @@ Python.
 
 This project is inspired by the broad effort in the Python community to write
 `sans-I/O implementations of network protocols <http://sans-io.readthedocs.io/>`_.
-Caproto manages the coupled state of an EPICS Client or Server, its
-VirtualCircuits, and Channels; it interprets received UDP and TCP messages and
-exposes them (zero-copy) as higher-level objects;
-using these same objects, it can compose valid messages to be sent. But,
-crucially, it performs no I/O itself. It merely processes and validates
-incoming and outgoing messsages and tracks client and server state. The
-developer using caproto is in complete control over when and how bytes are
-actually transmitted and received.  The transport may be synchronous, threaded,
-asynchronous, etc. Caproto is unopinionated about this.
+Caproto parses and validates incoming and outgoing commands, keeping track
+the state of an EPICS Client, Server, Virtual Circuits, and Channels. But,
+crucially, it performs no I/O itself: handling sockets and transport is
+completely up the caller. Caproto a toolkit for building programs that speak
+EPICS.
 
 Why do this?
 ============
@@ -24,12 +20,12 @@ Why do this?
 The aim is to provide a complete, reusable implementation of the Channel Access
 protocol in Python which can be wrapped in whichever network library you like
 best. It is not a replacement for
-`pyepics <https://github.com/pyepics/pyepics>`_ or
-`cothread <http://controls.diamond.ac.uk/downloads/python/cothread/>`_. Rather
-it would be make libraries like pyepics or cothread easier to write in the
-future. See the
-`sans-I/O documentation <http://sans-io.readthedocs.io/>`_ for more on the why
-and how of this idea and for a list of related projects.
+`pyepics <https://github.com/pyepics/pyepics>`_,
+`cothread <http://controls.diamond.ac.uk/downloads/python/cothread/>`_, or
+`pcaspy` <https://pcaspy.readthedocs.io>_`. It's a pure-Python implementation
+of *libca* that makes libraries like these easier to write in the
+future. See the `sans-I/O documentation <http://sans-io.readthedocs.io/>`_ for
+more on the why and how of this idea and for a list of related projects.
 
 This entire implementation, including copious docstrings and comments, is
 shorter than official webpage documenting the Channel Access specification. The
