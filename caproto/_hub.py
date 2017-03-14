@@ -282,9 +282,9 @@ class VirtualCircuit:
         if isinstance(command, VersionRequest):
             if self.priority != command.priority:
                 err = get_exception(self.our_role, command)
-                raise("priority {} does not match previously set priority "
-                      "of {} for this circuit".format(command.priority,
-                                                      self.priority))
+                raise err("priority {} does not match previously set priority "
+                          "of {} for this circuit".format(command.priority,
+                                                          self.priority))
 
 
     def new_channel_id(self):
