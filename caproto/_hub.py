@@ -280,7 +280,9 @@ class VirtualCircuit:
             self._state.process_command_type(self.their_role, type(command))
 
         if isinstance(command, VersionRequest):
-            if self.priority != command.priority:
+            if self.priority is None:
+                self.priority = command.priority
+            elif self.priority != command.priority:
                 err = get_exception(self.our_role, command)
                 raise err("priority {} does not match previously set priority "
                           "of {} for this circuit".format(command.priority,
