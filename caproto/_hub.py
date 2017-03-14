@@ -542,9 +542,25 @@ class Hub:
         else:
             self.their_role = CLIENT
         self.protocol_version = protcol_version
-        self.circuits = {}  # keyed by ((host, port), priority)
+        self.circuits = []
         logger_name = "caproto.Hub"
         self.log = logging.getLogger(logger_name)
+
+    def new_circuit(self, address, priority):
+        """
+        A convenience method to instantiate a new :class:`VirtualCircuit`
+        and register it with this :class:`Hub`.
+        """
+        circuit = VirtualCircuit(self, address, priority)
+        self.circuits.append(circuit)
+        return circuit
+
+    def get_circuit(self, address, priority):
+        for circuit in self.circuits:
+            if circuit.address == address and circuit.priority == priority:
+                return circuit
+        raise CaprotoKeyError("No circuit with circuit.key == {!r}"
+                              "".format((address, priority)))
 
     def new_channel(self, name, address, priority, cid=None):
         """
@@ -575,10 +591,9 @@ class _BaseChannel:
         self.name = name
         # Find an existing VirtualCircuit we can use or make a new one.
         try:
-            circuit = self._hub.circuits[(address, priority)]
+            circuit = self._hub.get_circuit(address, priority)
         except KeyError:
-            circuit = VirtualCircuit(hub, address, priority)
-            self._hub.circuits[(address, priority)] = circuit
+            circuit = self._hub.new_circuit(address, priority)
         self.circuit = circuit
         if cid is None:
             cid = self.circuit.new_channel_id()

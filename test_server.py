@@ -68,7 +68,7 @@ def recv(circuit):
 # First receive directly into the circuit.
 print('initial receipt')
 bytes_received = connection.recv(4096)
-circuit = ca.VirtualCircuit(srv, client_address, None)
+circuit = srv.new_circuit(client_address, None)
 circuit.recv(bytes_received)
 circuit.next_command()
 circuit.next_command()
