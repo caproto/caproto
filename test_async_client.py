@@ -94,6 +94,7 @@ class VirtualCircuit:
             chan = self.ioids.pop(command.ioid)
         elif isinstance(command, ca.EventAddResponse):
             chan = self.subscriptionids[command.subscriptionid]
+            chan.process_subscription(command)
         elif isinstance(command, ca.EventCancelResponse):
             self.subscriptionids.pop(command.subscriptionid)
         event = self.event
@@ -109,6 +110,23 @@ class Channel:
         self.channel = channel  # a caproto.ClientChannel
         self.last_reading = None
         self.monitoring_tasks = {}  # maps subscriptionid to curio.Task
+        self._callback = None  # user func to call when subscriptions are run
+
+    def register_user_callback(self, func):
+        """
+        Func to be called when a subscription receives a new EventAdd command.
+
+        This function will be called by a Task in the main thread. If ``func``
+        needs to do CPU-intensive or I/O-related work, it should execute that
+        work in a separate thread of process.
+        """
+        self._callback = func
+
+    def process_subscription(self, event_add_command):
+        if self._callback is None:
+            return
+        else:
+            self._callback(event_add_command)
 
     async def wait_for_connection(self):
         """Wait for this Channel to be connected, ready to use.
@@ -315,8 +333,15 @@ class Client:
 
 
 async def main():
+    # Connect to two motorsim PVs. Test reading, writing, and subscribing.
     pv1 = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
     pv2 = "XF:31IDA-OP{Tbl-Ax:X2}Mtr.VAL"
+
+    # Some user function to call when subscriptions receive data.
+    called = []
+    def user_callback(command):
+        print("Subscription has received data.")
+        called.append(True)
 
     client = Client()
     await client.register()
@@ -325,6 +350,8 @@ async def main():
     # Send out connection requests without waiting for responses...
     chan1 = await client.create_channel(pv1)
     chan2 = await client.create_channel(pv2)
+    # Set up a function to call when subscriptions are received.
+    chan1.register_user_callback(user_callback)
     # ...and then wait for all the responses.
     await chan1.wait_for_connection()
     await chan2.wait_for_connection()
@@ -332,7 +359,6 @@ async def main():
     print('reading:', reading)
     await chan1.subscribe()
     await chan2.read()
-    await curio.sleep(1)
     await chan1.unsubscribe(0)
     await chan1.write((5,))
     reading = await chan1.read()
@@ -342,7 +368,8 @@ async def main():
     print('reading:', reading)
     await chan2.clear()
     await chan1.clear()
-
+    assert called
+    
 
 if __name__ == '__main__':
     curio.run(main())
