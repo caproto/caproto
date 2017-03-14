@@ -114,6 +114,7 @@ def get_command_class(role, header):
         _class = Commands[role][2]
     return _class
 
+
 def read_datagram(data, address, role):
     "Parse bytes from one datagram into one or more commands."
     barray = bytearray(data)
@@ -268,7 +269,7 @@ class SearchResponse(Message):
 
     def __init__(self, port, sid, cid, version):
         encoded_ip = socket.inet_pton(socket.AF_INET, sid)
-        int_encoded_ip, = struct.unpack('I', encoded_ip)  # bytes -> int
+        int_encoded_ip, = struct.unpack('!I', encoded_ip)  # bytes -> int
         header = SearchResponseHeader(data_type=port,
                                       sid=int_encoded_ip,
                                       cid=cid)
@@ -288,7 +289,7 @@ class SearchResponse(Message):
     def sid(self):
         # for CA version >= 4.11
         int_encoded_ip = self.header.parameter1
-        encoded_ip = struct.pack('I', int_encoded_ip)  # int -> bytes
+        encoded_ip = struct.pack('!I', int_encoded_ip)  # int -> bytes
         return socket.inet_ntop(socket.AF_INET, encoded_ip)
 
     @property
@@ -332,13 +333,22 @@ class RsrvIsUpResponse(Message):
     ID = 13
     HAS_PAYLOAD = False
 
-    def __init__(self, server_port, beacon_id, address):
-        header = RsrvIsUpResponseHeader(server_port, beacon_id, address)
+    def __init__(self, version, server_port, beacon_id, address):
+        # TODO if address is 0, it should be replaced with the remote ip from
+        # the udp packet
+        header = RsrvIsUpResponseHeader(version, server_port, beacon_id,
+                                        address)
         super().__init__(header, None)
 
-    server_port = property(lambda self: self.header.data_type)
+    version = property(lambda self: self.header.data_type)
+    server_port = property(lambda self: self.header.data_count)
     beacon_id = property(lambda self: self.header.parameter1)
     address = property(lambda self: self.header.parameter2)
+
+    @property
+    def address_string(self):
+        addr_bytes = struct.pack('!I', self.address)
+        return socket.inet_ntop(socket.AF_INET, addr_bytes)
 
 
 class RepeaterConfirmResponse(Message):
@@ -358,14 +368,14 @@ class RepeaterRegisterRequest(Message):
 
     def __init__(self, client_ip_address):
         encoded_ip = socket.inet_pton(socket.AF_INET, str(client_ip_address))
-        int_encoded_ip, = struct.unpack('I', encoded_ip)  # bytes -> int
+        int_encoded_ip, = struct.unpack('!I', encoded_ip)  # bytes -> int
         header = RepeaterRegisterRequestHeader(int_encoded_ip)
         super().__init__(header, None)
 
     @property
     def client_ip_address(self):
         int_encoded_ip = self.header.parameter2
-        encoded_ip = struct.pack('I', int_encoded_ip)  # int -> bytes
+        encoded_ip = struct.pack('!I', int_encoded_ip)  # int -> bytes
         return socket.inet_ntop(socket.AF_INET, encoded_ip)
 
 
@@ -771,3 +781,8 @@ for command in Commands[CLIENT].values():
     command.DIRECTION = REQUEST
 for command in Commands[SERVER].values():
     command.DIRECTION = RESPONSE
+
+# TODO special-case, RsrvIsUp is sent from CA Server to Broadcaster server
+Commands[CLIENT][RsrvIsUpResponse.ID] = RsrvIsUpResponse
+Commands[SERVER][RsrvIsUpResponse.ID] = RsrvIsUpResponse
+RsrvIsUpResponse.DIRECTION = REQUEST
