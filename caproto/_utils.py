@@ -56,7 +56,7 @@ class RemoteProtocolError(ChannelAccessProtocolError):
     ...
 
 
-class UninitializedVirtualCircuit(CaprotoError):
+class CaprotoKeyError(CaprotoError, KeyError):
     ...
 
 
