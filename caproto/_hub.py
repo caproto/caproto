@@ -290,7 +290,6 @@ class VirtualCircuit:
                           "of {} for this circuit".format(command.priority,
                                                           self.priority))
 
-
     def new_channel_id(self):
         "Return a valid value for a cid or sid."
         # Return the next sequential unused id. Wrap back to 0 on overflow.

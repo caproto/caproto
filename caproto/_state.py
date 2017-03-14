@@ -50,6 +50,9 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
             # VirtualCircuits can only be closed by timeout.
         },
         ERROR: {},
+        CLOSED: {
+            # a terminal state
+        },
     },
     SERVER: {
         IDLE: {
@@ -82,6 +85,9 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
             EchoResponse: CONNECTED,
             ErrorResponse: ERROR,
             # VirtualCircuits can only be closed by timeout.
+        },
+        CLOSED: {
+            # a terminal state
         },
     },
 }

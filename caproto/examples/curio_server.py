@@ -8,6 +8,10 @@ import getpass
 SERVER_PORT = 5064
 
 
+class DisconnectedCircuit(Exception):
+    ...
+
+
 class VirtualCircuit:
     "Wraps a caproto.VirtualCircuit with a curio client."
     def __init__(self, circuit, client):
@@ -28,6 +32,8 @@ class VirtualCircuit:
         """
         print('recv....')
         bytes_received = await self.client.recv(4096)
+        if not bytes_received:
+            raise DisconnectedCircuit()
         self.circuit.recv(bytes_received)
 
     async def next_command(self):
@@ -57,13 +63,14 @@ class VirtualCircuit:
         elif isinstance(command, ca.EventCancelRequest):
             chan = self.circuit.channels[command.sid]
             await self.send(chan.unsubscribe(command.subscriptionid))
+        elif isinstance(command, ca.ClearChannelRequest):
+            chan = self.circuit.channels[command.sid]
+            await self.send(chan.clear())
         #event = self.event
         #self.event = None
         #await event.set()
         #return command
         return command
-
-
 
 
 class Context:
@@ -102,8 +109,7 @@ class Context:
                         responses.clear()
                         break  # Do not send any repsonse to this datagram.
                     ip = await socket.gethostname()
-                    res = ca.SearchResponse(self.port, ip,
-                                            1, 13)
+                    res = ca.SearchResponse(self.port, ip, 1, 13)
                     responses.append(res)
 
     async def tcp_handler(self, client, addr):
@@ -119,7 +125,11 @@ class Context:
             ca.AccessRightsResponse(cid=1, access_rights=3),
             ca.CreateChanResponse(data_type=2, data_count=1, cid=1, sid=1))
         while True:
-            await circuit.next_command()
+            try:
+                await circuit.next_command()
+            except DisconnectedCircuit:
+                print('disconnected')
+                return
 
     async def run(self):
         tcp_server = curio.tcp_server('', self.port, self.tcp_handler)
