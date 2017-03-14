@@ -5,8 +5,8 @@
 #
 # VirtualCircuit: has a caproto.VirtualCircuit, a socket, and some caches.
 # Channel: has a VirtualCircuit and a caproto.ClientChannel.
-# Client: has a caproto.Hub, a caproto.Broadcaster, a UDP socket, a cache of
-#         search results and a cache of VirtualCircuits.
+# Context: has a caproto.Hub, a caproto.Broadcaster, a UDP socket, a cache of
+#          search results and a cache of VirtualCircuits.
 #
 import caproto as ca
 import curio
@@ -104,7 +104,7 @@ class VirtualCircuit:
 
 
 class Channel:
-    """Wraps a VirtualCircuit and a caproto.ClientClient."""
+    """Wraps a VirtualCircuit and a caproto.ClientChannel."""
     def __init__(self, circuit, channel):
         self.circuit = circuit  # a VirtualCircuit
         self.channel = channel  # a caproto.ClientChannel
@@ -131,7 +131,7 @@ class Channel:
     async def wait_for_connection(self):
         """Wait for this Channel to be connected, ready to use.
 
-        The method ``Client.create_channel`` spawns an asynchronous task to
+        The method ``Context.create_channel`` spawns an asynchronous task to
         initialize the connection in the fist place. This method waits for it
         to complete.
         """
@@ -199,7 +199,7 @@ class Channel:
         await task.cancel()
 
 
-class Client:
+class Context:
     "Wraps a caproto.Broadcaster and a caproto.Hub and adds transport."
     def __init__(self, repeater_port=REPEATER_PORT, server_port=SERVER_PORT):
         self.repeater_port = repeater_port
@@ -343,13 +343,13 @@ async def main():
         print("Subscription has received data.")
         called.append(True)
 
-    client = Client()
-    await client.register()
-    await client.search(pv1)
-    await client.search(pv2)
+    ctx = Context()
+    await ctx.register()
+    await ctx.search(pv1)
+    await ctx.search(pv2)
     # Send out connection requests without waiting for responses...
-    chan1 = await client.create_channel(pv1)
-    chan2 = await client.create_channel(pv2)
+    chan1 = await ctx.create_channel(pv1)
+    chan2 = await ctx.create_channel(pv2)
     # Set up a function to call when subscriptions are received.
     chan1.register_user_callback(user_callback)
     # ...and then wait for all the responses.
