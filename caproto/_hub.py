@@ -252,6 +252,8 @@ class VirtualCircuit:
 
             # If we got this far, the state machine has validated this Command.
             # Update other Channel and Circuit state.
+            if isinstance(command, AccessRightsResponse):
+                chan.access_rights = command.access_rights
             if isinstance(command, CreateChanResponse):
                 chan.sid = command.sid
                 self._channels_sid[chan.sid] = chan
@@ -604,6 +606,7 @@ class _BaseChannel:
         self.native_data_type = None
         self.native_data_count = None
         self.sid = None
+        self.access_rights = None
         self.cleared = False  # If True, Channel is at end of life.
 
     @property
