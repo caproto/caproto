@@ -422,8 +422,8 @@ class Broadcaster:
             for i, command in enumerate(commands):
                 self.log.debug("%d of %d: %r", i, len(commands), command)
             self._parsed_commands.extend(commands)
-        self.log.debug(("Returning 1 of %d commands from the datagram most "
-                        "recently parsed. %d more datagrams are cached."),
+        self.log.debug(("Processing 1/%d commands left in datagram. "
+                        "%d more datagrams are cached."),
                        len(self._parsed_commands), len(self._datagram_inbox))
         command = self._parsed_commands.popleft()
         self._process_command(self.their_role, command, self._history)
