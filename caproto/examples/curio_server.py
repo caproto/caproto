@@ -8,6 +8,64 @@ import getpass
 SERVER_PORT = 5064
 
 
+class VirtualCircuit:
+    "Wraps a caproto.VirtualCircuit with a curio client."
+    def __init__(self, circuit, client):
+        self.circuit = circuit  # a caproto.VirtualCircuit
+        self.client = client
+
+    async def send(self, *commands):
+        """
+        Process a command and tranport it over the TCP socket for this circuit.
+        """
+        print("send....")
+        bytes_to_send = self.circuit.send(*commands)
+        await self.client.sendall(bytes_to_send)
+
+    async def recv(self):
+        """
+        Receive bytes over TCP and cache them in this circuit's buffer.
+        """
+        print('recv....')
+        bytes_received = await self.client.recv(4096)
+        self.circuit.recv(bytes_received)
+
+    async def next_command(self):
+        """
+        Process one incoming command.
+
+        1. Receive data from the socket if a full comannd's worth of bytes are
+           not already cached.
+        2. Dispatch to caproto.VirtualCircuit.next_command which validates.
+        3. Update Channel state if applicable.
+        """
+        while True:
+            command = self.circuit.next_command()
+            if isinstance(command, ca.NEED_DATA):
+                await self.recv()
+                continue
+            break
+        if isinstance(command, ca.ReadNotifyRequest):
+            chan = self.circuit.channels[command.sid]
+            await self.send(chan.read(values=(3.14,), ioid=command.ioid))
+        if isinstance(command, ca.WriteNotifyRequest):
+            chan = self.circuit.channels[command.sid]
+            await self.send(chan.write(ioid=command.ioid))
+        elif isinstance(command, ca.EventAddRequest):
+            chan = self.circuit.channels[command.sid]
+            await self.send(chan.subscribe((3.14,), command.subscriptionid))
+        elif isinstance(command, ca.EventCancelRequest):
+            chan = self.circuit.channels[command.sid]
+            await self.send(chan.unsubscribe(command.subscriptionid))
+        #event = self.event
+        #self.event = None
+        #await event.set()
+        #return command
+        return command
+
+
+
+
 class Context:
     def __init__(self, host, port, pvdb):
         self.host = host
@@ -49,26 +107,19 @@ class Context:
                     responses.append(res)
 
     async def tcp_handler(self, client, addr):
-        circuit = self.hub.new_circuit(addr, None)
+        circuit = VirtualCircuit(self.hub.new_circuit(addr, None), client)
 
-
-        bytes_received = await client.recv(4096)
-        circuit.recv(bytes_received)
         # TODO Do not assume that all handshake bytes come in at once.
-        circuit.next_command()
-        circuit.next_command()
-        circuit.next_command()
-        circuit.next_command()
-        bytes_to_send = circuit.send(
+        await circuit.next_command()
+        await circuit.next_command()
+        await circuit.next_command()
+        await circuit.next_command()
+        bytes_to_send = await circuit.send(
             ca.VersionResponse(13),
             ca.AccessRightsResponse(cid=1, access_rights=3),
             ca.CreateChanResponse(data_type=2, data_count=1, cid=1, sid=1))
-        await client.sendall(bytes_to_send)
         while True:
-            data = await client.recv(4096)
-            if not data:
-                break
-            await client.sendall(data)
+            await circuit.next_command()
 
     async def run(self):
         tcp_server = curio.tcp_server('', self.port, self.tcp_handler)
@@ -82,24 +133,3 @@ if __name__ == '__main__':
     pvdb = ["asdf"]
     ctx = Context('0.0.0.0', SERVER_PORT, pvdb)
     curio.run(ctx.run())
-
-
-class VirtualCircuit:
-    def __init__(self, circuit):
-        self.circuit = circuit  # a caproto.VirtualCircuit
-
-def send(circuit, command):
-    bytes_to_send = circuit.send(command)
-    connection.sendall(bytes_to_send)
-
-def recv(circuit):
-    bytes_received = connection.recv(4096)
-    circuit.recv(bytes_received)
-    commands = []
-    while True:
-        command = circuit.next_command()
-        if type(command) is ca.NEED_DATA:
-            break
-        commands.append(command)
-    return commands
-
