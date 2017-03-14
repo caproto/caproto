@@ -71,8 +71,8 @@ class VirtualCircuit:
         self.their_role = hub.their_role
         self.log = self._hub.log
         if priority is None and self.our_role is CLIENT:
-            raise RuntimeError("Client-side VirtualCircuit requires a "
-                               "non-None priority at initialization time.")
+            raise CaprotoRuntimeError("Client-side VirtualCircuit requires a "
+                                      "non-None priority at initialization time.")
 
     @property
     def host(self):
@@ -87,10 +87,10 @@ class VirtualCircuit:
     @property
     def key(self):
         if self.priority is None:
-            raise RuntimeError("This VirtualCircuit has not received a "
-                               "VersionRequest and does not know its "
-                               "priority. Therefore, it does not yet have a "
-                               "key.")
+            raise CaprotoRuntimeError("This VirtualCircuit has not received a "
+                                      "VersionRequest and does not know its "
+                                      "priority. Therefore, it does not yet "
+                                      "have a key.")
         return self.address, self.priority  # a unique identifier
 
     def send(self, *commands):
