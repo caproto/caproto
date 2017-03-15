@@ -224,7 +224,7 @@ class Message:
 
 class VersionRequest(Message):
     """
-    Initiate a new connection between the client and the server.
+    Initiate a new connection or broadcast between the client and the server.
 
     Fields:
 
@@ -252,7 +252,7 @@ class VersionRequest(Message):
 
 class VersionResponse(Message):
     """
-    Respond to a client's initiation of a new connection.
+    Respond to a client's initiation of a new connection or broadcast.
 
     Fields:
 
