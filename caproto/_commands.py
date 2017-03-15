@@ -517,7 +517,7 @@ class RepeaterRegisterRequest(Message):
         super().__init__(header, None)
 
     @property
-    def client_ip_address(self):
+    def client_address(self):
         int_encoded_ip = self.header.parameter2
         encoded_ip = struct.pack('!I', int_encoded_ip)  # int -> bytes
         return socket.inet_ntop(socket.AF_INET, encoded_ip)
