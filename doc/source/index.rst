@@ -22,7 +22,7 @@ protocol in Python which can be wrapped in whichever network library you like
 best. It is not a replacement for
 `pyepics <https://github.com/pyepics/pyepics>`_,
 `cothread <http://controls.diamond.ac.uk/downloads/python/cothread/>`_, or
-`pcaspy` <https://pcaspy.readthedocs.io>_`. It's a pure-Python implementation
+`pcaspy` <https://pcaspy.readthedocs.io>`_. It's a pure-Python implementation
 of *libca* that makes libraries like these easier to write in the
 future. See the `sans-I/O documentation <http://sans-io.readthedocs.io/>`_ for
 more on the why and how of this idea and for a list of related projects.
