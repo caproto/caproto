@@ -485,10 +485,16 @@ class RepeaterConfirmResponse(Message):
     HAS_PAYLOAD = False
 
     def __init__(self, repeater_address):
-        header = RepeaterConfirmResponseHeader(repeater_address)
+        encoded_ip = socket.inet_pton(socket.AF_INET, str(repeater_address))
+        int_encoded_ip, = struct.unpack('!I', encoded_ip)  # bytes -> int
+        header = RepeaterRegisterRequestHeader(int_encoded_ip)
         super().__init__(header, None)
 
-    repeater_address = property(lambda self: self.header.parameter2)
+    @property
+    def repeater_address(self):
+        int_encoded_ip = self.header.parameter2
+        encoded_ip = struct.pack('!I', int_encoded_ip)  # int -> bytes
+        return socket.inet_ntop(socket.AF_INET, encoded_ip)
 
 
 class RepeaterRegisterRequest(Message):
@@ -504,8 +510,8 @@ class RepeaterRegisterRequest(Message):
     ID = 24
     HAS_PAYLOAD = False
 
-    def __init__(self, client_ip_address):
-        encoded_ip = socket.inet_pton(socket.AF_INET, str(client_ip_address))
+    def __init__(self, client_address):
+        encoded_ip = socket.inet_pton(socket.AF_INET, str(client_address))
         int_encoded_ip, = struct.unpack('!I', encoded_ip)  # bytes -> int
         header = RepeaterRegisterRequestHeader(int_encoded_ip)
         super().__init__(header, None)
