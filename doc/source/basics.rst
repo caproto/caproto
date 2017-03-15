@@ -2,6 +2,9 @@
 Getting Started
 ***************
 
+Caproto can be used to implement both EPICS clients and servers. To give a
+flavor for how the API works, we’ll demonstrate a small client.
+
 Channel Access Basics
 =====================
 

@@ -69,5 +69,5 @@ indispensible. See :doc:`references`.
 
    basics
    api
-   examples
+   examples/index
    references
