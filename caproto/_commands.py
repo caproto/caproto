@@ -313,6 +313,28 @@ class SearchRequest(Message):
 
 
 class SearchResponse(Message):
+    """
+    Answer a :class:`SearchRequest` giving the address of a Channel.
+
+    Fields:
+
+    .. attribute:: port
+
+        Port number that will accept TCP connections with clients.
+
+    .. attribute:: ip
+
+        IP address (as a string) that will accept TCP connections with clients.
+
+    .. attribute:: cid
+
+        Echoing :data:`cid` of :class:`SearchRequest` to let the client match
+        this response with the original request.
+
+    .. attribute:: version
+
+        The version of the Channel Access protocol.
+    """
     ID = 6
     HAS_PAYLOAD = True
 
