@@ -51,10 +51,19 @@ class VirtualCircuit:
                 await self.recv()
                 continue
             break
-        if isinstance(command, ca.ReadNotifyRequest):
+        # TODO Split this off into _process_command.
+        # Maybe also split sending into separate func?
+        if isinstance(command, ca.CreateChanRequest):
+            await self.send(
+                ca.VersionResponse(13),
+                ca.AccessRightsResponse(cid=command.cid, access_rights=3),
+                # TODO Handle sid propertly
+                ca.CreateChanResponse(data_type=2, data_count=1,
+                                      cid=command.cid, sid=1))
+        elif isinstance(command, ca.ReadNotifyRequest):
             chan = self.circuit.channels[command.sid]
             await self.send(chan.read(values=(3.14,), ioid=command.ioid))
-        if isinstance(command, ca.WriteNotifyRequest):
+        elif isinstance(command, ca.WriteNotifyRequest):
             chan = self.circuit.channels[command.sid]
             await self.send(chan.write(ioid=command.ioid))
         elif isinstance(command, ca.EventAddRequest):
@@ -114,16 +123,6 @@ class Context:
 
     async def tcp_handler(self, client, addr):
         circuit = VirtualCircuit(self.hub.new_circuit(addr, None), client)
-
-        # TODO Do not assume that all handshake bytes come in at once.
-        await circuit.next_command()
-        await circuit.next_command()
-        await circuit.next_command()
-        await circuit.next_command()
-        bytes_to_send = await circuit.send(
-            ca.VersionResponse(13),
-            ca.AccessRightsResponse(cid=1, access_rights=3),
-            ca.CreateChanResponse(data_type=2, data_count=1, cid=1, sid=1))
         while True:
             try:
                 await circuit.next_command()
