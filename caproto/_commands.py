@@ -338,8 +338,8 @@ class SearchResponse(Message):
     ID = 6
     HAS_PAYLOAD = True
 
-    def __init__(self, port, sid, cid, version):
-        encoded_ip = socket.inet_pton(socket.AF_INET, sid)
+    def __init__(self, port, ip, cid, version):
+        encoded_ip = socket.inet_pton(socket.AF_INET, ip)
         int_encoded_ip, = struct.unpack('!I', encoded_ip)  # bytes -> int
         header = SearchResponseHeader(data_type=port,
                                       sid=int_encoded_ip,
@@ -357,7 +357,7 @@ class SearchResponse(Message):
         return cls.from_components(header, payload_bytes)
 
     @property
-    def sid(self):
+    def ip(self):
         # for CA version >= 4.11
         int_encoded_ip = self.header.parameter1
         encoded_ip = struct.pack('!I', int_encoded_ip)  # int -> bytes
