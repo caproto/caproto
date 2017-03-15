@@ -223,6 +223,20 @@ class Message:
 
 
 class VersionRequest(Message):
+    """
+    Initiate a new connection between the client and the server.
+
+    Fields:
+
+    .. attribute:: priority
+
+        Between 0 (low) and 99 (high) designating this connection's priority
+        in the event of congestion.
+
+    .. attribute:: version
+
+        The version of the Channel Access protocol.
+    """
     ID = 0
     HAS_PAYLOAD = False
 
@@ -237,6 +251,15 @@ class VersionRequest(Message):
 
 
 class VersionResponse(Message):
+    """
+    Respond to a client's initiation of a new connection.
+
+    Fields:
+
+    .. attribute:: version
+
+        The version of the Channel Access protocol.
+    """
     ID = 0
     HAS_PAYLOAD = False
 
@@ -248,6 +271,32 @@ class VersionResponse(Message):
 
 
 class SearchRequest(Message):
+    """
+    Query for the address of the server that provides a given Channel.
+
+    Fields:
+
+    .. attribute:: name
+    
+        String name of the channel (i.e. 'PV')
+
+    .. attribute:: cid
+
+        Integer that uniquely identifies this search query on the client side.
+
+    .. attribute:: version
+
+        The version of the Channel Access protocol.
+
+    .. attribute:: payload_size
+
+        Padded length of name string
+
+    .. attribute:: reply
+
+        Hard-coded to :data:`NO_REPLY` (:data:`5`) meaning that only the
+        server(s) with an affirmative response should reply.
+    """
     ID = 6
     HAS_PAYLOAD = True
 
@@ -301,6 +350,20 @@ class SearchResponse(Message):
 
 
 class NotFoundResponse(Message):
+    """
+    Answer a :class:`SearchResponse` in the negative.
+
+    Fields:
+    
+    .. attribute:: cid
+
+        Echoing :data:`cid` of :class:`SearchRequest` to let the client match
+        this response with the original request.
+
+    .. attribute:: version
+
+        The version of the Channel Access protocol.
+    """
     ID = 14
     HAS_PAYLOAD = False
 
@@ -314,6 +377,11 @@ class NotFoundResponse(Message):
 
 
 class EchoRequest(Message):
+    """
+    Request an :class:`EchoResponse`.
+
+    This command has no fields.
+    """
     ID = 23
     HAS_PAYLOAD = False
 
@@ -322,6 +390,11 @@ class EchoRequest(Message):
 
 
 class EchoResponse(Message):
+    """
+    Respond to an :class:`EchoRequest`.
+
+    This command has no fields.
+    """
     ID = 23
     HAS_PAYLOAD = False
 
@@ -330,6 +403,31 @@ class EchoResponse(Message):
 
 
 class RsrvIsUpResponse(Message):
+    """
+    Heartbeat beacon sent by the server.
+
+    Fields:
+
+    .. attribute:: version
+
+        The version of the Channel Access protocol.
+
+    .. attribute:: server_port
+
+        Port number.
+
+    .. attribute:: beacon_id
+    
+        Sequentially incremented integer.
+
+    .. attribute:: address
+        
+        IP address encoded as integer.
+
+    .. attribute:: address_string
+
+        IP address as string.
+    """
     ID = 13
     HAS_PAYLOAD = False
 
@@ -352,6 +450,15 @@ class RsrvIsUpResponse(Message):
 
 
 class RepeaterConfirmResponse(Message):
+    """
+    Confirm successful client registration with the Repeater.
+
+    Fields:
+
+    .. attribute:: repeater_address
+    
+        IP address of repeater (as a string).
+    """
     ID = 17
     HAS_PAYLOAD = False
 
@@ -363,6 +470,15 @@ class RepeaterConfirmResponse(Message):
 
 
 class RepeaterRegisterRequest(Message):
+    """
+    Register a client with the Repeater.
+
+    Fields:
+
+    .. attribute:: client_address
+    
+        IP address of the client (as a string).
+    """
     ID = 24
     HAS_PAYLOAD = False
 
@@ -399,6 +515,44 @@ class EventAddRequestPayload(ctypes.BigEndianStructure):
 
 
 class EventAddRequest(Message):
+    """
+    Subscribe; i.e. request to notified of changes in a Channel's value.
+
+    Fields:
+
+    .. attribute:: data_type
+
+        Integer code of desired DBR type of readings.
+
+    .. attribute:: data_count
+    
+        Desired number of elements per reading.
+
+    .. attribute:: sid
+
+        Integer ID of this Channel designated by the server.
+
+    .. attribute:: subscriptionid
+
+        New integer ID designated by the client uniquely identifying this
+        subscription on this Virtual Circuit.
+
+    .. attribute:: low
+
+        Deprecated. (Use :data:`mask`.)
+
+    .. attribute:: high
+
+        Deprecated. (Use :data:`mask`.)
+
+    .. attribute:: to
+
+        Deprecated. (Use :data:`mask`.)
+
+    .. attribute:: mask
+
+        Mask indicating which changes to report.
+    """
     ID = 1
     HAS_PAYLOAD = True
 
@@ -426,6 +580,35 @@ class EventAddRequest(Message):
 
 
 class EventAddResponse(Message):
+    """
+    Notify the client of a change in a Channel's value.
+
+    Fields:
+
+    .. attribute:: values
+
+        data in a tuple of built-in Python or numpy types
+
+    .. attribute:: data_type
+
+        Integer code of DBR type of reading.
+
+    .. attribute:: data_count
+    
+        Number of elements in this reading.
+
+    .. attribute:: sid
+
+        Integer ID of this Channel designated by the server.
+
+    .. attribute:: status_code
+
+        As per Channel Access spec, 1 is success; 0 or >1 are various failures.
+
+    .. attribute:: subscriptionid
+
+        Echoing the :data:`subscriptionid` in the :class:`EventAddRequest`
+    """
     ID = 1
     HAS_PAYLOAD = True
 
@@ -454,6 +637,23 @@ class EventAddResponse(Message):
 
 
 class EventCancelRequest(Message):
+    """
+    End notifcations about chnages in a Channel's value.
+
+    Fields:
+
+    .. attribute:: data_type
+
+        Integer code of DBR type of reading.
+
+    .. attribute:: sid
+
+        Integer ID of this Channel designated by the server.
+
+    .. attribute:: subscriptionid
+
+        Integer ID for this subscription.
+    """
     ID = 2
     HAS_PAYLOAD = False
 
@@ -468,6 +668,23 @@ class EventCancelRequest(Message):
 
 
 class EventCancelResponse(Message):
+    """
+    Confirm receipt of :class:`EventCancelRequest`.
+
+    Fields:
+
+    .. attribute:: data_type
+
+        Integer code of DBR type of reading.
+
+    .. attribute:: sid
+
+        Integer ID of this Channel designated by the server.
+
+    .. attribute:: subscriptionid
+
+        Integer ID for this subscription.
+    """
     # Actually this is coded with the ID = 1 like EventAdd*.
     # This is the only weird exception so we special-case it in the function
     # get_command_class.
@@ -485,7 +702,7 @@ class EventCancelResponse(Message):
 
 
 class ReadRequest(Message):
-    "Deprecated: See also ReadNotifyRequest"
+    "Deprecated by Channel Access: See :class:`ReadNotifyRequest`."
     ID = 3
     HAS_PAYLOAD = False
 
@@ -500,7 +717,7 @@ class ReadRequest(Message):
 
 
 class ReadResponse(Message):
-    "Deprecated: See also ReadNotifyResponse"
+    "Deprecated by Channel Access: See :class:`ReadNotifyResponse`."
     ID = 3
     HAS_PAYLOAD = True
 
@@ -519,7 +736,7 @@ class ReadResponse(Message):
 
 
 class WriteRequest(Message):
-    "Deprecated: See also WriteNotifyRequest"
+    "Deprecated: See :class:`WriteNotifyRequest`."
     ID = 4
     HAS_PAYLOAD = True
 
@@ -540,6 +757,11 @@ class WriteRequest(Message):
 
 
 class EventsOffRequest(Message):
+    """
+    Temporarily turn off :class:`EventAddResponse` notifications.
+
+    This command has no fields.
+    """
     ID = 8
     HAS_PAYLOAD = False
 
@@ -548,6 +770,11 @@ class EventsOffRequest(Message):
 
 
 class EventsOnRequest(Message):
+    """
+    Restore :class:`EventAddResponse` notifications.
+
+    This command has no fields.
+    """
     ID = 9
     HAS_PAYLOAD = False
 
@@ -556,7 +783,7 @@ class EventsOnRequest(Message):
 
 
 class ReadSyncRequest(Message):
-    "Deprecated: See also ReadNotifyRequest"
+    "Deprecated by Channel Access: See :class:`ReadNotifyRequest`"
     ID = 10
     HAS_PAYLOAD = False
 
@@ -571,6 +798,20 @@ class _ErrorResponsePayload(ctypes.BigEndianStructure):
 
 
 class ErrorResponse(Message):
+    """
+    Notify client of a server-side error, including some details about error.
+
+    Fields:
+
+    .. attribute:: cid
+
+        Integer ID for this Channel designated by the client.
+
+    .. attribute:: status_code
+
+        As per Channel Access spec, 1 is success; 0 or >1 are various failures.
+
+    """
     ID = 11
     HAS_PAYLOAD = True
 
@@ -596,6 +837,19 @@ class ErrorResponse(Message):
 
 
 class ClearChannelRequest(Message):
+    """
+    Close a Channel.
+
+    Fields:
+
+    .. attribute:: cid
+
+        Integer ID for this Channel designated by the client.
+
+    .. attribute:: sid
+    
+        Integer ID for this Channel designated by the server.
+    """
     ID = 12
     HAS_PAYLOAD = False
 
@@ -607,6 +861,19 @@ class ClearChannelRequest(Message):
 
 
 class ClearChannelResponse(Message):
+    """
+    Confirm that a Channel has been closed.
+
+    Fields:
+
+    .. attribute:: cid
+
+        Integer ID for this Channel designated by the client.
+
+    .. attribute:: sid
+    
+        Integer ID for this Channel designated by the server.
+    """
     ID = 12
     HAS_PAYLOAD = False
 
@@ -618,6 +885,28 @@ class ClearChannelResponse(Message):
 
 
 class ReadNotifyRequest(Message):
+    """
+    Request a fresh reading of a Channel.
+
+    Fields:
+
+    .. attribute:: data_type
+
+        Integer code of desired DBR type of readings.
+
+    .. attribute:: data_count
+    
+        Desired number of elements per reading.
+
+    .. attribute:: sid
+    
+        Integer ID for this Channel designated by the server.
+
+    .. attribute:: ioid
+
+        New integer ID uniquely identifying this I/O transaction on this
+        Virtual Circuit.
+    """
     ID = 15
     HAS_PAYLOAD = False
 
@@ -632,6 +921,32 @@ class ReadNotifyRequest(Message):
 
 
 class ReadNotifyResponse(Message):
+    """
+    Request a fresh reading of a Channel.
+
+    Fields:
+
+    .. attribute:: data_type
+
+        Integer code of desired DBR type of readings.
+
+    .. attribute:: data_count
+    
+        Desired number of elements per reading.
+
+    .. attribute:: sid
+    
+        Integer ID for this Channel designated by the server.
+
+    .. attribute:: ioid
+
+        Integer ID for I/O transaction, echoing :class:`ReadNotifyRequest`.
+    
+    .. attribute:: status
+
+        As per Channel Access spec, 1 is success; 0 or >1 are various failures.
+
+    """
     ID = 15
     HAS_PAYLOAD = True
 
@@ -651,6 +966,25 @@ class ReadNotifyResponse(Message):
 
 
 class CreateChanRequest(Message):
+    """
+    Request a new Channel.
+
+    Fields:
+
+    .. attribute:: name
+
+        String name of the channel (i.e. 'PV')
+
+    .. attribute:: cid
+
+        New integer ID designated by the client, uniquely identifying this
+        Channel on its VirtualCircuit.
+
+    .. attribute:: version
+
+        The version of the Channel Access protocol.
+
+    """
     ID = 18
     HAS_PAYLOAD = True
 
@@ -666,6 +1000,30 @@ class CreateChanRequest(Message):
 
 
 class CreateChanResponse(Message):
+    """
+    Confirm the intialization of a new Channel
+
+    Fields:
+
+    .. attribute:: data_type
+
+        Integer code of native DBR type of readings.
+
+    .. attribute:: data_count
+    
+        Native number of elements per reading.
+
+    .. attribute:: cid
+
+        Integer ID for this Channel designated by the client, echoing the value
+        in :class:`CreateChanRequest`.
+
+    .. attribute:: sid
+    
+        New integer ID for this Channel designated by the server uniquely
+        identifying this Channel on its VirtualCircuit.
+        
+    """
     ID = 18
     HAS_PAYLOAD = False
 
@@ -680,6 +1038,32 @@ class CreateChanResponse(Message):
 
 
 class WriteNotifyRequest(Message):
+    """
+    Write a value to a Channel.
+
+    Fields:
+
+    .. attribute:: values
+
+        data in a tuple of built-in Python or numpy types
+
+    .. attribute:: data_type
+
+        Integer code of DBR type.
+
+    .. attribute:: data_count
+    
+        Number of elements.
+
+    .. attribute:: sid
+    
+        Integer ID for this Channel designated by the server.
+
+    .. attribute:: ioid
+
+        New integer ID uniquely identifying this I/O transaction on this
+        Virtual Circuit.
+    """
     ID = 19
     HAS_PAYLOAD = True
 
@@ -699,6 +1083,32 @@ class WriteNotifyRequest(Message):
 
 
 class WriteNotifyResponse(Message):
+    """
+    Confirm the receipt of a :class:`WriteNotifyRequest`.
+
+    Fields:
+
+    .. attribute:: data_type
+
+        Integer code of DBR type.
+
+    .. attribute:: data_count
+    
+        Number of elements.
+
+    .. attribute:: sid
+    
+        Integer ID for this Channel designated by the server.
+
+    .. attribute:: ioid
+
+        Integer ID for this I/O transaction, echoing
+        :class:`WriteNotifyRequest`.
+
+    .. attribute:: status
+
+        As per Channel Access spec, 1 is success; 0 or >1 are various failures.
+    """
     ID = 19
     HAS_PAYLOAD = False
 
@@ -713,6 +1123,15 @@ class WriteNotifyResponse(Message):
 
 
 class ClientNameRequest(Message):
+    """
+    Tell the server the client name (i.e., user name) of the client.
+
+    Fields:
+
+    .. attribute:: name
+    
+        Client name.
+    """
     ID = 20
     HAS_PAYLOAD = True
 
@@ -726,6 +1145,15 @@ class ClientNameRequest(Message):
 
 
 class HostNameRequest(Message):
+    """
+    Tell the server the host name of the client.
+
+    Fields:
+
+    .. attribute:: name
+    
+        Host name.
+    """
     ID = 21
     HAS_PAYLOAD = True
 
@@ -739,6 +1167,20 @@ class HostNameRequest(Message):
 
 
 class AccessRightsResponse(Message):
+    """
+    Notify the client that channel creation failed.
+
+    Fields:
+
+    .. attribute:: cid
+
+        Integer ID for this Channel designated by the client.
+
+    .. attribute:: access_rights
+
+        Integer designated level of read or write access. (See Channel Access
+        spec for details about meanings.)
+    """
     ID = 22
     HAS_PAYLOAD = False
 
@@ -751,6 +1193,15 @@ class AccessRightsResponse(Message):
 
 
 class CreateChFailResponse(Message):
+    """
+    Notify the client that channel creation failed.
+
+    Fields:
+
+    .. attribute:: cid
+
+        Integer ID for this Channel designated by the client.
+    """
     ID = 26
     HAS_PAYLOAD = False
 
@@ -761,6 +1212,15 @@ class CreateChFailResponse(Message):
 
 
 class ServerDisconnResponse(Message):
+    """
+    Notify the client that server will disconnect from this Channel.
+
+    Fields:
+
+    .. attribute:: cid
+
+        Integer ID for this Channel designated by the client.
+    """
     ID = 27
     HAS_PAYLOAD = False
 
