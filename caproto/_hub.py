@@ -549,14 +549,19 @@ class Hub:
 
     def new_circuit(self, address, priority):
         """
-        A convenience method to instantiate a new :class:`VirtualCircuit`
-        and register it with this :class:`Hub`.
+        Instantiate a new :class:`VirtualCircuit` and register it with this
+        :class:`Hub`.
         """
         circuit = VirtualCircuit(self, address, priority)
         self.circuits.append(circuit)
         return circuit
 
     def get_circuit(self, address, priority):
+        """
+        Return the :class:`VirtualCircuit` with this address and priority.
+
+        If none exists, a :class:`CaprotoKeyError` is raised.
+        """
         for circuit in self.circuits:
             if circuit.address == address and circuit.priority == priority:
                 return circuit
@@ -565,8 +570,8 @@ class Hub:
 
     def new_channel(self, name, address, priority, cid=None):
         """
-        A convenience method: instantiate a new :class:`ClientChannel` or
-        :class:`ServerChannel`, corresponding to :attr:`our_role`.
+        Instantiate a new :class:`ClientChannel` or :class:`ServerChannel`,
+        corresponding to :attr:`our_role`.
 
         This method does not update any important state. It is equivalent to:
         ``<ChannelClass>(<Hub>, None, <UNIQUE_INT>, name)``
