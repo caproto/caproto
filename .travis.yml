@@ -80,7 +80,8 @@ script:
 
   - set -e
   - # Command to build your docs
-  - pip install sphinx sphinx_rtd_theme numpydoc ipython doctr matplotlib
+  - conda install ipython matplotlib
+  - pip install sphinx sphinx_rtd_theme numpydoc doctr
   - cd doc
   - make html
   - cd ..
