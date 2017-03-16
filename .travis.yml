@@ -45,7 +45,7 @@ script:
   - caget XF:31IDA-BI{Cam:Tbl}ROI1:ArrayCounter
   - set -e
   - # Command to build your docs
-  - pip install sphinx sphinx_rtd_theme numpydoc ipython doctr
+  - pip install sphinx sphinx_rtd_theme numpydoc ipython doctr matplotlib
   - cd doc
   - make html
   - cd ..
