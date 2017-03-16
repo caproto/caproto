@@ -147,22 +147,49 @@ Caproto uses special constants to represent the states of the state machine:
           IDLE
           ERROR
 
-It also uses special constants to represent which role a peer is playing,
+For example, a new VirtualCiruit starts with these states:
+
+.. ipython:: python
+
+    circuit = caproto.VirtualCircuit(our_role=caproto.CLIENT,
+                                     address=('0.0.0.0', 5555),
+                                     priority=0)
+    circuit.states
+
+When a :class:`VersionRequest` is sent through the VirtualCircuit, both the
+client and the server state update.
+
+.. ipython:: python
+
+    circuit.send(caproto.VersionRequest(version=13, priority=0));
+    circuit.states
+
+And we can test the current state using constants like
+:class:`SEND_VERSION_RESPONSE`.
+
+.. ipython:: python
+
+    circuit.states[caproto.SERVER] is caproto.SEND_VERSION_RESPONSE
+
+Notice the special constants to represent which role a peer is playing,
 
 .. data:: CLIENT
           SERVER
 
-to represent the nature of a command,
+Special constants are also used to represent the nature of a command
 
 .. data:: RESPONSE
           REQUEST
 
-and as a sentinel "Command" indicating that more data needs to be received
+and as a sentinel "Command" returned by :meth:`Broadcaster.next_command` and
+:meth:`VirtualCircuit.next_command` when more data needs to be received
 before any new Commands can be parsed.
 
 .. data:: NEED_DATA
 
-Borrowing a trick from the h11 project, these sentinels are *instances of
+Borrowing a trick (one of many!) from the h11 project, these special constants
+are modeled after ``None``: they’re singletons, their ``__repr__()`` is
+their name, and you compare them with ``is``.  They are also *instances of
 themselves*. This can be useful if you have some object ``obj`` that might be a
 Command or might be a sentinel (e.g. :data:`NEED_DATA`). You can always call
 ``type(obj)`` and get something useful.
