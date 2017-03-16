@@ -199,6 +199,14 @@ The VirtualCircuit object
 
 .. autoclass:: VirtualCircuit
 
+    .. attribute:: our_role
+
+        :class:`caproto.CLIENT` or :class:`caproto.SERVER`
+
+    .. attribute:: log
+
+        Python logger instance
+
     .. attribute:: host
 
         peer host name
@@ -217,6 +225,26 @@ The VirtualCircuit object
     .. automethod:: new_channel_id
     .. automethod:: new_subscriptionid
     .. automethod:: new_ioid
+
+The Broadcaster object
+======================
+
+.. autoclass:: Broadcaster
+
+    .. attribute:: our_role
+
+        :class:`caproto.CLIENT` or :class:`caproto.SERVER`
+
+    .. attribute:: log
+
+        Python logger instance
+
+    .. automethod:: send
+    .. automethod:: recv
+    .. automethod:: next_command
+    .. automethod:: new_search_id
+    .. automethod:: search
+    .. automethod:: register
 
 Channel objects
 ===============
