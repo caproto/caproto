@@ -1,6 +1,6 @@
 language: python
 python:
-  - 3.6
+  - 3.5
 
 sudo: required
 dist: trusty
@@ -56,7 +56,7 @@ before_install:
 
 install:
   # INSTALL OPHYD
-  - conda install numpy pyepics prettytable filestore ipython pyolog networkx
+  - conda install numpy pyepics
   - conda install readline -c lightsource2
   - pip install coveralls pytest pytest-cov codecov
   - pin install .
