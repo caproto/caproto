@@ -1,0 +1,54 @@
+language: python
+
+sudo: required
+dist: trusty
+env:
+  global:
+    - secure: "Hnz9c6x13kaAc7IqH4/wJWNel2rzEC8/x0KhFoGLVLHjmiH1LMmpGh/P5CPADlmKS80WFz4vhJ0YtSjtHCPI+9Y2aBGn8z732WM86OyGHITviCMTxtyVZfRFCkOAVlU0qpIyWu4p0rEfxrXCztSKE4bBO/wWnFhGGw9CJROnFhJwoJlbI9i28zscyeGsdqHNUfXHkyUAN3c3LKoYZgnJco5HiHLwXVvsy3DMkvOizLgslf6lrHwnQOT1F49ShgPcGGWpkuRARXkGII7lB0LOn2TBoTzmhgjoC3OmC4nZGJfzitwH9+nHc+iJ3mTlshsXb366B/D5TNVIL/4rzYV8zw49DogQIWYtECK4/z7fOzG61yCU33b3aeXU2OI4k5eZ2qN3gp3KQ4+PWyCMTHsBVgs6o49K1HWtFuuFLuhUPT4FVs2Pzz6yTka9NUukPO1LoTeQAUvGxRbc/15CjIWXtqqzEGmlPi8AFEo2kw33EtTawMU9w8nzAfdk5DX28Qcuzh9XA9nVUD0j7Rum7nGY1f5+icXh0FsOuP1uHt82bXIYvw3rey3RkWcqVcniJXlkq0bAZM/ZSXWX5VHyQ2e7C4kxCdnzVqjgtlGT2ARSlD6o8FKKRKTAKD7kQ9ajTjZHRhO+xbvP+X4K9GlbGvPyU9bnDFa14fXBJS4dTMd8GgQ="
+
+services:
+  - docker
+
+cache:
+  directories:
+    - $HOME/.cache/pip
+
+matrix:
+  include:
+    - python: 3.4
+      env: BUILD_DOCS=false
+    - python: 3.5
+      env: BUILD_DOCS=true
+
+before_install:
+  - export DOCKER0_IP=$(/sbin/ifconfig docker0 |grep 'inet addr' | sed -e 's/.*addr:\([^ ]*\).*/\1/')
+  - export EPICS_CA_ADDR_LIST=$( echo $DOCKER0_IP | sed -e 's/^\([0-9]\+\)\.\([0-9]\+\)\..*$/\1.\2.255.255/' )
+  - export EPICS_CA_AUTO_ADDR_LIST="no"
+  - export EPICS_CA_MAX_ARRAY_BYTES=10000000
+  - export DOCKERIMAGE="klauer/epics-docker"
+  - perl --version
+  - git fetch --unshallow
+  - docker pull ${DOCKERIMAGE}
+  - docker images
+  - docker ps -a
+  - docker run -d -p $DOCKER0_IP:5064:5064/tcp -p $DOCKER0_IP:5065:5065/udp --name epics_iocs ${DOCKERIMAGE}
+  - docker ps -a
+
+install:
+  - pip install numpy
+  - pip install .
+
+  # setup some path environment variables for epics
+  - export PATH=$PATH:$EPICS_BASE/bin/$EPICS_HOST_ARCH
+  - export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$EPICS_BASE/lib/$EPICS_HOST_ARCH"
+  - echo "PATH=$PATH"
+
+script:
+  - echo "Checking if the motor IOC is running:"
+  - caget XF:31IDA-OP{Tbl-Ax:X1}Mtr
+  - echo "Checking if the areaDetector IOC is running:"
+  - caget XF:31IDA-BI{Cam:Tbl}ROI1:ArrayCounter
+  - set -e
+  - # Command to build your docs
+  - pip install sphinx sphinx_rtd_theme numpydoc ipython doctr
+  - doctr deploy
