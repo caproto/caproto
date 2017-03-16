@@ -42,17 +42,23 @@ class CaprotoError(Exception):
     ...
 
 
-class ChannelAccessProtocolError(CaprotoError):
+class ProtocolError(CaprotoError):
     # Any error resulting from sending or receiving a command will raise (a
     # subclass of) this error and never any other error.
     ...
 
 
-class LocalProtocolError(ChannelAccessProtocolError):
+class LocalProtocolError(ProtocolError):
+    """
+    You tried to do something that caproto thinks is illegal.
+    """
     ...
 
 
-class RemoteProtocolError(ChannelAccessProtocolError):
+class RemoteProtocolError(ProtocolError):
+    """
+    Your remote peer tried to do something that caproto thinks is illegal.
+    """
     ...
 
 

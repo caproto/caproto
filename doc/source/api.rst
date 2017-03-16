@@ -212,4 +212,7 @@ and the built-in Python `KeyError`.
 
 The only special exceptions raised by caproto are :class:`LocalProtocolError`
 and :class:`RemoteProtocolError`. These inherit from
-:class:`ChannelAccessProtocolError`.
+:class:`ProtocolError`.
+
+.. autoclass:: LocalProtocolError
+.. autoclass:: RemoteProtocolError
