@@ -13,6 +13,11 @@ servers on its network. It locates these servers using UDP broadcasts. It
 communicates with an individual server via one or more TCP connections, which
 is calls *Virtual Circuits*.
 
+In this example, our client will talk to 
+`EPICS motorsim <github.com/danielballan/motorsim>`_, which provides a
+collection of simulated motors we can read and move. But this same code could
+talk to any Channel Access server, including one implemented in caproto itself.
+
 Registering with the Repeater
 -----------------------------
 

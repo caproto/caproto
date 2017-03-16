@@ -48,9 +48,9 @@ How do you know it works?
   using Python and Jinja templates from the documentation itself to reduce
   the potential for bugs introduced by human transcription. Where we
   found errors in the documentation, we fixed them and submitted a patch
-  upstream. (NOTE: Again this is a reminder to submit a patch.)
+  upstream. (NOTE: This is a reminder to submit a patch.)
 * It passes the server test spec https://github.com/mdavidsaver/catvs (NOTE: As
-  of this writing, this is not  true! It's here as a reminder to make it true
+  of this writing, this is not true! It's here as a reminder to make it true
   before we publish this documentation.)
 * The byte sizes of the DBR types compare exactly to those in pyepics.
 
@@ -58,10 +58,11 @@ So should I use it?
 ===================
 
 That depends. Probably not. It's a very young project, and the primary author
-(hi!) is fairly new to EPICS.
+(hi!) is fairly new to EPICS. For important work, one of the more battle-tested
+projects linked above would be a better choice.
 
-For important work, one of the more battle-tested projects linked above would
-be a better choice.
+But by all means, take it for a test drive. Use it to understand EPICS better
+or to play with the growing family of asynchronous libraries in Python.
 
 How's the performance?
 ======================
