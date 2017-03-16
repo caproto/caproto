@@ -59,7 +59,7 @@ install:
   - conda install numpy pyepics
   - conda install readline -c lightsource2
   - pip install coveralls pytest pytest-cov codecov
-  - pin install .
+  - pip install .
 
   # setup some path environment variables for epics
   - export PATH=$PATH:$EPICS_BASE/bin/$EPICS_HOST_ARCH
