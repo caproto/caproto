@@ -247,15 +247,8 @@ generating valid commands.
     .. automethod:: subscribe
     .. automethod:: unsubscribe
 
-
-..
-    Headers
-    =======
-    .. automodule:: caproto._headers
-        :members:
-
-DBR
-===
+Payload Data Types
+==================
 
 Exceptions
 ==========
