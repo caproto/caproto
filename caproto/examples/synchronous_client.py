@@ -9,11 +9,9 @@ CA_SERVER_PORT = 5064
 pv1 = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
 ip = '127.0.0.1'
 
-# Make a Hub and a Broadcaster.
+# Make a Broadcaster.
 b = ca.Broadcaster(our_role=ca.CLIENT)
 b.log.setLevel('DEBUG')
-cli = ca.Hub(our_role=ca.CLIENT)
-cli.log.setLevel('DEBUG')
 
 # Make a dict to hold our tcp sockets.
 sockets = {}
@@ -64,7 +62,11 @@ def main():
     assert type(command) is ca.SearchResponse
     address = ca.extract_address(command)
     
-    chan1 = cli.new_channel(name=pv1, address=address, priority=0)
+    circuit = ca.VirtualCircuit(our_role=ca.CLIENT,
+                                address=address,
+                                priority=0)
+    circuit.log.setLevel('DEBUG')
+    chan1 = ca.ClientChannel(pv1, circuit)
     sockets[chan1.circuit] = socket.create_connection(chan1.circuit.address)
     
     # Initialize our new TCP-based CA connection with a VersionRequest.

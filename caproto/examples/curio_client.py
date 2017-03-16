@@ -5,7 +5,7 @@
 #
 # VirtualCircuit: has a caproto.VirtualCircuit, a socket, and some caches.
 # Channel: has a VirtualCircuit and a caproto.ClientChannel.
-# Context: has a caproto.Hub, a caproto.Broadcaster, a UDP socket, a cache of
+# Context: has a caproto.Broadcaster, a UDP socket, a cache of
 #          search results and a cache of VirtualCircuits.
 #
 import caproto as ca
@@ -200,14 +200,12 @@ class Channel:
 
 
 class Context:
-    "Wraps a caproto.Broadcaster and a caproto.Hub and adds transport."
+    "Wraps a caproto.Broadcaster, a UDP socket, and cache of VirtualCircuits." 
     def __init__(self, repeater_port=REPEATER_PORT, server_port=SERVER_PORT):
         self.repeater_port = repeater_port
         self.server_port = server_port
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
-        self.hub = ca.Hub(our_role=ca.CLIENT)
         self.broadcaster.log.setLevel('DEBUG')
-        self.hub.log.setLevel('DEBUG')
 
         # UDP socket broadcasting to CA servers
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM,
@@ -216,7 +214,7 @@ class Context:
         self.udp_sock = sock
 
         self.registered = False  # refers to RepeaterRegisterRequest
-        self.circuits = {}  # map (address, prioirty) to VirtualCircuit
+        self.circuits = []  # list of VirtualCircuits
         self.unanswered_searches = {}  # map search id (cid) to name
         self.search_results = {}  # map name to address
         self.event = None  # used for signaling consumers about new commands
@@ -257,19 +255,34 @@ class Context:
             event = await self.get_event()
             await event.wait()
 
+    def get_circuit(self, address, priority):
+        """
+        Return a VirtualCircuit with this address, priority.
+
+        Make a new one if necessary.
+        """
+        for circuit in self.circuits:
+            if (circuit.circuit.address == address and
+                    circuit.circuit.priority == priority):
+                return circuit
+        circuit = VirtualCircuit(ca.VirtualCircuit(our_role=ca.CLIENT,
+                                                   address=address,
+                                                   priority=priority))
+        circuit.circuit.log.setLevel('DEBUG')
+        self.circuits.append(circuit)
+        print('returning', circuit)
+        return circuit
+
     async def create_channel(self, name, priority=0):
         """
         Create a new channel.
         """
         address = self.search_results[name]
-        chan = self.hub.new_channel(name, address=address, priority=priority)
-        try:
-            circuit = self.circuits[(address, priority)]
-        except KeyError:
-            circuit = VirtualCircuit(chan.circuit)
-            self.circuits[(address, priority)] = circuit
+        circuit = self.get_circuit(address, priority)
+        chan = ca.ClientChannel(name, circuit.circuit)
 
         async def connect():
+            print('chan.circuit', chan.circuit)
             if chan.circuit._state[ca.SERVER] is ca.IDLE:
                 await circuit.create_connection()
                 await circuit.send(chan.version())

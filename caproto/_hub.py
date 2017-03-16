@@ -1,9 +1,8 @@
-# This module defines two classes that encapsulate key abstractions in
+# This module defines classes that encapsulate key abstractions in
 # Channel Access: Channels and VirtualCircuits. Each VirtualCircuit is a
 # companion to a (user-managed) TCP socket, updating its state in response to
-# incoming and outgoing TCP bytestreams. A third class, the Hub, owns these
-# VirtualCircuits and spawns new ones as needed. The Hub updates its state in
-# response to incoming and outgoing UDP datagrams.
+# incoming and outgoing TCP bytestreams. Each Channel belongs to a circuit, and
+# tracks state particular to that Channel.
 import itertools
 from collections import deque
 import logging
@@ -45,18 +44,22 @@ class VirtualCircuit:
 
     Parameters
     ----------
-    hub : Hub
     address : tuple
         ``(host, port)`` as a string and an integer respectively
     priority : integer or None
         May be used by the server to prioritize requests when under high
         load. Lowest priority is 0; highest is 99.
     """
-    def __init__(self, hub, address, priority):
-        self._hub = hub
+    def __init__(self, our_role, address, priority):
+        self.our_role = our_role
+        if our_role is CLIENT:
+            self.their_role = SERVER
+        else:
+            self.their_role = CLIENT
         self.address = address
         self.priority = priority
         self.channels = {}  # map cid to Channel
+        self.log = logging.getLogger("caproto.VC")
         self._state = CircuitState(self.channels)
         self._data = bytearray()
         self._channels_sid = {}  # map sid to Channel
@@ -66,10 +69,6 @@ class VirtualCircuit:
         self._channel_id_counter = itertools.count(0)
         self._ioid_counter = itertools.count(0)
         self._sub_counter = itertools.count(0)
-        # Copy these hub attributes for convenience.
-        self.our_role = hub.our_role
-        self.their_role = hub.their_role
-        self.log = self._hub.log
         if priority is None and self.our_role is CLIENT:
             raise CaprotoRuntimeError("Client-side VirtualCircuit requires a "
                                       "non-None priority at initialization time.")
@@ -201,10 +200,9 @@ class VirtualCircuit:
                 try:
                     chan = self.channels[command.cid]
                 except KeyError:
-                    chan = self._hub.new_channel(name=command.name,
-                                                 address=self.address,
-                                                 priority=self.priority,
-                                                 cid=command.cid)
+                    _class = {CLIENT: ClientChannel,
+                              SERVER: ServerChannel}[self.our_role]
+                    chan = _class(command.name, self, command.cid)
             else:
                 # In all other cases, the Command gives us a cid.
                 cid = command.cid
@@ -339,7 +337,7 @@ class Broadcaster:
     ----------
     our_role : CLIENT or SERVER
     protocol_version : integer
-        default is ``DEFAULT_PROTOCOL_VERSION``
+        Default is ``DEFAULT_PROTOCOL_VERSION``.
     """
     def __init__(self, our_role, protocol_version=DEFAULT_PROTOCOL_VERSION):
         if our_role not in (SERVER, CLIENT):
@@ -521,85 +519,14 @@ class Broadcaster:
         return command
 
 
-class Hub:
-    """An object encapsulating the state of Channel Access TCP connections.
-
-    This tracks the state of one Client and all its connected Servers or one
-    Server and all its connected Clients.
-
-    Parameters
-    ----------
-    our_role : CLIENT or SERVER
-    protocol_version : integer
-        default is ``DEFAULT_PROTOCOL_VERSION``
-    """
-    def __init__(self, our_role, protcol_version=DEFAULT_PROTOCOL_VERSION):
-        if our_role not in (SERVER, CLIENT):
-            raise CaprotoValueError("role must be caproto.SERVER or "
-                                    "caproto.CLIENT")
-        self.our_role = our_role
-        if our_role is CLIENT:
-            self.their_role = SERVER
-        else:
-            self.their_role = CLIENT
-        self.protocol_version = protcol_version
-        self.circuits = []
-        logger_name = "caproto.Hub"
-        self.log = logging.getLogger(logger_name)
-
-    def new_circuit(self, address, priority):
-        """
-        Instantiate a new :class:`VirtualCircuit` and register it with this
-        :class:`Hub`.
-        """
-        circuit = VirtualCircuit(self, address, priority)
-        self.circuits.append(circuit)
-        return circuit
-
-    def get_circuit(self, address, priority):
-        """
-        Return the :class:`VirtualCircuit` with this address and priority.
-
-        If none exists, a :class:`CaprotoKeyError` is raised.
-        """
-        for circuit in self.circuits:
-            if circuit.address == address and circuit.priority == priority:
-                return circuit
-        raise CaprotoKeyError("No circuit with circuit.key == {!r}"
-                              "".format((address, priority)))
-
-    def new_channel(self, name, address, priority, cid=None):
-        """
-        Instantiate a new :class:`ClientChannel` or :class:`ServerChannel`,
-        corresponding to :attr:`our_role`.
-
-        This method does not update any important state. It is equivalent to:
-        ``<ChannelClass>(<Hub>, None, <UNIQUE_INT>, name)``
-
-        Parameters
-        ----------
-        name : string
-            Channnel name (PV)
-        cid : int, optional for CLIENT
-            On CLIENT, if None, a valid (i.e., unused) integer is allocated.
-        """
-        _class = {CLIENT: ClientChannel, SERVER: ServerChannel}[self.our_role]
-        channel = _class(self, name, address, priority, cid)
-        return channel
-
-
 class _BaseChannel:
     # Base class for ClientChannel and ServerChannel, which add convenience
     # methods for composing requests and repsponses, respectively. All of the
     # important code is here in the base class.
-    def __init__(self, hub, name, address, priority, cid=None):
-        self._hub = hub
+    def __init__(self, name, circuit, cid=None,
+                 protocol_version=DEFAULT_PROTOCOL_VERSION):
+        self.protocol_version = protocol_version
         self.name = name
-        # Find an existing VirtualCircuit we can use or make a new one.
-        try:
-            circuit = self._hub.get_circuit(address, priority)
-        except KeyError:
-            circuit = self._hub.new_circuit(address, priority)
         self.circuit = circuit
         if cid is None:
             cid = self.circuit.new_channel_id()
@@ -674,9 +601,12 @@ class ClientChannel(_BaseChannel):
 
     Parameters
     ----------
-    hub : :class:`Hub`
     name : string
         Channnel name (PV)
+    circuit : VirtualCircuit
+    cid : integer, optional
+    protocol_version : integer, optional
+        Default is ``DEFAULT_PROTOCOL_VERSION``.
     """
     def version(self):
         """
@@ -692,7 +622,7 @@ class ClientChannel(_BaseChannel):
         -------
         VersionRequest
         """
-        command = VersionRequest(version=self._hub.protocol_version,
+        command = VersionRequest(version=self.protocol_version,
                                  priority=self.circuit.priority)
         return command
 
@@ -741,7 +671,7 @@ class ClientChannel(_BaseChannel):
         CreateChanRequest
         """
         command = CreateChanRequest(self.name, self.cid,
-                                    self._hub.protocol_version)
+                                    self.protocol_version)
         return command
 
     def clear(self):
@@ -871,6 +801,18 @@ class ClientChannel(_BaseChannel):
 
 
 class ServerChannel(_BaseChannel):
+    """
+    A server-side Channel.
+
+    Parameters
+    ----------
+    name : string
+        Channnel name (PV)
+    circuit : VirtualCircuit
+    cid : integer, optional
+    protocol_version : integer, optional
+        Default is ``DEFAULT_PROTOCOL_VERSION``.
+    """
     def version(self):
         """
         Generate a valid :class:`VersionResponse`.
@@ -880,7 +822,7 @@ class ServerChannel(_BaseChannel):
         VersionResponse
         """
 
-        command = VersionResponse(self._circuit._hub.protocol_version)
+        command = VersionResponse(self._circuit.protocol_version)
         return command
 
     def create(self, native_data_type, native_data_count, sid):

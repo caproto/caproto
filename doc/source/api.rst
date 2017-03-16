@@ -164,12 +164,6 @@ The VirtualCircuit object
     .. automethod:: new_subscriptionid
     .. automethod:: new_ioid
 
-.. autoclass:: Hub
-
-    .. automethod:: new_circuit
-    .. automethod:: get_circuit
-    .. automethod:: new_channel
-
 Channel convenience objects
 ===========================
 

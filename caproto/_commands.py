@@ -16,7 +16,8 @@
 #    ``__new__``.
 #
 # (1) is typically done by the user. (2) is typically done by calling the
-# ``next_command`` method of a :class:`Hub` or a :class:`VirtualCircuit`.
+# ``next_command`` method of a :class:`Broadcaster` or a
+# :class:`VirtualCircuit`.
 import ctypes
 import inspect
 import struct

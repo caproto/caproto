@@ -88,9 +88,7 @@ class Context:
         self.port = port
         self.pvdb = pvdb
         self.broadcaster = ca.Broadcaster(our_role=ca.SERVER)
-        self.hub = ca.Hub(our_role=ca.SERVER)
         self.broadcaster.log.setLevel('DEBUG')
-        self.hub.log.setLevel('DEBUG')
     
     async def udp_server(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -117,12 +115,16 @@ class Context:
                     if (not known_pv) and command.reply == ca.NO_REPLY:
                         responses.clear()
                         break  # Do not send any repsonse to this datagram.
-                    ip = await socket.gethostname()
+                    # TODO This is just hacking...
+                    hostname = await socket.gethostname()
+                    host = await socket.gethostbyaddr(hostname)
+                    ip = host[-1][0]
                     res = ca.SearchResponse(self.port, ip, 1, 13)
                     responses.append(res)
 
     async def tcp_handler(self, client, addr):
-        circuit = VirtualCircuit(self.hub.new_circuit(addr, None), client)
+        circuit = VirtualCircuit(ca.VirtualCircuit(ca.SERVER, addr, None), client)
+        circuit.circuit.log.setLevel('DEBUG')
         while True:
             try:
                 await circuit.next_command()

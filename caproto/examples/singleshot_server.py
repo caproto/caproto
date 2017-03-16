@@ -11,8 +11,6 @@ CA_REPEATER_PORT = 5065
 CA_SERVER_PORT = 5064
 pv1 = "XF:31IDA-FAKE-PV"
 
-srv = ca.Hub(our_role=ca.SERVER)
-srv.log.setLevel('DEBUG')
 b = ca.Broadcaster(our_role=ca.SERVER)
 b.log.setLevel('DEBUG')
 
@@ -68,7 +66,10 @@ def recv(circuit):
 # First receive directly into the circuit.
 print('initial receipt')
 bytes_received = connection.recv(4096)
-circuit = srv.new_circuit(client_address, None)
+circuit = ca.VirtualCircuit(our_role=ca.SERVER,
+                         address=client_address,
+                         priority=None)
+circuit.log.setLevel('DEBUG')
 circuit.recv(bytes_received)
 circuit.next_command()
 circuit.next_command()
@@ -82,5 +83,6 @@ connection.sendall(bytes_to_send)
 recv(circuit)
 circuit.next_command()
 send(circuit, ca.ReadNotifyResponse((3.14,), 2, 1, 1, 1))
-circuit.next_command()
+recv(circuit)
+print(circuit.next_command())
 send(circuit, ca.ClearChannelResponse(1, 1))
