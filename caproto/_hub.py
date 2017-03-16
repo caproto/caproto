@@ -60,7 +60,7 @@ class VirtualCircuit:
         self.priority = priority
         self.channels = {}  # map cid to Channel
         self.log = logging.getLogger("caproto.VC")
-        self._state = CircuitState(self.channels)
+        self.states = CircuitState(self.channels)
         self._data = bytearray()
         self._channels_sid = {}  # map sid to Channel
         self._ioids = {}  # map ioid to Channel
@@ -276,8 +276,8 @@ class VirtualCircuit:
         # Otherwise, this Command affects the state of this circuit, not a
         # specific Channel. Run the circuit's state machine.
         else:
-            self._state.process_command_type(self.our_role, type(command))
-            self._state.process_command_type(self.their_role, type(command))
+            self.states.process_command_type(self.our_role, type(command))
+            self.states.process_command_type(self.their_role, type(command))
 
         if isinstance(command, VersionRequest):
             if self.priority is None:
@@ -532,7 +532,7 @@ class _BaseChannel:
             cid = self.circuit.new_channel_id()
         self.cid = cid
         self.circuit.channels[self.cid] = self
-        self._state = ChannelState(self.circuit._state)
+        self.states = ChannelState(self.circuit.states)
         # These will be set when the circuit processes CreateChanResponse.
         self.native_data_type = None
         self.native_data_count = None
@@ -575,9 +575,9 @@ class _BaseChannel:
 
         transitions = []
         for role in (self.circuit.our_role, self.circuit.their_role):
-            initial_state = self._state[role]
-            self._state.process_command_type(role, type(command))
-            new_state = self._state[role]
+            initial_state = self.states[role]
+            self.states.process_command_type(role, type(command))
+            new_state = self.states[role]
             # Assemble arguments needed by state_changed, to be called later.
             if initial_state is not new_state:
                 transition = (role, initial_state, new_state, command)

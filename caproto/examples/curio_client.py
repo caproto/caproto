@@ -135,14 +135,14 @@ class Channel:
         initialize the connection in the fist place. This method waits for it
         to complete.
         """
-        while not self.channel._state[ca.CLIENT] == ca.CONNECTED:
+        while not self.channel.states[ca.CLIENT] == ca.CONNECTED:
             event = await self.circuit.get_event()
             await event.wait()
 
     async def clear(self):
         "Disconnect this Channel."
         await self.circuit.send(self.channel.clear())
-        while self.channel._state[ca.CLIENT] == ca.CONNECTED:
+        while self.channel.states[ca.CLIENT] == ca.CONNECTED:
             event = await self.circuit.get_event()
             await event.wait()
 
@@ -283,7 +283,7 @@ class Context:
 
         async def connect():
             print('chan.circuit', chan.circuit)
-            if chan.circuit._state[ca.SERVER] is ca.IDLE:
+            if chan.circuit.states[ca.SERVER] is ca.IDLE:
                 await circuit.create_connection()
                 await circuit.send(chan.version())
                 await circuit.send(chan.host_name())
