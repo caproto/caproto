@@ -85,4 +85,4 @@ script:
   - cd doc
   - make html
   - cd ..
-  - doctr deploy
+  - doctr deploy doc
