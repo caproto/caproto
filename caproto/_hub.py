@@ -350,7 +350,6 @@ class Broadcaster:
             self.their_role = CLIENT
         self.protocol_version = protocol_version
         self.unanswered_searches = {}  # map search id (cid) to name
-        self.search_results = {}  # map name to SearchResponse command
         self._datagram_inbox = deque()  # datagrams to be parsed into Commands
         self._history = []  # commands parsed so far from current datagram
         self._parsed_commands = deque()  # parsed Commands to be processed
