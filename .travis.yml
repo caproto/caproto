@@ -46,4 +46,7 @@ script:
   - set -e
   - # Command to build your docs
   - pip install sphinx sphinx_rtd_theme numpydoc ipython doctr
-  - doctr deploy .
+  - cd doc
+  - make html
+  - cd ..
+  - doctr deploy
