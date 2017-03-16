@@ -236,7 +236,7 @@ We'll use these two convenience functions for what follows.
 Success! We now have a connection to the ``XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL``
 channel. Next we'll read and write values.
 
-Incidentally, we reuse this same ``circuit`` and ``socket`` to connect to
+Incidentally, we can reuse this same ``circuit`` and ``socket`` to connect to
 other channels on the same server. In the commands that follow, we'll use the
 integer IDs ``cid`` (specified by our client in ``CreateChanRequest``) and
 ``sid`` (specified by the server in its ``CreateChanResponse``) to specify
@@ -259,14 +259,25 @@ Read:
 
 .. ipython:: python
 
-    send(caproto.ReadNotifyRequest(data_type=2, data_count=1, sid=sid, ioid=1))
+    send(caproto.ReadNotifyRequest(data_type=create_chan_response.data_type,
+                                   data_count=create_chan_response.data_count,
+                                   sid=sid,
+                                   ioid=1))
     recv()
+
+We may request a particular data type and element count; in the case we just
+asked for the "native" data type and count that the server reported in its
+``CreateChanResponse`` above.
 
 Write:
 
 .. ipython:: python
     
-    send(caproto.WriteNotifyRequest(values=(4,), data_type=2, data_count=1, sid=sid, ioid=2))
+    send(caproto.WriteNotifyRequest(values=(4,),
+                                    data_type=create_chan_response.data_type,
+                                    data_count=create_chan_response.data_count,
+                                    sid=sid,
+                                    ioid=2))
     recv()
 
 Why is the value given as a tuple? Channel Access has its own sprawling data
@@ -283,9 +294,8 @@ Subscribing to "Events" (Updates)
 ---------------------------------
 
 Ask the server to send responses every time the value of the Channel changes.
-We can request a particular data type and element count; in the case we'll
-just ask for the "native" data type and count that the server reported in its
-``CreateChanResponse`` above.
+As with reading, above, we have the option of requesting a specific data type
+or element count, but we'll use the "native" parameters.
 
 .. ipython:: python
 
