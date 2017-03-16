@@ -8,10 +8,10 @@ Python.
 
 This project is inspired by the broad effort in the Python community to write
 `sans-I/O implementations of network protocols <http://sans-io.readthedocs.io/>`_.
-Caproto parses and validates incoming and outgoing commands, keeping track
+Caproto parses and validates incoming and outgoing bytes, keeping track
 the state of an EPICS Client, Server, Virtual Circuits, and Channels. But,
 crucially, it performs no I/O itself: handling sockets and transport is
-completely up the caller. Caproto a toolkit for building programs that speak
+completely up the caller. Caproto is a toolkit for building programs that speak
 EPICS.
 
 Why do this?
