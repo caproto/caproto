@@ -320,17 +320,18 @@ Simplify Bookkeepinig with Channels
 ===================================
 
 In the example above, we handled a ``VirtualCircuit`` and several different
-commands. Internally, the ``VirtualCircuit`` policed our adherence to the
-Channel Access protocol. It tracks the state of the circuit itself and the
-state of the channel(s) in the circuit. To facilitate this, it creates a
-``ClientChannel`` object for each channel to track its state and stash
-bookkeeping details like ``cid`` and ``sid``.
+commands. The ``VirtualCircuit`` policed our adherence to the
+Channel Access protocol by watching incoming and outgoing commands and tracking
+the state of the circuit itself and the state(s) of the channel(s) on the
+circuit.  To facilitate this, it creates a ``ClientChannel`` object for each
+channel to encapsulate its state and stash bookkeeping details like ``cid`` and
+``sid``.
 
 Using these objects directly can help us juggle IDs and generate valid commands
-more succintly. But this API is purely optional, and using it does not affect
+more succintly. This API is purely optional, and using it does not affect
 the state machines.
 
-This:
+See how much more succinct our example becomes:
 
 .. code-block:: python
 
@@ -357,7 +358,7 @@ This:
     send(chan.clear())
     recv()
 
-is equivalent to this:
+Here is the equivalent, a condensed copy of our work from previous sections:
 
 .. code-block:: python
 
@@ -393,3 +394,10 @@ is equivalent to this:
     ### Clear
     send(caproto.ClearChannelRequest(sid, cid))
     recv()
+
+Notice that the channel convenience methods like ``chan.create()`` don't
+actually *do* anything. We still have to ``send`` the command into the
+VirtualCircuit and then send it over the socket. These are just easy ways to
+generate valid commands --- with auto-generated unique IDs filled in --- which
+you may or may not then choose to send. The state machines are not updated
+until (unless) the command is actually sent.
