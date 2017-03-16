@@ -278,6 +278,8 @@ generating valid commands.
 Payload Data Types
 ==================
 
+(Implemented but not yet documented.)
+
 Exceptions
 ==========
 
