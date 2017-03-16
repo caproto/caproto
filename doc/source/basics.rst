@@ -8,14 +8,13 @@ flavor for how the API works, we’ll demonstrate a small client.
 Channel Access Basics
 =====================
 
+A Channel Access client reads and writes values to *Channels* available from
+servers on its network. It locates these servers using UDP broadcasts. It
+communicates with an individual server via one or more TCP connections, which
+is calls *Virtual Circuits*.
+
 Registering with the Repeater
 -----------------------------
-
-A Channel Access client locates servers on its network using UDP broadcasts. It
-communicates with each individual server via one or more TCP connections. Why
-have multiple TCP connections to the same server? They can be designated
-different *priority* to cope with high traffic. Channel Access calls each
-individual connection a *Virtual Circuit*.
 
 To begin, we need a UDP socket.
 
@@ -26,10 +25,10 @@ To begin, we need a UDP socket.
     udp_sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
 
 A new Channel Access client is required to register itself with a *Repeater*,
-an independent process that rebroadcasts all UDP traffic. We must send a
-*request* and receive a *response* from the Repeater. At the lowest level, we
-merely need to send the right bytes over the network. This is effective, but no
-very readable:
+an independent process that rebroadcasts all UDP traffic on a given host. To
+register, we must send a *request* to the Repeater and recive a *response*.
+At the lowest level, we simply need to send the right bytes over the network.
+This is effective, but no very readable:
 
 .. ipython:: python
 
@@ -42,7 +41,14 @@ very readable:
     data
 
 Hurray it worked? Caproto provides a higher level of abstraction, *Commands*,
-so that we don't need to with raw bytes. Let's try this again using caproto.
+so that we don't need to work with raw bytes. Let's try this again using
+caproto.
+
+.. note::
+
+    Other sans-I/O libraries use the word *Event* for what we are calling a
+    *Command*. "Event" is an overloaded term in Channel Access, so we're going
+    our own way here.
 
 Set up the socket, exactly as above. Additionally, import :mod:`caproto` and
 make a :class:`caproto.Broadcaster`.
@@ -79,10 +85,6 @@ These bytes are same bytes we assembled manually before:
 
     bytes_to_send
     
-.. ipython:: python
-
-    udp_sock.sendto(bytes_to_send, ('', 5065))
-
 Why we need two steps here? Why doesn't caproto just send the bytes for us?
 Because it's designed to support any socket API you might want to use ---
 synchronous (like this example), asynchronous, etc. Caproto does not care how
@@ -115,6 +117,15 @@ When there aren't enough bytes cached to interpret another complete Command,
 
     b.next_command()
 
+When we call :meth:`~Broadcaster.send` or :meth:`~Broadcaster.next_command`,
+two things happen. The broadcaster translates between low-level bytes and a
+high-level *Command*. The broadcaster also updates its internal state machine
+encoding the rules of the protocol. It tracks the state of both the client and
+server (it can serve as either). If, as the client, you send an illegal
+command, it will raise :class:`LocalProtocolError`. If, as the client, you
+receive bytes from the server that constitute an illegal command, it will raise
+:class:`RemoteProtocolError`.
+
 Searching for a Channel
 -----------------------
 
@@ -133,7 +144,7 @@ datagram as our search request.
     name  = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
     bytes_to_send = b.send(caproto.VersionRequest(priority=0, version=13),
                            caproto.SearchRequest(name=name, cid=0, version=13))
-    udp_sock.sendto(bytes_to_send, ('', CA_SERVER_PORT))
+    udp_sock.sendto(bytes_to_send, ('', 5064))
 
 Our answer will arrive in a single datagram with multiple commands in it.
 
@@ -143,32 +154,242 @@ Our answer will arrive in a single datagram with multiple commands in it.
     b.recv(bytes_received, address)
     b.next_command()
     b.next_command()
+    address
 
 Now we have the address of a server that has the channel we're interested in.
+Next, we'll set aside the broadcaster and initiate TCP communication with this
+particular server.
 
-    
+Creating a Channel
+------------------
+
+Create a TCP connection with the server at the ``address`` we found above.
+
+.. ipython:: python
+
+    sock = socket.create_connection(address)
+
+
+A :class:`caproto.VirtualCircuit` plays the same for a TCP connection as the
+:class:`caproto.Broadcaster` played for UDP: we'll use it to interpret received
+bytes as Commands and to ensure that incoming and outgoing bytes abide by the
+protocol.
+
+.. ipython:: python
+
     circuit = caproto.VirtualCircuit(our_role=caproto.CLIENT, address=address, priority=0)
-    chan1 = caproto.ClientChannel(circuit, name)
-    socket = socket.create_connection(chan1.circuit.address)
+
+We'll use these two convenience functions for what follows.
+
+.. code-block:: python
+
+    def send(command):
+        "Process a Command in the VirtualCircuit and then transmit its bytes."
+        bytes_to_send = circuit.send(command)  # Update state machine.
+        sock.send(bytes_to_send)  # Actually transmit bytes.
+
+    def recv():
+        "Receive some bytes and parse all the Commands in them."
+        bytes_received = sock.recv(4096)
+        circuit.recv(bytes_received)  # Cache bytes.
+        commands = []
+        while True:
+            command = circuit.next_command()  # Parsing happens here.
+            if type(command) is caproto.NEED_DATA:
+                break  # Not enough bytes to parse any more commands.
+            commands.append(command)
+        return commands
+
+.. ipython:: python
+    :suppress:
+
+    def send(command):
+        bytes_to_send = circuit.send(command)
+        sock.send(bytes_to_send)
+    def recv():
+        bytes_received = sock.recv(4096)
+        circuit.recv(bytes_received)
+        commands = []
+        while True:
+            command = circuit.next_command()
+            if type(command) is caproto.NEED_DATA:
+                break
+            commands.append(command)
+        return commands
+
+.. ipython:: python
+
+    send(caproto.VersionRequest(priority=0, version=13))
+    recv()
+    send(caproto.HostNameRequest('localhost'))
+    send(caproto.ClientNameRequest('user'))
+    cid = 1  # a client-specific unique ID for this Channel
+    send(caproto.CreateChanRequest(name=name, cid=cid, version=13))
+    access_response, create_chan_response = recv()
+    access_response, create_chan_response
+
+Success! We now have a connection to the ``XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL``
+channel. Next we'll read and write values.
+
+Incidentally, we reuse this same ``circuit`` and ``socket`` to connect to
+other channels on the same server. In the commands that follow, we'll use the
+integer IDs ``cid`` (specified by our client in ``CreateChanRequest``) and
+``sid`` (specified by the server in its ``CreateChanResponse``) to specify
+which channel we mean.
+
+.. ipython:: python
+
+    sid = create_chan_response.sid
+
+In the event of high traffic clogging the network, we can open up *multiple*
+TCP connections to the same server, each with its own VirtualCircuit, and
+designate them with different *priority* (specified in our ``VersionRequest``).
+This why we need the concept of a VirtualCircuit: there can be multiple
+VirtualCircuits between peers.
+
+Reading and Writing Values
+--------------------------
+
+Read:
+
+.. ipython:: python
+
+    send(caproto.ReadNotifyRequest(data_type=2, data_count=1, sid=sid, ioid=1))
+    recv()
+
+Write:
+
+.. ipython:: python
     
-    # Initialize our new TCP-based CA connection with a VersionRequest.
-    send(chan1.circuit, ca.VersionRequest(priority=0, version=13))
-    bytes_to_send = chan1.circuit.send(command)
-    socket.send(bytes_to_send)
-    recv(chan1.circuit)
-    # Send info about us.
-    send(chan1.circuit, ca.HostNameRequest('localhost'))
-    send(chan1.circuit, ca.ClientNameRequest('username'))
-    send(chan1.circuit, ca.CreateChanRequest(name=pv1, cid=chan1.cid, version=13))
-    commands = recv(chan1.circuit)
+    send(caproto.WriteNotifyRequest(values=(4,), data_type=2, data_count=1, sid=sid, ioid=2))
+    recv()
+    
+Subscribing to "Events" (Updates)
+---------------------------------
 
-TODO This is not true. It's only true of circuits.
+Ask the server to send responses every time the value of the Channel changes.
+We can request a particular data type and element count; in the case we'll
+just ask for the "native" data type and count that the server reported in its
+``CreateChanResponse`` above.
 
-When we call :meth:`~Broadcaster.send` or :meth:`~Broadcaster.next_command`,
-two things happen. The broadcaster translates between low-level bytes and a
-high-level *Command*. The broadcaster also updates its internal state machine
-encoding the rules of the protocol. It tracks the state of both the client and
-server (it can serve as either). If, as the client, you send an illegal
-command, it will raise :class:`LocalProtocolError`. If, as the client, you
-receive bytes from the server that constitute an illegal command, it will raise
-:class:`RemoteProtocolError`.
+.. ipython:: python
+
+    req = caproto.EventAddRequest(data_type=create_chan_response.data_type,
+                                  data_count=create_chan_response.data_count,
+                                  sid=sid,
+                                  subscriptionid=0,
+                                  low=0, high=0, to=0, mask=1)
+    send(req)
+
+The server always sends at least one response with the current value at
+subscription time.
+
+.. ipython:: python
+
+    recv()
+
+If the value changes, additional responses will come in. If multiple
+subscriptions are in play at once over this circuit, we can use the
+``subscriptionid`` to match them to the right channel. We also use it to end
+the subscription:
+    
+.. ipython:: python
+
+    send(caproto.EventCancelRequest(data_type=req.data_type,
+                                    sid=req.sid,
+                                    subscriptionid=req.subscriptionid))
+    recv()
+
+Closing the Channel
+-------------------
+
+To clean up, close the Channel.
+
+.. ipython:: python
+
+    send(caproto.ClearChannelRequest(sid, cid))
+    recv()
+
+If we are done with the circuit, close the socket too.
+
+.. ipython:: python
+
+    sock.close()
+
+Simplify Bookkeepinig with Channels
+===================================
+
+In the example above, we handled a ``VirtualCircuit`` and several different
+commands. Internally, the ``VirtualCircuit`` policed our adherence to the
+Channel Access protocol. It tracks the state of the circuit itself and the
+state of the channel(s) in the circuit. To facilitate this, it creates a
+``ClientChannel`` object for each channel to track its state and stash
+bookkeeping details like ``cid`` and ``sid``.
+
+Using these objects directly can help us juggle IDs and generate valid commands
+more succintly. But this API is purely optional, and using it does not affect
+the state machines.
+
+This:
+
+.. code-block:: python
+
+    ### Create
+    chan = caproto.ClientChannel(name, circuit)
+    send(chan.version())
+    recv()
+    send(chan.host_name('localhost'), chan.client_name('user'), chan.create())
+    recv()
+
+    ### Read and Write
+    send(chan.read())
+    recv()
+    send(chan.write((4,)))
+    recv()
+
+    ### Subscribe and Unsubscribe
+    send(chan.subscribe())
+    recv()
+    send(chan.unsubscribe(0))
+    recv()
+
+    ### Clear
+    send(chan.clear())
+    recv()
+
+is equivalent to this:
+
+.. code-block:: python
+
+    ### Create
+    send(caproto.VersionRequest(priority=0, version=13))
+    recv()
+    send(caproto.HostNameRequest('localhost'))
+    send(caproto.ClientNameRequest('user'))
+    cid = 1  # a client-specific unique ID for this Channel
+    send(caproto.CreateChanRequest(name=name, cid=cid, version=13))
+    access_response, create_chan_response = recv()
+    access_response, create_chan_response
+
+    ### Read and Write
+    send(caproto.ReadNotifyRequest(data_type=2, data_count=1, sid=sid, ioid=1))
+    recv()
+    send(caproto.WriteNotifyRequest(values=(4,), data_type=2, data_count=1, sid=sid, ioid=2))
+    recv()
+    
+    ### Subscribe and Unsubscribe
+    req = caproto.EventAddRequest(data_type=create_chan_response.data_type,
+                                  data_count=create_chan_response.data_count,
+                                  sid=sid,
+                                  subscriptionid=0,
+                                  low=0, high=0, to=0, mask=1)
+    send(req)
+    recv()
+    send(caproto.EventCancelRequest(data_type=req.data_type,
+                                    sid=req.sid,
+                                    subscriptionid=req.subscriptionid))
+    recv()
+
+    ### Clear
+    send(caproto.ClearChannelRequest(sid, cid))
+    recv()
