@@ -80,6 +80,33 @@ designated by the Channel Access spec.)
 The State Machine
 =================
 
+To validate commands being sent and received, the caproto VirtualCircuit object
+maintains several state machines. It keeps track of what the client is doing
+and what server is doing, whether it is playing the role of the client or
+server.
+
+A single VirtualCircuit maintains:
+
+* exactly one client-side circuit state machine
+* exactly one server-side circuit state machine
+* one client-side channel state machine *per channel*
+* one server-side channel *per channel*
+
+The basic interaction looks like this:
+
+* Client specifies the priority and protocol version of a new Virtual Circuit.
+* Server confirms.
+* Client (optionally) provides its host name and client name.
+* Client requests the creation of a new Channel.
+* Server announces access rights for this Channel and confirms Channel
+  creation.
+
+With the Channel open, the client may send unlimited requests to read, write,
+or subscribe. The Server responds. The server or the client may initiate
+closing the Channel.
+
+The state machines look like this. Click on each to expand.
+
 .. |channel-client| image:: _static/command_triggered_channel_transitions_client.png
       :target: _static/command_triggered_channel_transitions_client.png
       :width: 100%
@@ -164,8 +191,12 @@ The VirtualCircuit object
     .. automethod:: new_subscriptionid
     .. automethod:: new_ioid
 
-Channel convenience objects
-===========================
+Channel objects
+===============
+
+These objects are used internally by :class:`VirtualCircuit` to track the state
+of individual channels. The user can optionally use them as a convenience for
+generating valid commands.
 
 .. autoclass:: ClientChannel
 
@@ -198,9 +229,6 @@ Channel convenience objects
 
 DBR
 ===
-
-.. automodule:: caproto._dbr
-    :members:
 
 Exceptions
 ==========

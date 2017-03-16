@@ -2,8 +2,8 @@
 Getting Started: Writing Your Own Channel Access Client
 *******************************************************
 
-Caproto can be used to implement both EPICS clients and servers. To give a
-flavor for how the API works, we’ll demonstrate a small client.
+Caproto can be used to implement both Channel Access clients and servers. To
+give a flavor for how the API works, we’ll demonstrate a small client.
 
 Channel Access Basics
 =====================

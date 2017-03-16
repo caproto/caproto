@@ -44,14 +44,32 @@ How do you know it works?
   monitoring the simulated motor ioc, motorsim.
 * It can talk to libca as a server --- for example, responding correctly to
   caget, caput, camonitor.
-* It passes the server test spec https://github.com/mdavidsaver/catvs (NOTE: As
-  of this writing, this is not  true! It's here as a reminder to make it true
-  before we publish this documentation.)
 * The Python module that specifies the byte layout of each command is generated
   using Python and Jinja templates from the documentation itself to reduce
   the potential for bugs introduced by human transcription. Where we
   found errors in the documentation, we fixed them and submitted a patch
   upstream. (NOTE: Again this is a reminder to submit a patch.)
+* It passes the server test spec https://github.com/mdavidsaver/catvs (NOTE: As
+  of this writing, this is not  true! It's here as a reminder to make it true
+  before we publish this documentation.)
+* The byte sizes of the DBR types compare exactly to those in pyepics.
+
+So should I use it?
+===================
+
+That depends. Probably not. It's a very young project, and the primary author
+(hi!) is fairly new to EPICS.
+
+For important work, one of the more battle-tested projects linked above would
+be a better choice.
+
+How's the performance?
+======================
+
+No idea yet! That's high on the list of things we'd like to know. Caproto gets
+some important basics right, like reading bytes directly from sockets into C
+structs with no extra copies. Time will tell if there are any major
+bottlenecks we haven't anticipated.
 
 Acknowledgement
 ===============
@@ -71,3 +89,4 @@ indispensible. See :doc:`references`.
    api
    examples/index
    references
+   release-notes
