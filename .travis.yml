@@ -1,4 +1,6 @@
 language: python
+python:
+    - 3.6
 
 sudo: required
 dist: trusty
@@ -12,13 +14,6 @@ services:
 cache:
   directories:
     - $HOME/.cache/pip
-
-matrix:
-  include:
-    - python: 3.4
-      env: BUILD_DOCS=false
-    - python: 3.5
-      env: BUILD_DOCS=true
 
 before_install:
   - export DOCKER0_IP=$(/sbin/ifconfig docker0 |grep 'inet addr' | sed -e 's/.*addr:\([^ ]*\).*/\1/')
