@@ -55,11 +55,11 @@ before_install:
   - source activate $CONDA_ENV
 
 install:
-  # INSTALL OPHYD
   - conda install numpy pyepics
   - conda install readline -c lightsource2
   - pip install coveralls pytest pytest-cov codecov
   - pip install .
+  - python caproto/examples/repeater.py  # run a repeater
 
   # setup some path environment variables for epics
   - export PATH=$PATH:$EPICS_BASE/bin/$EPICS_HOST_ARCH
