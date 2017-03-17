@@ -40,7 +40,8 @@ This is effective, but no very readable:
 .. ipython:: python
 
     bytes_to_send = b'\x00\x18\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
-    udp_sock.sendto(bytes_to_send, ('', 5065))
+    import os
+    udp_sock.sendto(bytes_to_send, (os.environ['EPICS_CA_ADDR_LIST'], 5065))
 
 .. ipython:: python
 
@@ -86,7 +87,7 @@ Transport those bytes over the wire.
 
 .. ipython:: python
 
-    udp_sock.sendto(bytes_to_send, ('', 5065))
+    udp_sock.sendto(bytes_to_send, (os.environ['EPICS_CA_ADDR_LIST'], 5065))
 
 These bytes are same bytes we assembled manually before:
 
