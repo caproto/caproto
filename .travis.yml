@@ -34,7 +34,7 @@ before_install:
 install:
   - pip install numpy
   - pip install .
-  - python caproto/examples/repeater.py  # run a repeater
+  - python caproto/examples/repeater.py & # run a repeater
 
 script:
   - set -e
