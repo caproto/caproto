@@ -28,7 +28,7 @@ before_install:
   - docker pull ${DOCKERIMAGE}
   - docker images
   - docker ps -a
-  - docker run -d -p $DOCKER0_IP:5064:5064/tcp -p $DOCKER0_IP:5065:5065/udp --name epics_iocs ${DOCKERIMAGE}
+  - docker run -d -p $DOCKER0_IP:5064:5064/tcp -p $DOCKER0_IP:5064:5064/udp --name epics_iocs ${DOCKERIMAGE}
   - docker ps -a
 
 install:
