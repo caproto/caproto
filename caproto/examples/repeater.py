@@ -83,11 +83,12 @@ async def start_datagram_proxy(bind, port):
         lambda: protocol, local_addr=(bind, port))
 
 
-def main(bind='0.0.0.0', port=5065):
+def main():
     print('hi')
     loop = asyncio.get_event_loop()
-    print("Starting datagram proxy...")
-    coro = start_datagram_proxy(bind, port)
+    addr = ('0.0.0.0', os.environ.get('EPICS_CA_REPEATER_PORT', 5065))
+    print("Starting datagram proxy on {}...".format(addr))
+    coro = start_datagram_proxy(*addr)
     transport, _ = loop.run_until_complete(coro)
     print("Datagram proxy is running...")
     try:
