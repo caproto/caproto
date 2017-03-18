@@ -181,7 +181,7 @@ class Message:
             raise CaprotoTypeError("A {} must have a header with "
                                    "header.command = {}, not {}."
                                    "".format(type(self), self.ID,
-                                             header.commmand))
+                                             header.command))
         self.header = header
         self.payload = payload
 
@@ -488,7 +488,7 @@ class RepeaterConfirmResponse(Message):
     def __init__(self, repeater_address):
         encoded_ip = socket.inet_pton(socket.AF_INET, str(repeater_address))
         int_encoded_ip, = struct.unpack('!I', encoded_ip)  # bytes -> int
-        header = RepeaterRegisterRequestHeader(int_encoded_ip)
+        header = RepeaterConfirmResponseHeader(int_encoded_ip)
         super().__init__(header, None)
 
     @property
