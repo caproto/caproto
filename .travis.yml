@@ -11,6 +11,11 @@ env:
 services:
   - docker
 
+addons:
+  apt:
+    packages:
+      - graphviz  # for building docs
+
 cache:
   directories:
     - $HOME/.cache/pip
@@ -37,8 +42,10 @@ install:
 
 script:
   - set -e
-  - # Command to build your docs
-  - pip install sphinx sphinx_rtd_theme numpydoc doctr ipython matplotlib
+  # Install deps for building the docs.
+  - pip install sphinx sphinx_rtd_theme numpydoc doctr ipython matplotlib graphviz
+  # Build the docs.
   - cd doc
   - make html
+  # Upload the docs to gh-pages.
   - doctr deploy .
