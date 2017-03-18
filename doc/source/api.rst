@@ -107,6 +107,15 @@ closing the Channel.
 
 The state machines look like this. Click on each to expand.
 
+.. ipython:: python
+   :suppress:
+
+   import sys
+   import subprocess
+   subprocess.check_call([sys.executable,
+                          sys._caproto_hack_docs_source_path
+                          + "/../gen_graphs.py"])
+
 .. |channel-client| image:: _static/command_triggered_channel_transitions_client.png
       :target: _static/command_triggered_channel_transitions_client.png
       :width: 100%
@@ -121,8 +130,12 @@ The state machines look like this. Click on each to expand.
       :width: 100%
 
 +------------------+------------------+
+| Channel (Client) | Channel (Server) |
+|                  |                  |
 | |channel-client| | |channel-server| |
 +------------------+------------------+
+| Circuit (Client) | Circuit (Server) |
+|                  |                  |
 | |circuit-client| | |circuit-server| |
 +------------------+------------------+
 
