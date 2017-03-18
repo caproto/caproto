@@ -14,7 +14,7 @@ Channel Access Basics
 A Channel Access client reads and writes values to *Channels* available from
 servers on its network. It locates these servers using UDP broadcasts. It
 communicates with an individual server via one or more TCP connections, which
-is calls *Virtual Circuits*.
+it calls *Virtual Circuits*.
 
 In this example, our client will talk to 
 `EPICS motorsim <github.com/danielballan/motorsim>`_, which provides a
