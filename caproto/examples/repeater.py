@@ -7,8 +7,8 @@ import caproto
 
 class ProxyDatagramProtocol(asyncio.DatagramProtocol):
 
-    def __init__(self, remote_address):
-        self.remote_address = remote_address
+    def __init__(self):
+        self.host = socket.gethostbyname(socket.gethostname())
         self.remotes = {}
         self.broadcaster = caproto.Broadcaster(our_role=caproto.SERVER)
         super().__init__()
@@ -19,14 +19,14 @@ class ProxyDatagramProtocol(asyncio.DatagramProtocol):
     def datagram_received(self, data, addr):
         self.broadcaster.recv(data, addr)
         command = self.broadcaster.next_command()
-        print(command)
+        print(command, addr)
         if addr in self.remotes:
             self.remotes[addr].transport.sendto(data)
             return
         loop = asyncio.get_event_loop()
         self.remotes[addr] = RemoteDatagramProtocol(self, addr, data)
         coro = loop.create_datagram_endpoint(
-            lambda: self.remotes[addr], remote_addr=self.remote_address)
+            lambda: self.remotes[addr], remote_addr=addr)
         asyncio.ensure_future(coro)
 
 
@@ -35,11 +35,16 @@ class RemoteDatagramProtocol(asyncio.DatagramProtocol):
     def __init__(self, proxy, addr, data):
         self.proxy = proxy
         self.addr = addr
+        print('new remote with addr', addr)
         self.data = data
         super().__init__()
 
     def connection_made(self, transport):
         self.transport = transport
+        confirmation = caproto.RepeaterConfirmResponse(self.addr[0])
+        confirmation_bytes = self.proxy.broadcaster.send(confirmation)
+        self.transport.sendto(confirmation_bytes)
+        print('sent confirmation to', self.addr)
         self.transport.sendto(self.data)
 
     def datagram_received(self, data, sender_addr):
@@ -49,18 +54,18 @@ class RemoteDatagramProtocol(asyncio.DatagramProtocol):
         self.proxy.remotes.pop(self.attr)
 
 
-async def start_datagram_proxy(bind, port, remote_host, remote_port):
+async def start_datagram_proxy(bind, port):
     loop = asyncio.get_event_loop()
-    protocol = ProxyDatagramProtocol((remote_host, remote_port))
+    protocol = ProxyDatagramProtocol()
     return await loop.create_datagram_endpoint(
         lambda: protocol, local_addr=(bind, port))
 
 
-def main(bind='0.0.0.0', port=5065, remote_host='127.0.0.1', remote_port=5064):
+def main(bind='0.0.0.0', port=5065):
     print('hi')
     loop = asyncio.get_event_loop()
     print("Starting datagram proxy...")
-    coro = start_datagram_proxy(bind, port, remote_host, remote_port)
+    coro = start_datagram_proxy(bind, port)
     transport, _ = loop.run_until_complete(coro)
     print("Datagram proxy is running...")
     try:
