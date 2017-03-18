@@ -7,19 +7,27 @@ This is a "bring your own I/O" implementation of the
 Python.
 
 This project is inspired by the broad effort in the Python community to write
-`sans-I/O implementations of network protocols <http://sans-io.readthedocs.io/>`_.
-Caproto parses and validates incoming and outgoing bytes, keeping track
-the state of an EPICS Client, Server, Virtual Circuits, and Channels. But,
-crucially, it performs no I/O itself: handling sockets and transport is
-completely up the caller. Caproto is a toolkit for building programs that speak
-EPICS.
+`sans-I/O implementations of network protocols <http://sans-io.readthedocs.io/>`_. The EPICS (Experimental Physics and Industrial Control System) Channel Access
+protocol is used in laboratories and comparies
+`around the world <https://en.wikipedia.org/wiki/EPICS#Facilities_using_EPICS>`_
+to implement distributed control systems for devices such as large telescopes,
+particle accelerators, and synchrotrons. Its
+`roots <http://www.aps.anl.gov/epics/docs/APS2014/01-Introduction-to-EPICS.pdf>`_
+go back to a 1988 meeting funded by the Reagan-era Strategic Defense Initiative
+("Star Wars").
+
+Caproto encodes the Channel Access protocol. It parses and validates incoming
+and outgoing bytes, keeping track the state of an EPICS Client, Server, Virtual
+Circuits, and Channels. But, crucially, it performs no I/O itself: handling
+sockets and transport is completely up the caller. Caproto is a toolkit for
+building programs that speak EPICS.
 
 Why do this?
 ============
 
 The aim is to provide a complete, reusable implementation of the Channel Access
-protocol in Python which can be wrapped in whichever network library you like
-best. It is not a replacement for
+protocol in Python which can be wrapped in whichever network library you want
+to use. It is not a replacement for
 `pyepics <https://github.com/pyepics/pyepics>`_,
 `cothread <http://controls.diamond.ac.uk/downloads/python/cothread/>`_, or
 `pcaspy <https://pcaspy.readthedocs.io>`_. It's a pure-Python implementation
@@ -75,10 +83,9 @@ bottlenecks we haven't anticipated.
 Acknowledgement
 ===============
 
-The design of this library was inspired by
-`h11 <https://h11.readthedocs.io/>`_, to which caproto owes its core design
-principles and many of its clever tricks. h11 is distributed under an MIT
-license.
+The design of this library was modeled on `h11 <https://h11.readthedocs.io/>`_,
+to which caproto owes its core design principles and many of its clever tricks.
+h11 is distributed under an MIT license.
 
 And of course many resources from the EPICS developer community were
 indispensible. See :doc:`references`.

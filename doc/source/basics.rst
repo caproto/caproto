@@ -3,7 +3,8 @@ Getting Started: Writing Your Own Channel Access Client
 *******************************************************
 
 Caproto can be used to implement both Channel Access clients and servers. To
-give a flavor for how the API works, we’ll demonstrate a small client.
+give a flavor for how the API works, we’ll demonstrate a simple, synchronous
+client.
 
 Channel Access Basics
 =====================
@@ -34,11 +35,14 @@ To begin, we need a UDP socket.
 
     udp_sock.settimeout(2)  # should never be tripped, but it help to debug
 
-A new Channel Access client is required to register itself with a *Repeater*,
-an independent process that rebroadcasts all UDP traffic on a given host. To
-register, we must send a *request* to the Repeater and recive a *response*.
-At the lowest level, we simply need to send the right bytes over the network.
-This is effective, but no very readable:
+A new Channel Access client is required to register itself with a Channel
+wccess Repeater.  (What a Repeater is *for* is not really important to our
+story here. It's an independent process that rebroadcasts incoming server
+heartbeats to all clients on our host. It exists because old systems don't
+handle broadcasts properly.) To register, we must send a *request* to the
+Repeater and receive a *response*. At the lowest level, we simply need to send
+the right bytes over the network. This is effective, but not especially
+readable:
 
 .. ipython:: python
 
@@ -50,9 +54,10 @@ This is effective, but no very readable:
     data, address = udp_sock.recvfrom(1024)
     data
 
-Hurray it worked? Caproto provides a higher level of abstraction, *Commands*,
-so that we don't need to work with raw bytes. Let's try this again using
-caproto.
+Hurray it worked? Unless you possess some Davidsaver-like talent for reading 
+Channel Access hex codes the way Neo experiences the Matrix, you may wants a
+better way. Caproto provides a higher level of abstraction, *Commands*, so that
+we don't need to work with raw bytes. Let's try this again using caproto.
 
 .. note::
 
@@ -60,8 +65,8 @@ caproto.
     *Command*. "Event" is an overloaded term in Channel Access, so we're going
     our own way here.
 
-Set up the socket, exactly as above. Additionally, import :mod:`caproto` and
-make a :class:`caproto.Broadcaster`.
+Set up the socket, exactly as above. Import :mod:`caproto` and make a
+:class:`caproto.Broadcaster`.
 
 .. ipython:: python
 
@@ -82,8 +87,8 @@ Make the command we want to send.
 
     command = caproto.RepeaterRegisterRequest('0.0.0.0')
 
-Pass the command to our broadcaster's :meth:`~Connection.send`send`` method,
-which translates the command to bytes.
+Pass the command to our broadcaster's :meth:`~Broadcaster.send` method, which
+translates the command to bytes.
 
 .. ipython:: python
 
@@ -104,9 +109,9 @@ These bytes are same bytes we assembled manually before:
 Why we need two steps here? Why doesn't caproto just send the bytes for us?
 Because it's designed to support any socket API you might want to use ---
 synchronous (like this example), asynchronous, etc. Caproto does not care how
-you send and receive that bytes. It's job is to make it easier to compose
-outgoing messages, interpret incoming ones, and verify that the rules of the
-protocol are obeyed.
+or when you send and receive the bytes. Its job is to make it easier to
+compose outgoing messages, interpret incoming ones, and verify that the rules
+of the protocol are obeyed by both peers.
 
 Recall that we are in the process of registering our client with a *Repeater*
 and that we are expecting a response. As with sending, receiving is a
@@ -118,13 +123,14 @@ broadcaster.
     bytes_received, address = udp_sock.recvfrom(1024)
     b.recv(bytes_received, address)
 
-The bytes have been cached but not yet parsed. The :class:`~Broadcaster`
-converst the bytes into *Commands* one at time.
+The bytes have been cached but not yet parsed. The :class:`~Broadcaster` can
+converts the bytes into *Commands* one at time.
 
 .. ipython:: python
 
     b.next_command()
 
+Think of this as a mutating operation, like using :func:`next` on an iterable.
 When there aren't enough bytes cached to interpret another complete Command,
 :meth:`~Broadcaster.next_command` returns the special constant
 :data:`NEED_DATA`.
@@ -145,15 +151,15 @@ receive bytes from the server that constitute an illegal command, it will raise
 Searching for a Channel
 -----------------------
 
-Say we're looking for a channel ("Process Variable") with a vintage EPICS name
-like :data:`"XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"`. It just flows off the tongue!
+Say we're looking for a channel ("Process Variable") with a typically lyrical
+EPICS name like :data:`"XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"`.
 
-We need to broadcast a search request to the servers on our network and recive
+We need to broadcast a search request to the servers on our network and receive
 any responses. We follow the same pattern as above, still using our broadcaster
-``b`` our socket ``udp_sock`` and some new caproto commands.
+``b``, our socket ``udp_sock``, and some new caproto commands.
 
-We need to announce which version of the protocol we are using in the same UDP
-datagram as our search request.
+In a single UDP datagram, we need to announce which version of the protocol we
+are using and the channel name we are looking for.
 
 .. ipython:: python
 
@@ -186,10 +192,10 @@ Create a TCP connection with the server at the ``address`` we found above.
     sock = socket.create_connection(address)
 
 
-A :class:`caproto.VirtualCircuit` plays the same for a TCP connection as the
-:class:`caproto.Broadcaster` played for UDP: we'll use it to interpret received
-bytes as Commands and to ensure that incoming and outgoing bytes abide by the
-protocol.
+A :class:`caproto.VirtualCircuit` plays the same role for a TCP connection as
+the :class:`caproto.Broadcaster` played for UDP: we'll use it to interpret
+received bytes as Commands and to ensure that incoming and outgoing bytes abide
+by the protocol.
 
 .. ipython:: python
 
@@ -247,7 +253,7 @@ We'll use these two convenience functions for what follows.
 Success! We now have a connection to the ``XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL``
 channel. Next we'll read and write values.
 
-Incidentally, we can reuse this same ``circuit`` and ``socket`` to connect to
+Incidentally, we can reuse this same ``circuit`` and ``sock`` to connect to
 other channels on the same server. In the commands that follow, we'll use the
 integer IDs ``cid`` (specified by our client in ``CreateChanRequest``) and
 ``sid`` (specified by the server in its ``CreateChanResponse``) to specify
