@@ -2,6 +2,8 @@
 Getting Started: Writing Your Own Channel Access Client
 *******************************************************
 
+.. currentmodule:: caproto
+
 Caproto can be used to implement both Channel Access clients and servers. To
 give a flavor for how the API works, we’ll demonstrate a simple, synchronous
 client.
@@ -36,7 +38,7 @@ To begin, we need a UDP socket.
     udp_sock.settimeout(2)  # should never be tripped, but it help to debug
 
 A new Channel Access client is required to register itself with a Channel
-wccess Repeater.  (What a Repeater is *for* is not really important to our
+Access Repeater.  (What a Repeater is *for* is not really important to our
 story here. It's an independent process that rebroadcasts incoming server
 heartbeats to all clients on our host. It exists because old systems don't
 handle broadcasts properly.) To register, we must send a *request* to the
@@ -66,7 +68,7 @@ we don't need to work with raw bytes. Let's try this again using caproto.
     our own way here.
 
 Set up the socket, exactly as above. Import :mod:`caproto` and make a
-:class:`caproto.Broadcaster`.
+:class:`Broadcaster`.
 
 .. ipython:: python
 
@@ -87,7 +89,7 @@ Make the command we want to send.
 
     command = caproto.RepeaterRegisterRequest('0.0.0.0')
 
-Pass the command to our broadcaster's :meth:`~Broadcaster.send` method, which
+Pass the command to our broadcaster's :meth:`Broadcaster.send` method, which
 translates the command to bytes.
 
 .. ipython:: python
@@ -123,23 +125,23 @@ broadcaster.
     bytes_received, address = udp_sock.recvfrom(1024)
     b.recv(bytes_received, address)
 
-The bytes have been cached but not yet parsed. The :class:`~Broadcaster` can
-converts the bytes into *Commands* one at time.
+The bytes have been cached but not yet parsed. The :class:`Broadcaster` can
+convert the bytes into *Commands* one at time.
 
 .. ipython:: python
 
     b.next_command()
 
-Think of this as a mutating operation, like using :func:`next` on an iterable.
+Think of this as a mutating operation, like using :func:`next` on an iterator.
 When there aren't enough bytes cached to interpret another complete Command,
-:meth:`~Broadcaster.next_command` returns the special constant
-:data:`NEED_DATA`.
+:meth:`Broadcaster.next_command` returns the special constant
+:class:`NEED_DATA`.
 
 .. ipython:: python
 
     b.next_command()
 
-When we call :meth:`~Broadcaster.send` or :meth:`~Broadcaster.next_command`,
+When we call :meth:`Broadcaster.send` or :meth:`Broadcaster.next_command`,
 two things happen. The broadcaster translates between low-level bytes and a
 high-level *Command*. The broadcaster also updates its internal state machine
 encoding the rules of the protocol. It tracks the state of both the client and
@@ -201,8 +203,8 @@ Create a TCP connection with the server at the ``address`` we found above.
     sock = socket.create_connection(address)
 
 
-A :class:`caproto.VirtualCircuit` plays the same role for a TCP connection as
-the :class:`caproto.Broadcaster` played for UDP: we'll use it to interpret
+A :class:`VirtualCircuit` plays the same role for a TCP connection as
+the :class:`Broadcaster` played for UDP: we'll use it to interpret
 received bytes as Commands and to ensure that incoming and outgoing bytes abide
 by the protocol.
 
@@ -248,13 +250,28 @@ We'll use these two convenience functions for what follows.
             commands.append(command)
         return commands
 
+We initialize the circuit by specifying our protcol version.
+
 .. ipython:: python
 
     send(caproto.VersionRequest(priority=0, version=13))
     recv()
+
+Optionally provide the host name, and "client" name, which the server may use
+to determine our read/write permissions on channels. (There is no
+authentication in Channel Access: security has to be provided at the network
+level.)
+
+.. ipython:: python
+
     send(caproto.HostNameRequest('localhost'))
     send(caproto.ClientNameRequest('user'))
-    cid = 1  # a client-specific unique ID for this Channel
+
+Finally, create the channel.
+
+.. ipython:: python
+
+    cid = 1  # a client-specified unique ID for this Channel
     send(caproto.CreateChanRequest(name=name, cid=cid, version=13))
     access_response, create_chan_response = recv()
     access_response, create_chan_response
@@ -264,8 +281,8 @@ channel. Next we'll read and write values.
 
 Incidentally, we can reuse this same ``circuit`` and ``sock`` to connect to
 other channels on the same server. In the commands that follow, we'll use the
-integer IDs ``cid`` (specified by our client in ``CreateChanRequest``) and
-``sid`` (specified by the server in its ``CreateChanResponse``) to specify
+integer IDs ``cid`` (specified by our client in :class:`CreateChanRequest`) and
+``sid`` (specified by the server in its :class:`CreateChanResponse`) to specify
 which channel we mean.
 
 .. ipython:: python
@@ -274,9 +291,9 @@ which channel we mean.
 
 In the event of high traffic clogging the network, we can open up *multiple*
 TCP connections to the same server, each with its own VirtualCircuit, and
-designate them with different *priority* (specified in our ``VersionRequest``).
-This why we need the concept of a VirtualCircuit: there can be multiple
-VirtualCircuits between peers.
+designate them with different *priority* (specified in our
+:class:`VersionRequest`). This why we need the concept of a VirtualCircuit:
+there can be multiple VirtualCircuits between peers.
 
 Reading and Writing Values
 --------------------------
@@ -293,7 +310,7 @@ Read:
 
 We may request a particular data type and element count; in the case we just
 asked for the "native" data type and count that the server reported in its
-``CreateChanResponse`` above.
+:class:`CreateChanResponse` above.
 
 Write:
 
@@ -313,7 +330,7 @@ that match byte layouts in the canonical implementation of Channel Access,
 libca. At a higher level, the user may interact with values as named tuples
 with an element for each field in the struct. The elements in the tuple are
 built-in Python types (strings, floats, integers). If the value is an array (in
-Channel Access parlance, a "waveform") it is given as a numpy arrays if numpy
+Channel Access parlance, a "waveform") it is given as a numpy array if numpy
 is available.
 
 Subscribing to "Events" (Updates)
@@ -370,13 +387,13 @@ If we are done with the circuit, close the socket too.
 Simplify Bookkeepinig with Channels
 ===================================
 
-In the example above, we handled a ``VirtualCircuit`` and several different
-commands. The ``VirtualCircuit`` policed our adherence to the
+In the example above, we handled a :class:`VirtualCircuit` and several
+different commands. The :class:`VirtualCircuit` policed our adherence to the
 Channel Access protocol by watching incoming and outgoing commands and tracking
 the state of the circuit itself and the state(s) of the channel(s) on the
-circuit.  To facilitate this, it creates a ``ClientChannel`` object for each
-channel to encapsulate its state and stash bookkeeping details like ``cid`` and
-``sid``.
+circuit.  To facilitate this, it creates a :class:`ClientChannel` object for
+each channel to encapsulate its state and stash bookkeeping details like
+``cid`` and ``sid``.
 
 Using these objects directly can help us juggle IDs and generate valid commands
 more succintly. This API is purely optional, and using it does not affect
@@ -418,7 +435,7 @@ Here is the equivalent, a condensed copy of our work from previous sections:
     recv()
     send(caproto.HostNameRequest('localhost'))
     send(caproto.ClientNameRequest('user'))
-    cid = 1  # a client-specific unique ID for this Channel
+    cid = 1  # a client-specified unique ID for this Channel
     send(caproto.CreateChanRequest(name=name, cid=cid, version=13))
     access_response, create_chan_response = recv()
     access_response, create_chan_response
