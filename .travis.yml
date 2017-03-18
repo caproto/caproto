@@ -21,7 +21,6 @@ before_install:
   - export EPICS_CA_AUTO_ADDR_LIST="no"
   - export EPICS_CA_MAX_ARRAY_BYTES=10000000
   - export DOCKERIMAGE="klauer/epics-docker"
-  - export CONDA_ENV="testenv"
 
   - perl --version
   - git fetch --unshallow
