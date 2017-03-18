@@ -57,7 +57,7 @@ readable:
     data
 
 Hurray it worked? Unless you possess some Davidsaver-like talent for reading 
-Channel Access hex codes the way Neo experiences the Matrix, you may wants a
+Channel Access hex codes the way Neo experiences the Matrix, you may want a
 better way. Caproto provides a higher level of abstraction, *Commands*, so that
 we don't need to work with raw bytes. Let's try this again using caproto.
 
