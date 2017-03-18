@@ -33,6 +33,7 @@ a bring-your-own-IO implementation of the EPICS Channel Access protocol
 * [x] Publish documentation.
 * [x] Write an example implementation of a client.
 * [x] Write an example implementation of a server.
+* [ ] Review state machines.
 * [ ] Write pytest tests to exercise examples.
 * [ ] Test read/write of every DBR type.
 * [ ] Benchmark!

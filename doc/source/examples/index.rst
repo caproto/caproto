@@ -3,7 +3,8 @@ Examples
 ********
 
 Caproto includes some example implementations of simple clients and servers,
-for illustration and benchmarking purposes, the module :mod:`caproto.examples`.
+for illustration and benchmarking purposes, in the module
+:mod:`caproto.examples`.
 
 .. toctree::
 
