@@ -28,8 +28,6 @@ To begin, we need a UDP socket.
     import socket
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    udp_sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_LOOP, 1)
 
 A new Channel Access client is required to register itself with a *Repeater*,
 an independent process that rebroadcasts all UDP traffic on a given host. To
@@ -40,8 +38,7 @@ This is effective, but no very readable:
 .. ipython:: python
 
     bytes_to_send = b'\x00\x18\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
-    import os
-    udp_sock.sendto(bytes_to_send, (os.environ['EPICS_CA_ADDR_LIST'], 5065))
+    udp_sock.sendto(bytes_to_send, ('', 5065))
 
 .. ipython:: python
 
@@ -65,8 +62,6 @@ make a :class:`caproto.Broadcaster`.
 
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    udp_sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_LOOP, 1)
     import caproto
     b = caproto.Broadcaster(our_role=caproto.CLIENT)
 
@@ -87,7 +82,7 @@ Transport those bytes over the wire.
 
 .. ipython:: python
 
-    udp_sock.sendto(bytes_to_send, (os.environ['EPICS_CA_ADDR_LIST'], 5065))
+    udp_sock.sendto(bytes_to_send, ('', 5065))
 
 These bytes are same bytes we assembled manually before:
 
