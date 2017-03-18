@@ -152,11 +152,20 @@ Searching for a Channel
 -----------------------
 
 Say we're looking for a channel ("Process Variable") with a typically lyrical
-EPICS name like :data:`"XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"`.
+EPICS name like :data:`"XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"`. Some server on our
+network provides this channel. The range of IP addresses to search is typically
+set in an environment variable.
+
+.. ipython:: python
+
+    import os
+    hosts = os.environ['EPICS_CA_ADDR_LIST']  # example: '172.17.255.255'
 
 We need to broadcast a search request to the servers on our network and receive
-any responses. We follow the same pattern as above, still using our broadcaster
-``b``, our socket ``udp_sock``, and some new caproto commands.
+a response. (In the event that multiple responses arrive, Channel Access
+specifies that all but the first response should be ignored.) We follow the
+same pattern as above, still using our broadcaster ``b``, our socket
+``udp_sock``, and some new caproto commands.
 
 In a single UDP datagram, we need to announce which version of the protocol we
 are using and the channel name we are looking for.
@@ -166,7 +175,7 @@ are using and the channel name we are looking for.
     name  = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
     bytes_to_send = b.send(caproto.VersionRequest(priority=0, version=13),
                            caproto.SearchRequest(name=name, cid=0, version=13))
-    udp_sock.sendto(bytes_to_send, ('', 5064))
+    udp_sock.sendto(bytes_to_send, ('', hosts))
 
 Our answer will arrive in a single datagram with multiple commands in it.
 
