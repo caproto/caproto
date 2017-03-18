@@ -102,13 +102,13 @@ Transport those bytes over the wire.
 
     udp_sock.sendto(bytes_to_send, ('', 5065))
 
-These bytes are same bytes we assembled manually before:
+These bytes are the same bytes we spelled out manually before:
 
 .. ipython:: python
 
     bytes_to_send
     
-Why we need two steps here? Why doesn't caproto just send the bytes for us?
+Why do we need two steps here? Why doesn't caproto just send the bytes for us?
 Because it's designed to support any socket API you might want to use ---
 synchronous (like this example), asynchronous, etc. Caproto does not care how
 or when you send and receive the bytes. Its job is to make it easier to
@@ -155,8 +155,8 @@ Searching for a Channel
 
 Say we're looking for a channel ("Process Variable") with a typically lyrical
 EPICS name like :data:`"XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"`. Some server on our
-network provides this channel. The range of IP addresses to search is typically
-set in an environment variable.
+network provides this channel. The range of IP addresses to search is
+conventionally recorded in an environment variable.
 
 .. ipython:: python
 
@@ -257,9 +257,9 @@ We initialize the circuit by specifying our protcol version.
     send(caproto.VersionRequest(priority=0, version=13))
     recv()
 
-Optionally provide the host name, and "client" name, which the server may use
+Optionally provide the host name and "client" name, which the server may use
 to determine our read/write permissions on channels. (There is no
-authentication in Channel Access: security has to be provided at the network
+authentication in Channel Access; security has to be provided at the network
 level.)
 
 .. ipython:: python

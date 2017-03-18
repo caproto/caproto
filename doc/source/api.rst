@@ -33,16 +33,17 @@ provided by the Channel Access specification.
 
     com.header
 
-These names are rather opaque, but each Command provides accessors its data
-with more obvious names, corresponding to the names in the repr.
+These names are rather opaque, but each Command provides views on this same
+data through type-specific attributes with more obvious names. These are the
+same names used in the Command's ``__repr__()`` and ``__init__`` arguments.
 
 .. ipython:: python
 
     com.version
     com.priority
 
-This is a complete list of the Commands. (They are sorted in Command ID order,
-designated by the Channel Access spec.)
+This is a complete list of the Commands. They are sorted in Command ID order,
+designated by the Channel Access specification.
 
 .. autoclass:: VersionRequest
 .. autoclass:: VersionResponse
