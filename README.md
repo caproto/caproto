@@ -2,19 +2,10 @@
 
 a bring-your-own-IO implementation of the EPICS Channel Access protocol
 
-This is nowhere near a working prototype. It is a hobby project.
+[![Build Status](https://travis-ci.org/danielballan/caproto.svg?branch=master)](https://travis-ci.org/danielballan/caproto)
 
-This project is inspired by the broad effort in the Python community to write
-[sans-I/O implementations of network protocols](http://sans-io.readthedocs.io/).
-It manages the coupled state of EPICS Clients, VirtualCircuits, and Channels; it
-interprets received packets; and it composes valid packets to be sent. But,
-crucially, it performs no I/O itself. The developer is using this library is
-in complete control over when and how bytes are actually transmitted and
-received. The networking may be synchronous, threaded, asynchronous.
+[**Documentation**](https://github.com/danielballan/caproto)
 
-The aim is to provide a complete, reusable implementation of the Channel Access
-protocol in Python which can be wrapped in whichever network library you like
-best.
 
 ## TO DO
 
@@ -34,12 +25,16 @@ best.
 * [x] Accessing values as ``dbr_instance.value`` is clumsy. Change the API for
   simple types.
 * [x] Make DBR <-> Python type conversion as automatic and smooth as possible
-* [ ] Add tests that exercise subscribe/unsubscribe on the server side in
+* [x] Add tests that exercise subscribe/unsubscribe on the server side in
   test_server.py.
-* [ ] Test read/write of every DBR type.
-* [ ] Write a standalone script that acts as a CARepeater so we can test without
+* [x] Set up Travis CI.
+* [x] Write a standalone script that acts as a CARepeater so we can test without
   libca.
-* [ ] Write an example implementation of a client.
-* [ ] Write an example implementation of a server.
-* [ ] Set up Travis CI.
-* [ ] Publish documentation.
+* [x] Publish documentation.
+* [x] Write an example implementation of a client.
+* [x] Write an example implementation of a server.
+* [ ] Write pytest tests to exercise examples.
+* [ ] Test read/write of every DBR type.
+* [ ] Benchmark!
+* [ ] Submit patch to upstream EPICS spec documentation.
+* [ ] Test against catvs.
