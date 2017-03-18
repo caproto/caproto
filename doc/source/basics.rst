@@ -29,6 +29,11 @@ To begin, we need a UDP socket.
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 
+.. ipython:: python
+    :suppress:
+
+    udp_sock.settimeout(2)  # should never be tripped, but it help to debug
+
 A new Channel Access client is required to register itself with a *Repeater*,
 an independent process that rebroadcasts all UDP traffic on a given host. To
 register, we must send a *request* to the Repeater and recive a *response*.
@@ -62,8 +67,14 @@ make a :class:`caproto.Broadcaster`.
 
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+
     import caproto
     b = caproto.Broadcaster(our_role=caproto.CLIENT)
+
+.. ipython:: python
+    :suppress:
+
+    udp_sock.settimeout(2)  # should never be tripped, but it help to debug
 
 Make the command we want to send.
 
