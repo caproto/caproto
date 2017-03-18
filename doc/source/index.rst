@@ -35,9 +35,10 @@ of *libca* that makes libraries like these easier to write in the
 future. See the `sans-I/O documentation <http://sans-io.readthedocs.io/>`_ for
 more on the why and how of this idea and for a list of related projects.
 
-This entire implementation, including copious docstrings and comments, is
-shorter than official webpage documenting the Channel Access specification. The
-codebase itself may serve as useful introduction to Channel Access concepts.
+This entire implementation is shorter than the
+`webpage documenting the Channel Access protocol documentation <http://www.aps.anl.gov/epics/base/R3-16/0-docs/CAproto/index.html>`_.
+The codebase itself may serve as useful introduction to Channel Access
+concepts.
 
 Vital Statistics
 ================
@@ -57,7 +58,8 @@ How do you know it works?
   the potential for bugs introduced by human transcription. Where we
   found errors in the documentation, we fixed them and submitted a patch
   upstream. (NOTE: This is a reminder to submit a patch.)
-* It passes the server test spec https://github.com/mdavidsaver/catvs (NOTE: As
+* It passes the server test spec
+  `catvs <https://github.com/mdavidsaver/catvs>`_ (NOTE: As
   of this writing, this is not true! It's here as a reminder to make it true
   before we publish this documentation.)
 * The byte sizes of the DBR types compare exactly to those in pyepics.

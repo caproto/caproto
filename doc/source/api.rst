@@ -171,19 +171,19 @@ And we can test the current state using constants like
 
     circuit.states[caproto.SERVER] is caproto.SEND_VERSION_RESPONSE
 
-Notice the special constants to represent which role a peer is playing,
+Notice the special constants to represent which role a peer is playing.
 
 .. data:: CLIENT
           SERVER
 
-Special constants are also used to represent the nature of a command
+Special constants are also used to represent the "direction" of a command.
 
 .. data:: RESPONSE
           REQUEST
 
-and as a sentinel "Command" returned by :meth:`Broadcaster.next_command` and
-:meth:`VirtualCircuit.next_command` when more data needs to be received
-before any new Commands can be parsed.
+Another special constant serves as a sentinel "Command" returned by
+:meth:`Broadcaster.next_command` and :meth:`VirtualCircuit.next_command` when
+more data needs to be received before any new Commands can be parsed.
 
 .. data:: NEED_DATA
 
@@ -191,7 +191,7 @@ Borrowing a trick (one of many!) from the h11 project, these special constants
 are modeled after ``None``: they’re singletons, their ``__repr__()`` is
 their name, and you compare them with ``is``.  They are also *instances of
 themselves*. This can be useful if you have some object ``obj`` that might be a
-Command or might be a sentinel (e.g. :data:`NEED_DATA`). You can always call
+Command or might be a sentinel (e.g. :class:`NEED_DATA`). You can always call
 ``type(obj)`` and get something useful.
 
 The VirtualCircuit object
@@ -286,7 +286,7 @@ Exceptions
 All exceptions directly raised by caproto inherit from :class:`CaprotoError`.
 
 Errors like :class:`CaprotoKeyError` inherit from both :class:`CaprotoError`
-and the built-in Python `KeyError`.
+and the built-in Python :class:`KeyError`.
 
 The only special exceptions raised by caproto are :class:`LocalProtocolError`
 and :class:`RemoteProtocolError`. These inherit from
