@@ -130,8 +130,12 @@ The state machines look like this. Click on each to expand.
       :width: 100%
 
 +------------------+------------------+
+| Channel (Client) | Channel (Server) |
+|                  |                  |
 | |channel-client| | |channel-server| |
 +------------------+------------------+
+| Circuit (Client) | Circuit (Server) |
+|                  |                  |
 | |circuit-client| | |circuit-server| |
 +------------------+------------------+
 
