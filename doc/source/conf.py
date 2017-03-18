@@ -1,3 +1,5 @@
+import sys
+import os
 import caproto
 import sphinx_rtd_theme
 #!/usr/bin/env python3
@@ -45,6 +47,7 @@ extensions = [
     'numpydoc',
 ]
 
+sys._caproto_hack_docs_source_path = os.path.dirname(__file__)
 autosummary_generate = True
 numpydoc_show_class_members = False
 
