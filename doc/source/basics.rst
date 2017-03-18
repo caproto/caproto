@@ -175,7 +175,7 @@ are using and the channel name we are looking for.
     name  = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
     bytes_to_send = b.send(caproto.VersionRequest(priority=0, version=13),
                            caproto.SearchRequest(name=name, cid=0, version=13))
-    udp_sock.sendto(bytes_to_send, ('', hosts))
+    udp_sock.sendto(bytes_to_send, (hosts, 5064))
 
 Our answer will arrive in a single datagram with multiple commands in it.
 
