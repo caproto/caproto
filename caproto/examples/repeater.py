@@ -45,7 +45,6 @@ class RemoteDatagramProtocol(asyncio.DatagramProtocol):
         confirmation_bytes = self.proxy.broadcaster.send(confirmation)
         self.transport.sendto(confirmation_bytes)
         print('sent confirmation to', self.addr)
-        self.transport.sendto(self.data)
 
     def datagram_received(self, data, sender_addr):
         self.proxy.transport.sendto(data, self.addr)
