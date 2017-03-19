@@ -1,5 +1,8 @@
 *.swp
+doc/source/_static
 caproto/__pycache__
 caproto.egg-info
 __pycache__/
 doc/build
+.cache/
+.coverage
