@@ -1,2 +1,7 @@
 [run]
 source = caproto
+
+[report]
+omit =
+    caproto/generate_headers.py
+    caproto/_version.py
