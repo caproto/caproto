@@ -92,6 +92,9 @@ h11 is distributed under an MIT license.
 And of course many resources from the EPICS developer community were
 indispensible. See :doc:`references`.
 
+Contents
+========
+
 .. toctree::
    :maxdepth: 2
 
