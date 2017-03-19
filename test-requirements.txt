@@ -1,0 +1,4 @@
+pytest
+coverage
+codecov
+curio
