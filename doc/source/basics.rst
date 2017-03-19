@@ -250,7 +250,7 @@ We'll use these two convenience functions for what follows.
             commands.append(command)
         return commands
 
-We initialize the circuit by specifying our protcol version.
+We initialize the circuit by specifying our protocol version.
 
 .. ipython:: python
 
@@ -391,12 +391,12 @@ In the example above, we handled a :class:`VirtualCircuit` and several
 different commands. The :class:`VirtualCircuit` policed our adherence to the
 Channel Access protocol by watching incoming and outgoing commands and tracking
 the state of the circuit itself and the state(s) of the channel(s) on the
-circuit.  To facilitate this, it creates a :class:`ClientChannel` object for
-each channel to encapsulate its state and stash bookkeeping details like
-``cid`` and ``sid``.
+circuit. Internally, to facilitate this, it creates a :class:`ClientChannel`
+object for each channel to encapsulate its state and stash bookkeeping details
+like ``cid`` and ``sid``.
 
 Using these objects directly can help us juggle IDs and generate valid commands
-more succintly. This API is purely optional, and using it does not affect
+more succinctly. This API is purely optional, and using it does not affect
 the state machines.
 
 See how much more succinct our example becomes:
