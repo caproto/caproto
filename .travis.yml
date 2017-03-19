@@ -41,11 +41,18 @@ install:
   - python caproto/examples/repeater.py & # run a repeater
 
 script:
+  - pip install -r test-requirements.txt
+  - coverage run run_tests.py
+  - coverage report -m
   - set -e
   # Install deps for building the docs.
-  - pip install sphinx sphinx_rtd_theme numpydoc doctr ipython matplotlib graphviz
+  - pip install -r docs-requirements.txt
   # Build the docs.
   - cd doc
   - make html
   # Upload the docs to gh-pages.
   - doctr deploy .
+  - cd ..
+
+after_success:
+  - codecov
