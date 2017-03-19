@@ -1,4 +1,5 @@
 import caproto as ca
+import os
 import time
 import socket
 import getpass
@@ -35,7 +36,7 @@ def recv(circuit):
 def main():
     # A broadcast socket
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-    udp_sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
+    udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     
     # Register with the repeater.
     bytes_to_send = b.send(ca.RepeaterRegisterRequest('0.0.0.0'))
@@ -51,7 +52,8 @@ def main():
     # one datagram.
     bytes_to_send = b.send(ca.VersionRequest(0, 13),
                            ca.SearchRequest(pv1, 0, 13))
-    udp_sock.sendto(bytes_to_send, ('', CA_SERVER_PORT))
+    hosts = os.environ['EPICS_CA_ADDR_LIST']
+    udp_sock.sendto(bytes_to_send, (hosts, CA_SERVER_PORT))
     print('searching for %s' % pv1)
     # Receive a VersionResponse and SearchResponse.
     bytes_received, address = udp_sock.recvfrom(1024)
