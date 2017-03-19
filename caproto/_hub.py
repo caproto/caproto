@@ -595,7 +595,7 @@ class ClientChannel(_BaseChannel):
     (2) A VirtualCircuit processes a CreateChanRequest that refers to a cid
     that it has not yet seen. A ClientChannel will be automatically
     instantiated with the name and cid indicated that command and the address
-    and priority of that VirtualCircuit. It can be access in the circuit's
+    and priority of that VirtualCircuit. It can be accessed in the circuit's
     ``channels`` attribute.
 
     Parameters

@@ -8,7 +8,7 @@ Python.
 
 This project is inspired by the broad effort in the Python community to write
 `sans-I/O implementations of network protocols <http://sans-io.readthedocs.io/>`_. The EPICS (Experimental Physics and Industrial Control System) Channel Access
-protocol is used in laboratories and comparies
+protocol is used in laboratories and companies
 `around the world <https://en.wikipedia.org/wiki/EPICS#Facilities_using_EPICS>`_
 to implement distributed control systems for devices such as large telescopes,
 particle accelerators, and synchrotrons. Its
@@ -50,7 +50,7 @@ How do you know it works?
 =========================
 
 * It can talk to libca as a client --- for example, reading, writing to, and
-  monitoring the simulated motor ioc, motorsim.
+  monitoring the simulated motor IOC, motorsim.
 * It can talk to libca as a server --- for example, responding correctly to
   caget, caput, camonitor.
 * The Python module that specifies the byte layout of each command is generated

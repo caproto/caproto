@@ -19,7 +19,7 @@ Take :class:`VersionRequest` as an example.
     import caproto
     com = caproto.VersionRequest(version=13, priority=0)
 
-A Command has a useful repr:
+A Command has a useful ``__repr__()``:
 
 .. ipython:: python
 
