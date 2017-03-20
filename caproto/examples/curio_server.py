@@ -115,11 +115,8 @@ class Context:
                     if (not known_pv) and command.reply == ca.NO_REPLY:
                         responses.clear()
                         break  # Do not send any repsonse to this datagram.
-                    # TODO This is just hacking...
-                    hostname = await socket.gethostname()
-                    host = await socket.gethostbyaddr(hostname)
-                    ip = host[-1][0]
-                    res = ca.SearchResponse(self.port, ip, 1, 13)
+                    ip = _get_my_ip()
+                    res = ca.SearchResponse(self.port, ip, command.cid, 13)
                     responses.append(res)
 
     async def tcp_handler(self, client, addr):
@@ -138,6 +135,18 @@ class Context:
         udp_task = await curio.spawn(self.udp_server())
         await udp_task.join()
         await tcp_task.join()
+
+
+def _get_my_ip():
+    # Reliably getting the IP is a surprisingly tricky problem solved by this
+    # crazy one-liner from http://stackoverflow.com/a/1267524/1221924
+    # This uses the synchronous socket API, not the curio one, which we should
+    # eventually fix.
+    import socket
+    try:
+        return [l for l in ([ip for ip in socket.gethostbyname_ex(socket.gethostname())[2] if not ip.startswith("127.")][:1], [[(s.connect(('8.8.8.8', 53)), s.getsockname()[0], s.close()) for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]]) if l][0][0]
+    except Exception:
+        return '127.0.0.1'
 
 
 if __name__ == '__main__':

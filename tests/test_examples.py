@@ -45,6 +45,8 @@ def test_curio_server(kernel):
         ctx = client.Context()
         await ctx.register()
         await ctx.search('pi')
+        print('done searching')
+        chan1 = await ctx.create_channel('pi')
         chan1.register_user_callback(user_callback)
         # ...and then wait for all the responses.
         await chan1.wait_for_connection()
@@ -64,8 +66,7 @@ def test_curio_server(kernel):
     async def task():
         server_task = await curio.spawn(run_server())
         await curio.sleep(5)
-        client_task = await curio.spawn(run_client())
-        await client_task.join()
+        client_task = await run_client()
         await kernel_task.kill()
 
     curio.run(task())

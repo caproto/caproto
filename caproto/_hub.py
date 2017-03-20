@@ -449,13 +449,13 @@ class Broadcaster:
                                      "other commands")
         elif isinstance(command, SearchRequest):
             if VersionRequest not in map(type, history):
-                err = get_exception(self, command)
+                err = get_exception(self.our_role, command)
                 raise err("A broadcasted SearchResponse must be preceded by a "
                           "VersionResponse in the same datagram.")
             self.unanswered_searches[command.cid] = command.name
         elif isinstance(command, SearchResponse):
             if VersionResponse not in map(type, history):
-                err = get_exception(self, command)
+                err = get_exception(self.our_role, command)
                 raise err("A broadcasted SearchResponse must be preceded by a "
                           "VersionResponse in the same datagram.")
             try:
@@ -977,5 +977,5 @@ def extract_address(search_response):
         # the UDP datagram.
         address = search_response.sender_address
     else:
-        address = search_response.sid, search_response.port
+        address = search_response.ip, search_response.port
     return address
