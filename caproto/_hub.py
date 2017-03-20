@@ -62,7 +62,7 @@ class VirtualCircuit:
         self.log = logging.getLogger("caproto.VC")
         self.states = CircuitState(self.channels)
         self._data = bytearray()
-        self._channels_sid = {}  # map sid to Channel
+        self.channels_sid = {}  # map sid to Channel
         self._ioids = {}  # map ioid to Channel
         self.event_add_commands = {}  # map subscriptionid to EventAdd command
         # There are only used by the convenience methods, to auto-generate ids.
@@ -173,7 +173,7 @@ class VirtualCircuit:
                 # Identify the Channel based on its sid.
                 sid = command.sid
                 try:
-                    chan = self._channels_sid[sid]
+                    chan = self.channels_sid[sid]
                 except KeyError:
                     err = get_exception(self.our_role, command)
                     raise err("Unknown Channel sid {!r}".format(command.sid))
@@ -194,7 +194,7 @@ class VirtualCircuit:
                     err = get_exception(self.our_role, command)
                     raise err("Unrecognized subscriptionid {!r}"
                               "".format(command.subscriptionid))
-                chan = self._channels_sid[event_add.sid]
+                chan = self.channels_sid[event_add.sid]
             elif isinstance(command, CreateChanRequest):
                 # A Channel instance for this cid may already exist.
                 try:
@@ -254,9 +254,9 @@ class VirtualCircuit:
                 chan.access_rights = command.access_rights
             if isinstance(command, CreateChanResponse):
                 chan.sid = command.sid
-                self._channels_sid[chan.sid] = chan
+                self.channels_sid[chan.sid] = chan
             elif isinstance(command, ClearChannelResponse):
-                self._channels_sid.pop(chan.sid)
+                self.channels_sid.pop(chan.sid)
                 self.channels.pop(chan.cid)
             elif isinstance(command, (ReadNotifyRequest, WriteNotifyRequest)):
                 # Stash the ioid for later reference.

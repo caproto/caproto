@@ -61,19 +61,19 @@ class VirtualCircuit:
                 ca.CreateChanResponse(data_type=2, data_count=1,
                                       cid=command.cid, sid=1))
         elif isinstance(command, ca.ReadNotifyRequest):
-            chan = self.circuit.channels[command.sid]
+            chan = self.circuit.channels_sid[command.sid]
             await self.send(chan.read(values=(3.14,), ioid=command.ioid))
         elif isinstance(command, ca.WriteNotifyRequest):
-            chan = self.circuit.channels[command.sid]
+            chan = self.circuit.channels_sid[command.sid]
             await self.send(chan.write(ioid=command.ioid))
         elif isinstance(command, ca.EventAddRequest):
-            chan = self.circuit.channels[command.sid]
+            chan = self.circuit.channels_sid[command.sid]
             await self.send(chan.subscribe((3.14,), command.subscriptionid))
         elif isinstance(command, ca.EventCancelRequest):
-            chan = self.circuit.channels[command.sid]
+            chan = self.circuit.channels_sid[command.sid]
             await self.send(chan.unsubscribe(command.subscriptionid))
         elif isinstance(command, ca.ClearChannelRequest):
-            chan = self.circuit.channels[command.sid]
+            chan = self.circuit.channels_sid[command.sid]
             await self.send(chan.clear())
         #event = self.event
         #self.event = None
