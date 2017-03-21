@@ -252,7 +252,13 @@ class VirtualCircuit:
             # Update other Channel and Circuit state.
             if isinstance(command, AccessRightsResponse):
                 chan.access_rights = command.access_rights
-            if isinstance(command, CreateChanResponse):
+            elif (isinstance(command, CreateChanRequest) and
+                    self.our_role is SERVER):
+                chan.sid = self.new_channel_id()
+                command.sid = chan.sid  # to notify server of sid it should use
+                self.channels_sid[chan.sid] = chan
+            elif (isinstance(command, CreateChanResponse) and
+                    self.our_role is CLIENT):
                 chan.sid = command.sid
                 self.channels_sid[chan.sid] = chan
             elif isinstance(command, ClearChannelResponse):
