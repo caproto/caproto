@@ -135,8 +135,6 @@ def data_payload(values, data_type, data_count, *, metadata=None):
                     # raise ValueError('Invalid metadata for {}={} ({})'
                     #                  ''.format(attr, value, ex))
                     print('set metadata fail', attr, value)
-                else:
-                    print('set', metadata, attr, value)
     payload.value = value_payload.value
 
     payload = bytes(payload)
