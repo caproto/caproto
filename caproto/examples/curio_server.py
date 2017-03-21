@@ -49,35 +49,40 @@ class VirtualCircuit:
                 await self.recv()
                 continue
             break
-        # TODO Split this off into _process_command.
-        # Maybe also split sending into separate func?
+
+        for response_command in self._process_command(command):
+            if isinstance(response_command, (list, tuple)):
+                await self.send(*response_command)
+            else:
+                await self.send(response_command)
+
+        return command
+
+    def _process_command(self, command):
         if isinstance(command, ca.CreateChanRequest):
-            await self.send(
-                ca.VersionResponse(13),
-                ca.AccessRightsResponse(cid=command.cid, access_rights=3),
-                # TODO Handle sid propertly
-                ca.CreateChanResponse(data_type=2, data_count=1,
-                                      cid=command.cid, sid=1))
+            yield [ca.VersionResponse(13),
+                   ca.AccessRightsResponse(cid=command.cid, access_rights=3),
+                   # TODO Handle sid propertly
+                   ca.CreateChanResponse(data_type=2, data_count=1,
+                                         cid=command.cid, sid=1),
+                   ]
+
         elif isinstance(command, ca.ReadNotifyRequest):
             chan = self.circuit.channels_sid[command.sid]
-            await self.send(chan.read(values=(3.14,), ioid=command.ioid))
+            yield chan.read(values=(3.14,), data_type=command.data_type,
+                            ioid=command.ioid)
         elif isinstance(command, ca.WriteNotifyRequest):
             chan = self.circuit.channels_sid[command.sid]
-            await self.send(chan.write(ioid=command.ioid))
+            yield chan.write(ioid=command.ioid)
         elif isinstance(command, ca.EventAddRequest):
             chan = self.circuit.channels_sid[command.sid]
-            await self.send(chan.subscribe((3.14,), command.subscriptionid))
+            yield chan.subscribe((3.14,), command.subscriptionid)
         elif isinstance(command, ca.EventCancelRequest):
             chan = self.circuit.channels_sid[command.sid]
-            await self.send(chan.unsubscribe(command.subscriptionid))
+            yield chan.unsubscribe(command.subscriptionid)
         elif isinstance(command, ca.ClearChannelRequest):
             chan = self.circuit.channels_sid[command.sid]
-            await self.send(chan.clear())
-        #event = self.event
-        #self.event = None
-        #await event.set()
-        #return command
-        return command
+            yield chan.clear()
 
 
 class Context:
@@ -87,7 +92,7 @@ class Context:
         self.pvdb = pvdb
         self.broadcaster = ca.Broadcaster(our_role=ca.SERVER)
         self.broadcaster.log.setLevel('DEBUG')
-    
+
     async def udp_server(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
