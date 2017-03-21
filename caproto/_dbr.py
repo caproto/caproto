@@ -866,6 +866,7 @@ control_types = (ChType.CTRL_STRING, ChType.CTRL_INT, ChType.CTRL_SHORT,
 
 char_types = (ChType.CHAR, ChType.TIME_CHAR, ChType.CTRL_CHAR)
 native_float_types = (ChType.FLOAT, ChType.DOUBLE)
+native_int_types = (ChType.INT, ChType.CHAR, ChType.LONG, ChType.ENUM)
 
 
 try:

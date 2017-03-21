@@ -862,7 +862,8 @@ class ServerChannel(_BaseChannel):
         command = ClearChannelResponse(self.sid, self.cid)
         return command
 
-    def read(self, values, ioid, data_type=None, data_count=None, status=1):
+    def read(self, values, ioid, data_type=None, data_count=None, status=1, *,
+             metadata=None):
         """
         Generate a valid :class:`ReadNotifyResponse`.
 
@@ -880,6 +881,8 @@ class ServerChannel(_BaseChannel):
             :attr:`native_data_count`.
         status : integer, optional
             Default is 1 (success).
+        metadata :
+            Status and control metadata for the values
 
         Returns
         -------
@@ -887,7 +890,7 @@ class ServerChannel(_BaseChannel):
         """
         data_type, data_count = self._fill_defaults(data_type, data_count)
         command = ReadNotifyResponse(values, data_type, data_count, status,
-                                     ioid)
+                                     ioid, metadata=metadata)
         return command
 
     def write(self, ioid, data_type=None, data_count=None, status=1):
