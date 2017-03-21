@@ -47,7 +47,7 @@ from ._headers import (MessageHeader, ExtendedMessageHeader,
 
 from ._dbr import (DBR_INT, DBR_STRING, DBR_TYPES, DO_REPLY, NO_REPLY,
                    ChannelType, float_t, short_t, to_builtin, ushort_t,
-                   native_type)
+                   native_type, timestamp_to_epics)
 
 from ._utils import (CLIENT, NEED_DATA, REQUEST, RESPONSE,
                      SERVER, CaprotoTypeError, CaprotoValueError)
@@ -101,7 +101,7 @@ metadata_keywords = ('timestamp', 'status', 'severity', 'strs',
                      'upper_alarm_limit', 'upper_warning_limit',
                      'lower_warning_limit', 'lower_alarm_limit',
                      'upper_ctrl_limit', 'lower_ctrl_limit',
-                     'precision',
+                     'precision', 'timestamp',
                      )
 
 
@@ -121,13 +121,24 @@ def data_payload(values, data_type, data_count, *, metadata=None):
 
     payload = DBR_TYPES[data_type]()
 
-    print('md' ,metadata)
     if metadata:
         for attr in metadata_keywords:
+            # TODO note that some facilities use the nanosecond integer as
+            # a lossless event id and conversion to float is not a good thing
+            # ... should incorporate that into the logic here
+            if attr == 'timestamp':
+                if (hasattr(metadata, 'timestamp') and
+                        hasattr(payload, 'secondsSinceEpoch') and
+                        hasattr(payload, 'nanoSeconds')):
+                    sec, ns = timestamp_to_epics(metadata.timestamp)
+                    payload.secondsSinceEpoch = sec
+                    payload.nanoSeconds = ns
+
             if hasattr(metadata, attr) and hasattr(payload, attr):
                 value = getattr(metadata, attr)
                 if isinstance(value, str):
                     value = value.encode('latin-1')
+
                 try:
                     setattr(payload, attr, value)
                 except Exception as ex:

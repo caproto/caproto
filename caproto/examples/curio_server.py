@@ -41,7 +41,6 @@ class DatabaseRecordBase:
         self.status = status
         self.severity = severity
         self.value = value
-        # self.channel = caproto.ServerChannel()
 
     def __len__(self):
         try:
