@@ -940,7 +940,7 @@ class ServerChannel(_BaseChannel):
                                    subscriptionid)
         return command
 
-    def unsubscribe(self, subscriptionid, data_type=None, data_count=None):
+    def unsubscribe(self, subscriptionid, data_type=None):
         """
         Generate a valid :class:`EventCancelResponse`.
 
@@ -951,17 +951,14 @@ class ServerChannel(_BaseChannel):
             Requested Channel Access data type. Default is the channel's
             native data type, which can be checked in the Channel's attribute
             :attr:`native_data_type`.
-        data_count : integer, optional
-            Requested number of values. Default is the channel's native data
-            count, which can be checked in the Channel's attribute
-            :attr:`native_data_count`.
 
         Returns
         -------
         EventCancelResponse
         """
-        # TODO How does CA actually work? It seems to break its spec.
-        ...
+        data_type, _ = self._fill_defaults(data_type, None)
+        command  = EventCancelResponse(data_type, self.sid, subscriptionid)
+        return command
 
 
 def extract_address(search_response):
