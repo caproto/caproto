@@ -26,7 +26,7 @@ def test_curio_client():
     main()
 
 
-def test_curio_server(kernel):
+def test_curio_server():
     import caproto.examples.curio_server as server
     import caproto.examples.curio_client as client
 
@@ -66,11 +66,12 @@ def test_curio_server(kernel):
 
     async def task():
         server_task = await curio.spawn(run_server())
-        await curio.sleep(1)
+        await curio.sleep(1)  # Give server some time to start up.
         client_task = await run_client()
         print('client is done')
         await server_task.cancel()
-        print('server is canceled', server_task.cancelled)
+        print('server is canceled', server_task.cancelled)  # prints True
 
     curio.run(task)
+    # seems to hang here
     print('done')
