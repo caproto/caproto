@@ -6,11 +6,13 @@
 # Lauer.
 
 import ctypes
+import datetime
 from enum import IntEnum
 from collections import namedtuple
 
 # EPICS2UNIX_EPOCH = 631173600.0 - time.timezone
 EPICS2UNIX_EPOCH = 631152000.0
+EPICS_EPOCH = datetime.datetime.fromtimestamp(EPICS2UNIX_EPOCH)
 
 MAX_STRING_SIZE = 40
 MAX_UNITS_SIZE = 8
@@ -44,6 +46,15 @@ def epics_timestamp_to_unix(seconds_since_epoch, nano_seconds):
     '''UNIX timestamp (seconds) from Epics TimeStamp structure'''
     return (EPICS2UNIX_EPOCH + seconds_since_epoch + 1.e-6 *
             int(1.e-3 * nano_seconds))
+
+
+def timestamp_to_epics(ts):
+    '''Python timestamp from EPICS TimeStamp structure'''
+    # TODO this is not quite right and is also rather important
+    if isinstance(ts, float):
+        ts = datetime.datetime.fromtimestamp(ts)
+    dt = ts - EPICS_EPOCH
+    return int(dt.total_seconds()), int(dt.microseconds * 1e3)
 
 
 class DBR_STRING(ctypes.BigEndianStructure):
