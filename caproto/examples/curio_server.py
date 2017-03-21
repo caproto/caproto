@@ -5,6 +5,8 @@ import curio
 from curio import socket
 
 import caproto as ca
+from caproto import _dbr as dbr
+from caproto import ChType
 
 
 SERVER_PORT = 5064
@@ -12,6 +14,21 @@ SERVER_PORT = 5064
 
 class DisconnectedCircuit(Exception):
     ...
+
+
+def convert_to(values, from_dtype, to_dtype):
+    if from_dtype == to_dtype:
+        return values
+
+    if (from_dtype in dbr.native_float_types and to_dtype in
+            dbr.native_int_types):
+        # TODO performance
+        values = [int(v) for v in values]
+    elif to_dtype in (ChType.STRING, ChType.STS_STRING, ChType.TIME_STRING,
+                      ChType.CTRL_STRING):
+        values = [str(v) for v in values]
+
+    return values
 
 
 class DatabaseRecordBase:
@@ -128,6 +145,10 @@ class VirtualCircuit:
         return command
 
     def _process_command(self, command):
+        def get_db_entry():
+            chan = self.circuit.channels_sid[command.sid]
+            return chan, chan.db_entry
+
         if isinstance(command, ca.CreateChanRequest):
             chan = self.circuit.channels_sid[command.sid]
             if not hasattr(chan, 'db_entry'):
@@ -147,20 +168,28 @@ class VirtualCircuit:
                    ]
 
         elif isinstance(command, ca.ReadNotifyRequest):
-            chan = self.circuit.channels_sid[command.sid]
-            yield chan.read(values=(3.14,), data_type=command.data_type,
-                            ioid=command.ioid)
+            chan, db_entry = get_db_entry()
+            values = db_entry.value
+            try:
+                len(values)
+            except TypeError:
+                values = [values, ]
+
+            yield chan.read(values=convert_to(values, db_entry.data_type,
+                                              command.data_type),
+                            data_type=command.data_type, ioid=command.ioid,
+                            metadata=db_entry)
         elif isinstance(command, ca.WriteNotifyRequest):
-            chan = self.circuit.channels_sid[command.sid]
+            chan, db_entry = get_db_entry()
             yield chan.write(ioid=command.ioid)
         elif isinstance(command, ca.EventAddRequest):
-            chan = self.circuit.channels_sid[command.sid]
+            chan, db_entry = get_db_entry()
             yield chan.subscribe((3.14,), command.subscriptionid)
         elif isinstance(command, ca.EventCancelRequest):
-            chan = self.circuit.channels_sid[command.sid]
+            chan, db_entry = get_db_entry()
             yield chan.unsubscribe(command.subscriptionid)
         elif isinstance(command, ca.ClearChannelRequest):
-            chan = self.circuit.channels_sid[command.sid]
+            chan, db_entry = get_db_entry()
             yield chan.clear()
 
 
@@ -237,7 +266,18 @@ def _get_my_ip():
 
 
 if __name__ == '__main__':
-    pvdb = {'pi': DatabaseRecordDouble(value=3.14),
+    pvdb = {'pi': DatabaseRecordDouble(value=3.14,
+                                       lower_disp_limit=3.13,
+                                       upper_disp_limit=3.15,
+                                       lower_alarm_limit=3.12,
+                                       upper_alarm_limit=3.16,
+                                       lower_warning_limit=3.11,
+                                       upper_warning_limit=3.17,
+                                       lower_ctrl_limit=3.10,
+                                       upper_ctrl_limit=3.18,
+                                       precision=5,
+                                       units='doodles',
+                                       ),
             }
     ctx = Context('0.0.0.0', SERVER_PORT, pvdb)
     curio.run(ctx.run())
