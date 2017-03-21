@@ -40,10 +40,10 @@ stsack_string_t = 40 * ctypes.c_char # epicsOldString
 class_name_t = 40 * ctypes.c_char  # epicsOldString
 
 
-def epics_timestamp_to_unix(secondsSinceEpoch, nanoSeconds):
+def epics_timestamp_to_unix(seconds_since_epoch, nano_seconds):
     '''UNIX timestamp (seconds) from Epics TimeStamp structure'''
-    return (EPICS2UNIX_EPOCH + secondsSinceEpoch + 1.e-6 *
-            int(1.e-3 * nanoSeconds))
+    return (EPICS2UNIX_EPOCH + seconds_since_epoch + 1.e-6 *
+            int(1.e-3 * nano_seconds))
 
 
 class DBR_STRING(ctypes.BigEndianStructure):
