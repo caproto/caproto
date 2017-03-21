@@ -46,7 +46,8 @@ from ._headers import (MessageHeader, ExtendedMessageHeader,
                        )
 
 from ._dbr import (DBR_INT, DBR_STRING, DBR_TYPES, DO_REPLY, NO_REPLY,
-                   ChannelType, float_t, short_t, to_builtin, ushort_t)
+                   ChannelType, float_t, short_t, to_builtin, ushort_t,
+                   native_type)
 
 from ._utils import (CLIENT, NEED_DATA, REQUEST, RESPONSE,
                      SERVER, CaprotoTypeError, CaprotoValueError)
@@ -94,13 +95,52 @@ def padded_string_payload(name):
     return size, payload
 
 
-def data_payload(values, data_type, data_count):
-    size = data_count * ctypes.sizeof(DBR_TYPES[data_type])
+# TODO re-arrange and tweak as desired
+metadata_keywords = ('timestamp', 'status', 'severity', 'strs',
+                     'units', 'lower_disp_limit', 'upper_disp_limit',
+                     'upper_alarm_limit', 'upper_warning_limit',
+                     'lower_warning_limit', 'lower_alarm_limit',
+                     'upper_ctrl_limit', 'lower_ctrl_limit',
+                     'precision',
+                     )
+
+
+def data_payload(values, data_type, data_count, *, metadata=None):
+    ntype = native_type(data_type)
+    size = ctypes.sizeof(DBR_TYPES[data_type])
+
+    if ntype != data_type:
+        size += (data_count - 1) * ctypes.sizeof(DBR_TYPES[ntype])
+
     if data_count != 1:
+        # TODO this needs some work
         assert data_count == len(values)
-        payload = b''.join(map(bytes, values))
+        value_payload = b''.join(map(bytes, values))
     else:
-        payload = bytes(DBR_TYPES[data_type](*values))
+        value_payload = DBR_TYPES[ntype](*values)
+
+    payload = DBR_TYPES[data_type]()
+
+    print('md' ,metadata)
+    if metadata:
+        for attr in metadata_keywords:
+            if hasattr(metadata, attr) and hasattr(payload, attr):
+                value = getattr(metadata, attr)
+                if isinstance(value, str):
+                    value = value.encode('latin-1')
+                try:
+                    setattr(payload, attr, value)
+                except Exception as ex:
+                    # TODO server probably should not fail here
+                    # raise ValueError('Invalid metadata for {}={} ({})'
+                    #                  ''.format(attr, value, ex))
+                    print('set metadata fail', attr, value)
+                else:
+                    print('set', metadata, attr, value)
+    payload.value = value_payload.value
+
+    payload = bytes(payload)
+
     # Payloads must be zeropadded to have a size that is a multiple of 8.
     if size % 8 != 0:
         size = 8 * math.ceil(size/8)
@@ -218,8 +258,14 @@ class Message:
 
     def __repr__(self):
         signature = inspect.signature(type(self))
-        d = [(arg, getattr(self, arg)) for arg in signature.parameters]
-        formatted_args = ", ".join(["{!s}={!r}".format(k, v)
+        d = []
+        for arg in signature.parameters:
+            try:
+                d.append((arg, repr(getattr(self, arg))))
+            except Exception as ex:
+                d.append((arg, '(repr failure {})'.format(ex)))
+
+        formatted_args = ", ".join(["{!s}={}".format(k, v)
                                     for k, v in d])
         return "{}({})".format(type(self).__name__, formatted_args)
 
@@ -282,7 +328,7 @@ class SearchRequest(Message):
     Fields:
 
     .. attribute:: name
-    
+
         String name of the channel (i.e. 'PV')
 
     .. attribute:: cid
@@ -381,7 +427,7 @@ class NotFoundResponse(Message):
     Answer a :class:`SearchResponse` in the negative.
 
     Fields:
-    
+
     .. attribute:: cid
 
         Echoing :data:`cid` of :class:`SearchRequest` to let the client match
@@ -444,11 +490,11 @@ class RsrvIsUpResponse(Message):
         Port number.
 
     .. attribute:: beacon_id
-    
+
         Sequentially incremented integer.
 
     .. attribute:: address
-        
+
         IP address encoded as integer.
 
     .. attribute:: address_string
@@ -483,7 +529,7 @@ class RepeaterConfirmResponse(Message):
     Fields:
 
     .. attribute:: repeater_address
-    
+
         IP address of repeater (as a string).
     """
     ID = 17
@@ -509,7 +555,7 @@ class RepeaterRegisterRequest(Message):
     Fields:
 
     .. attribute:: client_address
-    
+
         IP address of the client (as a string).
     """
     ID = 24
@@ -558,7 +604,7 @@ class EventAddRequest(Message):
         Integer code of desired DBR type of readings.
 
     .. attribute:: data_count
-    
+
         Desired number of elements per reading.
 
     .. attribute:: sid
@@ -627,7 +673,7 @@ class EventAddResponse(Message):
         Integer code of DBR type of reading.
 
     .. attribute:: data_count
-    
+
         Number of elements in this reading.
 
     .. attribute:: sid
@@ -646,8 +692,9 @@ class EventAddResponse(Message):
     HAS_PAYLOAD = True
 
     def __init__(self, values, data_type, data_count,
-                 status_code, subscriptionid):
-        size, payload = data_payload(values, data_type, data_count)
+                 status_code, subscriptionid, *, metadata=None):
+        size, payload = data_payload(values, data_type, data_count,
+                                     metadata=metadata)
         header = EventAddResponseHeader(size, data_type, data_count,
                                         status_code, subscriptionid)
         super().__init__(header, payload)
@@ -765,9 +812,11 @@ class ReadResponse(Message):
     ID = 3
     HAS_PAYLOAD = True
 
-    def __init__(self, data, data_type, data_count, sid, ioid):
+    def __init__(self, data, data_type, data_count, sid, ioid, *,
+                 metadata=None):
         header = ReadResponseHeader(data_type, data_count, sid, ioid)
-        size, payload = data_payload(data, data_type, data_count)
+        size, payload = data_payload(data, data_type, data_count,
+                                     metadata=metadata)
         super().__init__(header, None)
 
     payload_size = property(lambda self: self.header.payload_size)
@@ -784,8 +833,10 @@ class WriteRequest(Message):
     ID = 4
     HAS_PAYLOAD = True
 
-    def __init__(self, values, data_type, data_count, sid, ioid):
-        size, payload = data_payload(values, data_type, data_count)
+    def __init__(self, values, data_type, data_count, sid, ioid, *,
+                 metadata=None):
+        size, payload = data_payload(values, data_type, data_count,
+                                     metadata=metadata)
         header = WriteRequestHeader(size, data_type, data_count, sid, ioid)
         super().__init__(header, payload)
 
@@ -891,7 +942,7 @@ class ClearChannelRequest(Message):
         Integer ID for this Channel designated by the client.
 
     .. attribute:: sid
-    
+
         Integer ID for this Channel designated by the server.
     """
     ID = 12
@@ -915,7 +966,7 @@ class ClearChannelResponse(Message):
         Integer ID for this Channel designated by the client.
 
     .. attribute:: sid
-    
+
         Integer ID for this Channel designated by the server.
     """
     ID = 12
@@ -939,11 +990,11 @@ class ReadNotifyRequest(Message):
         Integer code of desired DBR type of readings.
 
     .. attribute:: data_count
-    
+
         Desired number of elements per reading.
 
     .. attribute:: sid
-    
+
         Integer ID for this Channel designated by the server.
 
     .. attribute:: ioid
@@ -975,17 +1026,17 @@ class ReadNotifyResponse(Message):
         Integer code of desired DBR type of readings.
 
     .. attribute:: data_count
-    
+
         Desired number of elements per reading.
 
     .. attribute:: sid
-    
+
         Integer ID for this Channel designated by the server.
 
     .. attribute:: ioid
 
         Integer ID for I/O transaction, echoing :class:`ReadNotifyRequest`.
-    
+
     .. attribute:: status
 
         As per Channel Access spec, 1 is success; 0 or >1 are various failures.
@@ -994,8 +1045,10 @@ class ReadNotifyResponse(Message):
     ID = 15
     HAS_PAYLOAD = True
 
-    def __init__(self, values, data_type, data_count, status, ioid):
-        size, payload = data_payload(values, data_type, data_count)
+    def __init__(self, values, data_type, data_count, status, ioid, *,
+                 metadata=None):
+        size, payload = data_payload(values, data_type, data_count,
+                                     metadata=metadata)
         header = ReadNotifyResponseHeader(size, data_type, data_count, status,
                                           ioid)
         super().__init__(header, payload)
@@ -1054,7 +1107,7 @@ class CreateChanResponse(Message):
         Integer code of native DBR type of readings.
 
     .. attribute:: data_count
-    
+
         Native number of elements per reading.
 
     .. attribute:: cid
@@ -1063,10 +1116,10 @@ class CreateChanResponse(Message):
         in :class:`CreateChanRequest`.
 
     .. attribute:: sid
-    
+
         New integer ID for this Channel designated by the server uniquely
         identifying this Channel on its VirtualCircuit.
-        
+
     """
     ID = 18
     HAS_PAYLOAD = False
@@ -1096,11 +1149,11 @@ class WriteNotifyRequest(Message):
         Integer code of DBR type.
 
     .. attribute:: data_count
-    
+
         Number of elements.
 
     .. attribute:: sid
-    
+
         Integer ID for this Channel designated by the server.
 
     .. attribute:: ioid
@@ -1111,8 +1164,10 @@ class WriteNotifyRequest(Message):
     ID = 19
     HAS_PAYLOAD = True
 
-    def __init__(self, values, data_type, data_count, sid, ioid):
-        size, payload = data_payload(values, data_type, data_count)
+    def __init__(self, values, data_type, data_count, sid, ioid, *,
+                 metadata=None):
+        size, payload = data_payload(values, data_type, data_count,
+                                     metadata=metadata)
         header = WriteNotifyRequestHeader(size, data_type, data_count, sid,
                                           ioid)
         super().__init__(header, payload)
@@ -1137,11 +1192,11 @@ class WriteNotifyResponse(Message):
         Integer code of DBR type.
 
     .. attribute:: data_count
-    
+
         Number of elements.
 
     .. attribute:: sid
-    
+
         Integer ID for this Channel designated by the server.
 
     .. attribute:: ioid
@@ -1173,7 +1228,7 @@ class ClientNameRequest(Message):
     Fields:
 
     .. attribute:: name
-    
+
         Client name.
     """
     ID = 20
@@ -1195,7 +1250,7 @@ class HostNameRequest(Message):
     Fields:
 
     .. attribute:: name
-    
+
         Host name.
     """
     ID = 21
