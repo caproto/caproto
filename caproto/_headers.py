@@ -384,9 +384,9 @@ def EventCancelRequestHeader(data_type, data_count, sid, subscriptionid):
     return MessageHeader(*struct_args)
 
 
-def EventAddResponseHeader(data_type, sid, subscriptionid):
+def EventCancelResponseHeader(data_type, sid, subscriptionid):
     """
-    Construct a ``MessageHeader`` for a EventAddResponse command.
+    Construct a ``MessageHeader`` for a EventCancelResponse command.
 
     Clears event subscription.
     This message will stop event updates for specified channel.
@@ -406,6 +406,7 @@ def EventAddResponseHeader(data_type, sid, subscriptionid):
         Same value as CA_PROTO_EVENT_ADD request.
     
     """
+    struct_args = (1, 0, data_type, 0, sid, subscriptionid)
     return MessageHeader(*struct_args)
 
 

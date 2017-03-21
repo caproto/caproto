@@ -31,7 +31,7 @@ from ._headers import (MessageHeader, ExtendedMessageHeader,
                        CreateChanResponseHeader, EchoRequestHeader,
                        EchoResponseHeader, ErrorResponseHeader,
                        EventAddRequestHeader, EventAddResponseHeader,
-                       EventCancelRequestHeader,
+                       EventCancelRequestHeader, EventCancelResponseHeader,
                        EventsOffRequestHeader, EventsOnRequestHeader,
                        HostNameRequestHeader, NotFoundResponseHeader,
                        ReadNotifyRequestHeader, ReadNotifyResponseHeader,
@@ -167,23 +167,27 @@ class Message:
     DIRECTION = None  # REQUEST or RESPONSE; set at the end of this module
     sender_address = None  # set for the read_datagram function
 
-    def __init__(self, header, payload=None, validate_payload=True):
-        if validate_payload and payload is None:
-            if header.payload_size != 0:
-                raise CaprotoValueError("header.payload_size {} > 0 but "
-                                        "payload is None."
-                                        "".format(header.payload_size))
-        elif validate_payload and header.payload_size != len(payload):
-            raise CaprotoValueError("header.payload_size {} != len(payload) {}"
-                                    "".format(header.payload_size,
-                                              len(payload)))
-        if header.command != self.ID:
-            raise CaprotoTypeError("A {} must have a header with "
-                                   "header.command = {}, not {}."
-                                   "".format(type(self), self.ID,
-                                             header.command))
+    def __init__(self, header, payload=None, validate=True):
         self.header = header
         self.payload = payload
+        if validate:
+            self.validate()
+
+    def validate(self):
+        if self.payload is None:
+            if self.header.payload_size != 0:
+                raise CaprotoValueError("header.payload_size {} > 0 but "
+                                        "payload is None."
+                                        "".format(self.header.payload_size))
+        elif self.header.payload_size != len(self.payload):
+            raise CaprotoValueError("header.payload_size {} != len(payload) {}"
+                                    "".format(self.header.payload_size,
+                                              len(self.payload)))
+        if self.header.command != self.ID:
+            raise CaprotoTypeError("A {} must have a header with "
+                                    "header.command == {}, not {}."
+                                    "".format(type(self), self.ID,
+                                              self.header.command))
 
     def __setstate__(self, val):
         header, payload = val
@@ -728,6 +732,17 @@ class EventCancelResponse(Message):
     data_type = property(lambda self: self.header.data_type)
     sid = property(lambda self: self.header.parameter1)
     subscriptionid = property(lambda self: self.header.parameter2)
+
+    def validate(self):
+        # special case because of weird ID
+        if self.header.command != 1:
+            raise CaprotoTypeError("A {} must have a header with "
+                                   "header.command == 1, not {}."
+                                   "".format(type(self), self.header.command))
+        if self.payload is not None:
+            raise CaprotoTypeError("A {} must have no payload."
+                                   "".format(type(self)))
+        # do not call super()
 
 
 class ReadRequest(Message):
