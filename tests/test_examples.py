@@ -62,11 +62,15 @@ def test_curio_server(kernel):
         print('reading:', reading)
         await chan1.clear()
         assert called
+        await chan1.circuit.socket.close()
 
     async def task():
         server_task = await curio.spawn(run_server())
-        await curio.sleep(5)
+        await curio.sleep(1)
         client_task = await run_client()
-        await kernel_task.kill()
+        print('client is done')
+        await server_task.cancel()
+        print('server is canceled', server_task.cancelled)
 
-    curio.run(task())
+    curio.run(task)
+    print('done')

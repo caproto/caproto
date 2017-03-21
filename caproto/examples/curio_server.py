@@ -22,7 +22,6 @@ class VirtualCircuit:
         """
         Process a command and tranport it over the TCP socket for this circuit.
         """
-        print("send....")
         bytes_to_send = self.circuit.send(*commands)
         await self.client.sendall(bytes_to_send)
 
@@ -30,7 +29,6 @@ class VirtualCircuit:
         """
         Receive bytes over TCP and cache them in this circuit's buffer.
         """
-        print('recv....')
         bytes_received = await self.client.recv(4096)
         if not bytes_received:
             raise DisconnectedCircuit()

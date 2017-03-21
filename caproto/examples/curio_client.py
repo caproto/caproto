@@ -135,14 +135,14 @@ class Channel:
         initialize the connection in the fist place. This method waits for it
         to complete.
         """
-        while not self.channel.states[ca.CLIENT] == ca.CONNECTED:
+        while not self.channel.states[ca.CLIENT] is ca.CONNECTED:
             event = await self.circuit.get_event()
             await event.wait()
 
     async def clear(self):
         "Disconnect this Channel."
         await self.circuit.send(self.channel.clear())
-        while self.channel.states[ca.CLIENT] == ca.CONNECTED:
+        while self.channel.states[ca.CLIENT] is ca.MUST_CLOSE:
             event = await self.circuit.get_event()
             await event.wait()
 
@@ -251,7 +251,6 @@ class Context:
         await self.send(self.server_port, ver_command, search_command)
         # Wait for the SearchResponse.
         while search_command.cid in self.unanswered_searches:
-            print('waiting')
             event = await self.get_event()
             await event.wait()
 
@@ -270,7 +269,6 @@ class Context:
                                                    priority=priority))
         circuit.circuit.log.setLevel('DEBUG')
         self.circuits.append(circuit)
-        print('returning', circuit)
         return circuit
 
     async def create_channel(self, name, priority=0):
@@ -282,7 +280,6 @@ class Context:
         chan = ca.ClientChannel(name, circuit.circuit)
 
         async def connect():
-            print('chan.circuit', chan.circuit)
             if chan.circuit.states[ca.SERVER] is ca.IDLE:
                 await circuit.create_connection()
                 await circuit.send(chan.version())
