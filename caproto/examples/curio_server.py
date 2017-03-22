@@ -20,12 +20,14 @@ def convert_to(values, from_dtype, to_dtype):
     if from_dtype == to_dtype:
         return values
 
-    if (from_dtype in dbr.native_float_types and to_dtype in
+    # TODO metadata is expected to be of this type as well!
+    native_to_dtype = dbr.native_type(to_dtype)
+
+    if (from_dtype in dbr.native_float_types and native_to_dtype in
             dbr.native_int_types):
         # TODO performance
         values = [int(v) for v in values]
-    elif to_dtype in (ChType.STRING, ChType.STS_STRING, ChType.TIME_STRING,
-                      ChType.CTRL_STRING):
+    elif native_to_dtype == ChType.STRING:
         values = [str(v) for v in values]
 
     return values
@@ -67,8 +69,6 @@ class DatabaseRecordEnum(DatabaseRecordBase):
 
 
 class DatabaseRecordNumeric(DatabaseRecordBase):
-    data_type = ca.DBR_LONG.DBR_ID
-
     def __init__(self, *, units='', upper_disp_limit=0.0,
                  lower_disp_limit=0.0, upper_alarm_limit=0.0,
                  upper_warning_limit=0.0, lower_warning_limit=0.0,
@@ -85,6 +85,10 @@ class DatabaseRecordNumeric(DatabaseRecordBase):
         self.lower_alarm_limit = lower_alarm_limit
         self.upper_ctrl_limit = upper_ctrl_limit
         self.lower_ctrl_limit = lower_ctrl_limit
+
+
+class DatabaseRecordInteger(DatabaseRecordNumeric):
+    data_type = ca.DBR_LONG.DBR_ID
 
 
 class DatabaseRecordDouble(DatabaseRecordNumeric):
@@ -272,6 +276,12 @@ if __name__ == '__main__':
                                        precision=5,
                                        units='doodles',
                                        ),
+            'enum' : DatabaseRecordEnum(value='a',
+                                        strs=['a', 'b', 'c', 'd'],
+                                        ),
+            'int' : DatabaseRecordInteger(value=0,
+                                          units='doodles',
+                                          ),
             }
     ctx = Context('0.0.0.0', SERVER_PORT, pvdb)
     curio.run(ctx.run())
