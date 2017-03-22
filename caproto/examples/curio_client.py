@@ -8,6 +8,7 @@
 # Context: has a caproto.Broadcaster, a UDP socket, a cache of
 #          search results and a cache of VirtualCircuits.
 #
+import os
 import caproto as ca
 import curio
 from curio import socket
@@ -224,7 +225,8 @@ class Context:
         Process a command and tranport it over the UDP socket.
         """
         bytes_to_send = self.broadcaster.send(*commands)
-        await self.udp_sock.sendto(bytes_to_send, ('', port))
+        hosts = os.environ['EPICS_CA_ADDR_LIST']
+        await self.udp_sock.sendto(bytes_to_send, (hosts, port))
 
     async def recv(self):
         """
