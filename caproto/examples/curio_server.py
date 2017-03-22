@@ -128,11 +128,15 @@ class Context:
                 return
 
     async def run(self):
-        tcp_server = curio.tcp_server('', self.port, self.tcp_handler)
-        tcp_task = await curio.spawn(tcp_server)
-        udp_task = await curio.spawn(self.udp_server())
-        await udp_task.join()
-        await tcp_task.join()
+        try:
+            tcp_server = curio.tcp_server('', self.port, self.tcp_handler)
+            tcp_task = await curio.spawn(tcp_server)
+            udp_task = await curio.spawn(self.udp_server())
+            await udp_task.join()
+            await tcp_task.join()
+        except curio.TaskCancelled:
+            await tcp_task.cancel()
+            await udp_task.cancel()
 
 
 def _get_my_ip():

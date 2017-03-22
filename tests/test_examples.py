@@ -30,6 +30,8 @@ def test_curio_server():
     import caproto.examples.curio_server as server
     import caproto.examples.curio_client as client
 
+    kernel = curio.Kernel()
+
     async def run_server():
         pvdb = ["pi"]
         ctx = server.Context('0.0.0.0', 5064, pvdb)
@@ -71,7 +73,9 @@ def test_curio_server():
         print('client is done')
         await server_task.cancel()
         print('server is canceled', server_task.cancelled)  # prints True
+        print(kernel._tasks)
 
-    curio.run(task)
+    with kernel:
+        kernel.run(task)
     # seems to hang here
     print('done')
