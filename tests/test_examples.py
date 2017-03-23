@@ -9,6 +9,7 @@ import curio.subprocess
 import caproto as ca
 from itertools import count
 from caproto.examples.curio_server import find_next_tcp_port
+from caproto import ChType
 
 
 REPEATER_PORT = 5065
@@ -255,6 +256,9 @@ def test_curio_server_with_caget():
                     precision=5,
                     units='doodles',
                     ),
+            'enum': server.DatabaseRecordEnum(value='b',
+                                               strs=['a', 'b', 'c', 'd'],
+                                               ),
             }
 
     ctrl_keys = ('upper_disp_limit', 'lower_alarm_limit',
@@ -281,39 +285,48 @@ def test_curio_server_with_caget():
         print('* client_test', pv)
         data = await run_caget(pv)
 
-        for dbr_type in (ca.ChType.DOUBLE, ca.ChType.TIME_DOUBLE,
-                         ca.ChType.CTRL_DOUBLE, ca.ChType.STS_DOUBLE,
-                         ca.ChType.LONG, ca.ChType.STS_LONG,
-                         ca.ChType.TIME_LONG, ca.ChType.CTRL_LONG):
+        db_entry = pvdb[pv]
+        db_native = ca.native_type(db_entry.data_type)
+
+        for dbr_type in (ChType.DOUBLE, ChType.TIME_DOUBLE, ChType.CTRL_DOUBLE,
+                         ChType.STS_DOUBLE, ChType.LONG, ChType.STS_LONG,
+                         ChType.TIME_LONG, ChType.CTRL_LONG):
 
             data = await run_caget(pv, dbr_type=dbr_type)
             print('dbr_type', dbr_type, 'data:')
             print(data)
 
-            if ca.native_type(dbr_type) == ca.ChType.LONG:
-                assert int(data['value']) == int(pvdb[pv].value)
-            elif ca.native_type(dbr_type) == ca.ChType.DOUBLE:
-                assert float(data['value']) == float(pvdb[pv].value)
+            db_value = db_entry.value
+
+            # convert from string value to enum if requesting int
+            if (db_native == ChType.ENUM and
+                    ca.native_type(dbr_type) not in (ChType.ENUM,
+                                                     ChType.STRING)):
+                db_value = db_entry.strs.index(db_value)
+
+            if ca.native_type(dbr_type) == ChType.LONG:
+                assert int(data['value']) == int(db_value)
+            elif ca.native_type(dbr_type) == ChType.DOUBLE:
+                assert float(data['value']) == float(db_value)
             else:
                 raise ValueError('TODO')
 
             # TODO metadata should be cast to requested type as well!
-            same_type = (ca.native_type(dbr_type) ==
-                         ca.native_type(pvdb[pv].data_type))
+            same_type = (ca.native_type(dbr_type) == db_native)
 
             if dbr_type in ca.control_types and same_type:
                 for key in ctrl_keys:
                     print('checking', key)
-                    assert float(data[key]) == getattr(pvdb[pv], key), key
+                    assert float(data[key]) == getattr(db_entry, key), key
 
             if dbr_type in ca.time_types:
-                timestamp = datetime.datetime.fromtimestamp(pvdb[pv].timestamp)
+                timestamp = datetime.datetime.fromtimestamp(db_entry.timestamp)
                 assert data['timestamp'] == timestamp
 
             if dbr_type in ca.time_types or dbr_type in ca.status_types:
                 for key in status_keys:
                     value = getattr(ca._dbr, data[key])
-                    assert value == getattr(pvdb[pv], key), key
+                    assert value == getattr(db_entry, key), key
 
     async def task():
 

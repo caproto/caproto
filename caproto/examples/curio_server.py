@@ -32,19 +32,25 @@ def find_next_tcp_port(host='0.0.0.0', starting_port=EPICS_CA2_PORT + 1):
     return port
 
 
-def convert_to(values, from_dtype, to_dtype):
+def convert_to(values, from_dtype, to_dtype, db_entry):
     if from_dtype == to_dtype:
         return values
 
     # TODO metadata is expected to be of this type as well!
-    native_to_dtype = dbr.native_type(to_dtype)
+    native_from = dbr.native_type(from_dtype)
+    native_to = dbr.native_type(to_dtype)
 
-    if (from_dtype in dbr.native_float_types and native_to_dtype in
+    if (from_dtype in dbr.native_float_types and native_to in
             dbr.native_int_types):
         # TODO performance
         values = [int(v) for v in values]
-    elif native_to_dtype == ChType.STRING:
-        values = [str(v) for v in values]
+    elif from_dtype == ChType.ENUM:
+        if native_to == ChType.STRING:
+            values = [v.encode('latin-1') for v in values]
+        else:
+            values = [db_entry.strs.index(v) for v in values]
+    elif native_to == ChType.STRING:
+        values = [v.encode('latin-1') for v in values]
 
     return values
 
@@ -190,7 +196,7 @@ class VirtualCircuit:
                 values = [values, ]
 
             yield chan.read(values=convert_to(values, db_entry.data_type,
-                                              command.data_type),
+                                              command.data_type, db_entry),
                             data_type=command.data_type, ioid=command.ioid,
                             metadata=db_entry)
         elif isinstance(command, ca.WriteNotifyRequest):
@@ -325,7 +331,7 @@ if __name__ == '__main__':
                                        precision=5,
                                        units='doodles',
                                        ),
-            'enum': DatabaseRecordEnum(value='a',
+            'enum': DatabaseRecordEnum(value='b',
                                        strs=['a', 'b', 'c', 'd'],
                                        ),
             'int': DatabaseRecordInteger(value=0,
