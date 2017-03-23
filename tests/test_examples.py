@@ -253,6 +253,17 @@ def test_curio_server_with_caget():
             'enum': server.DatabaseRecordEnum(value='b',
                                                strs=['a', 'b', 'c', 'd'],
                                                ),
+            'int': server.DatabaseRecordInteger(value=33,
+                                                units='poodles',
+                                                lower_disp_limit=33,
+                                                upper_disp_limit=35,
+                                                lower_alarm_limit=32,
+                                                upper_alarm_limit=36,
+                                                lower_warning_limit=31,
+                                                upper_warning_limit=37,
+                                                lower_ctrl_limit=30,
+                                                upper_ctrl_limit=38,
+                                                ),
             }
 
     ctrl_keys = ('upper_disp_limit', 'lower_alarm_limit',
@@ -310,6 +321,9 @@ def test_curio_server_with_caget():
 
             if dbr_type in ca.control_types and same_type:
                 for key in ctrl_keys:
+                    if key == 'precision' and ca.native_type(dbr_type) != ChType.DOUBLE:
+                        print('skipping', key)
+                        continue
                     print('checking', key)
                     assert float(data[key]) == getattr(db_entry, key), key
 
