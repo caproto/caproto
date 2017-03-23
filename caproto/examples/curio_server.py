@@ -17,11 +17,11 @@ class DisconnectedCircuit(Exception):
 
 
 def convert_to(values, from_dtype, to_dtype, db_entry):
-    if from_dtype == to_dtype:
+    native_from = dbr.native_type(from_dtype)
+    if from_dtype == to_dtype and native_from != ChType.ENUM:
         return values
 
     # TODO metadata is expected to be of this type as well!
-    native_from = dbr.native_type(from_dtype)
     native_to = dbr.native_type(to_dtype)
 
     if (from_dtype in dbr.native_float_types and native_to in
@@ -34,8 +34,10 @@ def convert_to(values, from_dtype, to_dtype, db_entry):
         else:
             values = [db_entry.strs.index(v) for v in values]
     elif native_to == ChType.STRING:
-        values = [v.encode('latin-1') for v in values]
-
+        if native_from in (ChType.STRING, ChType.ENUM):
+            values = [v.encode('latin-1') for v in values]
+        else:
+            values = [bytes(str(v), 'latin-1') for v in values]
     return values
 
 
@@ -184,10 +186,10 @@ class VirtualCircuit:
             except TypeError:
                 values = [values, ]
 
-            yield chan.read(values=convert_to(values, db_entry.data_type,
-                                              command.data_type, db_entry),
-                            data_type=command.data_type, ioid=command.ioid,
-                            metadata=db_entry)
+            values = convert_to(values, db_entry.data_type, command.data_type,
+                                db_entry)
+            yield chan.read(values=values, data_type=command.data_type,
+                            ioid=command.ioid, metadata=db_entry)
         elif isinstance(command, ca.WriteNotifyRequest):
             chan, db_entry = get_db_entry()
             yield chan.write(ioid=command.ioid)

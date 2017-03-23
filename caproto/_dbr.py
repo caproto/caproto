@@ -1029,7 +1029,7 @@ def to_builtin(structure, data_type, data_count):
                      for name, dtype in structure._fields_))
 
 
-def promote_type(ftype, use_time=False, use_ctrl=False):
+def promote_type(ftype, *, use_status=False, use_time=False, use_ctrl=False):
     """Promotes a native field type to its TIME or CTRL variant.
 
     Returns
@@ -1044,6 +1044,8 @@ def promote_type(ftype, use_time=False, use_ctrl=False):
         ftype += ChType.CTRL_STRING
     elif use_time:
         ftype += ChType.TIME_STRING
+    elif use_status:
+        ftype += ChType.STS_STRING
 
     if ftype == ChType.CTRL_STRING:
         return ChType.TIME_STRING
