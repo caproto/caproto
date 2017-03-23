@@ -221,7 +221,6 @@ def test_curio_server_with_caget():
             value = getattr(ca._dbr, data[key])
             assert value == getattr(pvdb[pv], key), key
 
-        # TODO this is off
         assert data['timestamp'] == datetime.datetime.fromtimestamp(pvdb[pv].timestamp)
 
         data = await run_caget(pv, dbr_type=ca.ChType.LONG)

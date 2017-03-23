@@ -12,7 +12,7 @@ from collections import namedtuple
 
 # EPICS2UNIX_EPOCH = 631173600.0 - time.timezone
 EPICS2UNIX_EPOCH = 631152000.0
-EPICS_EPOCH = datetime.datetime.fromtimestamp(EPICS2UNIX_EPOCH)
+EPICS_EPOCH = datetime.datetime.utcfromtimestamp(EPICS2UNIX_EPOCH)
 
 MAX_STRING_SIZE = 40
 MAX_UNITS_SIZE = 8
@@ -55,9 +55,8 @@ def epics_timestamp_to_unix(seconds_since_epoch, nano_seconds):
 
 def timestamp_to_epics(ts):
     '''Python timestamp from EPICS TimeStamp structure'''
-    # TODO this is not quite right and is also rather important
     if isinstance(ts, float):
-        ts = datetime.datetime.fromtimestamp(ts)
+        ts = datetime.datetime.utcfromtimestamp(ts)
     dt = ts - EPICS_EPOCH
     return int(dt.total_seconds()), int(dt.microseconds * 1e3)
 
