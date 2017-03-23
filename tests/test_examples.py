@@ -23,7 +23,7 @@ def test_synchronous_client():
 
 def test_curio_client():
     from caproto.examples.curio_client import main
-    main()
+    curio.run(main())
 
 
 def test_curio_server():
