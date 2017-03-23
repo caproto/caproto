@@ -8,7 +8,7 @@ import curio.subprocess
 import caproto as ca
 
 
-TEST_SERVER_PORT = 5066
+TEST_SERVER_PORT = 5064
 
 
 def test_synchronous_client():
@@ -178,6 +178,13 @@ def test_curio_server_with_caget():
                     ),
             }
 
+    ctrl_keys = ('upper_disp_limit', 'lower_alarm_limit',
+                 'upper_alarm_limit', 'lower_warning_limit',
+                 'upper_warning_limit', 'lower_ctrl_limit',
+                 'upper_ctrl_limit', 'precision')
+
+    status_keys = ('status', 'severity')
+
     async def run_server():
         nonlocal pvdb
         ctx = server.Context('0.0.0.0', TEST_SERVER_PORT, pvdb)
@@ -186,42 +193,40 @@ def test_curio_server_with_caget():
     async def run_client_test(pv):
         print('* client_test', pv)
         data = await run_caget(pv)
-        print('info', data)
 
-        data = await run_caget(pv, dbr_type=ca.ChType.DOUBLE)
-        assert float(data['value']) == float(pvdb[pv].value)
+        for dbr_type in (ca.ChType.DOUBLE, ca.ChType.TIME_DOUBLE,
+                         ca.ChType.CTRL_DOUBLE, ca.ChType.STS_DOUBLE,
+                         ca.ChType.LONG, ca.ChType.STS_LONG,
+                         ca.ChType.TIME_LONG, ca.ChType.CTRL_LONG):
 
-        data = await run_caget(pv, dbr_type=ca.ChType.CTRL_DOUBLE)
-        assert float(data['value']) == float(pvdb[pv].value)
-        ctrl_keys = ('upper_disp_limit lower_alarm_limit '
-                     'upper_alarm_limit '
-                     'lower_warning_limit upper_warning_limit '
-                     'lower_ctrl_limit '
-                     'upper_ctrl_limit precision').split()
+            data = await run_caget(pv, dbr_type=dbr_type)
+            print('dbr_type', dbr_type, 'data:')
+            print(data)
 
-        for key in ctrl_keys:
-            assert float(data[key]) == getattr(pvdb[pv], key), key
+            if ca.native_type(dbr_type) == ca.ChType.LONG:
+                assert int(data['value']) == int(pvdb[pv].value)
+            elif ca.native_type(dbr_type) == ca.ChType.DOUBLE:
+                assert float(data['value']) == float(pvdb[pv].value)
+            else:
+                raise ValueError('TODO')
 
-        data = await run_caget(pv, dbr_type=ca.ChType.TIME_DOUBLE)
-        assert float(data['value']) == float(pvdb[pv].value)
-        time_keys = ('status severity').split()
+            # TODO metadata should be cast to requested type as well!
+            same_type = (ca.native_type(dbr_type) ==
+                         ca.native_type(pvdb[pv].data_type))
 
-        for key in time_keys:
-            value = getattr(ca._dbr, data[key])
-            assert value == getattr(pvdb[pv], key), key
+            if dbr_type in ca.control_types and same_type:
+                for key in ctrl_keys:
+                    print('checking', key)
+                    assert float(data[key]) == getattr(pvdb[pv], key), key
 
-        assert data['timestamp'] == datetime.datetime.fromtimestamp(pvdb[pv].timestamp)
+            if dbr_type in ca.time_types:
+                timestamp = datetime.datetime.fromtimestamp(pvdb[pv].timestamp)
+                assert data['timestamp'] == timestamp
 
-        data = await run_caget(pv, dbr_type=ca.ChType.LONG)
-        assert int(data['value']) == int(pvdb[pv].value)
-
-        print('info', data)
-        data = await run_caget(pv, dbr_type=ca.ChType.STS_LONG)
-        print('info', data)
-        data = await run_caget(pv, dbr_type=ca.ChType.TIME_LONG)
-        print('info', data)
-        data = await run_caget(pv, dbr_type=ca.ChType.CTRL_LONG)
-        print('info', data)
+            if dbr_type in ca.time_types or dbr_type in ca.status_types:
+                for key in status_keys:
+                    value = getattr(ca._dbr, data[key])
+                    assert value == getattr(pvdb[pv], key), key
 
     async def task():
         nonlocal pvdb
