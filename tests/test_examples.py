@@ -204,6 +204,7 @@ async def run_caget(pv, *, dbr_type=None):
         'Hi ctrl limit': 'upper_ctrl_limit',
         'Timestamp': 'timestamp',
         'Precision': 'precision',
+        'Enums': 'enums',
     }
 
     lines = [line.strip() for line in output.split('\n')
@@ -222,10 +223,22 @@ async def run_caget(pv, *, dbr_type=None):
                     severity=sevr)
     else:
         info = dict(pv=lines[0])
+        in_enum_section = False
+        enums = {}
         for line in lines[1:]:
             if line:
-                key, value = line.split(':', 1)
-                info[key_map[key]] = value.strip()
+                if in_enum_section:
+                    num, name = line.split(']', 1)
+                    num = int(num[1:])
+                    enums[num] = name.strip()
+                else:
+                    key, value = line.split(':', 1)
+                    info[key_map[key]] = value.strip()
+
+                    if key == 'Enums':
+                        in_enum_section = True
+        if enums:
+            info['enums'] = enums
 
     if 'timestamp' in info:
         info['timestamp'] = datetime.datetime.strptime(info['timestamp'],
@@ -251,8 +264,8 @@ def test_curio_server_with_caget():
                     units='doodles',
                     ),
             'enum': server.DatabaseRecordEnum(value='b',
-                                               strs=['a', 'b', 'c', 'd'],
-                                               ),
+                                              strs=['a', 'b', 'c', 'd'],
+                                              ),
             'int': server.DatabaseRecordInteger(value=33,
                                                 units='poodles',
                                                 lower_disp_limit=33,
@@ -293,10 +306,14 @@ def test_curio_server_with_caget():
         db_entry = pvdb[pv]
         db_native = ca.native_type(db_entry.data_type)
 
-        for dbr_type in (ChType.DOUBLE, ChType.TIME_DOUBLE, ChType.CTRL_DOUBLE,
-                         ChType.STS_DOUBLE, ChType.LONG, ChType.STS_LONG,
-                         ChType.TIME_LONG, ChType.CTRL_LONG):
+        check_types = sum(([dtype,
+                           ca.promote_type(dtype, use_status=True),
+                           ca.promote_type(dtype, use_time=True),
+                           ca.promote_type(dtype, use_ctrl=True)]
+                          for dtype in ca.native_types),
+                          [])
 
+        for dbr_type in sorted(check_types):
             data = await run_caget(pv, dbr_type=dbr_type)
             print('dbr_type', dbr_type, 'data:')
             print(data)
@@ -305,21 +322,36 @@ def test_curio_server_with_caget():
 
             # convert from string value to enum if requesting int
             if (db_native == ChType.ENUM and
-                    ca.native_type(dbr_type) not in (ChType.ENUM,
-                                                     ChType.STRING)):
+                    not (ca.native_type(dbr_type) == ChType.STRING
+                         or dbr_type == ChType.CTRL_ENUM)):
                 db_value = db_entry.strs.index(db_value)
 
-            if ca.native_type(dbr_type) == ChType.LONG:
+            if ca.native_type(dbr_type) in (ChType.INT, ChType.LONG,
+                                            ChType.CHAR):
                 assert int(data['value']) == int(db_value)
-            elif ca.native_type(dbr_type) == ChType.DOUBLE:
+            elif ca.native_type(dbr_type) in (ChType.FLOAT, ChType.DOUBLE):
                 assert float(data['value']) == float(db_value)
+            elif ca.native_type(dbr_type) == ChType.STRING:
+                assert data['value'] == str(db_value)
+            elif ca.native_type(dbr_type) == ChType.ENUM:
+                bad_strings = ['Illegal Value (', 'Enum Index Overflow (']
+                for bad_string in bad_strings:
+                    if data['value'].startswith(bad_string):
+                        data['value'] = data['value'][len(bad_string):-1]
+
+                if db_native == ChType.ENUM and dbr_type == ChType.CTRL_ENUM:
+                    # ctrl enum gets back the full string value
+                    assert data['value'] == db_value
+                else:
+                    assert int(data['value']) == int(db_value)
             else:
-                raise ValueError('TODO')
+                raise ValueError('TODO ' + str(dbr_type))
 
             # TODO metadata should be cast to requested type as well!
             same_type = (ca.native_type(dbr_type) == db_native)
 
-            if dbr_type in ca.control_types and same_type:
+            if (dbr_type in ca.control_types and same_type
+                    and dbr_type != ChType.CTRL_ENUM):
                 for key in ctrl_keys:
                     if key == 'precision' and ca.native_type(dbr_type) != ChType.DOUBLE:
                         print('skipping', key)
