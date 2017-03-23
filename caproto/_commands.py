@@ -47,7 +47,7 @@ from ._headers import (MessageHeader, ExtendedMessageHeader,
 
 from ._dbr import (DBR_INT, DBR_STRING, DBR_TYPES, DO_REPLY, NO_REPLY,
                    ChannelType, float_t, short_t, to_builtin, ushort_t,
-                   native_type, timestamp_to_epics)
+                   native_type, timestamp_to_epics, MAX_ENUM_STRING_SIZE)
 
 from ._utils import (CLIENT, NEED_DATA, REQUEST, RESPONSE,
                      SERVER, CaprotoTypeError, CaprotoValueError)
@@ -133,6 +133,16 @@ def data_payload(values, data_type, data_count, *, metadata=None):
                     sec, ns = timestamp_to_epics(metadata.timestamp)
                     payload.secondsSinceEpoch = sec
                     payload.nanoSeconds = ns
+                    continue
+
+            elif (attr == 'strs' and hasattr(metadata, attr) and
+                    hasattr(payload, attr)):
+                for i, string in enumerate(metadata.strs):
+                    bytes_ = string.encode('latin-1')
+                    justified = bytes_.ljust(MAX_ENUM_STRING_SIZE, b'\x00')
+                    payload.strs[i][:] = justified
+                payload.no_str = len(metadata.strs)
+                continue
 
             if hasattr(metadata, attr) and hasattr(payload, attr):
                 value = getattr(metadata, attr)

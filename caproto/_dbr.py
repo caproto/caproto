@@ -637,7 +637,7 @@ class DBR_CTRL_ENUM(ctypes.BigEndianStructure):
         ('status', short_t),
         ('severity', short_t),
         ('no_str', short_t),  # number of strings
-        ('strs', MAX_ENUM_STATES * MAX_ENUM_STRING_SIZE * char_t),
+        ('strs', MAX_ENUM_STATES * (MAX_ENUM_STRING_SIZE * char_t)),
         ('value', ushort_t),
     ]
 
