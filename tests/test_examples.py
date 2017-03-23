@@ -8,6 +8,9 @@ import curio.subprocess
 import caproto as ca
 
 
+TEST_SERVER_PORT = 5066
+
+
 def test_synchronous_client():
     from caproto.examples.synchronous_client import main
 
@@ -37,7 +40,7 @@ def test_curio_server():
 
     async def run_server():
         pvdb = ["pi"]
-        ctx = server.Context('127.0.0.1', 5066, pvdb)
+        ctx = server.Context('127.0.0.1', TEST_SERVER_PORT, pvdb)
         await ctx.run()
 
     async def run_client():
@@ -47,7 +50,7 @@ def test_curio_server():
             print("Subscription has received data.")
             called.append(True)
 
-        ctx = client.Context(server_port=5066)
+        ctx = client.Context(server_port=TEST_SERVER_PORT)
         await ctx.register()
         await ctx.search('pi')
         print('done searching')
@@ -177,7 +180,7 @@ def test_curio_server_with_caget():
 
     async def run_server():
         nonlocal pvdb
-        ctx = server.Context('0.0.0.0', 5064, pvdb)
+        ctx = server.Context('0.0.0.0', TEST_SERVER_PORT, pvdb)
         await ctx.run()
 
     async def run_client_test(pv):
