@@ -222,7 +222,7 @@ def test_curio_server_with_caget():
             assert value == getattr(pvdb[pv], key), key
 
         # TODO this is off
-        # assert data['timestamp'] == datetime.datetime.fromtimestamp(pvdb[pv].timestamp)
+        assert data['timestamp'] == datetime.datetime.fromtimestamp(pvdb[pv].timestamp)
 
         data = await run_caget(pv, dbr_type=ca.ChType.LONG)
         assert int(data['value']) == int(pvdb[pv].value)
@@ -240,10 +240,12 @@ def test_curio_server_with_caget():
 
         server_task = await curio.spawn(run_server())
         await curio.sleep(1)  # Give server some time to start up.
-        for pv in pvdb:
-            await run_client_test(pv)
 
-        await server_task.cancel()
+        try:
+            for pv in pvdb:
+                await run_client_test(pv)
+        finally:
+            await server_task.cancel()
 
     with curio.Kernel() as kernel:
         kernel.run(task)
