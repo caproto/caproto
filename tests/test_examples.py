@@ -33,7 +33,7 @@ def test_curio_server():
     kernel = curio.Kernel()
 
     async def run_server():
-        pvdb = ["pi"]
+        pvdb = {'pi': server.DatabaseRecordDouble(value=3.14)}
         ctx = server.Context('127.0.0.1', 5066, pvdb)
         await ctx.run()
 
