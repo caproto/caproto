@@ -117,8 +117,12 @@ async def run_caget(pv, *, dbr_type=None):
     args.append(pv)
 
     print('* Executing', args)
-    output = await curio.subprocess.check_output(args)
-    output = output.decode('latin-1')
+    env = dict(os.environ)
+    env.update({"EPICS_CA_SERVER_PORT": "5066"})
+    p = curio.subprocess.Popen(args, env=env, stdout=curio.subprocess.PIPE)
+    await p.wait()
+    raw_output = await p.stdout.read()
+    output = raw_output.decode('latin-1')
     print('* output:')
     print(output)
     print('.')
@@ -187,7 +191,7 @@ def test_curio_server_with_caget():
 
     async def run_server():
         nonlocal pvdb
-        ctx = server.Context('0.0.0.0', 5064, pvdb)
+        ctx = server.Context('0.0.0.0', 5066, pvdb)
         await ctx.run()
 
     async def run_client_test(pv):
