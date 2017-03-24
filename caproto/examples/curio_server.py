@@ -129,12 +129,7 @@ class VirtualCircuit:
 
     def _process_command(self, command):
         if isinstance(command, ca.CreateChanRequest):
-            chan = self.circuit.channels_sid[command.sid]
-            if not hasattr(chan, 'db_entry'):
-                name = command.name.decode('latin-1')
-                chan.db_entry = self.context.pvdb[name]
-
-            db_entry = chan.db_entry
+            db_entry = self.context.pvdb[command.name.decode('latin-1')]
             access = db_entry.check_access(command.sender_address)
 
             yield [ca.VersionResponse(13),
@@ -143,9 +138,8 @@ class VirtualCircuit:
                    ca.CreateChanResponse(data_type=db_entry.data_type,
                                          data_count=len(db_entry),
                                          cid=command.cid,
-                                         sid=chan.sid),
+                                         sid=self.circuit.new_channel_id()),
                    ]
-
         elif isinstance(command, ca.ReadNotifyRequest):
             chan = self.circuit.channels_sid[command.sid]
             yield chan.read(values=(3.14,), data_type=command.data_type,
