@@ -147,7 +147,8 @@ class VirtualCircuit:
     def _process_command(self, command):
         def get_db_entry():
             chan = self.circuit.channels_sid[command.sid]
-            return chan, chan.db_entry
+            db_entry = self.context.pvdb[chan.name.decode('latin-1')]
+            return chan, db_entry
 
         if isinstance(command, ca.CreateChanRequest):
             db_entry = self.context.pvdb[command.name.decode('latin-1')]
