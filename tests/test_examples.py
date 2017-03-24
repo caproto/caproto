@@ -33,7 +33,17 @@ def test_curio_server():
     kernel = curio.Kernel()
 
     async def run_server():
-        pvdb = {'pi': server.DatabaseRecordDouble(value=3.14)}
+        pvdb = {'pi': server.DatabaseRecordDouble(value=3.14,
+                                           lower_disp_limit=3.13,
+                                           upper_disp_limit=3.15,
+                                           lower_alarm_limit=3.12,
+                                           upper_alarm_limit=3.16,
+                                           lower_warning_limit=3.11,
+                                           upper_warning_limit=3.17,
+                                           lower_ctrl_limit=3.10,
+                                           upper_ctrl_limit=3.18,
+                                           precision=5,
+                                           units='doodles')}
         ctx = server.Context('127.0.0.1', 5066, pvdb)
         await ctx.run()
 
