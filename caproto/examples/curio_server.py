@@ -1,8 +1,10 @@
-import caproto as ca
-import curio
-from curio import socket
 import time
 import getpass
+
+import curio
+from curio import socket
+
+import caproto as ca
 
 
 SERVER_PORT = 5064
@@ -12,11 +14,78 @@ class DisconnectedCircuit(Exception):
     ...
 
 
+class DatabaseRecordBase:
+    data_type = ca.DBR_LONG.DBR_ID
+
+    def __init__(self, *, timestamp=None, status=0, severity=0, value=None):
+        if timestamp is None:
+            timestamp = time.time()
+        self.timestamp = timestamp
+        self.status = status
+        self.severity = severity
+        self.value = value
+        # self.channel = caproto.ServerChannel()
+
+    def __len__(self):
+        try:
+            return len(self.value)
+        except TypeError:
+            return 1
+
+    def check_access(self, sender_address):
+        print('{} has full access to {}'.format(sender_address, self))
+        return 3  # read-write
+
+
+class DatabaseRecordEnum(DatabaseRecordBase):
+    data_type = ca.DBR_ENUM.DBR_ID
+
+    def __init__(self, *, strs=None, **kwargs):
+        self.strs = strs
+
+        super().__init__(**kwargs)
+
+    @property
+    def no_str(self):
+        return len(self.strs) if self.strs else 0
+
+
+class DatabaseRecordNumeric(DatabaseRecordBase):
+    data_type = ca.DBR_LONG.DBR_ID
+
+    def __init__(self, *, units='', upper_disp_limit=0.0,
+                 lower_disp_limit=0.0, upper_alarm_limit=0.0,
+                 upper_warning_limit=0.0, lower_warning_limit=0.0,
+                 lower_alarm_limit=0.0, upper_ctrl_limit=0.0,
+                 lower_ctrl_limit=0.0, **kwargs):
+
+        super().__init__(**kwargs)
+        self.units = units
+        self.upper_disp_limit = upper_disp_limit
+        self.lower_disp_limit = lower_disp_limit
+        self.upper_alarm_limit = upper_alarm_limit
+        self.upper_warning_limit = upper_warning_limit
+        self.lower_warning_limit = lower_warning_limit
+        self.lower_alarm_limit = lower_alarm_limit
+        self.upper_ctrl_limit = upper_ctrl_limit
+        self.lower_ctrl_limit = lower_ctrl_limit
+
+
+class DatabaseRecordDouble(DatabaseRecordNumeric):
+    data_type = ca.DBR_DOUBLE.DBR_ID
+
+    def __init__(self, *, precision=0, **kwargs):
+        super().__init__(**kwargs)
+
+        self.precision = precision
+
+
 class VirtualCircuit:
     "Wraps a caproto.VirtualCircuit with a curio client."
-    def __init__(self, circuit, client):
+    def __init__(self, circuit, client, context):
         self.circuit = circuit  # a caproto.VirtualCircuit
         self.client = client
+        self.context = context
 
     async def send(self, *commands):
         """
@@ -60,11 +129,21 @@ class VirtualCircuit:
 
     def _process_command(self, command):
         if isinstance(command, ca.CreateChanRequest):
+            chan = self.circuit.channels_sid[command.sid]
+            if not hasattr(chan, 'db_entry'):
+                name = command.name.decode('latin-1')
+                chan.db_entry = self.context.pvdb[name]
+
+            db_entry = chan.db_entry
+            access = db_entry.check_access(command.sender_address)
+
             yield [ca.VersionResponse(13),
-                   ca.AccessRightsResponse(cid=command.cid, access_rights=3),
-                   # TODO Handle sid propertly
-                   ca.CreateChanResponse(data_type=2, data_count=1,
-                                         cid=command.cid, sid=1),
+                   ca.AccessRightsResponse(cid=command.cid,
+                                           access_rights=access),
+                   ca.CreateChanResponse(data_type=db_entry.data_type,
+                                         data_count=len(db_entry),
+                                         cid=command.cid,
+                                         sid=chan.sid),
                    ]
 
         elif isinstance(command, ca.ReadNotifyRequest):
@@ -114,7 +193,7 @@ class Context:
                     res = ca.VersionResponse(13)
                     responses.append(res)
                 if isinstance(command, ca.SearchRequest):
-                    known_pv = command.name.decode() in self.pvdb
+                    known_pv = command.name.decode('latin-1') in self.pvdb
                     if (not known_pv) and command.reply == ca.NO_REPLY:
                         responses.clear()
                         break  # Do not send any repsonse to this datagram.
@@ -123,7 +202,8 @@ class Context:
                     responses.append(res)
 
     async def tcp_handler(self, client, addr):
-        circuit = VirtualCircuit(ca.VirtualCircuit(ca.SERVER, addr, None), client)
+        circuit = VirtualCircuit(ca.VirtualCircuit(ca.SERVER, addr, None), client,
+                                 self)
         circuit.circuit.log.setLevel('DEBUG')
         while True:
             try:
@@ -157,6 +237,7 @@ def _get_my_ip():
 
 
 if __name__ == '__main__':
-    pvdb = ["pi"]
+    pvdb = {'pi': DatabaseRecordDouble(value=3.14),
+            }
     ctx = Context('0.0.0.0', SERVER_PORT, pvdb)
     curio.run(ctx.run())
