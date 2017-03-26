@@ -12,9 +12,6 @@ from caproto.examples.curio_server import find_next_tcp_port
 
 
 REPEATER_PORT = 5065
-TEST_SERVER_PORT = find_next_tcp_port(starting_port=5066)
-print('Test server port will be: ', TEST_SERVER_PORT)
-
 
 _repeater_process = None
 
@@ -64,7 +61,6 @@ def test_curio_client():
 def test_curio_server():
     import caproto.examples.curio_server as server
     import caproto.examples.curio_client as client
-    TEST_SERVER_PORT = 5068
     kernel = curio.Kernel()
 
     async def run_server():
@@ -79,7 +75,9 @@ def test_curio_server():
                                            upper_ctrl_limit=3.18,
                                            precision=5,
                                            units='doodles')}
-        ctx = server.Context('127.0.0.1', TEST_SERVER_PORT, pvdb)
+        port = find_next_tcp_port()
+        print('Server will be on port', port)
+        ctx = server.Context('0.0.0.0', port, pvdb)
         await ctx.run()
 
     async def run_client():
@@ -89,7 +87,7 @@ def test_curio_server():
             print("Subscription has received data.")
             called.append(True)
 
-        ctx = client.Context(server_port=TEST_SERVER_PORT)
+        ctx = client.Context()
         await ctx.register()
         await ctx.search('pi')
         print('done searching')
@@ -112,7 +110,7 @@ def test_curio_server():
         await chan1.circuit.socket.close()
 
     async def task():
-        os.environ['EPICS_CA_ADDR_LIST'] = '127.0.0.1'
+        # os.environ['EPICS_CA_ADDR_LIST'] = '255.255.255.255'
         try:
             server_task = await curio.spawn(run_server())
             await curio.sleep(1)  # Give server some time to start up.
@@ -129,7 +127,7 @@ def test_curio_server():
     print('done')
 
 
-async def run_caget(pv, *, dbr_type=None, TEST_SERVER_PORT):
+async def run_caget(pv, *, dbr_type=None):
     '''Execute epics-base caget and parse results into a dictionary
 
     Parameters
@@ -151,15 +149,12 @@ async def run_caget(pv, *, dbr_type=None, TEST_SERVER_PORT):
     args.append(pv)
 
     print('* Executing', args)
-    env = dict(os.environ)
-    env.update({"EPICS_CA_SERVER_PORT": str(TEST_SERVER_PORT)})
-    output = ''
 
     for j in count():
         if j > 5:
             raise ValueError("tried 5 times and failed")
-
-        p = curio.subprocess.Popen(args, env=env, stdout=curio.subprocess.PIPE)
+        p = curio.subprocess.Popen(args, stdout=curio.subprocess.PIPE,
+                                   stderr=curio.subprocess.PIPE)
         await p.wait()
         raw_output = await p.stdout.read()
         output = raw_output.decode('latin-1')
@@ -192,6 +187,10 @@ async def run_caget(pv, *, dbr_type=None, TEST_SERVER_PORT):
     lines = [line.strip() for line in output.split('\n')
              if line.strip()]
 
+    if not lines:
+        err = await p.stderr.read()
+        raise RuntimeError('caget failed: {}'.format(err))
+
     if wide_mode:
         pv, timestamp, value, stat, sevr = lines[0].split(sep)
         info = dict(pv=pv,
@@ -215,7 +214,6 @@ async def run_caget(pv, *, dbr_type=None, TEST_SERVER_PORT):
 
 def test_curio_server_with_caget():
     import caproto.examples.curio_server as server
-    TEST_SERVER_PORT = 5573
 
     pvdb = {'pi': server.DatabaseRecordDouble(
                     value=3.14,
@@ -233,20 +231,27 @@ def test_curio_server_with_caget():
             }
 
     async def run_server():
-        ctx = server.Context('0.0.0.0', TEST_SERVER_PORT, pvdb)
-        await ctx.run()
+        nonlocal pvdb
+        port = find_next_tcp_port()
+        print('Server will be on port', port)
+        ctx = server.Context('0.0.0.0', port, pvdb)
+        try:
+            await ctx.run()
+        except Exception as ex:
+            print('Server failed', ex)
+            raise
+        finally:
+            print('Server exiting')
 
     async def run_client_test(pv):
         print('* client_test', pv)
-        data = await run_caget(pv, TEST_SERVER_PORT=TEST_SERVER_PORT)
+        data = await run_caget(pv)
         print('info', data)
 
-        data = await run_caget(pv, dbr_type=ca.ChType.DOUBLE,
-                               TEST_SERVER_PORT=TEST_SERVER_PORT)
+        data = await run_caget(pv, dbr_type=ca.ChType.DOUBLE)
         assert float(data['value']) == float(pvdb[pv].value)
 
-        data = await run_caget(pv, dbr_type=ca.ChType.CTRL_DOUBLE,
-                               TEST_SERVER_PORT=TEST_SERVER_PORT)
+        data = await run_caget(pv, dbr_type=ca.ChType.CTRL_DOUBLE)
         assert float(data['value']) == float(pvdb[pv].value)
         ctrl_keys = ('upper_disp_limit lower_alarm_limit '
                      'upper_alarm_limit '
@@ -257,8 +262,7 @@ def test_curio_server_with_caget():
         for key in ctrl_keys:
             assert float(data[key]) == getattr(pvdb[pv], key), key
 
-        data = await run_caget(pv, dbr_type=ca.ChType.TIME_DOUBLE,
-                               TEST_SERVER_PORT=TEST_SERVER_PORT)
+        data = await run_caget(pv, dbr_type=ca.ChType.TIME_DOUBLE)
         assert float(data['value']) == float(pvdb[pv].value)
         time_keys = ('status severity').split()
 
@@ -268,19 +272,15 @@ def test_curio_server_with_caget():
 
         assert data['timestamp'] == datetime.datetime.fromtimestamp(pvdb[pv].timestamp)
 
-        data = await run_caget(pv, dbr_type=ca.ChType.LONG,
-                               TEST_SERVER_PORT=TEST_SERVER_PORT)
+        data = await run_caget(pv, dbr_type=ca.ChType.LONG)
         assert int(data['value']) == int(pvdb[pv].value)
 
         print('info', data)
-        data = await run_caget(pv, dbr_type=ca.ChType.STS_LONG,
-                               TEST_SERVER_PORT=TEST_SERVER_PORT)
+        data = await run_caget(pv, dbr_type=ca.ChType.STS_LONG)
         print('info', data)
-        data = await run_caget(pv, dbr_type=ca.ChType.TIME_LONG,
-                               TEST_SERVER_PORT=TEST_SERVER_PORT)
+        data = await run_caget(pv, dbr_type=ca.ChType.TIME_LONG)
         print('info', data)
-        data = await run_caget(pv, dbr_type=ca.ChType.CTRL_LONG,
-                               TEST_SERVER_PORT=TEST_SERVER_PORT)
+        data = await run_caget(pv, dbr_type=ca.ChType.CTRL_LONG)
         print('info', data)
 
     async def task():
@@ -296,3 +296,13 @@ def test_curio_server_with_caget():
     with curio.Kernel() as kernel:
         kernel.run(task)
     print('done')
+
+
+if __name__ == '__main__':
+    setup_module(None)
+    try:
+        test_curio_client()
+        test_curio_server()
+        test_curio_server_with_caget()
+    finally:
+        teardown_module(None)
