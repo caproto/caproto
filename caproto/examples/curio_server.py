@@ -220,7 +220,7 @@ class Context:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         try:
-            sock.bind(('0.0.0.0', EPICS_CA1_PORT))
+            sock.bind((self.host, EPICS_CA1_PORT))
         except Exception:
             print('udp bind failure!')
             raise

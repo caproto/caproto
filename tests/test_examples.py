@@ -11,6 +11,7 @@ from caproto.examples.curio_server import find_next_tcp_port
 
 
 REPEATER_PORT = 5065
+SERVER_HOST = '0.0.0.0'
 
 _repeater_process = None
 
@@ -75,9 +76,9 @@ def test_curio_server():
                                            upper_ctrl_limit=3.18,
                                            precision=5,
                                            units='doodles')}
-        port = find_next_tcp_port()
-        print('Server will be on port', port)
-        ctx = server.Context('0.0.0.0', port, pvdb)
+        port = find_next_tcp_port(host=SERVER_HOST)
+        print('Server will be on', (SERVER_HOST, port))
+        ctx = server.Context(SERVER_HOST, port, pvdb)
         await ctx.run()
 
     async def run_client():
@@ -226,9 +227,9 @@ def test_curio_server_with_caget():
 
     async def run_server():
         nonlocal pvdb
-        port = find_next_tcp_port()
-        print('Server will be on port', port)
-        ctx = server.Context('0.0.0.0', port, pvdb)
+        port = find_next_tcp_port(host=SERVER_HOST)
+        print('Server will be on', (SERVER_HOST, port))
+        ctx = server.Context(SERVER_HOST, port, pvdb)
         try:
             await ctx.run()
         except Exception as ex:
