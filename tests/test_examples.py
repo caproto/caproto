@@ -11,9 +11,6 @@ from caproto.examples.curio_server import find_next_tcp_port
 
 
 REPEATER_PORT = 5065
-TEST_SERVER_PORT = find_next_tcp_port(starting_port=5066)
-print('Test server port will be: ', TEST_SERVER_PORT)
-
 
 _repeater_process = None
 
@@ -78,7 +75,9 @@ def test_curio_server():
                                            upper_ctrl_limit=3.18,
                                            precision=5,
                                            units='doodles')}
-        ctx = server.Context('127.0.0.1', TEST_SERVER_PORT, pvdb)
+        port = find_next_tcp_port()
+        print('Server will be on port', port)
+        ctx = server.Context('0.0.0.0', port, pvdb)
         await ctx.run()
 
     async def run_client():
@@ -88,7 +87,7 @@ def test_curio_server():
             print("Subscription has received data.")
             called.append(True)
 
-        ctx = client.Context(server_port=TEST_SERVER_PORT)
+        ctx = client.Context()
         await ctx.register()
         await ctx.search('pi')
         print('done searching')
@@ -111,7 +110,7 @@ def test_curio_server():
         await chan1.circuit.socket.close()
 
     async def task():
-        os.environ['EPICS_CA_ADDR_LIST'] = '127.0.0.1'
+        # os.environ['EPICS_CA_ADDR_LIST'] = '255.255.255.255'
         try:
             server_task = await curio.spawn(run_server())
             await curio.sleep(1)  # Give server some time to start up.
@@ -150,9 +149,8 @@ async def run_caget(pv, *, dbr_type=None):
     args.append(pv)
 
     print('* Executing', args)
-    env = dict(os.environ)
-    env.update({"EPICS_CA_SERVER_PORT": "5066"})
-    p = curio.subprocess.Popen(args, env=env, stdout=curio.subprocess.PIPE)
+    p = curio.subprocess.Popen(args, stdout=curio.subprocess.PIPE,
+                               stderr=curio.subprocess.PIPE)
     await p.wait()
     raw_output = await p.stdout.read()
     output = raw_output.decode('latin-1')
@@ -182,6 +180,10 @@ async def run_caget(pv, *, dbr_type=None):
 
     lines = [line.strip() for line in output.split('\n')
              if line.strip()]
+
+    if not lines:
+        err = await p.stderr.read()
+        raise RuntimeError('caget failed: {}'.format(err))
 
     if wide_mode:
         pv, timestamp, value, stat, sevr = lines[0].split(sep)
@@ -224,8 +226,16 @@ def test_curio_server_with_caget():
 
     async def run_server():
         nonlocal pvdb
-        ctx = server.Context('0.0.0.0', TEST_SERVER_PORT, pvdb)
-        await ctx.run()
+        port = find_next_tcp_port()
+        print('Server will be on port', port)
+        ctx = server.Context('0.0.0.0', port, pvdb)
+        try:
+            await ctx.run()
+        except Exception as ex:
+            print('Server failed', ex)
+            raise
+        finally:
+            print('Server exiting')
 
     async def run_client_test(pv):
         print('* client_test', pv)
@@ -282,3 +292,13 @@ def test_curio_server_with_caget():
     with curio.Kernel() as kernel:
         kernel.run(task)
     print('done')
+
+
+if __name__ == '__main__':
+    setup_module(None)
+    try:
+        test_curio_client()
+        test_curio_server()
+        test_curio_server_with_caget()
+    finally:
+        teardown_module(None)

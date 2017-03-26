@@ -399,6 +399,9 @@ class SearchResponse(Message):
     HAS_PAYLOAD = True
 
     def __init__(self, port, ip, cid, version):
+        if ip is None:
+            ip = '255.255.255.255'
+
         encoded_ip = socket.inet_pton(socket.AF_INET, ip)
         int_encoded_ip, = struct.unpack('!I', encoded_ip)  # bytes -> int
         header = SearchResponseHeader(data_type=port,

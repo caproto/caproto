@@ -7,16 +7,14 @@ from curio import socket
 import caproto as ca
 from caproto import _dbr as dbr
 from caproto import ChType
-
-
-SERVER_PORT = 5064
+from caproto import (EPICS_CA1_PORT, EPICS_CA2_PORT)
 
 
 class DisconnectedCircuit(Exception):
     ...
 
 
-def find_next_tcp_port(host='0.0.0.0', starting_port=SERVER_PORT):
+def find_next_tcp_port(host='0.0.0.0', starting_port=EPICS_CA2_PORT + 1):
     import socket
 
     port = starting_port
@@ -219,9 +217,15 @@ class Context:
 
     async def udp_server(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        sock.bind((self.host, self.port))
+        try:
+            sock.bind(('0.0.0.0', EPICS_CA1_PORT))
+        except Exception:
+            print('udp bind failure!')
+            raise
+        else:
+            print('udp server bound', sock)
         responses = []
         while True:
             responses.clear()
@@ -242,8 +246,11 @@ class Context:
                     if (not known_pv) and command.reply == ca.NO_REPLY:
                         responses.clear()
                         break  # Do not send any repsonse to this datagram.
-                    ip = _get_my_ip()
-                    res = ca.SearchResponse(self.port, ip, command.cid, 13)
+
+                    # we can get the IP but it's more reliable (AFAIK) to
+                    # let the client get the ip from the packet
+                    # ip = _get_my_ip()
+                    res = ca.SearchResponse(self.port, None, command.cid, 13)
                     responses.append(res)
 
     async def tcp_handler(self, client, addr):
@@ -270,15 +277,23 @@ class Context:
 
 
 def _get_my_ip():
-    # Reliably getting the IP is a surprisingly tricky problem solved by this
-    # crazy one-liner from http://stackoverflow.com/a/1267524/1221924
-    # This uses the synchronous socket API, not the curio one, which we should
-    # eventually fix.
-    import socket
     try:
-        return [l for l in ([ip for ip in socket.gethostbyname_ex(socket.gethostname())[2] if not ip.startswith("127.")][:1], [[(s.connect(('8.8.8.8', 53)), s.getsockname()[0], s.close()) for s in [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]]) if l][0][0]
-    except Exception:
+        import netifaces
+    except ImportError:
         return '127.0.0.1'
+
+    interfaces = [netifaces.ifaddresses(interface)
+                  for interface in netifaces.interfaces()
+                  ]
+    ipv4s = [af_inet_info['addr']
+             for interface in interfaces
+             if netifaces.AF_INET in interface
+             for af_inet_info in interface[netifaces.AF_INET]
+             ]
+
+    if not ipv4s:
+        return '127.0.0.1'
+    return ipv4s[0]
 
 
 if __name__ == '__main__':
@@ -301,5 +316,6 @@ if __name__ == '__main__':
                                           units='doodles',
                                           ),
             }
-    ctx = Context('0.0.0.0', SERVER_PORT, pvdb)
+
+    ctx = Context('0.0.0.0', find_next_tcp_port(), pvdb)
     curio.run(ctx.run())

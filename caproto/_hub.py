@@ -33,6 +33,9 @@ from ._dbr import (SubscriptionType, )
 
 DEFAULT_PROTOCOL_VERSION = 13
 
+# official IANA ports
+EPICS_CA1_PORT, EPICS_CA2_PORT = 5064, 5065
+
 
 class VirtualCircuit:
     """
@@ -975,7 +978,7 @@ def extract_address(search_response):
         # The CA spec tells us that this sentinel value means we
         # should fall back to using the address of the sender of
         # the UDP datagram.
-        address = search_response.sender_address
+        address = search_response.sender_address[0]
     else:
-        address = search_response.ip, search_response.port
-    return address
+        address = search_response.ip
+    return (address, search_response.port)
