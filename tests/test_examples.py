@@ -1,14 +1,41 @@
 import signal
 import os
 import datetime
+import logging
 import time
 from multiprocessing import Process
 import curio
 import curio.subprocess
 import caproto as ca
+from caproto.examples.curio_server import find_next_tcp_port
 
 
-TEST_SERVER_PORT = 5066
+REPEATER_PORT = 5065
+TEST_SERVER_PORT = find_next_tcp_port(starting_port=5066)
+print('Test server port will be: ', TEST_SERVER_PORT)
+
+
+_repeater_process = None
+
+
+def setup_module(module):
+    global _repeater_process
+    from caproto.examples.repeater import main
+    logging.getLogger('caproto').setLevel(logging.DEBUG)
+    logging.basicConfig()
+
+    _repeater_process = Process(target=main, args=('0.0.0.0', REPEATER_PORT))
+    _repeater_process.start()
+
+    print('Waiting for the repeater to start up...')
+    time.sleep(2)
+
+
+def teardown_module(module):
+    global _repeater_process
+    print('teardown_module: killing repeater process')
+    _repeater_process.terminate()
+    _repeater_process = None
 
 
 def test_synchronous_client():
@@ -29,7 +56,8 @@ def test_synchronous_client():
 
 def test_curio_client():
     from caproto.examples.curio_client import main
-    curio.run(main())
+    with curio.Kernel() as kernel:
+        kernel.run(main())
 
 
 def test_curio_server():
@@ -84,13 +112,15 @@ def test_curio_server():
 
     async def task():
         os.environ['EPICS_CA_ADDR_LIST'] = '127.0.0.1'
-        server_task = await curio.spawn(run_server())
-        await curio.sleep(1)  # Give server some time to start up.
-        client_task = await run_client()
-        print('client is done')
-        await server_task.cancel()
-        print('server is canceled', server_task.cancelled)  # prints True
-        print(kernel._tasks)
+        try:
+            server_task = await curio.spawn(run_server())
+            await curio.sleep(1)  # Give server some time to start up.
+            client_task = await run_client()
+            print('client is done')
+        finally:
+            await server_task.cancel()
+            print('server is canceled', server_task.cancelled)  # prints True
+            print(kernel._tasks)
 
     with kernel:
         kernel.run(task)
