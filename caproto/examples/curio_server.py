@@ -16,6 +16,24 @@ class DisconnectedCircuit(Exception):
     ...
 
 
+def find_next_tcp_port(host='0.0.0.0', starting_port=SERVER_PORT):
+    import socket
+
+    port = starting_port
+
+    while port <= 65535:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.bind((host, port))
+        except IOError as ex:
+            print(ex, port)
+            port += 1
+        else:
+            break
+
+    return port
+
+
 def convert_to(values, from_dtype, to_dtype):
     if from_dtype == to_dtype:
         return values
