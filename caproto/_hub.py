@@ -642,7 +642,7 @@ class ClientChannel(_BaseChannel):
         HostNameRequest
         """
         if host_name is None:
-            host_name = socket.gethostname()[:40]  # Truncate for EPICS.
+            host_name = socket.gethostname()[:39]  # Truncate for EPICS.
         command = HostNameRequest(host_name)
         return command
 
