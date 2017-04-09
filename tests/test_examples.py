@@ -17,6 +17,25 @@ SERVER_HOST = '0.0.0.0'
 _repeater_process = None
 
 
+def get_broadcast_addr_list():
+    import netifaces
+
+    interfaces = [netifaces.ifaddresses(interface)
+                  for interface in netifaces.interfaces()
+                  ]
+    bcast = [af_inet_info['broadcast']
+             if 'broadcast' in af_inet_info
+             else af_inet_info['peer']
+
+             for interface in interfaces
+             if netifaces.AF_INET in interface
+             for af_inet_info in interface[netifaces.AF_INET]
+             ]
+
+    print('Broadcast address list:', bcast)
+    return ' '.join(bcast)
+
+
 def setup_module(module):
     global _repeater_process
     from caproto.examples.repeater import main
@@ -149,19 +168,26 @@ async def run_caget(pv, *, dbr_type=None):
         wide_mode = False
     args.append(pv)
 
+    print()
     print('* Executing', args)
 
+    env = dict(PATH=os.environ['PATH'],
+               EPICS_CA_AUTO_ADDR_LIST=os.environ['EPICS_CA_AUTO_ADDR_LIST'],
+               EPICS_CA_ADDR_LIST=os.environ['EPICS_CA_ADDR_LIST'])
+    print('----------------------------------------------------------')
     for j in count():
         if j > 5:
             raise ValueError("tried 5 times and failed")
-        p = curio.subprocess.Popen(args, stdout=curio.subprocess.PIPE,
+        p = curio.subprocess.Popen(args, env=env,
+                                   stdout=curio.subprocess.PIPE,
                                    stderr=curio.subprocess.PIPE)
         await p.wait()
         raw_output = await p.stdout.read()
         output = raw_output.decode('latin-1')
+
         print('* output:')
         print(output)
-        print('.')
+        print()
         if output:
             break
 
@@ -301,6 +327,8 @@ def test_curio_server_with_caget():
 
 if __name__ == '__main__':
     setup_module(None)
+    os.environ['EPICS_CA_ADDR_LIST'] = get_broadcast_addr_list()
+    os.environ['EPICS_CA_AUTO_ADDR_LIST'] = 'no'
     try:
         test_curio_client()
         test_curio_server()

@@ -18,6 +18,7 @@ tcp_address = ('0.0.0.0', CA_SERVER_PORT)
 # Create a UDP socket
 udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
 udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 udp_sock.bind(('0.0.0.0', 5064))
 

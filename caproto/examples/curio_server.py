@@ -217,22 +217,32 @@ class Context:
 
     async def udp_server(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        # for BSD/Darwin
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         try:
             sock.bind((self.host, EPICS_CA1_PORT))
         except Exception:
-            print('udp bind failure!')
+            print('[server] udp bind failure!')
             raise
         else:
-            print('udp server bound', sock)
+            print('[server] udp bound', sock)
         responses = []
         while True:
             responses.clear()
-            bytes_received, addr = await sock.recvfrom(1024)
+            print('[server] await recv')
+            try:
+                bytes_received, addr = await sock.recvfrom(1024)
+            except Exception as ex:
+                print('[server] await recv fail', ex)
+                raise
+            else:
+                print('[server] await recv ok, addr', addr)
             self.broadcaster.recv(bytes_received, addr)
             while True:
                 command = self.broadcaster.next_command()
+                print('(server)', command)
                 if isinstance(command, ca.NEED_DATA):
                     # Respond, and then break to receive the next datagram.
                     bytes_to_send = self.broadcaster.send(*responses)
@@ -292,6 +302,11 @@ def _get_my_ip():
              for af_inet_info in interface[netifaces.AF_INET]
              ]
 
+    print([af_inet_info
+             for interface in interfaces
+             if netifaces.AF_INET in interface
+             for af_inet_info in interface[netifaces.AF_INET]
+             ])
     if not ipv4s:
         return '127.0.0.1'
     return ipv4s[0]
