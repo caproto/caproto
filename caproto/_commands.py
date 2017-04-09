@@ -22,7 +22,6 @@ import ctypes
 import inspect
 import struct
 import socket
-import math
 from ._headers import (MessageHeader, ExtendedMessageHeader,
 
                        AccessRightsResponseHeader, ClearChannelRequestHeader,
@@ -61,7 +60,8 @@ def ensure_bytes(s):
     if isinstance(s, bytes):
         return s
     elif isinstance(s, str):
-        return s.encode()
+        # be sure to include a null terminator
+        return s.encode() + b'\0'
     else:
         raise CaprotoTypeError("expected str or bytes")
 
@@ -85,14 +85,13 @@ def padded_len(s):
         raise CaprotoValueError("EPICS imposes a 40-character limit on "
                                 "strings. The " "string {!r} is {} "
                                 "characters.".format(s, len(s)))
-    return 8 * math.ceil(len(s) / 8)
+    return 8 * ((len(s) + 7) // 8)
 
 
-def padded_string_payload(name):
-    name = ensure_bytes(name)
-    size = padded_len(name)
-    payload = bytes(DBR_STRING(name))[:size]
-    return size, payload
+def padded_string_payload(payload):
+    byte_payload = ensure_bytes(payload)
+    padded_size = padded_len(byte_payload)
+    return padded_size, byte_payload.ljust(padded_size, b'\x00')
 
 
 # TODO re-arrange and tweak as desired
@@ -152,7 +151,7 @@ def data_payload(values, data_type, data_count, *, metadata=None):
 
     # Payloads must be zeropadded to have a size that is a multiple of 8.
     if size % 8 != 0:
-        size = 8 * math.ceil(size/8)
+        size = 8 * ((size + 7) // 8)
         payload = payload.ljust(size, b'\x00')
     return size, payload
 
@@ -234,9 +233,9 @@ class Message:
                                               len(self.payload)))
         if self.header.command != self.ID:
             raise CaprotoTypeError("A {} must have a header with "
-                                    "header.command == {}, not {}."
-                                    "".format(type(self), self.ID,
-                                              self.header.command))
+                                   "header.command == {}, not {}."
+                                   "".format(type(self), self.ID,
+                                             self.header.command))
 
     def __setstate__(self, val):
         header, payload = val
@@ -937,7 +936,6 @@ class ErrorResponse(Message):
         """
         payload_struct = _ErrorResponsePayload.from_buffer(payload_bytes)
         return cls.from_components(header, payload_struct)
-
 
 
 class ClearChannelRequest(Message):
