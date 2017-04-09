@@ -219,13 +219,8 @@ class Context:
         Process a command and tranport it over the UDP socket.
         """
         bytes_to_send = self.broadcaster.send(*commands)
-        try:
-            hosts = os.environ['EPICS_CA_ADDR_LIST']
-        except KeyError:
-            hosts = '255.255.255.255'
-
-        for host in hosts.split():
-            print('sending to', bytes_to_send, (host, port))
+        for host in ca.get_address_list():
+            print('sending to', (host, port), bytes_to_send)
             await self.udp_sock.sendto(bytes_to_send, (host, port))
 
     async def recv(self):
@@ -237,11 +232,12 @@ class Context:
 
     async def register(self):
         "Register this client with the CA Repeater."
-        command = self.broadcaster.register('0.0.0.0')
+        command = self.broadcaster.register('127.0.0.1')
         await self.send(ca.EPICS_CA2_PORT, command)
         while not self.registered:
             event = await self.get_event()
             await event.wait()
+        print('Registered with repeater')
 
     async def search(self, name):
         "Generate, process, and the transport a search request."
