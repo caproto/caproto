@@ -55,8 +55,8 @@ def main():
     # one datagram.
     bytes_to_send = b.send(ca.VersionRequest(0, 13),
                            ca.SearchRequest(pv1, 0, 13))
-    hosts = os.environ['EPICS_CA_ADDR_LIST']
-    udp_sock.sendto(bytes_to_send, (hosts, CA_SERVER_PORT))
+    for host in ca.get_address_list():
+        udp_sock.sendto(bytes_to_send, (host, CA_SERVER_PORT))
     print('searching for %s' % pv1)
     # Receive a VersionResponse and SearchResponse.
     bytes_received, address = udp_sock.recvfrom(1024)
