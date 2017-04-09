@@ -63,7 +63,7 @@ def main():
     command = b.next_command()
     assert type(command) is ca.SearchResponse
     address = ca.extract_address(command)
-    
+
     circuit = ca.VirtualCircuit(our_role=ca.CLIENT,
                                 address=address,
                                 priority=0)
@@ -77,10 +77,13 @@ def main():
     # Send info about us.
     send(chan1.circuit, ca.HostNameRequest('localhost'))
     send(chan1.circuit, ca.ClientNameRequest('username'))
-    send(chan1.circuit, ca.CreateChanRequest(name=pv1, cid=chan1.cid, version=13))
+    send(chan1.circuit, ca.CreateChanRequest(name=pv1, cid=chan1.cid,
+                                             version=13))
+    commands = []
     commands = recv(chan1.circuit)
 
     # Test subscriptions.
+    assert chan1.native_data_type and chan1.native_data_count
     add_req = ca.EventAddRequest(data_type=chan1.native_data_type,
                                  data_count=chan1.native_data_count,
                                  sid=chan1.sid,
