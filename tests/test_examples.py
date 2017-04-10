@@ -8,7 +8,7 @@ import curio.subprocess
 import caproto as ca
 
 
-TEST_SERVER_PORT = 5066
+TEST_SERVER_PORT = 5064
 
 
 def test_synchronous_client():
@@ -121,7 +121,7 @@ async def run_caget(pv, *, dbr_type=None):
 
     print('* Executing', args)
     env = dict(os.environ)
-    env.update({"EPICS_CA_SERVER_PORT": "5066"})
+    env.update({"EPICS_CA_SERVER_PORT": str(TEST_SERVER_PORT)})
     p = curio.subprocess.Popen(args, env=env, stdout=curio.subprocess.PIPE)
     await p.wait()
     raw_output = await p.stdout.read()
