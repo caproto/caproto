@@ -241,7 +241,7 @@ def test_curio_server_with_caget():
         nonlocal pvdb
 
         server_task = await curio.spawn(run_server())
-        await curio.sleep(1)  # Give server some time to start up.
+        await curio.sleep(5)  # Give server some time to start up.
 
         try:
             for pv in pvdb:
