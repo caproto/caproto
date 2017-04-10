@@ -1,0 +1,39 @@
+# vi: sw=2 ts=2 sts=2
+
+machine:
+  python:
+    version: 3.5.3
+  services:
+    - docker
+  environment:
+    DOCKER_IMAGE: klauer/epics-docker
+    DOCKER0_IP: $(/sbin/ifconfig docker0 |grep 'inet addr' | sed -e 's/.*addr:\([^ ]*\).*/\1/')
+    EPICS_CA_ADDR_LIST: $( echo $DOCKER0_IP | sed -e 's/^\([0-9]\+\)\.\([0-9]\+\)\..*$/\1.\2.255.255/' ) 
+    EPICS_CA_AUTO_ADDR_LIST: "no"
+    EPICS_CA_MAX_ARRAY_BYTES: 10000000
+
+dependencies:
+  pre:
+    # install docker
+    - docker pull ${DOCKER_IMAGE}
+    - docker images
+    - docker run -d -p $DOCKER0_IP:5064:5064/tcp --name epics_iocs ${DOCKER_IMAGE}
+    - docker ps -a
+
+    - sudo bash ./install_epics_on_travis.sh
+    - sudo rm `which caRepeater`
+
+    # check to see if the environment variables got set properly
+    - env
+    - env |grep EPICS
+    - caget XF:31IDA-OP{Tbl-Ax:X1}Mtr
+  
+    - pip install -r test-requirements.txt
+
+  override:
+    - python setup.py install
+
+test:
+  override:
+    - coverage run run_tests.py -vs tests/
+    - coverage report -m
