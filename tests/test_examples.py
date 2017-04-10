@@ -6,7 +6,7 @@ from multiprocessing import Process
 import curio
 import curio.subprocess
 import caproto as ca
-
+from itertools import count
 
 TEST_SERVER_PORT = 5064
 
@@ -122,13 +122,21 @@ async def run_caget(pv, *, dbr_type=None):
     print('* Executing', args)
     env = dict(os.environ)
     env.update({"EPICS_CA_SERVER_PORT": str(TEST_SERVER_PORT)})
-    p = curio.subprocess.Popen(args, env=env, stdout=curio.subprocess.PIPE)
-    await p.wait()
-    raw_output = await p.stdout.read()
-    output = raw_output.decode('latin-1')
-    print('* output:')
-    print(output)
-    print('.')
+    output = ''
+
+    for j in count():
+        if j > 5:
+            raise ValueError("tried 5 times and failed")
+
+        p = curio.subprocess.Popen(args, env=env, stdout=curio.subprocess.PIPE)
+        await p.wait()
+        raw_output = await p.stdout.read()
+        output = raw_output.decode('latin-1')
+        print('* output:')
+        print(output)
+        print('.')
+        if output:
+            break
 
     key_map = {
         'Native data type': 'native_data_type',
@@ -193,7 +201,6 @@ def test_curio_server_with_caget():
             }
 
     async def run_server():
-        nonlocal pvdb
         ctx = server.Context('0.0.0.0', TEST_SERVER_PORT, pvdb)
         await ctx.run()
 
@@ -238,10 +245,8 @@ def test_curio_server_with_caget():
         print('info', data)
 
     async def task():
-        nonlocal pvdb
 
         server_task = await curio.spawn(run_server())
-        await curio.sleep(5)  # Give server some time to start up.
 
         try:
             for pv in pvdb:
