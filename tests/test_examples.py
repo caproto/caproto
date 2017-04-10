@@ -107,7 +107,7 @@ async def run_caget(pv, *, dbr_type=None, TEST_SERVER_PORT):
         Specific dbr_type to request
     '''
     sep = '@'
-    args = ['/usr/bin/env', 'caget', '-F', sep]
+    args = ['/usr/bin/env', 'caget', '-w', '7', '-F', sep]
     if dbr_type is None:
         args += ['-a']
         wide_mode = True
