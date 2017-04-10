@@ -361,6 +361,11 @@ class SearchRequest(Message):
 
     def __init__(self, name, cid, version):
         size, payload = padded_string_payload(name)
+        _len = len(name)
+        if _len > 40:
+            raise CaprotoValueError("EPICS imposes a 40-character limit on "
+                                    "strings. The " "string {!r} is {} "
+                                    "characters.".format(name, _len))
         header = SearchRequestHeader(size, NO_REPLY, version, cid)
         super().__init__(header, payload)
 
