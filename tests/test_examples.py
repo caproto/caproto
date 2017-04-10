@@ -8,8 +8,6 @@ import curio.subprocess
 import caproto as ca
 from itertools import count
 
-TEST_SERVER_PORT = 5064
-
 
 def test_synchronous_client():
     from caproto.examples.synchronous_client import main
@@ -35,7 +33,7 @@ def test_curio_client():
 def test_curio_server():
     import caproto.examples.curio_server as server
     import caproto.examples.curio_client as client
-
+    TEST_SERVER_PORT = 5068
     kernel = curio.Kernel()
 
     async def run_server():
@@ -98,7 +96,7 @@ def test_curio_server():
     print('done')
 
 
-async def run_caget(pv, *, dbr_type=None):
+async def run_caget(pv, *, dbr_type=None, TEST_SERVER_PORT):
     '''Execute epics-base caget and parse results into a dictionary
 
     Parameters
@@ -184,6 +182,7 @@ async def run_caget(pv, *, dbr_type=None):
 
 def test_curio_server_with_caget():
     import caproto.examples.curio_server as server
+    TEST_SERVER_PORT = 5573
 
     pvdb = {'pi': server.DatabaseRecordDouble(
                     value=3.14,
@@ -206,13 +205,15 @@ def test_curio_server_with_caget():
 
     async def run_client_test(pv):
         print('* client_test', pv)
-        data = await run_caget(pv)
+        data = await run_caget(pv, TEST_SERVER_PORT=TEST_SERVER_PORT)
         print('info', data)
 
-        data = await run_caget(pv, dbr_type=ca.ChType.DOUBLE)
+        data = await run_caget(pv, dbr_type=ca.ChType.DOUBLE,
+                               TEST_SERVER_PORT=TEST_SERVER_PORT)
         assert float(data['value']) == float(pvdb[pv].value)
 
-        data = await run_caget(pv, dbr_type=ca.ChType.CTRL_DOUBLE)
+        data = await run_caget(pv, dbr_type=ca.ChType.CTRL_DOUBLE,
+                               TEST_SERVER_PORT=TEST_SERVER_PORT)
         assert float(data['value']) == float(pvdb[pv].value)
         ctrl_keys = ('upper_disp_limit lower_alarm_limit '
                      'upper_alarm_limit '
@@ -223,7 +224,8 @@ def test_curio_server_with_caget():
         for key in ctrl_keys:
             assert float(data[key]) == getattr(pvdb[pv], key), key
 
-        data = await run_caget(pv, dbr_type=ca.ChType.TIME_DOUBLE)
+        data = await run_caget(pv, dbr_type=ca.ChType.TIME_DOUBLE,
+                               TEST_SERVER_PORT=TEST_SERVER_PORT)
         assert float(data['value']) == float(pvdb[pv].value)
         time_keys = ('status severity').split()
 
@@ -233,15 +235,19 @@ def test_curio_server_with_caget():
 
         assert data['timestamp'] == datetime.datetime.fromtimestamp(pvdb[pv].timestamp)
 
-        data = await run_caget(pv, dbr_type=ca.ChType.LONG)
+        data = await run_caget(pv, dbr_type=ca.ChType.LONG,
+                               TEST_SERVER_PORT=TEST_SERVER_PORT)
         assert int(data['value']) == int(pvdb[pv].value)
 
         print('info', data)
-        data = await run_caget(pv, dbr_type=ca.ChType.STS_LONG)
+        data = await run_caget(pv, dbr_type=ca.ChType.STS_LONG,
+                               TEST_SERVER_PORT=TEST_SERVER_PORT)
         print('info', data)
-        data = await run_caget(pv, dbr_type=ca.ChType.TIME_LONG)
+        data = await run_caget(pv, dbr_type=ca.ChType.TIME_LONG,
+                               TEST_SERVER_PORT=TEST_SERVER_PORT)
         print('info', data)
-        data = await run_caget(pv, dbr_type=ca.ChType.CTRL_LONG)
+        data = await run_caget(pv, dbr_type=ca.ChType.CTRL_LONG,
+                               TEST_SERVER_PORT=TEST_SERVER_PORT)
         print('info', data)
 
     async def task():
