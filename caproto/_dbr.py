@@ -6,11 +6,13 @@
 # Lauer.
 
 import ctypes
+import datetime
 from enum import IntEnum
 from collections import namedtuple
 
 # EPICS2UNIX_EPOCH = 631173600.0 - time.timezone
 EPICS2UNIX_EPOCH = 631152000.0
+EPICS_EPOCH = datetime.datetime.utcfromtimestamp(EPICS2UNIX_EPOCH)
 
 MAX_STRING_SIZE = 40
 MAX_UNITS_SIZE = 8
@@ -19,6 +21,11 @@ MAX_ENUM_STATES = 16
 
 DO_REPLY = 10
 NO_REPLY = 5
+
+NO_ALARM = 0
+MINOR_ALARM = 1
+MAJOR_ALARM = 2
+INVALID_ALARM = 3
 
 DBE_VALUE = 1
 DBE_ARCHIVE = 2
@@ -40,10 +47,18 @@ stsack_string_t = 40 * ctypes.c_char # epicsOldString
 class_name_t = 40 * ctypes.c_char  # epicsOldString
 
 
-def epics_timestamp_to_unix(secondsSinceEpoch, nanoSeconds):
+def epics_timestamp_to_unix(seconds_since_epoch, nano_seconds):
     '''UNIX timestamp (seconds) from Epics TimeStamp structure'''
-    return (EPICS2UNIX_EPOCH + secondsSinceEpoch + 1.e-6 *
-            int(1.e-3 * nanoSeconds))
+    return (EPICS2UNIX_EPOCH + seconds_since_epoch + 1.e-6 *
+            int(1.e-3 * nano_seconds))
+
+
+def timestamp_to_epics(ts):
+    '''Python timestamp from EPICS TimeStamp structure'''
+    if isinstance(ts, float):
+        ts = datetime.datetime.utcfromtimestamp(ts)
+    dt = ts - EPICS_EPOCH
+    return int(dt.total_seconds()), int(dt.microseconds * 1e3)
 
 
 class DBR_STRING(ctypes.BigEndianStructure):
@@ -622,7 +637,7 @@ class DBR_CTRL_ENUM(ctypes.BigEndianStructure):
         ('status', short_t),
         ('severity', short_t),
         ('no_str', short_t),  # number of strings
-        ('strs', MAX_ENUM_STATES * MAX_ENUM_STRING_SIZE * char_t),
+        ('strs', MAX_ENUM_STATES * (MAX_ENUM_STRING_SIZE * char_t)),
         ('value', ushort_t),
     ]
 
@@ -866,6 +881,7 @@ control_types = (ChType.CTRL_STRING, ChType.CTRL_INT, ChType.CTRL_SHORT,
 
 char_types = (ChType.CHAR, ChType.TIME_CHAR, ChType.CTRL_CHAR)
 native_float_types = (ChType.FLOAT, ChType.DOUBLE)
+native_int_types = (ChType.INT, ChType.CHAR, ChType.LONG, ChType.ENUM)
 
 
 try:
@@ -1013,7 +1029,7 @@ def to_builtin(structure, data_type, data_count):
                      for name, dtype in structure._fields_))
 
 
-def promote_type(ftype, use_time=False, use_ctrl=False):
+def promote_type(ftype, *, use_status=False, use_time=False, use_ctrl=False):
     """Promotes a native field type to its TIME or CTRL variant.
 
     Returns
@@ -1028,6 +1044,8 @@ def promote_type(ftype, use_time=False, use_ctrl=False):
         ftype += ChType.CTRL_STRING
     elif use_time:
         ftype += ChType.TIME_STRING
+    elif use_status:
+        ftype += ChType.STS_STRING
 
     if ftype == ChType.CTRL_STRING:
         return ChType.TIME_STRING
