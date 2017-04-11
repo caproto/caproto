@@ -2,3 +2,4 @@ pytest
 coverage
 codecov
 curio
+netifaces

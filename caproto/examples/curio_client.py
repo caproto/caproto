@@ -14,10 +14,6 @@ import curio
 from curio import socket
 
 
-REPEATER_PORT = 5065
-SERVER_PORT = 5064
-
-
 class VirtualCircuit:
     "Wraps a caproto.VirtualCircuit and adds transport."
     def __init__(self, circuit):
@@ -201,10 +197,8 @@ class Channel:
 
 
 class Context:
-    "Wraps a caproto.Broadcaster, a UDP socket, and cache of VirtualCircuits." 
-    def __init__(self, repeater_port=REPEATER_PORT, server_port=SERVER_PORT):
-        self.repeater_port = repeater_port
-        self.server_port = server_port
+    "Wraps a caproto.Broadcaster, a UDP socket, and cache of VirtualCircuits."
+    def __init__(self):
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
         self.broadcaster.log.setLevel('DEBUG')
 
@@ -225,8 +219,9 @@ class Context:
         Process a command and tranport it over the UDP socket.
         """
         bytes_to_send = self.broadcaster.send(*commands)
-        hosts = os.environ['EPICS_CA_ADDR_LIST']
-        await self.udp_sock.sendto(bytes_to_send, (hosts, port))
+        for host in ca.get_address_list():
+            print('sending to', (host, port), bytes_to_send)
+            await self.udp_sock.sendto(bytes_to_send, (host, port))
 
     async def recv(self):
         """
@@ -237,11 +232,12 @@ class Context:
 
     async def register(self):
         "Register this client with the CA Repeater."
-        command = self.broadcaster.register('0.0.0.0')
-        await self.send(self.repeater_port, command)
+        command = self.broadcaster.register('127.0.0.1')
+        await self.send(ca.EPICS_CA2_PORT, command)
         while not self.registered:
             event = await self.get_event()
             await event.wait()
+        print('Registered with repeater')
 
     async def search(self, name):
         "Generate, process, and the transport a search request."
@@ -250,7 +246,7 @@ class Context:
         ver_command, search_command = self.broadcaster.search(name)
         # Stash the search ID for recognizes the SearchResponse later.
         self.unanswered_searches[search_command.cid] = name
-        await self.send(self.server_port, ver_command, search_command)
+        await self.send(ca.EPICS_CA1_PORT, ver_command, search_command)
         # Wait for the SearchResponse.
         while search_command.cid in self.unanswered_searches:
             event = await self.get_event()
@@ -381,7 +377,7 @@ async def main():
     await chan2.clear()
     await chan1.clear()
     assert called
-    
+
 
 if __name__ == '__main__':
     curio.run(main())
