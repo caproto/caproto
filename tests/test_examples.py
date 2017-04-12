@@ -1,8 +1,12 @@
 import signal
 import os
+import datetime
 import time
 from multiprocessing import Process
 import curio
+import curio.subprocess
+import caproto as ca
+from itertools import count
 
 
 def test_synchronous_client():
@@ -29,12 +33,22 @@ def test_curio_client():
 def test_curio_server():
     import caproto.examples.curio_server as server
     import caproto.examples.curio_client as client
-
+    TEST_SERVER_PORT = 5068
     kernel = curio.Kernel()
 
     async def run_server():
-        pvdb = ["pi"]
-        ctx = server.Context('127.0.0.1', 5066, pvdb)
+        pvdb = {'pi': server.DatabaseRecordDouble(value=3.14,
+                                           lower_disp_limit=3.13,
+                                           upper_disp_limit=3.15,
+                                           lower_alarm_limit=3.12,
+                                           upper_alarm_limit=3.16,
+                                           lower_warning_limit=3.11,
+                                           upper_warning_limit=3.17,
+                                           lower_ctrl_limit=3.10,
+                                           upper_ctrl_limit=3.18,
+                                           precision=5,
+                                           units='doodles')}
+        ctx = server.Context('127.0.0.1', TEST_SERVER_PORT, pvdb)
         await ctx.run()
 
     async def run_client():
@@ -44,7 +58,7 @@ def test_curio_server():
             print("Subscription has received data.")
             called.append(True)
 
-        ctx = client.Context(server_port=5066)
+        ctx = client.Context(server_port=TEST_SERVER_PORT)
         await ctx.register()
         await ctx.search('pi')
         print('done searching')
@@ -79,4 +93,173 @@ def test_curio_server():
     with kernel:
         kernel.run(task)
     # seems to hang here
+    print('done')
+
+
+async def run_caget(pv, *, dbr_type=None, TEST_SERVER_PORT):
+    '''Execute epics-base caget and parse results into a dictionary
+
+    Parameters
+    ----------
+    pv : str
+        PV name
+    dbr_type : caproto.ChType, optional
+        Specific dbr_type to request
+    '''
+    sep = '@'
+    args = ['/usr/bin/env', 'caget', '-w', '7', '-F', sep]
+    if dbr_type is None:
+        args += ['-a']
+        wide_mode = True
+    else:
+        dbr_type = int(dbr_type)
+        args += ['-d', str(dbr_type)]
+        wide_mode = False
+    args.append(pv)
+
+    print('* Executing', args)
+    env = dict(os.environ)
+    env.update({"EPICS_CA_SERVER_PORT": str(TEST_SERVER_PORT)})
+    output = ''
+
+    for j in count():
+        if j > 5:
+            raise ValueError("tried 5 times and failed")
+
+        p = curio.subprocess.Popen(args, env=env, stdout=curio.subprocess.PIPE)
+        await p.wait()
+        raw_output = await p.stdout.read()
+        output = raw_output.decode('latin-1')
+        print('* output:')
+        print(output)
+        print('.')
+        if output:
+            break
+
+    key_map = {
+        'Native data type': 'native_data_type',
+        'Request type': 'request_type',
+        'Element count': 'element_count',
+        'Value': 'value',
+        'Status': 'status',
+        'Severity': 'severity',
+        'Units': 'units',
+        'Lo disp limit': 'lower_disp_limit',
+        'Hi disp limit': 'upper_disp_limit',
+        'Lo alarm limit': 'lower_alarm_limit',
+        'Lo warn limit': 'lower_warning_limit',
+        'Hi warn limit': 'upper_warning_limit',
+        'Hi alarm limit': 'upper_alarm_limit',
+        'Lo ctrl limit': 'lower_ctrl_limit',
+        'Hi ctrl limit': 'upper_ctrl_limit',
+        'Timestamp': 'timestamp',
+        'Precision': 'precision',
+    }
+
+    lines = [line.strip() for line in output.split('\n')
+             if line.strip()]
+
+    if wide_mode:
+        pv, timestamp, value, stat, sevr = lines[0].split(sep)
+        info = dict(pv=pv,
+                    timestamp=timestamp,
+                    value=value,
+                    status=stat,
+                    severity=sevr)
+    else:
+        info = dict(pv=lines[0])
+        for line in lines[1:]:
+            if line:
+                key, value = line.split(':', 1)
+                info[key_map[key]] = value.strip()
+
+    if 'timestamp' in info:
+        info['timestamp'] = datetime.datetime.strptime(info['timestamp'],
+                                                       '%Y-%m-%d %H:%M:%S.%f')
+
+    return info
+
+
+def test_curio_server_with_caget():
+    import caproto.examples.curio_server as server
+    TEST_SERVER_PORT = 5573
+
+    pvdb = {'pi': server.DatabaseRecordDouble(
+                    value=3.14,
+                    lower_disp_limit=3.13,
+                    upper_disp_limit=3.15,
+                    lower_alarm_limit=3.12,
+                    upper_alarm_limit=3.16,
+                    lower_warning_limit=3.11,
+                    upper_warning_limit=3.17,
+                    lower_ctrl_limit=3.10,
+                    upper_ctrl_limit=3.18,
+                    precision=5,
+                    units='doodles',
+                    ),
+            }
+
+    async def run_server():
+        ctx = server.Context('0.0.0.0', TEST_SERVER_PORT, pvdb)
+        await ctx.run()
+
+    async def run_client_test(pv):
+        print('* client_test', pv)
+        data = await run_caget(pv, TEST_SERVER_PORT=TEST_SERVER_PORT)
+        print('info', data)
+
+        data = await run_caget(pv, dbr_type=ca.ChType.DOUBLE,
+                               TEST_SERVER_PORT=TEST_SERVER_PORT)
+        assert float(data['value']) == float(pvdb[pv].value)
+
+        data = await run_caget(pv, dbr_type=ca.ChType.CTRL_DOUBLE,
+                               TEST_SERVER_PORT=TEST_SERVER_PORT)
+        assert float(data['value']) == float(pvdb[pv].value)
+        ctrl_keys = ('upper_disp_limit lower_alarm_limit '
+                     'upper_alarm_limit '
+                     'lower_warning_limit upper_warning_limit '
+                     'lower_ctrl_limit '
+                     'upper_ctrl_limit precision').split()
+
+        for key in ctrl_keys:
+            assert float(data[key]) == getattr(pvdb[pv], key), key
+
+        data = await run_caget(pv, dbr_type=ca.ChType.TIME_DOUBLE,
+                               TEST_SERVER_PORT=TEST_SERVER_PORT)
+        assert float(data['value']) == float(pvdb[pv].value)
+        time_keys = ('status severity').split()
+
+        for key in time_keys:
+            value = getattr(ca._dbr, data[key])
+            assert value == getattr(pvdb[pv], key), key
+
+        assert data['timestamp'] == datetime.datetime.fromtimestamp(pvdb[pv].timestamp)
+
+        data = await run_caget(pv, dbr_type=ca.ChType.LONG,
+                               TEST_SERVER_PORT=TEST_SERVER_PORT)
+        assert int(data['value']) == int(pvdb[pv].value)
+
+        print('info', data)
+        data = await run_caget(pv, dbr_type=ca.ChType.STS_LONG,
+                               TEST_SERVER_PORT=TEST_SERVER_PORT)
+        print('info', data)
+        data = await run_caget(pv, dbr_type=ca.ChType.TIME_LONG,
+                               TEST_SERVER_PORT=TEST_SERVER_PORT)
+        print('info', data)
+        data = await run_caget(pv, dbr_type=ca.ChType.CTRL_LONG,
+                               TEST_SERVER_PORT=TEST_SERVER_PORT)
+        print('info', data)
+
+    async def task():
+
+        server_task = await curio.spawn(run_server())
+
+        try:
+            for pv in pvdb:
+                await run_client_test(pv)
+        finally:
+            await server_task.cancel()
+
+    with curio.Kernel() as kernel:
+        kernel.run(task)
     print('done')
