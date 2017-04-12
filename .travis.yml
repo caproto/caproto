@@ -26,7 +26,7 @@ before_install:
   - export EPICS_CA_AUTO_ADDR_LIST="no"
   - export EPICS_CA_MAX_ARRAY_BYTES=10000000
   - export DOCKERIMAGE="klauer/epics-docker"
-
+  - sudo bash install_epics_on_travis.sh
   - perl --version
   - git fetch --unshallow
   - docker pull ${DOCKERIMAGE}
