@@ -1272,6 +1272,11 @@ class HostNameRequest(Message):
     payload_size = property(lambda self: self.header.payload_size)
     name = property(lambda self: bytes(self.payload).rstrip(b'\x00'))
 
+    @classmethod
+    def from_wire(cls, header, payload_bytes):
+        ''' '''
+        return cls.from_components(header, payload_bytes)
+
 
 class AccessRightsResponse(Message):
     """
