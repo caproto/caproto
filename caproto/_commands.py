@@ -1265,8 +1265,6 @@ class HostNameRequest(Message):
     HAS_PAYLOAD = True
 
     def __init__(self, name):
-        if len(name) > 40:
-            name = name[:40]
         size, payload = padded_string_payload(name)
         header = HostNameRequestHeader(size)
         super().__init__(header, payload)
