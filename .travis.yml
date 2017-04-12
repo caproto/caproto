@@ -35,6 +35,7 @@ before_install:
   - docker ps -a
   - docker run -d -p $DOCKER0_IP:7000-9000:5064/tcp --name epics_iocs ${DOCKERIMAGE}
   - docker ps -a
+  - ip addr
 
 install:
   - pip install numpy
