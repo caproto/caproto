@@ -46,11 +46,15 @@ print('Accepted TCP')
 
 sock3.close()
 
+
 # # Make a dict to hold our tcp sockets.
 sockets = {}
+
+
 def send(circuit, command):
     bytes_to_send = circuit.send(command)
     connection.sendall(bytes_to_send)
+
 
 def recv(circuit):
     bytes_received = connection.recv(4096)
@@ -63,12 +67,13 @@ def recv(circuit):
         commands.append(command)
     return commands
 
+
 # First receive directly into the circuit.
 print('initial receipt')
 bytes_received = connection.recv(4096)
 circuit = ca.VirtualCircuit(our_role=ca.SERVER,
-                         address=client_address,
-                         priority=None)
+                            address=client_address,
+                            priority=None)
 circuit.log.setLevel('DEBUG')
 circuit.recv(bytes_received)
 circuit.next_command()
@@ -77,8 +82,9 @@ circuit.next_command()
 circuit.next_command()
 print('normal operation')
 bytes_to_send = circuit.send(ca.VersionResponse(13),
-                           ca.AccessRightsResponse(cid=1, access_rights=3),
-                           ca.CreateChanResponse(data_type=2, data_count=1, cid=1, sid=1))
+                             ca.AccessRightsResponse(cid=1, access_rights=3),
+                             ca.CreateChanResponse(data_type=2,
+                                                   data_count=1, cid=1, sid=1))
 connection.sendall(bytes_to_send)
 recv(circuit)
 circuit.next_command()

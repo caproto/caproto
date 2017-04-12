@@ -229,7 +229,8 @@ class Context:
                     responses.append(res)
 
     async def tcp_handler(self, client, addr):
-        circuit = VirtualCircuit(ca.VirtualCircuit(ca.SERVER, addr, None), client,
+        circuit = VirtualCircuit(ca.VirtualCircuit(ca.SERVER, addr, None),
+                                 client,
                                  self)
         circuit.circuit.log.setLevel('DEBUG')
         while True:
@@ -276,12 +277,12 @@ if __name__ == '__main__':
                                        precision=5,
                                        units='doodles',
                                        ),
-            'enum' : DatabaseRecordEnum(value='a',
-                                        strs=['a', 'b', 'c', 'd'],
-                                        ),
-            'int' : DatabaseRecordInteger(value=0,
-                                          units='doodles',
-                                          ),
+            'enum': DatabaseRecordEnum(value='a',
+                                       strs=['a', 'b', 'c', 'd'],
+                                       ),
+            'int': DatabaseRecordInteger(value=0,
+                                         units='doodles',
+                                         ),
             }
     ctx = Context('0.0.0.0', SERVER_PORT, pvdb)
     curio.run(ctx.run())

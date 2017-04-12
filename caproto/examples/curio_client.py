@@ -201,7 +201,7 @@ class Channel:
 
 
 class Context:
-    "Wraps a caproto.Broadcaster, a UDP socket, and cache of VirtualCircuits." 
+    "Wraps a caproto.Broadcaster, a UDP socket, and cache of VirtualCircuits."
     def __init__(self, repeater_port=REPEATER_PORT, server_port=SERVER_PORT):
         self.repeater_port = repeater_port
         self.server_port = server_port
@@ -381,7 +381,7 @@ async def main():
     await chan2.clear()
     await chan1.clear()
     assert called
-    
+
 
 if __name__ == '__main__':
     curio.run(main())
