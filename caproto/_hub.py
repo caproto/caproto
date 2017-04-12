@@ -33,6 +33,9 @@ from ._dbr import (SubscriptionType, )
 
 DEFAULT_PROTOCOL_VERSION = 13
 
+# official IANA ports
+EPICS_CA1_PORT, EPICS_CA2_PORT = 5064, 5065
+
 
 class VirtualCircuit:
     """
@@ -639,7 +642,7 @@ class ClientChannel(_BaseChannel):
         HostNameRequest
         """
         if host_name is None:
-            host_name = socket.gethostname()[:40]  # Truncate for EPICS.
+            host_name = socket.gethostname()[:39]  # Truncate for EPICS.
         command = HostNameRequest(host_name)
         return command
 
@@ -856,7 +859,8 @@ class ServerChannel(_BaseChannel):
         command = ClearChannelResponse(self.sid, self.cid)
         return command
 
-    def read(self, values, ioid, data_type=None, data_count=None, status=1):
+    def read(self, values, ioid, data_type=None, data_count=None, status=1, *,
+             metadata=None):
         """
         Generate a valid :class:`ReadNotifyResponse`.
 
@@ -874,6 +878,8 @@ class ServerChannel(_BaseChannel):
             :attr:`native_data_count`.
         status : integer, optional
             Default is 1 (success).
+        metadata :
+            Status and control metadata for the values
 
         Returns
         -------
@@ -881,7 +887,7 @@ class ServerChannel(_BaseChannel):
         """
         data_type, data_count = self._fill_defaults(data_type, data_count)
         command = ReadNotifyResponse(values, data_type, data_count, status,
-                                     ioid)
+                                     ioid, metadata=metadata)
         return command
 
     def write(self, ioid, data_type=None, data_count=None, status=1):
@@ -972,7 +978,7 @@ def extract_address(search_response):
         # The CA spec tells us that this sentinel value means we
         # should fall back to using the address of the sender of
         # the UDP datagram.
-        address = search_response.sender_address
+        address = search_response.sender_address[0]
     else:
-        address = search_response.ip, search_response.port
-    return address
+        address = search_response.ip
+    return (address, search_response.port)

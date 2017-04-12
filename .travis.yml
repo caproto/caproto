@@ -1,6 +1,7 @@
 language: python
 python:
   - 3.5
+  - 3.6
 
 sudo: required
 dist: trusty
@@ -26,19 +27,20 @@ before_install:
   - export EPICS_CA_AUTO_ADDR_LIST="no"
   - export EPICS_CA_MAX_ARRAY_BYTES=10000000
   - export DOCKERIMAGE="klauer/epics-docker"
-
+  - sudo bash install_epics_on_travis.sh
   - perl --version
   - git fetch --unshallow
+  - sudo bash install_epics_on_travis.sh
   - docker pull ${DOCKERIMAGE}
   - docker images
   - docker ps -a
-  - docker run -d -p $DOCKER0_IP:5064:5064/tcp -p $DOCKER0_IP:5064:5064/udp --name epics_iocs ${DOCKERIMAGE}
+  - docker run -d -p $DOCKER0_IP:7000-9000:5064/tcp --name epics_iocs ${DOCKERIMAGE}
   - docker ps -a
+  - ip addr
 
 install:
   - pip install numpy
   - pip install .
-  - python caproto/examples/repeater.py & # run a repeater
 
 script:
   - pip install -r test-requirements.txt
