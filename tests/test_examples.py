@@ -3,7 +3,6 @@ import datetime
 import logging
 import time
 from multiprocessing import Process
-from itertools import count
 
 import pytest
 import curio
@@ -221,8 +220,36 @@ def test_curio_server():
 
     with kernel:
         kernel.run(task)
-    # seems to hang here
     print('done')
+
+
+async def run_epics_base_binary(*args):
+    '''Run an EPICS-base binary with the environment variables set
+
+    Returns
+    -------
+    stdout, stderr
+        Decoded standard output and standard error text
+    '''
+    args = ['/usr/bin/env'] + list(args)
+
+    print()
+    print('* Executing', args)
+
+    epics_env = ca.get_environment_variables()
+    env = dict(PATH=os.environ['PATH'],
+               EPICS_CA_AUTO_ADDR_LIST=epics_env['EPICS_CA_AUTO_ADDR_LIST'],
+               EPICS_CA_ADDR_LIST=epics_env['EPICS_CA_ADDR_LIST'])
+
+    p = curio.subprocess.Popen(args, env=env,
+                               stdout=curio.subprocess.PIPE,
+                               stderr=curio.subprocess.PIPE)
+    await p.wait()
+    raw_stdout = await p.stdout.read()
+    raw_stderr = await p.stderr.read()
+    stdout = raw_stdout.decode('latin-1')
+    stderr = raw_stderr.decode('latin-1')
+    return stdout, stderr
 
 
 async def run_caget(pv, *, dbr_type=None):
@@ -236,7 +263,7 @@ async def run_caget(pv, *, dbr_type=None):
         Specific dbr_type to request
     '''
     sep = '@'
-    args = ['/usr/bin/env', 'caget', '-w', '0.2', '-F', sep]
+    args = ['caget', '-w', '0.2', '-F', sep]
     if dbr_type is None:
         args += ['-a']
         wide_mode = True
@@ -246,28 +273,11 @@ async def run_caget(pv, *, dbr_type=None):
         wide_mode = False
     args.append(pv)
 
-    print()
-    print('* Executing', args)
+    output, stderr = await run_epics_base_binary(*args)
 
-    env = dict(PATH=os.environ['PATH'],
-               EPICS_CA_AUTO_ADDR_LIST=os.environ['EPICS_CA_AUTO_ADDR_LIST'],
-               EPICS_CA_ADDR_LIST=os.environ['EPICS_CA_ADDR_LIST'])
     print('----------------------------------------------------------')
-    for j in count():
-        if j > 5:
-            raise ValueError("tried 5 times and failed")
-        p = curio.subprocess.Popen(args, env=env,
-                                   stdout=curio.subprocess.PIPE,
-                                   stderr=curio.subprocess.PIPE)
-        await p.wait()
-        raw_output = await p.stdout.read()
-        output = raw_output.decode('latin-1')
-
-        print('* output:')
-        print(output)
-        print()
-        if output:
-            break
+    print(output)
+    print()
 
     key_map = {
         'Native data type': 'native_data_type',
@@ -294,8 +304,7 @@ async def run_caget(pv, *, dbr_type=None):
              if line.strip()]
 
     if not lines:
-        err = await p.stderr.read()
-        raise RuntimeError('caget failed: {}'.format(err))
+        raise RuntimeError('caget failed: {}'.format(stderr))
 
     if wide_mode:
         pv, timestamp, value, stat, sevr = lines[0].split(sep)
@@ -329,6 +338,33 @@ async def run_caget(pv, *, dbr_type=None):
                 info['timestamp'], '%Y-%m-%d %H:%M:%S.%f')
 
     return info
+
+# ca_test does not exist in our builds
+# async def run_base_catest(pv, *, dbr_type=None):
+#     '''Execute epics-base ca_test and parse results into a dictionary
+#
+#     Parameters
+#     ----------
+#     pv : str
+#         PV name
+#     '''
+#     output, stderr = await run_epics_base_binary('ca_test', pv)
+#
+#     print('----------------------------------------------------------')
+#
+#     lines = []
+#     line_starters = ['name:', 'native type:', 'native count:']
+#     for line in output.split('\n'):
+#         line = line.rstrip()
+#         if line.startswith('DBR'):
+#             lines.append(line)
+#         else:
+#             if any(line.startswith(starter) for starter in line_starters):
+#                 lines.append(line)
+#             else:
+#                 lines[-1] += line
+#
+#     return lines
 
 
 caget_pvdb = {
