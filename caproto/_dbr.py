@@ -51,8 +51,6 @@ long_t = ctypes.c_int32  # epicsInt32
 ulong_t = ctypes.c_uint32  # epicsUInt32
 float_t = ctypes.c_float  # epicsFloat32
 double_t = ctypes.c_double  # epicsFloat64
-stsack_string_t = 40 * ctypes.c_char  # epicsOldString
-class_name_t = 40 * ctypes.c_char  # epicsOldString
 
 
 def epics_timestamp_to_unix(seconds_since_epoch, nano_seconds):
@@ -370,7 +368,7 @@ class DBR_TIME_DOUBLE(ctypes.BigEndianStructure):
     ]
 
 
-# DBR_GR_STRING (21) is not implemented by EPICS.
+# DBR_GR_STRING (21) is not implemented by EPICS. - use DBR_STS_STRING
 
 
 class DBR_GR_INT(ctypes.BigEndianStructure):
@@ -450,7 +448,7 @@ class DBR_GR_ENUM(ctypes.BigEndianStructure):
         ('status', short_t),
         ('severity', short_t),
         ('no_str', short_t),  # number of strings
-        ('strs', MAX_ENUM_STATES * MAX_ENUM_STRING_SIZE * char_t),
+        ('strs', MAX_ENUM_STATES * (MAX_ENUM_STRING_SIZE * char_t)),
     ]
 
 
@@ -546,26 +544,7 @@ class DBR_GR_DOUBLE(ctypes.BigEndianStructure):
     ]
 
 
-# DBR_GR_STRING (28) is not implemented by libca.
-class DBR_CTRL_STRING(ctypes.BigEndianStructure):
-    DBR_ID = 28
-    _pack_ = 1
-    _fields_ = [
-        ('status', short_t),
-        ('severity', short_t),
-        ('precision', short_t),
-        ('units', MAX_UNITS_SIZE * char_t),
-        ('upper_disp_limit', short_t),
-        ('lower_disp_limit', short_t),
-        ('upper_alarm_limit', short_t),
-        ('upper_warning_limit', short_t),
-        ('lower_warning_limit', short_t),
-        ('lower_alarm_limit', short_t),
-        ('upper_ctrl_limit', short_t),
-        ('lower_ctrl_limit', short_t),
-    ]
-
-
+# DBR_CTRL_STRING (28) is not implemented by libca.
 
 class DBR_CTRL_INT(ctypes.BigEndianStructure):
     DBR_ID = 29
@@ -801,7 +780,7 @@ class DBR_CLASS_NAME(ctypes.BigEndianStructure):
     DBR_ID = 38
     _pack_ = 1
     _fields_ = [
-        ('value', ushort_t),
+        ('value', string_t),
     ]
 
 
@@ -860,6 +839,15 @@ class ChannelType(IntEnum):
     TIME_LONG = 19
     TIME_DOUBLE = 20
 
+    GR_STRING = 21
+    GR_SHORT = 22
+    GR_INT = GR_SHORT
+    GR_FLOAT = 23
+    GR_ENUM = 24
+    GR_CHAR = 25
+    GR_LONG = 26
+    GR_DOUBLE = 27
+
     CTRL_STRING = 28
     CTRL_INT = 29
     CTRL_SHORT = 29
@@ -868,6 +856,9 @@ class ChannelType(IntEnum):
     CTRL_CHAR = 32
     CTRL_LONG = 33
     CTRL_DOUBLE = 34
+
+    STSACK_STRING = 37
+    CLASS_NAME = 38
 
 
 class SubscriptionType(IntEnum):
@@ -892,6 +883,10 @@ status_types = (ChType.STS_STRING, ChType.STS_SHORT, ChType.STS_INT,
 time_types = (ChType.TIME_STRING, ChType.TIME_INT, ChType.TIME_SHORT,
               ChType.TIME_FLOAT, ChType.TIME_ENUM, ChType.TIME_CHAR,
               ChType.TIME_LONG, ChType.TIME_DOUBLE)
+
+graphical_types = (ChType.GR_STRING, ChType.GR_SHORT, ChType.GR_INT,
+                   ChType.GR_FLOAT, ChType.GR_ENUM, ChType.GR_CHAR,
+                   ChType.GR_LONG, ChType.GR_DOUBLE)
 
 control_types = (ChType.CTRL_STRING, ChType.CTRL_INT, ChType.CTRL_SHORT,
                  ChType.CTRL_FLOAT, ChType.CTRL_ENUM, ChType.CTRL_CHAR,
@@ -928,6 +923,14 @@ DBR_TYPES = {
     ChType.LONG: ulong_t,
     ChType.DOUBLE: double_t,
 
+    ChType.GR_STRING: DBR_STS_STRING,
+    ChType.GR_INT: DBR_GR_INT,
+    ChType.GR_FLOAT: DBR_GR_FLOAT,
+    ChType.GR_ENUM: DBR_GR_ENUM,
+    ChType.GR_CHAR: DBR_GR_CHAR,
+    ChType.GR_LONG: DBR_GR_LONG,
+    ChType.GR_DOUBLE: DBR_GR_DOUBLE,
+
     ChType.STS_STRING: DBR_STS_STRING,
     ChType.STS_INT: DBR_STS_INT,
     ChType.STS_FLOAT: DBR_STS_FLOAT,
@@ -946,14 +949,19 @@ DBR_TYPES = {
     ChType.TIME_DOUBLE: DBR_TIME_DOUBLE,
 
     # Note: there is no ctrl string in the C definition
-    ChType.CTRL_STRING: DBR_CTRL_STRING,
+    ChType.CTRL_STRING: DBR_STS_STRING,
     ChType.CTRL_SHORT: DBR_CTRL_INT,
     ChType.CTRL_INT: DBR_CTRL_INT,
     ChType.CTRL_FLOAT: DBR_CTRL_FLOAT,
     ChType.CTRL_ENUM: DBR_CTRL_ENUM,
     ChType.CTRL_CHAR: DBR_CTRL_CHAR,
     ChType.CTRL_LONG: DBR_CTRL_LONG,
-    ChType.CTRL_DOUBLE: DBR_CTRL_DOUBLE
+    ChType.CTRL_DOUBLE: DBR_CTRL_DOUBLE,
+
+    # Special types:
+    ChType.STSACK_STRING: DBR_STSACK_STRING,
+    ChType.CLASS_NAME: DBR_CLASS_NAME,
+
 }
 
 if USE_NUMPY:
@@ -1023,6 +1031,15 @@ _native_map = {
     ChType.TIME_LONG: ChType.LONG,
     ChType.TIME_DOUBLE: ChType.DOUBLE,
 
+    ChType.GR_STRING: ChType.STRING,
+    ChType.GR_INT: ChType.INT,
+    ChType.GR_SHORT: ChType.SHORT,
+    ChType.GR_FLOAT: ChType.FLOAT,
+    ChType.GR_ENUM: ChType.ENUM,
+    ChType.GR_CHAR: ChType.CHAR,
+    ChType.GR_LONG: ChType.LONG,
+    ChType.GR_DOUBLE: ChType.DOUBLE,
+
     ChType.CTRL_STRING: ChType.STRING,
     ChType.CTRL_SHORT: ChType.SHORT,
     ChType.CTRL_INT: ChType.INT,
@@ -1031,6 +1048,11 @@ _native_map = {
     ChType.CTRL_CHAR: ChType.CHAR,
     ChType.CTRL_LONG: ChType.LONG,
     ChType.CTRL_DOUBLE: ChType.DOUBLE,
+
+    # Special types:
+    ChType.STSACK_STRING: ChType.STSACK_STRING,
+    ChType.CLASS_NAME: ChType.CLASS_NAME,
+
 }
 
 
