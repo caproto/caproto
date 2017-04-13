@@ -11,6 +11,13 @@ from caproto import (DatabaseRecordDouble, DatabaseRecordInteger,
 from caproto import (EPICS_CA1_PORT, EPICS_CA2_PORT)
 
 
+class DisconnectedCircuit(Exception):
+    ...
+
+
+SERVER_ENCODING = 'latin-1'
+
+
 def find_next_tcp_port(host='0.0.0.0', starting_port=EPICS_CA2_PORT + 1):
     import socket
 
@@ -96,11 +103,11 @@ class VirtualCircuit:
     def _process_command(self, command):
         def get_db_entry():
             chan = self.circuit.channels_sid[command.sid]
-            db_entry = self.context.pvdb[chan.name.decode('latin-1')]
+            db_entry = self.context.pvdb[chan.name.decode(SERVER_ENCODING)]
             return chan, db_entry
 
         if isinstance(command, ca.CreateChanRequest):
-            db_entry = self.context.pvdb[command.name.decode('latin-1')]
+            db_entry = self.context.pvdb[command.name.decode(SERVER_ENCODING)]
             access = db_entry.check_access(command.sender_address)
 
             yield [ca.VersionResponse(13),
@@ -181,7 +188,7 @@ class Context:
                     res = ca.VersionResponse(13)
                     responses.append(res)
                 if isinstance(command, ca.SearchRequest):
-                    known_pv = command.name.decode('latin-1') in self.pvdb
+                    known_pv = command.name.decode(SERVER_ENCODING) in self.pvdb
                     if (not known_pv) and command.reply == ca.NO_REPLY:
                         responses.clear()
                         break  # Do not send any repsonse to this datagram.
@@ -262,5 +269,6 @@ if __name__ == '__main__':
                                          ),
             }
 
+    pvdb['pi'].alarm.alarm_string = 'delicious'
     ctx = Context('0.0.0.0', find_next_tcp_port(), pvdb)
     curio.run(ctx.run())

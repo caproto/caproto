@@ -1,7 +1,8 @@
 import time
 from ._dbr import (DBR_TYPES, ChType, promote_type, native_type,
                    native_float_types, native_int_types, native_types,
-                   timestamp_to_epics, time_types, MAX_ENUM_STRING_SIZE)
+                   timestamp_to_epics, time_types, MAX_ENUM_STRING_SIZE,
+                   DBR_STSACK_STRING)
 from ._utils import ensure_bytes
 
 # it's all about data
@@ -9,6 +10,41 @@ ENCODING = 'latin-1'
 
 
 # TODO these aren't really records. what were you thinking?
+class DatabaseAlarmStatus:
+    def __init__(self, *, status=0, severity=0, acknowledge_transient=False,
+                 acknowledge_severity=0, alarm_string=''):
+        self.status = status
+        self.severity = severity
+        self.acknowledge_transient = acknowledge_transient
+        self.acknowledge_severity = acknowledge_severity
+        self.alarm_string = ''
+
+    def acknowledge(self):
+        pass
+
+    def _set_instance_from_dbr(self, dbr):
+        self.status = dbr.status
+        self.severity = dbr.severity
+        self.acknowledge_transient = (dbr.ackt != 0)
+        self.acknowledge_severity = dbr.acks
+        self.alarm_string = dbr.value.decode(ENCODING)
+
+    @classmethod
+    def _from_dbr(cls, dbr):
+        instance = cls()
+        instance._set_instance_from_dbr(dbr)
+
+    def to_dbr(self, dbr=None):
+        if dbr is None:
+            dbr = DBR_STSACK_STRING()
+        dbr.status = self.status
+        dbr.severity = self.severity
+        dbr.ackt = 1 if self.acknowledge_transient else 0
+        dbr.acks = self.acknowledge_severity
+        dbr.value = self.alarm_string.encode(ENCODING)
+        return dbr
+
+
 class DatabaseRecordBase:
     data_type = ChType.LONG
 
@@ -16,8 +52,7 @@ class DatabaseRecordBase:
         if timestamp is None:
             timestamp = time.time()
         self.timestamp = timestamp
-        self.status = status
-        self.severity = severity
+        self.alarm = DatabaseAlarmStatus(status=status, severity=severity)
         self.value = value
 
         self._data = {chtype: DBR_TYPES[chtype]()
@@ -35,6 +70,9 @@ class DatabaseRecordBase:
         self._data['native'] = []
 
     def convert_to(self, to_dtype):
+        if to_dtype in (ChType.STSACK_STRING, ChType.CLASS_NAME):
+            return None
+
         # this leaves a lot to be desired
         from_dtype = self.data_type
         native_to = native_type(to_dtype)
@@ -125,6 +163,22 @@ class DatabaseRecordBase:
     def epics_timestamp(self):
         'EPICS timestamp as (seconds, nanoseconds) since EPICS epoch'
         return timestamp_to_epics(self.timestamp)
+
+    @property
+    def status(self):
+        return self.alarm.status
+
+    @status.setter
+    def status(self, status):
+        self.alarm.status = status
+
+    @property
+    def severity(self):
+        return self.alarm.severity
+
+    @severity.setter
+    def severity(self, severity):
+        self.alarm.severity = severity
 
     def __len__(self):
         try:
