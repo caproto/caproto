@@ -29,19 +29,20 @@ def make_sentinel(name):
     cls.__class__ = cls
     return cls
 
-sentinels = ("CLIENT SERVER " # roles
-             "RESPONSE REQUEST "  # directions
-             "NEED_DATA "  # special sentinel for read_* functions
-             # states
-             "SEND_SEARCH_REQUEST AWAIT_SEARCH_RESPONSE "
-             "SEND_SEARCH_RESPONSE NEED_CIRCUIT "
-             "SEND_VERSION_REQUEST AWAIT_VERSION_RESPONSE "
-             "SEND_VERSION_RESPONSE "
-             "SEND_CREATE_CHAN_REQUEST AWAIT_CREATE_CHAN_RESPONSE "
-             "SEND_CREATE_CHAN_RESPONSE "
-             "CONNECTED MUST_CLOSE CLOSED IDLE ERROR".split())
-for token in sentinels:
-    globals()[token] = make_sentinel(token)
+
+globals().update(
+    {token: make_sentinel(token) for token in
+     ('CLIENT', 'SERVER',  # roles
+      'RESPONSE', 'REQUEST',  # directions
+      'NEED_DATA',  # special sentinel for read_* functions
+      # and states
+      'SEND_SEARCH_REQUEST', 'AWAIT_SEARCH_RESPONSE',
+      'SEND_SEARCH_RESPONSE', 'NEED_CIRCUIT', 'SEND_VERSION_REQUEST',
+      'AWAIT_VERSION_RESPONSE', 'SEND_VERSION_RESPONSE',
+      'SEND_CREATE_CHAN_REQUEST', 'AWAIT_CREATE_CHAN_RESPONSE',
+      'SEND_CREATE_CHAN_RESPONSE', 'CONNECTED', 'MUST_CLOSE', 'CLOSED',
+      'IDLE', 'ERROR')
+     })
 
 
 class CaprotoError(Exception):
@@ -66,10 +67,6 @@ class RemoteProtocolError(ProtocolError):
     """
     Your remote peer tried to do something that caproto thinks is illegal.
     """
-    ...
-
-
-class CaprotoKeyError(CaprotoError, KeyError):
     ...
 
 
