@@ -17,7 +17,7 @@ def find_dbd_path():
 
 @contextmanager
 def softioc(*, db_text='', access_rules_text='', additional_args=None,
-            macros=None, dbd_path=None, dbd_name='softIoc.dbd'):
+            macros=None, dbd_path=None, dbd_name='softIoc.dbd', env=None):
     '''[context manager] Start a soft IOC on-demand
 
     Parameters
@@ -35,6 +35,8 @@ def softioc(*, db_text='', access_rules_text='', additional_args=None,
         Uses `find_dbd_path()` if None
     dbd_name : str
         Name of dbd file
+    env : dict
+        Environment variables to pass
 
     Yields
     ------
@@ -54,6 +56,12 @@ def softioc(*, db_text='', access_rules_text='', additional_args=None,
     if macros is None:
         macros = dict(P='test')
 
+    proc_env = dict(os.environ)
+    if env is not None:
+        proc_env.update(**env)
+
+    # if 'EPICS_' not in proc_env:
+
     macros = ','.join('{}={}'.format(k, v) for k, v in macros.items())
 
     with NamedTemporaryFile(mode='w+') as cf:
@@ -68,11 +76,14 @@ def softioc(*, db_text='', access_rules_text='', additional_args=None,
                 dbd_path = find_dbd_path()
 
             dbd_path = os.path.join(dbd_path, dbd_name)
-            proc = subprocess.Popen(['softIoc', '-D', dbd_path,
-                                     '-m', macros, '-a', cf.name,
-                                     '-d', df.name] + additional_args,
-                                     stdin=subprocess.PIPE,
-                                     stdout=subprocess.PIPE)
+            popen_args = ['softIoc',
+                          '-D', dbd_path,
+                          '-m', macros,
+                          '-a', cf.name,
+                          '-d', df.name]
+            proc = subprocess.Popen(popen_args + additional_args, env=proc_env,
+                                    stdin=subprocess.PIPE,
+                                    stdout=subprocess.PIPE)
             yield proc
 
             proc.kill()
