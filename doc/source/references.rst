@@ -5,6 +5,7 @@ References
 These resources were useful in the development of this project.
 
 * `CA protcol spec <http://www.aps.anl.gov/epics/base/R3-16/0-docs/CAproto/index.html>`_
+* `"Channel Access in Depth," slides by Kenneth Evans, Jr.  <http://www.aps.anl.gov/bcda/epicsgettingstarted/specialtopics/ChannelAccessInDepth1up.pdf>`_
 * `"Channel Access Concepts," slides by Andrew Johnson <http://www.aps.anl.gov/epics/docs/APS2014/05-CA-Concepts.pdf>`_
 * `Michael DavidSaver's wireshark plugin for parsing Channel Access network traffic <https://github.com/mdavidsaver/cashark>`_
 * `Ken Lauer's homebrew-epics formula <https://github.com/danielballan/motorsim/tree/homebrew-epics>`_
@@ -14,3 +15,4 @@ These resources were useful in the development of this project.
 * the documentation and source code of `h11 <https://h11.readthedocs.io/>`_ and
   `pyepics <https://github.com/pyepics/pyepics>`_
 * the source code of `epics-base <https://github.com/epics-base/epics-base/>`_
+* `This Stack Overflow post about socket options <http://stackoverflow.com/questions/14388706/socket-options-so-reuseaddr-and-so-reuseport-how-do-they-differ-do-they-mean-t>`_
