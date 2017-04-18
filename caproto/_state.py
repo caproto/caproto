@@ -178,6 +178,8 @@ STATE_TRIGGERED_TRANSITIONS = {
 
 
 class _BaseState:
+    TRANSITIONS = {}  # Subclasses should override this with non-empty dict.
+
     def __repr__(self):
         return "<{!s} states={!r}>".format(type(self).__name__, self.states)
 
@@ -185,15 +187,19 @@ class _BaseState:
         return self.states[role]
 
     def _fire_command_triggered_transitions(self, role, command_type):
-        state = self.states[role]
+        current_state = self.states[role]
+        allowed_transitions = self.TRANSITIONS[role][current_state]
         try:
-            new_state = self.TRANSITIONS[role][state][command_type]
+            new_state = allowed_transitions[command_type]
         except KeyError:
             err = get_exception(role, command_type)
             raise err(
                 "{} cannot handle command type {} when role={} and state={}"
                 .format(self, command_type.__name__, role, self.states[role]))
         self.states[role] = new_state
+
+    def process_command_type(self, role, command_type):
+        raise NotImplementedError("Subclass must define this.")
 
 
 class ChannelState(_BaseState):
