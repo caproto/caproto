@@ -49,6 +49,8 @@ script:
   - set -e
   # Install deps for building the docs.
   - pip install -r docs-requirements.txt
+  # Run a CA Repeater for the docs examples to use.
+  - python caproto/examples/repeater.py &
   # Build the docs.
   - cd doc
   - make html
