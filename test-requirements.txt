@@ -1,5 +1,6 @@
-pytest
-coverage
 codecov
+coverage
 curio
 netifaces
+pyepics
+pytest

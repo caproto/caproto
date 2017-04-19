@@ -41,7 +41,6 @@ before_install:
 
 install:
   - pip install numpy
-  - pip install pyepics
   - pip install .
 
 script:
