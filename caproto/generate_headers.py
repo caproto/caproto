@@ -142,7 +142,7 @@ def write_commands(path=None):
     """
     Generate _headers.py from headers.tpl and CAproto.html
     """
-    with open('CAproto.html') as f:
+    with open(getpath('..', 'CAproto.html')) as f:
         soup = BeautifulSoup(f.read(), 'html.parser')
     commands = []
     for _id in ('secCommandsShared',
