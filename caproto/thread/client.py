@@ -1,0 +1,602 @@
+import caproto as ca
+import copy
+import functools
+import itertools
+import socket
+import threading
+
+
+CA_REPEATER_PORT = 5065
+CA_SERVER_PORT = 5064
+
+
+class SocketThread:
+    def __init__(self, socket, target_obj):
+        self.socket = socket
+        self.target_obj = target_obj
+        self.thread = threading.Thread(target=self, daemon=True)
+        self.thread.start()
+
+    def __call__(self):
+        while True:
+            print('recev')
+            bytes_recv, address = self.socket.recvfrom(4096)
+            self.target_obj.next_command(bytes_recv, address)
+
+
+class Context:
+    "Wraps a caproto.Broadcaster, a UDP socket, and cache of VirtualCircuits."
+    def __init__(self):
+        self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
+        self.broadcaster.log.setLevel('DEBUG')
+
+        # UDP socket broadcasting to CA servers
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM,
+                             socket.IPPROTO_UDP)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        self.udp_sock = sock
+
+        self.registered = False  # refers to RepeaterRegisterRequest
+        self.circuits = []  # list of VirtualCircuits
+        self.unanswered_searches = {}  # map search id (cid) to name
+        self.search_results = {}  # map name to address
+        self.event = None  # used for signaling consumers about new commands
+
+        self.has_new_command = threading.Condition()
+        self.sock_thread = SocketThread(sock, self)
+
+    def send(self, port, *commands):
+        """
+        Process a command and tranport it over the UDP socket.
+        """
+        bytes_to_send = self.broadcaster.send(*commands)
+        for host in ca.get_address_list() + ['0.0.0.0']:
+            print('sending to', (host, port), bytes_to_send)
+            self.udp_sock.sendto(bytes_to_send, (host, port))
+
+    def recv(self):
+        """
+        Receive bytes over TCP and cache them in this circuit's buffer.
+        """
+        bytes_received, address = self.udp_sock.recvfrom(4096)
+        self.broadcaster.recv(bytes_received, address)
+
+    def register(self):
+        "Register this client with the CA Repeater."
+        command = self.broadcaster.register('127.0.0.1')
+
+        self.send(ca.EPICS_CA2_PORT, command)
+
+        while True:
+            with self.has_new_command:
+                if self.registered:
+                    break
+                self.has_new_command.wait()
+        print('Registered with repeater')
+
+    def search(self, name):
+        "Generate, process, and the transport a search request."
+        # Discard any old search result for this name.
+        self.search_results.pop(name, None)
+        ver_command, search_command = self.broadcaster.search(name)
+        # Stash the search ID for recognizes the SearchResponse later.
+        self.unanswered_searches[search_command.cid] = name
+        self.send(ca.EPICS_CA1_PORT, ver_command, search_command)
+        # Wait for the SearchResponse.
+        while True:
+            with self.has_new_command:
+                if search_command.cid not in self.unanswered_searches:
+                    break
+                suc = self.has_new_command.wait(5)
+                if not suc:
+                    raise TimeoutError()
+
+    def get_circuit(self, address, priority):
+        """
+        Return a VirtualCircuit with this address, priority.
+
+        Make a new one if necessary.
+        """
+        for circuit in self.circuits:
+            if (circuit.circuit.address == address and
+                    circuit.circuit.priority == priority):
+                return circuit
+        circuit = VirtualCircuit(ca.VirtualCircuit(our_role=ca.CLIENT,
+                                                   address=address,
+                                                   priority=priority))
+        circuit.circuit.log.setLevel('DEBUG')
+        self.circuits.append(circuit)
+        return circuit
+
+    def create_channel(self, name, priority=0):
+        """
+        Create a new channel.
+        """
+        address = self.search_results[name]
+        circuit = self.get_circuit(address, priority)
+        chan = ca.ClientChannel(name, circuit.circuit)
+
+        def connect():
+            if chan.circuit.states[ca.SERVER] is ca.IDLE:
+                circuit.create_connection()
+                circuit.send(chan.version())
+                circuit.send(chan.host_name())
+                circuit.send(chan.client_name())
+            circuit.send(chan.create())
+
+        # Spawn an async task to connect the channel and return a Channel
+        # instance immediately. User can use ``Channel.wait_for_connection()``
+        # to wait for connect() to complete.
+        connect()
+        return Channel(circuit, chan)
+
+    def next_command(self, bytes_recv, address):
+        "Receive and process and next command broadcasted over UDP."
+        self.broadcaster.recv(bytes_recv, address)
+        while True:
+            with self.has_new_command:
+                command = self.broadcaster.next_command()
+                if isinstance(command, ca.NEED_DATA):
+                    return
+
+                if isinstance(command, ca.RepeaterConfirmResponse):
+                    self.registered = True
+                if isinstance(command, ca.VersionResponse):
+                    # Check that the server version is one we can talk to.
+                    assert command.version > 11
+                if isinstance(command, ca.SearchResponse):
+                    name = self.unanswered_searches.pop(command.cid, None)
+                    if name is not None:
+                        self.search_results[name] = ca.extract_address(command)
+                    else:
+                        # This is a redundant response, which the spec
+                        # tell us we must ignore.
+                        pass
+                print(command)
+                self.has_new_command.notify_all()
+
+
+class VirtualCircuit:
+    def __init__(self, circuit):
+        self.circuit = circuit  # a caproto.VirtualCircuit
+        self.channels = {}  # map cid to Channel
+        self.ioids = {}  # map ioid to Channel
+        self.subscriptionids = {}  # map subscriptionid to Channel
+        self.event = None  # used for signaling consumers about new commands
+        self.has_new_command = threading.Condition()
+        self.socket = None
+        self.sock_thread = None
+
+    def create_connection(self):
+        self.socket = socket.create_connection(self.circuit.address)
+        self.sock_thread = SocketThread(self.socket, self)
+
+    def send(self, *commands):
+        if self.socket is None:
+            raise RuntimeError("must create connection first")
+
+        # turn the crank on the caproto
+        bytes_to_send = self.circuit.send(*commands)
+        # send bytes over the wire
+        self.socket.send(bytes_to_send)
+
+    def next_command(self, bytes_recv, address):
+        self.circuit.recv(bytes_recv)
+        while True:
+            with self.has_new_command:
+                command = self.circuit.next_command()
+                if isinstance(command, ca.NEED_DATA):
+                    return
+                if isinstance(command, ca.ReadNotifyResponse):
+                    chan = self.ioids.pop(command.ioid)
+                    chan.last_reading = command.values
+                if isinstance(command, ca.WriteNotifyResponse):
+                    chan = self.ioids.pop(command.ioid)
+                elif isinstance(command, ca.EventAddResponse):
+                    chan = self.subscriptionids[command.subscriptionid]
+                    chan.process_subscription(command)
+                elif isinstance(command, ca.EventCancelResponse):
+                    self.subscriptionids.pop(command.subscriptionid)
+                # notify anything waiting we may have a command for them
+                self.has_new_command.notify_all()
+
+
+def ensure_connection(func):
+    # TODO get timout default from func signature
+    @functools.wraps(func)
+    def inner(self, *args, **kwargs):
+        self.wait_for_connection(timeout=kwargs.get('timeout', None))
+        return func(self, *args, **kwargs)
+    return inner
+
+
+class PV(object):
+    """Epics Process Variable
+
+    A PV encapsulates an Epics Process Variable.
+
+    The primary interface methods for a pv are to get() and put() is value::
+
+      >>> p = PV(pv_name)  # create a pv object given a pv name
+      >>> p.get()          # get pv value
+      >>> p.put(val)       # set pv to specified value.
+
+    Additional important attributes include::
+
+      >>> p.pvname         # name of pv
+      >>> p.value          # pv value (can be set or get)
+      >>> p.char_value     # string representation of pv value
+      >>> p.count          # number of elements in array pvs
+      >>> p.type           # EPICS data type: 'string','double','enum','long',..
+"""
+
+    _fmtsca = "<PV '%(pvname)s', count=%(count)i, type=%(typefull)s, access=%(access)s>"
+    _fmtarr = "<PV '%(pvname)s', count=%(count)i/%(nelm)i, type=%(typefull)s, access=%(access)s>"
+    _fields = ('pvname',  'value',  'char_value',  'status',  'ftype',  'chid',
+               'host', 'count', 'access', 'write_access', 'read_access',
+               'severity', 'timestamp', 'posixseconds', 'nanoseconds',
+               'precision', 'units', 'enum_strs',
+               'upper_disp_limit', 'lower_disp_limit', 'upper_alarm_limit',
+               'lower_alarm_limit', 'lower_warning_limit',
+               'upper_warning_limit', 'upper_ctrl_limit', 'lower_ctrl_limit')
+
+    def __init__(self, pvname, callback=None, form='time',
+                 verbose=False, auto_monitor=None, count= None,
+                 connection_callback=None,
+                 connection_timeout=None):
+
+        self.pvname = pvname.strip()
+        self.form = form.lower()
+        self.verbose = verbose
+        self.auto_monitor = auto_monitor
+        self.ftype = None
+        self.connected = False
+        self.connection_timeout = connection_timeout
+
+        if self.connection_timeout is None:
+            self.connection_timeout = 1
+
+        self._args = {}.fromkeys(self._fields)
+        self._args['pvname'] = self.pvname
+        self._args['count'] = count
+        self._args['nelm']  = -1
+        self._args['type'] = 'unknown'
+        self._args['typefull'] = 'unknown'
+        self._args['access'] = 'unknown'
+        self.connection_callbacks = []
+
+        if connection_callback is not None:
+            self.connection_callbacks = [connection_callback]
+
+        self.callbacks  = {}
+        self._monref = None  # holder of data returned from create_subscription
+        self._conn_started = False
+
+        if isinstance(callback, (tuple, list)):
+            for i, thiscb in enumerate(callback):
+                if hasattr(thiscb, '__call__'):
+                    self.callbacks[i] = (thiscb, {})
+
+        elif hasattr(callback, '__call__'):
+            self.callbacks[0] = (callback, {})
+
+        self.chid = create_channel(self.pvname)
+        self._cb_count = iter(itertools.count())
+
+    def force_connect(self, pvname=None, chid=None, conn=True, **kws):
+        ...
+
+    def wait_for_connection(self, timeout=None):
+        """wait for a connection that started with connect() to finish
+        Returns
+        -------
+        connected : bool
+            If the PV is connected when this method returns
+        """
+        return False
+
+    def connect(self, timeout=None):
+        """check that a PV is connected, forcing a connection if needed
+
+        Returns
+        -------
+        connected : bool
+            If the PV is connected when this method returns
+        """
+        return False
+
+    def reconnect(self):
+        "try to reconnect PV"
+        self.disconnect()
+        return self.wait_for_connection()
+
+    def poll(self, evt=1.e-4, iot=1.0):
+        "poll for changes"
+        return None
+
+    @ensure_connection
+    def get(self, *, count=None, as_string=False, as_numpy=True,
+            timeout=None, with_ctrlvars=False, use_monitor=True):
+        """returns current value of PV.
+
+        Parameters
+        ----------
+        count : int, optional
+             explicitly limit count for array data
+        as_string : bool, optional
+            flag(True/False) to get a string representation
+            of the value.
+        as_numpy : bool, optional
+            use numpy array as the return type for array data.
+        timeout : float, optional
+            maximum time to wait for value to be received.
+            (default = 0.5 + log10(count) seconds)
+        use_monitor : bool, optional
+            use value from latest monitor callback (True, default)
+            or to make an explicit CA call for the value.
+
+        Returns
+        -------
+        val : Object
+            The value, the type is dependent on the underlying PV
+        """
+        return None
+
+    @ensure_connection
+    def put(self, value, *, wait=False, timeout=30.0,
+            use_complete=False, callback=None, callback_data=None):
+        """set value for PV, optionally waiting until the processing is
+        complete, and optionally specifying a callback function to be run
+        when the processing is complete.
+        """
+
+    @ensure_connection
+    def get_ctrlvars(self, timeout=5, warn=True):
+        "get control values for variable"
+
+    @ensure_connection
+    def get_timevars(self, timeout=5, warn=True):
+        "get time values for variable"
+
+    def __on_changes(self, value=None, **kwd):
+        """internal callback function: do not overwrite!!
+        To have user-defined code run when the PV value changes,
+        use add_callback()
+        """
+
+    def run_callbacks(self):
+        """run all user-defined callbacks with the current data
+
+        Normally, this is to be run automatically on event, but
+        it is provided here as a separate function for testing
+        purposes.
+        """
+        for index in sorted(list(self.callbacks.keys())):
+            self.run_callback(index)
+
+    def run_callback(self, index):
+        """run a specific user-defined callback, specified by index,
+        with the current data
+        Note that callback functions are called with keyword/val
+        arguments including:
+             self._args  (all PV data available, keys = __fields)
+             keyword args included in add_callback()
+             keyword 'cb_info' = (index, self)
+        where the 'cb_info' is provided as a hook so that a callback
+        function  that fails may de-register itself (for example, if
+        a GUI resource is no longer available).
+        """
+        try:
+            fcn, kwargs = self.callbacks[index]
+        except KeyError:
+            return
+        kwd = copy.copy(self._args)
+        kwd.update(kwargs)
+        kwd['cb_info'] = (index, self)
+        if hasattr(fcn, '__call__'):
+            fcn(**kwd)
+
+    def add_callback(self, callback, *, index=None, run_now=False,
+                     with_ctrlvars=True, **kw):
+        """add a callback to a PV.  Optional keyword arguments
+        set here will be preserved and passed on to the callback
+        at runtime.
+
+        Note that a PV may have multiple callbacks, so that each
+        has a unique index (small integer) that is returned by
+        add_callback.  This index is needed to remove a callback."""
+        if not callable(callback):
+            raise ValueError()
+
+        if index is not None:
+            raise ValueError("why do this")
+        index = next(self._cb_count)
+        self.callbacks[index] = (callback, kw)
+
+        if with_ctrlvars and self.connected:
+            self.get_ctrlvars()
+        if run_now:
+            self.get(as_string=True)
+            if self.connected:
+                self.run_callback(index)
+        return index
+
+    def remove_callback(self, index):
+        """remove a callback by index"""
+        self.callbacks.pop(index, None)
+
+    def clear_callbacks(self):
+        "clear all callbacks"
+        self.callbacks = {}
+
+    def __getval(self):
+        "get value"
+        return self.get()
+
+    def __setval(self, val):
+        "put-value"
+        return self.put(val)
+
+    value = property(__getval, __setval, None, "value property")
+
+    @property
+    def char_value(self):
+        "character string representation of value"
+        return self._getarg('char_value')
+
+    @property
+    def status(self):
+        "pv status"
+        return self._getarg('status')
+
+    @property
+    def type(self):
+        "pv type"
+        return self._args['type']
+
+    @property
+    def typefull(self):
+        "pv type"
+        return self._args['typefull']
+
+    @property
+    def host(self):
+        "pv host"
+        return self._getarg('host')
+
+    @property
+    def count(self):
+        """count (number of elements). For array data and later EPICS versions,
+        this is equivalent to the .NORD field.  See also 'nelm' property"""
+        if self._args['count'] is not None:
+            return self._args['count']
+        else:
+            return self._getarg('count')
+
+    @property
+    def nelm(self):
+        """native count (number of elements).
+        For array data this will return the full array size (ie, the
+        .NELM field).  See also 'count' property"""
+        if self._getarg('count') == 1:
+            return 1
+        return None
+
+    @property
+    def read_access(self):
+        "read access"
+        return self._getarg('read_access')
+
+    @property
+    def write_access(self):
+        "write access"
+        return self._getarg('write_access')
+
+    @property
+    def access(self):
+        "read/write access as string"
+        return self._getarg('access')
+
+    @property
+    def severity(self):
+        "pv severity"
+        return self._getarg('severity')
+
+    @property
+    def timestamp(self):
+        "timestamp of last pv action"
+        return self._getarg('timestamp')
+
+    @property
+    def posixseconds(self):
+        """integer seconds for timestamp of last pv action
+        using POSIX time convention"""
+        return self._getarg('posixseconds')
+
+    @property
+    def nanoseconds(self):
+        "integer nanoseconds for timestamp of last pv action"
+        return self._getarg('nanoseconds')
+
+    @property
+    def precision(self):
+        "number of digits after decimal point"
+        return self._getarg('precision')
+
+    @property
+    def units(self):
+        "engineering units for pv"
+        return self._getarg('units')
+
+    @property
+    def enum_strs(self):
+        "list of enumeration strings"
+        return self._getarg('enum_strs')
+
+    @property
+    def upper_disp_limit(self):
+        "limit"
+        return self._getarg('upper_disp_limit')
+
+    @property
+    def lower_disp_limit(self):
+        "limit"
+        return self._getarg('lower_disp_limit')
+
+    @property
+    def upper_alarm_limit(self):
+        "limit"
+        return self._getarg('upper_alarm_limit')
+
+    @property
+    def lower_alarm_limit(self):
+        "limit"
+        return self._getarg('lower_alarm_limit')
+
+    @property
+    def lower_warning_limit(self):
+        "limit"
+        return self._getarg('lower_warning_limit')
+
+    @property
+    def upper_warning_limit(self):
+        "limit"
+        return self._getarg('upper_warning_limit')
+
+    @property
+    def upper_ctrl_limit(self):
+        "limit"
+        return self._getarg('upper_ctrl_limit')
+
+    @property
+    def lower_ctrl_limit(self):
+        "limit"
+        return self._getarg('lower_ctrl_limit')
+
+    @property
+    def info(self):
+        "info string"
+        return self._getinfo()
+
+    @property
+    def put_complete(self):
+        "returns True if a put-with-wait has completed"
+        raise NotImplemented
+
+    def __repr__(self):
+        "string representation"
+
+        if self.connected:
+            if self.count == 1:
+                return self._fmtsca % self._args
+            else:
+                return self._fmtarr % self._args
+        else:
+            return "<PV '%s': not connected>" % self.pvname
+
+    def __eq__(self, other):
+        "test for equality"
+        return False
+
+    def disconnect(self):
+        "disconnect PV"
