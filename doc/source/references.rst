@@ -16,3 +16,5 @@ These resources were useful in the development of this project.
   `pyepics <https://github.com/pyepics/pyepics>`_
 * the source code of `epics-base <https://github.com/epics-base/epics-base/>`_
 * `This Stack Overflow post about socket options <http://stackoverflow.com/questions/14388706/socket-options-so-reuseaddr-and-so-reuseport-how-do-they-differ-do-they-mean-t>`_
+* David Beazley's blog post,
+  `Python Binary I/O Handling <https://dabeaz.blogspot.com/2009/08/python-binary-io-handling.html>`_
