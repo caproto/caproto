@@ -548,7 +548,7 @@ class _BaseChannel:
         Get cached EventAdd commands for this channel's active subscriptions.
         """
         return {k: v for k, v in self.circuit.event_add_commands.items()
-                if v.cid == self.cid}
+                if v.sid == self.sid}
 
     def kill(self):
         """
