@@ -26,19 +26,18 @@ Why do this?
 ============
 
 The aim is to provide a complete, reusable implementation of the Channel Access
-protocol in Python which can be wrapped in whichever network library you want
-to use. It is not a replacement for
-`pyepics <https://github.com/pyepics/pyepics>`_,
-`cothread <http://controls.diamond.ac.uk/downloads/python/cothread/>`_, or
-`pcaspy <https://pcaspy.readthedocs.io>`_. It's a pure-Python implementation
-of *libca* that makes libraries like these easier to write in the
-future. See the `sans-I/O documentation <http://sans-io.readthedocs.io/>`_ for
-more on the why and how of this idea and for a list of related projects.
+protocol in Python. Implementing the protocol in Python --- instead of wrapping
+the standard C library, ``libca`` --- separates message parsing, processing,
+and transport. This enables integration with any way of managing network calls
+in Python, including threads, processes, and various concurrency libraries. It
+gives the developer control over the timing of network calls, with better error
+handling and more control over performance trade-offs. See the
+`sans-I/O documentation <http://sans-io.readthedocs.io/>`_ for more on the
+rationale for this design pattern and a list of related projects.
 
-This entire implementation is shorter than the
-`webpage documenting the Channel Access protocol documentation <http://www.aps.anl.gov/epics/base/R3-16/0-docs/CAproto/index.html>`_.
 The codebase itself may serve as useful introduction to Channel Access
-concepts.
+concepts. It has all the advantages of a pure Python library: easy
+introspection, debug logging, and simple installation.
 
 Vital Statistics
 ================
@@ -58,10 +57,6 @@ How do you know it works?
   the potential for bugs introduced by human transcription. Where we
   found errors in the documentation, we fixed them and submitted a patch
   upstream. (NOTE: This is a reminder to submit a patch.)
-* It passes the server test spec
-  `catvs <https://github.com/mdavidsaver/catvs>`_ (NOTE: As
-  of this writing, this is not true! It's here as a reminder to make it true
-  before we publish this documentation.)
 * The byte sizes of the DBR types compare exactly to those in pyepics.
 
 So should I use it?
