@@ -116,18 +116,13 @@ class Context:
         circuit = self.get_circuit(address, priority)
         chan = ca.ClientChannel(name, circuit.circuit)
 
-        def connect():
-            if chan.circuit.states[ca.SERVER] is ca.IDLE:
-                circuit.create_connection()
-                circuit.send(chan.version())
-                circuit.send(chan.host_name())
-                circuit.send(chan.client_name())
-            circuit.send(chan.create())
+        if chan.circuit.states[ca.SERVER] is ca.IDLE:
+            circuit.create_connection()
+            circuit.send(chan.version())
+            circuit.send(chan.host_name())
+            circuit.send(chan.client_name())
+        circuit.send(chan.create())
 
-        # Spawn an async task to connect the channel and return a Channel
-        # instance immediately. User can use ``Channel.wait_for_connection()``
-        # to wait for connect() to complete.
-        connect()
         return Channel(circuit, chan)
 
     def next_command(self, bytes_recv, address):
@@ -199,6 +194,85 @@ class VirtualCircuit:
                     self.subscriptionids.pop(command.subscriptionid)
                 # notify anything waiting we may have a command for them
                 self.has_new_command.notify_all()
+
+
+class Channel:
+    """Wraps a VirtualCircuit and a caproto.ClientChannel."""
+    def __init__(self, circuit, channel):
+        self.circuit = circuit  # a VirtualCircuit
+        self.channel = channel  # a caproto.ClientChannel
+        self.last_reading = None
+        self.monitoring_tasks = {}  # maps subscriptionid to curio.Task
+        self._callback = None  # user func to call when subscriptions are run
+
+    def register_user_callback(self, func):
+        """
+        Func to be called when a subscription receives a new EventAdd command.
+
+        This function will be called by a Task in the main thread. If ``func``
+        needs to do CPU-intensive or I/O-related work, it should execute that
+        work in a separate thread of process.
+        """
+        self._callback = func
+
+    def process_subscription(self, event_add_command):
+        if self._callback is None:
+            return
+        else:
+            self._callback(event_add_command)
+
+    def wait_for_connection(self):
+        """Wait for this Channel to be connected, ready to use.
+
+        The method ``Context.create_channel`` spawns an asynchronous task to
+        initialize the connection in the fist place. This method waits for it
+        to complete.
+        """
+        raise NotImplemented()
+
+    def clear(self):
+        "Disconnect this Channel."
+        raise NotImplemented()
+
+    def read(self, *args, **kwargs):
+        """Request a fresh reading, wait for it, return it and stash it.
+
+        The most recent reading is always available in the ``last_reading``
+        attribute.
+        """
+        command = self.channel.read(*args, **kwargs)
+        # Stash the ioid to match the response to the request.
+        ioid = command.ioid
+        self.circuit.ioids[ioid] = self
+        self.circuit.send(command)
+        while True:
+            with self.circuit.has_new_command:
+                if ioid not in self.circuit.ioids:
+                    break
+                self.circuit.has_new_command.wait()
+        return self.last_reading
+
+    def write(self, *args, **kwargs):
+        "Write a new value and await confirmation from the server."
+        command = self.channel.write(*args, **kwargs)
+        # Stash the ioid to match the response to the request.
+        ioid = command.ioid
+        self.circuit.ioids[ioid] = self
+        self.circuit.send(command)
+        while True:
+            with self.circuit.has_new_command:
+                if ioid not in self.circuit.ioids:
+                    break
+                self.circuit.has_new_command.wait()
+        return self.last_reading
+
+    def subscribe(self, *args, **kwargs):
+        "Start a new subscription and spawn an async task to receive readings."
+        raise NotImplemented()
+
+    def unsubscribe(self, subscriptionid, *args, **kwargs):
+        "Cancel a subscription and await confirmation from the server."
+        raise NotImplemented()
 
 
 def ensure_connection(func):
