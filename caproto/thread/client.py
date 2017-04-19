@@ -268,11 +268,16 @@ class Channel:
 
     def subscribe(self, *args, **kwargs):
         "Start a new subscription and spawn an async task to receive readings."
-        raise NotImplemented()
+        command = self.channel.subscribe(*args, **kwargs)
+        # Stash the subscriptionid to match the response to the request.
+        self.circuit.subscriptionids[command.subscriptionid] = self
+        self.circuit.send(command)
+        # TODO verify it worked before returning?
 
     def unsubscribe(self, subscriptionid, *args, **kwargs):
         "Cancel a subscription and await confirmation from the server."
-        raise NotImplemented()
+        self.circuit.send(self.channel.unsubscribe(subscriptionid))
+        # TODO verify it worked before returning?
 
 
 def ensure_connection(func):
