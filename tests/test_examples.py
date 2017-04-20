@@ -43,7 +43,7 @@ def setup_module(module):
     logging.getLogger('caproto').setLevel(logging.DEBUG)
     logging.basicConfig()
 
-    _repeater_process = Process(target=main, args=('0.0.0.0', REPEATER_PORT))
+    _repeater_process = Process(target=main)
     _repeater_process.start()
 
     print('Waiting for the repeater to start up...')
