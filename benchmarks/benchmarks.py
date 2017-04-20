@@ -32,6 +32,8 @@ class _TimeWaveform:
 
         os.environ['EPICS_CA_MAX_ARRAY_BYTES'] = str(MAX_ARRAY_BYTES)
         self.pv = epics.PV(WAVEFORM_PV, auto_monitor=False)
+        assert self.pv.wait_for_connection()
+
         self.pv.put(list(range(self.num)))
         assert self.pv.get(timeout=0.5, as_numpy=True) is not None
 

@@ -76,6 +76,8 @@ def softioc(*, db_text='', access_rules_text='', additional_args=None,
                 dbd_path = find_dbd_path()
 
             dbd_path = os.path.join(dbd_path, dbd_name)
+            assert os.path.exists(dbd_path)
+
             popen_args = ['softIoc',
                           '-D', dbd_path,
                           '-m', macros,
