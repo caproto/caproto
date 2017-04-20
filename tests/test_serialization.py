@@ -69,16 +69,18 @@ def test_serialize(cmd):
     print('    ', inst)
     print('    ', bytes(inst.header))
     if inst.payload is not None:
-        print('    ', bytes(inst.payload))
+        print('    ', bytes(inst.payload), len(bytes(inst.payload)))
     print('    ', inst.header.payload_size)
+    print('    dt ', inst.header.data_type)
 
     wire_inst = ca.read_datagram(bytes(inst), ('addr', 0), role)[0]
     print('wire', bytes(wire_inst))
     print('    ', wire_inst)
     print('    ', bytes(wire_inst.header))
     if wire_inst.payload is not None:
-        print('    ', bytes(wire_inst.payload))
+        print('    ', bytes(wire_inst.payload), len(bytes(wire_inst.payload)))
     print('    ', wire_inst.header.payload_size)
     assert bytes(wire_inst.header) == bytes(inst.header)
+    print('    dt ', wire_inst.header.data_type)
     # TODO this is important to check:
     assert wire_inst == inst

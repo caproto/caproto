@@ -273,7 +273,11 @@ class Message:
         return bytes(self) != bytes(other)
 
     def __bytes__(self):
-        return bytes(self.header) + bytes(self.payload or b'')
+        if self.payload is not None:
+            payload_bytes = bytes(self.payload)[:self.header.payload_size]
+        else:
+            payload_bytes = b''
+        return bytes(self.header) + payload_bytes
 
     def __repr__(self):
         signature = inspect.signature(type(self))
