@@ -216,6 +216,7 @@ def read_from_bytestream(data, role):
 
 
 class Message:
+    __slots__ = ()
     ID = None  # integer, to be overriden by subclass
     DIRECTION = None  # REQUEST or RESPONSE; set at the end of this module
     sender_address = None  # set for the read_datagram function
@@ -242,10 +243,6 @@ class Message:
                                    "".format(type(self), self.ID,
                                              self.header.command))
 
-    def __setstate__(self, val):
-        header, payload = val
-        self.__dict__ = {'header': header, 'payload': payload}
-
     @classmethod
     def from_wire(cls, header, payload_bytes):
         """
@@ -263,7 +260,8 @@ class Message:
     def from_components(cls, header, payload):
         # Bwahahahaha
         instance = cls.__new__(cls)
-        instance.__dict__.update({'header': header, 'payload': payload})
+        instance.header = header
+        instance.payload = payload
         return instance
 
     def __eq__(self, other):
@@ -317,6 +315,7 @@ class VersionRequest(Message):
 
         The version of the Channel Access protocol.
     """
+    __slots__ = ()
     ID = 0
     HAS_PAYLOAD = False
 
@@ -340,6 +339,7 @@ class VersionResponse(Message):
 
         The version of the Channel Access protocol.
     """
+    __slots__ = ()
     ID = 0
     HAS_PAYLOAD = False
 
@@ -377,6 +377,7 @@ class SearchRequest(Message):
         Hard-coded to :data:`NO_REPLY` (:data:`5`) meaning that only the
         server(s) with an affirmative response should reply.
     """
+    __slots__ = ()
     ID = 6
     HAS_PAYLOAD = True
 
@@ -420,6 +421,7 @@ class SearchResponse(Message):
 
         The version of the Channel Access protocol.
     """
+    __slots__ = ()
     ID = 6
     HAS_PAYLOAD = True
 
@@ -474,6 +476,7 @@ class NotFoundResponse(Message):
 
         The version of the Channel Access protocol.
     """
+    __slots__ = ()
     ID = 14
     HAS_PAYLOAD = False
 
@@ -492,6 +495,7 @@ class EchoRequest(Message):
 
     This command has no fields.
     """
+    __slots__ = ()
     ID = 23
     HAS_PAYLOAD = False
 
@@ -505,6 +509,7 @@ class EchoResponse(Message):
 
     This command has no fields.
     """
+    __slots__ = ()
     ID = 23
     HAS_PAYLOAD = False
 
@@ -538,6 +543,7 @@ class RsrvIsUpResponse(Message):
 
         IP address as string.
     """
+    __slots__ = ()
     ID = 13
     HAS_PAYLOAD = False
 
@@ -569,6 +575,7 @@ class RepeaterConfirmResponse(Message):
 
         IP address of repeater (as a string).
     """
+    __slots__ = ()
     ID = 17
     HAS_PAYLOAD = False
 
@@ -595,6 +602,7 @@ class RepeaterRegisterRequest(Message):
 
         IP address of the client (as a string).
     """
+    __slots__ = ()
     ID = 24
     HAS_PAYLOAD = False
 
@@ -669,6 +677,7 @@ class EventAddRequest(Message):
 
         Mask indicating which changes to report.
     """
+    __slots__ = ()
     ID = 1
     HAS_PAYLOAD = True
 
@@ -725,6 +734,7 @@ class EventAddResponse(Message):
 
         Echoing the :data:`subscriptionid` in the :class:`EventAddRequest`
     """
+    __slots__ = ()
     ID = 1
     HAS_PAYLOAD = True
 
@@ -771,6 +781,7 @@ class EventCancelRequest(Message):
 
         Integer ID for this subscription.
     """
+    __slots__ = ()
     ID = 2
     HAS_PAYLOAD = False
 
@@ -805,6 +816,7 @@ class EventCancelResponse(Message):
     # Actually this is coded with the ID = 1 like EventAdd*.
     # This is the only weird exception so we special-case it in the function
     # get_command_class.
+    __slots__ = ()
     ID = 2
     HAS_PAYLOAD = False
 
@@ -831,6 +843,7 @@ class EventCancelResponse(Message):
 
 class ReadRequest(Message):
     "Deprecated by Channel Access: See :class:`ReadNotifyRequest`."
+    __slots__ = ()
     ID = 3
     HAS_PAYLOAD = False
 
@@ -846,6 +859,7 @@ class ReadRequest(Message):
 
 class ReadResponse(Message):
     "Deprecated by Channel Access: See :class:`ReadNotifyResponse`."
+    __slots__ = ()
     ID = 3
     HAS_PAYLOAD = True
 
@@ -867,6 +881,7 @@ class ReadResponse(Message):
 
 class WriteRequest(Message):
     "Deprecated: See :class:`WriteNotifyRequest`."
+    __slots__ = ()
     ID = 4
     HAS_PAYLOAD = True
 
@@ -894,6 +909,7 @@ class EventsOffRequest(Message):
 
     This command has no fields.
     """
+    __slots__ = ()
     ID = 8
     HAS_PAYLOAD = False
 
@@ -907,6 +923,7 @@ class EventsOnRequest(Message):
 
     This command has no fields.
     """
+    __slots__ = ()
     ID = 9
     HAS_PAYLOAD = False
 
@@ -916,6 +933,7 @@ class EventsOnRequest(Message):
 
 class ReadSyncRequest(Message):
     "Deprecated by Channel Access: See :class:`ReadNotifyRequest`"
+    __slots__ = ()
     ID = 10
     HAS_PAYLOAD = False
 
@@ -938,6 +956,7 @@ class ErrorResponse(Message):
         As per Channel Access spec, 1 is success; 0 or >1 are various failures.
 
     """
+    __slots__ = ()
     ID = 11
     HAS_PAYLOAD = True
 
@@ -979,6 +998,7 @@ class ClearChannelRequest(Message):
 
         Integer ID for this Channel designated by the server.
     """
+    __slots__ = ()
     ID = 12
     HAS_PAYLOAD = False
 
@@ -1003,6 +1023,7 @@ class ClearChannelResponse(Message):
 
         Integer ID for this Channel designated by the server.
     """
+    __slots__ = ()
     ID = 12
     HAS_PAYLOAD = False
 
@@ -1036,6 +1057,7 @@ class ReadNotifyRequest(Message):
         New integer ID uniquely identifying this I/O transaction on this
         Virtual Circuit.
     """
+    __slots__ = ()
     ID = 15
     HAS_PAYLOAD = False
 
@@ -1076,6 +1098,7 @@ class ReadNotifyResponse(Message):
         As per Channel Access spec, 1 is success; 0 or >1 are various failures.
 
     """
+    __slots__ = ()
     ID = 15
     HAS_PAYLOAD = True
 
@@ -1116,6 +1139,7 @@ class CreateChanRequest(Message):
         The version of the Channel Access protocol.
 
     """
+    __slots__ = ()
     ID = 18
     HAS_PAYLOAD = True
 
@@ -1155,6 +1179,7 @@ class CreateChanResponse(Message):
         identifying this Channel on its VirtualCircuit.
 
     """
+    __slots__ = ()
     ID = 18
     HAS_PAYLOAD = False
 
@@ -1195,6 +1220,7 @@ class WriteNotifyRequest(Message):
         New integer ID uniquely identifying this I/O transaction on this
         Virtual Circuit.
     """
+    __slots__ = ()
     ID = 19
     HAS_PAYLOAD = True
 
@@ -1242,6 +1268,7 @@ class WriteNotifyResponse(Message):
 
         As per Channel Access spec, 1 is success; 0 or >1 are various failures.
     """
+    __slots__ = ()
     ID = 19
     HAS_PAYLOAD = False
 
@@ -1265,6 +1292,7 @@ class ClientNameRequest(Message):
 
         Client name.
     """
+    __slots__ = ()
     ID = 20
     HAS_PAYLOAD = True
 
@@ -1287,6 +1315,7 @@ class HostNameRequest(Message):
 
         Host name.
     """
+    __slots__ = ()
     ID = 21
     HAS_PAYLOAD = True
 
@@ -1319,6 +1348,7 @@ class AccessRightsResponse(Message):
         Integer designated level of read or write access. (See Channel Access
         spec for details about meanings.)
     """
+    __slots__ = ()
     ID = 22
     HAS_PAYLOAD = False
 
@@ -1340,6 +1370,7 @@ class CreateChFailResponse(Message):
 
         Integer ID for this Channel designated by the client.
     """
+    __slots__ = ()
     ID = 26
     HAS_PAYLOAD = False
 
@@ -1359,6 +1390,7 @@ class ServerDisconnResponse(Message):
 
         Integer ID for this Channel designated by the client.
     """
+    __slots__ = ()
     ID = 27
     HAS_PAYLOAD = False
 
