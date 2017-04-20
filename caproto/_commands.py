@@ -183,8 +183,8 @@ def read_datagram(data, address, role):
             barray = barray[payload_size:]
         else:
             payload_bytes = None
-        command = _class.from_wire(header, payload_bytes)
-        command.sender_address = address  # (host, port)
+        command = _class.from_wire(header, payload_bytes,
+                                   sender_address=address)
         commands.append(command)
     return commands
 
@@ -215,15 +215,45 @@ def read_from_bytestream(data, role):
     return data[total_size:], command
 
 
-class Message:
-    __slots__ = ()
-    ID = None  # integer, to be overriden by subclass
-    DIRECTION = None  # REQUEST or RESPONSE; set at the end of this module
-    sender_address = None  # set for the read_datagram function
+Commands = {}
+Commands[CLIENT] = {}
+Commands[SERVER] = {}
+_commands = set()
 
-    def __init__(self, header, payload=None, validate=True):
+
+class _MetaDirectionalMessage(type):
+    # see what you've done, @tacaswell and @danielballan?
+    def __new__(metacls, name, bases, dct):
+        if name.endswith('Request'):
+            direction = REQUEST
+            command_dict = Commands[CLIENT]
+        else:
+            direction = RESPONSE
+            command_dict = Commands[SERVER]
+
+        dct['DIRECTION'] = direction
+        new_class = super().__new__(metacls, name, bases, dct)
+
+        if new_class.ID is not None:
+            command_dict[new_class.ID] = new_class
+
+        if name in ('RsrvIsUpResponse, '):
+            Commands[CLIENT][new_class.ID] = new_class
+            Commands[SERVER][new_class.ID] = new_class
+
+        _commands.add(new_class)
+        return new_class
+
+
+class Message(metaclass=_MetaDirectionalMessage):
+    __slots__ = ('payload', 'header', 'sender_address')
+    ID = None  # integer, to be overriden by subclass
+
+    def __init__(self, header, payload=None, validate=True, sender_address=None):
         self.header = header
         self.payload = payload
+        self.sender_address = sender_address
+
         if validate:
             self.validate()
 
@@ -244,7 +274,7 @@ class Message:
                                              self.header.command))
 
     @classmethod
-    def from_wire(cls, header, payload_bytes):
+    def from_wire(cls, header, payload_bytes, *, sender_address=None):
         """
         Use header.dbr_type to pack payload bytes into the right strucutre.
 
@@ -257,11 +287,12 @@ class Message:
         return cls.from_components(header, payload_struct)
 
     @classmethod
-    def from_components(cls, header, payload):
+    def from_components(cls, header, payload, *, sender_address=None):
         # Bwahahahaha
         instance = cls.__new__(cls)
         instance.header = header
         instance.payload = payload
+        instance.sender_address = sender_address
         return instance
 
     def __eq__(self, other):
@@ -439,12 +470,14 @@ class SearchResponse(Message):
         super().__init__(header, payload)
 
     @classmethod
-    def from_wire(cls, header, payload_bytes):
+    def from_wire(cls, header, payload_bytes, *, sender_address=None):
         # Special-case to handle the fact that data_type field is not the data
         # type. (It's used to hold the server port, unrelated to the payload.)
         if not payload_bytes:
-            return cls.from_components(header, None)
-        return cls.from_components(header, payload_bytes)
+            return cls.from_components(header, None,
+                                       sender_address=sender_address)
+        return cls.from_components(header, payload_bytes,
+                                   sender_address=sender_address)
 
     @property
     def ip(self):
@@ -689,9 +722,10 @@ class EventAddRequest(Message):
         super().__init__(header, payload)
 
     @classmethod
-    def from_wire(cls, header, payload_bytes):
+    def from_wire(cls, header, payload_bytes, *, sender_address=None):
         payload_struct = EventAddRequestPayload.from_buffer(payload_bytes)
-        return cls.from_components(header, payload_struct)
+        return cls.from_components(header, payload_struct,
+                                   sender_address=sender_address)
 
     data_type = property(lambda self: self.header.data_type)
     data_count = property(lambda self: self.header.data_count)
@@ -754,13 +788,15 @@ class EventAddResponse(Message):
     values = property(lambda self: self.payload)
 
     @classmethod
-    def from_wire(cls, header, payload_bytes):
+    def from_wire(cls, header, payload_bytes, *, sender_address=None):
         # libca responds to EventCancelRequest with an
         # EventAddResponse with an empty payload.
         if not payload_bytes:
-            return cls.from_components(header, None)
+            return cls.from_components(header, None,
+                                       sender_address=sender_address)
         payload_struct = from_buffer(header.data_type, payload_bytes)
-        return cls.from_components(header, payload_struct)
+        return cls.from_components(header, payload_struct,
+                                   sender_address=sender_address)
 
 
 class EventCancelRequest(Message):
@@ -980,8 +1016,9 @@ class ErrorResponse(Message):
         return MessageHeader.from_buffer(self.payload[:_MessageHeaderSize])
 
     @classmethod
-    def from_wire(cls, header, payload_bytes):
-        return cls.from_components(header, payload_bytes)
+    def from_wire(cls, header, payload_bytes, *, sender_address=None):
+        return cls.from_components(header, payload_bytes,
+                                   sender_address=sender_address)
 
 
 class ClearChannelRequest(Message):
@@ -1328,9 +1365,9 @@ class HostNameRequest(Message):
     name = property(lambda self: bytes(self.payload).rstrip(b'\x00'))
 
     @classmethod
-    def from_wire(cls, header, payload_bytes):
-        ''' '''
-        return cls.from_components(header, payload_bytes)
+    def from_wire(cls, header, payload_bytes, *, sender_address=None):
+        return cls.from_components(header, payload_bytes,
+                                   sender_address=sender_address)
 
 
 class AccessRightsResponse(Message):
@@ -1398,21 +1435,3 @@ class ServerDisconnResponse(Message):
         super().__init__(ServerDisconnResponseHeader(cid), None)
 
     cid = property(lambda self: self.header.parameter1)
-
-
-_classes = [obj for obj in globals().values() if isinstance(obj, type)]
-_commands = [_class for _class in _classes if issubclass(_class, Message)]
-Commands = {}
-Commands[CLIENT] = {_class.ID: _class for _class in _commands
-                    if _class.__name__.endswith('Request')}
-Commands[SERVER] = {_class.ID: _class for _class in _commands
-                    if _class.__name__.endswith('Response')}
-for command in Commands[CLIENT].values():
-    command.DIRECTION = REQUEST
-for command in Commands[SERVER].values():
-    command.DIRECTION = RESPONSE
-
-# TODO special-case, RsrvIsUp is sent from CA Server to Broadcaster server
-Commands[CLIENT][RsrvIsUpResponse.ID] = RsrvIsUpResponse
-Commands[SERVER][RsrvIsUpResponse.ID] = RsrvIsUpResponse
-RsrvIsUpResponse.DIRECTION = REQUEST
