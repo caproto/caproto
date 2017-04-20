@@ -266,6 +266,12 @@ class Message:
         instance.__dict__.update({'header': header, 'payload': payload})
         return instance
 
+    def __eq__(self, other):
+        return bytes(self) == bytes(other)
+
+    def __ne__(self, other):
+        return bytes(self) != bytes(other)
+
     def __bytes__(self):
         return bytes(self.header) + bytes(self.payload or b'')
 
