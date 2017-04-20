@@ -54,7 +54,7 @@
     //
     "matrix": {
         "numpy": [""],
-        "pyepics": [""],
+        "pip+pyepics": [""],
         "pip+curio": [""]
     },
 
