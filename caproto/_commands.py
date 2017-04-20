@@ -838,10 +838,10 @@ class ReadResponse(Message):
 
     def __init__(self, data, data_type, data_count, sid, ioid, *,
                  metadata=None):
-        header = ReadResponseHeader(data_type, data_count, sid, ioid)
         size, payload = data_payload(data, data_type, data_count,
                                      metadata=metadata)
-        super().__init__(header, None)
+        header = ReadResponseHeader(size, data_type, data_count, sid, ioid)
+        super().__init__(header, payload)
 
     payload_size = property(lambda self: self.header.payload_size)
     data_type = property(lambda self: self.header.data_type)
