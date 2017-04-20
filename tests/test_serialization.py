@@ -63,7 +63,7 @@ def test_serialize():
         if cmd in (ca.Message, ):
             continue
 
-        role = (ca.CLIENT if cmd.__name__.endswith('Request')
+        role = (ca.CLIENT if cmd.DIRECTION is ca.REQUEST
                 else ca.SERVER)
 
         print('inst', bytes(inst))
