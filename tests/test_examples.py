@@ -79,6 +79,48 @@ def test_curio_client():
         kernel.run(main())
 
 
+def test_thread_client():
+    from caproto.thread.client import Context
+
+    pv1 = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
+    pv2 = "XF:31IDA-OP{Tbl-Ax:X2}Mtr.VAL"
+
+    # Some user function to call when subscriptions receive data.
+    called = []
+
+    def user_callback(command):
+        print("Subscription has received data.")
+        called.append(True)
+
+    ctx = Context()
+    ctx.register()
+    ctx.search(pv1)
+    ctx.search(pv2)
+    # Send out connection requests without waiting for responses...
+    chan1 = ctx.create_channel(pv1)
+    chan2 = ctx.create_channel(pv2)
+    # Set up a function to call when subscriptions are received.
+    chan1.register_user_callback(user_callback)
+
+    reading = chan1.read()
+    print('reading:', reading)
+    chan1.subscribe()
+    chan2.read()
+    chan1.unsubscribe(0)
+    chan1.write((5,))
+    reading = chan1.read()
+    assert reading == 5
+    print('reading:', reading)
+    chan1.write((6,))
+    reading = chan1.read()
+    assert reading == 6
+    print('reading:', reading)
+    chan2.clear()
+    chan1.clear()
+    assert called
+
+
+
 def test_curio_server():
     import caproto.examples.curio_server as server
     import caproto.examples.curio_client as client
@@ -86,16 +128,16 @@ def test_curio_server():
 
     async def run_server():
         pvdb = {'pi': server.DatabaseRecordDouble(value=3.14,
-                                           lower_disp_limit=3.13,
-                                           upper_disp_limit=3.15,
-                                           lower_alarm_limit=3.12,
-                                           upper_alarm_limit=3.16,
-                                           lower_warning_limit=3.11,
-                                           upper_warning_limit=3.17,
-                                           lower_ctrl_limit=3.10,
-                                           upper_ctrl_limit=3.18,
-                                           precision=5,
-                                           units='doodles')}
+                                                  lower_disp_limit=3.13,
+                                                  upper_disp_limit=3.15,
+                                                  lower_alarm_limit=3.12,
+                                                  upper_alarm_limit=3.16,
+                                                  lower_warning_limit=3.11,
+                                                  upper_warning_limit=3.17,
+                                                  lower_ctrl_limit=3.10,
+                                                  upper_ctrl_limit=3.18,
+                                                  precision=5,
+                                                  units='doodles')}
         port = find_next_tcp_port(host=SERVER_HOST)
         print('Server will be on', (SERVER_HOST, port))
         ctx = server.Context(SERVER_HOST, port, pvdb)
@@ -104,6 +146,7 @@ def test_curio_server():
     async def run_client():
         # Some user function to call when subscriptions receive data.
         called = []
+
         def user_callback(command):
             print("Subscription has received data.")
             called.append(True)

@@ -347,6 +347,7 @@ async def main():
 
     # Some user function to call when subscriptions receive data.
     called = []
+
     def user_callback(command):
         print("Subscription has received data.")
         called.append(True)

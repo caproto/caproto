@@ -229,7 +229,8 @@ class Channel:
 
     def clear(self):
         "Disconnect this Channel."
-        raise NotImplemented()
+        self.circuit.send(self.channel.clear())
+        # TODO make sure it actually happens
 
     def read(self, *args, **kwargs):
         """Request a fresh reading, wait for it, return it and stash it.
