@@ -274,7 +274,10 @@ class Message:
 
     def __bytes__(self):
         if self.payload is not None:
-            payload_bytes = bytes(self.payload)[:self.header.payload_size]
+            # Trim 40-char string struct to payload_size.
+            raw_bytes = bytes(self.payload)[:self.header.payload_size]
+            # Pad to multiple of 8.
+            payload_bytes = raw_bytes.ljust(padded_len(raw_bytes), b'\x00')
         else:
             payload_bytes = b''
         return bytes(self.header) + payload_bytes
