@@ -823,7 +823,7 @@ class ReadRequest(Message):
 
     def __init__(self, data_type, data_count, sid, ioid):
         header = ReadNotifyRequestHeader(data_type, data_count, sid, ioid)
-        super().__init__(header, None)
+        super().__init__(header, None, validate=False)
 
     data_type = property(lambda self: self.header.data_type)
     data_count = property(lambda self: self.header.data_count)
