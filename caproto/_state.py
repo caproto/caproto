@@ -7,8 +7,8 @@ from ._commands import (AccessRightsResponse, ClearChannelRequest,
                         ReadNotifyRequest, ReadNotifyResponse,
                         ServerDisconnResponse, VersionRequest, VersionResponse,
                         WriteNotifyRequest, WriteNotifyResponse,
-
-                        )
+                        EventsOnRequest, EventsOffRequest, CreateChFailResponse
+                       )
 from ._utils import (AWAIT_CREATE_CHAN_RESPONSE, AWAIT_VERSION_RESPONSE,
                      CLIENT, CLOSED, CONNECTED, ERROR, IDLE, MUST_CLOSE,
                      NEED_CIRCUIT, REQUEST, RESPONSE, SEND_CREATE_CHAN_REQUEST,
@@ -22,70 +22,77 @@ from ._utils import (AWAIT_CREATE_CHAN_RESPONSE, AWAIT_VERSION_RESPONSE,
 COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
     CLIENT: {
         SEND_VERSION_REQUEST: {
-            EchoRequest: SEND_VERSION_REQUEST,
-            EchoResponse: SEND_VERSION_REQUEST,
             VersionRequest: AWAIT_VERSION_RESPONSE,
-            VersionResponse: CONNECTED,
-            ErrorResponse: ERROR,
+
+            # C channel access server (rsrv) sends VersionResponse upon TCP
+            # connection, unprompted by a VersionRequest, so we must accept
+            # that here.
+            VersionResponse: SEND_VERSION_REQUEST,
         },
         AWAIT_VERSION_RESPONSE: {
-            EchoRequest: AWAIT_VERSION_RESPONSE,
-            EchoResponse: AWAIT_VERSION_RESPONSE,
+            VersionResponse: CONNECTED,
+
             # Host and Client requests may come before or after we connect.
-            VersionRequest: AWAIT_VERSION_RESPONSE,
             HostNameRequest: AWAIT_VERSION_RESPONSE,
             ClientNameRequest: AWAIT_VERSION_RESPONSE,
-            VersionResponse: CONNECTED,
-            ErrorResponse: ERROR, },
+
+            EchoRequest: AWAIT_VERSION_RESPONSE,
+            EchoResponse: AWAIT_VERSION_RESPONSE,
+            ErrorResponse: ERROR,
+        },
         CONNECTED: {
-            EchoRequest: CONNECTED,
-            EchoResponse: CONNECTED,
             # Host and Client requests may come before or after we connect.
             HostNameRequest: CONNECTED,
             ClientNameRequest: CONNECTED,
-            AccessRightsResponse: CONNECTED,
-            VersionRequest: AWAIT_VERSION_RESPONSE,
-            VersionResponse: CONNECTED,
+
+            EventsOffRequest: CONNECTED,
+            EventsOnRequest: CONNECTED,
+
+            EchoRequest: CONNECTED,
+            EchoResponse: CONNECTED,
+
             ErrorResponse: ERROR,
             # VirtualCircuits can only be closed by timeout.
         },
-        ERROR: {},
+        ERROR: {
+            # a terminal state
+        },
         CLOSED: {
             # a terminal state
         },
     },
     SERVER: {
         IDLE: {
-            # C channel access server (rsrv) sends VersionResponse upon
-            # connection
-            VersionResponse: CONNECTED,
             VersionRequest: SEND_VERSION_RESPONSE,
-            EchoRequest: IDLE,
-            EchoResponse: IDLE,
-            ErrorResponse: ERROR,
+
+            # C channel access server (rsrv) sends VersionResponse upon TCP
+            # connection, unprompted by a VersionRequest, so we must accept
+            # that here.
+            VersionResponse: IDLE,
         },
         SEND_VERSION_RESPONSE: {
-            VersionRequest: SEND_VERSION_RESPONSE,
             VersionResponse: CONNECTED,
-            EchoRequest: SEND_VERSION_RESPONSE,
-            EchoResponse: SEND_VERSION_RESPONSE,
+
             # Host and Client requests may come before or after we connect.
             HostNameRequest: SEND_VERSION_RESPONSE,
             ClientNameRequest: SEND_VERSION_RESPONSE,
+
             ErrorResponse: ERROR,
         },
         CONNECTED: {
             # Host and Client requests may come before or after we connect.
-            VersionRequest: SEND_VERSION_RESPONSE,
-            VersionResponse: CONNECTED,
             HostNameRequest: CONNECTED,
             ClientNameRequest: CONNECTED,
-            AccessRightsResponse: CONNECTED,
+
+            EventsOffRequest: CONNECTED,
+            EventsOnRequest: CONNECTED,
+
             EchoRequest: CONNECTED,
             EchoResponse: CONNECTED,
+
             ErrorResponse: ERROR,
-            # VirtualCircuits can only be closed by timeout.
         },
+        # VirtualCircuits can only be closed by timeout.
         CLOSED: {
             # a terminal state
         },
@@ -102,20 +109,29 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
         AWAIT_CREATE_CHAN_RESPONSE: {
             CreateChanResponse: CONNECTED,
             AccessRightsResponse: AWAIT_CREATE_CHAN_RESPONSE,
+            CreateChFailResponse: ERROR,
             ErrorResponse: ERROR,
         },
         CONNECTED: {
+            AccessRightsResponse: CONNECTED,
+
             ReadNotifyRequest: CONNECTED,
-            WriteNotifyRequest: CONNECTED,
             ReadNotifyResponse: CONNECTED,
+            WriteNotifyRequest: CONNECTED,
             WriteNotifyResponse: CONNECTED,
+
             EventAddRequest: CONNECTED,
-            EventCancelRequest: CONNECTED,
             EventAddResponse: CONNECTED,
+            EventCancelRequest: CONNECTED,
             EventCancelResponse: CONNECTED,
+
             ClearChannelRequest: MUST_CLOSE,
             ServerDisconnResponse: CLOSED,
             ErrorResponse: ERROR,
+
+            # The commands ReadRequest, WriteRequest, WriteResponse, and
+            # ReadSync (deprecated in 3.13) will need to be added here if we
+            # want to support them.
         },
         MUST_CLOSE: {
             ClearChannelResponse: CLOSED,
@@ -132,25 +148,33 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
     SERVER: {
         IDLE: {
             CreateChanRequest: SEND_CREATE_CHAN_RESPONSE,
-            ErrorResponse: ERROR,
+            # No ErrorResponse possible here because we don't have a cid yet.
         },
         SEND_CREATE_CHAN_RESPONSE: {
-            CreateChanResponse: CONNECTED,
             AccessRightsResponse: SEND_CREATE_CHAN_RESPONSE,
+            CreateChanResponse: CONNECTED,
+            CreateChFailResponse: ERROR,
             ErrorResponse: ERROR,
         },
         CONNECTED: {
+            AccessRightsResponse: CONNECTED,
+
             ReadNotifyRequest: CONNECTED,
-            WriteNotifyRequest: CONNECTED,
             ReadNotifyResponse: CONNECTED,
+            WriteNotifyRequest: CONNECTED,
             WriteNotifyResponse: CONNECTED,
+
             EventAddRequest: CONNECTED,
-            EventCancelRequest: CONNECTED,
             EventAddResponse: CONNECTED,
+            EventCancelRequest: CONNECTED,
             EventCancelResponse: CONNECTED,
+
             ClearChannelRequest: MUST_CLOSE,
             ServerDisconnResponse: CLOSED,
             ErrorResponse: ERROR,
+            # The commands ReadRequest, WriteRequest, WriteResponse, and
+            # ReadSync (deprecated in 3.13) will need to be added here if we
+            # want to support them.
         },
         MUST_CLOSE: {
             ClearChannelResponse: CLOSED,
@@ -178,6 +202,8 @@ STATE_TRIGGERED_TRANSITIONS = {
 
 
 class _BaseState:
+    TRANSITIONS = {}  # Subclasses should override this with non-empty dict.
+
     def __repr__(self):
         return "<{!s} states={!r}>".format(type(self).__name__, self.states)
 
@@ -185,15 +211,19 @@ class _BaseState:
         return self.states[role]
 
     def _fire_command_triggered_transitions(self, role, command_type):
-        state = self.states[role]
+        current_state = self.states[role]
+        allowed_transitions = self.TRANSITIONS[role][current_state]
         try:
-            new_state = self.TRANSITIONS[role][state][command_type]
+            new_state = allowed_transitions[command_type]
         except KeyError:
             err = get_exception(role, command_type)
             raise err(
                 "{} cannot handle command type {} when role={} and state={}"
                 .format(self, command_type.__name__, role, self.states[role]))
         self.states[role] = new_state
+
+    def process_command_type(self, role, command_type):
+        raise NotImplementedError("Subclass must define this.")
 
 
 class ChannelState(_BaseState):
