@@ -910,12 +910,6 @@ class ReadSyncRequest(Message):
         super().__init__(ReadSyncRequestHeader(), None)
 
 
-class _ErrorResponsePayload(ctypes.BigEndianStructure):
-    _fields_ = [
-        ('value', ctypes.c_char * 100),
-    ]
-
-
 class ErrorResponse(Message):
     """
     Notify client of a server-side error, including some details about error.
@@ -935,23 +929,27 @@ class ErrorResponse(Message):
     HAS_PAYLOAD = True
 
     def __init__(self, original_request, cid, status_code, error_message):
-        _error_message = DBR_STRING(ensure_bytes(error_message))
-        payload = bytes(original_request) + _error_message
-        size = len(payload)
+        msg_size, msg_payload = padded_string_payload(error_message)
+        req_bytes = bytes(original_request.header)
+
+        size = len(req_bytes) + msg_size
+        payload = req_bytes + msg_payload
+
         header = ErrorResponseHeader(size, cid, status_code)
         super().__init__(header, payload)
 
     payload_size = property(lambda self: self.header.payload_size)
     cid = property(lambda self: self.header.parameter1)
     status_code = property(lambda self: self.header.parameter2)
+    error_message = property(lambda self: self.payload[_MessageHeaderSize:])
+
+    @property
+    def original_request(self):
+        return MessageHeader.from_buffer(self.payload[:_MessageHeaderSize])
 
     @classmethod
     def from_wire(cls, header, payload_bytes):
-        """
-        Override base because payload contains a string >40 characers.
-        """
-        payload_struct = _ErrorResponsePayload.from_buffer(payload_bytes)
-        return cls.from_components(header, payload_struct)
+        return cls.from_components(header, payload_bytes)
 
 
 class ClearChannelRequest(Message):
