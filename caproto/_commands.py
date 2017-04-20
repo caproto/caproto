@@ -23,7 +23,6 @@ import inspect
 import struct
 import socket
 from ._headers import (MessageHeader, ExtendedMessageHeader,
-
                        AccessRightsResponseHeader, ClearChannelRequestHeader,
                        ClearChannelResponseHeader, ClientNameRequestHeader,
                        CreateChFailResponseHeader, CreateChanRequestHeader,
@@ -272,8 +271,11 @@ class Message:
 
     def __repr__(self):
         signature = inspect.signature(type(self))
+        parameters = (signature.parameters if type(self) is not Message
+                      else ['header'])
+
         d = []
-        for arg in signature.parameters:
+        for arg in parameters:
             try:
                 d.append((arg, repr(getattr(self, arg))))
             except Exception as ex:
