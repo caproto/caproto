@@ -23,7 +23,6 @@ import inspect
 import struct
 import socket
 from ._headers import (MessageHeader, ExtendedMessageHeader,
-
                        AccessRightsResponseHeader, ClearChannelRequestHeader,
                        ClearChannelResponseHeader, ClientNameRequestHeader,
                        CreateChFailResponseHeader, CreateChanRequestHeader,
@@ -267,13 +266,29 @@ class Message:
         instance.__dict__.update({'header': header, 'payload': payload})
         return instance
 
+    def __eq__(self, other):
+        return bytes(self) == bytes(other)
+
+    def __ne__(self, other):
+        return bytes(self) != bytes(other)
+
     def __bytes__(self):
-        return bytes(self.header) + bytes(self.payload or b'')
+        if self.payload is not None:
+            # Trim 40-char string struct to payload_size.
+            raw_bytes = bytes(self.payload)[:self.header.payload_size]
+            # Pad to multiple of 8.
+            payload_bytes = raw_bytes.ljust(padded_len(raw_bytes), b'\x00')
+        else:
+            payload_bytes = b''
+        return bytes(self.header) + payload_bytes
 
     def __repr__(self):
         signature = inspect.signature(type(self))
+        parameters = (signature.parameters if type(self) is not Message
+                      else ['header'])
+
         d = []
-        for arg in signature.parameters:
+        for arg in parameters:
             try:
                 d.append((arg, repr(getattr(self, arg))))
             except Exception as ex:
@@ -601,7 +616,7 @@ class EventAddRequestPayload(ctypes.BigEndianStructure):
                 ('high', float_t),
                 ('to', float_t),
                 ('mask', ushort_t),
-                ('__padding__', short_t),
+                ('__padding', short_t),
                 ]
 
     def __init__(self, low=0.0, high=0.0, to=0.0, mask=0):
@@ -609,7 +624,7 @@ class EventAddRequestPayload(ctypes.BigEndianStructure):
         self.high = high
         self.to = to
         self.mask = mask
-        self.__padding__ = 0
+        self.__padding = 0
 
     def __len__(self):
         return len(bytes(self))
@@ -677,7 +692,7 @@ class EventAddRequest(Message):
     high = property(lambda self: self.payload.high)
     to = property(lambda self: self.payload.to)
     mask = property(lambda self: self.payload.mask)
-    __padding__ = property(lambda self: self.payload.__padding__)
+    __padding = property(lambda self: self.payload.__padding)
 
 
 class EventAddResponse(Message):
@@ -821,7 +836,7 @@ class ReadRequest(Message):
 
     def __init__(self, data_type, data_count, sid, ioid):
         header = ReadNotifyRequestHeader(data_type, data_count, sid, ioid)
-        super().__init__(header, None)
+        super().__init__(header, None, validate=False)
 
     data_type = property(lambda self: self.header.data_type)
     data_count = property(lambda self: self.header.data_count)
@@ -836,10 +851,10 @@ class ReadResponse(Message):
 
     def __init__(self, data, data_type, data_count, sid, ioid, *,
                  metadata=None):
-        header = ReadResponseHeader(data_type, data_count, sid, ioid)
         size, payload = data_payload(data, data_type, data_count,
                                      metadata=metadata)
-        super().__init__(header, None)
+        header = ReadResponseHeader(size, data_type, data_count, sid, ioid)
+        super().__init__(header, payload)
 
     payload_size = property(lambda self: self.header.payload_size)
     data_type = property(lambda self: self.header.data_type)
@@ -908,12 +923,6 @@ class ReadSyncRequest(Message):
         super().__init__(ReadSyncRequestHeader(), None)
 
 
-class _ErrorResponsePayload(ctypes.BigEndianStructure):
-    _fields_ = [
-        ('value', ctypes.c_char * 100),
-    ]
-
-
 class ErrorResponse(Message):
     """
     Notify client of a server-side error, including some details about error.
@@ -933,23 +942,27 @@ class ErrorResponse(Message):
     HAS_PAYLOAD = True
 
     def __init__(self, original_request, cid, status_code, error_message):
-        _error_message = DBR_STRING(ensure_bytes(error_message))
-        payload = bytes(original_request) + _error_message
-        size = len(payload)
+        msg_size, msg_payload = padded_string_payload(error_message)
+        req_bytes = bytes(original_request.header)
+
+        size = len(req_bytes) + msg_size
+        payload = req_bytes + msg_payload
+
         header = ErrorResponseHeader(size, cid, status_code)
         super().__init__(header, payload)
 
     payload_size = property(lambda self: self.header.payload_size)
     cid = property(lambda self: self.header.parameter1)
     status_code = property(lambda self: self.header.parameter2)
+    error_message = property(lambda self: self.payload[_MessageHeaderSize:])
+
+    @property
+    def original_request(self):
+        return MessageHeader.from_buffer(self.payload[:_MessageHeaderSize])
 
     @classmethod
     def from_wire(cls, header, payload_bytes):
-        """
-        Override base because payload contains a string >40 characers.
-        """
-        payload_struct = _ErrorResponsePayload.from_buffer(payload_bytes)
-        return cls.from_components(header, payload_struct)
+        return cls.from_components(header, payload_bytes)
 
 
 class ClearChannelRequest(Message):
