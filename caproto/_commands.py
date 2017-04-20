@@ -609,7 +609,7 @@ class EventAddRequestPayload(ctypes.BigEndianStructure):
                 ('high', float_t),
                 ('to', float_t),
                 ('mask', ushort_t),
-                ('__padding__', short_t),
+                ('__padding', short_t),
                 ]
 
     def __init__(self, low=0.0, high=0.0, to=0.0, mask=0):
@@ -617,7 +617,7 @@ class EventAddRequestPayload(ctypes.BigEndianStructure):
         self.high = high
         self.to = to
         self.mask = mask
-        self.__padding__ = 0
+        self.__padding = 0
 
     def __len__(self):
         return len(bytes(self))
@@ -685,7 +685,7 @@ class EventAddRequest(Message):
     high = property(lambda self: self.payload.high)
     to = property(lambda self: self.payload.to)
     mask = property(lambda self: self.payload.mask)
-    __padding__ = property(lambda self: self.payload.__padding__)
+    __padding = property(lambda self: self.payload.__padding)
 
 
 class EventAddResponse(Message):
