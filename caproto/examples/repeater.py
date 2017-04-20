@@ -1,5 +1,28 @@
-"""UDP proxy server."""
-# Based on https://gist.github.com/vxgmichel/b2cf8536363275e735c231caef35a5df
+# Channel Access Repeater
+#
+# The CA Repeater is basically a UDP proxy server. Its only role is to forward
+# server beacons (a.k.a RsrvIsUp commands) to all clients on a host. It exists
+# to cope with older system that do not broadcast correctly, failing to fan out
+# the message to all clients reliably.
+
+# Operation:
+# 1. Try to bind to 0.0.0.0 on the CA REPEATER PORT. This may be set by the
+#    environment variable EPICS_CA_REPEATER_PORT. The default is 5065.
+# 2. If binding fails, assume a CA Repeater is already running. Exit.
+# 3. When a UDP datagram is received from an unknown port:
+#    - Check that the source host is localhost. If it is not, ignore it.
+#    - The datagram data may be a RegisterRepeaterRequest (recent versions of
+#      Channel Access) or blank (old versions of Channel Access).
+#    - Stash the source port number.
+#    - Send a RepeaterConfirmResponse to that source port.
+#    - Send an empty datagram to any other ports we have stashed.
+#    - Forward all subsequent messages to all ports we know about.
+
+
+# This implementation owes something to a StackOverflow-linked gist, which
+# provides a basic asyncio UDP proxy server.
+# https://gist.github.com/vxgmichel/b2cf8536363275e735c231caef35a5df
+import os
 import socket
 import asyncio
 import caproto
@@ -63,13 +86,14 @@ async def start_datagram_proxy(bind, port):
         lambda: protocol, local_addr=(bind, port))
 
 
-def main(bind='0.0.0.0', port=5065):
+def main():
     print('hi')
     import logging
     logging.getLogger('caproto').setLevel(logging.INFO)
     loop = asyncio.get_event_loop()
-    print("Starting datagram proxy...")
-    coro = start_datagram_proxy(bind, port)
+    addr = ('0.0.0.0', os.environ.get('EPICS_CA_REPEATER_PORT', 5065))
+    print("Starting datagram proxy on {}...".format(addr))
+    coro = start_datagram_proxy(*addr)
     transport, _ = loop.run_until_complete(coro)
     print("Datagram proxy is running...")
     try:
