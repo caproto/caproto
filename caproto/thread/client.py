@@ -19,13 +19,16 @@ class SocketThread:
 
     def __call__(self):
         while True:
-            print('recev')
             bytes_recv, address = self.socket.recvfrom(4096)
             self.target_obj.next_command(bytes_recv, address)
 
 
 class Context:
     "Wraps a caproto.Broadcaster, a UDP socket, and cache of VirtualCircuits."
+    __slots__ = ('broadcaster', 'udp_sock', 'circuits',
+                 'unanswered_searches', 'search_results',
+                 'has_new_command', 'sock_thread', 'registered')
+
     def __init__(self):
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
         self.broadcaster.log.setLevel('DEBUG')
@@ -40,7 +43,6 @@ class Context:
         self.circuits = []  # list of VirtualCircuits
         self.unanswered_searches = {}  # map search id (cid) to name
         self.search_results = {}  # map name to address
-        self.event = None  # used for signaling consumers about new commands
 
         self.has_new_command = threading.Condition()
         self.sock_thread = SocketThread(sock, self)
@@ -50,16 +52,9 @@ class Context:
         Process a command and tranport it over the UDP socket.
         """
         bytes_to_send = self.broadcaster.send(*commands)
-        for host in ca.get_address_list() + ['0.0.0.0']:
+        for host in ca.get_address_list():
             print('sending to', (host, port), bytes_to_send)
             self.udp_sock.sendto(bytes_to_send, (host, port))
-
-    def recv(self):
-        """
-        Receive bytes over TCP and cache them in this circuit's buffer.
-        """
-        bytes_received, address = self.udp_sock.recvfrom(4096)
-        self.broadcaster.recv(bytes_received, address)
 
     def register(self):
         "Register this client with the CA Repeater."
@@ -157,7 +152,6 @@ class VirtualCircuit:
         self.channels = {}  # map cid to Channel
         self.ioids = {}  # map ioid to Channel
         self.subscriptionids = {}  # map subscriptionid to Channel
-        self.event = None  # used for signaling consumers about new commands
         self.has_new_command = threading.Condition()
         self.socket = None
         self.sock_thread = None
@@ -198,6 +192,9 @@ class VirtualCircuit:
 
 class Channel:
     """Wraps a VirtualCircuit and a caproto.ClientChannel."""
+    __slots__ = ('circuit', 'channel', 'last_reading', 'monitoring_tasks',
+                 '_callback')
+
     def __init__(self, circuit, channel):
         self.circuit = circuit  # a VirtualCircuit
         self.channel = channel  # a caproto.ClientChannel
