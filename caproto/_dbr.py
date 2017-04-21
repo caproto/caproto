@@ -897,6 +897,19 @@ control_types = (ChType.CTRL_STRING, ChType.CTRL_INT, ChType.CTRL_SHORT,
                  ChType.CTRL_FLOAT, ChType.CTRL_ENUM, ChType.CTRL_CHAR,
                  ChType.CTRL_LONG, ChType.CTRL_DOUBLE)
 
+char_types = (ChType.CHAR, ChType.TIME_CHAR,
+              ChType.CTRL_CHAR, ChType.STS_CHAR)
+
+int_types = (ChType.INT, ChType.TIME_INT,
+             ChType.CTRL_INT, ChType.CTRL_INT,
+             ChType.LONG, ChType.TIME_LONG,
+             ChType.CTRL_LONG, ChType.CTRL_LONG)
+
+float_types = (ChType.FLOAT, ChType.TIME_FLOAT,
+               ChType.CTRL_FLOAT, ChType.CTRL_FLOAT,
+               ChType.DOUBLE, ChType.TIME_DOUBLE,
+               ChType.CTRL_DOUBLE, ChType.CTRL_DOUBLE)
+
 char_types = (ChType.CHAR, ChType.TIME_CHAR, ChType.CTRL_CHAR)
 native_float_types = (ChType.FLOAT, ChType.DOUBLE)
 native_int_types = (ChType.INT, ChType.CHAR, ChType.LONG, ChType.ENUM)
