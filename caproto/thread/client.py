@@ -849,3 +849,69 @@ class PV:
 
     def disconnect(self):
         "disconnect PV"
+
+
+def get_pv(pvname, *args, **kwargs):
+    return PV(pvname)
+
+
+def caput(pvname, value, wait=False, timeout=60):
+    """caput(pvname, value, wait=False, timeout=60)
+    simple put to a pv's value.
+       >>> caput('xx.VAL',3.0)
+
+    to wait for pv to complete processing, use 'wait=True':
+       >>> caput('xx.VAL',3.0,wait=True)
+    """
+    thispv = get_pv(pvname, connect=True)
+    if thispv.connected:
+        return thispv.put(value, wait=wait, timeout=timeout)
+
+
+def caget(pvname, as_string=False, count=None, as_numpy=True,
+          use_monitor=False, timeout=5.0):
+    """caget(pvname, as_string=False)
+    simple get of a pv's value..
+       >>> x = caget('xx.VAL')
+
+    to get the character string representation (formatted double,
+    enum string, etc):
+       >>> x = caget('xx.VAL', as_string=True)
+
+    to get a truncated amount of data from an array, you can specify
+    the count with
+       >>> x = caget('MyArray.VAL', count=1000)
+    """
+    start_time = time.time()
+    thispv = get_pv(pvname, timeout=timeout, connect=True)
+    if thispv.connected:
+        if as_string:
+            thispv.get_ctrlvars()
+        timeout -= (time.time() - start_time)
+        val = thispv.get(count=count, timeout=timeout,
+                         use_monitor=use_monitor,
+                         as_string=as_string,
+                         as_numpy=as_numpy)
+
+        return val
+
+
+def cainfo(pvname, print_out=True):
+    """cainfo(pvname,print_out=True)
+
+    return printable information about pv
+       >>>cainfo('xx.VAL')
+
+    will return a status report for the pv.
+
+    If print_out=False, the status report will be printed,
+    and not returned.
+    """
+    thispv = get_pv(pvname, connect=True)
+    if thispv.connected:
+        thispv.get()
+        thispv.get_ctrlvars()
+        if print_out:
+            ca.write(thispv.info)
+        else:
+            return thispv.info
