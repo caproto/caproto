@@ -42,7 +42,7 @@ class VirtualCircuit:
         """
         if self.socket is None:
             raise RuntimeError("must await create_connection() first")
-        bytes_received = await self.socket.recv(4096)
+        bytes_received = await self.socket.recv(32768)
         self.circuit.recv(bytes_received)
 
     async def get_event(self):

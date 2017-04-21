@@ -1,7 +1,7 @@
-sphinx
-sphinx_rtd_theme
-numpydoc
 doctr
+graphviz
 ipython
 matplotlib
-graphviz
+numpydoc
+sphinx
+sphinx_rtd_theme
