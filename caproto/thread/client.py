@@ -122,7 +122,7 @@ class Context:
 
         with circuit.has_new_command:
             while True:
-                if chan.cid is not None:
+                if chan.connected:
                     break
                 circuit.has_new_command.wait()
         return chan
@@ -187,7 +187,7 @@ class VirtualCircuit:
 
                 if isinstance(command, ca.CreateChanResponse):
                     chan = self.channels[command.cid]
-                    chan.cid = command.cid
+                    chan.connected = True
                 elif isinstance(command, ca.ReadNotifyResponse):
                     chan = self.ioids.pop(command.ioid)
                     chan.last_reading = command
@@ -205,7 +205,7 @@ class VirtualCircuit:
 class Channel:
     """Wraps a VirtualCircuit and a caproto.ClientChannel."""
     __slots__ = ('circuit', 'channel', 'last_reading', 'monitoring_tasks',
-                 '_callback', 'cid')
+                 '_callback', 'connected')
 
     def __init__(self, circuit, channel):
         self.circuit = circuit  # a VirtualCircuit
@@ -213,7 +213,7 @@ class Channel:
         self.last_reading = None
         self.monitoring_tasks = {}  # maps subscriptionid to curio.Task
         self._callback = None  # user func to call when subscriptions are run
-        self.cid = None
+        self.connected = False
 
     def register_user_callback(self, func):
         """
