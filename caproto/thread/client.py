@@ -362,7 +362,7 @@ class PV:
         if connection_callback is not None:
             self.connection_callbacks = [connection_callback]
 
-        self.callbacks  = {}
+        self.callbacks = {}
         self._monref = None  # holder of data returned from create_subscription
         self._conn_started = False
 
@@ -466,7 +466,7 @@ class PV:
         complete, and optionally specifying a callback function to be run
         when the processing is complete.
         """
-        self.chid.write(value)
+        return self.chid.write((value,))
 
     @ensure_connection
     def get_ctrlvars(self, timeout=5, warn=True):
