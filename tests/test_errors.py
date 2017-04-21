@@ -2,7 +2,9 @@ import pytest
 import caproto as ca
 
 
-def test_counter_wraparound(circuit):
+def test_counter_wraparound(client_circuit):
+    circuit = client_circuit
+
     MAX = 2**16
     for i in range(MAX + 2):
         assert i % MAX == circuit.new_channel_id()
@@ -33,7 +35,9 @@ def test_circuit_properties():
     srv_circuit.priority = prio
     srv_circuit.key
 
-def test_illegal_sequences(circuit):
+def test_unknown_id_errors(client_circuit):
+    circuit = client_circuit
+
     # Read a channel that does not exist.
     com = ca.ReadNotifyRequest(data_type=5, data_count=1, sid=1, ioid=1)
     with pytest.raises(ca.LocalProtocolError):
@@ -50,5 +54,33 @@ def test_illegal_sequences(circuit):
     com = ca.EventAddResponse(values=(1,), data_type=5, data_count=1,
                               status_code=1, subscriptionid=1)
     circuit.recv(bytes(com))
+    with pytest.raises(ca.RemoteProtocolError):
+        circuit.next_command()
+
+def test_mismatched_event_add_responses(client_channel):
+    circuit = client_channel.circuit
+
+    # Send an EventAddRequest and test legal and illegal responses.
+    req = ca.EventAddRequest(data_type=5, data_count=1, sid=10,
+                             subscriptionid=1, low=0, high=0, to=0, mask=0)
+    circuit.send(req)
+
+    # Good response
+    res = ca.EventAddResponse(values=(1,), data_type=5, data_count=1,
+                              status_code=1, subscriptionid=1)
+    circuit.recv(bytes(res))
+    circuit.next_command()
+
+    # Bad response
+    res = ca.EventAddResponse(values=(1,), data_type=6, data_count=1,
+                              status_code=1, subscriptionid=1)
+    circuit.recv(bytes(res))
+    with pytest.raises(ca.RemoteProtocolError):
+        circuit.next_command()
+
+    # Bad response
+    res = ca.EventAddResponse(values=([1, 2]), data_type=5, data_count=2,
+                              status_code=1, subscriptionid=1)
+    circuit.recv(bytes(res))
     with pytest.raises(ca.RemoteProtocolError):
         circuit.next_command()
