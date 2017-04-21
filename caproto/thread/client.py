@@ -329,6 +329,7 @@ class PV:
                'upper_disp_limit', 'lower_disp_limit', 'upper_alarm_limit',
                'lower_alarm_limit', 'lower_warning_limit',
                'upper_warning_limit', 'upper_ctrl_limit', 'lower_ctrl_limit')
+    _default_context = None
 
     def __init__(self, pvname, callback=None, form='time',
                  verbose=False, auto_monitor=None, count= None,
@@ -336,7 +337,9 @@ class PV:
                  connection_timeout=None, *, context=None):
 
         if context is None:
-            context = _default_context
+            context = self._default_context
+        if context is None:
+            raise RuntimeError("must have a valid context")
 
         self._context = context
         self.pvname = pvname.strip()
@@ -826,8 +829,6 @@ class PV:
                 self.get_ctrlvars(timeout=1, warn=False)
         return self._args.get(arg, None)
 
-
-
     def __repr__(self):
         "string representation"
 
@@ -847,5 +848,3 @@ class PV:
         "disconnect PV"
 
 
-_default_context = Context()
-_default_context.register()
