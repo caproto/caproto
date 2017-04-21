@@ -7,8 +7,7 @@ import itertools
 from collections import deque
 import logging
 import getpass
-import socket
-# N.B. We do no networking whatsoever in caproto. We only use socket for
+import socket # N.B. We do no networking whatsoever in caproto. We only use socket for
 # socket.gethostname() to give a nice default for a HostNameRequest command.
 from ._commands import (AccessRightsResponse,
                         ClearChannelRequest, ClearChannelResponse,
@@ -33,6 +32,7 @@ from ._dbr import (SubscriptionType, )
 
 
 DEFAULT_PROTOCOL_VERSION = 13
+MAX_ID = 2**16 # max value of various integer IDs
 
 # official IANA ports
 EPICS_CA1_PORT, EPICS_CA2_PORT = 5064, 5065
@@ -296,8 +296,9 @@ class VirtualCircuit:
         "Return a valid value for a cid or sid."
         # Return the next sequential unused id. Wrap back to 0 on overflow.
         i = next(self._channel_id_counter)
-        if i == 2**16:
+        if i == MAX_ID:
             self._channel_id_counter = itertools.count(0)
+            i = next(self._channel_id_counter)
         while i in self.channels:
             i = next(self._channel_id_counter)
         return i
@@ -309,8 +310,9 @@ class VirtualCircuit:
         """
         # Return the next sequential unused id. Wrap back to 0 on overflow.
         i = next(self._sub_counter)
-        if i == 2**16:
+        if i == MAX_ID:
             self._sub_counter = itertools.count(0)
+            i = next(self._sub_counter)
         while i in self.event_add_commands:
             i = next(self._sub_counter)
         return i
@@ -322,9 +324,10 @@ class VirtualCircuit:
         """
         # Return the next sequential unused id. Wrap back to 0 on overflow.
         i = next(self._ioid_counter)
-        if i == 2**16:
+        if i == MAX_ID:
             self._ioid_counter = itertools.count(0)
-        while i in self.event_add_commands:
+            i = next(self._ioid_counter)
+        while i in self._ioids:
             i = next(self._ioid_counter)
         return i
 
@@ -475,7 +478,7 @@ class Broadcaster:
     def new_search_id(self):
         # Return the next sequential unused id. Wrap back to 0 on overflow.
         i = next(self._search_id_counter)
-        if i == 2**16:
+        if i == MAX_ID:
             self._search_id_counter = itertools.count(0)
         while i in self.unanswered_searches:
             i = next(self._search_id_counter)
