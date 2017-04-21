@@ -470,6 +470,14 @@ class PV:
         complete, and optionally specifying a callback function to be run
         when the processing is complete.
         """
+        if self._args['typefull'] in ca.enum_types:
+            if isinstance(value, str):
+                try:
+                    value = self.enum_strs.index(value)
+                except ValueError:
+                    raise ValueError('{} is not in Enum ({}'.format(
+                        value, self.enum_strs))
+
         return self.chid.write((value,))
 
     @ensure_connection
@@ -511,6 +519,10 @@ class PV:
         for attr, arg in arg_map.items():
             if hasattr(dbr_data, attr):
                 ret[arg] = getattr(dbr_data, attr)
+
+        if ret.get('enum_strs', None):
+            ret['enum_strs'] = tuple(k.value.decode('utf-8') for
+                                     k in ret['enum_strs'] if k.value)
 
         if hasattr(dbr_data, 'nanoSeconds'):
             ret['posixseconds'] = dbr_data.secondsSinceEpoch
