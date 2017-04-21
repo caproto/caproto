@@ -27,11 +27,13 @@ from ._commands import (AccessRightsResponse,
 from ._state import (ChannelState, CircuitState, get_exception)
 from ._utils import (CLIENT, SERVER, NEED_DATA, CaprotoKeyError,
                      CaprotoValueError, LocalProtocolError,
+                     CaprotoRuntimeError,
                      )
 from ._dbr import (SubscriptionType, )
 
 
 DEFAULT_PROTOCOL_VERSION = 13
+MAX_ID = 2**16 # max value of various integer IDs
 
 # official IANA ports
 EPICS_CA1_PORT, EPICS_CA2_PORT = 5064, 5065
@@ -294,12 +296,14 @@ class VirtualCircuit:
     def new_channel_id(self):
         "Return a valid value for a cid or sid."
         # Return the next sequential unused id. Wrap back to 0 on overflow.
-        i = next(self._channel_id_counter)
-        if i == 2**16:
-            self._channel_id_counter = itertools.count(0)
-        while i in self.channels:
+        while True:
             i = next(self._channel_id_counter)
-        return i
+            if i in self.channels:
+                continue
+            if i == MAX_ID:
+                self._channel_id_counter = itertools.count(0)
+                continue
+            return i
 
     def new_subscriptionid(self):
         """
@@ -307,12 +311,14 @@ class VirtualCircuit:
         It does not update any important state.
         """
         # Return the next sequential unused id. Wrap back to 0 on overflow.
-        i = next(self._sub_counter)
-        if i == 2**16:
-            self._sub_counter = itertools.count(0)
-        while i in self.event_add_commands:
+        while True:
             i = next(self._sub_counter)
-        return i
+            if i in self.event_add_commands:
+                continue
+            if i == MAX_ID:
+                self._sub_counter = itertools.count(0)
+                continue
+            return i
 
     def new_ioid(self):
         """
@@ -320,12 +326,14 @@ class VirtualCircuit:
         It does not update any important state.
         """
         # Return the next sequential unused id. Wrap back to 0 on overflow.
-        i = next(self._ioid_counter)
-        if i == 2**16:
-            self._ioid_counter = itertools.count(0)
-        while i in self.event_add_commands:
+        while True:
             i = next(self._ioid_counter)
-        return i
+            if i in self._ioids:
+                continue
+            if i == MAX_ID:
+                self._ioid_counter = itertools.count(0)
+                continue
+            return i
 
 
 class Broadcaster:
@@ -473,12 +481,14 @@ class Broadcaster:
 
     def new_search_id(self):
         # Return the next sequential unused id. Wrap back to 0 on overflow.
-        i = next(self._search_id_counter)
-        if i == 2**16:
-            self._search_id_counter = itertools.count(0)
-        while i in self.unanswered_searches:
+        while True:
             i = next(self._search_id_counter)
-        return i
+            if i in self.unanswered_searches:
+                continue
+            if i == MAX_ID:
+                self._search_id_counter = itertools.count(0)
+                continue
+            return i
 
     def search(self, name):
         """

@@ -82,6 +82,10 @@ class CaprotoTypeError(TypeError, CaprotoError):
     ...
 
 
+class CaprotoRuntimeError(RuntimeError, CaprotoError):
+    ...
+
+
 def get_environment_variables():
     '''Get a dictionary of known EPICS environment variables'''
     defaults = dict(EPICS_CA_ADDR_LIST='',
