@@ -155,6 +155,13 @@ def test_thread_pv():
     print('read', time_pv.get())
     print('done')
 
+    repr(time_pv)
+
+    for k, v in PV.__dict__.items():
+        if isinstance(v, property):
+            getattr(time_pv, k)
+            getattr(ctrl_pv, k)
+
 
 def test_curio_server():
     import caproto.examples.curio_server as server

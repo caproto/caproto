@@ -4,7 +4,7 @@ import functools
 import itertools
 import socket
 import threading
-
+import time
 
 CA_REPEATER_PORT = 5065
 CA_SERVER_PORT = 5064
@@ -363,7 +363,6 @@ class PV:
             self.connection_callbacks = [connection_callback]
 
         self.callbacks = {}
-        self._monref = None  # holder of data returned from create_subscription
         self._conn_started = False
 
         if isinstance(callback, (tuple, list)):
@@ -423,10 +422,6 @@ class PV:
         "try to reconnect PV"
         self.disconnect()
         return self.wait_for_connection()
-
-    def poll(self, evt=1.e-4, iot=1.0):
-        "poll for changes"
-        return None
 
     @ensure_connection
     def get(self, *, count=None, as_string=False, as_numpy=True,
@@ -620,7 +615,7 @@ class PV:
     @property
     def host(self):
         "pv host"
-        return self._getarg('host')
+        return self.chid.channel.host_name().name.decode('utf-8')
 
     @property
     def count(self):
@@ -739,7 +734,99 @@ class PV:
     @property
     def put_complete(self):
         "returns True if a put-with-wait has completed"
-        raise NotImplemented
+        True
+
+    def _getinfo(self):
+        "get information paragraph"
+        self.get_ctrlvars()
+        out = []
+        xtype = self._args['typefull']
+        mod_map = {'enum': ca.enum_types,
+                   'status': ca.status_types,
+                   'time': ca.time_types,
+                   'control': ca.control_types,
+                   'native': ca.native_types}
+        mod = next(k for k, v in mod_map.items() if xtype in v)
+        nt_type = ca.native_type(xtype)
+        fmt = '%i'
+
+        if nt_type in (ca.ChType.FLOAT, ca.ChType.DOUBLE):
+            fmt = '%g'
+        elif nt_type in (ca.ChType.CHAR, ca.ChType.STRING):
+            fmt = '%s'
+
+        # self._set_charval(self._args['value'], call_ca=False)
+        out.append("== %s  (%s) ==" % (self.pvname, ca.DBR_TYPES[xtype].__name__))
+        if self.count == 1:
+            val = self._args['value']
+            out.append('   value      = %s' % fmt % val)
+        else:
+            ext  = {True:'...', False:''}[self.count > 10]
+            elems = range(min(5, self.count))
+            try:
+                aval = [fmt % self._args['value'][i] for i in elems]
+            except TypeError:
+                aval = ('unknown',)
+            out.append("   value      = array  [%s%s]" % (",".join(aval), ext))
+        for nam in ('char_value', 'count', 'nelm', 'type', 'units',
+                    'precision', 'host', 'access',
+                    'status', 'severity', 'timestamp',
+                    'posixseconds', 'nanoseconds',
+                    'upper_ctrl_limit', 'lower_ctrl_limit',
+                    'upper_disp_limit', 'lower_disp_limit',
+                    'upper_alarm_limit', 'lower_alarm_limit',
+                    'upper_warning_limit', 'lower_warning_limit'):
+            if hasattr(self, nam):
+                att = getattr(self, nam)
+                if att is not None:
+                    if nam == 'timestamp':
+                        def fmt_time(tstamp=None):
+                            "simple formatter for time values"
+                            if tstamp is None:
+                                tstamp = time.time()
+                            tstamp, frac = divmod(tstamp, 1)
+                            return "%s.%5.5i" % (time.strftime("%Y-%m-%d %H:%M:%S",
+                                                               time.localtime(tstamp)),
+                                                 round(1.e5*frac))
+
+                        att = "%.3f (%s)" % (att, fmt_time(att))
+                    elif nam == 'char_value':
+                        att = "'%s'" % att
+                    if len(nam) < 12:
+                        out.append('   %.11s= %s' % (nam+' '*12, str(att)))
+                    else:
+                        out.append('   %.20s= %s' % (nam+' '*20, str(att)))
+        if xtype == 'enum':  # list enum strings
+            out.append('   enum strings: ')
+            for index, nam in enumerate(self.enum_strs):
+                out.append("       %i = %s " % (index, nam))
+
+        if len(self.chid.channel.subscriptions) > 0:
+            msg = 'PV is internally monitored'
+            out.append('   %s, with %i user-defined callbacks:' % (msg,
+                                                         len(self.callbacks)))
+            if len(self.callbacks) > 0:
+                for nam in sorted(self.callbacks.keys()):
+                    cback = self.callbacks[nam][0]
+                    out.append('      {!r}'.format(cback))
+        else:
+            out.append('   PV is NOT internally monitored')
+        out.append('=============================')
+        return '\n'.join(out)
+
+    def _getarg(self, arg):
+        "wrapper for property retrieval"
+        if self._args['value'] is None:
+            self.get()
+        if self._args[arg] is None:
+            if arg in ('status', 'severity', 'timestamp',
+                       'posixseconds', 'nanoseconds'):
+                self.get_timevars(timeout=1, warn=False)
+            else:
+                self.get_ctrlvars(timeout=1, warn=False)
+        return self._args.get(arg, None)
+
+
 
     def __repr__(self):
         "string representation"
@@ -761,3 +848,4 @@ class PV:
 
 
 _default_context = Context()
+_default_context.register()
