@@ -1139,12 +1139,11 @@ class ReadNotifyResponse(Message):
     ID = 15
     HAS_PAYLOAD = True
 
-    def __init__(self, values, data_type, data_count, status, ioid, *,
-                 metadata=None):
-        size, payload = data_payload(values, data_type, data_count,
-                                     metadata=metadata)
-        header = ReadNotifyResponseHeader(size, data_type, data_count, status,
-                                          ioid)
+    def __init__(self, dbr_data, values, data_count, status, ioid):
+        payload = bytes(dbr_data) + bytes(values)
+        size = len(payload)
+        header = ReadNotifyResponseHeader(size, dbr_data.DBR_ID, data_count,
+                                          status, ioid)
         super().__init__(header, payload)
 
     payload_size = property(lambda self: self.header.payload_size)

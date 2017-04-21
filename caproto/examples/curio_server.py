@@ -1,13 +1,12 @@
-import time
-import getpass
-
 import curio
 from curio import socket
 
 import caproto as ca
 from caproto import _dbr as dbr
-from caproto import ChType
+from caproto import (ChType, DatabaseRecordDouble, DatabaseRecordInteger,
+                     DatabaseRecordEnum)
 from caproto import (EPICS_CA1_PORT, EPICS_CA2_PORT)
+from caproto import ReadNotifyResponse
 
 
 class DisconnectedCircuit(Exception):
@@ -30,98 +29,6 @@ def find_next_tcp_port(host='0.0.0.0', starting_port=EPICS_CA2_PORT + 1):
             break
 
     return port
-
-
-def convert_to(values, from_dtype, to_dtype, db_entry):
-    native_from = dbr.native_type(from_dtype)
-    if from_dtype == to_dtype and native_from != ChType.ENUM:
-        return values
-
-    # TODO metadata is expected to be of this type as well!
-    native_to = dbr.native_type(to_dtype)
-
-    if (from_dtype in dbr.native_float_types and native_to in
-            dbr.native_int_types):
-        # TODO performance
-        values = [int(v) for v in values]
-    elif from_dtype == ChType.ENUM:
-        if native_to == ChType.STRING:
-            values = [v.encode('latin-1') for v in values]
-        else:
-            values = [db_entry.strs.index(v) for v in values]
-    elif native_to == ChType.STRING:
-        if native_from in (ChType.STRING, ChType.ENUM):
-            values = [v.encode('latin-1') for v in values]
-        else:
-            values = [bytes(str(v), 'latin-1') for v in values]
-    return values
-
-
-class DatabaseRecordBase:
-    data_type = ca.DBR_LONG.DBR_ID
-
-    def __init__(self, *, timestamp=None, status=0, severity=0, value=None):
-        if timestamp is None:
-            timestamp = time.time()
-        self.timestamp = timestamp
-        self.status = status
-        self.severity = severity
-        self.value = value
-
-    def __len__(self):
-        try:
-            return len(self.value)
-        except TypeError:
-            return 1
-
-    def check_access(self, sender_address):
-        print('{} has full access to {}'.format(sender_address, self))
-        return 3  # read-write
-
-
-class DatabaseRecordEnum(DatabaseRecordBase):
-    data_type = ca.DBR_ENUM.DBR_ID
-
-    def __init__(self, *, strs=None, **kwargs):
-        self.strs = strs
-
-        super().__init__(**kwargs)
-
-    @property
-    def no_str(self):
-        return len(self.strs) if self.strs else 0
-
-
-class DatabaseRecordNumeric(DatabaseRecordBase):
-    def __init__(self, *, units='', upper_disp_limit=0.0,
-                 lower_disp_limit=0.0, upper_alarm_limit=0.0,
-                 upper_warning_limit=0.0, lower_warning_limit=0.0,
-                 lower_alarm_limit=0.0, upper_ctrl_limit=0.0,
-                 lower_ctrl_limit=0.0, **kwargs):
-
-        super().__init__(**kwargs)
-        self.units = units
-        self.upper_disp_limit = upper_disp_limit
-        self.lower_disp_limit = lower_disp_limit
-        self.upper_alarm_limit = upper_alarm_limit
-        self.upper_warning_limit = upper_warning_limit
-        self.lower_warning_limit = lower_warning_limit
-        self.lower_alarm_limit = lower_alarm_limit
-        self.upper_ctrl_limit = upper_ctrl_limit
-        self.lower_ctrl_limit = lower_ctrl_limit
-
-
-class DatabaseRecordInteger(DatabaseRecordNumeric):
-    data_type = ca.DBR_LONG.DBR_ID
-
-
-class DatabaseRecordDouble(DatabaseRecordNumeric):
-    data_type = ca.DBR_DOUBLE.DBR_ID
-
-    def __init__(self, *, precision=0, **kwargs):
-        super().__init__(**kwargs)
-
-        self.precision = precision
 
 
 class VirtualCircuit:
@@ -191,16 +98,10 @@ class VirtualCircuit:
                    ]
         elif isinstance(command, ca.ReadNotifyRequest):
             chan, db_entry = get_db_entry()
-            values = db_entry.value
-            try:
-                len(values)
-            except TypeError:
-                values = [values, ]
-
-            values = convert_to(values, db_entry.data_type, command.data_type,
-                                db_entry)
-            yield chan.read(values=values, data_type=command.data_type,
-                            ioid=command.ioid, metadata=db_entry)
+            dbr_data, values = db_entry.get_dbr_data(command.data_type)
+            yield ReadNotifyResponse(dbr_data=dbr_data, values=values,
+                                     data_count=1 + len(values),
+                                     status=1, ioid=command.ioid)
         elif isinstance(command, ca.WriteNotifyRequest):
             chan, db_entry = get_db_entry()
             yield chan.write(ioid=command.ioid)
