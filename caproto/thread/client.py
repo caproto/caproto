@@ -332,7 +332,7 @@ class PV:
     _default_context = None
 
     def __init__(self, pvname, callback=None, form='time',
-                 verbose=False, auto_monitor=None, count= None,
+                 verbose=False, auto_monitor=None, count=None,
                  connection_callback=None,
                  connection_timeout=None, *, context=None):
 
@@ -379,7 +379,7 @@ class PV:
         # not handling lazy instantiation
         self._context.search(self.pvname)
         self.chid = self._context.create_channel(self.pvname)
-
+        self.connected = True
         self._args['type'] = ca.ChType(self.chid.channel.native_data_type)
         self._args['typefull'] = ca.promote_type(self.type,
                                                  use_time=(form == 'time'),
@@ -399,6 +399,10 @@ class PV:
         self.chid.subscribe(data_type=self.typefull)
 
         self._cb_count = iter(itertools.count())
+
+        # todo move to async connect logic
+        for cb in self.connection_callbacks:
+            cb(pvname=pvname, conn=True, pv=self)
 
     def force_connect(self, pvname=None, chid=None, conn=True, **kws):
         ...
@@ -471,10 +475,18 @@ class PV:
     @ensure_connection
     def get_ctrlvars(self, timeout=5, warn=True):
         "get control values for variable"
+        dtype = ca.promote_type(self.type, use_ctrl=True)
+        command = self.chid.read(data_type=dtype)
+        info = self._parse_dbr_data(command.values)
+        self._args.update(**info)
 
     @ensure_connection
     def get_timevars(self, timeout=5, warn=True):
         "get time values for variable"
+        dtype = ca.promote_type(self.type, use_time=True)
+        command = self.chid.read(data_type=dtype)
+        info = self._parse_dbr_data(command.values)
+        self._args.update(**info)
 
     def _parse_dbr_metadata(self, dbr_data):
         ret = {}
