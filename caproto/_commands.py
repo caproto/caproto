@@ -183,8 +183,8 @@ def read_datagram(data, address, role):
             barray = barray[payload_size:]
         else:
             payload_bytes = None
-        command = _class.from_wire(header, payload_bytes)
-        command.sender_address = address  # (host, port)
+        command = _class.from_wire(header, payload_bytes,
+                                   sender_address=address)
         commands.append(command)
     return commands
 
@@ -215,14 +215,45 @@ def read_from_bytestream(data, role):
     return data[total_size:], command
 
 
-class Message:
-    ID = None  # integer, to be overriden by subclass
-    DIRECTION = None  # REQUEST or RESPONSE; set at the end of this module
-    sender_address = None  # set for the read_datagram function
+Commands = {}
+Commands[CLIENT] = {}
+Commands[SERVER] = {}
+_commands = set()
 
-    def __init__(self, header, payload=None, validate=True):
+
+class _MetaDirectionalMessage(type):
+    # see what you've done, @tacaswell and @danielballan?
+    def __new__(metacls, name, bases, dct):
+        if name.endswith('Request'):
+            direction = REQUEST
+            command_dict = Commands[CLIENT]
+        else:
+            direction = RESPONSE
+            command_dict = Commands[SERVER]
+
+        dct['DIRECTION'] = direction
+        new_class = super().__new__(metacls, name, bases, dct)
+
+        if new_class.ID is not None:
+            command_dict[new_class.ID] = new_class
+
+        if name in ('RsrvIsUpResponse, '):
+            Commands[CLIENT][new_class.ID] = new_class
+            Commands[SERVER][new_class.ID] = new_class
+
+        _commands.add(new_class)
+        return new_class
+
+
+class Message(metaclass=_MetaDirectionalMessage):
+    __slots__ = ('payload', 'header', 'sender_address')
+    ID = None  # integer, to be overriden by subclass
+
+    def __init__(self, header, payload=None, validate=True, sender_address=None):
         self.header = header
         self.payload = payload
+        self.sender_address = sender_address
+
         if validate:
             self.validate()
 
@@ -242,12 +273,8 @@ class Message:
                                    "".format(type(self), self.ID,
                                              self.header.command))
 
-    def __setstate__(self, val):
-        header, payload = val
-        self.__dict__ = {'header': header, 'payload': payload}
-
     @classmethod
-    def from_wire(cls, header, payload_bytes):
+    def from_wire(cls, header, payload_bytes, *, sender_address=None):
         """
         Use header.dbr_type to pack payload bytes into the right strucutre.
 
@@ -260,10 +287,12 @@ class Message:
         return cls.from_components(header, payload_struct)
 
     @classmethod
-    def from_components(cls, header, payload):
+    def from_components(cls, header, payload, *, sender_address=None):
         # Bwahahahaha
         instance = cls.__new__(cls)
-        instance.__dict__.update({'header': header, 'payload': payload})
+        instance.header = header
+        instance.payload = payload
+        instance.sender_address = sender_address
         return instance
 
     def __eq__(self, other):
@@ -317,6 +346,7 @@ class VersionRequest(Message):
 
         The version of the Channel Access protocol.
     """
+    __slots__ = ()
     ID = 0
     HAS_PAYLOAD = False
 
@@ -340,6 +370,7 @@ class VersionResponse(Message):
 
         The version of the Channel Access protocol.
     """
+    __slots__ = ()
     ID = 0
     HAS_PAYLOAD = False
 
@@ -377,6 +408,7 @@ class SearchRequest(Message):
         Hard-coded to :data:`NO_REPLY` (:data:`5`) meaning that only the
         server(s) with an affirmative response should reply.
     """
+    __slots__ = ()
     ID = 6
     HAS_PAYLOAD = True
 
@@ -420,6 +452,7 @@ class SearchResponse(Message):
 
         The version of the Channel Access protocol.
     """
+    __slots__ = ()
     ID = 6
     HAS_PAYLOAD = True
 
@@ -437,12 +470,14 @@ class SearchResponse(Message):
         super().__init__(header, payload)
 
     @classmethod
-    def from_wire(cls, header, payload_bytes):
+    def from_wire(cls, header, payload_bytes, *, sender_address=None):
         # Special-case to handle the fact that data_type field is not the data
         # type. (It's used to hold the server port, unrelated to the payload.)
         if not payload_bytes:
-            return cls.from_components(header, None)
-        return cls.from_components(header, payload_bytes)
+            return cls.from_components(header, None,
+                                       sender_address=sender_address)
+        return cls.from_components(header, payload_bytes,
+                                   sender_address=sender_address)
 
     @property
     def ip(self):
@@ -474,6 +509,7 @@ class NotFoundResponse(Message):
 
         The version of the Channel Access protocol.
     """
+    __slots__ = ()
     ID = 14
     HAS_PAYLOAD = False
 
@@ -492,6 +528,7 @@ class EchoRequest(Message):
 
     This command has no fields.
     """
+    __slots__ = ()
     ID = 23
     HAS_PAYLOAD = False
 
@@ -505,6 +542,7 @@ class EchoResponse(Message):
 
     This command has no fields.
     """
+    __slots__ = ()
     ID = 23
     HAS_PAYLOAD = False
 
@@ -538,6 +576,7 @@ class RsrvIsUpResponse(Message):
 
         IP address as string.
     """
+    __slots__ = ()
     ID = 13
     HAS_PAYLOAD = False
 
@@ -569,6 +608,7 @@ class RepeaterConfirmResponse(Message):
 
         IP address of repeater (as a string).
     """
+    __slots__ = ()
     ID = 17
     HAS_PAYLOAD = False
 
@@ -595,6 +635,7 @@ class RepeaterRegisterRequest(Message):
 
         IP address of the client (as a string).
     """
+    __slots__ = ()
     ID = 24
     HAS_PAYLOAD = False
 
@@ -669,6 +710,7 @@ class EventAddRequest(Message):
 
         Mask indicating which changes to report.
     """
+    __slots__ = ()
     ID = 1
     HAS_PAYLOAD = True
 
@@ -680,9 +722,10 @@ class EventAddRequest(Message):
         super().__init__(header, payload)
 
     @classmethod
-    def from_wire(cls, header, payload_bytes):
+    def from_wire(cls, header, payload_bytes, *, sender_address=None):
         payload_struct = EventAddRequestPayload.from_buffer(payload_bytes)
-        return cls.from_components(header, payload_struct)
+        return cls.from_components(header, payload_struct,
+                                   sender_address=sender_address)
 
     data_type = property(lambda self: self.header.data_type)
     data_count = property(lambda self: self.header.data_count)
@@ -725,6 +768,7 @@ class EventAddResponse(Message):
 
         Echoing the :data:`subscriptionid` in the :class:`EventAddRequest`
     """
+    __slots__ = ()
     ID = 1
     HAS_PAYLOAD = True
 
@@ -744,13 +788,15 @@ class EventAddResponse(Message):
     values = property(lambda self: self.payload)
 
     @classmethod
-    def from_wire(cls, header, payload_bytes):
+    def from_wire(cls, header, payload_bytes, *, sender_address=None):
         # libca responds to EventCancelRequest with an
         # EventAddResponse with an empty payload.
         if not payload_bytes:
-            return cls.from_components(header, None)
+            return cls.from_components(header, None,
+                                       sender_address=sender_address)
         payload_struct = from_buffer(header.data_type, payload_bytes)
-        return cls.from_components(header, payload_struct)
+        return cls.from_components(header, payload_struct,
+                                   sender_address=sender_address)
 
 
 class EventCancelRequest(Message):
@@ -771,6 +817,7 @@ class EventCancelRequest(Message):
 
         Integer ID for this subscription.
     """
+    __slots__ = ()
     ID = 2
     HAS_PAYLOAD = False
 
@@ -805,6 +852,7 @@ class EventCancelResponse(Message):
     # Actually this is coded with the ID = 1 like EventAdd*.
     # This is the only weird exception so we special-case it in the function
     # get_command_class.
+    __slots__ = ()
     ID = 2
     HAS_PAYLOAD = False
 
@@ -831,6 +879,7 @@ class EventCancelResponse(Message):
 
 class ReadRequest(Message):
     "Deprecated by Channel Access: See :class:`ReadNotifyRequest`."
+    __slots__ = ()
     ID = 3
     HAS_PAYLOAD = False
 
@@ -846,6 +895,7 @@ class ReadRequest(Message):
 
 class ReadResponse(Message):
     "Deprecated by Channel Access: See :class:`ReadNotifyResponse`."
+    __slots__ = ()
     ID = 3
     HAS_PAYLOAD = True
 
@@ -867,6 +917,7 @@ class ReadResponse(Message):
 
 class WriteRequest(Message):
     "Deprecated: See :class:`WriteNotifyRequest`."
+    __slots__ = ()
     ID = 4
     HAS_PAYLOAD = True
 
@@ -894,6 +945,7 @@ class EventsOffRequest(Message):
 
     This command has no fields.
     """
+    __slots__ = ()
     ID = 8
     HAS_PAYLOAD = False
 
@@ -907,6 +959,7 @@ class EventsOnRequest(Message):
 
     This command has no fields.
     """
+    __slots__ = ()
     ID = 9
     HAS_PAYLOAD = False
 
@@ -916,6 +969,7 @@ class EventsOnRequest(Message):
 
 class ReadSyncRequest(Message):
     "Deprecated by Channel Access: See :class:`ReadNotifyRequest`"
+    __slots__ = ()
     ID = 10
     HAS_PAYLOAD = False
 
@@ -938,6 +992,7 @@ class ErrorResponse(Message):
         As per Channel Access spec, 1 is success; 0 or >1 are various failures.
 
     """
+    __slots__ = ()
     ID = 11
     HAS_PAYLOAD = True
 
@@ -961,8 +1016,9 @@ class ErrorResponse(Message):
         return MessageHeader.from_buffer(self.payload[:_MessageHeaderSize])
 
     @classmethod
-    def from_wire(cls, header, payload_bytes):
-        return cls.from_components(header, payload_bytes)
+    def from_wire(cls, header, payload_bytes, *, sender_address=None):
+        return cls.from_components(header, payload_bytes,
+                                   sender_address=sender_address)
 
 
 class ClearChannelRequest(Message):
@@ -979,6 +1035,7 @@ class ClearChannelRequest(Message):
 
         Integer ID for this Channel designated by the server.
     """
+    __slots__ = ()
     ID = 12
     HAS_PAYLOAD = False
 
@@ -1003,6 +1060,7 @@ class ClearChannelResponse(Message):
 
         Integer ID for this Channel designated by the server.
     """
+    __slots__ = ()
     ID = 12
     HAS_PAYLOAD = False
 
@@ -1036,6 +1094,7 @@ class ReadNotifyRequest(Message):
         New integer ID uniquely identifying this I/O transaction on this
         Virtual Circuit.
     """
+    __slots__ = ()
     ID = 15
     HAS_PAYLOAD = False
 
@@ -1076,6 +1135,7 @@ class ReadNotifyResponse(Message):
         As per Channel Access spec, 1 is success; 0 or >1 are various failures.
 
     """
+    __slots__ = ()
     ID = 15
     HAS_PAYLOAD = True
 
@@ -1116,6 +1176,7 @@ class CreateChanRequest(Message):
         The version of the Channel Access protocol.
 
     """
+    __slots__ = ()
     ID = 18
     HAS_PAYLOAD = True
 
@@ -1155,6 +1216,7 @@ class CreateChanResponse(Message):
         identifying this Channel on its VirtualCircuit.
 
     """
+    __slots__ = ()
     ID = 18
     HAS_PAYLOAD = False
 
@@ -1195,6 +1257,7 @@ class WriteNotifyRequest(Message):
         New integer ID uniquely identifying this I/O transaction on this
         Virtual Circuit.
     """
+    __slots__ = ()
     ID = 19
     HAS_PAYLOAD = True
 
@@ -1242,6 +1305,7 @@ class WriteNotifyResponse(Message):
 
         As per Channel Access spec, 1 is success; 0 or >1 are various failures.
     """
+    __slots__ = ()
     ID = 19
     HAS_PAYLOAD = False
 
@@ -1265,6 +1329,7 @@ class ClientNameRequest(Message):
 
         Client name.
     """
+    __slots__ = ()
     ID = 20
     HAS_PAYLOAD = True
 
@@ -1287,6 +1352,7 @@ class HostNameRequest(Message):
 
         Host name.
     """
+    __slots__ = ()
     ID = 21
     HAS_PAYLOAD = True
 
@@ -1299,9 +1365,9 @@ class HostNameRequest(Message):
     name = property(lambda self: bytes(self.payload).rstrip(b'\x00'))
 
     @classmethod
-    def from_wire(cls, header, payload_bytes):
-        ''' '''
-        return cls.from_components(header, payload_bytes)
+    def from_wire(cls, header, payload_bytes, *, sender_address=None):
+        return cls.from_components(header, payload_bytes,
+                                   sender_address=sender_address)
 
 
 class AccessRightsResponse(Message):
@@ -1319,6 +1385,7 @@ class AccessRightsResponse(Message):
         Integer designated level of read or write access. (See Channel Access
         spec for details about meanings.)
     """
+    __slots__ = ()
     ID = 22
     HAS_PAYLOAD = False
 
@@ -1340,6 +1407,7 @@ class CreateChFailResponse(Message):
 
         Integer ID for this Channel designated by the client.
     """
+    __slots__ = ()
     ID = 26
     HAS_PAYLOAD = False
 
@@ -1359,6 +1427,7 @@ class ServerDisconnResponse(Message):
 
         Integer ID for this Channel designated by the client.
     """
+    __slots__ = ()
     ID = 27
     HAS_PAYLOAD = False
 
@@ -1366,21 +1435,3 @@ class ServerDisconnResponse(Message):
         super().__init__(ServerDisconnResponseHeader(cid), None)
 
     cid = property(lambda self: self.header.parameter1)
-
-
-_classes = [obj for obj in globals().values() if isinstance(obj, type)]
-_commands = [_class for _class in _classes if issubclass(_class, Message)]
-Commands = {}
-Commands[CLIENT] = {_class.ID: _class for _class in _commands
-                    if _class.__name__.endswith('Request')}
-Commands[SERVER] = {_class.ID: _class for _class in _commands
-                    if _class.__name__.endswith('Response')}
-for command in Commands[CLIENT].values():
-    command.DIRECTION = REQUEST
-for command in Commands[SERVER].values():
-    command.DIRECTION = RESPONSE
-
-# TODO special-case, RsrvIsUp is sent from CA Server to Broadcaster server
-Commands[CLIENT][RsrvIsUpResponse.ID] = RsrvIsUpResponse
-Commands[SERVER][RsrvIsUpResponse.ID] = RsrvIsUpResponse
-RsrvIsUpResponse.DIRECTION = REQUEST
