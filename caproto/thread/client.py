@@ -487,6 +487,7 @@ class PV:
         command = self.chid.read(data_type=dtype)
         info = self._parse_dbr_data(command.values)
         self._args.update(**info)
+        return info
 
     @ensure_connection
     def get_timevars(self, timeout=5, warn=True):
