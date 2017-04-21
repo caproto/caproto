@@ -109,16 +109,18 @@ class Context:
         """
         address = self.search_results[name]
         circuit = self.get_circuit(address, priority)
-        chan = ca.ClientChannel(name, circuit.circuit)
+        cid = circuit.circuit.new_channel_id()
+        cachan = ca.ClientChannel(name, circuit.circuit, cid=cid)
+        circuit.channels[cid] = Channel(circuit, cachan)
 
-        if chan.circuit.states[ca.SERVER] is ca.IDLE:
+        if cachan.circuit.states[ca.SERVER] is ca.IDLE:
             circuit.create_connection()
-            circuit.send(chan.version())
-            circuit.send(chan.host_name())
-            circuit.send(chan.client_name())
-        circuit.send(chan.create())
+            circuit.send(cachan.version())
+            circuit.send(cachan.host_name())
+            circuit.send(cachan.client_name())
+        circuit.send(cachan.create())
 
-        return Channel(circuit, chan)
+        return circuit.channels[cid]
 
     def next_command(self, bytes_recv, address):
         "Receive and process and next command broadcasted over UDP."
@@ -170,16 +172,21 @@ class VirtualCircuit:
         self.socket.send(bytes_to_send)
 
     def next_command(self, bytes_recv, address):
+        "Receive and process and next command from the virtual circuit."
         self.circuit.recv(bytes_recv)
         while True:
             with self.has_new_command:
                 command = self.circuit.next_command()
-                if isinstance(command, ca.NEED_DATA):
-                    return
-                if isinstance(command, ca.ReadNotifyResponse):
+                if command is ca.NEED_DATA:
+                    break
+
+                if isinstance(command, ca.CreateChanResponse):
+                    chan = self.channels[command.cid]
+                    chan.initialized_event.set()
+                elif isinstance(command, ca.ReadNotifyResponse):
                     chan = self.ioids.pop(command.ioid)
                     chan.last_reading = command.values
-                if isinstance(command, ca.WriteNotifyResponse):
+                elif isinstance(command, ca.WriteNotifyResponse):
                     chan = self.ioids.pop(command.ioid)
                 elif isinstance(command, ca.EventAddResponse):
                     chan = self.subscriptionids[command.subscriptionid]
@@ -193,7 +200,7 @@ class VirtualCircuit:
 class Channel:
     """Wraps a VirtualCircuit and a caproto.ClientChannel."""
     __slots__ = ('circuit', 'channel', 'last_reading', 'monitoring_tasks',
-                 '_callback')
+                 '_callback', 'initialized_event')
 
     def __init__(self, circuit, channel):
         self.circuit = circuit  # a VirtualCircuit
@@ -201,6 +208,7 @@ class Channel:
         self.last_reading = None
         self.monitoring_tasks = {}  # maps subscriptionid to curio.Task
         self._callback = None  # user func to call when subscriptions are run
+        self.initialized_event = threading.Event()
 
     def register_user_callback(self, func):
         """
@@ -279,7 +287,7 @@ class Channel:
 
 
 def ensure_connection(func):
-    # TODO get timout default from func signature
+    # TODO get timeout default from func signature
     @functools.wraps(func)
     def inner(self, *args, **kwargs):
         self.wait_for_connection(timeout=kwargs.get('timeout', None))
