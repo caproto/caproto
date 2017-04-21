@@ -7,7 +7,8 @@ import itertools
 from collections import deque
 import logging
 import getpass
-import socket # N.B. We do no networking whatsoever in caproto. We only use socket for
+import socket
+# N.B. We do no networking whatsoever in caproto. We only use socket for
 # socket.gethostname() to give a nice default for a HostNameRequest command.
 from ._commands import (AccessRightsResponse,
                         ClearChannelRequest, ClearChannelResponse,
