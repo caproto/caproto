@@ -27,6 +27,7 @@ from ._commands import (AccessRightsResponse,
 from ._state import (ChannelState, CircuitState, get_exception)
 from ._utils import (CLIENT, SERVER, NEED_DATA, CaprotoKeyError,
                      CaprotoValueError, LocalProtocolError,
+                     CaprotoRuntimeError,
                      )
 from ._dbr import (SubscriptionType, )
 
