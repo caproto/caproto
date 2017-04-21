@@ -101,7 +101,6 @@ def test_thread_client():
     chan2 = ctx.create_channel(pv2)
     # Set up a function to call when subscriptions are received.
     chan1.register_user_callback(user_callback)
-    chan1.initialized_event.wait()
 
     reading = chan1.read()
     print('reading:', reading)

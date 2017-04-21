@@ -111,7 +111,7 @@ class Context:
         circuit = self.get_circuit(address, priority)
         cid = circuit.circuit.new_channel_id()
         cachan = ca.ClientChannel(name, circuit.circuit, cid=cid)
-        circuit.channels[cid] = Channel(circuit, cachan)
+        chan = circuit.channels[cid] = Channel(circuit, cachan)
 
         if cachan.circuit.states[ca.SERVER] is ca.IDLE:
             circuit.create_connection()
@@ -120,7 +120,12 @@ class Context:
             circuit.send(cachan.client_name())
         circuit.send(cachan.create())
 
-        return circuit.channels[cid]
+        with circuit.has_new_command:
+            while True:
+                if chan.cid is not None:
+                    break
+                circuit.has_new_command.wait()
+        return chan
 
     def next_command(self, bytes_recv, address):
         "Receive and process and next command broadcasted over UDP."
@@ -182,7 +187,7 @@ class VirtualCircuit:
 
                 if isinstance(command, ca.CreateChanResponse):
                     chan = self.channels[command.cid]
-                    chan.initialized_event.set()
+                    chan.cid = command.cid
                 elif isinstance(command, ca.ReadNotifyResponse):
                     chan = self.ioids.pop(command.ioid)
                     chan.last_reading = command
@@ -200,7 +205,7 @@ class VirtualCircuit:
 class Channel:
     """Wraps a VirtualCircuit and a caproto.ClientChannel."""
     __slots__ = ('circuit', 'channel', 'last_reading', 'monitoring_tasks',
-                 '_callback', 'initialized_event')
+                 '_callback', 'cid')
 
     def __init__(self, circuit, channel):
         self.circuit = circuit  # a VirtualCircuit
@@ -208,7 +213,7 @@ class Channel:
         self.last_reading = None
         self.monitoring_tasks = {}  # maps subscriptionid to curio.Task
         self._callback = None  # user func to call when subscriptions are run
-        self.initialized_event = threading.Event()
+        self.cid = None
 
     def register_user_callback(self, func):
         """
@@ -295,7 +300,7 @@ def ensure_connection(func):
     return inner
 
 
-class PV(object):
+class PV:
     """Epics Process Variable
 
     A PV encapsulates an Epics Process Variable.
@@ -348,7 +353,7 @@ class PV(object):
         self._args = {}.fromkeys(self._fields)
         self._args['pvname'] = self.pvname
         self._args['count'] = count
-        self._args['nelm']  = -1
+        self._args['nelm'] = -1
         self._args['type'] = 'unknown'
         self._args['typefull'] = 'unknown'
         self._args['access'] = 'unknown'
@@ -372,7 +377,7 @@ class PV(object):
         # not handling lazy instantiation
         self._context.search(self.pvname)
         self.chid = self._context.create_channel(self.pvname)
-        self.chid.initialized_event.wait()
+
         self._args['type'] = ca.ChType(self.chid.channel.native_data_type)
         self._args['typefull'] = ca.promote_type(self.type,
                                                  use_time=(form == 'time'),
@@ -403,7 +408,6 @@ class PV(object):
         connected : bool
             If the PV is connected when this method returns
         """
-        self.chid.initialized_event.wait(timeout)
 
     def connect(self, timeout=None):
         """check that a PV is connected, forcing a connection if needed
