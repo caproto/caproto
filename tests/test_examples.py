@@ -110,16 +110,51 @@ def test_thread_client():
     chan1.unsubscribe(0)
     chan1.write((5,))
     reading = chan1.read()
-    assert reading == 5
+    assert reading.values == 5
     print('reading:', reading)
     chan1.write((6,))
     reading = chan1.read()
-    assert reading == 6
+    assert reading.values == 6
     print('reading:', reading)
     chan2.clear()
     chan1.clear()
     assert called
 
+
+def test_thread_pv():
+    from caproto.thread.client import Context, PV
+
+    pv1 = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
+    # pv2 = "XF:31IDA-OP{Tbl-Ax:X2}Mtr.VAL"
+
+    # Some user function to call when subscriptions receive data.
+    called = []
+
+    def user_callback(*, value, **kwargs):
+        print()
+        print('-- user callback', value)
+        called.append(True)
+
+    ctx = Context()
+    ctx.register()
+
+    time_pv = PV(pv1, context=ctx, form='time')
+    ctrl_pv = PV(pv1, context=ctx, form='ctrl')
+
+    time_pv.wait_for_connection()
+    time_pv.add_callback(user_callback)
+    print('time read', time_pv.get())
+    print('ctrl read', ctrl_pv.get())
+
+    time_pv.put((3, ))
+    time_pv.put((6, ))
+
+    time.sleep(0.1)
+    assert time_pv.get() == 6
+    assert called
+
+    print('read', time_pv.get())
+    print('done')
 
 
 def test_curio_server():

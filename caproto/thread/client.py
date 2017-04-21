@@ -185,7 +185,7 @@ class VirtualCircuit:
                     chan.initialized_event.set()
                 elif isinstance(command, ca.ReadNotifyResponse):
                     chan = self.ioids.pop(command.ioid)
-                    chan.last_reading = command.values
+                    chan.last_reading = command
                 elif isinstance(command, ca.WriteNotifyResponse):
                     chan = self.ioids.pop(command.ioid)
                 elif isinstance(command, ca.EventAddResponse):
@@ -328,8 +328,12 @@ class PV(object):
     def __init__(self, pvname, callback=None, form='time',
                  verbose=False, auto_monitor=None, count= None,
                  connection_callback=None,
-                 connection_timeout=None):
+                 connection_timeout=None, *, context=None):
 
+        if context is None:
+            context = _default_context
+
+        self._context = context
         self.pvname = pvname.strip()
         self.form = form.lower()
         self.verbose = verbose
@@ -365,7 +369,28 @@ class PV(object):
         elif hasattr(callback, '__call__'):
             self.callbacks[0] = (callback, {})
 
-        self.chid = create_channel(self.pvname)
+        # not handling lazy instantiation
+        self._context.search(self.pvname)
+        self.chid = self._context.create_channel(self.pvname)
+        self.chid.initialized_event.wait()
+        self._args['type'] = ca.ChType(self.chid.channel.native_data_type)
+        self._args['typefull'] = ca.promote_type(self.type,
+                                                 use_time=(form == 'time'),
+                                                 use_ctrl=(form != 'time'))
+        self._args['nelm'] = self.chid.channel.native_data_count
+        self._args['count'] = self.chid.channel.native_data_count
+
+        # yeah... enum.Flag would be nice here
+        self._args['write_access'] = (self.chid.channel.access_rights & 2) == 2
+        self._args['read_access'] = (self.chid.channel.access_rights & 1) == 1
+
+        access_strs = ('no access', 'read-only', 'write-only', 'read/write')
+        self._args['access'] = access_strs[self.chid.channel.access_rights]
+
+        self.chid.register_user_callback(self.__on_changes)
+        # if auto_monitor:
+        self.chid.subscribe(data_type=self.typefull)
+
         self._cb_count = iter(itertools.count())
 
     def force_connect(self, pvname=None, chid=None, conn=True, **kws):
@@ -378,7 +403,7 @@ class PV(object):
         connected : bool
             If the PV is connected when this method returns
         """
-        return False
+        self.chid.initialized_event.wait(timeout)
 
     def connect(self, timeout=None):
         """check that a PV is connected, forcing a connection if needed
@@ -388,7 +413,7 @@ class PV(object):
         connected : bool
             If the PV is connected when this method returns
         """
-        return False
+        self.wait_for_connection(timeout=timeout)
 
     def reconnect(self):
         "try to reconnect PV"
@@ -425,7 +450,10 @@ class PV(object):
         val : Object
             The value, the type is dependent on the underlying PV
         """
-        return None
+        command = self.chid.read(data_type=self.typefull)
+        info = self._parse_dbr_data(command.values)
+        print('read() info', info)
+        return info['value']
 
     @ensure_connection
     def put(self, value, *, wait=False, timeout=30.0,
@@ -434,6 +462,7 @@ class PV(object):
         complete, and optionally specifying a callback function to be run
         when the processing is complete.
         """
+        self.chid.write(value)
 
     @ensure_connection
     def get_ctrlvars(self, timeout=5, warn=True):
@@ -443,11 +472,51 @@ class PV(object):
     def get_timevars(self, timeout=5, warn=True):
         "get time values for variable"
 
-    def __on_changes(self, value=None, **kwd):
+    def _parse_dbr_data(self, dbr_data):
+        ret = dict(value=dbr_data.value)
+
+        arg_map = {'status': 'status',
+                   'severity': 'severity',
+                   'precision': 'precision',
+                   'units': 'units',
+                   'upper_disp_limit': 'upper_disp_limit',
+                   'lower_disp_limit': 'lower_disp_limit',
+                   'upper_alarm_limit': 'upper_alarm_limit',
+                   'upper_warning_limit': 'upper_warning_limit',
+                   'lower_warning_limit': 'lower_warning_limit',
+                   'lower_alarm_limit': 'lower_alarm_limit',
+                   'upper_ctrl_limit': 'upper_ctrl_limit',
+                   'lower_ctrl_limit': 'lower_ctrl_limit',
+                   'strs': 'enum_strs',
+                   # 'secondsSinceEpoch': 'posixseconds',
+                   # 'nanoSeconds': 'nanoseconds',
+                   }
+
+        for attr, arg in arg_map.items():
+            if hasattr(dbr_data, attr):
+                ret[arg] = getattr(dbr_data, attr)
+
+        if hasattr(dbr_data, 'nanoSeconds'):
+            ret['posixseconds'] = dbr_data.secondsSinceEpoch
+            ret['nanoseconds'] = dbr_data.nanoSeconds
+            timestamp = ca.epics_timestamp_to_unix(dbr_data.secondsSinceEpoch,
+                                                   dbr_data.nanoSeconds)
+            ret['timestamp'] = timestamp
+
+        if 'units' in ret:
+            ret['units'] = ret['units'].decode('latin-1')
+
+        return ret
+
+    def __on_changes(self, command):
         """internal callback function: do not overwrite!!
         To have user-defined code run when the PV value changes,
         use add_callback()
         """
+        info = self._parse_dbr_data(command.values)
+        print('updated info', info)
+        self._args.update(**info)
+        self.run_callbacks()
 
     def run_callbacks(self):
         """run all user-defined callbacks with the current data
@@ -685,3 +754,6 @@ class PV(object):
 
     def disconnect(self):
         "disconnect PV"
+
+
+_default_context = Context()
