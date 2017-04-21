@@ -4,12 +4,14 @@ import caproto as ca
 
 def test_counter_wraparound(client_circuit):
     circuit = client_circuit
+    broadcaster = ca.Broadcaster(ca.CLIENT)
 
     MAX = 2**16
     for i in range(MAX + 2):
         assert i % MAX == circuit.new_channel_id()
         assert i % MAX == circuit.new_subscriptionid()
         assert i % MAX == circuit.new_ioid()
+        assert i % MAX == broadcaster.new_search_id()
 
 
 def test_circuit_properties():
