@@ -133,7 +133,7 @@ class Context:
         while True:
             with self.has_new_command:
                 command = self.broadcaster.next_command()
-                if isinstance(command, ca.NEED_DATA):
+                if command is ca.NEED_DATA:
                     return
 
                 if isinstance(command, ca.RepeaterConfirmResponse):
