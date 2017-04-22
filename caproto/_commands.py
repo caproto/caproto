@@ -326,7 +326,7 @@ class Message(metaclass=_MetaDirectionalMessage):
         trimmed_bytes = raw_bytes[:self.header.payload_size]
         # Pad to multiple of 8.
         payload_bytes = trimmed_bytes.ljust(padded_len(trimmed_bytes), b'\x00')
-    return bytes(self.header) + bytes(payload_bytes)
+        return bytes(self.header) + bytes(payload_bytes)
 
     def __repr__(self):
         signature = inspect.signature(type(self))
