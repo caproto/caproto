@@ -120,7 +120,6 @@ class DBR_STS_STRING(ctypes.BigEndianStructure):
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
-        ('value',  string_t),
     ]
 
 
@@ -135,7 +134,6 @@ class DBR_STS_INT(ctypes.BigEndianStructure):
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
-        ('value', short_t),
     ]
 
 
@@ -150,7 +148,6 @@ class DBR_STS_FLOAT(ctypes.BigEndianStructure):
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
-        ('value', float_t),
     ]
 
 
@@ -165,7 +162,6 @@ class DBR_STS_ENUM(ctypes.BigEndianStructure):
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
-        ('value', ushort_t),
     ]
 
 
@@ -182,7 +178,6 @@ class DBR_STS_CHAR(ctypes.BigEndianStructure):
         ('status', short_t),
         ('severity', short_t),
         ('RISC_pad', char_t),
-        ('value', char_t),
     ]
 
 
@@ -197,7 +192,6 @@ class DBR_STS_LONG(ctypes.BigEndianStructure):
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
-        ('value', long_t),
     ]
 
 
@@ -214,7 +208,6 @@ class DBR_STS_DOUBLE(ctypes.BigEndianStructure):
         ('status', short_t),
         ('severity', short_t),
         ('RISC_pad', long_t),
-        ('value', double_t),
     ]
 
 
@@ -232,7 +225,6 @@ class DBR_TIME_STRING(ctypes.BigEndianStructure):
         ('severity', short_t),
         ('secondsSinceEpoch', ctypes.c_uint32),
         ('nanoSeconds', ctypes.c_uint32),
-        ('value', 40 * char_t),
     ]
 
 
@@ -252,7 +244,6 @@ class DBR_TIME_INT(ctypes.BigEndianStructure):
         ('secondsSinceEpoch', ctypes.c_uint32),
         ('nanoSeconds', ctypes.c_uint32),
         ('RISC_pad', short_t),
-        ('value', ushort_t),
     ]
 
 
@@ -270,7 +261,6 @@ class DBR_TIME_FLOAT(ctypes.BigEndianStructure):
         ('severity', short_t),
         ('secondsSinceEpoch', ctypes.c_uint32),
         ('nanoSeconds', ctypes.c_uint32),
-        ('value', float_t),
     ]
 
 
@@ -291,7 +281,6 @@ class DBR_TIME_ENUM(ctypes.BigEndianStructure):
         ('secondsSinceEpoch', ctypes.c_uint32),
         ('nanoSeconds', ctypes.c_uint32),
         ('RISC_pad', short_t),
-        ('value', ushort_t),
     ]
 
 
@@ -313,7 +302,6 @@ class DBR_TIME_CHAR(ctypes.BigEndianStructure):
         ('nanoSeconds', ctypes.c_uint32),
         ('RISC_pad0', short_t),
         ('RISC_pad1', char_t),
-        ('value', char_t),
     ]
 
 
@@ -331,7 +319,6 @@ class DBR_TIME_LONG(ctypes.BigEndianStructure):
         ('severity', short_t),
         ('secondsSinceEpoch', ctypes.c_uint32),
         ('nanoSeconds', ctypes.c_uint32),
-        ('value', long_t),
     ]
 
 
@@ -351,7 +338,6 @@ class DBR_TIME_DOUBLE(ctypes.BigEndianStructure):
         ('secondsSinceEpoch', ctypes.c_uint32),
         ('nanoSeconds', ctypes.c_uint32),
         ('RISC_Pad', long_t),
-        ('value', double_t),
     ]
 
 
@@ -382,7 +368,6 @@ class DBR_GR_INT(ctypes.BigEndianStructure):
         ('upper_warning_limit', short_t),
         ('lower_warning_limit', short_t),
         ('lower_alarm_limit', short_t),
-        ('value', short_t),
     ]
 
 
@@ -415,7 +400,6 @@ class DBR_GR_FLOAT(ctypes.BigEndianStructure):
         ('upper_warning_limit', float_t),
         ('lower_warning_limit', float_t),
         ('lower_alarm_limit', float_t),
-        ('value', float_t),
     ]
 
 
@@ -435,7 +419,6 @@ class DBR_GR_ENUM(ctypes.BigEndianStructure):
         ('severity', short_t),
         ('no_str', short_t),  # number of strings
         ('strs', MAX_ENUM_STATES * MAX_ENUM_STRING_SIZE * char_t),
-        ('value', ushort_t),
     ]
 
 
@@ -465,7 +448,6 @@ class DBR_GR_CHAR(ctypes.BigEndianStructure):
         ('upper_warning_limit', char_t),
         ('lower_warning_limit', char_t),
         ('lower_alarm_limit', char_t),
-        ('value', char_t),
     ]
 
 
@@ -494,7 +476,6 @@ class DBR_GR_LONG(ctypes.BigEndianStructure):
         ('upper_warning_limit', long_t),
         ('lower_warning_limit', long_t),
         ('lower_alarm_limit', long_t),
-        ('value', long_t),
     ]
 
 
@@ -527,7 +508,6 @@ class DBR_GR_DOUBLE(ctypes.BigEndianStructure):
         ('upper_warning_limit', double_t),
         ('lower_warning_limit', double_t),
         ('lower_alarm_limit', double_t),
-        ('value', double_t),
     ]
 
 
@@ -547,7 +527,6 @@ class DBR_CTRL_STRING(ctypes.BigEndianStructure):
         ('lower_alarm_limit', short_t),
         ('upper_ctrl_limit', short_t),
         ('lower_ctrl_limit', short_t),
-        ('value', string_t),
     ]
 
 
@@ -581,7 +560,6 @@ class DBR_CTRL_INT(ctypes.BigEndianStructure):
         ('lower_alarm_limit', short_t),
         ('upper_ctrl_limit', short_t),
         ('lower_ctrl_limit', short_t),
-        ('value', short_t),
     ]
 
 
@@ -618,7 +596,6 @@ class DBR_CTRL_FLOAT(ctypes.BigEndianStructure):
         ('lower_alarm_limit', float_t),
         ('upper_ctrl_limit', float_t),
         ('lower_ctrl_limit', float_t),
-        ('value', float_t),
     ]
 
 
@@ -638,7 +615,6 @@ class DBR_CTRL_ENUM(ctypes.BigEndianStructure):
         ('severity', short_t),
         ('no_str', short_t),  # number of strings
         ('strs', MAX_ENUM_STATES * (MAX_ENUM_STRING_SIZE * char_t)),
-        ('value', ushort_t),
     ]
 
 
@@ -673,7 +649,6 @@ class DBR_CTRL_CHAR(ctypes.BigEndianStructure):
         ('upper_ctrl_limit', char_t),
         ('lower_ctrl_limit', char_t),
         ('RISC_pad', char_t),
-        ('value', char_t),
     ]
 
 
@@ -706,7 +681,6 @@ class DBR_CTRL_LONG(ctypes.BigEndianStructure):
         ('lower_alarm_limit', long_t),
         ('upper_ctrl_limit', long_t),
         ('lower_ctrl_limit', long_t),
-        ('value', long_t),
     ]
 
 
@@ -743,7 +717,6 @@ class DBR_CTRL_DOUBLE(ctypes.BigEndianStructure):
         ('lower_alarm_limit', double_t),
         ('upper_ctrl_limit', double_t),
         ('lower_ctrl_limit', double_t),
-        ('value', double_t),
     ]
 
 
@@ -776,7 +749,6 @@ class DBR_STSACK_STRING(ctypes.BigEndianStructure):
         ('severity', short_t),
         ('ackt', ushort_t),
         ('acks', ushort_t),
-        ('value', 40 * char_t),
     ]
 
 
@@ -901,14 +873,14 @@ else:
 
 # map of Epics DBR types to ctypes types
 DBR_TYPES = {
-    ChType.STRING: DBR_STRING,
-    ChType.INT: DBR_INT,
-    ChType.SHORT: DBR_INT,
-    ChType.FLOAT: DBR_FLOAT,
-    ChType.ENUM: DBR_ENUM,
-    ChType.CHAR: DBR_CHAR,
-    ChType.LONG: DBR_LONG,
-    ChType.DOUBLE: DBR_DOUBLE,
+    ChType.STRING: string_t,
+    ChType.INT: int_t,
+    ChType.SHORT: int_t,
+    ChType.FLOAT: float_t,
+    ChType.ENUM: ushort_t,
+    ChType.CHAR: char_t,
+    ChType.LONG: ulong_t,
+    ChType.DOUBLE: double_t,
 
     ChType.STS_STRING: DBR_STS_STRING,
     ChType.STS_INT: DBR_STS_INT,

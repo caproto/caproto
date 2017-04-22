@@ -99,66 +99,47 @@ metadata_keywords = ('timestamp', 'status', 'severity', 'strs',
                      )
 
 
-def data_payload(values, data_type, data_count, *, metadata=None):
-    ntype = native_type(data_type)
-    size = ctypes.sizeof(DBR_TYPES[data_type])
-
-    if ntype != data_type:
-        size += (data_count - 1) * ctypes.sizeof(DBR_TYPES[ntype])
-
-    if data_count != 1:
-        # TODO this needs some work
-        assert data_count == len(values)
-        value_payload = b''.join(map(bytes, values))
+def data_payload(data, metadata, data_type, data_count):
+    if isinstance(data, ctypes.BigEndianStructure):
+        # This is already a DBR.
+        encoded_data = data
     else:
-        value_payload = DBR_TYPES[ntype](*values)
-
-    payload = DBR_TYPES[data_type]()
-
-    if metadata:
-        for attr in metadata_keywords:
-            # TODO note that some facilities use the nanosecond integer as
-            # a lossless event id and conversion to float is not a good thing
-            # ... should incorporate that into the logic here
-            if attr == 'timestamp':
-                if (hasattr(metadata, 'timestamp') and
-                        hasattr(payload, 'secondsSinceEpoch') and
-                        hasattr(payload, 'nanoSeconds')):
-                    sec, ns = timestamp_to_epics(metadata.timestamp)
-                    payload.secondsSinceEpoch = sec
-                    payload.nanoSeconds = ns
-                    continue
-
-            elif (attr == 'strs' and hasattr(metadata, attr) and
-                    hasattr(payload, attr)):
-                for i, string in enumerate(metadata.strs):
-                    bytes_ = string.encode('latin-1')
-                    justified = bytes_.ljust(MAX_ENUM_STRING_SIZE, b'\x00')
-                    payload.strs[i][:] = justified
-                payload.no_str = len(metadata.strs)
-                continue
-
-            if hasattr(metadata, attr) and hasattr(payload, attr):
-                value = getattr(metadata, attr)
-                if isinstance(value, str):
-                    value = value.encode('latin-1')
-
-                try:
-                    setattr(payload, attr, value)
-                except Exception as ex:
-                    # TODO server probably should not fail here
-                    # raise ValueError('Invalid metadata for {}={} ({})'
-                    #                  ''.format(attr, value, ex))
-                    print('set metadata fail', attr, value)
-    payload.value = value_payload.value
-
-    payload = bytes(payload)
+        # This is a tuple of values to be encoded into a DBR.
+        ntype = native_type(data_type)
+        cls_dict = {'_fields_': [('value', ntype * data_count)]}
+        cls = type(name, (ctypes.BigEndianStructure,), cls_dict)
+        cls(data)  # This is probably wrong in a super dumb way.
+    if isinstance(metamdata, ctypes.BigEndianStructure):
+        # This is already a DBR.
+    else:
+        # This is a tuple of values to be encoded into a DBR.
+        justified_md = []
+        for val in metadata:
+            if isinstance(val, str):
+                val = bytes_(val).ljust(MAX_ENUM_STRING_SIZE, b'\x00')
+            justified_md.append(val)
+        encoded_metadata = DBR_TYPES[data_type](*justified_metadata)
+    payload = bytes(encoded_metadata) + bytes(encoded_data)
+    size = len(payload)
 
     # Payloads must be zeropadded to have a size that is a multiple of 8.
     if size % 8 != 0:
         size = 8 * ((size + 7) // 8)
         payload = payload.ljust(size, b'\x00')
     return size, payload
+
+
+def extract_data(payload, data_type, data_count):
+    "Return a scalar or numpy array (or list if numpy is not installed)."
+    # TO DO
+    payload[ctypes.sizeof(DBR_STRUCTS[self.datatype]):]
+
+
+def extract_metadata(payload, data_type):
+    "Return a namedtuple."
+    # TO DO
+    ...
+
 
 
 def get_command_class(role, header):
@@ -1122,37 +1103,34 @@ class ReadNotifyResponse(Message):
 
         Desired number of elements per reading.
 
-    .. attribute:: sid
+    .. attribute:: status
 
-        Integer ID for this Channel designated by the server.
+        As per Channel Access spec, 1 is success; 0 or >1 are various failures.
 
     .. attribute:: ioid
 
         Integer ID for I/O transaction, echoing :class:`ReadNotifyRequest`.
-
-    .. attribute:: status
-
-        As per Channel Access spec, 1 is success; 0 or >1 are various failures.
 
     """
     __slots__ = ()
     ID = 15
     HAS_PAYLOAD = True
 
-    def __init__(self, dbr_data, values, data_count, status, ioid):
-        payload = bytes(dbr_data) + bytes(values)
-        size = len(payload)
+    def __init__(self, data, metadata, data_type, data_count, status, ioid):
+        size, payload = data_payload(data, metadata, data_type, data_count)
         header = ReadNotifyResponseHeader(size, dbr_data.DBR_ID, data_count,
                                           status, ioid)
         super().__init__(header, payload)
 
     payload_size = property(lambda self: self.header.payload_size)
+    data = property(lambda self: extract_data(self.payload, self.data_type,
+                                              self.data_count))
+    metadata = property(lambda self: extract_metadata(self.payload,
+                                                      self.data_type))
     data_type = property(lambda self: self.header.data_type)
     data_count = property(lambda self: self.header.data_count)
     status = property(lambda self: self.header.parameter1)
     ioid = property(lambda self: self.header.parameter2)
-    values = property(lambda self: to_builtin(self.payload, self.data_type,
-                                              self.data_count))
 
 
 class CreateChanRequest(Message):
