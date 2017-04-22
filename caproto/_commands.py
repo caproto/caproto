@@ -53,6 +53,11 @@ from ._dbr import (DBR_INT, DBR_STRING, DBR_TYPES, DO_REPLY, NO_REPLY,
 from ._utils import (CLIENT, NEED_DATA, REQUEST, RESPONSE,
                      SERVER, CaprotoTypeError, CaprotoValueError)
 
+# numpy is only used if it is available
+try:
+    import numpy as np
+except ImportError:
+    pass
 
 _MessageHeaderSize = ctypes.sizeof(MessageHeader)
 _ExtendedMessageHeaderSize = ctypes.sizeof(ExtendedMessageHeader)
@@ -140,7 +145,9 @@ def data_payload(data, metadata, data_type, data_count):
         md_payload = metadata
     elif isinstance(metadata, bytes):
         md_payload = metadata
-    elif isinstance(data, collections.Iterable):
+    elif metadata is None:
+        md_payload = b''
+    elif isinstance(metadata, collections.Iterable):
         # This is a tuple of values to be encoded into a DBR.
         justified_md = []
         for val in metadata:
@@ -260,7 +267,7 @@ class _MetaDirectionalMessage(type):
 
 
 class Message(metaclass=_MetaDirectionalMessage):
-    __slots__ = ('payload', 'header', 'sender_address', 'buffers')
+    __slots__ = ('header', 'buffers', 'sender_address')
     ID = None  # integer, to be overriden by subclass
 
     def __init__(self, header, *buffers, validate=True, sender_address=None):
@@ -272,12 +279,12 @@ class Message(metaclass=_MetaDirectionalMessage):
             self.validate()
 
     def validate(self):
+        size = sum(len(buf) for buf in self.buffers)
         if self.buffers is ():
             if self.header.payload_size != 0:
                 raise CaprotoValueError("header.payload_size {} > 0 but "
                                         "payload is None."
                                         "".format(self.header.payload_size))
-        size = sum(len(buf) for buf in self.buffers)
         elif self.header.payload_size != size:
             raise CaprotoValueError("header.payload_size {} != len(payload) {}"
                                     "".format(self.header.payload_size, size))
@@ -296,7 +303,7 @@ class Message(metaclass=_MetaDirectionalMessage):
         field, and these override this method in their subclass.
         """
         if not cls.HAS_PAYLOAD:
-            return cls.from_components(header, None)
+            return cls.from_components(header)
         payload_struct = from_buffer(header.data_type, payload_bytes)
         return cls.from_components(header, payload_struct)
 
@@ -371,7 +378,7 @@ class VersionRequest(Message):
         if not (0 <= priority < 100):
             raise CaprotoValueError("Expecting 0 < priority < 100")
         header = VersionRequestHeader(priority, version)
-        super().__init__(header, None)
+        super().__init__(header)
 
     priority = property(lambda self: self.header.data_type)
     version = property(lambda self: self.header.data_count)
@@ -393,7 +400,7 @@ class VersionResponse(Message):
 
     def __init__(self, version):
         header = VersionResponseHeader(version)
-        super().__init__(header, None)
+        super().__init__(header)
 
     version = property(lambda self: self.header.data_count)
 
@@ -443,7 +450,7 @@ class SearchRequest(Message):
     reply = property(lambda self: self.header.data_type)
     version = property(lambda self: self.header.data_count)
     cid = property(lambda self: self.header.parameter1)
-    name = property(lambda self: bytes(self.payload).rstrip(b'\x00'))
+    name = property(lambda self: bytes(self.buffers[0]).rstrip(b'\x00'))
 
 
 class SearchResponse(Message):
@@ -491,7 +498,7 @@ class SearchResponse(Message):
         # Special-case to handle the fact that data_type field is not the data
         # type. (It's used to hold the server port, unrelated to the payload.)
         if not payload_bytes:
-            return cls.from_components(header, None,
+            return cls.from_components(header,
                                        sender_address=sender_address)
         return cls.from_components(header, payload_bytes,
                                    sender_address=sender_address)
@@ -505,7 +512,7 @@ class SearchResponse(Message):
 
     @property
     def version(self):
-        return DBR_INT.from_buffer(bytearray(self.payload)[:2]).value
+        return DBR_INT.from_buffer(bytearray(self.buffers[0])[:2]).value
 
     port = property(lambda self: self.header.data_type)
     cid = property(lambda self: self.header.parameter2)
@@ -532,7 +539,7 @@ class NotFoundResponse(Message):
 
     def __init__(self, version, cid):
         header = NotFoundResponseHeader(DO_REPLY, version, cid)
-        super().__init__(header, None)
+        super().__init__(header)
 
     reply_flag = property(lambda self: self.header.data_type)
     version = property(lambda self: self.header.data_count)
@@ -550,7 +557,7 @@ class EchoRequest(Message):
     HAS_PAYLOAD = False
 
     def __init__(self):
-        super().__init__(EchoRequestHeader(), None)
+        super().__init__(EchoRequestHeader())
 
 
 class EchoResponse(Message):
@@ -564,7 +571,7 @@ class EchoResponse(Message):
     HAS_PAYLOAD = False
 
     def __init__(self):
-        super().__init__(EchoResponseHeader(), None)
+        super().__init__(EchoResponseHeader())
 
 
 class RsrvIsUpResponse(Message):
@@ -602,7 +609,7 @@ class RsrvIsUpResponse(Message):
         # the udp packet
         header = RsrvIsUpResponseHeader(version, server_port, beacon_id,
                                         address)
-        super().__init__(header, None)
+        super().__init__(header)
 
     version = property(lambda self: self.header.data_type)
     server_port = property(lambda self: self.header.data_count)
@@ -633,7 +640,7 @@ class RepeaterConfirmResponse(Message):
         encoded_ip = socket.inet_pton(socket.AF_INET, str(repeater_address))
         int_encoded_ip, = struct.unpack('!I', encoded_ip)  # bytes -> int
         header = RepeaterConfirmResponseHeader(int_encoded_ip)
-        super().__init__(header, None)
+        super().__init__(header)
 
     @property
     def repeater_address(self):
@@ -660,7 +667,7 @@ class RepeaterRegisterRequest(Message):
         encoded_ip = socket.inet_pton(socket.AF_INET, str(client_address))
         int_encoded_ip, = struct.unpack('!I', encoded_ip)  # bytes -> int
         header = RepeaterRegisterRequestHeader(int_encoded_ip)
-        super().__init__(header, None)
+        super().__init__(header)
 
     @property
     def client_address(self):
@@ -789,13 +796,14 @@ class EventAddResponse(Message):
     ID = 1
     HAS_PAYLOAD = True
 
-    def __init__(self, values, data_type, data_count,
+    def __init__(self, data, data_type, data_count,
                  status_code, subscriptionid, *, metadata=None):
-        size, payload = data_payload(values, data_type, data_count,
-                                     metadata=metadata)
+        data_buffer, md_buffer = data_payload(data, metadata, data_type,
+                                              data_count)
+        size = len(data_buffer) + len(md_buffer)
         header = EventAddResponseHeader(size, data_type, data_count,
                                         status_code, subscriptionid)
-        super().__init__(header, payload)
+        super().__init__(header, data_buffer, md_buffer)
 
     payload_size = property(lambda self: self.header.payload_size)
     data_type = property(lambda self: self.header.data_type)
@@ -809,7 +817,7 @@ class EventAddResponse(Message):
         # libca responds to EventCancelRequest with an
         # EventAddResponse with an empty payload.
         if not payload_bytes:
-            return cls.from_components(header, None,
+            return cls.from_components(header,
                                        sender_address=sender_address)
         payload_struct = from_buffer(header.data_type, payload_bytes)
         return cls.from_components(header, payload_struct,
@@ -840,7 +848,7 @@ class EventCancelRequest(Message):
 
     def __init__(self, data_type, sid, subscriptionid):
         header = EventCancelRequestHeader(data_type, 0, sid, subscriptionid)
-        super().__init__(header, None)
+        super().__init__(header)
 
     data_type = property(lambda self: self.header.data_type)
     data_count = property(lambda self: self.header.data_count)
@@ -876,7 +884,7 @@ class EventCancelResponse(Message):
     def __init__(self, data_type, sid, subscriptionid):
         # TODO: refactor, this does not exist
         header = EventCancelResponseHeader(data_type, sid, subscriptionid)
-        super().__init__(header, None)
+        super().__init__(header)
 
     data_type = property(lambda self: self.header.data_type)
     sid = property(lambda self: self.header.parameter1)
@@ -888,7 +896,7 @@ class EventCancelResponse(Message):
             raise CaprotoTypeError("A {} must have a header with "
                                    "header.command == 1, not {}."
                                    "".format(type(self), self.header.command))
-        if self.payload is not None:
+        if self.payload:
             raise CaprotoTypeError("A {} must have no payload."
                                    "".format(type(self)))
         # do not call super()
@@ -902,7 +910,7 @@ class ReadRequest(Message):
 
     def __init__(self, data_type, data_count, sid, ioid):
         header = ReadNotifyRequestHeader(data_type, data_count, sid, ioid)
-        super().__init__(header, None, validate=False)
+        super().__init__(header, validate=False)
 
     data_type = property(lambda self: self.header.data_type)
     data_count = property(lambda self: self.header.data_count)
@@ -918,10 +926,11 @@ class ReadResponse(Message):
 
     def __init__(self, data, data_type, data_count, sid, ioid, *,
                  metadata=None):
-        size, payload = data_payload(data, data_type, data_count,
-                                     metadata=metadata)
+        data_buffer, md_buffer = data_payload(data, metadata, data_type,
+                                              data_count)
+        size = len(data_buffer) + len(md_buffer)
         header = ReadResponseHeader(size, data_type, data_count, sid, ioid)
-        super().__init__(header, payload)
+        super().__init__(header, data_buffer, md_buffer)
 
     payload_size = property(lambda self: self.header.payload_size)
     data_type = property(lambda self: self.header.data_type)
@@ -938,12 +947,13 @@ class WriteRequest(Message):
     ID = 4
     HAS_PAYLOAD = True
 
-    def __init__(self, values, data_type, data_count, sid, ioid, *,
+    def __init__(self, data, data_type, data_count, sid, ioid, *,
                  metadata=None):
-        size, payload = data_payload(values, data_type, data_count,
-                                     metadata=metadata)
+        data_buffer, md_buffer = data_payload(data, metadata, data_type,
+                                              data_count)
+        size = len(data_buffer) + len(md_buffer)
         header = WriteRequestHeader(size, data_type, data_count, sid, ioid)
-        super().__init__(header, payload)
+        super().__init__(header, data_buffer, md_buffer)
 
     payload_size = property(lambda self: self.header.payload_size)
     data_type = property(lambda self: self.header.data_type)
@@ -967,7 +977,7 @@ class EventsOffRequest(Message):
     HAS_PAYLOAD = False
 
     def __init__(self):
-        super().__init__(EventsOffRequestHeader(), None)
+        super().__init__(EventsOffRequestHeader())
 
 
 class EventsOnRequest(Message):
@@ -981,7 +991,7 @@ class EventsOnRequest(Message):
     HAS_PAYLOAD = False
 
     def __init__(self):
-        super().__init__(EventsOnRequestHeader(), None)
+        super().__init__(EventsOnRequestHeader())
 
 
 class ReadSyncRequest(Message):
@@ -991,7 +1001,7 @@ class ReadSyncRequest(Message):
     HAS_PAYLOAD = False
 
     def __init__(self):
-        super().__init__(ReadSyncRequestHeader(), None)
+        super().__init__(ReadSyncRequestHeader())
 
 
 class ErrorResponse(Message):
@@ -1057,7 +1067,7 @@ class ClearChannelRequest(Message):
     HAS_PAYLOAD = False
 
     def __init__(self, sid, cid):
-        super().__init__(ClearChannelRequestHeader(sid, cid), None)
+        super().__init__(ClearChannelRequestHeader(sid, cid))
 
     sid = property(lambda self: self.header.parameter1)
     cid = property(lambda self: self.header.parameter2)
@@ -1082,7 +1092,7 @@ class ClearChannelResponse(Message):
     HAS_PAYLOAD = False
 
     def __init__(self, sid, cid):
-        super().__init__(ClearChannelResponseHeader(sid, cid), None)
+        super().__init__(ClearChannelResponseHeader(sid, cid))
 
     sid = property(lambda self: self.header.parameter1)
     cid = property(lambda self: self.header.parameter2)
@@ -1117,7 +1127,7 @@ class ReadNotifyRequest(Message):
 
     def __init__(self, data_type, data_count, sid, ioid):
         header = ReadNotifyRequestHeader(data_type, data_count, sid, ioid)
-        super().__init__(header, None)
+        super().__init__(header)
 
     data_type = property(lambda self: self.header.data_type)
     data_count = property(lambda self: self.header.data_count)
@@ -1152,11 +1162,14 @@ class ReadNotifyResponse(Message):
     ID = 15
     HAS_PAYLOAD = True
 
-    def __init__(self, data, metadata, data_type, data_count, status, ioid):
-        size, payload = data_payload(data, metadata, data_type, data_count)
-        header = ReadNotifyResponseHeader(size, dbr_data.DBR_ID, data_count,
+    def __init__(self, data, data_type, data_count, status, ioid, *,
+                 metadata=None):
+        data_buffer, md_buffer = data_payload(data, metadata, data_type,
+                                              data_count)
+        size = len(data_buffer) + len(md_buffer)
+        header = ReadNotifyResponseHeader(size, data_type, data_count,
                                           status, ioid)
-        super().__init__(header, payload)
+        super().__init__(header, data_buffer, md_buffer)
 
     payload_size = property(lambda self: self.header.payload_size)
     data = property(lambda self: extract_data(self.payload, self.data_type,
@@ -1235,7 +1248,7 @@ class CreateChanResponse(Message):
 
     def __init__(self, data_type, data_count, cid, sid):
         header = CreateChanResponseHeader(data_type, data_count, cid, sid)
-        super().__init__(header, None)
+        super().__init__(header)
 
     data_type = property(lambda self: self.header.data_type)
     data_count = property(lambda self: self.header.data_count)
@@ -1274,13 +1287,14 @@ class WriteNotifyRequest(Message):
     ID = 19
     HAS_PAYLOAD = True
 
-    def __init__(self, values, data_type, data_count, sid, ioid, *,
+    def __init__(self, data, data_type, data_count, sid, ioid, *,
                  metadata=None):
-        size, payload = data_payload(values, data_type, data_count,
-                                     metadata=metadata)
+        data_buffer, md_buffer = data_payload(data, metadata, data_type,
+                                              data_count)
+        size = len(data_buffer) + len(md_buffer)
         header = WriteNotifyRequestHeader(size, data_type, data_count, sid,
                                           ioid)
-        super().__init__(header, payload)
+        super().__init__(header, data_buffer, md_buffer)
 
     payload_size = property(lambda self: self.header.payload_size)
     data_type = property(lambda self: self.header.data_type)
@@ -1324,7 +1338,7 @@ class WriteNotifyResponse(Message):
 
     def __init__(self, data_type, data_count, status, ioid):
         header = WriteNotifyResponseHeader(data_type, data_count, status, ioid)
-        super().__init__(header, None)
+        super().__init__(header)
 
     data_type = property(lambda self: self.header.data_type)
     data_count = property(lambda self: self.header.data_count)
@@ -1404,7 +1418,7 @@ class AccessRightsResponse(Message):
 
     def __init__(self, cid, access_rights):
         header = AccessRightsResponseHeader(cid, access_rights)
-        super().__init__(header, None)
+        super().__init__(header)
 
     cid = property(lambda self: self.header.parameter1)
     access_rights = property(lambda self: self.header.parameter2)
@@ -1425,7 +1439,7 @@ class CreateChFailResponse(Message):
     HAS_PAYLOAD = False
 
     def __init__(self, cid):
-        super().__init__(CreateChFailResponseHeader(cid), None)
+        super().__init__(CreateChFailResponseHeader(cid))
 
     cid = property(lambda self: self.header.parameter1)
 
@@ -1445,6 +1459,6 @@ class ServerDisconnResponse(Message):
     HAS_PAYLOAD = False
 
     def __init__(self, cid):
-        super().__init__(ServerDisconnResponseHeader(cid), None)
+        super().__init__(ServerDisconnResponseHeader(cid))
 
     cid = property(lambda self: self.header.parameter1)
