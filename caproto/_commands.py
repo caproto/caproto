@@ -260,27 +260,27 @@ class _MetaDirectionalMessage(type):
 
 
 class Message(metaclass=_MetaDirectionalMessage):
-    __slots__ = ('payload', 'header', 'sender_address')
+    __slots__ = ('payload', 'header', 'sender_address', 'buffers')
     ID = None  # integer, to be overriden by subclass
 
-    def __init__(self, header, payload=None, validate=True, sender_address=None):
+    def __init__(self, header, *buffers, validate=True, sender_address=None):
         self.header = header
-        self.payload = payload
+        self.buffers = buffers
         self.sender_address = sender_address
 
         if validate:
             self.validate()
 
     def validate(self):
-        if self.payload is None:
+        if self.buffers is ():
             if self.header.payload_size != 0:
                 raise CaprotoValueError("header.payload_size {} > 0 but "
                                         "payload is None."
                                         "".format(self.header.payload_size))
-        elif self.header.payload_size != len(self.payload):
+        size = sum(len(buf) for buf in self.buffers)
+        elif self.header.payload_size != size:
             raise CaprotoValueError("header.payload_size {} != len(payload) {}"
-                                    "".format(self.header.payload_size,
-                                              len(self.payload)))
+                                    "".format(self.header.payload_size, size))
         if self.header.command != self.ID:
             raise CaprotoTypeError("A {} must have a header with "
                                    "header.command == {}, not {}."
@@ -301,11 +301,11 @@ class Message(metaclass=_MetaDirectionalMessage):
         return cls.from_components(header, payload_struct)
 
     @classmethod
-    def from_components(cls, header, payload, *, sender_address=None):
+    def from_components(cls, header, *buffers, sender_address=None):
         # Bwahahahaha
         instance = cls.__new__(cls)
         instance.header = header
-        instance.payload = payload
+        instance.buffers = buffers
         instance.sender_address = sender_address
         return instance
 
@@ -316,14 +316,17 @@ class Message(metaclass=_MetaDirectionalMessage):
         return bytes(self) != bytes(other)
 
     def __bytes__(self):
-        if self.payload is not None:
-            # Trim 40-char string struct to payload_size.
-            raw_bytes = bytes(self.payload)[:self.header.payload_size]
-            # Pad to multiple of 8.
-            payload_bytes = raw_bytes.ljust(padded_len(raw_bytes), b'\x00')
-        else:
-            payload_bytes = b''
-        return bytes(self.header) + payload_bytes
+        # In general it's better to use self.buffers over bytes(self) because
+        # The former does not copy large continuous memory arrays.
+        raw_bytes = bytearray()
+        # Concatenate buffers -- this copies data!
+        for buf in self.buffers:
+            raw_bytes += bytes(buf)
+        # Trim 40-char string struct to payload_size.
+        trimmed_bytes = raw_bytes[:self.header.payload_size]
+        # Pad to multiple of 8.
+        payload_bytes = trimmed_bytes.ljust(padded_len(trimmed_bytes), b'\x00')
+    return bytes(self.header) + bytes(payload_bytes)
 
     def __repr__(self):
         signature = inspect.signature(type(self))
@@ -342,7 +345,7 @@ class Message(metaclass=_MetaDirectionalMessage):
         return "{}({})".format(type(self).__name__, formatted_args)
 
     def __len__(self):
-        return len(bytes(self))
+        return len(bytes(self.header)) + sum(len(buf) for buf in self.buffers)
 
 
 class VersionRequest(Message):

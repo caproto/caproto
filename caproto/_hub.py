@@ -108,11 +108,11 @@ class VirtualCircuit:
         *commands :
             any number of :class:`Message` objects
         """
-        bytes_to_send = b''
+        buffers_to_send = []
         for command in commands:
             self._process_command(self.our_role, command)
             self.log.debug("Serializing %r", command)
-            bytes_to_send += bytes(command)
+            bytes_to_send.extend(command.buffers)
         return bytes_to_send
 
     def recv(self, byteslike):
