@@ -18,6 +18,8 @@
 # (1) is typically done by the user. (2) is typically done by calling the
 # ``next_command`` method of a :class:`Broadcaster` or a
 # :class:`VirtualCircuit`.
+import array
+import collections
 import ctypes
 import inspect
 import struct
@@ -45,7 +47,8 @@ from ._headers import (MessageHeader, ExtendedMessageHeader,
 
 from ._dbr import (DBR_INT, DBR_STRING, DBR_TYPES, DO_REPLY, NO_REPLY,
                    ChannelType, float_t, short_t, to_builtin, ushort_t,
-                   native_type, timestamp_to_epics, MAX_ENUM_STRING_SIZE)
+                   native_type, timestamp_to_epics, MAX_ENUM_STRING_SIZE,
+                   USE_NUMPY, array_type_code)
 
 from ._utils import (CLIENT, NEED_DATA, REQUEST, RESPONSE,
                      SERVER, CaprotoTypeError, CaprotoValueError)
@@ -100,43 +103,73 @@ metadata_keywords = ('timestamp', 'status', 'severity', 'strs',
 
 
 def data_payload(data, metadata, data_type, data_count):
-    if isinstance(data, ctypes.BigEndianStructure):
-        # This is already a DBR.
-        encoded_data = data
+    """
+    Pack bytes into a payload.
+
+    Parameters
+    ----------
+    data : ``array.array``, ``numpy.ndarray``, any iterable, or bytes
+        If input is bytes or ``array.array``, we assume that the byte order of
+        the input is big-endian. If the input is ``numpy.ndarray`` or any
+        other iterable, we ensure big-endianness.
+    metadata : a DBR struct, any iterable, or bytes
+    data_type : integer
+    data_count : integer
+
+    Returns
+    -------
+    md_payload, data_payload
+    """
+    ntype = native_type(data_type)
+
+    # Make the data payload.
+    if isinstance(data, array.array):
+        data_payload = data
+    elif isinstance(data, bytes):
+        data_payload = data
+    elif USE_NUMPY and isinstance(data, np.ndarray):
+        data_payload = data.astype(data.dtype.newbyteorder('>'))
+    elif isinstance(data, collections.Iterable):
+        data_payload = array.array(array_type_code(ntype), data)
     else:
-        # This is a tuple of values to be encoded into a DBR.
-        ntype = native_type(data_type)
-        cls_dict = {'_fields_': [('value', ntype * data_count)]}
-        cls = type(name, (ctypes.BigEndianStructure,), cls_dict)
-        cls(data)  # This is probably wrong in a super dumb way.
-    if isinstance(metamdata, ctypes.BigEndianStructure):
+        raise CaprotoTypeError("data given as type we cannot handle")
+
+    if (isinstance(metadata, ctypes.BigEndianStructure) and
+            hasattr(metadata, 'DBR_ID')):
         # This is already a DBR.
-    else:
+        md_payload = metadata
+    elif isinstance(metadata, bytes):
+        md_payload = metadata
+    elif isinstance(data, collections.Iterable):
         # This is a tuple of values to be encoded into a DBR.
         justified_md = []
         for val in metadata:
             if isinstance(val, str):
-                val = bytes_(val).ljust(MAX_ENUM_STRING_SIZE, b'\x00')
+                if len(val) > 40:  # 39?
+                    raise CaprotoValueError("The protocol limits strings to "
+                                            "40 characters.")
+                val = val.ljust(MAX_ENUM_STRING_SIZE, b'\x00')
             justified_md.append(val)
-        encoded_metadata = DBR_TYPES[data_type](*justified_metadata)
-    payload = bytes(encoded_metadata) + bytes(encoded_data)
-    size = len(payload)
+        md_payload = DBR_TYPES[data_type](*justified_metadata)
+    else:
+        raise CaprotoTypeError("metadata given as type we cannot handle")
 
+    # TO DO Do this close to transmission?
     # Payloads must be zeropadded to have a size that is a multiple of 8.
-    if size % 8 != 0:
-        size = 8 * ((size + 7) // 8)
-        payload = payload.ljust(size, b'\x00')
-    return size, payload
+    #if size % 8 != 0:
+    #    size = 8 * ((size + 7) // 8)
+    #    payload = payload.ljust(size, b'\x00')
+    return md_payload, data_payload
 
 
 def extract_data(payload, data_type, data_count):
-    "Return a scalar or numpy array (or list if numpy is not installed)."
+    "Return a scalar or big-endian array (numpy.ndarray or array.array)."
     # TO DO
     payload[ctypes.sizeof(DBR_STRUCTS[self.datatype]):]
 
 
 def extract_metadata(payload, data_type):
-    "Return a namedtuple."
+    "Return one of the classes in _data.py."
     # TO DO
     ...
 

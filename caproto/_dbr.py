@@ -10,6 +10,13 @@ import datetime
 from enum import IntEnum
 from collections import namedtuple
 
+try:
+    import numpy
+except ImportError:
+    USE_NUMPY = False
+else:
+    USE_NUMPY = True
+
 # EPICS2UNIX_EPOCH = 631173600.0 - time.timezone
 EPICS2UNIX_EPOCH = 631152000.0
 EPICS_EPOCH = datetime.datetime.utcfromtimestamp(EPICS2UNIX_EPOCH)
@@ -909,6 +916,20 @@ DBR_TYPES = {
     ChType.CTRL_LONG: DBR_CTRL_LONG,
     ChType.CTRL_DOUBLE: DBR_CTRL_DOUBLE
 }
+
+_array_type_code_map = {
+    ChType.STRING: 'B',  # TO DO
+    ChType.INT: 'H',
+    ChType.FLOAT: 'f',
+    ChType.ENUM: 'H',
+    ChType.CHAR:'B',
+    ChType.LONG: 'L',
+    ChType.DOUBLE: 'd',
+}
+
+
+def array_type_code(native_type):
+    return _array_type_code_map[native_type]
 
 
 _native_map = {
