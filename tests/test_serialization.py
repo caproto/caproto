@@ -41,7 +41,7 @@ parameter_values = {
     'subscriptionid': [0],
     'to': [0],
     'validate': [0],
-    'values': [[1], ],
+    'data': [[1], ],
     'version': [0],
 }
 
@@ -68,8 +68,7 @@ def test_serialize(cmd):
     print('inst', bytes(inst))
     print('    ', inst)
     print('    ', bytes(inst.header))
-    if inst.payload is not None:
-        print('    ', bytes(inst.payload), len(bytes(inst.payload)))
+    print('    ', inst.buffers)
     print('    ', inst.header.payload_size)
     print('    dt ', inst.header.data_type)
 
@@ -77,8 +76,7 @@ def test_serialize(cmd):
     print('wire', bytes(wire_inst))
     print('    ', wire_inst)
     print('    ', bytes(wire_inst.header))
-    if wire_inst.payload is not None:
-        print('    ', bytes(wire_inst.payload), len(bytes(wire_inst.payload)))
+    print('    ', wire_inst.buffers)
     print('    ', wire_inst.header.payload_size)
     assert bytes(wire_inst.header) == bytes(inst.header)
     print('    dt ', wire_inst.header.data_type)

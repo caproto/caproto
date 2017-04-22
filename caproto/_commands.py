@@ -279,7 +279,7 @@ class Message(metaclass=_MetaDirectionalMessage):
             self.validate()
 
     def validate(self):
-        size = sum(len(buf) for buf in self.buffers)
+        size = 8 * sum(len(buf) for buf in self.buffers)
         if self.buffers is ():
             if self.header.payload_size != 0:
                 raise CaprotoValueError("header.payload_size {} > 0 but "
@@ -494,13 +494,10 @@ class SearchResponse(Message):
         super().__init__(header, payload)
 
     @classmethod
-    def from_wire(cls, header, payload_bytes, *, sender_address=None):
+    def from_wire(cls, header, *buffers, sender_address=None):
         # Special-case to handle the fact that data_type field is not the data
         # type. (It's used to hold the server port, unrelated to the payload.)
-        if not payload_bytes:
-            return cls.from_components(header,
-                                       sender_address=sender_address)
-        return cls.from_components(header, payload_bytes,
+        return cls.from_components(header, *buffers,
                                    sender_address=sender_address)
 
     @property
@@ -746,8 +743,8 @@ class EventAddRequest(Message):
         super().__init__(header, payload)
 
     @classmethod
-    def from_wire(cls, header, payload_bytes, *, sender_address=None):
-        payload_struct = EventAddRequestPayload.from_buffer(payload_bytes)
+    def from_wire(cls, header, *buffers, sender_address=None):
+        payload_struct = EventAddRequestPayload.from_buffer(buffers[0])
         return cls.from_components(header, payload_struct,
                                    sender_address=sender_address)
 
@@ -800,7 +797,7 @@ class EventAddResponse(Message):
                  status_code, subscriptionid, *, metadata=None):
         data_buffer, md_buffer = data_payload(data, metadata, data_type,
                                               data_count)
-        size = len(data_buffer) + len(md_buffer)
+        size = 8 * (len(data_buffer) + len(md_buffer))
         header = EventAddResponseHeader(size, data_type, data_count,
                                         status_code, subscriptionid)
         super().__init__(header, data_buffer, md_buffer)
@@ -928,7 +925,7 @@ class ReadResponse(Message):
                  metadata=None):
         data_buffer, md_buffer = data_payload(data, metadata, data_type,
                                               data_count)
-        size = len(data_buffer) + len(md_buffer)
+        size = 8 * (len(data_buffer) + len(md_buffer))
         header = ReadResponseHeader(size, data_type, data_count, sid, ioid)
         super().__init__(header, data_buffer, md_buffer)
 
@@ -951,7 +948,7 @@ class WriteRequest(Message):
                  metadata=None):
         data_buffer, md_buffer = data_payload(data, metadata, data_type,
                                               data_count)
-        size = len(data_buffer) + len(md_buffer)
+        size = 8 * (len(data_buffer) + len(md_buffer))
         header = WriteRequestHeader(size, data_type, data_count, sid, ioid)
         super().__init__(header, data_buffer, md_buffer)
 
@@ -1166,7 +1163,7 @@ class ReadNotifyResponse(Message):
                  metadata=None):
         data_buffer, md_buffer = data_payload(data, metadata, data_type,
                                               data_count)
-        size = len(data_buffer) + len(md_buffer)
+        size = 8 * (len(data_buffer) + len(md_buffer))
         header = ReadNotifyResponseHeader(size, data_type, data_count,
                                           status, ioid)
         super().__init__(header, data_buffer, md_buffer)
@@ -1291,7 +1288,7 @@ class WriteNotifyRequest(Message):
                  metadata=None):
         data_buffer, md_buffer = data_payload(data, metadata, data_type,
                                               data_count)
-        size = len(data_buffer) + len(md_buffer)
+        size = 8 * (len(data_buffer) + len(md_buffer))
         header = WriteNotifyRequestHeader(size, data_type, data_count, sid,
                                           ioid)
         super().__init__(header, data_buffer, md_buffer)
