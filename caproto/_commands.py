@@ -128,7 +128,7 @@ def bytelen(item):
 
 def data_payload(data, metadata, data_type, data_count):
     """
-    Pack bytes into a payload.
+    Pack bytes into a set of buffers for usage as a single payload
 
     Parameters
     ----------
@@ -142,7 +142,8 @@ def data_payload(data, metadata, data_type, data_count):
 
     Returns
     -------
-    md_payload, data_payload
+    size, md_payload, data_payload[, pad_payload]
+        pad_payload will only be returned if needed
     """
     ntype = native_type(data_type)
 
@@ -180,12 +181,11 @@ def data_payload(data, metadata, data_type, data_count):
     else:
         raise CaprotoTypeError("metadata given as type we cannot handle")
 
-    # TO DO Do this close to transmission?
-    # Payloads must be zeropadded to have a size that is a multiple of 8.
-    #if size % 8 != 0:
-    #    size = 8 * ((size + 7) // 8)
-    #    payload = payload.ljust(size, b'\x00')
-    return md_payload, data_payload
+    size, pad_payload = pad_buffers(md_payload, data_payload)
+    if pad_payload:
+        return size, md_payload, data_payload, pad_payload
+    else:
+        return size, md_payload, data_payload
 
 
 def extract_data(payload, data_type, data_count):
@@ -815,12 +815,10 @@ class EventAddResponse(Message):
 
     def __init__(self, data, data_type, data_count,
                  status_code, subscriptionid, *, metadata=None):
-        data_buffer, md_buffer = data_payload(data, metadata, data_type,
-                                              data_count)
-        size, pad_buffer = pad_buffers(data_buffer, md_buffer)
+        size, *buffers = data_payload(data, metadata, data_type, data_count)
         header = EventAddResponseHeader(size, data_type, data_count,
                                         status_code, subscriptionid)
-        super().__init__(header, data_buffer, md_buffer, pad_buffer)
+        super().__init__(header, *buffers)
 
     payload_size = property(lambda self: self.header.payload_size)
     data_type = property(lambda self: self.header.data_type)
@@ -951,11 +949,9 @@ class ReadResponse(Message):
 
     def __init__(self, data, data_type, data_count, sid, ioid, *,
                  metadata=None):
-        data_buffer, md_buffer = data_payload(data, metadata, data_type,
-                                              data_count)
-        size, pad_buffer = pad_buffers(data_buffer, md_buffer)
+        size, *buffers = data_payload(data, metadata, data_type, data_count)
         header = ReadResponseHeader(size, data_type, data_count, sid, ioid)
-        super().__init__(header, data_buffer, md_buffer, pad_buffer)
+        super().__init__(header, *buffers)
 
     payload_size = property(lambda self: self.header.payload_size)
     data_type = property(lambda self: self.header.data_type)
@@ -980,11 +976,9 @@ class WriteRequest(Message):
 
     def __init__(self, data, data_type, data_count, sid, ioid, *,
                  metadata=None):
-        data_buffer, md_buffer = data_payload(data, metadata, data_type,
-                                              data_count)
-        size, pad_buffer = pad_buffers(data_buffer, md_buffer)
+        size, *buffers = data_payload(data, metadata, data_type, data_count)
         header = WriteRequestHeader(size, data_type, data_count, sid, ioid)
-        super().__init__(header, data_buffer, md_buffer, pad_buffer)
+        super().__init__(header, *buffers)
 
     payload_size = property(lambda self: self.header.payload_size)
     data_type = property(lambda self: self.header.data_type)
@@ -1209,12 +1203,10 @@ class ReadNotifyResponse(Message):
 
     def __init__(self, data, data_type, data_count, status, ioid, *,
                  metadata=None):
-        data_buffer, md_buffer = data_payload(data, metadata, data_type,
-                                              data_count)
-        size, pad_buffer = pad_buffers(data_buffer, md_buffer)
+        size, *buffers = data_payload(data, metadata, data_type, data_count)
         header = ReadNotifyResponseHeader(size, data_type, data_count, status,
                                           ioid)
-        super().__init__(header, data_buffer, md_buffer, pad_buffer)
+        super().__init__(header, *buffers)
 
     payload_size = property(lambda self: self.header.payload_size)
 
@@ -1343,12 +1335,10 @@ class WriteNotifyRequest(Message):
 
     def __init__(self, data, data_type, data_count, sid, ioid, *,
                  metadata=None):
-        data_buffer, md_buffer = data_payload(data, metadata, data_type,
-                                              data_count)
-        size, pad_buffer = pad_buffers(data_buffer, md_buffer)
+        size, *buffers = data_payload(data, metadata, data_type, data_count)
         header = WriteNotifyRequestHeader(size, data_type, data_count, sid,
                                           ioid)
-        super().__init__(header, data_buffer, md_buffer, pad_buffer)
+        super().__init__(header, *buffers)
 
     payload_size = property(lambda self: self.header.payload_size)
     data_type = property(lambda self: self.header.data_type)
