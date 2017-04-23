@@ -777,9 +777,9 @@ class EventAddResponse(Message):
 
     Fields:
 
-    .. attribute:: values
+    .. attribute:: data
 
-        data in a tuple of built-in Python or numpy types
+        data as built-in Python or numpy types
 
     .. attribute:: data_type
 
@@ -819,7 +819,14 @@ class EventAddResponse(Message):
     data_count = property(lambda self: self.header.data_count)
     status_code = property(lambda self: self.header.parameter1)
     subscriptionid = property(lambda self: self.header.parameter2)
-    values = property(lambda self: self.buffers[0])
+
+    @property
+    def data(self):
+        return extract_data(self.buffers[0], self.data_type, self.data_count)
+
+    @property
+    def metadata(self):
+        return extract_metadata(self.buffers[0], self.data_type)
 
     @classmethod
     def from_wire(cls, header, payload_bytes, *, sender_address=None):
@@ -947,8 +954,14 @@ class ReadResponse(Message):
     data_count = property(lambda self: self.header.data_count)
     sid = property(lambda self: self.header.parameter1)
     ioid = property(lambda self: self.header.parameter2)
-    values = property(lambda self: to_builtin(self.payload, self.data_type,
-                                              self.data_count))
+
+    @property
+    def data(self):
+        return extract_data(self.buffers[0], self.data_type, self.data_count)
+
+    @property
+    def metadata(self):
+        return extract_metadata(self.buffers[0], self.data_type)
 
 
 class WriteRequest(Message):
@@ -970,8 +983,14 @@ class WriteRequest(Message):
     data_count = property(lambda self: self.header.data_count)
     sid = property(lambda self: self.header.parameter1)
     ioid = property(lambda self: self.header.parameter2)
-    values = property(lambda self: to_builtin(self.payload, self.data_type,
-                                              self.data_count))
+
+    @property
+    def data(self):
+        return extract_data(self.buffers[0], self.data_type, self.data_count)
+
+    @property
+    def metadata(self):
+        return extract_metadata(self.buffers[0], self.data_type)
 
 # There is no 'WriteResponse'. See WriteNotifyRequest/WriteNotifyResponse.
 
@@ -1151,6 +1170,14 @@ class ReadNotifyResponse(Message):
 
     Fields:
 
+    .. attribute:: data
+
+        data as built-in Python or numpy types
+
+    .. attribute:: metadata
+
+        metadata in a ctypes.Structure
+
     .. attribute:: data_type
 
         Integer code of desired DBR type of readings.
@@ -1277,9 +1304,13 @@ class WriteNotifyRequest(Message):
 
     Fields:
 
-    .. attribute:: values
+    .. attribute:: data
 
-        data in a tuple of built-in Python or numpy types
+        data as built-in Python or numpy types
+
+    .. attribute:: metadata
+
+        metadata in a ctypes.Structure
 
     .. attribute:: data_type
 
@@ -1316,8 +1347,15 @@ class WriteNotifyRequest(Message):
     data_count = property(lambda self: self.header.data_count)
     sid = property(lambda self: self.header.parameter1)
     ioid = property(lambda self: self.header.parameter2)
-    values = property(lambda self: to_builtin(self.payload, self.data_type,
-                                              self.data_count))
+
+    @property
+    def data(self):
+        return extract_data(self.buffers[0], self.data_type, self.data_count)
+
+    @property
+    def metadata(self):
+        return extract_metadata(self.buffers[0], self.data_type)
+
 
 
 class WriteNotifyResponse(Message):
