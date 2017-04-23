@@ -81,3 +81,67 @@ def test_serialize(cmd):
     print('    dt ', wire_inst.header.data_type)
     # TODO this is important to check:
     assert wire_inst == inst
+
+
+def make_channels(cli_circuit, srv_circuit, data_type, data_count):
+    cid = 0
+    sid = 0
+    cli_channel = ca.ClientChannel('name', cli_circuit, cid)
+    srv_channel = ca.ServerChannel('name', srv_circuit, cid)
+    req = cli_channel.create()
+    cli_circuit.send(req)
+    srv_circuit.recv(bytes(req))
+    srv_circuit.next_command()
+    res = srv_channel.create(data_type, data_count, sid)
+    srv_circuit.send(res)
+    cli_circuit.recv(bytes(res))
+    cli_circuit.next_command()
+    return cli_channel, srv_channel
+
+
+payloads = [
+    (5, 1, (1,), None)
+]
+
+@pytest.mark.parametrize('data_type, data_count, data, metadata', payloads)
+def test_reads(circuit_pair, data_type, data_count, data):
+
+    cli_circuit, srv_circuit = circuit_pair
+    cli_channel, srv_channel = make_channels(*circuit_pair, 5, 1)
+
+    req = ca.ReadNotifyRequest(data_count=data_count, data_type=data_type,
+                               ioid=0, sid=0)
+    buffers_to_send = cli_circuit.send(req)
+    for buffer in buffers_to_send:
+        srv_circuit.recv(buffer)
+    srv_circuit.next_command()
+    res = ca.ReadNotifyResponse(data=data, metadata=metadata,
+                                data_count=data_count, data_type=data_type,
+                                ioid=0, status=1)
+    buffers_to_send = srv_circuit.send(res)
+    for buffer in buffers_to_send:
+        cli_circuit.recv(buffer)
+    com = cli_circuit.next_command()
+    print(com.data)
+
+
+@pytest.mark.parametrize('data_type, data_count, data, metadata', payloads)
+def test_writes(circuit_pair, data_type, data_count, data):
+
+    cli_circuit, srv_circuit = circuit_pair
+    cli_channel, srv_channel = make_channels(*circuit_pair, 5, 1)
+
+    req = ca.WriteNotifyRequest(data=data, data_count=data_count,
+                                data_type=data_type, ioid=0, sid=0)
+    buffers_to_send = cli_circuit.send(req)
+    for buffer in buffers_to_send:
+        srv_circuit.recv(buffer)
+    srv_circuit.next_command()
+    res = ca.ReadNotifyResponse(data=data, metadata=metadata,
+                                data_count=data_count, data_type=data_type,
+                                ioid=0, status=1)
+    buffers_to_send = srv_circuit.send(res)
+    for buffer in buffers_to_send:
+        cli_circuit.recv(buffer)
+    com = cli_circuit.next_command()
+    print(com.data)
