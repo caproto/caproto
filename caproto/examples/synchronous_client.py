@@ -20,8 +20,9 @@ sockets = {}
 
 # Convenience functions that do both transport caproto validation/ingest.
 def send(circuit, command):
-    bytes_to_send = circuit.send(command)
-    sockets[circuit].send(bytes_to_send)
+    buffers_to_send = circuit.send(command)
+    for buffer in buffers_to_send:
+        sockets[circuit].send(bytes(buffer))
 
 
 def recv(circuit):
@@ -121,7 +122,7 @@ def main():
     # Test writing.
     request = ca.WriteNotifyRequest(data_type=2, data_count=1,
                                     sid=chan1.sid,
-                                    ioid=13, values=(4,))
+                                    ioid=13, data=(4,))
 
     send(chan1.circuit, request)
     recv(chan1.circuit)
