@@ -280,19 +280,18 @@ class Message(metaclass=_MetaDirectionalMessage):
 
     def validate(self):
         size = 8 * sum(len(buf) for buf in self.buffers)
-        if self.buffers is ():
-            if self.header.payload_size != 0:
-                raise CaprotoValueError("header.payload_size {} > 0 but "
-                                        "payload is None."
-                                        "".format(self.header.payload_size))
+        if self.buffers is () and self.header.payload_size != 0:
+            raise CaprotoValueError(
+                "{}.header.payload_size {} > 0 but payload is None."
+                "".format(type(self).__name__, self.header.payload_size))
         elif self.header.payload_size != size:
-            raise CaprotoValueError("header.payload_size {} != len(payload) {}"
-                                    "".format(self.header.payload_size, size))
+            raise CaprotoValueError(
+                "{}.header.payload_size {} != payload size of {}"
+                "".format(type(self).__name__, self.header.payload_size, size))
         if self.header.command != self.ID:
-            raise CaprotoTypeError("A {} must have a header with "
-                                   "header.command == {}, not {}."
-                                   "".format(type(self), self.ID,
-                                             self.header.command))
+            raise CaprotoTypeError(
+                "A {} must have a header with header.command == {}, not {}."
+                "".format(type(self).__name__, self.ID, self.header.command))
 
     @classmethod
     def from_wire(cls, header, payload_bytes, *, sender_address=None):
