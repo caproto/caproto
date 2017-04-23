@@ -121,7 +121,7 @@ class VirtualCircuit:
             buffers_to_send.extend(command.buffers)
         return buffers_to_send
 
-    def recv(self, byteslike):
+    def recv(self, *buffers):
         """
         Add data received over TCP to our internal recieve buffer.
 
@@ -130,10 +130,12 @@ class VirtualCircuit:
 
         Parameters
         ----------
-        byteslike : bytes-like
+        *buffers :
+            any number of bytes-like buffers
         """
-        self.log.debug("Received %d bytes.", len(byteslike))
-        self._data += byteslike
+        for byteslike in buffers:
+            self.log.debug("Received %d bytes.", len(byteslike))
+            self._data += byteslike
 
     def next_command(self):
         """

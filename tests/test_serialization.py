@@ -112,15 +112,13 @@ def test_reads(circuit_pair, data_type, data_count, data, metadata):
     req = ca.ReadNotifyRequest(data_count=data_count, data_type=data_type,
                                ioid=0, sid=0)
     buffers_to_send = cli_circuit.send(req)
-    for buffer in buffers_to_send:
-        srv_circuit.recv(buffer)
+    srv_circuit.recv(*buffers_to_send)
     srv_circuit.next_command()
     res = ca.ReadNotifyResponse(data=data, metadata=metadata,
                                 data_count=data_count, data_type=data_type,
                                 ioid=0, status=1)
     buffers_to_send = srv_circuit.send(res)
-    for buffer in buffers_to_send:
-        cli_circuit.recv(buffer)
+    cli_circuit.recv(*buffers_to_send)
     com = cli_circuit.next_command()
     print(com.data)
 
@@ -134,14 +132,12 @@ def test_writes(circuit_pair, data_type, data_count, data, metadata):
     req = ca.WriteNotifyRequest(data=data, data_count=data_count,
                                 data_type=data_type, ioid=0, sid=0)
     buffers_to_send = cli_circuit.send(req)
-    for buffer in buffers_to_send:
-        srv_circuit.recv(buffer)
+    srv_circuit.recv(*buffers_to_send)
     srv_circuit.next_command()
     res = ca.ReadNotifyResponse(data=data, metadata=metadata,
                                 data_count=data_count, data_type=data_type,
                                 ioid=0, status=1)
     buffers_to_send = srv_circuit.send(res)
-    for buffer in buffers_to_send:
-        cli_circuit.recv(buffer)
+    cli_circuit.recv(*buffers_to_send)
     com = cli_circuit.next_command()
     assert com.data == data
