@@ -97,6 +97,15 @@ def padded_string_payload(payload):
     return padded_size, byte_payload.ljust(padded_size, b'\x00')
 
 
+def bytelen(item):
+    if isinstance(item, array.array):
+        return item.itemsize * len(item)
+    elif isinstance(item, ctypes.Structure):
+        return ctypes.sizeof(item)
+    else:
+        return len(item)
+
+
 # TODO re-arrange and tweak as desired
 metadata_keywords = ('timestamp', 'status', 'severity', 'strs',
                      'units', 'lower_disp_limit', 'upper_disp_limit',
@@ -157,7 +166,7 @@ def data_payload(data, metadata, data_type, data_count):
                                             "40 characters.")
                 val = val.ljust(MAX_ENUM_STRING_SIZE, b'\x00')
             justified_md.append(val)
-        md_payload = DBR_TYPES[data_type](*justified_metadata)
+        md_payload = DBR_TYPES[data_type](*justified_md)
     else:
         raise CaprotoTypeError("metadata given as type we cannot handle")
 
@@ -279,7 +288,7 @@ class Message(metaclass=_MetaDirectionalMessage):
             self.validate()
 
     def validate(self):
-        size = 8 * sum(len(buf) for buf in self.buffers)
+        size = sum(bytelen(buf) for buf in self.buffers)
         if self.buffers is () and self.header.payload_size != 0:
             raise CaprotoValueError(
                 "{}.header.payload_size {} > 0 but payload is None."
@@ -796,7 +805,7 @@ class EventAddResponse(Message):
                  status_code, subscriptionid, *, metadata=None):
         data_buffer, md_buffer = data_payload(data, metadata, data_type,
                                               data_count)
-        size = 8 * (len(data_buffer) + len(md_buffer))
+        size = bytelen(data_buffer) + bytelen(md_buffer)
         header = EventAddResponseHeader(size, data_type, data_count,
                                         status_code, subscriptionid)
         super().__init__(header, data_buffer, md_buffer)
@@ -892,7 +901,8 @@ class EventCancelResponse(Message):
             raise CaprotoTypeError("A {} must have a header with "
                                    "header.command == 1, not {}."
                                    "".format(type(self), self.header.command))
-        if self.payload:
+
+        if any(len(buf) for buf in self.buffers):
             raise CaprotoTypeError("A {} must have no payload."
                                    "".format(type(self)))
         # do not call super()
@@ -924,7 +934,7 @@ class ReadResponse(Message):
                  metadata=None):
         data_buffer, md_buffer = data_payload(data, metadata, data_type,
                                               data_count)
-        size = 8 * (len(data_buffer) + len(md_buffer))
+        size = bytelen(data_buffer) + bytelen(md_buffer)
         header = ReadResponseHeader(size, data_type, data_count, sid, ioid)
         super().__init__(header, data_buffer, md_buffer)
 
@@ -947,7 +957,7 @@ class WriteRequest(Message):
                  metadata=None):
         data_buffer, md_buffer = data_payload(data, metadata, data_type,
                                               data_count)
-        size = 8 * (len(data_buffer) + len(md_buffer))
+        size = bytelen(data_buffer) + bytelen(md_buffer)
         header = WriteRequestHeader(size, data_type, data_count, sid, ioid)
         super().__init__(header, data_buffer, md_buffer)
 
@@ -1162,7 +1172,7 @@ class ReadNotifyResponse(Message):
                  metadata=None):
         data_buffer, md_buffer = data_payload(data, metadata, data_type,
                                               data_count)
-        size = 8 * (len(data_buffer) + len(md_buffer))
+        size = bytelen(data_buffer) + bytelen(md_buffer)
         header = ReadNotifyResponseHeader(size, data_type, data_count,
                                           status, ioid)
         super().__init__(header, data_buffer, md_buffer)
@@ -1287,7 +1297,7 @@ class WriteNotifyRequest(Message):
                  metadata=None):
         data_buffer, md_buffer = data_payload(data, metadata, data_type,
                                               data_count)
-        size = 8 * (len(data_buffer) + len(md_buffer))
+        size = bytelen(data_buffer) + bytelen(md_buffer)
         header = WriteNotifyRequestHeader(size, data_type, data_count, sid,
                                           ioid)
         super().__init__(header, data_buffer, md_buffer)
