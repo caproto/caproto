@@ -41,16 +41,16 @@ DBE_ALARM = 4
 DBE_PROPERTY = 8
 
 
-string_t = MAX_STRING_SIZE* ctypes.c_char  # epicsOldString
-char_t = ctypes.c_char # epicsUint8
+string_t = MAX_STRING_SIZE * ctypes.c_char  # epicsOldString
+char_t = ctypes.c_char  # epicsUint8
 short_t = ctypes.c_int16  # epicsInt16
 ushort_t = ctypes.c_uint16  # epicsUInt16
 int_t = ctypes.c_int16  # epicsInt16
 long_t = ctypes.c_int32  # epicsInt32
 ulong_t = ctypes.c_uint32  # epicsUInt32
 float_t = ctypes.c_float  # epicsFloat32
-double_t = ctypes.c_double # epicsFloat64
-stsack_string_t = 40 * ctypes.c_char # epicsOldString
+double_t = ctypes.c_double  # epicsFloat64
+stsack_string_t = 40 * ctypes.c_char  # epicsOldString
 class_name_t = 40 * ctypes.c_char  # epicsOldString
 
 
@@ -919,11 +919,11 @@ DBR_TYPES = {
 
 _array_type_code_map = {
     ChType.STRING: 'B',  # TO DO
-    ChType.INT: 'H',
+    ChType.INT: 'h',
     ChType.FLOAT: 'f',
     ChType.ENUM: 'H',
-    ChType.CHAR:'B',
-    ChType.LONG: 'L',
+    ChType.CHAR: 'b',
+    ChType.LONG: 'l',
     ChType.DOUBLE: 'd',
 }
 
