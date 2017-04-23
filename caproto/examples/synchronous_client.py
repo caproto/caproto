@@ -1,8 +1,6 @@
 import caproto as ca
-import os
 import time
 import socket
-import getpass
 
 
 CA_REPEATER_PORT = 5065
@@ -37,9 +35,10 @@ def recv(circuit):
     return commands
 
 
-def main():
+def main(*, skip_monitor_section=False):
     # A broadcast socket
-    udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM,
+                             socket.IPPROTO_UDP)
     udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 
     # Register with the repeater.
@@ -94,17 +93,19 @@ def main():
                                  subscriptionid=0,
                                  low=0, high=0, to=0, mask=1)
     send(chan1.circuit, add_req)
-    subscriptionid = add_req.subscriptionid
 
-    try:
-        print('Monitoring until Ctrl-C is hit. Meanwhile, use caput to change '
-              'the value and watch for commands to arrive here.')
-        while True:
-            commands = recv(chan1.circuit)
-            if commands:
-                print(commands)
-    except KeyboardInterrupt:
-        pass
+    commands = recv(chan1.circuit)
+
+    if not skip_monitor_section:
+        try:
+            print('Monitoring until Ctrl-C is hit. Meanwhile, use caput to '
+                  'change the value and watch for commands to arrive here.')
+            while True:
+                commands = recv(chan1.circuit)
+                if commands:
+                    print(commands)
+        except KeyboardInterrupt:
+            pass
 
     cancel_req = ca.EventCancelRequest(data_type=add_req.data_type,
                                        sid=add_req.sid,
@@ -115,8 +116,7 @@ def main():
 
     # Test reading.
     send(chan1.circuit, ca.ReadNotifyRequest(data_type=2, data_count=1,
-                                            sid=chan1.sid,
-                                            ioid=12))
+                                             sid=chan1.sid, ioid=12))
     commands, = recv(chan1.circuit)
 
     # Test writing.

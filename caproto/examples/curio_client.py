@@ -86,7 +86,7 @@ class VirtualCircuit:
             break
         if isinstance(command, ca.ReadNotifyResponse):
             chan = self.ioids.pop(command.ioid)
-            chan.last_reading = command.values
+            chan.last_reading = command
         if isinstance(command, ca.WriteNotifyResponse):
             chan = self.ioids.pop(command.ioid)
         elif isinstance(command, ca.EventAddResponse):
