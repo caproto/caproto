@@ -104,7 +104,7 @@ payloads = [
 ]
 
 @pytest.mark.parametrize('data_type, data_count, data, metadata', payloads)
-def test_reads(circuit_pair, data_type, data_count, data):
+def test_reads(circuit_pair, data_type, data_count, data, metadata):
 
     cli_circuit, srv_circuit = circuit_pair
     cli_channel, srv_channel = make_channels(*circuit_pair, 5, 1)
@@ -126,7 +126,7 @@ def test_reads(circuit_pair, data_type, data_count, data):
 
 
 @pytest.mark.parametrize('data_type, data_count, data, metadata', payloads)
-def test_writes(circuit_pair, data_type, data_count, data):
+def test_writes(circuit_pair, data_type, data_count, data, metadata):
 
     cli_circuit, srv_circuit = circuit_pair
     cli_channel, srv_channel = make_channels(*circuit_pair, 5, 1)
@@ -144,4 +144,4 @@ def test_writes(circuit_pair, data_type, data_count, data):
     for buffer in buffers_to_send:
         cli_circuit.recv(buffer)
     com = cli_circuit.next_command()
-    print(com.data)
+    assert com.data == data
