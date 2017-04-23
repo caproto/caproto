@@ -88,9 +88,13 @@ def from_buffer(data_type, buffer):
                                     "characters.".format(buffer, _len))
         if _len < 40:
             buffer = buffer.ljust(40, b'\x00')
-    size = len(buffer)
-    md_payload = DBR_TYPES[data_type].from_buffer(buffer)
-    data_payload = buffer[ctypes.sizeof(DBR_TYPES[data_type]):]
+    if data_type > 6:
+        md_payload = DBR_TYPES[data_type].from_buffer(buffer)
+        md_size = ctypes.sizeof(DBR_TYPES[data_type])
+    else:
+        md_payload = b''
+        md_size = 0
+    data_payload = buffer[md_size:]
     return md_payload, data_payload
     # TODO Handle padding
 
