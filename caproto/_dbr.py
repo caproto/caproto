@@ -992,10 +992,10 @@ def native_type(ftype):
     return _native_map[ftype]
 
 
-def native_to_builtin(value, dtype, data_count):
+def native_to_builtin(value, data_type, data_count):
     if USE_NUMPY:
         # Return an ndarray.
-        dt = numpy.dtype(_numpy_map[dtype])
+        dt = numpy.dtype(_numpy_map[data_type])
         dt = dt.newbyteorder('>')
         return numpy.frombuffer(value, dtype=dt)
     else:
