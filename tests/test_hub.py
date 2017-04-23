@@ -56,14 +56,14 @@ def test_unknown_id_errors(client_circuit):
         circuit.send(com)
 
     # Receive a reading with an unknown ioid.
-    com = ca.ReadNotifyResponse(values=(1,), data_type=5, data_count=1, ioid=1,
+    com = ca.ReadNotifyResponse(data=(1,), data_type=5, data_count=1, ioid=1,
                                 status=1)
     circuit.recv(bytes(com))
     with pytest.raises(ca.RemoteProtocolError):
         circuit.next_command()
 
     # Receive an event with an unknown subscriptionid.
-    com = ca.EventAddResponse(values=(1,), data_type=5, data_count=1,
+    com = ca.EventAddResponse(data=(1,), data_type=5, data_count=1,
                               status_code=1, subscriptionid=1)
     circuit.recv(bytes(com))
     with pytest.raises(ca.RemoteProtocolError):
@@ -79,13 +79,13 @@ def test_mismatched_event_add_responses(client_channel):
     circuit.send(req)
 
     # Good response
-    res = ca.EventAddResponse(values=(1,), data_type=5, data_count=1,
+    res = ca.EventAddResponse(data=(1,), data_type=5, data_count=1,
                               status_code=1, subscriptionid=1)
     circuit.recv(bytes(res))
     circuit.next_command()
 
     # Bad response
-    res = ca.EventAddResponse(values=(1,), data_type=6, data_count=1,
+    res = ca.EventAddResponse(data=(1,), data_type=6, data_count=1,
                               status_code=1, subscriptionid=1)
     circuit.recv(bytes(res))
     with pytest.raises(ca.RemoteProtocolError):
@@ -93,7 +93,7 @@ def test_mismatched_event_add_responses(client_channel):
 
     # Needs data_payload fix likely coming in #45
     # Bad response
-    # res = ca.EventAddResponse(values=(1, 2), data_type=5, data_count=2,
+    # res = ca.EventAddResponse(data=(1, 2), data_type=5, data_count=2,
     #                           status_code=1, subscriptionid=1)
     # circuit.recv(bytes(res))
     # with pytest.raises(ca.RemoteProtocolError):
