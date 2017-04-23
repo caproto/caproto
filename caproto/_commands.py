@@ -21,6 +21,7 @@
 import array
 import collections
 import ctypes
+import _ctypes
 import inspect
 import struct
 import socket
@@ -101,7 +102,7 @@ def padded_string_payload(payload):
 def bytelen(item):
     if isinstance(item, array.array):
         return item.itemsize * len(item)
-    elif isinstance(item, ctypes.Structure):
+    elif isinstance(item, (ctypes.Structure, _ctypes._SimpleCData)):
         return ctypes.sizeof(item)
     else:
         return len(item)
