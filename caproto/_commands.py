@@ -193,7 +193,10 @@ def extract_data(payload, data_type, data_count):
     # TO DO
     data_offset = dbr_data_offsets[data_type]
     print('payload', payload, type(payload))
-    raw_data = payload[data_offset:]
+    if data_offset:
+        raw_data = payload[data_offset:]
+    else:
+        raw_data = payload
     return dbr.native_to_builtin(raw_data, data_type, data_count)
 
 
