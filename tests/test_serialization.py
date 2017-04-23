@@ -120,7 +120,7 @@ def test_reads(circuit_pair, data_type, data_count, data, metadata):
     buffers_to_send = srv_circuit.send(res)
     cli_circuit.recv(*buffers_to_send)
     com = cli_circuit.next_command()
-    print(com.data)
+    assert com.data == data
 
 
 @pytest.mark.parametrize('data_type, data_count, data, metadata', payloads)
