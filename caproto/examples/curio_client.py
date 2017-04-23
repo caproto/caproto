@@ -33,8 +33,8 @@ class VirtualCircuit:
         """
         if self.socket is None:
             raise RuntimeError("must await create_connection() first")
-        bytes_to_send = self.circuit.send(*commands)
-        await self.socket.send(bytes_to_send)
+        buffers_to_send = self.circuit.send(*commands)
+        await self.socket.sendmsg(buffers_to_send)
 
     async def recv(self):
         """

@@ -42,8 +42,8 @@ class VirtualCircuit:
         """
         Process a command and tranport it over the TCP socket for this circuit.
         """
-        bytes_to_send = self.circuit.send(*commands)
-        await self.client.sendall(bytes_to_send)
+        buffers_to_send = self.circuit.send(*commands)
+        await self.client.sendmsg(buffers_to_send)
 
     async def recv(self):
         """
