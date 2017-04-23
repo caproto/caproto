@@ -17,18 +17,37 @@ srv_b = ca.Broadcaster(our_role=ca.SERVER)
 cli_b.log.setLevel('DEBUG')
 srv_b.log.setLevel('DEBUG')
 
-cache = bytearray()
+req_cache = bytearray()
+res_cache = bytearray()
 
-# Convenience functions that do both transport caproto validation/ingest.
-def send(circuit, command):
+def srv_send(circuit, command):
     buffers_to_send = circuit.send(command)
     for buffer in buffers_to_send:
-        cache.extend(bytes(buffer))
+        res_cache.extend(bytes(buffer))
 
 
-def recv(circuit):
-    bytes_received = bytes(cache)
-    cache.clear()
+def srv_recv(circuit):
+    bytes_received = bytes(req_cache)
+    req_cache.clear()
+    circuit.recv(bytes_received)
+    commands = []
+    while True:
+        command = circuit.next_command()
+        if type(command) is ca.NEED_DATA:
+            break
+        commands.append(command)
+    return commands
+
+
+def cli_send(circuit, command):
+    buffers_to_send = circuit.send(command)
+    for buffer in buffers_to_send:
+        req_cache.extend(bytes(buffer))
+
+
+def cli_recv(circuit):
+    bytes_received = bytes(res_cache)
+    res_cache.clear()
     circuit.recv(bytes_received)
     commands = []
     while True:
@@ -76,16 +95,21 @@ def test_nonet():
     circuit.log.setLevel('DEBUG')
     chan1 = ca.ClientChannel(pv1, circuit)
 
-    # Initialize our new TCP-based CA connection with a VersionRequest.
-    send(chan1.circuit, ca.VersionRequest(priority=0, version=13))
-    recv(chan1.circuit)
-    # Send info about us.
-    send(chan1.circuit, ca.HostNameRequest('localhost'))
-    send(chan1.circuit, ca.ClientNameRequest('username'))
-    send(chan1.circuit, ca.CreateChanRequest(name=pv1, cid=chan1.cid,
-                                             version=13))
-    commands = []
-    commands = recv(chan1.circuit)
+    srv_circuit = ca.VirtualCircuit(our_role=ca.SERVER,
+                                    address=address, priority=None)
+
+    cli_send(chan1.circuit, ca.VersionRequest(priority=0, version=13))
+    srv_recv(srv_circuit)
+    srv_send(srv_circuit, ca.VersionResponse(version=13))
+    cli_recv(chan1.circuit)
+    cli_send(chan1.circuit, ca.HostNameRequest('localhost'))
+    cli_send(chan1.circuit, ca.ClientNameRequest('username'))
+    cli_send(chan1.circuit, ca.CreateChanRequest(name=pv1, cid=chan1.cid,
+                                                 version=13))
+    srv_recv(srv_circuit)
+    srv_send(srv_circuit, ca.CreateChanResponse(cid=chan1.cid, sid=1,
+                                                data_type=5, data_count=1))
+    cli_recv(chan1.circuit)
 
     # Test subscriptions.
     assert chan1.native_data_type and chan1.native_data_count
@@ -94,46 +118,48 @@ def test_nonet():
                                  sid=chan1.sid,
                                  subscriptionid=0,
                                  low=0, high=0, to=0, mask=1)
-    send(chan1.circuit, add_req)
+    cli_send(chan1.circuit, add_req)
+    srv_recv(srv_circuit)
     subscriptionid = add_req.subscriptionid
+    add_res = ca.EventAddResponse(data=(3,),
+                                  data_type=chan1.native_data_type,
+                                  data_count=chan1.native_data_count,
+                                  subscriptionid=0,
+                                  status_code=1)
 
-    try:
-        print('Monitoring until Ctrl-C is hit. Meanwhile, use caput to change '
-              'the value and watch for commands to arrive here.')
-        while True:
-            commands = recv(chan1.circuit)
-            if commands:
-                print(commands)
-    except KeyboardInterrupt:
-        pass
+    srv_send(srv_circuit, add_res)
+    cli_recv(chan1.circuit)
 
     cancel_req = ca.EventCancelRequest(data_type=add_req.data_type,
                                        sid=add_req.sid,
                                        subscriptionid=add_req.subscriptionid)
 
-    send(chan1.circuit, cancel_req)
-    commands, = recv(chan1.circuit)
+    cli_send(chan1.circuit, cancel_req)
+    srv_recv(srv_circuit)
+    cli_recv(chan1.circuit)
 
     # Test reading.
-    send(chan1.circuit, ca.ReadNotifyRequest(data_type=2, data_count=1,
+    cli_send(chan1.circuit, ca.ReadNotifyRequest(data_type=5, data_count=1,
                                             sid=chan1.sid,
                                             ioid=12))
-    commands, = recv(chan1.circuit)
+    srv_recv(srv_circuit)
+    srv_send(srv_circuit, ca.ReadNotifyResponse(data=(3,),
+                                                data_type=5, data_count=1,
+                                                ioid=12, status=1))
+    commands, = cli_recv(chan1.circuit)
 
     # Test writing.
     request = ca.WriteNotifyRequest(data_type=2, data_count=1,
                                     sid=chan1.sid,
-                                    ioid=13, values=(4,))
+                                    ioid=13, data=(4,))
 
-    send(chan1.circuit, request)
-    recv(chan1.circuit)
-    time.sleep(2)
-    send(chan1.circuit, ca.ReadNotifyRequest(data_type=2, data_count=1,
-                                             sid=chan1.sid,
-                                             ioid=14))
-    recv(chan1.circuit)
+    cli_send(chan1.circuit, request)
+    srv_recv(srv_circuit)
+    srv_send(srv_circuit, ca.WriteNotifyResponse(data_type=5, data_count=1,
+                                                 ioid=13, status=1))
+    cli_recv(chan1.circuit)
 
     # Test "clearing" (closing) the channel.
-    send(chan1.circuit, ca.ClearChannelRequest(chan1.sid, chan1.cid))
-    recv(chan1.circuit)
+    cli_send(chan1.circuit, ca.ClearChannelRequest(chan1.sid, chan1.cid))
+    srv_recv(chan1.circuit)
 
