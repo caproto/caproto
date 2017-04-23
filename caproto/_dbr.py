@@ -862,19 +862,14 @@ char_types = (ChType.CHAR, ChType.TIME_CHAR, ChType.CTRL_CHAR)
 native_float_types = (ChType.FLOAT, ChType.DOUBLE)
 native_int_types = (ChType.INT, ChType.CHAR, ChType.LONG, ChType.ENUM)
 
-
-try:
-    import numpy as np
-except ImportError:
-    pass
-else:
+if USE_NUMPY:
     _numpy_map = {
-        ChType.INT: np.int16,
-        ChType.FLOAT: np.float32,
-        ChType.ENUM: np.uint16,
-        ChType.CHAR: np.uint8,
-        ChType.LONG: np.int32,
-        ChType.DOUBLE: np.float64
+        ChType.INT: numpy.int16,
+        ChType.FLOAT: numpy.float32,
+        ChType.ENUM: numpy.uint16,
+        ChType.CHAR: numpy.uint8,
+        ChType.LONG: numpy.int32,
+        ChType.DOUBLE: numpy.float64
     }
 
 
@@ -925,6 +920,15 @@ _array_type_code_map = {
     ChType.CHAR: 'b',
     ChType.LONG: 'l',
     ChType.DOUBLE: 'd',
+}
+
+
+# Offset of the data in bytes, according to the DBR type
+dbr_data_offsets = {
+    data_type: ctypes.sizeof(DBR_TYPES[data_type])
+    if data_type not in native_types
+    else 0
+    for data_type in DBR_TYPES
 }
 
 
@@ -983,17 +987,14 @@ def native_type(ftype):
 
 
 def native_to_builtin(value, dtype, data_count):
-    if data_count == 1:
-        # Return a built-in Python type.
-        try:
-            return value.value  # if this is a Structure
-        except AttributeError:
-            return value
-    else:
+    if USE_NUMPY:
         # Return an ndarray.
-        dt = np.dtype(_numpy_map[dtype])
+        dt = numpy.dtype(_numpy_map[dtype])
         dt = dt.newbyteorder('>')
-        return np.frombuffer(value, dtype=dt)
+        return numpy.frombuffer(value, dtype=dt)
+    else:
+        # TODO
+        return  # array.array()
 
 
 def to_builtin(structure, data_type, data_count):
