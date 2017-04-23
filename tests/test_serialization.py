@@ -101,7 +101,8 @@ def make_channels(cli_circuit, srv_circuit, data_type, data_count):
 
 payloads = [
     # data_type, data_count, data, metadata
-    (5, 1, (1,), None),
+    (2, 1, (7,), None),
+    (5, 1, (7,), None),
 ]
 
 @pytest.mark.parametrize('data_type, data_count, data, metadata', payloads)
