@@ -5,6 +5,7 @@
 # The organizational code, making use of Enum, comes from pypvasync by Kenneth
 # Lauer.
 
+import array
 import ctypes
 import datetime
 from enum import IntEnum
@@ -918,10 +919,15 @@ _array_type_code_map = {
     ChType.FLOAT: 'f',
     ChType.ENUM: 'H',
     ChType.CHAR: 'b',
-    ChType.LONG: 'l',
+    ChType.LONG: 'i',
     ChType.DOUBLE: 'd',
 }
 
+for _type in set(native_types) - set([ChType.STRING]):
+    assert (array.array(_array_type_code_map[_type]).itemsize ==
+            ctypes.sizeof(DBR_TYPES[_type])), '{!r} check failed'.format(ChType(_type))
+
+del _type
 
 # Offset of the data in bytes, according to the DBR type
 dbr_data_offsets = {
