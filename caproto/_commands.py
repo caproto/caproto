@@ -88,7 +88,11 @@ def from_buffer(data_type, buffer):
                                     "characters.".format(buffer, _len))
         if _len < 40:
             buffer = buffer.ljust(40, b'\x00')
-    return DBR_TYPES[data_type].from_buffer(buffer)
+    size = len(buffer)
+    md_payload = DBR_TYPES[data_type].from_buffer(buffer)
+    data_payload = buffer[ctypes.sizeof(DBR_TYPES[data_type]):]
+    return md_payload, data_payload
+    # TODO Handle padding
 
 
 def padded_len(s):
@@ -334,8 +338,8 @@ class Message(metaclass=_MetaDirectionalMessage):
         """
         if not cls.HAS_PAYLOAD:
             return cls.from_components(header)
-        payload_struct = from_buffer(header.data_type, payload_bytes)
-        return cls.from_components(header, payload_struct)
+        payload = from_buffer(header.data_type, payload_bytes)
+        return cls.from_components(header, *payload)
 
     @classmethod
     def from_components(cls, header, *buffers, sender_address=None):
@@ -839,7 +843,7 @@ class EventAddResponse(Message):
 
     @property
     def data(self):
-        return extract_data(self.buffers[0], self.data_type, self.data_count)
+        return extract_data(self.buffers[1], self.data_type, self.data_count)
 
     @property
     def metadata(self):
@@ -852,8 +856,8 @@ class EventAddResponse(Message):
         if not payload_bytes:
             return cls.from_components(header,
                                        sender_address=sender_address)
-        payload_struct = from_buffer(header.data_type, payload_bytes)
-        return cls.from_components(header, payload_struct,
+        payload = from_buffer(header.data_type, payload_bytes)
+        return cls.from_components(header, *payload,
                                    sender_address=sender_address)
 
 
@@ -972,7 +976,7 @@ class ReadResponse(Message):
 
     @property
     def data(self):
-        return extract_data(self.buffers[0], self.data_type, self.data_count)
+        return extract_data(self.buffers[1], self.data_type, self.data_count)
 
     @property
     def metadata(self):
@@ -999,7 +1003,7 @@ class WriteRequest(Message):
 
     @property
     def data(self):
-        return extract_data(self.buffers[0], self.data_type, self.data_count)
+        return extract_data(self.buffers[1], self.data_type, self.data_count)
 
     @property
     def metadata(self):
@@ -1223,7 +1227,7 @@ class ReadNotifyResponse(Message):
 
     @property
     def data(self):
-        return extract_data(self.buffers[0], self.data_type, self.data_count)
+        return extract_data(self.buffers[1], self.data_type, self.data_count)
 
     @property
     def metadata(self):
@@ -1359,7 +1363,7 @@ class WriteNotifyRequest(Message):
 
     @property
     def data(self):
-        return extract_data(self.buffers[0], self.data_type, self.data_count)
+        return extract_data(self.buffers[1], self.data_type, self.data_count)
 
     @property
     def metadata(self):
