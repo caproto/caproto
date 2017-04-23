@@ -1256,7 +1256,7 @@ class CreateChanRequest(Message):
     payload_size = property(lambda self: self.header.payload_size)
     cid = property(lambda self: self.header.parameter1)
     version = property(lambda self: self.header.parameter2)
-    name = property(lambda self: bytes(self.payload).rstrip(b'\x00'))
+    name = property(lambda self: bytes(self.buffers[0]).rstrip(b'\x00'))
 
 
 class CreateChanResponse(Message):
@@ -1419,7 +1419,7 @@ class ClientNameRequest(Message):
         super().__init__(header, payload)
 
     payload_size = property(lambda self: self.header.payload_size)
-    name = property(lambda self: bytes(self.payload).rstrip(b'\x00'))
+    name = property(lambda self: bytes(self.buffers[0]).rstrip(b'\x00'))
 
 
 class HostNameRequest(Message):
@@ -1442,7 +1442,7 @@ class HostNameRequest(Message):
         super().__init__(header, payload)
 
     payload_size = property(lambda self: self.header.payload_size)
-    name = property(lambda self: bytes(self.payload).rstrip(b'\x00'))
+    name = property(lambda self: bytes(self.buffers[0]).rstrip(b'\x00'))
 
     @classmethod
     def from_wire(cls, header, payload_bytes, *, sender_address=None):
