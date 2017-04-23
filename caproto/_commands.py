@@ -47,9 +47,10 @@ from ._headers import (MessageHeader, ExtendedMessageHeader,
 
 from ._dbr import (DBR_INT, DBR_STRING, DBR_TYPES, DO_REPLY, NO_REPLY,
                    ChannelType, float_t, short_t, to_builtin, ushort_t,
-                   native_type, timestamp_to_epics, MAX_ENUM_STRING_SIZE,
+                   native_type, dbr_data_offsets, MAX_ENUM_STRING_SIZE,
                    USE_NUMPY, array_type_code)
 
+from . import _dbr as dbr
 from ._utils import (CLIENT, NEED_DATA, REQUEST, RESPONSE,
                      SERVER, CaprotoTypeError, CaprotoValueError)
 
@@ -181,7 +182,10 @@ def data_payload(data, metadata, data_type, data_count):
 def extract_data(payload, data_type, data_count):
     "Return a scalar or big-endian array (numpy.ndarray or array.array)."
     # TO DO
-    payload[ctypes.sizeof(DBR_STRUCTS[self.datatype]):]
+    data_offset = dbr_data_offsets[data_type]
+    print('payload', payload)
+    raw_data = payload[data_offset:]
+    return dbr.native_to_builtin(raw_data, data_type, data_count)
 
 
 def extract_metadata(payload, data_type):
@@ -360,7 +364,8 @@ class Message(metaclass=_MetaDirectionalMessage):
         return "{}({})".format(type(self).__name__, formatted_args)
 
     def __len__(self):
-        return len(bytes(self.header)) + sum(len(buf) for buf in self.buffers)
+        return (ctypes.sizeof(self.header) +
+                sum(bytelen(buf) for buf in self.buffers))
 
 
 class VersionRequest(Message):
@@ -697,7 +702,7 @@ class EventAddRequestPayload(ctypes.BigEndianStructure):
         self.__padding = 0
 
     def __len__(self):
-        return len(bytes(self))
+        return ctypes.sizeof(self)
 
 
 class EventAddRequest(Message):
@@ -760,11 +765,11 @@ class EventAddRequest(Message):
     data_count = property(lambda self: self.header.data_count)
     sid = property(lambda self: self.header.parameter1)
     subscriptionid = property(lambda self: self.header.parameter2)
-    low = property(lambda self: self.payload.low)
-    high = property(lambda self: self.payload.high)
-    to = property(lambda self: self.payload.to)
-    mask = property(lambda self: self.payload.mask)
-    __padding = property(lambda self: self.payload.__padding)
+    low = property(lambda self: self.payload_struct.low)
+    high = property(lambda self: self.payload_struct.high)
+    to = property(lambda self: self.payload_struct.to)
+    mask = property(lambda self: self.payload_struct.mask)
+    __padding = property(lambda self: self.payload_struct.__padding)
 
 
 class EventAddResponse(Message):
@@ -815,7 +820,7 @@ class EventAddResponse(Message):
     data_count = property(lambda self: self.header.data_count)
     status_code = property(lambda self: self.header.parameter1)
     subscriptionid = property(lambda self: self.header.parameter2)
-    values = property(lambda self: self.payload)
+    values = property(lambda self: self.buffers[0])
 
     @classmethod
     def from_wire(cls, header, payload_bytes, *, sender_address=None):
@@ -1178,10 +1183,15 @@ class ReadNotifyResponse(Message):
         super().__init__(header, data_buffer, md_buffer)
 
     payload_size = property(lambda self: self.header.payload_size)
-    data = property(lambda self: extract_data(self.payload, self.data_type,
-                                              self.data_count))
-    metadata = property(lambda self: extract_metadata(self.payload,
-                                                      self.data_type))
+
+    @property
+    def data(self):
+        return extract_data(self.buffers[0], self.data_type, self.data_count)
+
+    @property
+    def metadata(self):
+        return extract_metadata(self.buffers[0], self.data_type)
+
     data_type = property(lambda self: self.header.data_type)
     data_count = property(lambda self: self.header.data_count)
     status = property(lambda self: self.header.parameter1)
