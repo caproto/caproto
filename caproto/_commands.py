@@ -191,9 +191,7 @@ def extract_data(payload, data_type, data_count):
 
 def extract_metadata(payload, data_type):
     "Return one of the classes in _data.py."
-    # TO DO
-    ...
-
+    return dbr.DBR_TYPES[data_type].frombuffer(payload)
 
 
 def get_command_class(role, header):
