@@ -25,6 +25,7 @@ import _ctypes
 import inspect
 import struct
 import socket
+import sys
 from ._headers import (MessageHeader, ExtendedMessageHeader,
                        AccessRightsResponseHeader, ClearChannelRequestHeader,
                        ClearChannelResponseHeader, ClientNameRequestHeader,
@@ -149,13 +150,20 @@ def data_payload(data, metadata, data_type, data_count):
 
     # Make the data payload.
     if isinstance(data, array.array):
+        # Assume array is big-endian; we have no way of checking.
         data_payload = data
     elif isinstance(data, bytes):
+        # Assume bytes are big-endian; we have no way of checking.
         data_payload = data
     elif USE_NUMPY and isinstance(data, np.ndarray):
+        # Make big-endian.
         data_payload = data.astype(data.dtype.newbyteorder('>'))
     elif isinstance(data, collections.Iterable):
         data_payload = array.array(array_type_code(ntype), data)
+        # Make big-endian.
+        if sys.byteorder == 'little':
+            data_payload.byteswap()
+        print('data_payload', data_payload)
     else:
         raise CaprotoTypeError("data given as type we cannot handle")
 
