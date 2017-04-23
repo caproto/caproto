@@ -126,16 +126,6 @@ def bytelen(item):
         return len(item)
 
 
-# TODO re-arrange and tweak as desired
-metadata_keywords = ('timestamp', 'status', 'severity', 'strs',
-                     'units', 'lower_disp_limit', 'upper_disp_limit',
-                     'upper_alarm_limit', 'upper_warning_limit',
-                     'lower_warning_limit', 'lower_alarm_limit',
-                     'upper_ctrl_limit', 'lower_ctrl_limit',
-                     'precision', 'timestamp',
-                     )
-
-
 def data_payload(data, metadata, data_type, data_count):
     """
     Pack bytes into a payload.
