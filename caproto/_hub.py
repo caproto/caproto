@@ -99,14 +99,19 @@ class VirtualCircuit:
 
     def send(self, *commands):
         """
-        Convert one or more high-level Commands into bytes that may be
-        broadcast together in one TCP packet while updating our internal
+        Convert one or more high-level Commands into buffers of bytes that may
+        be broadcast together in one TCP packet while updating our internal
         state machine.
 
         Parameters
         ----------
         *commands :
             any number of :class:`Message` objects
+
+        Returns
+        -------
+        buffers_to_send : list
+            list of buffers to send over a socket
         """
         buffers_to_send = []
         for command in commands:
@@ -383,6 +388,11 @@ class Broadcaster:
         ----------
         *commands :
             any number of :class:`Message` objects
+
+        Returns
+        -------
+        bytes_to_send : bytes
+            bytes to send over a socket
         """
         bytes_to_send = b''
         history = []  # commands sent as part of this datagram
