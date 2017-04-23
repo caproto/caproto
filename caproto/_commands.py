@@ -43,13 +43,11 @@ from ._headers import (MessageHeader, ExtendedMessageHeader,
                        ServerDisconnResponseHeader, VersionRequestHeader,
                        VersionResponseHeader, WriteNotifyRequestHeader,
                        WriteNotifyResponseHeader, WriteRequestHeader,
-
                        )
 
-from ._dbr import (DBR_INT, DBR_STRING, DBR_TYPES, DO_REPLY, NO_REPLY,
-                   ChannelType, float_t, short_t, to_builtin, ushort_t,
-                   native_type, dbr_data_offsets, MAX_ENUM_STRING_SIZE,
-                   USE_NUMPY, array_type_code)
+from ._dbr import (DBR_INT, DBR_TYPES, DO_REPLY, NO_REPLY, ChannelType,
+                   float_t, short_t, ushort_t, native_type, dbr_data_offsets,
+                   MAX_ENUM_STRING_SIZE, USE_NUMPY, array_type_code)
 
 from . import _dbr as dbr
 from ._utils import (CLIENT, NEED_DATA, REQUEST, RESPONSE,
@@ -63,6 +61,10 @@ except ImportError:
 
 _MessageHeaderSize = ctypes.sizeof(MessageHeader)
 _ExtendedMessageHeaderSize = ctypes.sizeof(ExtendedMessageHeader)
+
+_pad_buffer = {mod_sz: b'\0' * (8 - mod_sz)
+               for mod_sz in range(1, 8)}
+_pad_buffer[0] = b''
 
 
 def ensure_bytes(s):
@@ -91,6 +93,22 @@ def from_buffer(data_type, buffer):
 def padded_len(s):
     "Length of a (byte)string rounded up to the nearest multiple of 8."
     return 8 * ((len(s) + 7) // 8)
+
+
+def pad_buffers(*buffers):
+    '''Get a bytestring for padding a concatenated set of buffers
+
+    Parameters
+    ----------
+    *buffers : supported buffer type
+
+    Returns
+    -------
+    full_padded_length, pad_buffer
+    '''
+    unpadded_size = sum(bytelen(buf) for buf in buffers)
+    pad_buffer = _pad_buffer[unpadded_size % 8]
+    return unpadded_size + len(pad_buffer), pad_buffer
 
 
 def padded_string_payload(payload):
@@ -184,14 +202,14 @@ def extract_data(payload, data_type, data_count):
     "Return a scalar or big-endian array (numpy.ndarray or array.array)."
     # TO DO
     data_offset = dbr_data_offsets[data_type]
-    print('payload', payload)
+    print('payload', payload, type(payload))
     raw_data = payload[data_offset:]
     return dbr.native_to_builtin(raw_data, data_type, data_count)
 
 
 def extract_metadata(payload, data_type):
     "Return one of the classes in _data.py."
-    return dbr.DBR_TYPES[data_type].frombuffer(payload)
+    return dbr.DBR_TYPES[data_type].from_buffer(payload)
 
 
 def get_command_class(role, header):
@@ -809,10 +827,10 @@ class EventAddResponse(Message):
                  status_code, subscriptionid, *, metadata=None):
         data_buffer, md_buffer = data_payload(data, metadata, data_type,
                                               data_count)
-        size = bytelen(data_buffer) + bytelen(md_buffer)
+        size, pad_buffer = pad_buffers(data_buffer, md_buffer)
         header = EventAddResponseHeader(size, data_type, data_count,
                                         status_code, subscriptionid)
-        super().__init__(header, data_buffer, md_buffer)
+        super().__init__(header, data_buffer, md_buffer, pad_buffer)
 
     payload_size = property(lambda self: self.header.payload_size)
     data_type = property(lambda self: self.header.data_type)
@@ -945,9 +963,9 @@ class ReadResponse(Message):
                  metadata=None):
         data_buffer, md_buffer = data_payload(data, metadata, data_type,
                                               data_count)
-        size = bytelen(data_buffer) + bytelen(md_buffer)
+        size, pad_buffer = pad_buffers(data_buffer, md_buffer)
         header = ReadResponseHeader(size, data_type, data_count, sid, ioid)
-        super().__init__(header, data_buffer, md_buffer)
+        super().__init__(header, data_buffer, md_buffer, pad_buffer)
 
     payload_size = property(lambda self: self.header.payload_size)
     data_type = property(lambda self: self.header.data_type)
@@ -974,9 +992,9 @@ class WriteRequest(Message):
                  metadata=None):
         data_buffer, md_buffer = data_payload(data, metadata, data_type,
                                               data_count)
-        size = bytelen(data_buffer) + bytelen(md_buffer)
+        size, pad_buffer = pad_buffers(data_buffer, md_buffer)
         header = WriteRequestHeader(size, data_type, data_count, sid, ioid)
-        super().__init__(header, data_buffer, md_buffer)
+        super().__init__(header, data_buffer, md_buffer, pad_buffer)
 
     payload_size = property(lambda self: self.header.payload_size)
     data_type = property(lambda self: self.header.data_type)
@@ -1203,10 +1221,10 @@ class ReadNotifyResponse(Message):
                  metadata=None):
         data_buffer, md_buffer = data_payload(data, metadata, data_type,
                                               data_count)
-        size = bytelen(data_buffer) + bytelen(md_buffer)
-        header = ReadNotifyResponseHeader(size, data_type, data_count,
-                                          status, ioid)
-        super().__init__(header, data_buffer, md_buffer)
+        size, pad_buffer = pad_buffers(data_buffer, md_buffer)
+        header = ReadNotifyResponseHeader(size, data_type, data_count, status,
+                                          ioid)
+        super().__init__(header, data_buffer, md_buffer, pad_buffer)
 
     payload_size = property(lambda self: self.header.payload_size)
 
@@ -1337,10 +1355,10 @@ class WriteNotifyRequest(Message):
                  metadata=None):
         data_buffer, md_buffer = data_payload(data, metadata, data_type,
                                               data_count)
-        size = bytelen(data_buffer) + bytelen(md_buffer)
+        size, pad_buffer = pad_buffers(data_buffer, md_buffer)
         header = WriteNotifyRequestHeader(size, data_type, data_count, sid,
                                           ioid)
-        super().__init__(header, data_buffer, md_buffer)
+        super().__init__(header, data_buffer, md_buffer, pad_buffer)
 
     payload_size = property(lambda self: self.header.payload_size)
     data_type = property(lambda self: self.header.data_type)
