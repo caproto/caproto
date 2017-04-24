@@ -145,19 +145,19 @@ def bytelen(item):
     Supports:
     - ``array.array`` (from the builtin Python lib)
     - ``ctypes`` objects
-    - an object that has an ``nbytes`` attribute (notably, numpy arrays)
+    - an object that has an ``nbytes`` attribute (notably, numpy arrays and
+      ``memoryview``)
     - ``bytes``
     - ``bytearray``
-    - ``memoryview``
     """
     if isinstance(item, array.array):
         return item.itemsize * len(item)
     elif isinstance(item, (ctypes.Structure, _ctypes._SimpleCData)):
         return ctypes.sizeof(item)
     elif hasattr(item, 'nbytes'):
-        # Duck-type as numpy array
+        # Duck-type as numpy array / memoryview.
         return item.nbytes
-    elif isinstance(item, (bytes, bytearray, memoryview)):
+    elif isinstance(item, (bytes, bytearray)):
         return len(item)
     else:
         # We could just fall back on len() but I worry that someone will
