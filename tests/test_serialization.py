@@ -84,6 +84,11 @@ def test_serialize(cmd):
     print('    dt ', wire_inst.header.data_type)
     assert wire_inst == inst
 
+    # Smoke test properties.
+    signature = inspect.signature(type(inst))
+    for arg in signature.parameters:
+        getattr(self, arg)
+
 
 def make_channels(cli_circuit, srv_circuit, data_type, data_count):
     cid = 0
