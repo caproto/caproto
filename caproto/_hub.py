@@ -429,6 +429,9 @@ class Broadcaster:
             for i, command in enumerate(commands):
                 self.log.debug("%d of %d: %r", i, len(commands), command)
             self._parsed_commands.extend(commands)
+            if not commands:
+                # Handle rare edge case: empty datagram.
+                return NEED_DATA
         self.log.debug(("Processing 1/%d commands left in datagram. "
                         "%d more datagrams are cached."),
                        len(self._parsed_commands), len(self._datagram_inbox))
