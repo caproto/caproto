@@ -1,5 +1,6 @@
 import struct
 import socket
+from numpy.testing import assert_array_almost_equal
 
 import caproto as ca
 import inspect
@@ -101,8 +102,14 @@ def make_channels(cli_circuit, srv_circuit, data_type, data_count):
 
 payloads = [
     # data_type, data_count, data, metadata
-    (2, 1, (7,), None),
-    (5, 1, (7,), None),
+    (ca.ChType.INT, 1, (7,), None),
+    (ca.ChType.INT, 5, (7, 21, 2, 4, 5), None),
+    (ca.ChType.FLOAT, 1, (7,), None),
+    (ca.ChType.FLOAT, 3, (7, 21.1, 3.1), None),
+    (ca.ChType.LONG, 1, (7,), None),
+    (ca.ChType.LONG, 2, (7, 21), None),
+    (ca.ChType.DOUBLE, 1, (7,), None),
+    (ca.ChType.DOUBLE, 6, (7, 21.1, 7, 7, 2.1, 1.1), None),
 ]
 
 @pytest.mark.parametrize('data_type, data_count, data, metadata', payloads)
@@ -122,7 +129,7 @@ def test_reads(circuit_pair, data_type, data_count, data, metadata):
     buffers_to_send = srv_circuit.send(res)
     cli_circuit.recv(*buffers_to_send)
     com = cli_circuit.next_command()
-    assert com.data == data
+    assert_array_almost_equal(com.data, data, )
 
 
 @pytest.mark.parametrize('data_type, data_count, data, metadata', payloads)
@@ -142,4 +149,4 @@ def test_writes(circuit_pair, data_type, data_count, data, metadata):
     buffers_to_send = srv_circuit.send(res)
     cli_circuit.recv(*buffers_to_send)
     com = cli_circuit.next_command()
-    assert com.data == data
+    assert_array_almost_equal(com.data, data)
