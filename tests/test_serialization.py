@@ -87,7 +87,8 @@ def test_serialize(cmd):
     # Smoke test properties.
     signature = inspect.signature(type(inst))
     for arg in signature.parameters:
-        getattr(self, arg)
+        getattr(inst, arg)
+        getattr(wire_inst, arg)
 
 
 def make_channels(cli_circuit, srv_circuit, data_type, data_count):

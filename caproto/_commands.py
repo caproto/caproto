@@ -246,6 +246,9 @@ def extract_data(payload, data_type, data_count):
 
 def extract_metadata(payload, data_type):
     "Return one of the classes in _data.py."
+    if data_type < 7:
+        return None
+    payload = bytearray(payload)  # Makes a copy -- maybe not necessary?
     return dbr.DBR_TYPES[data_type].from_buffer(payload)
 
 
@@ -511,7 +514,7 @@ class SearchRequest(Message):
                                     "strings. The " "string {!r} is {} "
                                     "characters.".format(name, _len))
         header = SearchRequestHeader(size, NO_REPLY, version, cid)
-        super().__init__(header, payload)
+        super().__init__(header, b'', payload)
 
     payload_size = property(lambda self: self.header.payload_size)
     reply = property(lambda self: self.header.data_type)
@@ -748,6 +751,10 @@ class EventAddRequestPayload(ctypes.BigEndianStructure):
     def __len__(self):
         return ctypes.sizeof(self)
 
+    @property
+    def nbytes(self):
+        return len(self)
+
 
 class EventAddRequest(Message):
     """
@@ -804,6 +811,11 @@ class EventAddRequest(Message):
         payload_struct = EventAddRequestPayload.from_buffer(buffers[0])
         return cls.from_components(header, payload_struct,
                                    sender_address=sender_address)
+
+    @property
+    def payload_struct(self):
+        return EventAddRequestPayload.from_buffer(self.buffers[0])
+
 
     data_type = property(lambda self: self.header.data_type)
     data_count = property(lambda self: self.header.data_count)
@@ -1099,20 +1111,25 @@ class ErrorResponse(Message):
         payload = req_bytes + msg_payload
 
         header = ErrorResponseHeader(size, cid, status_code)
-        super().__init__(header, payload)
+        super().__init__(header, b'', payload)
 
     payload_size = property(lambda self: self.header.payload_size)
     cid = property(lambda self: self.header.parameter1)
     status_code = property(lambda self: self.header.parameter2)
-    error_message = property(lambda self: self.payload[_MessageHeaderSize:])
+
+    @property
+    def error_message(self):
+        err_msg_bytes = bytearray(self.buffers[1][_MessageHeaderSize:])
+        return err_msg_bytes
 
     @property
     def original_request(self):
-        return MessageHeader.from_buffer(self.payload[:_MessageHeaderSize])
+        req_bytes = bytearray(self.buffers[1][:_MessageHeaderSize])
+        return MessageHeader.from_buffer(req_bytes)
 
     @classmethod
     def from_wire(cls, header, payload_bytes, *, sender_address=None):
-        return cls.from_components(header, payload_bytes,
+        return cls.from_components(header, b'', payload_bytes,
                                    sender_address=sender_address)
 
 
@@ -1288,7 +1305,7 @@ class CreateChanRequest(Message):
     def __init__(self, name, cid, version):
         size, payload = padded_string_payload(name)
         header = CreateChanRequestHeader(size, cid, version)
-        super().__init__(header, payload)
+        super().__init__(header, b'', payload)
 
     payload_size = property(lambda self: self.header.payload_size)
     cid = property(lambda self: self.header.parameter1)
@@ -1451,7 +1468,7 @@ class ClientNameRequest(Message):
     def __init__(self, name):
         size, payload = padded_string_payload(name)
         header = ClientNameRequestHeader(size)
-        super().__init__(header, payload)
+        super().__init__(header, b'', payload)
 
     payload_size = property(lambda self: self.header.payload_size)
     name = property(lambda self: bytes(self.buffers[1]).rstrip(b'\x00'))
@@ -1474,14 +1491,14 @@ class HostNameRequest(Message):
     def __init__(self, name):
         size, payload = padded_string_payload(name)
         header = HostNameRequestHeader(size)
-        super().__init__(header, payload)
+        super().__init__(header, b'', payload)
 
     payload_size = property(lambda self: self.header.payload_size)
     name = property(lambda self: bytes(self.buffers[1]).rstrip(b'\x00'))
 
     @classmethod
     def from_wire(cls, header, payload_bytes, *, sender_address=None):
-        return cls.from_components(header, payload_bytes,
+        return cls.from_components(header, b'', payload_bytes,
                                    sender_address=sender_address)
 
 
