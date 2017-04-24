@@ -214,6 +214,7 @@ def extract_data(payload, data_type, data_count):
     else:
         raw_data = payload
     data = dbr.native_to_builtin(raw_data, native_type(data_type), data_count)
+    print('data is', data, data[:data_count])
     return data[:data_count]
 
 

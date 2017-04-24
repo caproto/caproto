@@ -98,11 +98,11 @@ def test_thread_client():
     chan1.unsubscribe(0)
     chan1.write((5,))
     reading = chan1.read()
-    assert reading.values == 5
+    assert reading.data == 5
     print('reading:', reading)
     chan1.write((6,))
     reading = chan1.read()
-    assert reading.values == 6
+    assert reading.data == 6
     print('reading:', reading)
     chan2.clear()
     chan1.clear()
