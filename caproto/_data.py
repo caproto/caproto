@@ -3,6 +3,7 @@ from ._dbr import (DBR_LONG, DBR_ENUM, DBR_DOUBLE,
                    DBR_TYPES, ChType, promote_type,
                    native_type, native_float_types,
                    native_int_types)
+from ._utils import ensure_bytes
 
 # it's all about data
 ENCODING = 'latin-1'
@@ -137,7 +138,7 @@ class DatabaseRecordNumeric(DatabaseRecordBase):
                  lower_ctrl_limit=0.0, **kwargs):
 
         super().__init__(**kwargs)
-        self.units = units
+        self.units = ensure_bytes(units)
         self.upper_disp_limit = upper_disp_limit
         self.lower_disp_limit = lower_disp_limit
         self.upper_alarm_limit = upper_alarm_limit

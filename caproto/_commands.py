@@ -52,7 +52,7 @@ from ._dbr import (DBR_INT, DBR_TYPES, DO_REPLY, NO_REPLY, ChannelType,
 
 from . import _dbr as dbr
 from ._utils import (CLIENT, NEED_DATA, REQUEST, RESPONSE,
-                     SERVER, CaprotoTypeError, CaprotoValueError)
+                     SERVER, CaprotoTypeError, CaprotoValueError, ensure_bytes)
 
 # numpy is only used if it is available
 try:
@@ -78,16 +78,6 @@ def ipv4_from_int32(int_packed_ip: int) -> str:
     '''Unpack an IPv4 from a 32-bit integer (in network byte order)'''
     encoded_ip = struct.pack('!I', int_packed_ip)
     return socket.inet_ntop(socket.AF_INET, encoded_ip)
-
-
-def ensure_bytes(s):
-    if isinstance(s, bytes):
-        return s
-    elif isinstance(s, str):
-        # be sure to include a null terminator
-        return s.encode() + b'\0'
-    else:
-        raise CaprotoTypeError("expected str or bytes")
 
 
 def from_buffer(data_type, buffer):

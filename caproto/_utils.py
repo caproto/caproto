@@ -146,3 +146,14 @@ def broadcast_address_list_from_interfaces():
              ]
 
     return bcast
+
+
+def ensure_bytes(s):
+    """Encode string as bytes with null terminator. Bytes pass through."""
+    if isinstance(s, bytes):
+        return s
+    elif isinstance(s, str):
+        # be sure to include a null terminator
+        return s.encode() + b'\0'
+    else:
+        raise CaprotoTypeError("expected str or bytes")
