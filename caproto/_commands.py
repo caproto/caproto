@@ -213,7 +213,8 @@ def extract_data(payload, data_type, data_count):
         raw_data = payload[data_offset:]
     else:
         raw_data = payload
-    return dbr.native_to_builtin(raw_data, data_type, data_count)[:data_count]
+    data = dbr.native_to_builtin(raw_data, native_type(data_type), data_count)
+    return data[:data_count]
 
 
 def extract_metadata(payload, data_type):
