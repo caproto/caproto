@@ -68,6 +68,18 @@ _pad_buffer = {mod_sz: b'\0' * (8 - mod_sz)
 _pad_buffer[0] = b''
 
 
+def ipv4_to_int32(ip: str) -> int:
+    '''Pack an IPv4 into a 32-bit integer (in network byte order)'''
+    encoded_ip = socket.inet_pton(socket.AF_INET, ip)
+    return struct.unpack('!I', encoded_ip)[0]
+
+
+def ipv4_from_int32(int_packed_ip: int) -> str:
+    '''Unpack an IPv4 from a 32-bit integer (in network byte order)'''
+    encoded_ip = struct.pack('!I', int_packed_ip)
+    return socket.inet_ntop(socket.AF_INET, encoded_ip)
+
+
 def ensure_bytes(s):
     if isinstance(s, bytes):
         return s
@@ -518,10 +530,8 @@ class SearchResponse(Message):
         if ip is None:
             ip = '255.255.255.255'
 
-        encoded_ip = socket.inet_pton(socket.AF_INET, ip)
-        int_encoded_ip, = struct.unpack('!I', encoded_ip)  # bytes -> int
         header = SearchResponseHeader(data_type=port,
-                                      sid=int_encoded_ip,
+                                      sid=ipv4_to_int32(ip),
                                       cid=cid)
         # Pad a uint16 to fill 8 bytes.
         payload = bytes(DBR_INT(version)).ljust(8, b'\x00')
@@ -537,9 +547,7 @@ class SearchResponse(Message):
     @property
     def ip(self):
         # for CA version >= 4.11
-        int_encoded_ip = self.header.parameter1
-        encoded_ip = struct.pack('!I', int_encoded_ip)  # int -> bytes
-        return socket.inet_ntop(socket.AF_INET, encoded_ip)
+        return ipv4_from_int32(self.header.parameter1)
 
     @property
     def version(self):
@@ -668,16 +676,13 @@ class RepeaterConfirmResponse(Message):
     HAS_PAYLOAD = False
 
     def __init__(self, repeater_address):
-        encoded_ip = socket.inet_pton(socket.AF_INET, str(repeater_address))
-        int_encoded_ip, = struct.unpack('!I', encoded_ip)  # bytes -> int
-        header = RepeaterConfirmResponseHeader(int_encoded_ip)
+        header = RepeaterConfirmResponseHeader(
+            ipv4_to_int32(str(repeater_address)))
         super().__init__(header)
 
     @property
     def repeater_address(self):
-        int_encoded_ip = self.header.parameter2
-        encoded_ip = struct.pack('!I', int_encoded_ip)  # int -> bytes
-        return socket.inet_ntop(socket.AF_INET, encoded_ip)
+        return ipv4_from_int32(self.header.parameter2)
 
 
 class RepeaterRegisterRequest(Message):
@@ -695,16 +700,13 @@ class RepeaterRegisterRequest(Message):
     HAS_PAYLOAD = False
 
     def __init__(self, client_address):
-        encoded_ip = socket.inet_pton(socket.AF_INET, str(client_address))
-        int_encoded_ip, = struct.unpack('!I', encoded_ip)  # bytes -> int
-        header = RepeaterRegisterRequestHeader(int_encoded_ip)
+        header = RepeaterRegisterRequestHeader(
+            ipv4_to_int32(str(client_address)))
         super().__init__(header)
 
     @property
     def client_address(self):
-        int_encoded_ip = self.header.parameter2
-        encoded_ip = struct.pack('!I', int_encoded_ip)  # int -> bytes
-        return socket.inet_ntop(socket.AF_INET, encoded_ip)
+        return ipv4_from_int32(self.header.parameter2)
 
 
 class EventAddRequestPayload(ctypes.BigEndianStructure):

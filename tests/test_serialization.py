@@ -6,10 +6,9 @@ import caproto as ca
 import inspect
 import pytest
 
-# TODO this is used in several places in _commands.py
 ip = '255.255.255.255'
-encoded_ip = socket.inet_pton(socket.AF_INET, ip)
-int_encoded_ip, = struct.unpack('!I', encoded_ip)  # bytes -> int
+int_encoded_ip = ca.ipv4_to_int32(ip)
+
 
 parameter_values = {
     'address': [int_encoded_ip],
@@ -80,7 +79,6 @@ def test_serialize(cmd):
     print('    ', wire_inst.header.payload_size)
     assert bytes(wire_inst.header) == bytes(inst.header)
     print('    dt ', wire_inst.header.data_type)
-    # TODO this is important to check:
     assert wire_inst == inst
 
 
