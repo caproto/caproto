@@ -50,6 +50,10 @@ class CaprotoError(Exception):
     ...
 
 
+class DisconnectedCircuit(CaprotoError):
+    ...
+
+
 class ProtocolError(CaprotoError):
     # Any error resulting from sending or receiving a command will raise (a
     # subclass of) this error and never any other error.
