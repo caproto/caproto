@@ -424,6 +424,10 @@ class Message(metaclass=_MetaDirectionalMessage):
         return (ctypes.sizeof(self.header) +
                 sum(bytelen(buf) for buf in self.buffers))
 
+    @property
+    def nbytes(self):
+        return len(self)
+
 
 class VersionRequest(Message):
     """
