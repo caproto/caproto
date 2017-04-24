@@ -485,7 +485,8 @@ class PV:
         "get control values for variable"
         dtype = ca.promote_type(self.type, use_ctrl=True)
         command = self.chid.read(data_type=dtype)
-        info = self._parse_dbr_data(command.values)
+        info = self._parse_dbr_metadata(command.metadata)
+        info['value'] = command.data
         self._args.update(**info)
         return info
 
@@ -494,7 +495,8 @@ class PV:
         "get time values for variable"
         dtype = ca.promote_type(self.type, use_time=True)
         command = self.chid.read(data_type=dtype)
-        info = self._parse_dbr_data(command.values)
+        info = self._parse_dbr_metadata(command.metadata)
+        info['value'] = command.data
         self._args.update(**info)
 
     def _parse_dbr_metadata(self, dbr_data):
