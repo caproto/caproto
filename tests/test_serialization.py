@@ -1,6 +1,9 @@
+import array
+import copy
 import struct
 import socket
 from numpy.testing import assert_array_almost_equal
+import numpy
 
 import caproto as ca
 import inspect
@@ -97,18 +100,40 @@ def make_channels(cli_circuit, srv_circuit, data_type, data_count):
     cli_circuit.next_command()
     return cli_channel, srv_channel
 
+# Define big-endian arrays for use below in test_reads and test_writes.
+int_arr = array.array('h', [7, 21, 2, 4, 5])
+int_arr.byteswap()
+float_arr = array.array('f', [7, 21.1, 3.1])
+float_arr.byteswap()
+long_arr = array.array('i', [7, 21, 2, 4, 5])
+long_arr.byteswap()
+double_arr = array.array('d', [7, 21.1, 3.1])
+double_arr.byteswap()
 
 payloads = [
     # data_type, data_count, data, metadata
     (ca.ChType.INT, 1, (7,), None),
     (ca.ChType.INT, 5, (7, 21, 2, 4, 5), None),
+    (ca.ChType.INT, 5, int_arr, None),
+    (ca.ChType.INT, 5, bytes(int_arr), None),
+    (ca.ChType.INT, 5, numpy.array([7, 21, 2, 4, 5], dtype='i2'), None),
     (ca.ChType.FLOAT, 1, (7,), None),
     (ca.ChType.FLOAT, 3, (7, 21.1, 3.1), None),
+    (ca.ChType.FLOAT, 3, float_arr, None),
+    (ca.ChType.FLOAT, 3, bytes(float_arr), None),
+    (ca.ChType.FLOAT, 3, numpy.array([7, 21.1, 3.1], dtype='f4'), None),
     (ca.ChType.LONG, 1, (7,), None),
     (ca.ChType.LONG, 2, (7, 21), None),
+    (ca.ChType.LONG, 5, numpy.array([7, 21, 2, 4, 5], dtype='i4'), None),
+    (ca.ChType.LONG, 5, long_arr, None),
+    (ca.ChType.LONG, 5, bytes(long_arr), None),
     (ca.ChType.DOUBLE, 1, (7,), None),
     (ca.ChType.DOUBLE, 6, (7, 21.1, 7, 7, 2.1, 1.1), None),
+    (ca.ChType.DOUBLE, 3, numpy.array([7, 21.1, 3.1], dtype='f8'), None),
+    (ca.ChType.DOUBLE, 3, double_arr, None),
+    (ca.ChType.DOUBLE, 3, bytes(double_arr), None),
 ]
+
 
 @pytest.mark.parametrize('data_type, data_count, data, metadata', payloads)
 def test_reads(circuit_pair, data_type, data_count, data, metadata):
@@ -132,8 +157,18 @@ def test_reads(circuit_pair, data_type, data_count, data, metadata):
     # serialization over the socket.
     cli_circuit.recv(*(bytes(buf) for buf in buffers_to_send))
     com = cli_circuit.next_command()
-    assert_array_almost_equal(res.data, data)
-    assert_array_almost_equal(com.data, res.data)
+
+    if isinstance(data, array.ArrayType):
+        # Before comparing array.array (which exposes the byteorder naively)
+        # with a numpy.ndarray (which buries the byteorder in dtype), flip
+        # the byte order to little-endian.
+        expected = copy.deepcopy(data)
+        expected.byteswap()
+        assert_array_almost_equal(com.data, expected)
+    elif isinstance(data, bytes):
+        assert data == bytes(com.data)
+    else:
+        assert_array_almost_equal(com.data, data)
 
 
 @pytest.mark.parametrize('data_type, data_count, data, metadata', payloads)
@@ -157,5 +192,15 @@ def test_writes(circuit_pair, data_type, data_count, data, metadata):
     # serialization over the socket.
     cli_circuit.recv(*(bytes(buf) for buf in buffers_to_send))
     com = cli_circuit.next_command()
-    assert_array_almost_equal(res.data, data)
-    assert_array_almost_equal(com.data, res.data)
+
+    if isinstance(data, array.ArrayType):
+        # Before comparing array.array (which exposes the byteorder naively)
+        # with a numpy.ndarray (which buries the byteorder in dtype), flip
+        # the byte order to little-endian.
+        expected = copy.deepcopy(data)
+        expected.byteswap()
+        assert_array_almost_equal(com.data, expected)
+    elif isinstance(data, bytes):
+        assert data == bytes(com.data)
+    else:
+        assert_array_almost_equal(com.data, data)
