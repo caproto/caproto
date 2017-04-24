@@ -456,6 +456,7 @@ class PV:
         info = self._parse_dbr_metadata(command.metadata)
         print('read() info', info)
         info['value'] = command.data
+        self._args.update(**info)
         return info['value']
 
     @ensure_connection
@@ -518,6 +519,7 @@ class PV:
         """
         info = self._parse_dbr_metadata(command.metadata)
         print('updated info', info)
+        info['value'] = command.data
         self._args.update(**info)
         self.run_callbacks()
 
@@ -847,5 +849,3 @@ class PV:
 
     def disconnect(self):
         "disconnect PV"
-
-
