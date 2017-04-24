@@ -139,12 +139,32 @@ def padded_string_payload(payload):
 
 
 def bytelen(item):
+    """
+    Meaasure the byte length of an item.
+
+    Supports:
+    - ``array.array`` (from the builtin Python lib)
+    - ``ctypes`` objects
+    - an object that has an ``nbytes`` attribute (notably, numpy arrays)
+    - ``bytes``
+    - ``bytearray``
+    - ``memoryview``
+    """
     if isinstance(item, array.array):
         return item.itemsize * len(item)
     elif isinstance(item, (ctypes.Structure, _ctypes._SimpleCData)):
         return ctypes.sizeof(item)
-    else:
+    elif hasattr(item, 'nbytes'):
+        # Duck-type as numpy array
+        return item.nbytes
+    elif isinstance(item, (bytes, bytearray, memoryview)):
         return len(item)
+    else:
+        # We could just fall back on len() but I worry that someone will
+        # unwittingly use this on a type that has a __len__ that is not its
+        # bytelength and is not already caught above. Better to fail like this.
+        raise NotImplementedError("Not sure how to measure byte length of "
+                                  "object of type {}".format(type(item)))
 
 
 def data_payload(data, metadata, data_type, data_count):
@@ -155,8 +175,8 @@ def data_payload(data, metadata, data_type, data_count):
     ----------
     data : ``array.array``, ``numpy.ndarray``, any iterable, or bytes
         If input is bytes or ``array.array``, we assume that the byte order of
-        the input is big-endian. If the input is ``numpy.ndarray`` or any
-        other iterable, we ensure big-endianness.
+        the input is big-endian. (We have no means of checking.) If the input
+        is ``numpy.ndarray`` or any other iterable, we ensure big-endianness.
     metadata : a DBR struct, any iterable, or bytes
     data_type : integer
     data_count : integer
