@@ -236,12 +236,10 @@ def data_payload(data, metadata, data_type, data_count):
         return size, md_payload, data_payload
 
 
-def extract_data(payload, data_type, data_count):
+def extract_data(buffer, data_type, data_count):
     "Return a scalar or big-endian array (numpy.ndarray or array.array)."
-    data_offset = dbr_data_offsets[data_type]
-    raw_data = memoryview(payload)[data_offset:]
-    data = dbr.native_to_builtin(raw_data, native_type(data_type), data_count)
-    return data[:data_count]
+    data = dbr.native_to_builtin(buffer, native_type(data_type), data_count)
+    return data[:data_count]  # TODO Does this make a copy?
 
 
 def extract_metadata(payload, data_type):
@@ -1411,7 +1409,6 @@ class WriteNotifyRequest(Message):
     @property
     def metadata(self):
         return extract_metadata(self.buffers[0], self.data_type)
-
 
 
 class WriteNotifyResponse(Message):
