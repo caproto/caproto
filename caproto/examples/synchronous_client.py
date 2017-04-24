@@ -19,7 +19,7 @@ sockets = {}
 # Convenience functions that do both transport caproto validation/ingest.
 def send(circuit, command):
     buffers_to_send = circuit.send(command)
-    sockets[circuit].send(*buffers_to_send)
+    sockets[circuit].sendmsg(buffers_to_send)
 
 
 def recv(circuit):
