@@ -114,20 +114,26 @@ payloads = [
 def test_reads(circuit_pair, data_type, data_count, data, metadata):
 
     cli_circuit, srv_circuit = circuit_pair
-    cli_channel, srv_channel = make_channels(*circuit_pair, 5, 1)
+    cli_channel, srv_channel = make_channels(*circuit_pair, data_type,
+                                             data_count)
 
     req = ca.ReadNotifyRequest(data_count=data_count, data_type=data_type,
                                ioid=0, sid=0)
     buffers_to_send = cli_circuit.send(req)
-    srv_circuit.recv(*buffers_to_send)
+    # Socket transport would happen here. Calling bytes() simulates
+    # serialization over the socket.
+    srv_circuit.recv(*(bytes(buf) for buf in buffers_to_send))
     srv_circuit.next_command()
     res = ca.ReadNotifyResponse(data=data, metadata=metadata,
                                 data_count=data_count, data_type=data_type,
                                 ioid=0, status=1)
     buffers_to_send = srv_circuit.send(res)
-    cli_circuit.recv(*buffers_to_send)
+    # Socket transport would happen here. Calling bytes() simulates
+    # serialization over the socket.
+    cli_circuit.recv(*(bytes(buf) for buf in buffers_to_send))
     com = cli_circuit.next_command()
-    assert_array_almost_equal(com.data, data, )
+    assert_array_almost_equal(res.data, data)
+    assert_array_almost_equal(com.data, res.data)
 
 
 @pytest.mark.parametrize('data_type, data_count, data, metadata', payloads)
@@ -139,12 +145,17 @@ def test_writes(circuit_pair, data_type, data_count, data, metadata):
     req = ca.WriteNotifyRequest(data=data, data_count=data_count,
                                 data_type=data_type, ioid=0, sid=0)
     buffers_to_send = cli_circuit.send(req)
-    srv_circuit.recv(*buffers_to_send)
+    # Socket transport would happen here. Calling bytes() simulates
+    # serialization over the socket.
+    srv_circuit.recv(*(bytes(buf) for buf in buffers_to_send))
     srv_circuit.next_command()
     res = ca.ReadNotifyResponse(data=data, metadata=metadata,
                                 data_count=data_count, data_type=data_type,
                                 ioid=0, status=1)
     buffers_to_send = srv_circuit.send(res)
-    cli_circuit.recv(*buffers_to_send)
+    # Socket transport would happen here. Calling bytes() simulates
+    # serialization over the socket.
+    cli_circuit.recv(*(bytes(buf) for buf in buffers_to_send))
     com = cli_circuit.next_command()
-    assert_array_almost_equal(com.data, data)
+    assert_array_almost_equal(res.data, data)
+    assert_array_almost_equal(com.data, res.data)
