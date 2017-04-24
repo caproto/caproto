@@ -204,7 +204,8 @@ def data_payload(data, metadata, data_type, data_count):
         if sys.byteorder == 'little':
             data_payload.byteswap()
     else:
-        raise CaprotoTypeError("data given as type we cannot handle")
+        raise CaprotoTypeError("data given as type we cannot handle - {}"
+                               "".format(type(data)))
 
     if (isinstance(metadata, ctypes.BigEndianStructure) and
             hasattr(metadata, 'DBR_ID')):
@@ -226,7 +227,8 @@ def data_payload(data, metadata, data_type, data_count):
             justified_md.append(val)
         md_payload = DBR_TYPES[data_type](*justified_md)
     else:
-        raise CaprotoTypeError("metadata given as type we cannot handle")
+        raise CaprotoTypeError("metadata given as type we cannot handle - {}"
+                               "".format(type(metadata)))
 
     size, pad_payload = pad_buffers(md_payload, data_payload)
     if pad_payload:
