@@ -1044,8 +1044,10 @@ def native_type(ftype):
 
 
 def native_to_builtin(value, data_type, data_count):
+    if data_type is ChType.CHAR:
+        return value.partition(b'\0')[0].decode('utf-8')
     if USE_NUMPY:
-        # Return an ndarray.
+        # Return an ndarray
         dt = numpy.dtype(_numpy_map[data_type])
         dt = dt.newbyteorder('>')
         return numpy.frombuffer(value, dtype=dt)
