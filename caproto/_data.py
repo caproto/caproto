@@ -36,23 +36,28 @@ class DatabaseRecordBase:
 
         # additional 'array' data not stored in the base DBR types:
         self._data['native'] = []
-        # TODO it may be wise to rethink the DBR types to store the array of values
-        # from the outset
 
     def convert_to(self, to_dtype):
         # this leaves a lot to be desired
         values = self.value
-        from_dtype = self._data_type
-        if from_dtype == to_dtype and self.data_type != ChType.ENUM:
+        from_dtype = self.data_type
+
+        # TODO metadata is expected to be of this type as well!
+        native_to = native_type(to_dtype)
+        no_conversion_necessary = (
+            (from_dtype == native_to and self.data_type != ChType.ENUM) or
+            (from_dtype in native_float_types and native_to in
+             native_float_types) or
+            (from_dtype in native_int_types and native_to in native_int_types)
+        )
+
+        if no_conversion_necessary:
             try:
                 len(values)
             except TypeError:
                 return (values, )
             else:
                 return values
-
-        # TODO metadata is expected to be of this type as well!
-        native_to = native_type(to_dtype)
 
         if from_dtype in native_float_types and native_to in native_int_types:
             values = [int(v) for v in values]
@@ -95,7 +100,9 @@ class DatabaseRecordBase:
             # cached?
             dbr_data = DBR_TYPES[type_]
             for attr, _ in dbr_data._fields_:
-                setattr(dbr_data, getattr(self, attr))
+                # TODO @danielballan was right about RISC_padx items
+                if hasattr(self, attr):
+                    setattr(dbr_data, attr, getattr(self, attr))
             return dbr_data, self.convert_to(type_)
 
     def __len__(self):

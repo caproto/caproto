@@ -98,10 +98,12 @@ class VirtualCircuit:
                    ]
         elif isinstance(command, ca.ReadNotifyRequest):
             chan, db_entry = get_db_entry()
-            dbr_data, values = db_entry.get_dbr_data(command.data_type)
-            yield ReadNotifyResponse(dbr_data=dbr_data, values=values,
-                                     data_count=1 + len(values),
-                                     status=1, ioid=command.ioid)
+            # TODO
+            db_entry._data['native'] = [db_entry.value]
+            metadata, data = db_entry.get_dbr_data(command.data_type)
+            yield ReadNotifyResponse(data=data, data_type=command.data_type,
+                                     data_count=len(data), status=1,
+                                     ioid=command.ioid, metadata=metadata)
         elif isinstance(command, ca.WriteNotifyRequest):
             chan, db_entry = get_db_entry()
             yield chan.write(ioid=command.ioid)
