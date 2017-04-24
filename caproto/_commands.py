@@ -171,7 +171,6 @@ def data_payload(data, metadata, data_type, data_count):
         # Make big-endian.
         if sys.byteorder == 'little':
             data_payload.byteswap()
-        print('data_payload', data_payload)
     else:
         raise CaprotoTypeError("data given as type we cannot handle")
 
@@ -206,13 +205,8 @@ def data_payload(data, metadata, data_type, data_count):
 
 def extract_data(payload, data_type, data_count):
     "Return a scalar or big-endian array (numpy.ndarray or array.array)."
-    # TO DO
     data_offset = dbr_data_offsets[data_type]
-    print('payload', payload, type(payload))
-    if data_offset:
-        raw_data = payload[data_offset:]
-    else:
-        raw_data = payload
+    raw_data = memoryview(payload)[data_offset:]
     data = dbr.native_to_builtin(raw_data, native_type(data_type), data_count)
     return data[:data_count]
 
