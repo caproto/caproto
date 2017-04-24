@@ -99,7 +99,7 @@ class DatabaseRecordBase:
         else:
             # non-standard type request. frequent ones probably should be
             # cached?
-            dbr_data = DBR_TYPES[type_]
+            dbr_data = DBR_TYPES[type_]()
             for attr, _ in dbr_data._fields_:
                 # TODO @danielballan was right about RISC_padx items
                 if hasattr(self, attr):
