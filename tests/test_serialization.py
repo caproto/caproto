@@ -123,21 +123,28 @@ payloads = [
     (ca.ChType.INT, 5, int_arr, None),
     (ca.ChType.INT, 5, bytes(int_arr), None),
     (ca.ChType.INT, 5, numpy.array([7, 21, 2, 4, 5], dtype='i2'), None),
+
     (ca.ChType.FLOAT, 1, (7,), None),
     (ca.ChType.FLOAT, 3, (7, 21.1, 3.1), None),
     (ca.ChType.FLOAT, 3, float_arr, None),
     (ca.ChType.FLOAT, 3, bytes(float_arr), None),
     (ca.ChType.FLOAT, 3, numpy.array([7, 21.1, 3.1], dtype='f4'), None),
+
     (ca.ChType.LONG, 1, (7,), None),
     (ca.ChType.LONG, 2, (7, 21), None),
     (ca.ChType.LONG, 5, numpy.array([7, 21, 2, 4, 5], dtype='i4'), None),
     (ca.ChType.LONG, 5, long_arr, None),
     (ca.ChType.LONG, 5, bytes(long_arr), None),
+
     (ca.ChType.DOUBLE, 1, (7,), None),
     (ca.ChType.DOUBLE, 6, (7, 21.1, 7, 7, 2.1, 1.1), None),
     (ca.ChType.DOUBLE, 3, numpy.array([7, 21.1, 3.1], dtype='f8'), None),
     (ca.ChType.DOUBLE, 3, double_arr, None),
     (ca.ChType.DOUBLE, 3, bytes(double_arr), None),
+
+    (ca.ChType.TIME_DOUBLE, 1, (7,), ca.DBR_TIME_DOUBLE(1, 0, 3, 5)),
+    (ca.ChType.TIME_DOUBLE, 1, (7,), (1, 0, 3, 5)),
+    (ca.ChType.TIME_DOUBLE, 2, (7, 3.4), (1, 0, 3, 5)),
 ]
 
 
@@ -154,7 +161,7 @@ def test_reads(circuit_pair, data_type, data_count, data, metadata):
     # Socket transport would happen here. Calling bytes() simulates
     # serialization over the socket.
     srv_circuit.recv(*(bytes(buf) for buf in buffers_to_send))
-    srv_circuit.next_command()
+    req_received = srv_circuit.next_command()
     res = ca.ReadNotifyResponse(data=data, metadata=metadata,
                                 data_count=data_count, data_type=data_type,
                                 ioid=0, status=1)
@@ -162,7 +169,7 @@ def test_reads(circuit_pair, data_type, data_count, data, metadata):
     # Socket transport would happen here. Calling bytes() simulates
     # serialization over the socket.
     cli_circuit.recv(*(bytes(buf) for buf in buffers_to_send))
-    com = cli_circuit.next_command()
+    res_received = cli_circuit.next_command()
 
     if isinstance(data, array.ArrayType):
         # Before comparing array.array (which exposes the byteorder naively)
@@ -170,11 +177,11 @@ def test_reads(circuit_pair, data_type, data_count, data, metadata):
         # the byte order to little-endian.
         expected = copy.deepcopy(data)
         expected.byteswap()
-        assert_array_almost_equal(com.data, expected)
+        assert_array_almost_equal(res_received.data, expected)
     elif isinstance(data, bytes):
-        assert data == bytes(com.data)
+        assert data == bytes(res_received.data)
     else:
-        assert_array_almost_equal(com.data, data)
+        assert_array_almost_equal(res_received.data, data)
 
 
 @pytest.mark.parametrize('data_type, data_count, data, metadata', payloads)
@@ -183,21 +190,21 @@ def test_writes(circuit_pair, data_type, data_count, data, metadata):
     cli_circuit, srv_circuit = circuit_pair
     cli_channel, srv_channel = make_channels(*circuit_pair, 5, 1)
 
-    req = ca.WriteNotifyRequest(data=data, data_count=data_count,
+    req = ca.WriteNotifyRequest(data=data, metadata=metadata,
+                                data_count=data_count,
                                 data_type=data_type, ioid=0, sid=0)
     buffers_to_send = cli_circuit.send(req)
     # Socket transport would happen here. Calling bytes() simulates
     # serialization over the socket.
     srv_circuit.recv(*(bytes(buf) for buf in buffers_to_send))
-    srv_circuit.next_command()
-    res = ca.ReadNotifyResponse(data=data, metadata=metadata,
-                                data_count=data_count, data_type=data_type,
-                                ioid=0, status=1)
+    req_received = srv_circuit.next_command()
+    res = ca.WriteNotifyResponse(data_count=data_count, data_type=data_type,
+                                 ioid=0, status=1)
     buffers_to_send = srv_circuit.send(res)
     # Socket transport would happen here. Calling bytes() simulates
     # serialization over the socket.
     cli_circuit.recv(*(bytes(buf) for buf in buffers_to_send))
-    com = cli_circuit.next_command()
+    res_received = cli_circuit.next_command()
 
     if isinstance(data, array.ArrayType):
         # Before comparing array.array (which exposes the byteorder naively)
@@ -205,8 +212,8 @@ def test_writes(circuit_pair, data_type, data_count, data, metadata):
         # the byte order to little-endian.
         expected = copy.deepcopy(data)
         expected.byteswap()
-        assert_array_almost_equal(com.data, expected)
+        assert_array_almost_equal(req_received.data, expected)
     elif isinstance(data, bytes):
-        assert data == bytes(com.data)
+        assert data == bytes(req_received.data)
     else:
-        assert_array_almost_equal(com.data, data)
+        assert_array_almost_equal(req_received.data, data)
