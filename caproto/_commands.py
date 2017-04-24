@@ -207,8 +207,7 @@ def data_payload(data, metadata, data_type, data_count):
         raise CaprotoTypeError("data given as type we cannot handle - {}"
                                "".format(type(data)))
 
-    if (isinstance(metadata, ctypes.BigEndianStructure) and
-            hasattr(metadata, 'DBR_ID')):
+    if hasattr(metadata, 'DBR_ID'):
         # This is already a DBR.
         md_payload = metadata
     elif isinstance(metadata, bytes):
