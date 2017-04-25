@@ -49,6 +49,14 @@ parameter_values = {
 
 all_commands = set(ca._commands._commands) - set([ca.Message])
 
+
+def _np_hack(buf):
+    try:
+        return bytes(buf)
+    except TypeError:
+        return buf.tobytes()
+
+
 @pytest.mark.parametrize('cmd', all_commands)
 def test_serialize(cmd):
     print()
@@ -160,7 +168,7 @@ def test_reads(circuit_pair, data_type, data_count, data, metadata):
     buffers_to_send = cli_circuit.send(req)
     # Socket transport would happen here. Calling bytes() simulates
     # serialization over the socket.
-    srv_circuit.recv(*(bytes(buf) for buf in buffers_to_send))
+    srv_circuit.recv(*(_np_hack(buf) for buf in buffers_to_send))
     req_received = srv_circuit.next_command()
     res = ca.ReadNotifyResponse(data=data, metadata=metadata,
                                 data_count=data_count, data_type=data_type,
@@ -168,7 +176,7 @@ def test_reads(circuit_pair, data_type, data_count, data, metadata):
     buffers_to_send = srv_circuit.send(res)
     # Socket transport would happen here. Calling bytes() simulates
     # serialization over the socket.
-    cli_circuit.recv(*(bytes(buf) for buf in buffers_to_send))
+    cli_circuit.recv(*(_np_hack(buf) for buf in buffers_to_send))
     res_received = cli_circuit.next_command()
 
     if isinstance(data, array.ArrayType):
@@ -179,7 +187,7 @@ def test_reads(circuit_pair, data_type, data_count, data, metadata):
         expected.byteswap()
         assert_array_almost_equal(res_received.data, expected)
     elif isinstance(data, bytes):
-        assert data == bytes(res_received.data)
+        assert data == res_received.data.tobytes()
     else:
         assert_array_almost_equal(res_received.data, data)
 
@@ -196,14 +204,15 @@ def test_writes(circuit_pair, data_type, data_count, data, metadata):
     buffers_to_send = cli_circuit.send(req)
     # Socket transport would happen here. Calling bytes() simulates
     # serialization over the socket.
-    srv_circuit.recv(*(bytes(buf) for buf in buffers_to_send))
+    srv_circuit.recv(*(_np_hack(buf) for buf in buffers_to_send))
     req_received = srv_circuit.next_command()
     res = ca.WriteNotifyResponse(data_count=data_count, data_type=data_type,
                                  ioid=0, status=1)
     buffers_to_send = srv_circuit.send(res)
+
     # Socket transport would happen here. Calling bytes() simulates
     # serialization over the socket.
-    cli_circuit.recv(*(bytes(buf) for buf in buffers_to_send))
+    cli_circuit.recv(*(_np_hack(buf) for buf in buffers_to_send))
     res_received = cli_circuit.next_command()
 
     if isinstance(data, array.ArrayType):
