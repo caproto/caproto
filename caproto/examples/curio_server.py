@@ -79,7 +79,6 @@ class VirtualCircuit:
                     await self.send(response_command)
         except Exception as ex:
             print('Curio server failed to process command: {}'.format(command))
-            print('Traceback:')
             traceback.print_exc(file=sys.stdout)
 
             if hasattr(command, 'sid'):

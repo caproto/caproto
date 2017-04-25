@@ -1,8 +1,7 @@
 import time
-from ._dbr import (DBR_LONG, DBR_ENUM, DBR_DOUBLE, DBR_TYPES, ChType,
-                   promote_type, native_type, native_float_types,
-                   native_int_types, native_types, timestamp_to_epics,
-                   time_types)
+from ._dbr import (DBR_TYPES, ChType, promote_type, native_type,
+                   native_float_types, native_int_types, native_types,
+                   timestamp_to_epics, time_types)
 from ._utils import ensure_bytes
 
 # it's all about data
@@ -11,7 +10,7 @@ ENCODING = 'latin-1'
 
 # TODO these aren't really records. what were you thinking?
 class DatabaseRecordBase:
-    data_type = DBR_LONG.DBR_ID
+    data_type = ChType.LONG
 
     def __init__(self, *, timestamp=None, status=0, severity=0, value=None):
         if timestamp is None:
@@ -42,7 +41,7 @@ class DatabaseRecordBase:
 
         # TODO metadata is expected to be of this type as well!
         no_conversion_necessary = (
-            (from_dtype == native_to and self.data_type != ChType.ENUM) or
+            from_dtype == native_to or
             (from_dtype in native_float_types and native_to in
              native_float_types) or
             (from_dtype in native_int_types and native_to in native_int_types)
@@ -73,16 +72,15 @@ class DatabaseRecordBase:
         return values
 
     def get_dbr_data(self, type_):
-        if type_ in self._data:
+        if type_ in self._data and self.data_type != ChType.ENUM:
             dbr_data = self._data[type_]
             self._set_dbr_metadata(dbr_data)
             return dbr_data, self._data['native']
+        elif type_ in native_types:
+            return None, self.convert_to(type_)
 
         # non-standard type request. frequent ones probably should be
         # cached?
-        if type_ in native_types:
-            return None, self.convert_to(type_)
-
         dbr_data = DBR_TYPES[type_]()
         self._set_dbr_metadata(dbr_data)
         return dbr_data, self.convert_to(type_)
@@ -139,7 +137,7 @@ class DatabaseRecordBase:
 
 
 class DatabaseRecordEnum(DatabaseRecordBase):
-    data_type = DBR_ENUM.DBR_ID
+    data_type = ChType.ENUM
 
     def __init__(self, *, strs=None, **kwargs):
         self.strs = strs
@@ -149,6 +147,12 @@ class DatabaseRecordEnum(DatabaseRecordBase):
     @property
     def no_str(self):
         return len(self.strs) if self.strs else 0
+
+    def convert_to(self, to_dtype):
+        if native_type(to_dtype) == ChType.STRING:
+            return [bytes(str(self.value), ENCODING)]
+        else:
+            return [self.strs.index(self.value)]
 
 
 class DatabaseRecordNumeric(DatabaseRecordBase):
@@ -171,11 +175,11 @@ class DatabaseRecordNumeric(DatabaseRecordBase):
 
 
 class DatabaseRecordInteger(DatabaseRecordNumeric):
-    data_type = DBR_LONG.DBR_ID
+    data_type = ChType.LONG
 
 
 class DatabaseRecordDouble(DatabaseRecordNumeric):
-    data_type = DBR_DOUBLE.DBR_ID
+    data_type = ChType.DOUBLE
 
     def __init__(self, *, precision=0, **kwargs):
         super().__init__(**kwargs)
