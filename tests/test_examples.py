@@ -1,14 +1,18 @@
-import signal
 import os
 import datetime
 import logging
 import time
 from multiprocessing import Process
+from itertools import count
+
+import pytest
 import curio
 import curio.subprocess
+
 import caproto as ca
-from itertools import count
 from caproto.examples.curio_server import find_next_tcp_port
+import caproto.examples.curio_server as server
+
 from caproto import ChType
 
 
@@ -153,7 +157,6 @@ def test_thread_pv():
 
 
 def test_curio_server():
-    import caproto.examples.curio_server as server
     import caproto.examples.curio_client as client
     kernel = curio.Kernel()
 
@@ -209,7 +212,7 @@ def test_curio_server():
         try:
             server_task = await curio.spawn(run_server())
             await curio.sleep(1)  # Give server some time to start up.
-            client_task = await run_client()
+            await run_client()
             print('client is done')
         finally:
             await server_task.cancel()
@@ -233,7 +236,7 @@ async def run_caget(pv, *, dbr_type=None):
         Specific dbr_type to request
     '''
     sep = '@'
-    args = ['/usr/bin/env', 'caget', '-w', '7', '-F', sep]
+    args = ['/usr/bin/env', 'caget', '-w', '0.2', '-F', sep]
     if dbr_type is None:
         args += ['-a']
         wide_mode = True
@@ -321,56 +324,49 @@ async def run_caget(pv, *, dbr_type=None):
             info['enums'] = enums
 
     if 'timestamp' in info:
-        info['timestamp'] = datetime.datetime.strptime(info['timestamp'],
-                                                       '%Y-%m-%d %H:%M:%S.%f')
+        if info['timestamp'] != '<undefined>':
+            info['timestamp'] = datetime.datetime.strptime(
+                info['timestamp'], '%Y-%m-%d %H:%M:%S.%f')
 
     return info
 
 
-def test_curio_server_with_caget():
-    import caproto.examples.curio_server as server
+caget_pvdb = {
+    'pi': server.DatabaseRecordDouble(value=3.14,
+                                      lower_disp_limit=3.13,
+                                      upper_disp_limit=3.15,
+                                      lower_alarm_limit=3.12,
+                                      upper_alarm_limit=3.16,
+                                      lower_warning_limit=3.11,
+                                      upper_warning_limit=3.17,
+                                      lower_ctrl_limit=3.10,
+                                      upper_ctrl_limit=3.18,
+                                      precision=5,
+                                      units='doodles',
+                                      ),
+    'enum': server.DatabaseRecordEnum(value='b',
+                                      strs=['a', 'b', 'c', 'd'],
+                                      ),
+    'int': server.DatabaseRecordInteger(value=33,
+                                        units='poodles',
+                                        lower_disp_limit=33,
+                                        upper_disp_limit=35,
+                                        lower_alarm_limit=32,
+                                        upper_alarm_limit=36,
+                                        lower_warning_limit=31,
+                                        upper_warning_limit=37,
+                                        lower_ctrl_limit=30,
+                                        upper_ctrl_limit=38,
+                                        ),
+    }
 
-    pvdb = {'pi': server.DatabaseRecordDouble(
-                    value=3.14,
-                    lower_disp_limit=3.13,
-                    upper_disp_limit=3.15,
-                    lower_alarm_limit=3.12,
-                    upper_alarm_limit=3.16,
-                    lower_warning_limit=3.11,
-                    upper_warning_limit=3.17,
-                    lower_ctrl_limit=3.10,
-                    upper_ctrl_limit=3.18,
-                    precision=5,
-                    units='doodles',
-                    ),
-            'enum': server.DatabaseRecordEnum(value='b',
-                                              strs=['a', 'b', 'c', 'd'],
-                                              ),
-            'int': server.DatabaseRecordInteger(value=33,
-                                                units='poodles',
-                                                lower_disp_limit=33,
-                                                upper_disp_limit=35,
-                                                lower_alarm_limit=32,
-                                                upper_alarm_limit=36,
-                                                lower_warning_limit=31,
-                                                upper_warning_limit=37,
-                                                lower_ctrl_limit=30,
-                                                upper_ctrl_limit=38,
-                                                ),
-            }
 
-    ctrl_keys = ('upper_disp_limit', 'lower_alarm_limit',
-                 'upper_alarm_limit', 'lower_warning_limit',
-                 'upper_warning_limit', 'lower_ctrl_limit',
-                 'upper_ctrl_limit', 'precision')
-
-    status_keys = ('status', 'severity')
-
+@pytest.fixture(scope='function')
+def curio_server():
     async def run_server():
-        nonlocal pvdb
         port = find_next_tcp_port(host=SERVER_HOST)
         print('Server will be on', (SERVER_HOST, port))
-        ctx = server.Context(SERVER_HOST, port, pvdb)
+        ctx = server.Context(SERVER_HOST, port, caget_pvdb)
         try:
             await ctx.run()
         except Exception as ex:
@@ -379,82 +375,95 @@ def test_curio_server_with_caget():
         finally:
             print('Server exiting')
 
-    async def run_client_test(pv):
-        print('* client_test', pv)
-        data = await run_caget(pv)
+    return run_server
 
-        db_entry = pvdb[pv]
+
+caget_checks = sum(
+    ([(pv, dtype),
+      (pv, ca.promote_type(dtype, use_status=True)),
+      (pv, ca.promote_type(dtype, use_time=True)),
+      (pv, ca.promote_type(dtype, use_ctrl=True)),
+      ]
+     for pv in caget_pvdb
+     for dtype in ca.native_types),
+    []
+)
+
+
+@pytest.mark.parametrize('pv, dbr_type', caget_checks)
+def test_curio_server_with_caget(curio_server, pv, dbr_type):
+    ctrl_keys = ('upper_disp_limit', 'lower_alarm_limit',
+                 'upper_alarm_limit', 'lower_warning_limit',
+                 'upper_warning_limit', 'lower_ctrl_limit',
+                 'upper_ctrl_limit', 'precision')
+
+    status_keys = ('status', 'severity')
+
+    async def run_client_test():
+        print('* client_test', pv, dbr_type)
+        db_entry = caget_pvdb[pv]
         db_native = ca.native_type(db_entry.data_type)
 
-        check_types = sum(([dtype,
-                           ca.promote_type(dtype, use_status=True),
-                           ca.promote_type(dtype, use_time=True),
-                           ca.promote_type(dtype, use_ctrl=True)]
-                          for dtype in ca.native_types),
-                          [])
+        data = await run_caget(pv, dbr_type=dbr_type)
+        print('dbr_type', dbr_type, 'data:')
+        print(data)
 
-        for dbr_type in sorted(check_types):
-            data = await run_caget(pv, dbr_type=dbr_type)
-            print('dbr_type', dbr_type, 'data:')
-            print(data)
+        db_value = db_entry.value
 
-            db_value = db_entry.value
+        # convert from string value to enum if requesting int
+        if (db_native == ChType.ENUM and
+                not (ca.native_type(dbr_type) == ChType.STRING
+                     or dbr_type == ChType.CTRL_ENUM)):
+            db_value = db_entry.strs.index(db_value)
 
-            # convert from string value to enum if requesting int
-            if (db_native == ChType.ENUM and
-                    not (ca.native_type(dbr_type) == ChType.STRING
-                         or dbr_type == ChType.CTRL_ENUM)):
-                db_value = db_entry.strs.index(db_value)
+        if ca.native_type(dbr_type) in (ChType.INT, ChType.LONG,
+                                        ChType.CHAR):
+            assert int(data['value']) == int(db_value)
+        elif ca.native_type(dbr_type) in (ChType.FLOAT, ChType.DOUBLE):
+            assert float(data['value']) == float(db_value)
+        elif ca.native_type(dbr_type) == ChType.STRING:
+            assert data['value'] == str(db_value)
+        elif ca.native_type(dbr_type) == ChType.ENUM:
+            bad_strings = ['Illegal Value (', 'Enum Index Overflow (']
+            for bad_string in bad_strings:
+                if data['value'].startswith(bad_string):
+                    data['value'] = data['value'][len(bad_string):-1]
 
-            if ca.native_type(dbr_type) in (ChType.INT, ChType.LONG,
-                                            ChType.CHAR):
-                assert int(data['value']) == int(db_value)
-            elif ca.native_type(dbr_type) in (ChType.FLOAT, ChType.DOUBLE):
-                assert float(data['value']) == float(db_value)
-            elif ca.native_type(dbr_type) == ChType.STRING:
-                assert data['value'] == str(db_value)
-            elif ca.native_type(dbr_type) == ChType.ENUM:
-                bad_strings = ['Illegal Value (', 'Enum Index Overflow (']
-                for bad_string in bad_strings:
-                    if data['value'].startswith(bad_string):
-                        data['value'] = data['value'][len(bad_string):-1]
-
-                if db_native == ChType.ENUM and dbr_type == ChType.CTRL_ENUM:
-                    # ctrl enum gets back the full string value
-                    assert data['value'] == db_value
-                else:
-                    assert int(data['value']) == int(db_value)
+            if db_native == ChType.ENUM and dbr_type == ChType.CTRL_ENUM:
+                # ctrl enum gets back the full string value
+                assert data['value'] == db_value
             else:
-                raise ValueError('TODO ' + str(dbr_type))
+                assert int(data['value']) == int(db_value)
+        else:
+            raise ValueError('TODO ' + str(dbr_type))
 
-            # TODO metadata should be cast to requested type as well!
-            same_type = (ca.native_type(dbr_type) == db_native)
+        # TODO metadata should be cast to requested type as well!
+        same_type = (ca.native_type(dbr_type) == db_native)
 
-            if (dbr_type in ca.control_types and same_type
-                    and dbr_type != ChType.CTRL_ENUM):
-                for key in ctrl_keys:
-                    if key == 'precision' and ca.native_type(dbr_type) != ChType.DOUBLE:
-                        print('skipping', key)
-                        continue
-                    print('checking', key)
-                    assert float(data[key]) == getattr(db_entry, key), key
+        if (dbr_type in ca.control_types and same_type
+                and dbr_type != ChType.CTRL_ENUM):
+            for key in ctrl_keys:
+                if (key == 'precision' and
+                        ca.native_type(dbr_type) != ChType.DOUBLE):
+                    print('skipping', key)
+                    continue
+                print('checking', key)
+                assert float(data[key]) == getattr(db_entry, key), key
 
-            if dbr_type in ca.time_types:
-                timestamp = datetime.datetime.fromtimestamp(db_entry.timestamp)
-                assert data['timestamp'] == timestamp
+        if dbr_type in ca.time_types:
+            timestamp = datetime.datetime.fromtimestamp(db_entry.timestamp)
+            assert data['timestamp'] == timestamp
 
-            if dbr_type in ca.time_types or dbr_type in ca.status_types:
-                for key in status_keys:
-                    value = getattr(ca._dbr, data[key])
-                    assert value == getattr(db_entry, key), key
+        if dbr_type in ca.time_types or dbr_type in ca.status_types:
+            for key in status_keys:
+                value = getattr(ca._dbr, data[key])
+                assert value == getattr(db_entry, key), key
 
     async def task():
-
-        server_task = await curio.spawn(run_server())
+        server_task = await curio.spawn(curio_server)
 
         try:
-            for pv in pvdb:
-                await run_client_test(pv)
+            await run_client_test()
         finally:
             await server_task.cancel()
 
