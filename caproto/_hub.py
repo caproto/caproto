@@ -167,7 +167,7 @@ class VirtualCircuit:
         """
         if isinstance(command, ErrorResponse):
             err = get_exception(self.our_role, command)
-            raise err("Error: {!s}".format(command.payload))
+            raise err("Error: {!s}".format(command.error_message))
         # Filter for Commands that are pertinent to a specific Channel, as
         # opposed to the Circuit as a whole:
         if isinstance(command, (ClearChannelRequest, ClearChannelResponse,
