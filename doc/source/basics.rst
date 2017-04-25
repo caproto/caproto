@@ -24,17 +24,26 @@ talk to any Channel Access server, including one implemented in caproto itself.
 Registering with the Repeater
 -----------------------------
 
-To begin, we need a UDP socket.
+To begin, we need a socket configured for UDP broadcasting.
 
-.. ipython:: python
+.. code-block:: python
 
     import socket
-    udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    # for BSD/Darwin only
+    # udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
 
 .. ipython:: python
     :suppress:
 
+    import socket
+    udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    # for BSD/Darwin only
+    # udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
     udp_sock.settimeout(2)  # should never be tripped, but it help to debug
 
 A new Channel Access client is required to register itself with a Channel
