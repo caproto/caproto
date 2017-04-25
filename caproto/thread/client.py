@@ -352,6 +352,7 @@ class PV:
         self.ftype = None
         self.connected = False
         self.connection_timeout = connection_timeout
+        self.dflt_count = count
 
         if self.connection_timeout is None:
             self.connection_timeout = 1
@@ -399,7 +400,7 @@ class PV:
 
         self.chid.register_user_callback(self.__on_changes)
         # if auto_monitor:
-        self.chid.subscribe(data_type=self.typefull)
+        self.chid.subscribe(data_type=self.typefull, data_count=count)
 
         self._cb_count = iter(itertools.count())
 
@@ -459,7 +460,10 @@ class PV:
         val : Object
             The value, the type is dependent on the underlying PV
         """
-        command = self.chid.read(data_type=self.typefull)
+        if count is None:
+            count = self.dflt_count
+        command = self.chid.read(data_type=self.typefull,
+                                 data_count=count)
         info = self._parse_dbr_metadata(command.metadata)
         print('read() info', info)
         info['value'] = command.data
@@ -669,7 +673,7 @@ class PV:
         .NELM field).  See also 'count' property"""
         if self._getarg('count') == 1:
             return 1
-        return None
+        return self.chid.channel.native_data_count
 
     @property
     def read_access(self):
