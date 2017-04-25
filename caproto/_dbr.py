@@ -1042,8 +1042,6 @@ def native_to_builtin(value, native_type, data_count):
     #   character) strings.
     # - Enums are just integers that happen to have special significance.
     # - Everything else is, straightforwardly, an array of numbers.
-    if native_type == ChType.CHAR:
-        return value.partition(b'\0')[0]
     if USE_NUMPY:
         # Return an ndarray
         dt = numpy.dtype(_numpy_map[native_type])
