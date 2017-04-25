@@ -80,23 +80,18 @@ def ipv4_from_int32(int_packed_ip: int) -> str:
     return socket.inet_ntop(socket.AF_INET, encoded_ip)
 
 
-def from_buffer(data_type, buffer):
+def from_buffer(data_type, payload_size, buffer):
     "Wraps dbr_type.from_buffer and special-case strings."
-    # if data_type == ChannelType.STRING:
-    #     _len = len(buffer)
-    #     if _len > 40:
-    #         raise CaprotoValueError("EPICS imposes a 40-character limit on "
-    #                                 "strings. The " "string {!r} is {} "
-    #                                 "characters.".format(buffer, _len))
-    #     if _len < 40:
-    #         buffer = buffer.ljust(40, b'\x00')
-    if data_type > 6:
+    if data_type != native_type(data_type):
+        # This payload has a metadata component.
         md_payload = DBR_TYPES[data_type].from_buffer(buffer)
         md_size = ctypes.sizeof(DBR_TYPES[data_type])
     else:
         md_payload = b''
         md_size = 0
-    data_payload = buffer[md_size:]
+    # Use payload_size to strip off any right-padding that may have been added
+    # to make the byte-size of the payload a multiple of 8.
+    data_payload = buffer[md_size:(8 * payload_size)]
     return md_payload, data_payload
     # TODO Handle padding
 
@@ -364,7 +359,8 @@ class Message(metaclass=_MetaDirectionalMessage):
         """
         if not cls.HAS_PAYLOAD:
             return cls.from_components(header)
-        payload = from_buffer(header.data_type, payload_bytes)
+        payload = from_buffer(header.data_type, header.payload_size,
+                              payload_bytes)
         return cls.from_components(header, *payload)
 
     @classmethod
@@ -885,7 +881,8 @@ class EventAddResponse(Message):
         if not payload_bytes:
             return cls.from_components(header,
                                        sender_address=sender_address)
-        payload = from_buffer(header.data_type, payload_bytes)
+        payload = from_buffer(header.data_type, header.payload_size,
+                              payload_bytes)
         return cls.from_components(header, *payload,
                                    sender_address=sender_address)
 
