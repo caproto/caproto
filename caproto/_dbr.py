@@ -1058,32 +1058,6 @@ def native_to_builtin(value, data_type, data_count):
         return  # array.array()
 
 
-def to_builtin(structure, data_type, data_count):
-    """
-    Convert a DBR_* structure into a built-in type.
-
-    If the structure is a 'native type' (a scalar), a scalar is returned. If it
-    is a compound type, a namedtuple is returned.
-
-    The namedtuple will have a 'value' field with a scalar if
-    ``data_count == 1`` or a numpy array if ``data_count > 1``.
-
-    Parameters
-    ----------
-    structure : ctypes.Structure
-        a DBR_* structure
-    data_type : ChannelType or integer
-    data_count : integer
-    """
-    if data_type in native_types:
-        return native_to_builtin(structure, data_type, data_count)
-    else:
-        # Return a namedtuple containing built-in Python types.
-        tup = _named_tuples[data_type]
-        return tup(*(native_to_builtin(getattr(structure, name), dtype, 1)
-                     for name, dtype in structure._fields_))
-
-
 def promote_type(ftype, *, use_status=False, use_time=False, use_ctrl=False):
     """Promotes a native field type to its TIME or CTRL variant.
 
