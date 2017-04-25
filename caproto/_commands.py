@@ -80,8 +80,10 @@ def ipv4_from_int32(int_packed_ip: int) -> str:
     return socket.inet_ntop(socket.AF_INET, encoded_ip)
 
 
-def from_buffer(data_type, payload_size, buffer):
+def from_buffer(data_type, data_count, buffer):
     "Wraps dbr_type.from_buffer and special-case strings."
+    payload_size = data_count * ctypes.sizeof(
+        DBR_TYPES[native_type(data_type)])
     if data_type != native_type(data_type):
         # This payload has a metadata component.
         md_payload = DBR_TYPES[data_type].from_buffer(buffer)
@@ -91,7 +93,7 @@ def from_buffer(data_type, payload_size, buffer):
         md_size = 0
     # Use payload_size to strip off any right-padding that may have been added
     # to make the byte-size of the payload a multiple of 8.
-    data_payload = buffer[md_size:(8 * payload_size)]
+    data_payload = buffer[md_size:md_size + payload_size]
     return md_payload, data_payload
     # TODO Handle padding
 
@@ -359,7 +361,7 @@ class Message(metaclass=_MetaDirectionalMessage):
         """
         if not cls.HAS_PAYLOAD:
             return cls.from_components(header)
-        payload = from_buffer(header.data_type, header.payload_size,
+        payload = from_buffer(header.data_type, header.data_count,
                               payload_bytes)
         return cls.from_components(header, *payload)
 
@@ -881,7 +883,7 @@ class EventAddResponse(Message):
         if not payload_bytes:
             return cls.from_components(header,
                                        sender_address=sender_address)
-        payload = from_buffer(header.data_type, header.payload_size,
+        payload = from_buffer(header.data_type, header.data_count,
                               payload_bytes)
         return cls.from_components(header, *payload,
                                    sender_address=sender_address)
