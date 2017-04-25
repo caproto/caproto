@@ -1,5 +1,6 @@
 import array
 import copy
+import ctypes
 import struct
 import socket
 from numpy.testing import assert_array_almost_equal
@@ -233,3 +234,14 @@ def test_extended():
     assert req.header.data_count == 1000000
     assert req.data_count == 1000000
     assert isinstance(req.header, ca.ExtendedMessageHeader)
+
+
+def test_bytelen():
+    with pytest.raises(ca.CaprotoNotImplementedError):
+        ca.bytelen([1,2,3])
+    assert ca.bytelen(b'abc') == 3
+    assert ca.bytelen(bytearray(b'abc')) == 3
+    assert ca.bytelen(array.array('d', [1, 2, 3])) == 3 * 8
+    assert ca.bytelen(numpy.array([1, 2, 3], 'f8')) == 3 * 8
+    assert ca.bytelen(memoryview(b'abc')) == 3
+    assert ca.bytelen(ctypes.c_uint(1)) == 4

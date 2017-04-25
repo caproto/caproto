@@ -51,8 +51,10 @@ from ._dbr import (DBR_INT, DBR_TYPES, DO_REPLY, NO_REPLY, ChannelType,
                    MAX_ENUM_STRING_SIZE, USE_NUMPY, array_type_code)
 
 from . import _dbr as dbr
-from ._utils import (CLIENT, NEED_DATA, REQUEST, RESPONSE,
-                     SERVER, CaprotoTypeError, CaprotoValueError, ensure_bytes)
+from ._utils import (CLIENT, NEED_DATA, REQUEST, RESPONSE, SERVER,
+                     CaprotoTypeError, CaprotoValueError,
+                     CaprotoNotImplementedError,
+                     ensure_bytes)
 
 # numpy is only used if it is available
 try:
@@ -153,8 +155,9 @@ def bytelen(item):
         # We could just fall back on len() but I worry that someone will
         # unwittingly use this on a type that has a __len__ that is not its
         # bytelength and is not already caught above. Better to fail like this.
-        raise NotImplementedError("Not sure how to measure byte length of "
-                                  "object of type {}".format(type(item)))
+        raise CaprotoNotImplementedError("Not sure how to measure byte length "
+                                         "of object of type {}"
+                                         "".format(type(item)))
 
 
 def data_payload(data, metadata, data_type, data_count):
