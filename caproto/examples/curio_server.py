@@ -2,8 +2,7 @@ import curio
 from curio import socket
 
 import caproto as ca
-from caproto import _dbr as dbr
-from caproto import (ChType, DatabaseRecordDouble, DatabaseRecordInteger,
+from caproto import (DatabaseRecordDouble, DatabaseRecordInteger,
                      DatabaseRecordEnum)
 from caproto import (EPICS_CA1_PORT, EPICS_CA2_PORT)
 from caproto import ReadNotifyResponse
@@ -213,10 +212,10 @@ def _get_my_ip():
              ]
 
     print([af_inet_info
-             for interface in interfaces
-             if netifaces.AF_INET in interface
-             for af_inet_info in interface[netifaces.AF_INET]
-             ])
+           for interface in interfaces
+           if netifaces.AF_INET in interface
+           for af_inet_info in interface[netifaces.AF_INET]
+           ])
     if not ipv4s:
         return '127.0.0.1'
     return ipv4s[0]
