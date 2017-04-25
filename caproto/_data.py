@@ -2,7 +2,7 @@ import time
 from ._dbr import (DBR_LONG, DBR_ENUM, DBR_DOUBLE,
                    DBR_TYPES, ChType, promote_type,
                    native_type, native_float_types,
-                   native_int_types)
+                   native_int_types, native_types)
 from ._utils import ensure_bytes
 
 # it's all about data
@@ -99,6 +99,9 @@ class DatabaseRecordBase:
         else:
             # non-standard type request. frequent ones probably should be
             # cached?
+            if type_ in native_types:
+                return None, self.convert_to(type_)
+
             dbr_data = DBR_TYPES[type_]()
             for attr, _ in dbr_data._fields_:
                 # TODO @danielballan was right about RISC_padx items
