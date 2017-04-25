@@ -40,11 +40,10 @@ class DatabaseRecordBase:
 
     def convert_to(self, to_dtype):
         # this leaves a lot to be desired
-        values = self.value
         from_dtype = self.data_type
+        native_to = native_type(to_dtype)
 
         # TODO metadata is expected to be of this type as well!
-        native_to = native_type(to_dtype)
         no_conversion_necessary = (
             (from_dtype == native_to and self.data_type != ChType.ENUM) or
             (from_dtype in native_float_types and native_to in
@@ -52,13 +51,15 @@ class DatabaseRecordBase:
             (from_dtype in native_int_types and native_to in native_int_types)
         )
 
+        try:
+            len(self.value)
+        except TypeError:
+            values = (self.value, )
+        else:
+            values = self.value
+
         if no_conversion_necessary:
-            try:
-                len(values)
-            except TypeError:
-                return (values, )
-            else:
-                return values
+            return values
 
         if from_dtype in native_float_types and native_to in native_int_types:
             values = [int(v) for v in values]
