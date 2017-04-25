@@ -9,10 +9,6 @@ from caproto import (EPICS_CA1_PORT, EPICS_CA2_PORT)
 from caproto import ReadNotifyResponse
 
 
-class DisconnectedCircuit(Exception):
-    ...
-
-
 def find_next_tcp_port(host='0.0.0.0', starting_port=EPICS_CA2_PORT + 1):
     import socket
 
@@ -51,7 +47,7 @@ class VirtualCircuit:
         """
         bytes_received = await self.client.recv(4096)
         if not bytes_received:
-            raise DisconnectedCircuit()
+            raise ca.DisconnectedCircuit()
         self.circuit.recv(bytes_received)
 
     async def next_command(self):
@@ -185,7 +181,7 @@ class Context:
         while True:
             try:
                 await circuit.next_command()
-            except DisconnectedCircuit:
+            except ca.DisconnectedCircuit:
                 print('disconnected')
                 return
 
