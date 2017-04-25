@@ -64,11 +64,13 @@ class _TimeWaveform:
     def time_pyepics(self):
         for i in range(self.ITERS):
             values = self.pv.get(timeout=0.5, as_numpy=True)
+            assert len(values) == self.num
 
     def time_caproto_curio(self):
         async def curio_reading():
             for i in range(self.ITERS):
                 reading = await self.chan1.read()
+                assert len(reading.data) == self.num
 
         with curio.Kernel() as kernel:
             kernel.run(curio_reading())
