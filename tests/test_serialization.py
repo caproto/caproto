@@ -247,3 +247,8 @@ def test_bytelen():
     assert ca.bytelen(numpy.array([1, 2, 3], 'f8')) == 3 * 8
     assert ca.bytelen(memoryview(b'abc')) == 3
     assert ca.bytelen(ctypes.c_uint(1)) == 4
+
+
+def test_overlong_strings():
+    with pytest.raises(ca.CaprotoValueError):
+        ca.SearchRequest(name='a' * 41, cid=0, version=13)
