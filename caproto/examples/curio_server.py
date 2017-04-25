@@ -71,10 +71,26 @@ class VirtualCircuit:
                 continue
             break
 
-        for response_command in self._process_command(command):
-            if isinstance(response_command, (list, tuple)):
-                await self.send(*response_command)
-            else:
+        try:
+            for response_command in self._process_command(command):
+                if isinstance(response_command, (list, tuple)):
+                    await self.send(*response_command)
+                else:
+                    await self.send(response_command)
+        except Exception as ex:
+            print('Curio server failed to process command: {}'.format(command))
+            print('Traceback:')
+            traceback.print_exc(file=sys.stdout)
+
+            if hasattr(command, 'sid'):
+                cid = self.circuit.channels_sid[command.sid].cid
+
+                response_command = ca.ErrorResponse(
+                    command, cid,
+                    status_code=ca.ECA_INTERNAL.code_with_severity,
+                    error_message=('Python exception: {} {}'
+                                   ''.format(type(ex).__name__, ex))
+                )
                 await self.send(response_command)
 
         return command
