@@ -33,6 +33,7 @@ def validate(params):
 def is_reserved(param):
     return (param.field == 'reserved' or
             'Must be 0' in param.description or
+            'Must be 1' in param.description or
             'Payload size is constant' in param.description)
 
 
@@ -142,7 +143,7 @@ def write_commands(path=None):
     """
     Generate _headers.py from headers.tpl and CAproto.html
     """
-    with open('CAproto.html') as f:
+    with open(getpath('..', 'CAproto.html')) as f:
         soup = BeautifulSoup(f.read(), 'html.parser')
     commands = []
     for _id in ('secCommandsShared',

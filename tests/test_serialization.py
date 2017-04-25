@@ -226,3 +226,10 @@ def test_writes(circuit_pair, data_type, data_count, data, metadata):
         assert data == req_received.data.tobytes()
     else:
         assert_array_almost_equal(req_received.data, data)
+
+
+def test_extended():
+    req = ca.ReadNotifyRequest(data_type=5, data_count=1000000, sid=0, ioid=0)
+    assert req.header.data_count == 1000000
+    assert req.data_count == 1000000
+    assert isinstance(req.header, ca.ExtendedMessageHeader)
