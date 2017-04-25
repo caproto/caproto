@@ -98,6 +98,8 @@ def test_serialize(cmd):
     for arg in signature.parameters:
         getattr(inst, arg)
         getattr(wire_inst, arg)
+    len(inst)
+    inst.nbytes
 
 
 def make_channels(cli_circuit, srv_circuit, data_type, data_count):
