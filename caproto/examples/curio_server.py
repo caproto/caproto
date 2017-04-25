@@ -1,3 +1,7 @@
+import sys
+import traceback
+import random
+
 import curio
 from curio import socket
 
@@ -12,14 +16,16 @@ def find_next_tcp_port(host='0.0.0.0', starting_port=EPICS_CA2_PORT + 1):
     import socket
 
     port = starting_port
+    attempts = 0
 
-    while port <= 65535:
+    while attempts < 100:
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.bind((host, port))
         except IOError as ex:
             print(ex, port)
-            port += 1
+            port = random.randint(49152, 65535)
+            attempts += 1
         else:
             break
 
