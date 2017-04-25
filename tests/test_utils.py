@@ -1,4 +1,5 @@
 import os
+import pytest
 import caproto as ca
 
 
@@ -11,3 +12,10 @@ def test_broadcast_address_list_from_interfaces():
         ca.get_address_list()
     finally:
         os.environ = env
+
+
+def test_ensure_bytes():
+    assert ca.ensure_bytes('abc') == b'abc\0'
+    assert ca.ensure_bytes(b'abc\0') == b'abc\0'
+    with pytest.raises(ca.CaprotoTypeError):
+        ca.ensure_bytes(1)
