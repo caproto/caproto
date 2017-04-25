@@ -229,7 +229,10 @@ class Channel:
         if self._callback is None:
             return
         else:
-            self._callback(event_add_command)
+            try:
+                self._callback(event_add_command)
+            except Exception as ex:
+                print(ex)
 
     def wait_for_connection(self):
         """Wait for this Channel to be connected, ready to use.
