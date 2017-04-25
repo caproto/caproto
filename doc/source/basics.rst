@@ -227,8 +227,8 @@ We'll use these two convenience functions for what follows.
 
     def send(command):
         "Process a Command in the VirtualCircuit and then transmit its bytes."
-        bytes_to_send = circuit.send(command)  # Update state machine.
-        sock.send(bytes_to_send)  # Actually transmit bytes.
+        buffers_to_send = circuit.send(command)  # Update state machine.
+        sock.sendmsg(buffers_to_send)  # Actually transmit bytes.
 
     def recv():
         "Receive some bytes and parse all the Commands in them."
@@ -246,8 +246,8 @@ We'll use these two convenience functions for what follows.
     :suppress:
 
     def send(command):
-        bytes_to_send = circuit.send(command)
-        sock.send(bytes_to_send)
+        buffers_to_send = circuit.send(command)
+        sock.sendmsg(buffers_to_send)
     def recv():
         bytes_received = sock.recv(4096)
         circuit.recv(bytes_received)
@@ -325,7 +325,7 @@ Write:
 
 .. ipython:: python
     
-    send(caproto.WriteNotifyRequest(values=(4,),
+    send(caproto.WriteNotifyRequest(data=(4,),
                                     data_type=create_chan_response.data_type,
                                     data_count=create_chan_response.data_count,
                                     sid=sid,
@@ -452,7 +452,7 @@ Here is the equivalent, a condensed copy of our work from previous sections:
     ### Read and Write
     send(caproto.ReadNotifyRequest(data_type=2, data_count=1, sid=sid, ioid=1))
     recv()
-    send(caproto.WriteNotifyRequest(values=(4,), data_type=2, data_count=1, sid=sid, ioid=2))
+    send(caproto.WriteNotifyRequest(data=(4,), data_type=2, data_count=1, sid=sid, ioid=2))
     recv()
     
     ### Subscribe and Unsubscribe
