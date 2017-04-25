@@ -214,6 +214,6 @@ def test_writes(circuit_pair, data_type, data_count, data, metadata):
         expected.byteswap()
         assert_array_almost_equal(req_received.data, expected)
     elif isinstance(data, bytes):
-        assert data == bytes(req_received.data)
+        assert data == req_received.data.tobytes()
     else:
         assert_array_almost_equal(req_received.data, data)
