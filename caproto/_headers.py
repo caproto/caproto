@@ -57,7 +57,7 @@ def VersionRequestHeader(priority, version):
     When a new TCP connection is established by the client, CA_PROTO_VERSION is sent.
     Likewise, the server will accept the connection and send the response form back.
     Sent over UDP or TCP.
-
+		
 
     Parameters
     ----------
@@ -84,7 +84,7 @@ def VersionResponseHeader(version):
     When a new TCP connection is established by the client, CA_PROTO_VERSION is sent.
     Likewise, the server will accept the connection and send the response form back.
     Sent over UDP or TCP.
-
+		
 
     Parameters
     ----------
@@ -103,7 +103,7 @@ def SearchRequestHeader(payload_size, reply, version, cid):
 
     Searches for a given channel name.
     Sent over UDP or TCP.
-
+		
 
     Parameters
     ----------
@@ -132,7 +132,7 @@ def SearchResponseHeader(data_type, sid, cid):
 
     Searches for a given channel name.
     Sent over UDP or TCP.
-
+		
 
     Parameters
     ----------
@@ -161,7 +161,7 @@ def NotFoundResponseHeader(reply_flag, version, cid):
     Sent in response to CA_PROTO_SEARCH
     		(4.6.), but only when its DO_REPLY flag was set.
     Sent over UDP.
-
+		
 
     Parameters
     ----------
@@ -186,7 +186,7 @@ def EchoRequestHeader():
 
     Connection verify used by CA_V43.
     Sent over TCP.
-
+		
 
     Parameters
     ----------
@@ -202,7 +202,7 @@ def EchoResponseHeader():
 
     Connection verify used by CA_V43.
     Sent over TCP.
-
+		
 
     Parameters
     ----------
@@ -220,7 +220,7 @@ def RsrvIsUpResponseHeader(version, server_port, beaconid, address):
     Beacons are also sent out periodically to announce the server is still alive.
     Another function of beacons is to allow detection of changes in network topology.
     Sent over UDP.
-
+		
 
     Parameters
     ----------
@@ -248,7 +248,7 @@ def RepeaterConfirmResponseHeader(repeater_address):
 
     Confirms successful client registration with repeater.
     Sent over UDP.
-
+		
 
     Parameters
     ----------
@@ -268,7 +268,7 @@ def RepeaterRegisterRequestHeader(client_ip_address):
     Requests registration with the repeater.
     Repeater will confirm successful registration using CA_REPEATER_CONFIRM.
     Sent over TCP.
-
+		
 
     Parameters
     ----------
@@ -288,7 +288,7 @@ def EventAddRequestHeader(data_type, data_count, sid, subscriptionid):
     Creates a subscription on a channel, allowing the client to be notified of changes in value.
     A request will produce at least one response.
     Sent over TCP.
-
+		
 
     Parameters
     ----------
@@ -300,18 +300,18 @@ def EventAddRequestHeader(data_type, data_count, sid, subscriptionid):
         Desired number of elements
 
     sid : integer
-
+        
 				SID of the channel on which to reqister this subscription.
 				See SID - Server ID
 					(3.2.2.).
-
+			
 
     subscriptionid : integer
-
-				Subscription ID identifying this subscription.
+        
+				Subscription ID identifying this subscription. 
 				See Subscription ID
 					(3.2.3.).
-
+			
 
     """
     struct_args = (1, 16, data_type, data_count, sid, subscriptionid)
@@ -325,7 +325,7 @@ def EventAddResponseHeader(payload_size, data_type, data_count, status_code, sub
     Creates a subscription on a channel, allowing the client to be notified of changes in value.
     A request will produce at least one response.
     Sent over TCP.
-
+		
 
     Parameters
     ----------
@@ -358,7 +358,7 @@ def EventCancelRequestHeader(data_type, data_count, sid, subscriptionid):
     Clears event subscription.
     This message will stop event updates for specified channel.
     Sent over TCP.
-
+		
 
     Parameters
     ----------
@@ -391,7 +391,7 @@ def EventCancelResponseHeader(data_type, sid, subscriptionid):
     Clears event subscription.
     This message will stop event updates for specified channel.
     Sent over TCP.
-
+		
 
     Parameters
     ----------
@@ -417,7 +417,7 @@ def ReadRequestHeader(data_type, data_count, sid, ioid):
 
 		Read value of a channel.
 		Sent over TCP.
-
+		
 
 Deprecated since protocol version 3.13.
 
@@ -450,7 +450,7 @@ def ReadResponseHeader(payload_size, data_type, data_count, sid, ioid):
 
 		Read value of a channel.
 		Sent over TCP.
-
+		
 
 Deprecated since protocol version 3.13.
 
@@ -485,7 +485,7 @@ def WriteRequestHeader(payload_size, data_type, data_count, sid, ioid):
 
     Writes new channel value.
     Sent over TCP.
-
+		
 
     Parameters
     ----------
@@ -518,7 +518,7 @@ def EventsOffRequestHeader():
     Sent over TCP.
     This mechanism is used by clients with slow CPU to prevent congestion when they are unable to handle all updates recived.
     Effective automated handling of flow control is beyond the scope of this document.
-
+		
 
     Parameters
     ----------
@@ -536,7 +536,7 @@ def EventsOnRequestHeader():
     Sent over TCP.
     This mechanism is used by clients with slow CPU to prevent congestion when they are unable to handle all updates recived.
     Effective automated handling of flow control is beyond the scope of this document.
-
+		
 
     Parameters
     ----------
@@ -570,7 +570,7 @@ def ErrorResponseHeader(payload_size, cid, status_code):
     This applies to all asynchronous commands.
     Error message will contain a copy of original request and textual description of the error.
     Sent over UDP.
-
+		
 
     Parameters
     ----------
@@ -597,7 +597,7 @@ def ClearChannelRequestHeader(sid, cid):
 
     Clears a channel.
     This command will cause server to release the associated channel resources and no longer accept any requests for this SID/CID.
-
+		
 
     Parameters
     ----------
@@ -619,7 +619,7 @@ def ClearChannelResponseHeader(sid, cid):
 
     Clears a channel.
     This command will cause server to release the associated channel resources and no longer accept any requests for this SID/CID.
-
+		
 
     Parameters
     ----------
@@ -641,7 +641,7 @@ def ReadNotifyRequestHeader(data_type, data_count, sid, ioid):
 
 		Read value of a channel.
 		Sent over TCP.
-
+	
 
     Parameters
     ----------
@@ -669,7 +669,7 @@ def ReadNotifyResponseHeader(payload_size, data_type, data_count, sid, ioid):
 
 		Read value of a channel.
 		Sent over TCP.
-
+	
 
     Parameters
     ----------
@@ -701,7 +701,7 @@ def CreateChanRequestHeader(payload_size, cid, client_version):
     Requests creation of channel.
     Server will allocate required resources and return initialized SID.
     Sent over TCP.
-
+		
 
     Parameters
     ----------
@@ -727,7 +727,7 @@ def CreateChanResponseHeader(data_type, data_count, cid, sid):
     Requests creation of channel.
     Server will allocate required resources and return initialized SID.
     Sent over TCP.
-
+		
 
     Parameters
     ----------
@@ -755,7 +755,7 @@ def WriteNotifyRequestHeader(payload_size, data_type, data_count, sid, ioid):
 
     Writes new channel value.
     Sent over TCP.
-
+		
 
     Parameters
     ----------
@@ -786,7 +786,7 @@ def WriteNotifyResponseHeader(data_type, data_count, status, ioid):
 
     Writes new channel value.
     Sent over TCP.
-
+		
 
     Parameters
     ----------
@@ -812,9 +812,9 @@ def ClientNameRequestHeader(payload_size):
     """
     Construct a ``MessageHeader`` for a ClientNameRequest command.
 
-    Sends local username to virtual circuit peer.
+    Sends local username to virtual circuit peer. 
     This name identifies the user and affects access rights.
-
+		
 
     Parameters
     ----------
@@ -834,7 +834,7 @@ def HostNameRequestHeader(payload_size):
     Sends local host name to virtual circuit peer.
     This name will affect access rights.
     Sent over TCP.
-
+		
 
     Parameters
     ----------
@@ -854,7 +854,7 @@ def AccessRightsResponseHeader(cid, access_rights):
     Notifies of access rights for a channel.
     This value is determined based on host and client name and may change during runtime.
     Client cannot change access rights nor can it explicitly query its value, so last received value must be stored.
-
+		
 
     Parameters
     ----------
@@ -877,7 +877,7 @@ def CreateChFailResponseHeader(cid):
 
     Reports that channel creation failed.
     This response is sent to when channel creation in CA_PROTO_CREATE_CHAN fails.
-
+		
 
     Parameters
     ----------
@@ -897,7 +897,7 @@ def ServerDisconnResponseHeader(cid):
     Notifies the client that server has disconnected the channel.
     This may be since the channel has been destroyed on server.
     Sent over TCP.
-
+		
 
     Parameters
     ----------
@@ -908,3 +908,4 @@ def ServerDisconnResponseHeader(cid):
     """
     struct_args = (27, 0, 0, 0, cid, 0)
     return MessageHeader(*struct_args)
+

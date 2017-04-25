@@ -33,6 +33,7 @@ def validate(params):
 def is_reserved(param):
     return (param.field == 'reserved' or
             'Must be 0' in param.description or
+            'Must be 1' in param.description or
             'Payload size is constant' in param.description)
 
 
