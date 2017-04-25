@@ -17,7 +17,7 @@ class _TimeWaveform:
     def setup(self):
         # NOTE: have to increase EPICS_CA_MAX_ARRAY_BYTES if NELM >= 4096
         #       (remember default is 16384 bytes / sizeof(int32) = 4096)
-        MAX_ARRAY_BYTES = self.num * 4 + 4
+        MAX_ARRAY_BYTES = self.num * 10
         env = dict(EPICS_CA_MAX_ARRAY_BYTES=str(MAX_ARRAY_BYTES))
 
         db_text = util.make_database(
