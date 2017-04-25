@@ -1,8 +1,8 @@
 import time
-from ._dbr import (DBR_LONG, DBR_ENUM, DBR_DOUBLE,
-                   DBR_TYPES, ChType, promote_type,
-                   native_type, native_float_types,
-                   native_int_types, native_types)
+from ._dbr import (DBR_LONG, DBR_ENUM, DBR_DOUBLE, DBR_TYPES, ChType,
+                   promote_type, native_type, native_float_types,
+                   native_int_types, native_types, timestamp_to_epics,
+                   time_types)
 from ._utils import ensure_bytes
 
 # it's all about data
@@ -14,9 +14,6 @@ class DatabaseRecordBase:
     data_type = DBR_LONG.DBR_ID
 
     def __init__(self, *, timestamp=None, status=0, severity=0, value=None):
-        self._dirty = True
-        self._dirty_attrs = set()
-
         if timestamp is None:
             timestamp = time.time()
         self.timestamp = timestamp
@@ -77,38 +74,58 @@ class DatabaseRecordBase:
 
     def get_dbr_data(self, type_):
         if type_ in self._data:
-            if self._dirty:
-                # for attr in dirty_attrs... do custom dbr updating
-                for chtype, dbr_data in self._data.items():
-                    if chtype == 'native':
-                        # remaining values to ctypes array
-                        # self._data[native] = values[1:]
-                        pass
-                    else:
-                        # note that this is too generic to be useful, there
-                        # should be custom handling for each dbr field as
-                        # necessary
-                        for attr, _ in dbr_data._fields_:
-                            if hasattr(self, attr):
-                                value = getattr(self, attr)
-                                if isinstance(value, str):
-                                    value = bytes(value, ENCODING)
-                                setattr(dbr_data, attr, value)
-                            else:
-                                print('missing', attr)
-            return self._data[type_], self._data['native']
-        else:
-            # non-standard type request. frequent ones probably should be
-            # cached?
-            if type_ in native_types:
-                return None, self.convert_to(type_)
+            dbr_data = self._data[type_]
+            self._set_dbr_metadata(dbr_data)
+            return dbr_data, self._data['native']
 
-            dbr_data = DBR_TYPES[type_]()
-            for attr, _ in dbr_data._fields_:
-                # TODO @danielballan was right about RISC_padx items
-                if hasattr(self, attr):
-                    setattr(dbr_data, attr, getattr(self, attr))
-            return dbr_data, self.convert_to(type_)
+        # non-standard type request. frequent ones probably should be
+        # cached?
+        if type_ in native_types:
+            return None, self.convert_to(type_)
+
+        dbr_data = DBR_TYPES[type_]()
+        self._set_dbr_metadata(dbr_data)
+        return dbr_data, self.convert_to(type_)
+
+    def _set_dbr_metadata(self, dbr_data):
+        'Set all metadata fields of a given DBR type instance'
+        # note that this is too generic to be useful, there probably should be
+        # custom handling for each dbr field as necessary
+        ts_sec, ts_ns = self.epics_timestamp
+        other_values = {
+            'secondsSinceEpoch': ts_sec,
+            'nanoSeconds': ts_ns,
+            'RISC_Pad': 0,
+            'RISC_pad': 0,
+            'RISC_pad0': 0,
+            'RISC_pad1': 0,
+            'ackt': 0,  # TODO from #27
+            'acks': 0,  # TODO from #27
+            'no_strs': 0,  # if not enum type
+            'strs': [],  # if not enum type
+        }
+
+        for attr, _ in dbr_data._fields_:
+            if hasattr(self, attr):
+                value = getattr(self, attr)
+            elif attr in other_values:
+                value = other_values[attr]
+            else:
+                print('missing', attr)
+                continue
+
+            if isinstance(value, str):
+                value = bytes(value, ENCODING)
+            setattr(dbr_data, attr, value)
+
+        if dbr_data.DBR_ID in time_types:
+            epics_ts = self.epics_timestamp
+            dbr_data.secondsSinceEpoch, dbr_data.nanoSeconds = epics_ts
+
+    @property
+    def epics_timestamp(self):
+        'EPICS timestamp as (seconds, nanoseconds) since EPICS epoch'
+        return timestamp_to_epics(self.timestamp)
 
     def __len__(self):
         try:
