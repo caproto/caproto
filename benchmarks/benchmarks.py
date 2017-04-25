@@ -17,12 +17,11 @@ class _TimeWaveform:
     def setup(self):
         # NOTE: have to increase EPICS_CA_MAX_ARRAY_BYTES if NELM >= 4096
         #       (remember default is 16384 bytes / sizeof(int32) = 4096)
-        MAX_ARRAY_BYTES = 1000000
+        MAX_ARRAY_BYTES = self.num * 4 + 4
         env = dict(EPICS_CA_MAX_ARRAY_BYTES=str(MAX_ARRAY_BYTES))
-        nelm = (MAX_ARRAY_BYTES // 4) - 4  # timeouts
 
         db_text = util.make_database(
-            {(WAVEFORM_PV, 'waveform'): dict(FTVL='LONG', NELM=nelm),
+            {(WAVEFORM_PV, 'waveform'): dict(FTVL='LONG', NELM=self.num),
             },
         )
 
