@@ -3,6 +3,17 @@
 import ctypes
 
 
+# constants related to ExtendedMessageHeader
+MAX_16BIT = 2**16 - 1
+MAX_32BIT = 2**32 - 1
+MARKER1 = 0xffff
+MARKER2 = 0x0000
+
+def has_overflowing_field(struct_args):
+    return (any(x > MAX_16BIT for x in struct_args[:4]) or
+            any(x > MAX_32BIT for x in struct_args[4:]))
+
+
 class _BaseMessageHeader(ctypes.BigEndianStructure):
     # just to define a nice repr
     def __repr__(self):
@@ -70,7 +81,18 @@ def VersionRequestHeader(priority, version):
 
     """
     struct_args = (0, 0, priority, version, 0, 0)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def VersionResponseHeader(version):
@@ -94,7 +116,18 @@ def VersionResponseHeader(version):
 
     """
     struct_args = (0, 0, 1, version, 1, 0)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def SearchRequestHeader(payload_size, reply, version, cid):
@@ -123,7 +156,18 @@ def SearchRequestHeader(payload_size, reply, version, cid):
 
     """
     struct_args = (6, payload_size, reply, version, cid, cid)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def SearchResponseHeader(data_type, sid, cid):
@@ -150,7 +194,18 @@ def SearchResponseHeader(data_type, sid, cid):
 
     """
     struct_args = (6, 8, data_type, 0, sid, cid)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def NotFoundResponseHeader(reply_flag, version, cid):
@@ -177,7 +232,18 @@ def NotFoundResponseHeader(reply_flag, version, cid):
 
     """
     struct_args = (14, 0, reply_flag, version, cid, cid)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def EchoRequestHeader():
@@ -193,7 +259,18 @@ def EchoRequestHeader():
 
     """
     struct_args = (23, 0, 0, 0, 0, 0)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def EchoResponseHeader():
@@ -209,7 +286,18 @@ def EchoResponseHeader():
 
     """
     struct_args = (23, 0, 0, 0, 0, 0)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def RsrvIsUpResponseHeader(version, server_port, beaconid, address):
@@ -239,7 +327,18 @@ def RsrvIsUpResponseHeader(version, server_port, beaconid, address):
 
     """
     struct_args = (13, 0, version, server_port, beaconid, address)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def RepeaterConfirmResponseHeader(repeater_address):
@@ -258,7 +357,18 @@ def RepeaterConfirmResponseHeader(repeater_address):
 
     """
     struct_args = (17, 0, 0, 0, 0, repeater_address)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def RepeaterRegisterRequestHeader(client_ip_address):
@@ -278,7 +388,18 @@ def RepeaterRegisterRequestHeader(client_ip_address):
 
     """
     struct_args = (24, 0, 0, 0, 0, client_ip_address)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def EventAddRequestHeader(data_type, data_count, sid, subscriptionid):
@@ -315,7 +436,18 @@ def EventAddRequestHeader(data_type, data_count, sid, subscriptionid):
 
     """
     struct_args = (1, 16, data_type, data_count, sid, subscriptionid)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def EventAddResponseHeader(payload_size, data_type, data_count, status_code, subscriptionid):
@@ -348,7 +480,18 @@ def EventAddResponseHeader(payload_size, data_type, data_count, status_code, sub
 
     """
     struct_args = (1, payload_size, data_type, data_count, status_code, subscriptionid)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def EventCancelRequestHeader(data_type, data_count, sid, subscriptionid):
@@ -381,7 +524,18 @@ def EventCancelRequestHeader(data_type, data_count, sid, subscriptionid):
 
     """
     struct_args = (2, 0, data_type, data_count, sid, subscriptionid)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def EventCancelResponseHeader(data_type, sid, subscriptionid):
@@ -407,7 +561,18 @@ def EventCancelResponseHeader(data_type, sid, subscriptionid):
 
     """
     struct_args = (1, 0, data_type, 0, sid, subscriptionid)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def ReadRequestHeader(data_type, data_count, sid, ioid):
@@ -440,7 +605,18 @@ Deprecated since protocol version 3.13.
 
     """
     struct_args = (3, 0, data_type, data_count, sid, ioid)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def ReadResponseHeader(payload_size, data_type, data_count, sid, ioid):
@@ -476,7 +652,18 @@ Deprecated since protocol version 3.13.
 
     """
     struct_args = (3, payload_size, data_type, data_count, sid, ioid)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def WriteRequestHeader(payload_size, data_type, data_count, sid, ioid):
@@ -507,7 +694,18 @@ def WriteRequestHeader(payload_size, data_type, data_count, sid, ioid):
 
     """
     struct_args = (4, payload_size, data_type, data_count, sid, ioid)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def EventsOffRequestHeader():
@@ -525,7 +723,18 @@ def EventsOffRequestHeader():
 
     """
     struct_args = (8, 0, 0, 0, 0, 0)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def EventsOnRequestHeader():
@@ -543,7 +752,18 @@ def EventsOnRequestHeader():
 
     """
     struct_args = (9, 0, 0, 0, 0, 0)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def ReadSyncRequestHeader():
@@ -558,7 +778,18 @@ Deprecated since protocol version 3.13.
 
     """
     struct_args = (10, 0, 0, 0, 0, 0)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def ErrorResponseHeader(payload_size, cid, status_code):
@@ -588,7 +819,18 @@ def ErrorResponseHeader(payload_size, cid, status_code):
 
     """
     struct_args = (11, payload_size, 0, 0, cid, status_code)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def ClearChannelRequestHeader(sid, cid):
@@ -610,7 +852,18 @@ def ClearChannelRequestHeader(sid, cid):
 
     """
     struct_args = (12, 0, 0, 0, sid, cid)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def ClearChannelResponseHeader(sid, cid):
@@ -632,7 +885,18 @@ def ClearChannelResponseHeader(sid, cid):
 
     """
     struct_args = (12, 0, 0, 0, sid, cid)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def ReadNotifyRequestHeader(data_type, data_count, sid, ioid):
@@ -660,7 +924,18 @@ def ReadNotifyRequestHeader(data_type, data_count, sid, ioid):
 
     """
     struct_args = (15, 0, data_type, data_count, sid, ioid)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def ReadNotifyResponseHeader(payload_size, data_type, data_count, sid, ioid):
@@ -691,7 +966,18 @@ def ReadNotifyResponseHeader(payload_size, data_type, data_count, sid, ioid):
 
     """
     struct_args = (15, payload_size, data_type, data_count, sid, ioid)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def CreateChanRequestHeader(payload_size, cid, client_version):
@@ -717,7 +1003,18 @@ def CreateChanRequestHeader(payload_size, cid, client_version):
 
     """
     struct_args = (18, payload_size, 0, 0, cid, client_version)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def CreateChanResponseHeader(data_type, data_count, cid, sid):
@@ -746,7 +1043,18 @@ def CreateChanResponseHeader(data_type, data_count, cid, sid):
 
     """
     struct_args = (18, 0, data_type, data_count, cid, sid)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def WriteNotifyRequestHeader(payload_size, data_type, data_count, sid, ioid):
@@ -777,7 +1085,18 @@ def WriteNotifyRequestHeader(payload_size, data_type, data_count, sid, ioid):
 
     """
     struct_args = (19, payload_size, data_type, data_count, sid, ioid)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def WriteNotifyResponseHeader(data_type, data_count, status, ioid):
@@ -805,7 +1124,18 @@ def WriteNotifyResponseHeader(data_type, data_count, status, ioid):
 
     """
     struct_args = (19, 0, data_type, data_count, status, ioid)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def ClientNameRequestHeader(payload_size):
@@ -824,7 +1154,18 @@ def ClientNameRequestHeader(payload_size):
 
     """
     struct_args = (20, payload_size, 0, 0, 0, 0)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def HostNameRequestHeader(payload_size):
@@ -844,7 +1185,18 @@ def HostNameRequestHeader(payload_size):
 
     """
     struct_args = (21, payload_size, 0, 0, 0, 0)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def AccessRightsResponseHeader(cid, access_rights):
@@ -868,7 +1220,18 @@ def AccessRightsResponseHeader(cid, access_rights):
 
     """
     struct_args = (22, 0, 0, 0, cid, access_rights)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def CreateChFailResponseHeader(cid):
@@ -887,7 +1250,18 @@ def CreateChFailResponseHeader(cid):
 
     """
     struct_args = (26, 0, 0, 0, cid, 0)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 
 def ServerDisconnResponseHeader(cid):
@@ -907,5 +1281,16 @@ def ServerDisconnResponseHeader(cid):
 
     """
     struct_args = (27, 0, 0, 0, cid, 0)
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 

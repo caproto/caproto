@@ -3,6 +3,17 @@
 import ctypes
 
 
+# constants related to ExtendedMessageHeader
+MAX_16BIT = 2**16 - 1
+MAX_32BIT = 2**32 - 1
+MARKER1 = 0xffff
+MARKER2 = 0x0000
+
+def has_overflowing_field(struct_args):
+    return (any(x > MAX_16BIT for x in struct_args[:4]) or
+            any(x > MAX_32BIT for x in struct_args[4:]))
+
+
 class _BaseMessageHeader(ctypes.BigEndianStructure):
     # just to define a nice repr
     def __repr__(self):
@@ -60,6 +71,17 @@ def {{command.name}}Header({{ command.input_params|map('attr', 'field')|join(', 
 {% endfor %}
     """
     struct_args = ({{ command.struct_args|join(', ') }})
-    return MessageHeader(*struct_args)
+    if has_overflowing_field(struct_args):
+        # Use extended message form.
+        return ExtendedMessageHeader(struct_args[0],  # command
+                                     MARKER1,
+                                     struct_args[2],  # data_type
+                                     MARKER2,
+                                     struct_args[4],  # parameter1
+                                     struct_args[5],  # parameter2
+                                     struct_args[1],  # payload_size
+                                     struct_args[3])  # data_count
+    else:
+        return MessageHeader(*struct_args)
 
 {% endfor %}
