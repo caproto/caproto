@@ -37,7 +37,8 @@ from ._headers import (MessageHeader, ExtendedMessageHeader,
                        EventsOffRequestHeader, EventsOnRequestHeader,
                        HostNameRequestHeader, NotFoundResponseHeader,
                        ReadNotifyRequestHeader, ReadNotifyResponseHeader,
-                       ReadResponseHeader, ReadSyncRequestHeader,
+                       ReadRequestHeader, ReadResponseHeader,
+                       ReadSyncRequestHeader,
                        RepeaterConfirmResponseHeader,
                        RepeaterRegisterRequestHeader, RsrvIsUpResponseHeader,
                        SearchRequestHeader, SearchResponseHeader,
@@ -976,7 +977,7 @@ class ReadRequest(Message):
     HAS_PAYLOAD = False
 
     def __init__(self, data_type, data_count, sid, ioid):
-        header = ReadNotifyRequestHeader(data_type, data_count, sid, ioid)
+        header = ReadRequestHeader(data_type, data_count, sid, ioid)
         super().__init__(header, validate=False)
 
     data_type = property(lambda self: self.header.data_type)
