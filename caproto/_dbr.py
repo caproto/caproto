@@ -914,17 +914,6 @@ char_types = (ChType.CHAR, ChType.TIME_CHAR, ChType.CTRL_CHAR)
 native_float_types = (ChType.FLOAT, ChType.DOUBLE)
 native_int_types = (ChType.INT, ChType.CHAR, ChType.LONG, ChType.ENUM)
 
-if USE_NUMPY:
-    _numpy_map = {
-        ChType.INT: numpy.int16,
-        ChType.FLOAT: numpy.float32,
-        ChType.ENUM: numpy.uint16,
-        ChType.CHAR: numpy.uint8,
-        ChType.LONG: numpy.int32,
-        ChType.DOUBLE: numpy.float64
-    }
-
-
 # map of Epics DBR types to ctypes types
 DBR_TYPES = {
     ChType.STRING: string_t,
@@ -963,6 +952,18 @@ DBR_TYPES = {
     ChType.CTRL_LONG: DBR_CTRL_LONG,
     ChType.CTRL_DOUBLE: DBR_CTRL_DOUBLE
 }
+
+if USE_NUMPY:
+    _numpy_map = {
+        ChType.INT: numpy.int16,
+        ChType.FLOAT: numpy.float32,
+        ChType.ENUM: numpy.uint16,
+        ChType.CHAR: numpy.uint8,
+        ChType.LONG: numpy.int32,
+        ChType.DOUBLE: numpy.float64,
+        ChType.STRING: numpy.dtype('>S40'),
+        ChType.CHAR: numpy.dtype('>S1')
+    }
 
 _array_type_code_map = {
     ChType.STRING: 'B',  # TO DO
