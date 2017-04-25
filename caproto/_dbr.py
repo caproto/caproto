@@ -71,6 +71,7 @@ def timestamp_to_epics(ts):
 
 class DBR_STRING(ctypes.BigEndianStructure):
     DBR_ID = 0
+    _pack_ = 1
     _fields_ = [
         ('value', string_t),
     ]
@@ -78,6 +79,7 @@ class DBR_STRING(ctypes.BigEndianStructure):
 
 class DBR_INT(ctypes.BigEndianStructure):
     DBR_ID = 1
+    _pack_ = 1
     _fields_ = [
         ('value', int_t),
     ]
@@ -85,6 +87,7 @@ class DBR_INT(ctypes.BigEndianStructure):
 
 class DBR_FLOAT(ctypes.BigEndianStructure):
     DBR_ID = 2
+    _pack_ = 1
     _fields_ = [
         ('value', float_t),
     ]
@@ -92,6 +95,7 @@ class DBR_FLOAT(ctypes.BigEndianStructure):
 
 class DBR_ENUM(ctypes.BigEndianStructure):
     DBR_ID = 3
+    _pack_ = 1
     _fields_ = [
         ('value', ushort_t),
     ]
@@ -99,6 +103,7 @@ class DBR_ENUM(ctypes.BigEndianStructure):
 
 class DBR_CHAR(ctypes.BigEndianStructure):
     DBR_ID = 4
+    _pack_ = 1
     _fields_ = [
         ('value', char_t),
     ]
@@ -106,6 +111,7 @@ class DBR_CHAR(ctypes.BigEndianStructure):
 
 class DBR_LONG(ctypes.BigEndianStructure):
     DBR_ID = 5
+    _pack_ = 1
     _fields_ = [
         ('value', long_t),
     ]
@@ -113,6 +119,7 @@ class DBR_LONG(ctypes.BigEndianStructure):
 
 class DBR_DOUBLE(ctypes.BigEndianStructure):
     DBR_ID = 6
+    _pack_ = 1
     _fields_ = [
         ('value', double_t),
     ]
@@ -125,6 +132,7 @@ class DBR_STS_STRING(ctypes.BigEndianStructure):
     #     string_t    value;            /* current value */
     # };
     DBR_ID = 7
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -139,6 +147,7 @@ class DBR_STS_INT(ctypes.BigEndianStructure):
     #     short_t    value;            /* current value */
     # };
     DBR_ID = 8
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -153,6 +162,7 @@ class DBR_STS_FLOAT(ctypes.BigEndianStructure):
     #     float_t    value;            /* current value */
     # };
     DBR_ID = 9
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -167,6 +177,7 @@ class DBR_STS_ENUM(ctypes.BigEndianStructure):
     #     ushort_t    value;            /* current value */
     # };
     DBR_ID = 10
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -182,6 +193,7 @@ class DBR_STS_CHAR(ctypes.BigEndianStructure):
     #     char_t    value;        /* current value */
     # };
     DBR_ID = 11
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -197,6 +209,7 @@ class DBR_STS_LONG(ctypes.BigEndianStructure):
     #     long_t    value;            /* current value */
     # };
     DBR_ID = 12
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -212,6 +225,7 @@ class DBR_STS_DOUBLE(ctypes.BigEndianStructure):
     #     double_t    value;            /* current value */
     # };
     DBR_ID = 13
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -228,6 +242,7 @@ class DBR_TIME_STRING(ctypes.BigEndianStructure):
     #     string_t    value;            /* current value */
     # };
     DBR_ID = 14
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -246,6 +261,7 @@ class DBR_TIME_INT(ctypes.BigEndianStructure):
     #     short_t    value;            /* current value */
     # };
     DBR_ID = 15
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -264,6 +280,7 @@ class DBR_TIME_FLOAT(ctypes.BigEndianStructure):
     #     float_t    value;            /* current value */
     # };
     DBR_ID = 16
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -283,6 +300,7 @@ class DBR_TIME_ENUM(ctypes.BigEndianStructure):
     # };
     #
     DBR_ID = 17
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -303,6 +321,7 @@ class DBR_TIME_CHAR(ctypes.BigEndianStructure):
     #     char_t    value;            /* current value */
     # };
     DBR_ID = 18
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -322,6 +341,7 @@ class DBR_TIME_LONG(ctypes.BigEndianStructure):
     #     long_t    value;            /* current value */
     # };
     DBR_ID = 19
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -340,6 +360,7 @@ class DBR_TIME_DOUBLE(ctypes.BigEndianStructure):
     #     double_t    value;            /* current value */
     # };
     DBR_ID = 20
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -366,6 +387,7 @@ class DBR_GR_INT(ctypes.BigEndianStructure):
     #     short_t    value;            /* current value */
     # };
     DBR_ID = 22
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -396,6 +418,7 @@ class DBR_GR_FLOAT(ctypes.BigEndianStructure):
     #     float_t    value;            /* current value */
     # };
     DBR_ID = 23
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -422,6 +445,7 @@ class DBR_GR_ENUM(ctypes.BigEndianStructure):
     #     ushort_t    value;            /* current value */
     # };
     DBR_ID = 24
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -446,6 +470,7 @@ class DBR_GR_CHAR(ctypes.BigEndianStructure):
     #     char_t    value;            /* current value */
     # };
     DBR_ID = 25
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -474,6 +499,7 @@ class DBR_GR_LONG(ctypes.BigEndianStructure):
     #     long_t    value;            /* current value */
     # };
     DBR_ID = 26
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -504,6 +530,7 @@ class DBR_GR_DOUBLE(ctypes.BigEndianStructure):
     #     double_t    value;            /* current value */
     # };
     DBR_ID = 27
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -522,6 +549,7 @@ class DBR_GR_DOUBLE(ctypes.BigEndianStructure):
 # DBR_GR_STRING (28) is not implemented by libca.
 class DBR_CTRL_STRING(ctypes.BigEndianStructure):
     DBR_ID = 28
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -541,6 +569,7 @@ class DBR_CTRL_STRING(ctypes.BigEndianStructure):
 
 class DBR_CTRL_INT(ctypes.BigEndianStructure):
     DBR_ID = 29
+    _pack_ = 1
     # /* structure for a control integer */
     # struct dbr_ctrl_int{
     #     short_t    status;             /* status of value */
@@ -590,6 +619,7 @@ class DBR_CTRL_FLOAT(ctypes.BigEndianStructure):
     #     float_t    value;            /* current value */
     # };
     DBR_ID = 30
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -618,6 +648,7 @@ class DBR_CTRL_ENUM(ctypes.BigEndianStructure):
     #     ushort_t    value;        /* current value */
     # };
     DBR_ID = 31
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -644,6 +675,7 @@ class DBR_CTRL_CHAR(ctypes.BigEndianStructure):
     #     char_t    value;            /* current value */
     # };
     DBR_ID = 32
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -677,6 +709,7 @@ class DBR_CTRL_LONG(ctypes.BigEndianStructure):
     #     long_t    value;            /* current value */
     # };
     DBR_ID = 33
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -711,6 +744,7 @@ class DBR_CTRL_DOUBLE(ctypes.BigEndianStructure):
     #     double_t    value;            /* current value */
     # };
     DBR_ID = 34
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -730,6 +764,7 @@ class DBR_CTRL_DOUBLE(ctypes.BigEndianStructure):
 
 class DBR_PUT_ACKT(ctypes.BigEndianStructure):
     DBR_ID = 35
+    _pack_ = 1
     _fields_ = [
         ('value', ushort_t),
     ]
@@ -737,6 +772,7 @@ class DBR_PUT_ACKT(ctypes.BigEndianStructure):
 
 class DBR_PUT_ACKS(ctypes.BigEndianStructure):
     DBR_ID = 36
+    _pack_ = 1
     _fields_ = [
         ('value', ushort_t),
     ]
@@ -752,6 +788,7 @@ class DBR_STSACK_STRING(ctypes.BigEndianStructure):
     #     string_t    value;            /* current value */
     # };
     DBR_ID = 37
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -762,6 +799,7 @@ class DBR_STSACK_STRING(ctypes.BigEndianStructure):
 
 class DBR_CLASS_NAME(ctypes.BigEndianStructure):
     DBR_ID = 38
+    _pack_ = 1
     _fields_ = [
         ('value', ushort_t),
     ]
