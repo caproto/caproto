@@ -1,7 +1,7 @@
 import time
 from ._dbr import (DBR_TYPES, ChType, promote_type, native_type,
                    native_float_types, native_int_types, native_types,
-                   timestamp_to_epics, time_types)
+                   timestamp_to_epics, time_types, MAX_ENUM_STRING_SIZE)
 from ._utils import ensure_bytes
 
 # it's all about data
@@ -59,11 +59,6 @@ class DatabaseRecordBase:
 
         if from_dtype in native_float_types and native_to in native_int_types:
             values = [int(v) for v in values]
-        elif from_dtype == ChType.ENUM:
-            if native_to == ChType.STRING:
-                values = [v.encode(ENCODING) for v in values]
-            else:
-                values = [self.strs.index(v) for v in values]
         elif native_to == ChType.STRING:
             if self.data_type in (ChType.STRING, ChType.ENUM):
                 values = [v.encode(ENCODING) for v in values]
@@ -103,6 +98,7 @@ class DatabaseRecordBase:
             'strs': [],  # if not enum type
         }
 
+        to_type = ChType(dbr_data.DBR_ID)
         for attr, _ in dbr_data._fields_:
             if hasattr(self, attr):
                 value = getattr(self, attr)
@@ -114,7 +110,12 @@ class DatabaseRecordBase:
 
             if isinstance(value, str):
                 value = bytes(value, ENCODING)
-            setattr(dbr_data, attr, value)
+            try:
+                setattr(dbr_data, attr, value)
+            except TypeError as ex:
+                if to_type in native_int_types:
+                    # you probably want to kill me at this point
+                    setattr(dbr_data, attr, int(value))
 
         if dbr_data.DBR_ID in time_types:
             epics_ts = self.epics_timestamp
@@ -147,6 +148,14 @@ class DatabaseRecordEnum(DatabaseRecordBase):
     @property
     def no_str(self):
         return len(self.strs) if self.strs else 0
+
+    def _set_dbr_metadata(self, dbr_data):
+        if hasattr(dbr_data, 'strs'):
+            for i, string in enumerate(self.strs):
+                bytes_ = bytes(string, ENCODING)
+                dbr_data.strs[i][:] = bytes_.ljust(MAX_ENUM_STRING_SIZE, b'\x00')
+
+        return super()._set_dbr_metadata(dbr_data)
 
     def convert_to(self, to_dtype):
         if native_type(to_dtype) == ChType.STRING:
