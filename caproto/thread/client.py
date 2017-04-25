@@ -6,6 +6,8 @@ import socket
 import threading
 import time
 
+from collections import Iterable
+
 CA_REPEATER_PORT = 5065
 CA_SERVER_PORT = 5064
 
@@ -484,8 +486,11 @@ class PV:
                 except ValueError:
                     raise ValueError('{} is not in Enum ({}'.format(
                         value, self.enum_strs))
+        if not isinstance(value, Iterable):
+            value = (value, )
 
-        return self.chid.write((value,))
+        return self.chid.write(v.encode('utf-8') if isinstance(v, str) else v
+                               for v in value)
 
     @ensure_connection
     def get_ctrlvars(self, timeout=5, warn=True):
