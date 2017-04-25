@@ -1036,10 +1036,17 @@ def native_type(ftype):
     return _native_map[ftype]
 
 
-def native_to_builtin(value, data_type, data_count):
+def native_to_builtin(value, native_type, data_count):
+    # - A waveform of characters is just a bytestring.
+    # - A waveform of strings is an array whose elements are fixed-length (40-
+    #   character) strings.
+    # - Enums are just integers that happen to have special significance.
+    # - Everything else is, straightforwardly, an array of numbers.
+    if native_type == ChType.CHAR:
+        return value.partition(b'\0')[0]
     if USE_NUMPY:
         # Return an ndarray
-        dt = numpy.dtype(_numpy_map[data_type])
+        dt = numpy.dtype(_numpy_map[native_type])
         dt = dt.newbyteorder('>')
         return numpy.frombuffer(value, dtype=dt)
     else:
