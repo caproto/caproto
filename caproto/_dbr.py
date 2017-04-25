@@ -1030,14 +1030,6 @@ _native_map = {
     ChType.CTRL_DOUBLE: ChType.DOUBLE,
 }
 
-_named_tuples = {}
-for ch_type in status_types + time_types + control_types:
-    _class = DBR_TYPES[ch_type]
-    tup = namedtuple(ch_type.name, (name for name, _ in _class._fields_))
-    _named_tuples.update({ch_type: tup})
-
-_channel_types = ChannelType.__members__.values()
-
 
 def native_type(ftype):
     '''return native field type from TIME or CTRL variant'''
