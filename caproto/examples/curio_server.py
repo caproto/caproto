@@ -1,127 +1,35 @@
-import time
-import getpass
+import sys
+import traceback
+import random
 
 import curio
 from curio import socket
 
 import caproto as ca
-from caproto import _dbr as dbr
-from caproto import ChType
+from caproto import (DatabaseRecordDouble, DatabaseRecordInteger,
+                     DatabaseRecordEnum)
 from caproto import (EPICS_CA1_PORT, EPICS_CA2_PORT)
-
-
-class DisconnectedCircuit(Exception):
-    ...
+from caproto import ReadNotifyResponse
 
 
 def find_next_tcp_port(host='0.0.0.0', starting_port=EPICS_CA2_PORT + 1):
     import socket
 
     port = starting_port
+    attempts = 0
 
-    while port <= 65535:
+    while attempts < 100:
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.bind((host, port))
         except IOError as ex:
             print(ex, port)
-            port += 1
+            port = random.randint(49152, 65535)
+            attempts += 1
         else:
             break
 
     return port
-
-
-def convert_to(values, from_dtype, to_dtype, db_entry):
-    native_from = dbr.native_type(from_dtype)
-    if from_dtype == to_dtype and native_from != ChType.ENUM:
-        return values
-
-    # TODO metadata is expected to be of this type as well!
-    native_to = dbr.native_type(to_dtype)
-
-    if (from_dtype in dbr.native_float_types and native_to in
-            dbr.native_int_types):
-        # TODO performance
-        values = [int(v) for v in values]
-    elif from_dtype == ChType.ENUM:
-        if native_to == ChType.STRING:
-            values = [v.encode('latin-1') for v in values]
-        else:
-            values = [db_entry.strs.index(v) for v in values]
-    elif native_to == ChType.STRING:
-        if native_from in (ChType.STRING, ChType.ENUM):
-            values = [v.encode('latin-1') for v in values]
-        else:
-            values = [bytes(str(v), 'latin-1') for v in values]
-    return values
-
-
-class DatabaseRecordBase:
-    data_type = ca.DBR_LONG.DBR_ID
-
-    def __init__(self, *, timestamp=None, status=0, severity=0, value=None):
-        if timestamp is None:
-            timestamp = time.time()
-        self.timestamp = timestamp
-        self.status = status
-        self.severity = severity
-        self.value = value
-
-    def __len__(self):
-        try:
-            return len(self.value)
-        except TypeError:
-            return 1
-
-    def check_access(self, sender_address):
-        print('{} has full access to {}'.format(sender_address, self))
-        return 3  # read-write
-
-
-class DatabaseRecordEnum(DatabaseRecordBase):
-    data_type = ca.DBR_ENUM.DBR_ID
-
-    def __init__(self, *, strs=None, **kwargs):
-        self.strs = strs
-
-        super().__init__(**kwargs)
-
-    @property
-    def no_str(self):
-        return len(self.strs) if self.strs else 0
-
-
-class DatabaseRecordNumeric(DatabaseRecordBase):
-    def __init__(self, *, units='', upper_disp_limit=0.0,
-                 lower_disp_limit=0.0, upper_alarm_limit=0.0,
-                 upper_warning_limit=0.0, lower_warning_limit=0.0,
-                 lower_alarm_limit=0.0, upper_ctrl_limit=0.0,
-                 lower_ctrl_limit=0.0, **kwargs):
-
-        super().__init__(**kwargs)
-        self.units = units
-        self.upper_disp_limit = upper_disp_limit
-        self.lower_disp_limit = lower_disp_limit
-        self.upper_alarm_limit = upper_alarm_limit
-        self.upper_warning_limit = upper_warning_limit
-        self.lower_warning_limit = lower_warning_limit
-        self.lower_alarm_limit = lower_alarm_limit
-        self.upper_ctrl_limit = upper_ctrl_limit
-        self.lower_ctrl_limit = lower_ctrl_limit
-
-
-class DatabaseRecordInteger(DatabaseRecordNumeric):
-    data_type = ca.DBR_LONG.DBR_ID
-
-
-class DatabaseRecordDouble(DatabaseRecordNumeric):
-    data_type = ca.DBR_DOUBLE.DBR_ID
-
-    def __init__(self, *, precision=0, **kwargs):
-        super().__init__(**kwargs)
-
-        self.precision = precision
 
 
 class VirtualCircuit:
@@ -135,8 +43,8 @@ class VirtualCircuit:
         """
         Process a command and tranport it over the TCP socket for this circuit.
         """
-        bytes_to_send = self.circuit.send(*commands)
-        await self.client.sendall(bytes_to_send)
+        buffers_to_send = self.circuit.send(*commands)
+        await self.client.sendmsg(buffers_to_send)
 
     async def recv(self):
         """
@@ -144,7 +52,7 @@ class VirtualCircuit:
         """
         bytes_received = await self.client.recv(4096)
         if not bytes_received:
-            raise DisconnectedCircuit()
+            raise ca.DisconnectedCircuit()
         self.circuit.recv(bytes_received)
 
     async def next_command(self):
@@ -163,10 +71,25 @@ class VirtualCircuit:
                 continue
             break
 
-        for response_command in self._process_command(command):
-            if isinstance(response_command, (list, tuple)):
-                await self.send(*response_command)
-            else:
+        try:
+            for response_command in self._process_command(command):
+                if isinstance(response_command, (list, tuple)):
+                    await self.send(*response_command)
+                else:
+                    await self.send(response_command)
+        except Exception as ex:
+            print('Curio server failed to process command: {}'.format(command))
+            traceback.print_exc(file=sys.stdout)
+
+            if hasattr(command, 'sid'):
+                cid = self.circuit.channels_sid[command.sid].cid
+
+                response_command = ca.ErrorResponse(
+                    command, cid,
+                    status_code=ca.ECA_INTERNAL.code_with_severity,
+                    error_message=('Python exception: {} {}'
+                                   ''.format(type(ex).__name__, ex))
+                )
                 await self.send(response_command)
 
         return command
@@ -191,16 +114,12 @@ class VirtualCircuit:
                    ]
         elif isinstance(command, ca.ReadNotifyRequest):
             chan, db_entry = get_db_entry()
-            values = db_entry.value
-            try:
-                len(values)
-            except TypeError:
-                values = [values, ]
-
-            values = convert_to(values, db_entry.data_type, command.data_type,
-                                db_entry)
-            yield chan.read(values=values, data_type=command.data_type,
-                            ioid=command.ioid, metadata=db_entry)
+            # TODO
+            db_entry._data['native'] = [db_entry.value]
+            metadata, data = db_entry.get_dbr_data(command.data_type)
+            yield ReadNotifyResponse(data=data, data_type=command.data_type,
+                                     data_count=len(data), status=1,
+                                     ioid=command.ioid, metadata=metadata)
         elif isinstance(command, ca.WriteNotifyRequest):
             chan, db_entry = get_db_entry()
             yield chan.write(ioid=command.ioid)
@@ -282,7 +201,7 @@ class Context:
         while True:
             try:
                 await circuit.next_command()
-            except DisconnectedCircuit:
+            except ca.DisconnectedCircuit:
                 print('disconnected')
                 return
 
@@ -314,10 +233,10 @@ def _get_my_ip():
              ]
 
     print([af_inet_info
-             for interface in interfaces
-             if netifaces.AF_INET in interface
-             for af_inet_info in interface[netifaces.AF_INET]
-             ])
+           for interface in interfaces
+           if netifaces.AF_INET in interface
+           for af_inet_info in interface[netifaces.AF_INET]
+           ])
     if not ipv4s:
         return '127.0.0.1'
     return ipv4s[0]

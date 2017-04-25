@@ -174,7 +174,7 @@ class VirtualCircuit:
         # turn the crank on the caproto
         bytes_to_send = self.circuit.send(*commands)
         # send bytes over the wire
-        self.socket.send(bytes_to_send)
+        self.socket.sendmsg(bytes_to_send)
 
     def next_command(self, bytes_recv, address):
         "Receive and process and next command from the virtual circuit."
@@ -453,8 +453,10 @@ class PV:
             The value, the type is dependent on the underlying PV
         """
         command = self.chid.read(data_type=self.typefull)
-        info = self._parse_dbr_data(command.values)
+        info = self._parse_dbr_metadata(command.metadata)
         print('read() info', info)
+        info['value'] = command.data
+        self._args.update(**info)
         return info['value']
 
     @ensure_connection
@@ -474,8 +476,8 @@ class PV:
     def get_timevars(self, timeout=5, warn=True):
         "get time values for variable"
 
-    def _parse_dbr_data(self, dbr_data):
-        ret = dict(value=dbr_data.value)
+    def _parse_dbr_metadata(self, dbr_data):
+        ret = {}
 
         arg_map = {'status': 'status',
                    'severity': 'severity',
@@ -515,8 +517,9 @@ class PV:
         To have user-defined code run when the PV value changes,
         use add_callback()
         """
-        info = self._parse_dbr_data(command.values)
+        info = self._parse_dbr_metadata(command.metadata)
         print('updated info', info)
+        info['value'] = command.data
         self._args.update(**info)
         self.run_callbacks()
 
@@ -846,5 +849,3 @@ class PV:
 
     def disconnect(self):
         "disconnect PV"
-
-

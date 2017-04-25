@@ -3,33 +3,19 @@ import caproto as ca
 
 
 @pytest.fixture(scope='function')
-def client_circuit(request):
+def circuit_pair(request):
     host = '127.0.0.1'
     port = 5555
-    prio = 1
-    circuit = ca.VirtualCircuit(ca.CLIENT, (host, port), prio)
-    return circuit
-
-
-@pytest.fixture(scope='function')
-def client_channel(request):
-    host = '127.0.0.1'
-    port = 5555
-    prio = 1
-    cid = 1
-    sid = 10
-    data_type = 5
-    data_count = 1
-    cli_circuit = ca.VirtualCircuit(ca.CLIENT, (host, port), prio)
-    srv_circuit = ca.VirtualCircuit(ca.SERVER, (host, port), prio)
-    cli_channel = ca.ClientChannel('name', cli_circuit, cid)
-    srv_channel = ca.ServerChannel('name', srv_circuit, cid)
-    req = cli_channel.create()
-    cli_circuit.send(req)
-    srv_circuit.recv(bytes(req))
+    priority = 1
+    version = 13
+    cli_circuit = ca.VirtualCircuit(ca.CLIENT, (host, port), priority)
+    buffers_to_send = cli_circuit.send(ca.VersionRequest(version=version,
+                                                         priority=priority))
+    
+    srv_circuit = ca.VirtualCircuit(ca.SERVER, (host, port), None)
+    srv_circuit.recv(*buffers_to_send)
     srv_circuit.next_command()
-    res = srv_channel.create(data_type, data_count, sid)
-    srv_circuit.send(res)
-    cli_circuit.recv(bytes(res))
+    buffers_to_send = srv_circuit.send(ca.VersionResponse(version=version))
+    cli_circuit.recv(*buffers_to_send)
     cli_circuit.next_command()
-    return cli_channel
+    return cli_circuit, srv_circuit

@@ -33,8 +33,8 @@ class VirtualCircuit:
         """
         if self.socket is None:
             raise RuntimeError("must await create_connection() first")
-        bytes_to_send = self.circuit.send(*commands)
-        await self.socket.send(bytes_to_send)
+        buffers_to_send = self.circuit.send(*commands)
+        await self.socket.sendmsg(buffers_to_send)
 
     async def recv(self):
         """
@@ -43,6 +43,8 @@ class VirtualCircuit:
         if self.socket is None:
             raise RuntimeError("must await create_connection() first")
         bytes_received = await self.socket.recv(32768)
+        if not len(bytes_received):
+            raise ca.DisconnectedCircuit()
         self.circuit.recv(bytes_received)
 
     async def get_event(self):
@@ -86,7 +88,7 @@ class VirtualCircuit:
             break
         if isinstance(command, ca.ReadNotifyResponse):
             chan = self.ioids.pop(command.ioid)
-            chan.last_reading = command.values
+            chan.last_reading = command
         if isinstance(command, ca.WriteNotifyResponse):
             chan = self.ioids.pop(command.ioid)
         elif isinstance(command, ca.EventAddResponse):

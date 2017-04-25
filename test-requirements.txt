@@ -4,3 +4,4 @@ curio
 netifaces
 pyepics
 pytest
+numpy

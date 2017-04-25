@@ -5,10 +5,18 @@
 # The organizational code, making use of Enum, comes from pypvasync by Kenneth
 # Lauer.
 
+import array
 import ctypes
 import datetime
 from enum import IntEnum
 from collections import namedtuple
+
+try:
+    import numpy
+except ImportError:
+    USE_NUMPY = False
+else:
+    USE_NUMPY = True
 
 # EPICS2UNIX_EPOCH = 631173600.0 - time.timezone
 EPICS2UNIX_EPOCH = 631152000.0
@@ -34,16 +42,16 @@ DBE_ALARM = 4
 DBE_PROPERTY = 8
 
 
-string_t = MAX_STRING_SIZE* ctypes.c_char  # epicsOldString
-char_t = ctypes.c_char # epicsUint8
+string_t = MAX_STRING_SIZE * ctypes.c_char  # epicsOldString
+char_t = ctypes.c_char  # epicsUint8
 short_t = ctypes.c_int16  # epicsInt16
 ushort_t = ctypes.c_uint16  # epicsUInt16
 int_t = ctypes.c_int16  # epicsInt16
 long_t = ctypes.c_int32  # epicsInt32
 ulong_t = ctypes.c_uint32  # epicsUInt32
 float_t = ctypes.c_float  # epicsFloat32
-double_t = ctypes.c_double # epicsFloat64
-stsack_string_t = 40 * ctypes.c_char # epicsOldString
+double_t = ctypes.c_double  # epicsFloat64
+stsack_string_t = 40 * ctypes.c_char  # epicsOldString
 class_name_t = 40 * ctypes.c_char  # epicsOldString
 
 
@@ -63,6 +71,7 @@ def timestamp_to_epics(ts):
 
 class DBR_STRING(ctypes.BigEndianStructure):
     DBR_ID = 0
+    _pack_ = 1
     _fields_ = [
         ('value', string_t),
     ]
@@ -70,6 +79,7 @@ class DBR_STRING(ctypes.BigEndianStructure):
 
 class DBR_INT(ctypes.BigEndianStructure):
     DBR_ID = 1
+    _pack_ = 1
     _fields_ = [
         ('value', int_t),
     ]
@@ -77,6 +87,7 @@ class DBR_INT(ctypes.BigEndianStructure):
 
 class DBR_FLOAT(ctypes.BigEndianStructure):
     DBR_ID = 2
+    _pack_ = 1
     _fields_ = [
         ('value', float_t),
     ]
@@ -84,6 +95,7 @@ class DBR_FLOAT(ctypes.BigEndianStructure):
 
 class DBR_ENUM(ctypes.BigEndianStructure):
     DBR_ID = 3
+    _pack_ = 1
     _fields_ = [
         ('value', ushort_t),
     ]
@@ -91,6 +103,7 @@ class DBR_ENUM(ctypes.BigEndianStructure):
 
 class DBR_CHAR(ctypes.BigEndianStructure):
     DBR_ID = 4
+    _pack_ = 1
     _fields_ = [
         ('value', char_t),
     ]
@@ -98,6 +111,7 @@ class DBR_CHAR(ctypes.BigEndianStructure):
 
 class DBR_LONG(ctypes.BigEndianStructure):
     DBR_ID = 5
+    _pack_ = 1
     _fields_ = [
         ('value', long_t),
     ]
@@ -105,6 +119,7 @@ class DBR_LONG(ctypes.BigEndianStructure):
 
 class DBR_DOUBLE(ctypes.BigEndianStructure):
     DBR_ID = 6
+    _pack_ = 1
     _fields_ = [
         ('value', double_t),
     ]
@@ -117,10 +132,10 @@ class DBR_STS_STRING(ctypes.BigEndianStructure):
     #     string_t    value;            /* current value */
     # };
     DBR_ID = 7
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
-        ('value',  string_t),
     ]
 
 
@@ -132,10 +147,10 @@ class DBR_STS_INT(ctypes.BigEndianStructure):
     #     short_t    value;            /* current value */
     # };
     DBR_ID = 8
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
-        ('value', short_t),
     ]
 
 
@@ -147,10 +162,10 @@ class DBR_STS_FLOAT(ctypes.BigEndianStructure):
     #     float_t    value;            /* current value */
     # };
     DBR_ID = 9
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
-        ('value', float_t),
     ]
 
 
@@ -162,10 +177,10 @@ class DBR_STS_ENUM(ctypes.BigEndianStructure):
     #     ushort_t    value;            /* current value */
     # };
     DBR_ID = 10
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
-        ('value', ushort_t),
     ]
 
 
@@ -178,11 +193,11 @@ class DBR_STS_CHAR(ctypes.BigEndianStructure):
     #     char_t    value;        /* current value */
     # };
     DBR_ID = 11
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
         ('RISC_pad', char_t),
-        ('value', char_t),
     ]
 
 
@@ -194,10 +209,10 @@ class DBR_STS_LONG(ctypes.BigEndianStructure):
     #     long_t    value;            /* current value */
     # };
     DBR_ID = 12
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
-        ('value', long_t),
     ]
 
 
@@ -210,11 +225,11 @@ class DBR_STS_DOUBLE(ctypes.BigEndianStructure):
     #     double_t    value;            /* current value */
     # };
     DBR_ID = 13
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
         ('RISC_pad', long_t),
-        ('value', double_t),
     ]
 
 
@@ -227,12 +242,12 @@ class DBR_TIME_STRING(ctypes.BigEndianStructure):
     #     string_t    value;            /* current value */
     # };
     DBR_ID = 14
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
         ('secondsSinceEpoch', ctypes.c_uint32),
         ('nanoSeconds', ctypes.c_uint32),
-        ('value', 40 * char_t),
     ]
 
 
@@ -246,13 +261,13 @@ class DBR_TIME_INT(ctypes.BigEndianStructure):
     #     short_t    value;            /* current value */
     # };
     DBR_ID = 15
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
         ('secondsSinceEpoch', ctypes.c_uint32),
         ('nanoSeconds', ctypes.c_uint32),
         ('RISC_pad', short_t),
-        ('value', ushort_t),
     ]
 
 
@@ -265,12 +280,12 @@ class DBR_TIME_FLOAT(ctypes.BigEndianStructure):
     #     float_t    value;            /* current value */
     # };
     DBR_ID = 16
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
         ('secondsSinceEpoch', ctypes.c_uint32),
         ('nanoSeconds', ctypes.c_uint32),
-        ('value', float_t),
     ]
 
 
@@ -285,13 +300,13 @@ class DBR_TIME_ENUM(ctypes.BigEndianStructure):
     # };
     #
     DBR_ID = 17
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
         ('secondsSinceEpoch', ctypes.c_uint32),
         ('nanoSeconds', ctypes.c_uint32),
         ('RISC_pad', short_t),
-        ('value', ushort_t),
     ]
 
 
@@ -306,6 +321,7 @@ class DBR_TIME_CHAR(ctypes.BigEndianStructure):
     #     char_t    value;            /* current value */
     # };
     DBR_ID = 18
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -313,7 +329,6 @@ class DBR_TIME_CHAR(ctypes.BigEndianStructure):
         ('nanoSeconds', ctypes.c_uint32),
         ('RISC_pad0', short_t),
         ('RISC_pad1', char_t),
-        ('value', char_t),
     ]
 
 
@@ -326,12 +341,12 @@ class DBR_TIME_LONG(ctypes.BigEndianStructure):
     #     long_t    value;            /* current value */
     # };
     DBR_ID = 19
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
         ('secondsSinceEpoch', ctypes.c_uint32),
         ('nanoSeconds', ctypes.c_uint32),
-        ('value', long_t),
     ]
 
 
@@ -345,13 +360,13 @@ class DBR_TIME_DOUBLE(ctypes.BigEndianStructure):
     #     double_t    value;            /* current value */
     # };
     DBR_ID = 20
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
         ('secondsSinceEpoch', ctypes.c_uint32),
         ('nanoSeconds', ctypes.c_uint32),
         ('RISC_Pad', long_t),
-        ('value', double_t),
     ]
 
 
@@ -372,6 +387,7 @@ class DBR_GR_INT(ctypes.BigEndianStructure):
     #     short_t    value;            /* current value */
     # };
     DBR_ID = 22
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -382,7 +398,6 @@ class DBR_GR_INT(ctypes.BigEndianStructure):
         ('upper_warning_limit', short_t),
         ('lower_warning_limit', short_t),
         ('lower_alarm_limit', short_t),
-        ('value', short_t),
     ]
 
 
@@ -403,6 +418,7 @@ class DBR_GR_FLOAT(ctypes.BigEndianStructure):
     #     float_t    value;            /* current value */
     # };
     DBR_ID = 23
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -415,7 +431,6 @@ class DBR_GR_FLOAT(ctypes.BigEndianStructure):
         ('upper_warning_limit', float_t),
         ('lower_warning_limit', float_t),
         ('lower_alarm_limit', float_t),
-        ('value', float_t),
     ]
 
 
@@ -430,12 +445,12 @@ class DBR_GR_ENUM(ctypes.BigEndianStructure):
     #     ushort_t    value;            /* current value */
     # };
     DBR_ID = 24
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
         ('no_str', short_t),  # number of strings
         ('strs', MAX_ENUM_STATES * MAX_ENUM_STRING_SIZE * char_t),
-        ('value', ushort_t),
     ]
 
 
@@ -455,6 +470,7 @@ class DBR_GR_CHAR(ctypes.BigEndianStructure):
     #     char_t    value;            /* current value */
     # };
     DBR_ID = 25
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -465,7 +481,6 @@ class DBR_GR_CHAR(ctypes.BigEndianStructure):
         ('upper_warning_limit', char_t),
         ('lower_warning_limit', char_t),
         ('lower_alarm_limit', char_t),
-        ('value', char_t),
     ]
 
 
@@ -484,6 +499,7 @@ class DBR_GR_LONG(ctypes.BigEndianStructure):
     #     long_t    value;            /* current value */
     # };
     DBR_ID = 26
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -494,7 +510,6 @@ class DBR_GR_LONG(ctypes.BigEndianStructure):
         ('upper_warning_limit', long_t),
         ('lower_warning_limit', long_t),
         ('lower_alarm_limit', long_t),
-        ('value', long_t),
     ]
 
 
@@ -515,6 +530,7 @@ class DBR_GR_DOUBLE(ctypes.BigEndianStructure):
     #     double_t    value;            /* current value */
     # };
     DBR_ID = 27
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -527,13 +543,13 @@ class DBR_GR_DOUBLE(ctypes.BigEndianStructure):
         ('upper_warning_limit', double_t),
         ('lower_warning_limit', double_t),
         ('lower_alarm_limit', double_t),
-        ('value', double_t),
     ]
 
 
 # DBR_GR_STRING (28) is not implemented by libca.
 class DBR_CTRL_STRING(ctypes.BigEndianStructure):
     DBR_ID = 28
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -547,13 +563,13 @@ class DBR_CTRL_STRING(ctypes.BigEndianStructure):
         ('lower_alarm_limit', short_t),
         ('upper_ctrl_limit', short_t),
         ('lower_ctrl_limit', short_t),
-        ('value', string_t),
     ]
 
 
 
 class DBR_CTRL_INT(ctypes.BigEndianStructure):
     DBR_ID = 29
+    _pack_ = 1
     # /* structure for a control integer */
     # struct dbr_ctrl_int{
     #     short_t    status;             /* status of value */
@@ -581,7 +597,6 @@ class DBR_CTRL_INT(ctypes.BigEndianStructure):
         ('lower_alarm_limit', short_t),
         ('upper_ctrl_limit', short_t),
         ('lower_ctrl_limit', short_t),
-        ('value', short_t),
     ]
 
 
@@ -604,6 +619,7 @@ class DBR_CTRL_FLOAT(ctypes.BigEndianStructure):
     #     float_t    value;            /* current value */
     # };
     DBR_ID = 30
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -618,7 +634,6 @@ class DBR_CTRL_FLOAT(ctypes.BigEndianStructure):
         ('lower_alarm_limit', float_t),
         ('upper_ctrl_limit', float_t),
         ('lower_ctrl_limit', float_t),
-        ('value', float_t),
     ]
 
 
@@ -633,12 +648,12 @@ class DBR_CTRL_ENUM(ctypes.BigEndianStructure):
     #     ushort_t    value;        /* current value */
     # };
     DBR_ID = 31
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
         ('no_str', short_t),  # number of strings
         ('strs', MAX_ENUM_STATES * (MAX_ENUM_STRING_SIZE * char_t)),
-        ('value', ushort_t),
     ]
 
 
@@ -660,6 +675,7 @@ class DBR_CTRL_CHAR(ctypes.BigEndianStructure):
     #     char_t    value;            /* current value */
     # };
     DBR_ID = 32
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -673,7 +689,6 @@ class DBR_CTRL_CHAR(ctypes.BigEndianStructure):
         ('upper_ctrl_limit', char_t),
         ('lower_ctrl_limit', char_t),
         ('RISC_pad', char_t),
-        ('value', char_t),
     ]
 
 
@@ -694,6 +709,7 @@ class DBR_CTRL_LONG(ctypes.BigEndianStructure):
     #     long_t    value;            /* current value */
     # };
     DBR_ID = 33
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -706,7 +722,6 @@ class DBR_CTRL_LONG(ctypes.BigEndianStructure):
         ('lower_alarm_limit', long_t),
         ('upper_ctrl_limit', long_t),
         ('lower_ctrl_limit', long_t),
-        ('value', long_t),
     ]
 
 
@@ -729,6 +744,7 @@ class DBR_CTRL_DOUBLE(ctypes.BigEndianStructure):
     #     double_t    value;            /* current value */
     # };
     DBR_ID = 34
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
@@ -743,12 +759,12 @@ class DBR_CTRL_DOUBLE(ctypes.BigEndianStructure):
         ('lower_alarm_limit', double_t),
         ('upper_ctrl_limit', double_t),
         ('lower_ctrl_limit', double_t),
-        ('value', double_t),
     ]
 
 
 class DBR_PUT_ACKT(ctypes.BigEndianStructure):
     DBR_ID = 35
+    _pack_ = 1
     _fields_ = [
         ('value', ushort_t),
     ]
@@ -756,6 +772,7 @@ class DBR_PUT_ACKT(ctypes.BigEndianStructure):
 
 class DBR_PUT_ACKS(ctypes.BigEndianStructure):
     DBR_ID = 36
+    _pack_ = 1
     _fields_ = [
         ('value', ushort_t),
     ]
@@ -771,17 +788,18 @@ class DBR_STSACK_STRING(ctypes.BigEndianStructure):
     #     string_t    value;            /* current value */
     # };
     DBR_ID = 37
+    _pack_ = 1
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
         ('ackt', ushort_t),
         ('acks', ushort_t),
-        ('value', 40 * char_t),
     ]
 
 
 class DBR_CLASS_NAME(ctypes.BigEndianStructure):
     DBR_ID = 38
+    _pack_ = 1
     _fields_ = [
         ('value', ushort_t),
     ]
@@ -883,32 +901,27 @@ char_types = (ChType.CHAR, ChType.TIME_CHAR, ChType.CTRL_CHAR)
 native_float_types = (ChType.FLOAT, ChType.DOUBLE)
 native_int_types = (ChType.INT, ChType.CHAR, ChType.LONG, ChType.ENUM)
 
-
-try:
-    import numpy as np
-except ImportError:
-    pass
-else:
+if USE_NUMPY:
     _numpy_map = {
-        ChType.INT: np.int16,
-        ChType.FLOAT: np.float32,
-        ChType.ENUM: np.uint16,
-        ChType.CHAR: np.uint8,
-        ChType.LONG: np.int32,
-        ChType.DOUBLE: np.float64
+        ChType.INT: numpy.int16,
+        ChType.FLOAT: numpy.float32,
+        ChType.ENUM: numpy.uint16,
+        ChType.CHAR: numpy.uint8,
+        ChType.LONG: numpy.int32,
+        ChType.DOUBLE: numpy.float64
     }
 
 
 # map of Epics DBR types to ctypes types
 DBR_TYPES = {
-    ChType.STRING: DBR_STRING,
-    ChType.INT: DBR_INT,
-    ChType.SHORT: DBR_INT,
-    ChType.FLOAT: DBR_FLOAT,
-    ChType.ENUM: DBR_ENUM,
-    ChType.CHAR: DBR_CHAR,
-    ChType.LONG: DBR_LONG,
-    ChType.DOUBLE: DBR_DOUBLE,
+    ChType.STRING: string_t,
+    ChType.INT: int_t,
+    ChType.SHORT: int_t,
+    ChType.FLOAT: float_t,
+    ChType.ENUM: ushort_t,
+    ChType.CHAR: char_t,
+    ChType.LONG: ulong_t,
+    ChType.DOUBLE: double_t,
 
     ChType.STS_STRING: DBR_STS_STRING,
     ChType.STS_INT: DBR_STS_INT,
@@ -937,6 +950,34 @@ DBR_TYPES = {
     ChType.CTRL_LONG: DBR_CTRL_LONG,
     ChType.CTRL_DOUBLE: DBR_CTRL_DOUBLE
 }
+
+_array_type_code_map = {
+    ChType.STRING: 'B',  # TO DO
+    ChType.INT: 'h',
+    ChType.FLOAT: 'f',
+    ChType.ENUM: 'H',
+    ChType.CHAR: 'b',
+    ChType.LONG: 'i',
+    ChType.DOUBLE: 'd',
+}
+
+for _type in set(native_types) - set([ChType.STRING]):
+    assert (array.array(_array_type_code_map[_type]).itemsize ==
+            ctypes.sizeof(DBR_TYPES[_type])), '{!r} check failed'.format(ChType(_type))
+
+del _type
+
+# Offset of the data in bytes, according to the DBR type
+dbr_data_offsets = {
+    data_type: ctypes.sizeof(DBR_TYPES[data_type])
+    if data_type not in native_types
+    else 0
+    for data_type in DBR_TYPES
+}
+
+
+def array_type_code(native_type):
+    return _array_type_code_map[native_type]
 
 
 _native_map = {
@@ -989,18 +1030,15 @@ def native_type(ftype):
     return _native_map[ftype]
 
 
-def native_to_builtin(value, dtype, data_count):
-    if data_count == 1:
-        # Return a built-in Python type.
-        try:
-            return value.value  # if this is a Structure
-        except AttributeError:
-            return value
-    else:
+def native_to_builtin(value, data_type, data_count):
+    if USE_NUMPY:
         # Return an ndarray.
-        dt = np.dtype(_numpy_map[dtype])
+        dt = numpy.dtype(_numpy_map[data_type])
         dt = dt.newbyteorder('>')
-        return np.frombuffer(value, dtype=dt)
+        return numpy.frombuffer(value, dtype=dt)
+    else:
+        # TODO
+        return  # array.array()
 
 
 def to_builtin(structure, data_type, data_count):

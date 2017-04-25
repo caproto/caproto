@@ -87,7 +87,6 @@ async def start_datagram_proxy(bind, port):
 
 
 def main():
-    print('hi')
     import logging
     logging.getLogger('caproto').setLevel(logging.INFO)
     loop = asyncio.get_event_loop()

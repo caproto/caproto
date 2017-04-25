@@ -99,23 +99,29 @@ class VirtualCircuit:
 
     def send(self, *commands):
         """
-        Convert one or more high-level Commands into bytes that may be
-        broadcast together in one TCP packet while updating our internal
+        Convert one or more high-level Commands into buffers of bytes that may
+        be broadcast together in one TCP packet while updating our internal
         state machine.
 
         Parameters
         ----------
         *commands :
             any number of :class:`Message` objects
+
+        Returns
+        -------
+        buffers_to_send : list
+            list of buffers to send over a socket
         """
-        bytes_to_send = b''
+        buffers_to_send = []
         for command in commands:
             self._process_command(self.our_role, command)
             self.log.debug("Serializing %r", command)
-            bytes_to_send += bytes(command)
-        return bytes_to_send
+            buffers_to_send.append(bytes(command.header))
+            buffers_to_send.extend(command.buffers)
+        return buffers_to_send
 
-    def recv(self, byteslike):
+    def recv(self, *buffers):
         """
         Add data received over TCP to our internal recieve buffer.
 
@@ -124,10 +130,12 @@ class VirtualCircuit:
 
         Parameters
         ----------
-        byteslike : bytes-like
+        *buffers :
+            any number of bytes-like buffers
         """
-        self.log.debug("Received %d bytes.", len(byteslike))
-        self._data += byteslike
+        for byteslike in buffers:
+            self.log.debug("Received %d bytes.", len(byteslike))
+            self._data += byteslike
 
     def next_command(self):
         """
@@ -159,7 +167,7 @@ class VirtualCircuit:
         """
         if isinstance(command, ErrorResponse):
             err = get_exception(self.our_role, command)
-            raise err("Error: {!s}".format(command.payload))
+            raise err("Error: {!s}".format(command.error_message))
         # Filter for Commands that are pertinent to a specific Channel, as
         # opposed to the Circuit as a whole:
         if isinstance(command, (ClearChannelRequest, ClearChannelResponse,
@@ -382,6 +390,11 @@ class Broadcaster:
         ----------
         *commands :
             any number of :class:`Message` objects
+
+        Returns
+        -------
+        bytes_to_send : bytes
+            bytes to send over a socket
         """
         bytes_to_send = b''
         history = []  # commands sent as part of this datagram
