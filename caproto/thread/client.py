@@ -476,14 +476,19 @@ class PV:
         info = self._parse_dbr_metadata(command.metadata)
         print('read() info', info)
         info['value'] = command.data
-        self._args.update(**info)
+
         ret = info['value']
         if as_string and self.typefull in ca.char_types:
             ret = (b''.join(ret)).decode('utf-8').strip()
+            info['char_value'] = ret
         if self.typefull in ca.string_types:
             ret = [v.decode('utf-8').strip() for v in ret]
+            if len(ret) == 1:
+                ret = ret[0]
+            info['char_value'] = ret
         if not as_numpy:
-            return list(ret)
+            ret = list(ret)
+        self._args.update(**info)
         return ret
 
     @ensure_connection
