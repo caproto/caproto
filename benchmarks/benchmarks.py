@@ -17,12 +17,11 @@ class _TimeWaveform:
     def setup(self):
         # NOTE: have to increase EPICS_CA_MAX_ARRAY_BYTES if NELM >= 4096
         #       (remember default is 16384 bytes / sizeof(int32) = 4096)
-        MAX_ARRAY_BYTES = 1000000
+        MAX_ARRAY_BYTES = self.num * 10
         env = dict(EPICS_CA_MAX_ARRAY_BYTES=str(MAX_ARRAY_BYTES))
-        nelm = (MAX_ARRAY_BYTES // 4) - 4  # timeouts
 
         db_text = util.make_database(
-            {(WAVEFORM_PV, 'waveform'): dict(FTVL='LONG', NELM=nelm),
+            {(WAVEFORM_PV, 'waveform'): dict(FTVL='LONG', NELM=self.num),
             },
         )
 
@@ -65,11 +64,13 @@ class _TimeWaveform:
     def time_pyepics(self):
         for i in range(self.ITERS):
             values = self.pv.get(timeout=0.5, as_numpy=True)
+            assert len(values) == self.num
 
     def time_caproto_curio(self):
         async def curio_reading():
             for i in range(self.ITERS):
                 reading = await self.chan1.read()
+                assert len(reading.data) == self.num
 
         with curio.Kernel() as kernel:
             kernel.run(curio_reading())
