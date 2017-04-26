@@ -2,7 +2,7 @@
 caproto: a pure-Python Channel Access protocol library
 ******************************************************
 
-This is a "bring your own I/O" implementation of the
+Caproto is a "bring your own I/O" implementation of the
 `EPICS <http://www.aps.anl.gov/epics/>`_ Channel Access protocol in
 Python.
 
@@ -12,8 +12,7 @@ protocol is used in laboratories and companies
 `around the world <https://en.wikipedia.org/wiki/EPICS#Facilities_using_EPICS>`_
 to implement distributed control systems for devices such as large telescopes,
 particle accelerators, and synchrotrons. Its
-`roots <http://www.aps.anl.gov/epics/docs/APS2014/01-Introduction-to-EPICS.pdf>`_
-go back to a 1988 meeting funded by the Reagan-era Strategic Defense Initiative
+`roots <http://www.aps.anl.gov/epics/docs/APS2014/01-Introduction-to-EPICS.pdf>`_ go back to a 1988 meeting funded by the Reagan-era Strategic Defense Initiative
 ("Star Wars").
 
 Caproto encodes the Channel Access protocol. It parses and validates incoming
@@ -21,6 +20,8 @@ and outgoing bytes, keeping track the state of an EPICS Client, Server, Virtual
 Circuits, and Channels. But, crucially, it performs no I/O itself: handling
 sockets and transport is completely up the caller. Caproto is a toolkit for
 building programs that speak EPICS.
+
+The authors pronounce caproto "kah-proto" (not "C.A. proto"). It's fun to say.
 
 Why do this?
 ============
@@ -53,11 +54,13 @@ How do you know it works?
 * It can talk to libca as a server --- for example, responding correctly to
   caget, caput, camonitor.
 * The Python module that specifies the byte layout of each command is generated
-  using Python and Jinja templates from the documentation itself to reduce
-  the potential for bugs introduced by human transcription. Where we
-  found errors in the documentation, we fixed them and submitted a patch
-  upstream. (NOTE: This is a reminder to submit a patch.)
-* The byte sizes of the DBR types compare exactly to those in pyepics.
+  from a template, scraping the EPICS documentation itself to reduce
+  the potential for bugs introduced by human transcription. (In fact, this
+  uncovered some bugs in the documentation. A patch will be submitted
+  upstream.)
+* A pyepics-like interface built on top of caproto passes the pyepics unit
+  tests.
+* > 90% of the lines of code are covered by tests.
 
 So should I use it?
 ===================
@@ -72,10 +75,16 @@ or to play with the growing family of asynchronous libraries in Python.
 How's the performance?
 ======================
 
-No idea yet! That's high on the list of things we'd like to know. Caproto gets
-some important basics right, like reading bytes directly from sockets into C
-structs with no extra copies. Time will tell if there are any major
-bottlenecks we haven't anticipated.
+Caproto is fast. See its
+`published benchmarks <https://danielballan.github.io/caproto/bench/#/summarylist>`_.
+
+There has been next to no performance tuning at this stage in the development,
+but caproto gets some important basics right, such as reading bytes directly
+between sockets into C structs and numpy arrays with no extra copies. It is
+already faster than pyepics for reading large waveforms. Moreover, the control
+that caproto hands developers to make performance trade-offs should support
+greater optimiziations for use cases beyond a general-purpose Channel Access
+client.
 
 Acknowledgement
 ===============
@@ -92,9 +101,18 @@ Contents
 
 .. toctree::
    :maxdepth: 2
+   :caption: Channel Access Sans I/O
 
    basics
    api
-   examples/index
+   Performance Benchmarks <https://danielballan.github.io/caproto/bench/#/summarylist>
    references
    release-notes
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Clients and Servers
+
+   curio-client
+   curio-server
+   threading-client

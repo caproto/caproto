@@ -1,6 +1,6 @@
-*******************************************************
-Getting Started: Writing Your Own Channel Access Client
-*******************************************************
+**************************************
+Writing Your Own Channel Access Client
+**************************************
 
 .. currentmodule:: caproto
 

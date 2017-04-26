@@ -10,8 +10,8 @@ import curio
 import curio.subprocess
 
 import caproto as ca
-from caproto.examples.curio_server import find_next_tcp_port
-import caproto.examples.curio_server as server
+from caproto.curio.server import find_next_tcp_port
+import caproto.curio.server as server
 
 from caproto import ChType
 
@@ -43,7 +43,7 @@ def get_broadcast_addr_list():
 
 def setup_module(module):
     global _repeater_process
-    from caproto.examples.repeater import main
+    from caproto.asyncio.repeater import main
     logging.getLogger('caproto').setLevel(logging.DEBUG)
     logging.basicConfig()
 
@@ -62,18 +62,18 @@ def teardown_module(module):
 
 
 def test_synchronous_client():
-    from caproto.examples.synchronous_client import main
+    from caproto.sync.simple_client import main
     main(skip_monitor_section=True)
 
 
 def test_curio_client():
-    from caproto.examples.curio_client import main
+    from caproto.curio.client import main
     with curio.Kernel() as kernel:
         kernel.run(main())
 
 
 def test_thread_client():
-    from caproto.thread.client import Context
+    from caproto.threading.client import Context
 
     pv1 = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
     pv2 = "XF:31IDA-OP{Tbl-Ax:X2}Mtr.VAL"
@@ -114,7 +114,7 @@ def test_thread_client():
 
 
 def test_thread_pv():
-    from caproto.thread.client import Context, PV
+    from caproto.threading.client import Context, PV
 
     pv1 = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
     # pv2 = "XF:31IDA-OP{Tbl-Ax:X2}Mtr.VAL"
@@ -157,7 +157,7 @@ def test_thread_pv():
 
 
 def test_curio_server():
-    import caproto.examples.curio_client as client
+    import caproto.curio.client as client
     kernel = curio.Kernel()
 
     async def run_server():

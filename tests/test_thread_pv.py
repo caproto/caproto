@@ -94,7 +94,7 @@ import time
 import unittest
 import numpy
 from contextlib import contextmanager
-from caproto.thread.client import PV, caput, caget, Context
+from caproto.threading.client import PV, caput, caget, Context
 import logging
 from multiprocessing import Process
 
@@ -122,7 +122,7 @@ def get_broadcast_addr_list():
 
 def setup_module(module):
     global _repeater_process
-    from caproto.examples.repeater import main
+    from caproto.asyncio.repeater import main
     logging.getLogger('caproto').setLevel(logging.DEBUG)
     logging.basicConfig()
 
