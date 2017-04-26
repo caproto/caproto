@@ -344,7 +344,7 @@ class PV:
     _default_context = None
 
     def __init__(self, pvname, callback=None, form='time',
-                 verbose=False, auto_monitor=None, count=None,
+                 verbose=False, auto_monitor=False, count=None,
                  connection_callback=None,
                  connection_timeout=None, *, context=None):
 
