@@ -737,13 +737,13 @@ class ClientChannel(_BaseChannel):
         command = ReadNotifyRequest(data_type, data_count, self.sid, ioid)
         return command
 
-    def write(self, data, data_type=None, data_count=None):
+    def write(self, data, data_type=None, data_count=None, metadata=None):
         """
         Generate a valid :class:`WriteNotifyRequest`.
 
         Parameters
         ----------
-        data : object
+        data : tuple, ``numpy.ndarray``, ``array.array``, or bytes
         data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
             Requested Channel Access data type. Default is the channel's
             native data type, which can be checked in the Channel's attribute
@@ -752,6 +752,8 @@ class ClientChannel(_BaseChannel):
             Requested number of values. Default is the channel's native data
             count, which can be checked in the Channel's attribute
             :attr:`native_data_count`.
+        metadata : ``ctypes.BigEndianStructure`` or tuple
+            Status and control metadata for the values
 
         Returns
         -------
@@ -760,7 +762,7 @@ class ClientChannel(_BaseChannel):
         data_type, data_count = self._fill_defaults(data_type, data_count)
         ioid = self.circuit.new_ioid()
         command = WriteNotifyRequest(data, data_type, data_count, self.sid,
-                                     ioid)
+                                     ioid, metadata=metadata)
         return command
 
     def subscribe(self, data_type=None, data_count=None, low=0.0, high=0.0,
@@ -885,14 +887,14 @@ class ServerChannel(_BaseChannel):
         command = ClearChannelResponse(self.sid, self.cid)
         return command
 
-    def read(self, values, ioid, data_type=None, data_count=None, status=1, *,
+    def read(self, data, ioid, data_type=None, data_count=None, status=1, *,
              metadata=None):
         """
         Generate a valid :class:`ReadNotifyResponse`.
 
         Parameters
         ----------
-        values : ???
+        data : tuple, ``numpy.ndarray``, ``array.array``, or bytes
         ioid : integer
         data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
             Requested Channel Access data type. Default is the channel's
@@ -904,7 +906,7 @@ class ServerChannel(_BaseChannel):
             :attr:`native_data_count`.
         status : integer, optional
             Default is 1 (success).
-        metadata :
+        metadata : ``ctypes.BigEndianStructure`` or tuple
             Status and control metadata for the values
 
         Returns
@@ -912,7 +914,7 @@ class ServerChannel(_BaseChannel):
         ReadNotifyResponse
         """
         data_type, data_count = self._fill_defaults(data_type, data_count)
-        command = ReadNotifyResponse(values, data_type, data_count, status,
+        command = ReadNotifyResponse(data, data_type, data_count, status,
                                      ioid, metadata=metadata)
         return command
 
@@ -942,15 +944,15 @@ class ServerChannel(_BaseChannel):
         command = WriteNotifyResponse(data_type, data_count, status, ioid)
         return command
 
-    def subscribe(self, values, subscriptionid, data_type=None,
-                  data_count=None, status_code=32):
+    def subscribe(self, data, subscriptionid, data_type=None,
+                  data_count=None, status_code=32, metadata=None):
         """
         Generate a valid :class:`EventAddResponse`.
 
         Parameters
         ----------
-        values :
-        subscriptionid :
+        data : tuple, ``numpy.ndarray``, ``array.array``, or bytes
+        subscriptionid : integer
         data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
             Requested Channel Access data type. Default is the channel's
             native data type, which can be checked in the Channel's attribute
@@ -961,6 +963,8 @@ class ServerChannel(_BaseChannel):
             :attr:`native_data_count`.
         status_code : integer, optional
             Default is 32 (???).
+        metadata : ``ctypes.BigEndianStructure`` or tuple
+            Status and control metadata for the values
 
         Returns
         -------
@@ -968,8 +972,8 @@ class ServerChannel(_BaseChannel):
         """
         # TODO It's unclear what the status_code means here.
         data_type, data_count = self._fill_defaults(data_type, data_count)
-        command = EventAddResponse(values, data_type, data_count, status_code,
-                                   subscriptionid)
+        command = EventAddResponse(data, data_type, data_count, status_code,
+                                   subscriptionid, metadata=metadata)
         return command
 
     def unsubscribe(self, subscriptionid, data_type=None):
