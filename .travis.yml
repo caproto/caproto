@@ -47,7 +47,7 @@ install:
 
 script:
   - pip install -r test-requirements.txt
-  - coverage run run_tests.py -vs tests/
+  - coverage run run_tests.py -v tests/
   - coverage report -m
   - set -e
   # Install deps for building the docs.
