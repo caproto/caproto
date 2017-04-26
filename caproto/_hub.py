@@ -982,7 +982,7 @@ class ServerChannel(_BaseChannel):
 
         Parameters
         ----------
-        subscriptionid :
+        subscriptionid : integer
         data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
             Requested Channel Access data type. Default is the channel's
             native data type, which can be checked in the Channel's attribute
