@@ -60,9 +60,7 @@ class DatabaseRecordBase:
                       (promote_type(self.data_type, use_ctrl=True),
                        promote_type(self.data_type, use_time=True),
                        promote_type(self.data_type, use_status=True),
-                       # pending merge of #27 which will have conflicts with
-                       # this one now:
-                       # promote_type(self.data_type, use_gr=True),
+                       promote_type(self.data_type, use_gr=True),
                        )
                       }
 
