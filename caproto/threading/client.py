@@ -295,6 +295,7 @@ class Channel:
         self.circuit.subscriptionids[command.subscriptionid] = self
         self.circuit.send(command)
         # TODO verify it worked before returning?
+        return command.subscriptionid
 
     def unsubscribe(self, subscriptionid, *args, **kwargs):
         "Cancel a subscription and await confirmation from the server."
@@ -360,6 +361,7 @@ class PV:
         self.connected = False
         self.connection_timeout = connection_timeout
         self.dflt_count = count
+        self._subid = None
 
         if self.connection_timeout is None:
             self.connection_timeout = 1
@@ -411,7 +413,8 @@ class PV:
             self.auto_monitor = mcount < AUTOMONITOR_MAXLENGTH
 
         if self.auto_monitor:
-            self.chid.subscribe(data_type=self.typefull, data_count=count)
+            self._subid = self.chid.subscribe(data_type=self.typefull,
+                                              data_count=count)
 
         self._cb_count = iter(itertools.count())
 
@@ -484,8 +487,9 @@ class PV:
             # force no-monitor rather than
             use_monitor = False
 
+        # trigger going out to got data from network
         if ((not use_monitor) or
-            (not self.auto_monitor) or
+            (self._subid is None) or
             (self._args['value'] is None) or
             (count is not None and
              count > len(self._args['value']))):
@@ -644,7 +648,9 @@ class PV:
         add_callback.  This index is needed to remove a callback."""
         if not callable(callback):
             raise ValueError()
-
+        if self._subid is None:
+            self._subid = self.chid.subscribe(data_type=self.typefull,
+                                              data_count=self.dflt_count)
         if index is not None:
             raise ValueError("why do this")
         index = next(self._cb_count)
