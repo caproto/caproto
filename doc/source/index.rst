@@ -7,12 +7,14 @@ Caproto is a "bring your own I/O" implementation of the
 Python.
 
 This project is inspired by the broad effort in the Python community to write
-`sans-I/O implementations of network protocols <http://sans-io.readthedocs.io/>`_. The EPICS (Experimental Physics and Industrial Control System) Channel Access
+`sans-I/O implementations of network protocols <http://sans-io.readthedocs.io/>`_.
+The EPICS (Experimental Physics and Industrial Control System) Channel Access
 protocol is used in laboratories and companies
 `around the world <https://en.wikipedia.org/wiki/EPICS#Facilities_using_EPICS>`_
 to implement distributed control systems for devices such as large telescopes,
 particle accelerators, and synchrotrons. Its
-`roots <http://www.aps.anl.gov/epics/docs/APS2014/01-Introduction-to-EPICS.pdf>`_ go back to a 1988 meeting funded by the Reagan-era Strategic Defense Initiative
+`roots <http://www.aps.anl.gov/epics/docs/APS2014/01-Introduction-to-EPICS.pdf>`_
+go back to a 1988 meeting funded by the Reagan-era Strategic Defense Initiative
 ("Star Wars").
 
 Caproto encodes the Channel Access protocol. It parses and validates incoming
