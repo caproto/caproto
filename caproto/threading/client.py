@@ -495,14 +495,25 @@ class PV:
              count > len(self._args['value']))):
             command = self.chid.read(data_type=dt,
                                      data_count=count)
-            info = self._parse_dbr_metadata(command.metadata)
-            print('read() info', info)
-            info['value'] = command.data
-        else:
-            info = self._args
+            self.__ingest_read_response_command(command)
+
+        info = self._args
+
+        if ((as_string and (self.typefull in ca.char_types or
+                            self.typefull in ca.enum_types)) or
+                self.typefull in ca.string_types):
+            return info['char_value']
+        elif not as_numpy:
+            return list(info['value'])
+        return info['value']
+
+    def __ingest_read_response_command(self, command):
+        info = self._parse_dbr_metadata(command.metadata)
+        print('read() info', info)
+        info['value'] = command.data
 
         ret = info['value']
-        if as_string and self.typefull in ca.char_types:
+        if self.typefull in ca.char_types:
             ret = ret.tobytes().partition(b'\x00')[0].decode('utf-8')
             info['char_value'] = ret
         elif self.typefull in ca.string_types:
@@ -510,10 +521,10 @@ class PV:
             if len(ret) == 1:
                 ret = ret[0]
             info['char_value'] = ret
-        elif not as_numpy:
-            ret = list(ret)
+        elif self.typefull is ca.enum_types:
+            info['char_value'] = self.enum_strs[ret[0]]
+
         self._args.update(**info)
-        return ret
 
     @ensure_connection
     def put(self, value, *, wait=False, timeout=30.0,
@@ -599,10 +610,7 @@ class PV:
         To have user-defined code run when the PV value changes,
         use add_callback()
         """
-        info = self._parse_dbr_metadata(command.metadata)
-        print('updated info', info)
-        info['value'] = command.data
-        self._args.update(**info)
+        self.__ingest_read_response_command(command)
         self.run_callbacks()
 
     def run_callbacks(self):
