@@ -10,7 +10,7 @@ import getpass
 import socket
 # N.B. We do no networking whatsoever in caproto. We only use socket for
 # socket.gethostname() to give a nice default for a HostNameRequest command.
-from ._commands import (AccessRightsResponse,
+from ._commands import (AccessRightsResponse, CreateChFailResponse,
                         ClearChannelRequest, ClearChannelResponse,
                         ClientNameRequest, CreateChanRequest,
                         CreateChanResponse, ErrorResponse,
@@ -170,7 +170,7 @@ class VirtualCircuit:
         # opposed to the Circuit as a whole:
         if isinstance(command, (ClearChannelRequest, ClearChannelResponse,
                                 CreateChanRequest, CreateChanResponse,
-                                AccessRightsResponse,
+                                CreateChFailResponse, AccessRightsResponse,
                                 ReadNotifyRequest, ReadNotifyResponse,
                                 WriteNotifyRequest, WriteNotifyResponse,
                                 EventAddRequest, EventAddResponse,
@@ -993,7 +993,18 @@ class ServerChannel(_BaseChannel):
         EventCancelResponse
         """
         data_type, _ = self._fill_defaults(data_type, None)
-        command  = EventCancelResponse(data_type, self.sid, subscriptionid)
+        command = EventCancelResponse(data_type, self.sid, subscriptionid)
+        return command
+
+    def disconnect(self):
+        """
+        Generate a valid :class:`ServerDisconnResponse`.
+
+        Returns
+        -------
+        ServerDisconnResponse
+        """
+        command = ServerDisconnResponse(self.cid)
         return command
 
 
