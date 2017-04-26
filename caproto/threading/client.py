@@ -68,7 +68,8 @@ class Context:
             with self.has_new_command:
                 if self.registered:
                     break
-                self.has_new_command.wait(2)
+                if not self.has_new_command.wait(2):
+                    raise TimeoutError()
         print('Registered with repeater')
 
     def search(self, name):
@@ -84,8 +85,7 @@ class Context:
             with self.has_new_command:
                 if search_command.cid not in self.unanswered_searches:
                     break
-                suc = self.has_new_command.wait(2)
-                if not suc:
+                if not self.has_new_command.wait(2):
                     raise TimeoutError()
 
     def get_circuit(self, address, priority):
@@ -126,7 +126,8 @@ class Context:
             while True:
                 if chan.connected:
                     break
-                circuit.has_new_command.wait(2)
+                if not circuit.has_new_command.wait(2):
+                    raise TimeoutError()
         return chan
 
     def next_command(self, bytes_recv, address):
@@ -179,7 +180,9 @@ class VirtualCircuit:
         self.socket.sendmsg(bytes_to_send)
 
     def next_command(self, bytes_recv, address):
-        "Receive and process and next command from the virtual circuit."
+        """Receive and process and next command from the virtual circuit.
+
+        This will be run on the recv thread"""
         self.circuit.recv(bytes_recv)
         while True:
             with self.has_new_command:
@@ -232,7 +235,7 @@ class Channel:
             return
         else:
             try:
-                self._callback(event_add_command)
+                return self._callback(event_add_command)
             except Exception as ex:
                 print(ex)
 
@@ -265,7 +268,8 @@ class Channel:
             with self.circuit.has_new_command:
                 if ioid not in self.circuit.ioids:
                     break
-                self.circuit.has_new_command.wait(2)
+                if not self.circuit.has_new_command.wait(2):
+                    raise TimeoutError()
         return self.last_reading
 
     def write(self, *args, **kwargs):
@@ -279,7 +283,8 @@ class Channel:
             with self.circuit.has_new_command:
                 if ioid not in self.circuit.ioids:
                     break
-                self.circuit.has_new_command.wait(2)
+                if not self.circuit.has_new_command.wait(60):
+                    raise TimeoutError()
         return self.last_reading
 
     def subscribe(self, *args, **kwargs):
