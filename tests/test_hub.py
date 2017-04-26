@@ -125,19 +125,24 @@ def test_mismatched_event_add_responses(circuit_pair):
     circuit.recv(bytes(res))
     circuit.next_command()
 
-    # Bad response
+    # Bad response -- wrong data_type
     res = ca.EventAddResponse(data=(1,), data_type=6, data_count=1,
                               status_code=1, subscriptionid=1)
     circuit.recv(bytes(res))
     with pytest.raises(ca.RemoteProtocolError):
         circuit.next_command()
 
-    # Bad response
+    # Bad response -- wrong data_count
     res = ca.EventAddResponse(data=(1, 2), data_type=5, data_count=2,
                               status_code=1, subscriptionid=1)
     circuit.recv(bytes(res))
     with pytest.raises(ca.RemoteProtocolError):
         circuit.next_command()
+
+    # Bad request -- wrong sid for this subscriptionid
+    req = ca.EventCancelRequest(data_type=5, sid=1, subscriptionid=1)
+    with pytest.raises(ca.LocalProtocolError):
+        circuit.send(req)
 
 
 def test_empty_datagram():
@@ -153,3 +158,33 @@ def test_extract_address():
     new_style = ca.SearchResponse(port=6666, ip='1.2.3.4', cid=0, version=13)
     ca.extract_address(old_style) == '1.2.3.4'
     ca.extract_address(new_style) == '5.6.7.8'
+
+
+def test_register_convenience_method():
+    broadcaster = ca.Broadcaster(ca.CLIENT)
+    broadcaster.register()
+
+
+def test_broadcaster_checks():
+    b = ca.Broadcaster(ca.CLIENT)
+    with pytest.raises(ca.LocalProtocolError):
+        b.send(ca.SearchRequest(name='LIRR', cid=0, version=13))
+
+    b.send(ca.RepeaterRegisterRequest('1.2.3.4'))
+    res = ca.RepeaterConfirmResponse('5.6.7.8')
+    b.recv(bytes(res), ('5.6.7.8', 6666))
+    assert b.next_command() == res
+
+    req = ca.SearchRequest(name='LIRR', cid=0, version=13)
+    with pytest.raises(ca.LocalProtocolError):
+        b.send(req)
+    b.send(ca.VersionRequest(priority=0, version=13), req)
+
+    res = ca.SearchResponse(port=6666, ip='1.2.3.4', cid=0, version=13)
+    addr = ('1.2.3.4', 6666)
+    b.recv(bytes(res), addr)
+    with pytest.raises(ca.RemoteProtocolError):
+        b.next_command()
+    b.recv(bytes(ca.VersionResponse(version=13)) + bytes(res), addr)
+    b.next_command()
+    b.next_command()
