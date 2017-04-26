@@ -76,7 +76,8 @@ class VirtualCircuit:
         self._sub_counter = itertools.count(0)
         if priority is None and self.our_role is CLIENT:
             raise CaprotoRuntimeError("Client-side VirtualCircuit requires a "
-                                      "non-None priority at initialization time.")
+                                      "non-None priority at initialization "
+                                      "time.")
 
     @property
     def host(self):
