@@ -477,7 +477,14 @@ class PV:
         print('read() info', info)
         info['value'] = command.data
         self._args.update(**info)
-        return info['value']
+        ret = info['value']
+        if as_string and self.typefull in ca.char_types:
+            ret = (b''.join(ret)).decode('utf-8').strip()
+        if self.typefull in ca.string_types:
+            ret = [v.decode('utf-8').strip() for v in ret]
+        if not as_numpy:
+            return list(ret)
+        return ret
 
     @ensure_connection
     def put(self, value, *, wait=False, timeout=30.0,
