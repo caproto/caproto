@@ -965,7 +965,6 @@ if USE_NUMPY:
         ChType.LONG: numpy.int32,
         ChType.DOUBLE: numpy.float64,
         ChType.STRING: numpy.dtype('>S40'),
-        ChType.CHAR: numpy.dtype('>S1')
     }
 
 _array_type_code_map = {
