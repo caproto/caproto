@@ -481,12 +481,12 @@ class PV:
         if as_string and self.typefull in ca.char_types:
             ret = (b''.join(ret)).decode('utf-8').strip()
             info['char_value'] = ret
-        if self.typefull in ca.string_types:
+        elif self.typefull in ca.string_types:
             ret = [v.decode('utf-8').strip() for v in ret]
             if len(ret) == 1:
                 ret = ret[0]
             info['char_value'] = ret
-        if not as_numpy:
+        elif not as_numpy:
             ret = list(ret)
         self._args.update(**info)
         return ret
