@@ -187,7 +187,7 @@ def data_payload(data, metadata, data_type, data_count):
         data_payload = data.astype(data.dtype.newbyteorder('>'))
     elif isinstance(data, collections.Iterable):
         if ntype == ChannelType.STRING:
-            data_payload = b''.join(bytes(d) for d in data)
+            data_payload = b''.join(bytes(d).ljust(40, b'\0') for d in data)
         else:
             data_payload = array.array(array_type_code(ntype), data)
             # Make big-endian.
