@@ -35,5 +35,5 @@ dependencies:
 
 test:
   override:
-    - coverage run run_tests.py -vs tests/
+    - coverage run run_tests.py -v tests/
     - coverage report -m
