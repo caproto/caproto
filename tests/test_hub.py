@@ -29,6 +29,30 @@ def test_counter_wraparound(circuit_pair):
         assert i % MAX == circuit.new_ioid()
         assert i % MAX == broadcaster.new_search_id()
 
+def test_counter_skipping(circuit_pair):
+    circuit, _ = circuit_pair
+    broadcaster = ca.Broadcaster(ca.CLIENT)
+
+    broadcaster.unanswered_searches[0] = 'placeholder'
+    broadcaster.unanswered_searches[2] = 'placeholder'
+    assert broadcaster.new_search_id() == 1
+    assert list(broadcaster.unanswered_searches) == [0, 2]
+    assert broadcaster.new_search_id() == 3
+
+    circuit.channels[2] = 'placeholder'
+    assert circuit.new_channel_id() == 0
+    assert circuit.new_channel_id() == 1
+    # should skip 2
+    assert circuit.new_channel_id() == 3
+
+    circuit._ioids[0] = 'placeholder'
+    # should skip 0
+    circuit.new_ioid() == 1
+
+    circuit.event_add_commands[0] = 'placeholder'
+    # should skip 0
+    circuit.new_subscriptionid() == 1
+
 
 def test_circuit_properties():
     host = '127.0.0.1'
@@ -108,10 +132,24 @@ def test_mismatched_event_add_responses(circuit_pair):
     with pytest.raises(ca.RemoteProtocolError):
         circuit.next_command()
 
-    # Needs data_payload fix likely coming in #45
     # Bad response
-    # res = ca.EventAddResponse(data=(1, 2), data_type=5, data_count=2,
-    #                           status_code=1, subscriptionid=1)
-    # circuit.recv(bytes(res))
-    # with pytest.raises(ca.RemoteProtocolError):
-    #     circuit.next_command()
+    res = ca.EventAddResponse(data=(1, 2), data_type=5, data_count=2,
+                              status_code=1, subscriptionid=1)
+    circuit.recv(bytes(res))
+    with pytest.raises(ca.RemoteProtocolError):
+        circuit.next_command()
+
+
+def test_empty_datagram():
+    broadcaster = ca.Broadcaster(ca.CLIENT)
+    broadcaster.recv(b'', ('127.0.0.1', 6666))
+    assert broadcaster.next_command() is ca.NEED_DATA
+
+
+def test_extract_address():
+    old_style = ca.SearchResponse(port=6666, ip='1.2.3.4', cid=0, version=13)
+    old_style.header.parameter1 = 0xffffffff
+    old_style.sender_address = ('5.6.7.8', 6666)
+    new_style = ca.SearchResponse(port=6666, ip='1.2.3.4', cid=0, version=13)
+    ca.extract_address(old_style) == '1.2.3.4'
+    ca.extract_address(new_style) == '5.6.7.8'
