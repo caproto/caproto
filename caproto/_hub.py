@@ -589,7 +589,7 @@ class _BaseChannel:
         if data_type is None:
             data_type = self.native_data_type
         if data_count is None:
-            data_count = self.native_data_count
+            data_count = 0
         return data_type, data_count
 
     def state_changed(self, role, old_state, new_state, command):
@@ -758,6 +758,8 @@ class ClientChannel(_BaseChannel):
         WriteNotifyRequest
         """
         data_type, data_count = self._fill_defaults(data_type, data_count)
+        if data_count == 0:
+            data_count = len(data)
         ioid = self.circuit.new_ioid()
         command = WriteNotifyRequest(data, data_type, data_count, self.sid,
                                      ioid)

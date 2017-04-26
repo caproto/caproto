@@ -508,8 +508,8 @@ class PV:
         if not isinstance(value, Iterable):
             value = (value, )
 
-        return self.chid.write(v.encode('utf-8') if isinstance(v, str) else v
-                               for v in value)
+        return self.chid.write(tuple(
+            v.encode('utf-8') if isinstance(v, str) else v for v in value))
 
     @ensure_connection
     def get_ctrlvars(self, timeout=5, warn=True):
