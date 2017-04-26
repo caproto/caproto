@@ -283,7 +283,7 @@ class Channel:
             with self.circuit.has_new_command:
                 if ioid not in self.circuit.ioids:
                     break
-                if not self.circuit.has_new_command.wait(2):
+                if not self.circuit.has_new_command.wait(60):
                     raise TimeoutError()
         return self.last_reading
 
