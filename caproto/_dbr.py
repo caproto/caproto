@@ -897,20 +897,25 @@ control_types = (ChType.CTRL_STRING, ChType.CTRL_INT, ChType.CTRL_SHORT,
                  ChType.CTRL_FLOAT, ChType.CTRL_ENUM, ChType.CTRL_CHAR,
                  ChType.CTRL_LONG, ChType.CTRL_DOUBLE)
 
+char_types = (ChType.CHAR, ChType.TIME_CHAR,
+              ChType.CTRL_CHAR, ChType.STS_CHAR)
+
+string_types = (ChType.STRING, ChType.TIME_STRING,
+                ChType.CTRL_STRING, ChType.STS_STRING)
+
+int_types = (ChType.INT, ChType.TIME_INT,
+             ChType.CTRL_INT, ChType.CTRL_INT,
+             ChType.LONG, ChType.TIME_LONG,
+             ChType.CTRL_LONG, ChType.CTRL_LONG)
+
+float_types = (ChType.FLOAT, ChType.TIME_FLOAT,
+               ChType.CTRL_FLOAT, ChType.CTRL_FLOAT,
+               ChType.DOUBLE, ChType.TIME_DOUBLE,
+               ChType.CTRL_DOUBLE, ChType.CTRL_DOUBLE)
+
 char_types = (ChType.CHAR, ChType.TIME_CHAR, ChType.CTRL_CHAR)
 native_float_types = (ChType.FLOAT, ChType.DOUBLE)
 native_int_types = (ChType.INT, ChType.CHAR, ChType.LONG, ChType.ENUM)
-
-if USE_NUMPY:
-    _numpy_map = {
-        ChType.INT: numpy.int16,
-        ChType.FLOAT: numpy.float32,
-        ChType.ENUM: numpy.uint16,
-        ChType.CHAR: numpy.uint8,
-        ChType.LONG: numpy.int32,
-        ChType.DOUBLE: numpy.float64
-    }
-
 
 # map of Epics DBR types to ctypes types
 DBR_TYPES = {
@@ -950,6 +955,18 @@ DBR_TYPES = {
     ChType.CTRL_LONG: DBR_CTRL_LONG,
     ChType.CTRL_DOUBLE: DBR_CTRL_DOUBLE
 }
+
+if USE_NUMPY:
+    _numpy_map = {
+        ChType.INT: numpy.int16,
+        ChType.FLOAT: numpy.float32,
+        ChType.ENUM: numpy.uint16,
+        ChType.CHAR: numpy.uint8,
+        ChType.LONG: numpy.int32,
+        ChType.DOUBLE: numpy.float64,
+        ChType.STRING: numpy.dtype('>S40'),
+        ChType.CHAR: numpy.dtype('>S1')
+    }
 
 _array_type_code_map = {
     ChType.STRING: 'B',  # TO DO
@@ -1016,55 +1033,26 @@ _native_map = {
     ChType.CTRL_DOUBLE: ChType.DOUBLE,
 }
 
-_named_tuples = {}
-for ch_type in status_types + time_types + control_types:
-    _class = DBR_TYPES[ch_type]
-    tup = namedtuple(ch_type.name, (name for name, _ in _class._fields_))
-    _named_tuples.update({ch_type: tup})
-
-_channel_types = ChannelType.__members__.values()
-
 
 def native_type(ftype):
     '''return native field type from TIME or CTRL variant'''
     return _native_map[ftype]
 
 
-def native_to_builtin(value, data_type, data_count):
+def native_to_builtin(value, native_type, data_count):
+    # - A waveform of characters is just a bytestring.
+    # - A waveform of strings is an array whose elements are fixed-length (40-
+    #   character) strings.
+    # - Enums are just integers that happen to have special significance.
+    # - Everything else is, straightforwardly, an array of numbers.
     if USE_NUMPY:
-        # Return an ndarray.
-        dt = numpy.dtype(_numpy_map[data_type])
+        # Return an ndarray
+        dt = numpy.dtype(_numpy_map[native_type])
         dt = dt.newbyteorder('>')
         return numpy.frombuffer(value, dtype=dt)
     else:
         # TODO
         return  # array.array()
-
-
-def to_builtin(structure, data_type, data_count):
-    """
-    Convert a DBR_* structure into a built-in type.
-
-    If the structure is a 'native type' (a scalar), a scalar is returned. If it
-    is a compound type, a namedtuple is returned.
-
-    The namedtuple will have a 'value' field with a scalar if
-    ``data_count == 1`` or a numpy array if ``data_count > 1``.
-
-    Parameters
-    ----------
-    structure : ctypes.Structure
-        a DBR_* structure
-    data_type : ChannelType or integer
-    data_count : integer
-    """
-    if data_type in native_types:
-        return native_to_builtin(structure, data_type, data_count)
-    else:
-        # Return a namedtuple containing built-in Python types.
-        tup = _named_tuples[data_type]
-        return tup(*(native_to_builtin(getattr(structure, name), dtype, 1)
-                     for name, dtype in structure._fields_))
 
 
 def promote_type(ftype, *, use_status=False, use_time=False, use_ctrl=False):

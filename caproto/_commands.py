@@ -80,23 +80,20 @@ def ipv4_from_int32(int_packed_ip: int) -> str:
     return socket.inet_ntop(socket.AF_INET, encoded_ip)
 
 
-def from_buffer(data_type, buffer):
+def from_buffer(data_type, data_count, buffer):
     "Wraps dbr_type.from_buffer and special-case strings."
-    if data_type == ChannelType.STRING:
-        _len = len(buffer)
-        if _len > 40:
-            raise CaprotoValueError("EPICS imposes a 40-character limit on "
-                                    "strings. The " "string {!r} is {} "
-                                    "characters.".format(buffer, _len))
-        if _len < 40:
-            buffer = buffer.ljust(40, b'\x00')
-    if data_type > 6:
+    payload_size = data_count * ctypes.sizeof(
+        DBR_TYPES[native_type(data_type)])
+    if data_type != native_type(data_type):
+        # This payload has a metadata component.
         md_payload = DBR_TYPES[data_type].from_buffer(buffer)
         md_size = ctypes.sizeof(DBR_TYPES[data_type])
     else:
         md_payload = b''
         md_size = 0
-    data_payload = buffer[md_size:]
+    # Use payload_size to strip off any right-padding that may have been added
+    # to make the byte-size of the payload a multiple of 8.
+    data_payload = buffer[md_size:md_size + payload_size]
     return md_payload, data_payload
     # TODO Handle padding
 
@@ -190,7 +187,7 @@ def data_payload(data, metadata, data_type, data_count):
         data_payload = data.astype(data.dtype.newbyteorder('>'))
     elif isinstance(data, collections.Iterable):
         if ntype == ChannelType.STRING:
-            data_payload = b''.join(bytes(d) for d in data)
+            data_payload = b''.join(bytes(d).ljust(40, b'\0') for d in data)
         else:
             data_payload = array.array(array_type_code(ntype), data)
             # Make big-endian.
@@ -364,7 +361,8 @@ class Message(metaclass=_MetaDirectionalMessage):
         """
         if not cls.HAS_PAYLOAD:
             return cls.from_components(header)
-        payload = from_buffer(header.data_type, payload_bytes)
+        payload = from_buffer(header.data_type, header.data_count,
+                              payload_bytes)
         return cls.from_components(header, *payload)
 
     @classmethod
@@ -885,7 +883,8 @@ class EventAddResponse(Message):
         if not payload_bytes:
             return cls.from_components(header,
                                        sender_address=sender_address)
-        payload = from_buffer(header.data_type, payload_bytes)
+        payload = from_buffer(header.data_type, header.data_count,
+                              payload_bytes)
         return cls.from_components(header, *payload,
                                    sender_address=sender_address)
 
@@ -1302,6 +1301,18 @@ class CreateChanRequest(Message):
         header = CreateChanRequestHeader(size, cid, version)
         super().__init__(header, b'', payload)
 
+    @classmethod
+    def from_wire(cls, header, payload_bytes, *, sender_address=None):
+        """
+        Use header.dbr_type to pack payload bytes into the right strucutre.
+
+        Some Command types allocate a different meaning to the header.dbr_type
+        field, and these override this method in their subclass.
+        """
+
+        return cls.from_components(header, b'', payload_bytes,
+                                   sender_address=sender_address)
+
     payload_size = property(lambda self: self.header.payload_size)
     cid = property(lambda self: self.header.parameter1)
     version = property(lambda self: self.header.parameter2)
@@ -1463,6 +1474,17 @@ class ClientNameRequest(Message):
         size, payload = padded_string_payload(name)
         header = ClientNameRequestHeader(size)
         super().__init__(header, b'', payload)
+
+    @classmethod
+    def from_wire(cls, header, payload_bytes, *, sender_address=None):
+        """
+        Use header.dbr_type to pack payload bytes into the right strucutre.
+
+        Some Command types allocate a different meaning to the header.dbr_type
+        field, and these override this method in their subclass.
+        """
+        return cls.from_components(header, b'', payload_bytes,
+                                   sender_address=sender_address)
 
     payload_size = property(lambda self: self.header.payload_size)
     name = property(lambda self: bytes(self.buffers[1]).rstrip(b'\x00'))

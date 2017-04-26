@@ -2,7 +2,7 @@ import array
 import copy
 import struct
 import socket
-from numpy.testing import assert_array_almost_equal
+from numpy.testing import assert_array_equal, assert_array_almost_equal
 import numpy
 
 import caproto as ca
@@ -153,6 +153,13 @@ payloads = [
     (ca.ChType.TIME_DOUBLE, 1, (7,), ca.DBR_TIME_DOUBLE(1, 0, 3, 5)),
     (ca.ChType.TIME_DOUBLE, 1, (7,), (1, 0, 3, 5)),
     (ca.ChType.TIME_DOUBLE, 2, (7, 3.4), (1, 0, 3, 5)),
+
+    (ca.ChType.STRING, 1, b'abc'.ljust(40, b'\x00'), None),
+    (ca.ChType.STRING, 3, 3 * b'abc'.ljust(40, b'\x00'), None),
+    (ca.ChType.STRING, 3, numpy.array(['abc', 'def'], '>S40'), None),
+    (ca.ChType.STRING, 3, numpy.array(['abc', 'def'], 'S40'), None),
+    (ca.ChType.CHAR, 1, b'z', None),
+    (ca.ChType.CHAR, 3, b'abc', None),
 ]
 
 
@@ -187,9 +194,12 @@ def test_reads(circuit_pair, data_type, data_count, data, metadata):
         expected.byteswap()
         assert_array_almost_equal(res_received.data, expected)
     elif isinstance(data, bytes):
-        assert data == res_received.data.tobytes()
+        assert data == _np_hack(res_received.data)
     else:
-        assert_array_almost_equal(res_received.data, data)
+        try:
+            assert_array_equal(res_received.data, data)  # for strings
+        except AssertionError:
+            assert_array_almost_equal(res_received.data, data)  # for floats
 
 
 @pytest.mark.parametrize('data_type, data_count, data, metadata', payloads)
@@ -223,9 +233,12 @@ def test_writes(circuit_pair, data_type, data_count, data, metadata):
         expected.byteswap()
         assert_array_almost_equal(req_received.data, expected)
     elif isinstance(data, bytes):
-        assert data == req_received.data.tobytes()
+        assert data == _np_hack(req_received.data)
     else:
-        assert_array_almost_equal(req_received.data, data)
+        try:
+            assert_array_equal(req_received.data, data)  # for strings
+        except AssertionError:
+            assert_array_almost_equal(req_received.data, data)  # for floats
 
 
 def test_extended():

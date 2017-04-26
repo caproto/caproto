@@ -28,12 +28,16 @@ before_install:
   - export EPICS_CA_MAX_ARRAY_BYTES=10000000
   - export DOCKERIMAGE="klauer/epics-docker"
   - export EPICS_BASE=/usr/lib/epics
+  - export PE_DOCKERIMAGE="klauer/simioc-docker"
+  - export PE_DOCKERTAG="pyepics-docker"
   - perl --version
   - git fetch --unshallow
   - sudo bash install_epics_on_travis.sh
   - docker pull ${DOCKERIMAGE}
+  - docker pull ${PE_DOCKERIMAGE}:${PE_DOCKERTAG}
   - docker images
-  - docker run -d -p $DOCKER0_IP:7000-9000:5064/tcp --name epics_iocs ${DOCKERIMAGE}
+  - docker run -d -p $DOCKER0_IP:7000-9000:5064/tcp  ${DOCKERIMAGE}
+  - docker run -d -p $DOCKER0_IP:7000-9000:5064/tcp ${PE_DOCKERIMAGE}:${PE_DOCKERTAG}
   - docker ps -a
   - ip addr
 

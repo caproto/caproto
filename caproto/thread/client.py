@@ -6,6 +6,8 @@ import socket
 import threading
 import time
 
+from collections import Iterable
+
 CA_REPEATER_PORT = 5065
 CA_SERVER_PORT = 5064
 
@@ -66,7 +68,7 @@ class Context:
             with self.has_new_command:
                 if self.registered:
                     break
-                self.has_new_command.wait()
+                self.has_new_command.wait(2)
         print('Registered with repeater')
 
     def search(self, name):
@@ -82,7 +84,7 @@ class Context:
             with self.has_new_command:
                 if search_command.cid not in self.unanswered_searches:
                     break
-                suc = self.has_new_command.wait(5)
+                suc = self.has_new_command.wait(2)
                 if not suc:
                     raise TimeoutError()
 
@@ -124,7 +126,7 @@ class Context:
             while True:
                 if chan.connected:
                     break
-                circuit.has_new_command.wait()
+                circuit.has_new_command.wait(2)
         return chan
 
     def next_command(self, bytes_recv, address):
@@ -229,7 +231,10 @@ class Channel:
         if self._callback is None:
             return
         else:
-            self._callback(event_add_command)
+            try:
+                self._callback(event_add_command)
+            except Exception as ex:
+                print(ex)
 
     def wait_for_connection(self):
         """Wait for this Channel to be connected, ready to use.
@@ -260,7 +265,7 @@ class Channel:
             with self.circuit.has_new_command:
                 if ioid not in self.circuit.ioids:
                     break
-                self.circuit.has_new_command.wait()
+                self.circuit.has_new_command.wait(2)
         return self.last_reading
 
     def write(self, *args, **kwargs):
@@ -274,7 +279,7 @@ class Channel:
             with self.circuit.has_new_command:
                 if ioid not in self.circuit.ioids:
                     break
-                self.circuit.has_new_command.wait()
+                self.circuit.has_new_command.wait(2)
         return self.last_reading
 
     def subscribe(self, *args, **kwargs):
@@ -332,7 +337,7 @@ class PV:
     _default_context = None
 
     def __init__(self, pvname, callback=None, form='time',
-                 verbose=False, auto_monitor=None, count= None,
+                 verbose=False, auto_monitor=None, count=None,
                  connection_callback=None,
                  connection_timeout=None, *, context=None):
 
@@ -349,6 +354,7 @@ class PV:
         self.ftype = None
         self.connected = False
         self.connection_timeout = connection_timeout
+        self.dflt_count = count
 
         if self.connection_timeout is None:
             self.connection_timeout = 1
@@ -379,7 +385,7 @@ class PV:
         # not handling lazy instantiation
         self._context.search(self.pvname)
         self.chid = self._context.create_channel(self.pvname)
-
+        self.connected = True
         self._args['type'] = ca.ChType(self.chid.channel.native_data_type)
         self._args['typefull'] = ca.promote_type(self.type,
                                                  use_time=(form == 'time'),
@@ -396,9 +402,13 @@ class PV:
 
         self.chid.register_user_callback(self.__on_changes)
         # if auto_monitor:
-        self.chid.subscribe(data_type=self.typefull)
+        self.chid.subscribe(data_type=self.typefull, data_count=count)
 
         self._cb_count = iter(itertools.count())
+
+        # todo move to async connect logic
+        for cb in self.connection_callbacks:
+            cb(pvname=pvname, conn=True, pv=self)
 
     def force_connect(self, pvname=None, chid=None, conn=True, **kws):
         ...
@@ -452,12 +462,34 @@ class PV:
         val : Object
             The value, the type is dependent on the underlying PV
         """
-        command = self.chid.read(data_type=self.typefull)
+        if count is None:
+            count = self.dflt_count
+        dt = self.typefull
+        if not as_string and self.typefull in ca.char_types:
+            re_map = {ca.ChType.CHAR: ca.ChType.INT,
+                      ca.ChType.CTRL_CHAR: ca.ChType.CTRL_INT,
+                      ca.ChType.TIME_CHAR: ca.ChType.TIME_INT,
+                      ca.ChType.STS_CHAR: ca.ChType.STS_INT}
+            dt = re_map[self.typefull]
+        command = self.chid.read(data_type=dt,
+                                 data_count=count)
         info = self._parse_dbr_metadata(command.metadata)
         print('read() info', info)
         info['value'] = command.data
+
+        ret = info['value']
+        if as_string and self.typefull in ca.char_types:
+            ret = (b''.join(ret)).decode('utf-8').strip()
+            info['char_value'] = ret
+        elif self.typefull in ca.string_types:
+            ret = [v.decode('utf-8').strip() for v in ret]
+            if len(ret) == 1:
+                ret = ret[0]
+            info['char_value'] = ret
+        elif not as_numpy:
+            ret = list(ret)
         self._args.update(**info)
-        return info['value']
+        return ret
 
     @ensure_connection
     def put(self, value, *, wait=False, timeout=30.0,
@@ -466,15 +498,37 @@ class PV:
         complete, and optionally specifying a callback function to be run
         when the processing is complete.
         """
-        return self.chid.write((value,))
+        if self._args['typefull'] in ca.enum_types:
+            if isinstance(value, str):
+                try:
+                    value = self.enum_strs.index(value)
+                except ValueError:
+                    raise ValueError('{} is not in Enum ({}'.format(
+                        value, self.enum_strs))
+        if not isinstance(value, Iterable):
+            value = (value, )
+
+        return self.chid.write(tuple(
+            v.encode('utf-8') if isinstance(v, str) else v for v in value))
 
     @ensure_connection
     def get_ctrlvars(self, timeout=5, warn=True):
         "get control values for variable"
+        dtype = ca.promote_type(self.type, use_ctrl=True)
+        command = self.chid.read(data_type=dtype)
+        info = self._parse_dbr_metadata(command.metadata)
+        info['value'] = command.data
+        self._args.update(**info)
+        return info
 
     @ensure_connection
     def get_timevars(self, timeout=5, warn=True):
         "get time values for variable"
+        dtype = ca.promote_type(self.type, use_time=True)
+        command = self.chid.read(data_type=dtype)
+        info = self._parse_dbr_metadata(command.metadata)
+        info['value'] = command.data
+        self._args.update(**info)
 
     def _parse_dbr_metadata(self, dbr_data):
         ret = {}
@@ -499,6 +553,10 @@ class PV:
         for attr, arg in arg_map.items():
             if hasattr(dbr_data, attr):
                 ret[arg] = getattr(dbr_data, attr)
+
+        if ret.get('enum_strs', None):
+            ret['enum_strs'] = tuple(k.value.decode('utf-8') for
+                                     k in ret['enum_strs'] if k.value)
 
         if hasattr(dbr_data, 'nanoSeconds'):
             ret['posixseconds'] = dbr_data.secondsSinceEpoch
@@ -639,7 +697,7 @@ class PV:
         .NELM field).  See also 'count' property"""
         if self._getarg('count') == 1:
             return 1
-        return None
+        return self.chid.channel.native_data_count
 
     @property
     def read_access(self):
@@ -849,3 +907,69 @@ class PV:
 
     def disconnect(self):
         "disconnect PV"
+
+
+def get_pv(pvname, *args, **kwargs):
+    return PV(pvname)
+
+
+def caput(pvname, value, wait=False, timeout=60):
+    """caput(pvname, value, wait=False, timeout=60)
+    simple put to a pv's value.
+       >>> caput('xx.VAL',3.0)
+
+    to wait for pv to complete processing, use 'wait=True':
+       >>> caput('xx.VAL',3.0,wait=True)
+    """
+    thispv = get_pv(pvname, connect=True)
+    if thispv.connected:
+        return thispv.put(value, wait=wait, timeout=timeout)
+
+
+def caget(pvname, as_string=False, count=None, as_numpy=True,
+          use_monitor=False, timeout=5.0):
+    """caget(pvname, as_string=False)
+    simple get of a pv's value..
+       >>> x = caget('xx.VAL')
+
+    to get the character string representation (formatted double,
+    enum string, etc):
+       >>> x = caget('xx.VAL', as_string=True)
+
+    to get a truncated amount of data from an array, you can specify
+    the count with
+       >>> x = caget('MyArray.VAL', count=1000)
+    """
+    start_time = time.time()
+    thispv = get_pv(pvname, timeout=timeout, connect=True)
+    if thispv.connected:
+        if as_string:
+            thispv.get_ctrlvars()
+        timeout -= (time.time() - start_time)
+        val = thispv.get(count=count, timeout=timeout,
+                         use_monitor=use_monitor,
+                         as_string=as_string,
+                         as_numpy=as_numpy)
+
+        return val
+
+
+def cainfo(pvname, print_out=True):
+    """cainfo(pvname,print_out=True)
+
+    return printable information about pv
+       >>>cainfo('xx.VAL')
+
+    will return a status report for the pv.
+
+    If print_out=False, the status report will be printed,
+    and not returned.
+    """
+    thispv = get_pv(pvname, connect=True)
+    if thispv.connected:
+        thispv.get()
+        thispv.get_ctrlvars()
+        if print_out:
+            ca.write(thispv.info)
+        else:
+            return thispv.info
