@@ -900,6 +900,9 @@ control_types = (ChType.CTRL_STRING, ChType.CTRL_INT, ChType.CTRL_SHORT,
 char_types = (ChType.CHAR, ChType.TIME_CHAR,
               ChType.CTRL_CHAR, ChType.STS_CHAR)
 
+string_types = (ChType.STRING, ChType.TIME_STRING,
+                ChType.CTRL_STRING, ChType.STS_STRING)
+
 int_types = (ChType.INT, ChType.TIME_INT,
              ChType.CTRL_INT, ChType.CTRL_INT,
              ChType.LONG, ChType.TIME_LONG,

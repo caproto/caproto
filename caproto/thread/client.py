@@ -464,7 +464,14 @@ class PV:
         """
         if count is None:
             count = self.dflt_count
-        command = self.chid.read(data_type=self.typefull,
+        dt = self.typefull
+        if not as_string and self.typefull in ca.char_types:
+            re_map = {ca.ChType.CHAR: ca.ChType.INT,
+                      ca.ChType.CTRL_CHAR: ca.ChType.CTRL_INT,
+                      ca.ChType.TIME_CHAR: ca.ChType.TIME_INT,
+                      ca.ChType.STS_CHAR: ca.ChType.STS_INT}
+            dt = re_map[self.typefull]
+        command = self.chid.read(data_type=dt,
                                  data_count=count)
         info = self._parse_dbr_metadata(command.metadata)
         print('read() info', info)
