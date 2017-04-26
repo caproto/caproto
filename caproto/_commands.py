@@ -920,7 +920,6 @@ class EventCancelRequest(Message):
         super().__init__(header)
 
     data_type = property(lambda self: self.header.data_type)
-    data_count = property(lambda self: self.header.data_count)
     sid = property(lambda self: self.header.parameter1)
     subscriptionid = property(lambda self: self.header.parameter2)
 
