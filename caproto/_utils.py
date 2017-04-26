@@ -78,6 +78,10 @@ class CaprotoKeyError(KeyError, CaprotoError):
     ...
 
 
+class CaprotoNotImplementedError(NotImplementedError, CaprotoError):
+    ...
+
+
 class CaprotoValueError(ValueError, CaprotoError):
     ...
 

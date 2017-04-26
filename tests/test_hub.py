@@ -2,11 +2,12 @@ import pytest
 import caproto as ca
 
 
-def make_channels(cli_circuit, srv_circuit, data_type, data_count):
-    cid = 0
-    sid = 0
-    cli_channel = ca.ClientChannel('name', cli_circuit, cid)
-    srv_channel = ca.ServerChannel('name', srv_circuit, cid)
+def make_channels(cli_circuit, srv_circuit, data_type, data_count, name='a'):
+    cid = cli_circuit.new_channel_id()
+    sid = srv_circuit.new_channel_id()
+
+    cli_channel = ca.ClientChannel(name, cli_circuit, cid)
+    srv_channel = ca.ServerChannel(name, srv_circuit, cid)
     req = cli_channel.create()
     cli_circuit.send(req)
     srv_circuit.recv(bytes(req))
@@ -28,6 +29,30 @@ def test_counter_wraparound(circuit_pair):
         assert i % MAX == circuit.new_subscriptionid()
         assert i % MAX == circuit.new_ioid()
         assert i % MAX == broadcaster.new_search_id()
+
+def test_counter_skipping(circuit_pair):
+    circuit, _ = circuit_pair
+    broadcaster = ca.Broadcaster(ca.CLIENT)
+
+    broadcaster.unanswered_searches[0] = 'placeholder'
+    broadcaster.unanswered_searches[2] = 'placeholder'
+    assert broadcaster.new_search_id() == 1
+    assert list(broadcaster.unanswered_searches) == [0, 2]
+    assert broadcaster.new_search_id() == 3
+
+    circuit.channels[2] = 'placeholder'
+    assert circuit.new_channel_id() == 0
+    assert circuit.new_channel_id() == 1
+    # should skip 2
+    assert circuit.new_channel_id() == 3
+
+    circuit._ioids[0] = 'placeholder'
+    # should skip 0
+    circuit.new_ioid() == 1
+
+    circuit.event_add_commands[0] = 'placeholder'
+    # should skip 0
+    circuit.new_subscriptionid() == 1
 
 
 def test_circuit_properties():
@@ -101,17 +126,104 @@ def test_mismatched_event_add_responses(circuit_pair):
     circuit.recv(bytes(res))
     circuit.next_command()
 
-    # Bad response
+    # Bad response -- wrong data_type
     res = ca.EventAddResponse(data=(1,), data_type=6, data_count=1,
                               status_code=1, subscriptionid=1)
     circuit.recv(bytes(res))
     with pytest.raises(ca.RemoteProtocolError):
         circuit.next_command()
 
-    # Needs data_payload fix likely coming in #45
-    # Bad response
-    # res = ca.EventAddResponse(data=(1, 2), data_type=5, data_count=2,
-    #                           status_code=1, subscriptionid=1)
-    # circuit.recv(bytes(res))
-    # with pytest.raises(ca.RemoteProtocolError):
-    #     circuit.next_command()
+    # Bad response -- wrong data_count
+    res = ca.EventAddResponse(data=(1, 2), data_type=5, data_count=2,
+                              status_code=1, subscriptionid=1)
+    circuit.recv(bytes(res))
+    with pytest.raises(ca.RemoteProtocolError):
+        circuit.next_command()
+
+    # Bad request -- wrong sid for this subscriptionid
+    req = ca.EventCancelRequest(data_type=5, sid=1, subscriptionid=1)
+    with pytest.raises(ca.LocalProtocolError):
+        circuit.send(req)
+
+
+def test_empty_datagram():
+    broadcaster = ca.Broadcaster(ca.CLIENT)
+    broadcaster.recv(b'', ('127.0.0.1', 6666))
+    assert broadcaster.next_command() is ca.NEED_DATA
+
+
+def test_extract_address():
+    old_style = ca.SearchResponse(port=6666, ip='1.2.3.4', cid=0, version=13)
+    old_style.header.parameter1 = 0xffffffff
+    old_style.sender_address = ('5.6.7.8', 6666)
+    new_style = ca.SearchResponse(port=6666, ip='1.2.3.4', cid=0, version=13)
+    ca.extract_address(old_style) == '1.2.3.4'
+    ca.extract_address(new_style) == '5.6.7.8'
+
+
+def test_register_convenience_method():
+    broadcaster = ca.Broadcaster(ca.CLIENT)
+    broadcaster.register()
+
+
+def test_broadcaster_checks():
+    b = ca.Broadcaster(ca.CLIENT)
+    with pytest.raises(ca.LocalProtocolError):
+        b.send(ca.SearchRequest(name='LIRR', cid=0, version=13))
+
+    b.send(ca.RepeaterRegisterRequest('1.2.3.4'))
+    res = ca.RepeaterConfirmResponse('5.6.7.8')
+    b.recv(bytes(res), ('5.6.7.8', 6666))
+    assert b.next_command() == res
+
+    req = ca.SearchRequest(name='LIRR', cid=0, version=13)
+    with pytest.raises(ca.LocalProtocolError):
+        b.send(req)
+    b.send(ca.VersionRequest(priority=0, version=13), req)
+
+    res = ca.SearchResponse(port=6666, ip='1.2.3.4', cid=0, version=13)
+    addr = ('1.2.3.4', 6666)
+    b.recv(bytes(res), addr)
+    with pytest.raises(ca.RemoteProtocolError):
+        b.next_command()
+    b.recv(bytes(ca.VersionResponse(version=13)) + bytes(res), addr)
+    b.next_command()
+    b.next_command()
+
+
+def test_methods(circuit_pair):
+    # testing lines in channel convenience methods not otherwise covered
+    cli_circuit, srv_circuit = circuit_pair
+    cli_channel1, srv_channel1 = make_channels(*circuit_pair, 5, 1, name='a')
+    cli_channel2, srv_channel2 = make_channels(*circuit_pair, 5, 1, name='b')
+
+    srv_channel1.version()  # smoke test
+
+    # Subscribe to two channels on the same circuit.
+    req1 = cli_channel1.subscribe()
+    cli_circuit.send(req1)
+    req2 = cli_channel2.subscribe()
+    cli_circuit.send(req2)
+    req3 = cli_channel2.subscribe()
+    cli_circuit.send(req3)
+
+    # Non-existent subscriptionid
+    with pytest.raises(ca.CaprotoKeyError):
+        cli_circuit.send(cli_channel1.unsubscribe(67))
+    # Wrong channel's subscriptionid (req3 but cli_channel1)
+    with pytest.raises(ca.CaprotoValueError):
+        cli_circuit.send(cli_channel1.unsubscribe(req3.subscriptionid))
+
+
+def test_error_response(circuit_pair):
+    cli_circuit, srv_circuit = circuit_pair
+    cli_channel, srv_channel = make_channels(*circuit_pair, 5, 1, name='a')
+    req = cli_channel.read()
+    buffers_to_send = cli_circuit.send(req)
+    srv_circuit.recv(*buffers_to_send)
+    req_received = srv_circuit.next_command()
+    srv_circuit.send(ca.ErrorResponse(original_request=req_received,
+                                      cid=srv_channel.cid,
+                                      status_code=42,
+                                      error_message='Tom missed the train.'))
+    # TODO Check more things once we decide on what errors should do.
