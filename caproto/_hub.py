@@ -564,7 +564,6 @@ class _BaseChannel:
         self.native_data_count = None
         self.sid = None
         self.access_rights = None
-        self.cleared = False  # If True, Channel is at end of life.
 
     @property
     def subscriptions(self):
@@ -573,13 +572,6 @@ class _BaseChannel:
         """
         return {k: v for k, v in self.circuit.event_add_commands.items()
                 if v.sid == self.sid}
-
-    def kill(self):
-        """
-        Mark as dead even though an ErrorResponse message was never processed.
-        """
-        self.cleared = True
-        # TODO Advance state machine.
 
     def _fill_defaults(self, data_type, data_count):
         # Boilerplate used in many convenience methods:
