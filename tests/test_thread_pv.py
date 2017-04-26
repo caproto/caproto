@@ -469,6 +469,7 @@ class PV_Tests(unittest.TestCase):
         time.sleep(0.1)
         val = pv.get()
         self.assertEqual(val, 0)
+        assert pv.get(as_string=True) == 'Stop'
 
     def test_DoubleVal(self):
         pvn = pvnames.double_pv

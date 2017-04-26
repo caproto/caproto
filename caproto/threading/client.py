@@ -499,10 +499,16 @@ class PV:
 
         info = self._args
 
-        if ((as_string and (self.typefull in ca.char_types or
-                            self.typefull in ca.enum_types)) or
+        if (as_string and (self.typefull in ca.char_types) or
                 self.typefull in ca.string_types):
             return info['char_value']
+        elif as_string and self.typefull in ca.enum_types:
+            enum_strs = self.enum_strs
+            ret = [enum_strs[r] for r in info['value']]
+            if len(ret) == 1:
+                ret, = ret
+            return ret
+
         elif not as_numpy:
             return list(info['value'])
         return info['value']
@@ -521,8 +527,6 @@ class PV:
             if len(ret) == 1:
                 ret = ret[0]
             info['char_value'] = ret
-        elif self.typefull is ca.enum_types:
-            info['char_value'] = self.enum_strs[ret[0]]
 
         self._args.update(**info)
 
