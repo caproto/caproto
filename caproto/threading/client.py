@@ -484,7 +484,7 @@ class PV:
 
         ret = info['value']
         if as_string and self.typefull in ca.char_types:
-            ret = (b''.join(ret)).decode('utf-8').strip()
+            ret = ret.partition(b'\x00')[0].decode('utf-8')
             info['char_value'] = ret
         elif self.typefull in ca.string_types:
             ret = [v.decode('utf-8').strip() for v in ret]
