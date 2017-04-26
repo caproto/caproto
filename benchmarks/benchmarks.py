@@ -5,7 +5,7 @@ import curio
 import epics
 
 from . import util
-from caproto.examples.curio_client import Context
+from caproto.curio.client import Context
 
 
 WAVEFORM_PV = 'wfioc:wf'
