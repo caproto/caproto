@@ -180,7 +180,9 @@ class VirtualCircuit:
         self.socket.sendmsg(bytes_to_send)
 
     def next_command(self, bytes_recv, address):
-        "Receive and process and next command from the virtual circuit."
+        """Receive and process and next command from the virtual circuit.
+
+        This will be run on the recv thread"""
         self.circuit.recv(bytes_recv)
         while True:
             with self.has_new_command:
@@ -233,7 +235,7 @@ class Channel:
             return
         else:
             try:
-                self._callback(event_add_command)
+                return self._callback(event_add_command)
             except Exception as ex:
                 print(ex)
 
