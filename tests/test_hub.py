@@ -2,11 +2,12 @@ import pytest
 import caproto as ca
 
 
-def make_channels(cli_circuit, srv_circuit, data_type, data_count):
-    cid = 0
-    sid = 0
-    cli_channel = ca.ClientChannel('name', cli_circuit, cid)
-    srv_channel = ca.ServerChannel('name', srv_circuit, cid)
+def make_channels(cli_circuit, srv_circuit, data_type, data_count, name='a'):
+    cid = cli_circuit.new_channel_id()
+    sid = srv_circuit.new_channel_id()
+
+    cli_channel = ca.ClientChannel(name, cli_circuit, cid)
+    srv_channel = ca.ServerChannel(name, srv_circuit, cid)
     req = cli_channel.create()
     cli_circuit.send(req)
     srv_circuit.recv(bytes(req))
@@ -188,3 +189,41 @@ def test_broadcaster_checks():
     b.recv(bytes(ca.VersionResponse(version=13)) + bytes(res), addr)
     b.next_command()
     b.next_command()
+
+
+def test_methods(circuit_pair):
+    # testing lines in channel convenience methods not otherwise covered
+    cli_circuit, srv_circuit = circuit_pair
+    cli_channel1, srv_channel1 = make_channels(*circuit_pair, 5, 1, name='a')
+    cli_channel2, srv_channel2 = make_channels(*circuit_pair, 5, 1, name='b')
+
+    srv_channel1.version()  # smoke test
+
+    # Subscribe to two channels on the same circuit.
+    req1 = cli_channel1.subscribe()
+    cli_circuit.send(req1)
+    req2 = cli_channel2.subscribe()
+    cli_circuit.send(req2)
+    req3 = cli_channel2.subscribe()
+    cli_circuit.send(req3)
+
+    # Non-existent subscriptionid
+    with pytest.raises(ca.CaprotoKeyError):
+        cli_circuit.send(cli_channel1.unsubscribe(67))
+    # Wrong channel's subscriptionid (req3 but cli_channel1)
+    with pytest.raises(ca.CaprotoValueError):
+        cli_circuit.send(cli_channel1.unsubscribe(req3.subscriptionid))
+
+
+def test_error_response(circuit_pair):
+    cli_circuit, srv_circuit = circuit_pair
+    cli_channel, srv_channel = make_channels(*circuit_pair, 5, 1, name='a')
+    req = cli_channel.read()
+    buffers_to_send = cli_circuit.send(req)
+    srv_circuit.recv(*buffers_to_send)
+    req_received = srv_circuit.next_command()
+    srv_circuit.send(ca.ErrorResponse(original_request=req_received,
+                                      cid=srv_channel.cid,
+                                      status_code=42,
+                                      error_message='Tom missed the train.'))
+    # TODO Check more things once we decide on what errors should do.
