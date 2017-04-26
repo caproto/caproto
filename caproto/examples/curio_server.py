@@ -9,7 +9,6 @@ import caproto as ca
 from caproto import (DatabaseRecordDouble, DatabaseRecordInteger,
                      DatabaseRecordEnum)
 from caproto import (EPICS_CA1_PORT, EPICS_CA2_PORT)
-from caproto import ReadNotifyResponse
 
 
 def find_next_tcp_port(host='0.0.0.0', starting_port=EPICS_CA2_PORT + 1):
@@ -117,9 +116,9 @@ class VirtualCircuit:
             # TODO
             db_entry._data['native'] = [db_entry.value]
             metadata, data = db_entry.get_dbr_data(command.data_type)
-            yield ReadNotifyResponse(data=data, data_type=command.data_type,
-                                     data_count=len(data), status=1,
-                                     ioid=command.ioid, metadata=metadata)
+            yield chan.read(data=data, data_type=command.data_type,
+                            data_count=len(data), status=1,
+                            ioid=command.ioid, metadata=metadata)
         elif isinstance(command, ca.WriteNotifyRequest):
             chan, db_entry = get_db_entry()
             yield chan.write(ioid=command.ioid)
