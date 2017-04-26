@@ -1301,6 +1301,18 @@ class CreateChanRequest(Message):
         header = CreateChanRequestHeader(size, cid, version)
         super().__init__(header, b'', payload)
 
+    @classmethod
+    def from_wire(cls, header, payload_bytes, *, sender_address=None):
+        """
+        Use header.dbr_type to pack payload bytes into the right strucutre.
+
+        Some Command types allocate a different meaning to the header.dbr_type
+        field, and these override this method in their subclass.
+        """
+
+        return cls.from_components(header, b'', payload_bytes,
+                                   sender_address=sender_address)
+
     payload_size = property(lambda self: self.header.payload_size)
     cid = property(lambda self: self.header.parameter1)
     version = property(lambda self: self.header.parameter2)
@@ -1462,6 +1474,17 @@ class ClientNameRequest(Message):
         size, payload = padded_string_payload(name)
         header = ClientNameRequestHeader(size)
         super().__init__(header, b'', payload)
+
+    @classmethod
+    def from_wire(cls, header, payload_bytes, *, sender_address=None):
+        """
+        Use header.dbr_type to pack payload bytes into the right strucutre.
+
+        Some Command types allocate a different meaning to the header.dbr_type
+        field, and these override this method in their subclass.
+        """
+        return cls.from_components(header, b'', payload_bytes,
+                                   sender_address=sender_address)
 
     payload_size = property(lambda self: self.header.payload_size)
     name = property(lambda self: bytes(self.buffers[1]).rstrip(b'\x00'))
