@@ -10,6 +10,7 @@ from collections import Iterable
 
 CA_REPEATER_PORT = 5065
 CA_SERVER_PORT = 5064
+AUTOMONITOR_MAXLENGTH = 65536
 
 
 class SocketThread:
@@ -350,7 +351,6 @@ class PV:
             context = self._default_context
         if context is None:
             raise RuntimeError("must have a valid context")
-
         self._context = context
         self.pvname = pvname.strip()
         self.form = form.lower()
@@ -406,8 +406,12 @@ class PV:
         self._args['access'] = access_strs[self.chid.channel.access_rights]
 
         self.chid.register_user_callback(self.__on_changes)
-        # if auto_monitor:
-        self.chid.subscribe(data_type=self.typefull, data_count=count)
+        if self.auto_monitor is None:
+            mcount = count if count is not None else self._args['count']
+            self.auto_monitor = mcount < AUTOMONITOR_MAXLENGTH
+
+        if self.auto_monitor:
+            self.chid.subscribe(data_type=self.typefull, data_count=count)
 
         self._cb_count = iter(itertools.count())
 
@@ -476,11 +480,22 @@ class PV:
                       ca.ChType.TIME_CHAR: ca.ChType.TIME_INT,
                       ca.ChType.STS_CHAR: ca.ChType.STS_INT}
             dt = re_map[self.typefull]
-        command = self.chid.read(data_type=dt,
-                                 data_count=count)
-        info = self._parse_dbr_metadata(command.metadata)
-        print('read() info', info)
-        info['value'] = command.data
+            # TODO if you want char arrays not as_string
+            # force no-monitor rather than
+            use_monitor = False
+
+        if ((not use_monitor) or
+            (not self.auto_monitor) or
+            (self._args['value'] is None) or
+            (count is not None and
+             count > len(self._args['value']))):
+            command = self.chid.read(data_type=dt,
+                                     data_count=count)
+            info = self._parse_dbr_metadata(command.metadata)
+            print('read() info', info)
+            info['value'] = command.data
+        else:
+            info = self._args
 
         ret = info['value']
         if as_string and self.typefull in ca.char_types:
