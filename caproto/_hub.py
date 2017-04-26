@@ -850,7 +850,7 @@ class ServerChannel(_BaseChannel):
         VersionResponse
         """
 
-        command = VersionResponse(self._circuit.protocol_version)
+        command = VersionResponse(self.protocol_version)
         return command
 
     def create(self, native_data_type, native_data_count, sid):
