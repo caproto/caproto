@@ -965,6 +965,7 @@ if USE_NUMPY:
         ChType.LONG: numpy.int32,
         ChType.DOUBLE: numpy.float64,
         ChType.STRING: numpy.dtype('>S40'),
+        ChType.CHAR: numpy.dtype('>S1')
     }
 
 _array_type_code_map = {
@@ -1044,8 +1045,6 @@ def native_to_builtin(value, native_type, data_count):
     #   character) strings.
     # - Enums are just integers that happen to have special significance.
     # - Everything else is, straightforwardly, an array of numbers.
-    if native_type == ChType.CHAR:
-        return value
     if USE_NUMPY:
         # Return an ndarray
         dt = numpy.dtype(_numpy_map[native_type])
