@@ -226,4 +226,75 @@ def test_error_response(circuit_pair):
                                       cid=srv_channel.cid,
                                       status_code=42,
                                       error_message='Tom missed the train.'))
-    # TODO Check more things once we decide on what errors should do.
+
+
+def test_create_channel_failure(circuit_pair):
+    cli_circuit, srv_circuit = circuit_pair
+    cid = cli_circuit.new_channel_id()
+    sid = srv_circuit.new_channel_id()
+    cli_channel = ca.ClientChannel('doomed', cli_circuit, cid)
+    srv_channel = ca.ServerChannel('doomed', srv_circuit, cid)
+
+    # Send and receive CreateChanRequest
+    req = cli_channel.create()
+    cli_circuit.send(req)
+    srv_circuit.recv(bytes(req))
+    srv_circuit.next_command()
+
+    # Send and receive CreateChFailResponse.
+    res = ca.CreateChFailResponse(req.cid)
+    buffers_to_send = srv_circuit.send(res)
+    assert srv_channel.states[ca.CLIENT] is ca.FAILED
+    assert srv_channel.states[ca.SERVER] is ca.FAILED
+    assert cli_channel.states[ca.CLIENT] is ca.AWAIT_CREATE_CHAN_RESPONSE
+    assert cli_channel.states[ca.SERVER] is ca.SEND_CREATE_CHAN_RESPONSE
+    cli_circuit.recv(*buffers_to_send)
+    cli_circuit.next_command()
+    assert cli_channel.states[ca.CLIENT] is ca.FAILED
+    assert cli_channel.states[ca.SERVER] is ca.FAILED
+
+
+def test_server_disconn(circuit_pair):
+    cli_circuit, srv_circuit = circuit_pair
+    cli_channel, srv_channel = make_channels(*circuit_pair, 5, 1, name='a')
+
+    buffers_to_send = srv_circuit.send(srv_channel.disconnect())
+    assert srv_channel.states[ca.CLIENT] is ca.CLOSED
+    assert srv_channel.states[ca.SERVER] is ca.CLOSED
+    assert cli_channel.states[ca.CLIENT] is ca.CONNECTED
+    assert cli_channel.states[ca.SERVER] is ca.CONNECTED
+    cli_circuit.recv(*buffers_to_send)
+    cli_circuit.next_command()
+    assert cli_channel.states[ca.CLIENT] is ca.CLOSED
+    assert cli_channel.states[ca.SERVER] is ca.CLOSED
+
+
+def test_clear(circuit_pair):
+    cli_circuit, srv_circuit = circuit_pair
+    cli_channel, srv_channel = make_channels(*circuit_pair, 5, 1, name='a')
+
+
+    assert cli_channel.states[ca.CLIENT] is ca.CONNECTED
+    assert cli_channel.states[ca.SERVER] is ca.CONNECTED
+
+    # Send request to clear.
+    buffers_to_send = cli_circuit.send(cli_channel.clear())
+    assert cli_channel.states[ca.CLIENT] is ca.MUST_CLOSE
+    assert cli_channel.states[ca.SERVER] is ca.MUST_CLOSE
+
+    # Receive request to clear.
+    srv_circuit.recv(*buffers_to_send)
+    srv_circuit.next_command()
+    assert srv_channel.states[ca.CLIENT] is ca.MUST_CLOSE
+    assert srv_channel.states[ca.SERVER] is ca.MUST_CLOSE
+
+    # Send confirmation.
+    buffers_to_send = srv_circuit.send(srv_channel.clear())
+    assert srv_channel.states[ca.CLIENT] is ca.CLOSED
+    assert srv_channel.states[ca.SERVER] is ca.CLOSED
+
+    # Receive confirmation.
+    cli_circuit.recv(*buffers_to_send)
+    cli_circuit.next_command()
+    assert cli_channel.states[ca.CLIENT] is ca.CLOSED
+    assert cli_channel.states[ca.SERVER] is ca.CLOSED
