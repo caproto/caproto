@@ -23,6 +23,9 @@ class SocketThread:
     def __call__(self):
         while True:
             bytes_recv, address = self.socket.recvfrom(4096)
+            if not len(bytes_recv):
+                self.target_obj.disconnect()
+                return
             self.target_obj.next_command(bytes_recv, address)
 
 
@@ -153,8 +156,11 @@ class Context:
                         # This is a redundant response, which the spec
                         # tell us we must ignore.
                         pass
-                print(command)
                 self.has_new_command.notify_all()
+
+    def disconnect(self):
+        # TODO sort out if this should do anything
+        ...
 
 
 class VirtualCircuit:
@@ -206,6 +212,9 @@ class VirtualCircuit:
                     self.subscriptionids.pop(command.subscriptionid)
                 # notify anything waiting we may have a command for them
                 self.has_new_command.notify_all()
+
+    def disconnect(self):
+        return self.circuit.disconnect()
 
 
 class Channel:
