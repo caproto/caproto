@@ -2,17 +2,24 @@ import time
 from ._dbr import (DBR_TYPES, ChType, promote_type, native_type,
                    native_float_types, native_int_types, native_types,
                    timestamp_to_epics, time_types, MAX_ENUM_STRING_SIZE,
-                   DBR_STSACK_STRING)
+                   DBR_STSACK_STRING, ushort_t)
 from ._utils import ensure_bytes
 
-# it's all about data
-ENCODING = 'latin-1'
+
+def _ensure_iterable(value):
+    try:
+        len(value)
+    except TypeError:
+        return (value, )
+    else:
+        return value
 
 
-# TODO these aren't really records. what were you thinking?
-class DatabaseAlarmStatus:
-    def __init__(self, *, status=0, severity=0, acknowledge_transient=False,
-                 acknowledge_severity=0, alarm_string=''):
+class ChannelAlarmStatus:
+    def __init__(self, *, channel_data=None, status=0, severity=0,
+                 acknowledge_transient=False, acknowledge_severity=0,
+                 alarm_string=''):
+        self.channel_data = channel_data
         self.status = status
         self.severity = severity
         self.acknowledge_transient = acknowledge_transient
@@ -27,7 +34,7 @@ class DatabaseAlarmStatus:
         self.severity = dbr.severity
         self.acknowledge_transient = (dbr.ackt != 0)
         self.acknowledge_severity = dbr.acks
-        self.alarm_string = dbr.value.decode(ENCODING)
+        self.alarm_string = dbr.value.decode(self.string_encoding)
 
     @classmethod
     def _from_dbr(cls, dbr):
@@ -41,19 +48,26 @@ class DatabaseAlarmStatus:
         dbr.severity = self.severity
         dbr.ackt = 1 if self.acknowledge_transient else 0
         dbr.acks = self.acknowledge_severity
-        dbr.value = self.alarm_string.encode(ENCODING)
+        dbr.value = self.alarm_string.encode(self.string_encoding)
         return dbr
+
+    @property
+    def string_encoding(self):
+        return self.channel_data.string_encoding
 
 
 class ChannelData:
     data_type = ChType.LONG
+    _has_custom_convert = False
 
-    def __init__(self, *, timestamp=None, status=0, severity=0, value=None):
+    def __init__(self, *, timestamp=None, status=0, severity=0, value=None,
+                 string_encoding='latin-1'):
         if timestamp is None:
             timestamp = time.time()
         self.timestamp = timestamp
-        self.alarm = DatabaseAlarmStatus(status=status, severity=severity)
+        self.alarm = ChannelAlarmStatus(status=status, severity=severity)
         self.value = value
+        self.string_encoding = string_encoding
 
         self._data = {chtype: DBR_TYPES[chtype]()
                       for chtype in
@@ -64,57 +78,58 @@ class ChannelData:
                        )
                       }
 
-        # additional 'array' data not stored in the base DBR types:
-        self._data['native'] = []
-
     def convert_to(self, to_dtype):
+        '''Convert values to another native type
+
+        Parameters
+        ----------
+        to_dtype : ca.ChType
+        '''
+        if to_dtype not in native_types:
+            raise ValueError('Expecting a native type')
+
         if to_dtype in (ChType.STSACK_STRING, ChType.CLASS_NAME):
             return None
 
-        # this leaves a lot to be desired
         from_dtype = self.data_type
-        native_to = native_type(to_dtype)
 
-        # TODO metadata is expected to be of this type as well!
         no_conversion_necessary = (
-            from_dtype == native_to or
-            (from_dtype in native_float_types and native_to in
+            from_dtype == to_dtype or
+            (from_dtype in native_float_types and to_dtype in
              native_float_types) or
-            (from_dtype in native_int_types and native_to in native_int_types)
+            (from_dtype in native_int_types and to_dtype in native_int_types)
         )
 
-        try:
-            len(self.value)
-        except TypeError:
-            values = (self.value, )
-        else:
-            values = self.value
+        values = _ensure_iterable(self.value)
 
         if no_conversion_necessary:
             return values
 
-        if from_dtype in native_float_types and native_to in native_int_types:
+        if from_dtype in native_float_types and to_dtype in native_int_types:
             values = [int(v) for v in values]
-        elif native_to == ChType.STRING:
-            if self.data_type in (ChType.STRING, ChType.ENUM):
-                values = [v.encode(ENCODING) for v in values]
-            else:
-                values = [bytes(str(v), ENCODING) for v in values]
+        elif to_dtype == ChType.STRING:
+            values = [str(v).encode(self.string_encoding) for v in values]
         return values
 
     def get_dbr_data(self, type_):
-        if type_ in self._data and self.data_type != ChType.ENUM:
+        native_to = native_type(type_)
+        if type_ in self._data:
             dbr_data = self._data[type_]
             self._set_dbr_metadata(dbr_data)
-            return dbr_data, self._data['native']
-        elif type_ in native_types:
-            return None, self.convert_to(type_)
 
-        # non-standard type request. frequent ones probably should be
-        # cached?
+            if self._has_custom_convert:
+                value = self.convert_to(native_to)
+            else:
+                value = _ensure_iterable(self.value)
+
+            return dbr_data, value
+        elif type_ in native_types:
+            return None, self.convert_to(native_to)
+
+        # non-standard type request. frequent ones probably should be cached?
         dbr_data = DBR_TYPES[type_]()
         self._set_dbr_metadata(dbr_data)
-        return dbr_data, self.convert_to(type_)
+        return dbr_data, self.convert_to(native_to)
 
     def _set_dbr_metadata(self, dbr_data):
         'Set all metadata fields of a given DBR type instance'
@@ -145,7 +160,7 @@ class ChannelData:
                 continue
 
             if isinstance(value, str):
-                value = bytes(value, ENCODING)
+                value = bytes(value, self.string_encoding)
             try:
                 setattr(dbr_data, attr, value)
             except TypeError as ex:
@@ -191,6 +206,7 @@ class ChannelData:
 
 class ChannelEnum(ChannelData):
     data_type = ChType.ENUM
+    _has_custom_convert = True
 
     def __init__(self, *, strs=None, **kwargs):
         self.strs = strs
@@ -204,14 +220,14 @@ class ChannelEnum(ChannelData):
     def _set_dbr_metadata(self, dbr_data):
         if hasattr(dbr_data, 'strs'):
             for i, string in enumerate(self.strs):
-                bytes_ = bytes(string, ENCODING)
+                bytes_ = bytes(string, self.string_encoding)
                 dbr_data.strs[i][:] = bytes_.ljust(MAX_ENUM_STRING_SIZE, b'\x00')
 
         return super()._set_dbr_metadata(dbr_data)
 
     def convert_to(self, to_dtype):
         if native_type(to_dtype) == ChType.STRING:
-            return [bytes(str(self.value), ENCODING)]
+            return [self.value.encode(self.string_encoding)]
         else:
             return [self.strs.index(self.value)]
 
@@ -251,8 +267,28 @@ class ChannelDouble(ChannelNumeric):
 class ChannelChar(ChannelNumeric):
     # 'Limits' on chars do not make much sense and are rarely used.
     data_type = ChType.CHAR
+    _has_custom_convert = True
+
+    def convert_to(self, to_dtype):
+        # if to_dtype == ChType.STRING:
+        #     return self.value.encode(self.string_encoding)
+        # else:
+        if isinstance(self.value, str):
+            return self.value.encode(self.string_encoding)
+        elif isinstance(self.value, bytes):
+            return self.value
+        else:
+            return [self.value]
 
 
 class ChannelString(ChannelData):
     data_type = ChType.STRING
+    _has_custom_convert = True
     # There is no CTRL or GR variant of STRING.
+
+    def convert_to(self, to_dtype):
+        if to_dtype != ChType.STRING:
+            return b''
+
+        # TODO support array types of string, long strings
+        return self.value.encode(self.string_encoding)

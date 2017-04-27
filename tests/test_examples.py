@@ -442,15 +442,16 @@ caget_checks = sum(
 )
 
 caget_checks += [('char', ChType.CHAR),
-                # ('char', ChType.STS_CHAR),
-                # ('char', ChType.TIME_CHAR),
-                # ('char', ChType.GR_CHAR),
-                # ('char', ChType.CTRL_CHAR),
+                 ('char', ChType.STS_CHAR),
+                 ('char', ChType.TIME_CHAR),
+                 ('char', ChType.GR_CHAR),
+                 ('char', ChType.CTRL_CHAR),
                 # ('str', ChType.STRING),
                 # ('str', ChType.STS_STRING),
                 # ('str', ChType.TIME_STRING),
                 ]
 
+# caget_checks = caget_checks[-19:]
 
 @pytest.mark.parametrize('pv, dbr_type', caget_checks)
 def test_curio_server_with_caget(curio_server, pv, dbr_type):
@@ -464,7 +465,10 @@ def test_curio_server_with_caget(curio_server, pv, dbr_type):
     async def run_client_test():
         print('* client_test', pv, dbr_type)
         db_entry = caget_pvdb[pv]
+        # native type as in the ChannelData database
         db_native = ca.native_type(db_entry.data_type)
+        # native type of the request
+        req_native = ca.native_type(dbr_type)
 
         data = await run_caget(pv, dbr_type=dbr_type)
         print('dbr_type', dbr_type, 'data:')
@@ -474,19 +478,20 @@ def test_curio_server_with_caget(curio_server, pv, dbr_type):
 
         # convert from string value to enum if requesting int
         if (db_native == ChType.ENUM and
-                not (ca.native_type(dbr_type) == ChType.STRING
-                     or dbr_type == ChType.CTRL_ENUM
-                     or dbr_type == ChType.GR_ENUM)):
+                not (req_native == ChType.STRING
+                     or dbr_type in (ChType.CTRL_ENUM,
+                                     ChType.GR_ENUM))):
             db_value = db_entry.strs.index(db_value)
-
-        if ca.native_type(dbr_type) in (ChType.INT, ChType.LONG,
-                                        ChType.CHAR):
-            assert int(data['value']) == int(db_value)
-        elif ca.native_type(dbr_type) in (ChType.FLOAT, ChType.DOUBLE):
+        if req_native in (ChType.INT, ChType.LONG, ChType.SHORT, ChType.CHAR):
+            if db_native == ChType.CHAR:
+                assert int(data['value']) == ord(db_value)
+            else:
+                assert int(data['value']) == int(db_value)
+        elif req_native in (ChType.FLOAT, ChType.DOUBLE):
             assert float(data['value']) == float(db_value)
-        elif ca.native_type(dbr_type) == ChType.STRING:
+        elif req_native == ChType.STRING:
             assert data['value'] == str(db_value)
-        elif ca.native_type(dbr_type) == ChType.ENUM:
+        elif req_native == ChType.ENUM:
             bad_strings = ['Illegal Value (', 'Enum Index Overflow (']
             for bad_string in bad_strings:
                 if data['value'].startswith(bad_string):

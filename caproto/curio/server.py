@@ -120,8 +120,6 @@ class VirtualCircuit:
                    ]
         elif isinstance(command, ca.ReadNotifyRequest):
             chan, db_entry = get_db_entry()
-            # TODO
-            db_entry._data['native'] = [db_entry.value]
             metadata, data = db_entry.get_dbr_data(command.data_type)
             yield chan.read(data=data, data_type=command.data_type,
                             data_count=len(data), status=1,
@@ -267,6 +265,19 @@ if __name__ == '__main__':
             'int': ChannelInteger(value=0,
                                   units='doodles',
                                   ),
+            'char': ca.ChannelChar(value=b'3',
+                                   units='poodles',
+                                   lower_disp_limit=33,
+                                   upper_disp_limit=35,
+                                   lower_alarm_limit=32,
+                                   upper_alarm_limit=36,
+                                   lower_warning_limit=31,
+                                   upper_warning_limit=37,
+                                   lower_ctrl_limit=30,
+                                   upper_ctrl_limit=38,
+                                   ),
+            'str': ca.ChannelString(value='hello',
+                                    string_encoding='utf-8'),
             }
 
     pvdb['pi'].alarm.alarm_string = 'delicious'
