@@ -283,11 +283,13 @@ generating valid commands.
 
     .. automethod:: version
     .. automethod:: create
+    .. automethod:: create_fail
     .. automethod:: clear
     .. automethod:: read
     .. automethod:: write
     .. automethod:: subscribe
     .. automethod:: unsubscribe
+    .. automethod:: disconnect
 
 Payload Data Types
 ==================

@@ -197,7 +197,9 @@ def test_methods(circuit_pair):
     cli_channel1, srv_channel1 = make_channels(*circuit_pair, 5, 1, name='a')
     cli_channel2, srv_channel2 = make_channels(*circuit_pair, 5, 1, name='b')
 
-    srv_channel1.version()  # smoke test
+    # smoke test
+    srv_channel1.version()
+    srv_channel1.create_fail()
 
     # Subscribe to two channels on the same circuit.
     req1 = cli_channel1.subscribe()

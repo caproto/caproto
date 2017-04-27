@@ -852,7 +852,6 @@ class ServerChannel(_BaseChannel):
         -------
         VersionResponse
         """
-
         command = VersionResponse(self.protocol_version)
         return command
 
@@ -875,6 +874,17 @@ class ServerChannel(_BaseChannel):
         """
         command = CreateChanResponse(native_data_type, native_data_count,
                                      self.cid, sid)
+        return command
+
+    def create_fail(self):
+        """
+        Generate a valid :class:`CreateChFailResponse`.
+
+        Returns
+        -------
+        CreateChFailResponse
+        """
+        command = CreateChFailResponse(self.cid)
         return command
 
     def clear(self):
