@@ -972,6 +972,7 @@ class PV:
 
     def disconnect(self):
         "disconnect PV"
+        self.chid.clear()
 
 
 def get_pv(pvname, *args, **kwargs):
