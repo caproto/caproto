@@ -332,6 +332,15 @@ in the :class:`ChannelType` enum:
     .. attribute:: TIME_LONG = 19
     .. attribute:: TIME_DOUBLE = 20
 
+    .. attribute:: GR_STRING = 21
+    .. attribute:: GR_SHORT = 22
+    .. attribute:: GR_INT = 22
+    .. attribute:: GR_FLOAT = 23
+    .. attribute:: GR_ENUM = 24
+    .. attribute:: GR_CHAR = 25
+    .. attribute:: GR_LONG = 26
+    .. attribute:: GR_DOUBLE = 27
+
     .. attribute:: CTRL_STRING = 28
     .. attribute:: CTRL_INT = 29
     .. attribute:: CTRL_SHORT = 29
@@ -340,6 +349,9 @@ in the :class:`ChannelType` enum:
     .. attribute:: CTRL_CHAR = 32
     .. attribute:: CTRL_LONG = 33
     .. attribute:: CTRL_DOUBLE = 34
+
+    .. attribute:: STSACK_STRING = 37
+    .. attribute:: CLASS_NAME = 38
 
 
 All commands that accept a ``data_type`` argument expect one of these
