@@ -397,6 +397,18 @@ caget_pvdb = {
                              lower_ctrl_limit=30,
                              upper_ctrl_limit=38,
                              ),
+    'char': ca.ChannelChar(value=b'3',
+                           units='poodles',
+                           lower_disp_limit=33,
+                           upper_disp_limit=35,
+                           lower_alarm_limit=32,
+                           upper_alarm_limit=36,
+                           lower_warning_limit=31,
+                           upper_warning_limit=37,
+                           lower_ctrl_limit=30,
+                           upper_ctrl_limit=38,
+                           ),
+    'str': ca.ChannelString(value='hello'),
     }
 
 
@@ -424,10 +436,20 @@ caget_checks = sum(
       (pv, ca.promote_type(dtype, use_ctrl=True)),
       (pv, ca.promote_type(dtype, use_gr=True)),
       ]
-     for pv in caget_pvdb
+     for pv in ('int', 'pi', 'enum')
      for dtype in ca.native_types),
     []
 )
+
+caget_checks += [('char', ChType.CHAR),
+                # ('char', ChType.STS_CHAR),
+                # ('char', ChType.TIME_CHAR),
+                # ('char', ChType.GR_CHAR),
+                # ('char', ChType.CTRL_CHAR),
+                # ('str', ChType.STRING),
+                # ('str', ChType.STS_STRING),
+                # ('str', ChType.TIME_STRING),
+                ]
 
 
 @pytest.mark.parametrize('pv, dbr_type', caget_checks)
