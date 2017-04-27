@@ -303,8 +303,7 @@ class VirtualCircuit:
         """
         Notify all channels on this circuit that they are disconnected.
 
-        Clients are servers should call this method when a TCP connection is
-        lost.
+        Clients should call this method when a TCP connection is lost.
         """
         self.states.disconnect()
 
