@@ -1,31 +1,49 @@
 import socket
-import threading
+
 from caproto.threading.client import SocketThread
+import pytest
 
 
-def test_socket_close():
-    a, b = socket.socketpair()
+@pytest.fixture
+def socket_thread_fixture():
 
-    class Dummy:
-        def __init__(self, ev):
+    class _DummyTargetObj:
+        def __init__(self):
             self.disconnected = False
-            self.payload = None
-            self.ev = ev
+            self.payloads = []
 
         def disconnect(self):
             self.disconnected = True
 
         def next_command(self, bytes_recv, address):
-            self.payload = bytes_recv
+            self.payloads.append(bytes_recv)
 
-    d = Dummy(threading.Event())
+    a, b = socket.socketpair()
+
+    d = _DummyTargetObj()
 
     st = SocketThread(a, d)
+
+    return a, b, d, st
+
+
+def test_socket_close(socket_thread_fixture):
+    a, b, d, st = socket_thread_fixture
     b.send(b'aardvark')
     b.close()
 
     st.thread.join()
 
-    assert d.payload == b'aardvark'
+    assert d.payloads[0] == b'aardvark'
+    assert len(d.payloads) == 1
     assert d.disconnected
+    assert not st.thread.is_alive()
+
+
+def test_socket_poison(socket_thread_fixture):
+    a, b, d, st = socket_thread_fixture
+
+    st.poison_ev.set()
+    st.thread.join()
+
     assert not st.thread.is_alive()

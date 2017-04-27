@@ -16,13 +16,22 @@ AUTOMONITOR_MAXLENGTH = 65536
 class SocketThread:
     def __init__(self, socket, target_obj):
         self.socket = socket
+        if socket.timeout is None:
+            socket.settimeout(.1)
         self.target_obj = target_obj
         self.thread = threading.Thread(target=self, daemon=True)
         self.thread.start()
+        self.poison_ev = threading.Event()
 
     def __call__(self):
         while True:
-            bytes_recv, address = self.socket.recvfrom(4096)
+            try:
+                bytes_recv, address = self.socket.recvfrom(4096)
+            except socket.timeout:
+                if self.poison_ev.isSet():
+                    bytes_recv = b''
+                else:
+                    continue
             if not len(bytes_recv):
                 self.target_obj.disconnect()
                 return
@@ -221,6 +230,7 @@ class VirtualCircuit:
     def disconnect(self):
         with self.has_new_command:
             return self.circuit.disconnect()
+        self.sock_thread.poison_ev.set()
 
 
 class Channel:
