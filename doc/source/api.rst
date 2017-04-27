@@ -289,10 +289,108 @@ generating valid commands.
     .. automethod:: subscribe
     .. automethod:: unsubscribe
 
+.. _payload_data_types:
+
 Payload Data Types
 ==================
 
-(Implemented but not yet documented.)
+Channel Access implements a system of data structures ("Database Records") that
+encode metadata like time, alarm status, and control limits with the data
+value(s). Each Channel Access data type has an integer ID, encoded by caproto
+in the :class:`ChannelType` enum:
+
+.. autoclass:: ChannelType
+
+    "Native" types hold a scalar or a homogeous array of values.
+
+    .. attribute:: STRING = 1
+    .. attribute:: INT = 1
+    .. attribute:: SHORT = 1
+    .. attribute:: FLOAT = 2
+    .. attribute:: ENUM = 3
+    .. attribute:: CHAR = 4
+    .. attribute:: LONG = 5
+    .. attribute:: DOUBLE = 6
+
+    Other types build on the native types by including a struct of metadata.
+
+    .. attribute:: STS_STRING = 7
+    .. attribute:: STS_SHORT = 8
+    .. attribute:: STS_INT = 8
+    .. attribute:: STS_FLOAT = 9
+    .. attribute:: STS_ENUM = 10
+    .. attribute:: STS_CHAR = 11
+    .. attribute:: STS_LONG = 12
+    .. attribute:: STS_DOUBLE = 13
+
+    .. attribute:: TIME_STRING = 14
+    .. attribute:: TIME_INT = 15
+    .. attribute:: TIME_SHORT = 15
+    .. attribute:: TIME_FLOAT = 16
+    .. attribute:: TIME_ENUM = 17
+    .. attribute:: TIME_CHAR = 18
+    .. attribute:: TIME_LONG = 19
+    .. attribute:: TIME_DOUBLE = 20
+
+    .. attribute:: CTRL_STRING = 28
+    .. attribute:: CTRL_INT = 29
+    .. attribute:: CTRL_SHORT = 29
+    .. attribute:: CTRL_FLOAT = 30
+    .. attribute:: CTRL_ENUM = 31
+    .. attribute:: CTRL_CHAR = 32
+    .. attribute:: CTRL_LONG = 33
+    .. attribute:: CTRL_DOUBLE = 34
+
+
+All commands that accept a ``data_type`` argument expect one of these
+:class:`ChannelType` attributes or the corresponding integer. Here some valid
+examples using the simple "native" types.
+
+.. code-block:: python
+
+    import caproto as ca
+
+    ReadNotifyResponse(data_type=ca.ChannelType.FLOAT,
+                       data_count=3,
+                       data=(3.2, 5.3, 10.6),
+                       metadata=None)
+
+    ReadNotifyResponse(data_type=2,  # 2 is equivalent to ChannelType.FLOAT
+                       data_count=3,
+                       data=(3.2, 5.3, 10.6),
+                       metadata=None)
+
+    ReadNotifyResponse(data_type=ca.ChannelType.FLOAT,
+                       data_count=1,
+                       data=(3.1,),  # scalars must be given inside an iterable
+                       metadata=None)
+
+    ReadNotifyResponse(data_type=ca.ChannelType.INT,
+                       data_count=5,
+                       data=numpy.array([7, 21, 2, 4, 5], dtype='i2'),
+                       metadata=None)
+
+And here are some examples using the compound types that include metadata. The
+metadata is packed into a ``ctypes.BigEndianStructure`` with the appropriate
+fields. The caller can handle the struct directly and pass it in:
+
+.. code-block:: python
+
+    metadata = ca.DBR_TIME_DOUBLE(1, 0, 3, 5)
+    ReadNotifyResponse(data_type=ca.ChannelType.TIME_DOUBLE,
+                       data_count=1,
+                       data=(7,),
+                       metadata=metadata)
+
+or the caller can pass the values as a tuple and let caproto fill in the
+struct:
+
+.. code-block:: python
+
+    ReadNotifyResponse(data_type=ca.ChannelType.TIME_DOUBLE,
+                       data_count=5,
+                       data=(7,),
+                       metadata=(1, 0, 3, 5))
 
 Exceptions
 ==========

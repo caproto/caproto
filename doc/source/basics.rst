@@ -332,15 +332,15 @@ Write:
                                     ioid=2))
     recv()
 
-Why is the value given as a tuple? Channel Access has its own sprawling data
-type system. Many of its types bundle a value with metadata like a timestamp
-and various "limits". At the lowest level, caproto reads values into C structs
-that match byte layouts in the canonical implementation of Channel Access,
-libca. At a higher level, the user may interact with values as named tuples
-with an element for each field in the struct. The elements in the tuple are
-built-in Python types (strings, floats, integers). If the value is an array (in
-Channel Access parlance, a "waveform") it is given as a numpy array if numpy
-is available.
+The ``data`` may be given as one of the following types:
+
+* ``tuple``
+* ``numpy.ndarray`` (if numpy is installed)
+* big-endian ``array.array`` (the somewhat rarely-used builtin array library)
+* big-endian bytes-like (``bytes``, ``bytearray``, ``memoryview``)
+
+The command also accepts a ``metadata`` parameter for data types that include
+metadata. See :ref:`payload_data_types` for details.
 
 Subscribing to "Events" (Updates)
 ---------------------------------
