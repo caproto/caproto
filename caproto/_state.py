@@ -10,8 +10,8 @@ from ._commands import (AccessRightsResponse, ClearChannelRequest,
                         EventsOnRequest, EventsOffRequest, CreateChFailResponse
                        )
 from ._utils import (AWAIT_CREATE_CHAN_RESPONSE, AWAIT_VERSION_RESPONSE,
-                     CLIENT, CLOSED, CONNECTED, ERROR, IDLE, MUST_CLOSE,
-                     NEED_CIRCUIT, REQUEST, RESPONSE, SEND_CREATE_CHAN_REQUEST,
+                     CLIENT, CLOSED, CONNECTED, DISCONNECTED, FAILED, IDLE,
+                     MUST_CLOSE, REQUEST, RESPONSE, SEND_CREATE_CHAN_REQUEST,
                      SEND_CREATE_CHAN_RESPONSE, SEND_VERSION_REQUEST,
                      SEND_VERSION_RESPONSE, SERVER,
 
@@ -38,7 +38,7 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
 
             EchoRequest: AWAIT_VERSION_RESPONSE,
             EchoResponse: AWAIT_VERSION_RESPONSE,
-            ErrorResponse: ERROR,
+            ErrorResponse: AWAIT_VERSION_RESPONSE,
         },
         CONNECTED: {
             # Host and Client requests may come before or after we connect.
@@ -51,14 +51,10 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
             EchoRequest: CONNECTED,
             EchoResponse: CONNECTED,
 
-            ErrorResponse: ERROR,
-            # VirtualCircuits can only be closed by timeout.
+            ErrorResponse: CONNECTED,
         },
-        ERROR: {
-            # a terminal state
-        },
-        CLOSED: {
-            # a terminal state
+        DISCONNECTED: {
+            # a terminal state that may only be reached by a special method
         },
     },
     SERVER: {
@@ -77,7 +73,7 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
             HostNameRequest: SEND_VERSION_RESPONSE,
             ClientNameRequest: SEND_VERSION_RESPONSE,
 
-            ErrorResponse: ERROR,
+            ErrorResponse: SEND_VERSION_RESPONSE,
         },
         CONNECTED: {
             # Host and Client requests may come before or after we connect.
@@ -90,11 +86,10 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
             EchoRequest: CONNECTED,
             EchoResponse: CONNECTED,
 
-            ErrorResponse: ERROR,
+            ErrorResponse: CONNECTED,
         },
-        # VirtualCircuits can only be closed by timeout.
-        CLOSED: {
-            # a terminal state
+        DISCONNECTED: {
+            # a terminal state that may only be reached by a special method
         },
     },
 }
@@ -104,13 +99,13 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
     CLIENT: {
         SEND_CREATE_CHAN_REQUEST: {
             CreateChanRequest: AWAIT_CREATE_CHAN_RESPONSE,
-            ErrorResponse: ERROR,
+            ErrorResponse: SEND_CREATE_CHAN_REQUEST,
         },
         AWAIT_CREATE_CHAN_RESPONSE: {
             CreateChanResponse: CONNECTED,
             AccessRightsResponse: AWAIT_CREATE_CHAN_RESPONSE,
-            CreateChFailResponse: ERROR,
-            ErrorResponse: ERROR,
+            CreateChFailResponse: FAILED,
+            ErrorResponse: AWAIT_CREATE_CHAN_RESPONSE,
         },
         CONNECTED: {
             AccessRightsResponse: CONNECTED,
@@ -127,7 +122,7 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
 
             ClearChannelRequest: MUST_CLOSE,
             ServerDisconnResponse: CLOSED,
-            ErrorResponse: ERROR,
+            ErrorResponse: CONNECTED,
 
             # The commands ReadRequest, WriteRequest, WriteResponse, and
             # ReadSync (deprecated in 3.13) will need to be added here if we
@@ -136,13 +131,16 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
         MUST_CLOSE: {
             ClearChannelResponse: CLOSED,
             ServerDisconnResponse: CLOSED,
-            ErrorResponse: ERROR,
+            ErrorResponse: MUST_CLOSE,
         },
         CLOSED: {
             # a terminal state
         },
-        ERROR: {
+        FAILED: {
             # a terminal state
+            ClearChannelResponse: FAILED,
+            ServerDisconnResponse: FAILED,
+            ErrorResponse: FAILED
         },
     },
     SERVER: {
@@ -153,8 +151,8 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
         SEND_CREATE_CHAN_RESPONSE: {
             AccessRightsResponse: SEND_CREATE_CHAN_RESPONSE,
             CreateChanResponse: CONNECTED,
-            CreateChFailResponse: ERROR,
-            ErrorResponse: ERROR,
+            CreateChFailResponse: FAILED,
+            ErrorResponse: SEND_CREATE_CHAN_RESPONSE,
         },
         CONNECTED: {
             AccessRightsResponse: CONNECTED,
@@ -171,7 +169,7 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
 
             ClearChannelRequest: MUST_CLOSE,
             ServerDisconnResponse: CLOSED,
-            ErrorResponse: ERROR,
+            ErrorResponse: CONNECTED,
             # The commands ReadRequest, WriteRequest, WriteResponse, and
             # ReadSync (deprecated in 3.13) will need to be added here if we
             # want to support them.
@@ -179,13 +177,16 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
         MUST_CLOSE: {
             ClearChannelResponse: CLOSED,
             ServerDisconnResponse: CLOSED,
-            ErrorResponse: ERROR,
+            ErrorResponse: MUST_CLOSE,
         },
         CLOSED: {
             # a terminal state
         },
-        ERROR: {
+        FAILED: {
             # a terminal state
+            ClearChannelResponse: FAILED,
+            ServerDisconnResponse: FAILED,
+            ErrorResponse: FAILED
         },
     },
 }
@@ -193,10 +194,17 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
 STATE_TRIGGERED_TRANSITIONS = {
     # (CHANNEL_STATE, CIRCUIT_STATE)
     CLIENT: {
-        (NEED_CIRCUIT, CONNECTED): (SEND_CREATE_CHAN_REQUEST, CONNECTED),
+        (SEND_CREATE_CHAN_REQUEST, DISCONNECTED): (CLOSED, DISCONNECTED),
+        (AWAIT_CREATE_CHAN_RESPONSE, DISCONNECTED): (CLOSED, DISCONNECTED),
+        (CONNECTED, DISCONNECTED): (CLOSED, DISCONNECTED),
+        (MUST_CLOSE, DISCONNECTED): (CLOSED, DISCONNECTED),
+        (FAILED, DISCONNECTED): (CLOSED, DISCONNECTED),
     },
     SERVER: {
-        (NEED_CIRCUIT, CONNECTED): (SEND_CREATE_CHAN_REQUEST, CONNECTED),
+        (SEND_CREATE_CHAN_RESPONSE, DISCONNECTED): (CLOSED, DISCONNECTED),
+        (CONNECTED, DISCONNECTED): (CLOSED, DISCONNECTED),
+        (MUST_CLOSE, DISCONNECTED): (CLOSED, DISCONNECTED),
+        (FAILED, DISCONNECTED): (CLOSED, DISCONNECTED),
     }
 }
 
@@ -242,7 +250,11 @@ class ChannelState(_BaseState):
 
     def process_command_type(self, role, command_type):
         self._fire_command_triggered_transitions(role, command_type)
-        self._fire_state_triggered_transitions(role)
+        self.update()
+
+    def update(self):
+        self._fire_state_triggered_transitions(CLIENT)
+        self._fire_state_triggered_transitions(SERVER)
 
 
 class CircuitState(_BaseState):
@@ -255,7 +267,13 @@ class CircuitState(_BaseState):
     def process_command_type(self, role, command_type):
         self._fire_command_triggered_transitions(role, command_type)
         for chan in self.channels.values():
-            chan.states._fire_state_triggered_transitions(role)
+            chan.states.update()
+
+    def disconnect(self):
+        self.states = {CLIENT: DISCONNECTED, SERVER: DISCONNECTED}
+        # Notify channels on this circuit.
+        for chan in self.channels.values():
+            chan.states.update()
 
 
 def get_exception(our_role, command):

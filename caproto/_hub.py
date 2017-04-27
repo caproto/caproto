@@ -10,7 +10,7 @@ import getpass
 import socket
 # N.B. We do no networking whatsoever in caproto. We only use socket for
 # socket.gethostname() to give a nice default for a HostNameRequest command.
-from ._commands import (AccessRightsResponse,
+from ._commands import (AccessRightsResponse, CreateChFailResponse,
                         ClearChannelRequest, ClearChannelResponse,
                         ClientNameRequest, CreateChanRequest,
                         CreateChanResponse, ErrorResponse,
@@ -170,7 +170,7 @@ class VirtualCircuit:
         # opposed to the Circuit as a whole:
         if isinstance(command, (ClearChannelRequest, ClearChannelResponse,
                                 CreateChanRequest, CreateChanResponse,
-                                AccessRightsResponse,
+                                CreateChFailResponse, AccessRightsResponse,
                                 ReadNotifyRequest, ReadNotifyResponse,
                                 WriteNotifyRequest, WriteNotifyResponse,
                                 EventAddRequest, EventAddResponse,
@@ -298,6 +298,14 @@ class VirtualCircuit:
                 raise err("priority {} does not match previously set priority "
                           "of {} for this circuit".format(command.priority,
                                                           self.priority))
+
+    def disconnect(self):
+        """
+        Notify all channels on this circuit that they are disconnected.
+
+        Clients should call this method when a TCP connection is lost.
+        """
+        self.states.disconnect()
 
     def new_channel_id(self):
         "Return a valid value for a cid or sid."
@@ -564,7 +572,6 @@ class _BaseChannel:
         self.native_data_count = None
         self.sid = None
         self.access_rights = None
-        self.cleared = False  # If True, Channel is at end of life.
 
     @property
     def subscriptions(self):
@@ -573,13 +580,6 @@ class _BaseChannel:
         """
         return {k: v for k, v in self.circuit.event_add_commands.items()
                 if v.sid == self.sid}
-
-    def kill(self):
-        """
-        Mark as dead even though an ErrorResponse message was never processed.
-        """
-        self.cleared = True
-        # TODO Advance state machine.
 
     def _fill_defaults(self, data_type, data_count):
         # Boilerplate used in many convenience methods:
@@ -851,7 +851,6 @@ class ServerChannel(_BaseChannel):
         -------
         VersionResponse
         """
-
         command = VersionResponse(self.protocol_version)
         return command
 
@@ -874,6 +873,17 @@ class ServerChannel(_BaseChannel):
         """
         command = CreateChanResponse(native_data_type, native_data_count,
                                      self.cid, sid)
+        return command
+
+    def create_fail(self):
+        """
+        Generate a valid :class:`CreateChFailResponse`.
+
+        Returns
+        -------
+        CreateChFailResponse
+        """
+        command = CreateChFailResponse(self.cid)
         return command
 
     def clear(self):
@@ -982,7 +992,7 @@ class ServerChannel(_BaseChannel):
 
         Parameters
         ----------
-        subscriptionid :
+        subscriptionid : integer
         data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
             Requested Channel Access data type. Default is the channel's
             native data type, which can be checked in the Channel's attribute
@@ -993,7 +1003,18 @@ class ServerChannel(_BaseChannel):
         EventCancelResponse
         """
         data_type, _ = self._fill_defaults(data_type, None)
-        command  = EventCancelResponse(data_type, self.sid, subscriptionid)
+        command = EventCancelResponse(data_type, self.sid, subscriptionid)
+        return command
+
+    def disconnect(self):
+        """
+        Generate a valid :class:`ServerDisconnResponse`.
+
+        Returns
+        -------
+        ServerDisconnResponse
+        """
+        command = ServerDisconnResponse(self.cid)
         return command
 
 
