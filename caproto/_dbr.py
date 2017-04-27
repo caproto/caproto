@@ -1077,14 +1077,17 @@ def native_to_builtin(value, native_type, data_count):
         return  # array.array()
 
 
-def promote_type(ftype, *, use_status=False, use_time=False, use_ctrl=False):
-    """Promotes a native field type to its TIME or CTRL variant.
+def promote_type(ftype, *, use_status=False, use_time=False, use_ctrl=False,
+                 use_gr=False):
+    """Promotes a native field type to its STS, TIME, CTRL, or GR variant.
 
     Returns
     -------
     ftype : int
         the promoted field value.
     """
+    if sum([use_status, use_time, use_ctrl, use_gr]) > 1:
+        raise ValueError("Only one of the kwargs may be True.")
     # Demote it back to a native type, if necessary
     ftype = ChType(_native_map.get(ftype, None))
 
@@ -1094,6 +1097,8 @@ def promote_type(ftype, *, use_status=False, use_time=False, use_ctrl=False):
         ftype += ChType.TIME_STRING
     elif use_status:
         ftype += ChType.STS_STRING
+    elif use_gr:
+        ftype += ChType.GR_STRING
 
     if ftype == ChType.CTRL_STRING:
         return ChType.TIME_STRING
