@@ -419,6 +419,7 @@ caget_checks = sum(
       (pv, ca.promote_type(dtype, use_status=True)),
       (pv, ca.promote_type(dtype, use_time=True)),
       (pv, ca.promote_type(dtype, use_ctrl=True)),
+      (pv, ca.promote_type(dtype, use_gr=True)),
       ]
      for pv in caget_pvdb
      for dtype in ca.native_types),

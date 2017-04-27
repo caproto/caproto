@@ -7,7 +7,7 @@ from curio import socket
 
 import caproto as ca
 from caproto import (DatabaseRecordDouble, DatabaseRecordInteger,
-                     DatabaseRecordEnum)
+                     DatabaseRecordEnum, DatabaseAlarmStatus)
 from caproto import (EPICS_CA1_PORT, EPICS_CA2_PORT)
 
 
