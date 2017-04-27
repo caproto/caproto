@@ -415,6 +415,26 @@ class PV:
 
         # not handling lazy instantiation
         self._context.search(self.pvname)
+        self.chid = None
+        self.wait_for_connection(form=form, count=count)
+
+    @property
+    def connected(self):
+        return self.chid is not None and self.chid.connected
+
+    def force_connect(self, pvname=None, chid=None, conn=True, **kws):
+        ...
+
+    def wait_for_connection(self, timeout=None, form=None, count=None):
+        """wait for a connection that started with connect() to finish
+        Returns
+        -------
+        connected : bool
+            If the PV is connected when this method returns
+        """
+        if self.connected:
+            return
+
         self.chid = self._context.create_channel(self.pvname)
 
         self._args['type'] = ca.ChType(self.chid.channel.native_data_type)
@@ -444,21 +464,7 @@ class PV:
 
         # todo move to async connect logic
         for cb in self.connection_callbacks:
-            cb(pvname=pvname, conn=True, pv=self)
-    @property
-    def connected(self):
-        return self.chid is not None and self.chid.connected
-
-    def force_connect(self, pvname=None, chid=None, conn=True, **kws):
-        ...
-
-    def wait_for_connection(self, timeout=None):
-        """wait for a connection that started with connect() to finish
-        Returns
-        -------
-        connected : bool
-            If the PV is connected when this method returns
-        """
+            cb(pvname=self.pvname, conn=True, pv=self)
 
     def connect(self, timeout=None):
         """check that a PV is connected, forcing a connection if needed
