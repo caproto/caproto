@@ -250,7 +250,7 @@ class ChannelState(_BaseState):
 
     def process_command_type(self, role, command_type):
         self._fire_command_triggered_transitions(role, command_type)
-        self._fire_state_triggered_transitions(role)
+        self.update()
 
     def update(self):
         self._fire_state_triggered_transitions(CLIENT)
@@ -267,7 +267,7 @@ class CircuitState(_BaseState):
     def process_command_type(self, role, command_type):
         self._fire_command_triggered_transitions(role, command_type)
         for chan in self.channels.values():
-            chan.states._fire_state_triggered_transitions(role)
+            chan.states.update()
 
     def disconnect(self):
         self.states = {CLIENT: DISCONNECTED, SERVER: DISCONNECTED}
