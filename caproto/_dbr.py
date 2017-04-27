@@ -479,6 +479,7 @@ class DBR_GR_CHAR(ctypes.BigEndianStructure):
         ('upper_warning_limit', char_t),
         ('lower_warning_limit', char_t),
         ('lower_alarm_limit', char_t),
+        ('RISC_pad', char_t),
     ]
 
 
