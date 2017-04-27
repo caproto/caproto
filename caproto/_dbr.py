@@ -840,7 +840,7 @@ class ChannelType(IntEnum):
     TIME_LONG = 19
     TIME_DOUBLE = 20
 
-    GR_STRING = 21
+    GR_STRING = 21  # not implemented by EPICS
     GR_SHORT = 22
     GR_INT = GR_SHORT
     GR_FLOAT = 23
@@ -849,7 +849,7 @@ class ChannelType(IntEnum):
     GR_LONG = 26
     GR_DOUBLE = 27
 
-    CTRL_STRING = 28
+    CTRL_STRING = 28  # not implemented by EPICS
     CTRL_INT = 29
     CTRL_SHORT = 29
     CTRL_FLOAT = 30
@@ -1092,6 +1092,8 @@ def promote_type(ftype, *, use_status=False, use_time=False, use_ctrl=False,
     # Demote it back to a native type, if necessary
     ftype = ChType(_native_map.get(ftype, None))
 
+    # Use the fact that the types are ordered in blocks and that the STRING
+    # variant is the first element of each block.
     if use_ctrl:
         ftype += ChType.CTRL_STRING
     elif use_time:

@@ -246,3 +246,13 @@ class ChannelDouble(ChannelNumeric):
         super().__init__(**kwargs)
 
         self.precision = precision
+
+
+class ChannelChar(ChannelNumeric):
+    # 'Limits' on chars do not make much sense and are rarely used.
+    data_type = ChType.CHAR
+
+
+class ChannelString(ChannelData):
+    data_type = ChType.STRING
+    # There is no CTRL or GR variant of STRING.
