@@ -46,7 +46,7 @@ class Context:
         self.udp_sock = sock
 
         self.registered = False  # refers to RepeaterRegisterRequest
-        self.circuits = []  # list of VirtualCircuits
+        self.circuits = {}  # list of VirtualCircuits
         self.unanswered_searches = {}  # map search id (cid) to name
         self.search_results = {}  # map name to address
 
@@ -98,15 +98,13 @@ class Context:
 
         Make a new one if necessary.
         """
-        for circuit in self.circuits:
-            if (circuit.circuit.address == address and
-                    circuit.circuit.priority == priority):
-                return circuit
-        circuit = VirtualCircuit(ca.VirtualCircuit(our_role=ca.CLIENT,
-                                                   address=address,
-                                                   priority=priority))
-        circuit.circuit.log.setLevel('DEBUG')
-        self.circuits.append(circuit)
+        circuit = self.circuits.get((address, priority), None)
+        if circuit is None or not circuit.connected:
+            circuit = VirtualCircuit(ca.VirtualCircuit(our_role=ca.CLIENT,
+                                                       address=address,
+                                                       priority=priority))
+            circuit.circuit.log.setLevel('DEBUG')
+            self.circuits[(address, priority)] = circuit
         return circuit
 
     def create_channel(self, name, priority=0):
@@ -173,7 +171,13 @@ class VirtualCircuit:
         self.socket = None
         self.sock_thread = None
 
+    @property
+    def connected(self):
+        return self.circuit.states[ca.CLIENT] is ca.CONNECTED
+
     def create_connection(self):
+        if self.sock_thread is not None:
+            raise RuntimeError('trying to reuse a VC')
         self.socket = socket.create_connection(self.circuit.address)
         self.sock_thread = SocketThread(self.socket, self)
 
