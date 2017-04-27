@@ -10,6 +10,7 @@ from collections import Iterable
 
 CA_REPEATER_PORT = 5065
 CA_SERVER_PORT = 5064
+AUTOMONITOR_MAXLENGTH = 65536
 
 
 class SocketThread:
@@ -294,6 +295,7 @@ class Channel:
         self.circuit.subscriptionids[command.subscriptionid] = self
         self.circuit.send(command)
         # TODO verify it worked before returning?
+        return command.subscriptionid
 
     def unsubscribe(self, subscriptionid, *args, **kwargs):
         "Cancel a subscription and await confirmation from the server."
@@ -342,7 +344,7 @@ class PV:
     _default_context = None
 
     def __init__(self, pvname, callback=None, form='time',
-                 verbose=False, auto_monitor=None, count=None,
+                 verbose=False, auto_monitor=False, count=None,
                  connection_callback=None,
                  connection_timeout=None, *, context=None):
 
@@ -350,7 +352,6 @@ class PV:
             context = self._default_context
         if context is None:
             raise RuntimeError("must have a valid context")
-
         self._context = context
         self.pvname = pvname.strip()
         self.form = form.lower()
@@ -360,6 +361,7 @@ class PV:
         self.connected = False
         self.connection_timeout = connection_timeout
         self.dflt_count = count
+        self._subid = None
 
         if self.connection_timeout is None:
             self.connection_timeout = 1
@@ -406,8 +408,13 @@ class PV:
         self._args['access'] = access_strs[self.chid.channel.access_rights]
 
         self.chid.register_user_callback(self.__on_changes)
-        # if auto_monitor:
-        self.chid.subscribe(data_type=self.typefull, data_count=count)
+        if self.auto_monitor is None:
+            mcount = count if count is not None else self._args['count']
+            self.auto_monitor = mcount < AUTOMONITOR_MAXLENGTH
+
+        if self.auto_monitor:
+            self._subid = self.chid.subscribe(data_type=self.typefull,
+                                              data_count=count)
 
         self._cb_count = iter(itertools.count())
 
@@ -476,14 +483,43 @@ class PV:
                       ca.ChType.TIME_CHAR: ca.ChType.TIME_INT,
                       ca.ChType.STS_CHAR: ca.ChType.STS_INT}
             dt = re_map[self.typefull]
-        command = self.chid.read(data_type=dt,
-                                 data_count=count)
+            # TODO if you want char arrays not as_string
+            # force no-monitor rather than
+            use_monitor = False
+
+        # trigger going out to got data from network
+        if ((not use_monitor) or
+            (self._subid is None) or
+            (self._args['value'] is None) or
+            (count is not None and
+             count > len(self._args['value']))):
+            command = self.chid.read(data_type=dt,
+                                     data_count=count)
+            self.__ingest_read_response_command(command)
+
+        info = self._args
+
+        if (as_string and (self.typefull in ca.char_types) or
+                self.typefull in ca.string_types):
+            return info['char_value']
+        elif as_string and self.typefull in ca.enum_types:
+            enum_strs = self.enum_strs
+            ret = [enum_strs[r] for r in info['value']]
+            if len(ret) == 1:
+                ret, = ret
+            return ret
+
+        elif not as_numpy:
+            return list(info['value'])
+        return info['value']
+
+    def __ingest_read_response_command(self, command):
         info = self._parse_dbr_metadata(command.metadata)
         print('read() info', info)
         info['value'] = command.data
 
         ret = info['value']
-        if as_string and self.typefull in ca.char_types:
+        if self.typefull in ca.char_types:
             ret = ret.tobytes().partition(b'\x00')[0].decode('utf-8')
             info['char_value'] = ret
         elif self.typefull in ca.string_types:
@@ -491,10 +527,8 @@ class PV:
             if len(ret) == 1:
                 ret = ret[0]
             info['char_value'] = ret
-        elif not as_numpy:
-            ret = list(ret)
+
         self._args.update(**info)
-        return ret
 
     @ensure_connection
     def put(self, value, *, wait=False, timeout=30.0,
@@ -580,10 +614,7 @@ class PV:
         To have user-defined code run when the PV value changes,
         use add_callback()
         """
-        info = self._parse_dbr_metadata(command.metadata)
-        print('updated info', info)
-        info['value'] = command.data
-        self._args.update(**info)
+        self.__ingest_read_response_command(command)
         self.run_callbacks()
 
     def run_callbacks(self):
@@ -629,7 +660,9 @@ class PV:
         add_callback.  This index is needed to remove a callback."""
         if not callable(callback):
             raise ValueError()
-
+        if self._subid is None:
+            self._subid = self.chid.subscribe(data_type=self.typefull,
+                                              data_count=self.dflt_count)
         if index is not None:
             raise ValueError("why do this")
         index = next(self._cb_count)
