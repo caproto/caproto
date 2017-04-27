@@ -1102,4 +1102,4 @@ def promote_type(ftype, *, use_status=False, use_time=False, use_ctrl=False,
 
     if ftype == ChType.CTRL_STRING:
         return ChType.TIME_STRING
-    return ftype
+    return ChType(ftype)
