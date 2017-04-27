@@ -45,7 +45,7 @@ class Context:
     "Wraps a caproto.Broadcaster, a UDP socket, and cache of VirtualCircuits."
     __slots__ = ('broadcaster', 'udp_sock', 'circuits',
                  'unanswered_searches', 'search_results',
-                 'has_new_command', 'sock_thread', 'registered')
+                 'has_new_command', 'sock_thread')
 
     def __init__(self):
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
@@ -57,7 +57,6 @@ class Context:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         self.udp_sock = sock
 
-        self.registered = False  # refers to RepeaterRegisterRequest
         self.circuits = {}  # list of VirtualCircuits
         self.unanswered_searches = {}  # map search id (cid) to name
         self.search_results = {}  # map name to address
@@ -153,8 +152,6 @@ class Context:
                 if command is ca.NEED_DATA:
                     return
 
-                if isinstance(command, ca.RepeaterConfirmResponse):
-                    self.registered = True
                 if isinstance(command, ca.VersionResponse):
                     # Check that the server version is one we can talk to.
                     assert command.version > 11
@@ -169,10 +166,13 @@ class Context:
                 self.has_new_command.notify_all()
 
     def disconnect(self):
+        self.broadcaster.disconnect()
         th = [self.sock_thread.thread]
         for circ in self.circuits.values():
             circ.disconnect()
             th.append(circ.sock_thread.thread)
+        self.circuits.clear()
+        self.search_results.clear()
         self.udp_sock.close()
         # wait for udp socket thread to stop
         cur_thread = threading.current_thread()
@@ -180,6 +180,10 @@ class Context:
         for t in th:
             if t is not cur_thread:
                 t.join()
+
+    @property
+    def registered(self):
+        return self.broadcaster.registered
 
 
 class VirtualCircuit:

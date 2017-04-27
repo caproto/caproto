@@ -55,6 +55,11 @@ def socket_thread_fixture():
 def cntx(request):
     cntx = Context()
     cntx.register()
+
+    def cleanup():
+        cntx.disconnect()
+
+    request.addfinalizer(cleanup)
     return cntx
 
 
@@ -111,12 +116,17 @@ def test_context_disconnect(cntx):
     chan.read()
     assert chan.connected
     assert chan.circuit.connected
+    assert cntx.registered
     cntx.disconnect()
     cntx.sock_thread.thread.join()
     assert not chan.connected
     assert not chan.circuit.connected
+    assert not cntx.registered
 
     assert not chan.circuit.sock_thread.thread.is_alive()
     assert not cntx.sock_thread.thread.is_alive()
     with pytest.raises(ca.LocalProtocolError):
         chan.read()
+
+    with pytest.raises(ca.LocalProtocolError):
+        cntx.search(str_pv)
