@@ -60,15 +60,45 @@ class ChannelData:
     data_type = ChType.LONG
     _has_custom_convert = False
 
-    def __init__(self, *, timestamp=None, status=0, severity=0, value=None,
-                 string_encoding='latin-1'):
+    def __init__(self, *, value=None, timestamp=None, status=0, severity=0,
+                 string_encoding='latin-1', alarm_status=None,
+                 reported_record_type='caproto'):
+        '''Metadata and Data for a single caproto Channel
+
+        Parameters
+        ----------
+        value :
+            Data which has to match with this class's data_type
+        timestamp : float, optional
+            Posix timestamp associated with the value
+            Defaults to `time.time()`
+        status : int, optional
+            Alarm status
+        severity : int, optional
+            Alarm severity
+        string_encoding : str, optional
+            Encoding to use for strings, used both in and out
+        alarm_status : ChannelAlarmStatus, optional
+            Optionally specify an allocated alarm status, which could be shared
+            among several channels
+        reported_record_type : str, optional
+            Though this is not a record, the channel access protocol supports
+            querying the record type.  This can be set to mimic an actual record
+            or be set to something arbitrary.
+            Defaults to 'caproto'
+        '''
         if timestamp is None:
             timestamp = time.time()
         self.timestamp = timestamp
-        self.alarm = ChannelAlarmStatus(status=status, severity=severity)
+        if alarm_status is not None:
+            self.alarm = alarm_status
+            self.alarm.channel_data = self
+        else:
+            self.alarm = ChannelAlarmStatus(status=status, severity=severity,
+                                            channel_data=self)
         self.value = value
         self.string_encoding = string_encoding
-
+        self.reported_record_type = reported_record_type
         self._data = {chtype: DBR_TYPES[chtype]()
                       for chtype in
                       (promote_type(self.data_type, use_ctrl=True),
@@ -112,6 +142,14 @@ class ChannelData:
         return values
 
     def get_dbr_data(self, type_):
+        if type_ == ChType.STSACK_STRING:
+            return self.alarm.to_dbr(), b''
+        elif type_ == ChType.CLASS_NAME:
+            class_name = DBR_TYPES[type_]()
+            rtyp = self.reported_record_type.encode(self.string_encoding)
+            class_name.value = rtyp
+            return class_name, b''
+
         native_to = native_type(type_)
         if type_ in self._data:
             dbr_data = self._data[type_]
@@ -124,7 +162,7 @@ class ChannelData:
 
             return dbr_data, value
         elif type_ in native_types:
-            return None, self.convert_to(native_to)
+            return b'', self.convert_to(native_to)
 
         # non-standard type request. frequent ones probably should be cached?
         dbr_data = DBR_TYPES[type_]()

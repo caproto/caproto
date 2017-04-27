@@ -278,6 +278,8 @@ if __name__ == '__main__':
                                    ),
             'str': ca.ChannelString(value='hello',
                                     string_encoding='latin-1'),
+            'stra': ca.ChannelString(value=['hello', 'how is it', 'going'],
+                                     string_encoding='latin-1'),
             }
 
     pvdb['pi'].alarm.alarm_string = 'delicious'

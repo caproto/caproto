@@ -176,19 +176,6 @@ def data_payload(data, metadata, data_type, data_count):
     size, md_payload, data_payload[, pad_payload]
         pad_payload will only be returned if needed
     """
-    # special-case alarm info and database record type queries
-    if data_type == ChannelType.STSACK_STRING:
-        payload = bytes(metadata.alarm.to_dbr())
-        return len(payload), payload
-    elif data_type == ChannelType.CLASS_NAME:
-        payload = dbr.DBR_CLASS_NAME()
-        try:
-            payload.value = metadata.reported_record_type.encode('latin-1')
-        except AttributeError:
-            payload.value = b'caproto'
-        data_payload = bytes(payload)
-        return len(payload), data_payload
-
     ntype = native_type(data_type)
 
     # Make the data payload.
@@ -209,6 +196,8 @@ def data_payload(data, metadata, data_type, data_count):
             # Make big-endian.
             if sys.byteorder == 'little':
                 data_payload.byteswap()
+    elif data is None:
+        data_payload = b''
     else:
         raise CaprotoTypeError("data given as type we cannot handle - {}"
                                "".format(type(data)))
