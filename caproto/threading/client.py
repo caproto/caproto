@@ -190,7 +190,8 @@ class VirtualCircuit:
         """Receive and process and next command from the virtual circuit.
 
         This will be run on the recv thread"""
-        self.circuit.recv(bytes_recv)
+        with self.has_new_command:
+            self.circuit.recv(bytes_recv)
         while True:
             with self.has_new_command:
                 command = self.circuit.next_command()
@@ -214,7 +215,8 @@ class VirtualCircuit:
                 self.has_new_command.notify_all()
 
     def disconnect(self):
-        return self.circuit.disconnect()
+        with self.has_new_command:
+            return self.circuit.disconnect()
 
 
 class Channel:
