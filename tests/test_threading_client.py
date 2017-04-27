@@ -1,10 +1,34 @@
 import socket
+import logging
+import time
+from multiprocessing import Process
 
-from caproto.threading.client import SocketThread
+from caproto.threading.client import SocketThread, Context
+import caproto as ca
 import pytest
 
 
-@pytest.fixture
+def setup_module(module):
+    global _repeater_process
+    from caproto.asyncio.repeater import main
+    logging.getLogger('caproto').setLevel(logging.DEBUG)
+    logging.basicConfig()
+
+    _repeater_process = Process(target=main)
+    _repeater_process.start()
+
+    print('Waiting for the repeater to start up...')
+    time.sleep(2)
+
+
+def teardown_module(module):
+    global _repeater_process
+    print('teardown_module: killing repeater process')
+    _repeater_process.terminate()
+    _repeater_process = None
+
+
+@pytest.fixture(scope='function')
 def socket_thread_fixture():
 
     class _DummyTargetObj:
@@ -25,6 +49,13 @@ def socket_thread_fixture():
     st = SocketThread(a, d)
 
     return a, b, d, st
+
+
+@pytest.fixture(scope='function')
+def cntx(request):
+    cntx = Context()
+    cntx.register()
+    return cntx
 
 
 def test_socket_server_close(socket_thread_fixture):
@@ -56,3 +87,18 @@ def test_socket_client_close(socket_thread_fixture):
     st.thread.join()
 
     assert not st.thread.is_alive()
+
+
+def test_channel_kill_client_socket(cntx):
+    str_pv = 'Py:ao1.DESC'
+    cntx.search(str_pv)
+    chan = cntx.create_channel(str_pv)
+    chan.read()
+    assert chan.connected
+    assert chan.circuit.connected
+    chan.circuit.socket.close()
+    chan.circuit.sock_thread.thread.join()
+    assert not chan.connected
+    assert not chan.circuit.connected
+    with pytest.raises(ca.LocalProtocolError):
+        chan.read()
