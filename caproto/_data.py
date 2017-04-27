@@ -288,7 +288,18 @@ class ChannelString(ChannelData):
 
     def convert_to(self, to_dtype):
         if to_dtype != ChType.STRING:
+            # TODO does this actually respond with an error?
             return b''
 
-        # TODO support array types of string, long strings
-        return self.value.encode(self.string_encoding)
+        if isinstance(self.value, str):
+            # single string
+            return [self.value.encode(self.string_encoding)]
+        elif isinstance(self.value, bytes):
+            # single bytestring
+            return [self.value]
+        else:
+            # array of strings/bytestrings
+            return [v.encode(self.string_encoding)
+                    if isinstance(v, str)
+                    else v
+                    for v in self.value]

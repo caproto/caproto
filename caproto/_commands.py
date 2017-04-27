@@ -98,7 +98,6 @@ def from_buffer(data_type, data_count, buffer):
     # to make the byte-size of the payload a multiple of 8.
     data_payload = buffer[md_size:md_size + payload_size]
     return md_payload, data_payload
-    # TODO Handle padding
 
 
 def padded_len(s):

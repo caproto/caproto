@@ -446,12 +446,11 @@ caget_checks += [('char', ChType.CHAR),
                  ('char', ChType.TIME_CHAR),
                  ('char', ChType.GR_CHAR),
                  ('char', ChType.CTRL_CHAR),
-                # ('str', ChType.STRING),
-                # ('str', ChType.STS_STRING),
-                # ('str', ChType.TIME_STRING),
-                ]
+                 ('str', ChType.STRING),
+                 ('str', ChType.STS_STRING),
+                 ('str', ChType.TIME_STRING),
+                 ]
 
-# caget_checks = caget_checks[-19:]
 
 @pytest.mark.parametrize('pv, dbr_type', caget_checks)
 def test_curio_server_with_caget(curio_server, pv, dbr_type):
@@ -490,7 +489,18 @@ def test_curio_server_with_caget(curio_server, pv, dbr_type):
         elif req_native in (ChType.FLOAT, ChType.DOUBLE):
             assert float(data['value']) == float(db_value)
         elif req_native == ChType.STRING:
-            assert data['value'] == str(db_value)
+            if db_native == ChType.STRING:
+                db_string_value = str(db_value)
+                string_length = len(db_string_value)
+                read_value = data['value'][:string_length]
+                assert int(data['element_count']) == string_length
+                assert read_value == db_string_value
+                # due to how we monitor the caget output, we get @@@s where
+                # null padding bytes are. so long as we verify element_count
+                # above and the set of chars that should match, this assertion
+                # should pass
+            else:
+                assert data['value'] == str(db_value)
         elif req_native == ChType.ENUM:
             bad_strings = ['Illegal Value (', 'Enum Index Overflow (']
             for bad_string in bad_strings:
