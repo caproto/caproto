@@ -140,6 +140,8 @@ def teardown_module(module):
     print('teardown_module: killing repeater process')
     _repeater_process.terminate()
     _repeater_process = None
+    PV._default_context.disconnect
+    PV._default_context = None
 
 
 def write(msg):
