@@ -236,6 +236,7 @@ The VirtualCircuit object
     .. automethod:: send
     .. automethod:: recv
     .. automethod:: next_command
+    .. automethod:: disconnect
     .. automethod:: new_channel_id
     .. automethod:: new_subscriptionid
     .. automethod:: new_ioid
