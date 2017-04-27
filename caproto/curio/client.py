@@ -45,6 +45,7 @@ class VirtualCircuit:
         bytes_received = await self.socket.recv(32768)
         if not len(bytes_received):
             self.circuit.disconnect()
+            return
         self.circuit.recv(bytes_received)
 
     async def get_event(self):
