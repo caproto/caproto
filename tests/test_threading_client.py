@@ -27,7 +27,7 @@ def socket_thread_fixture():
     return a, b, d, st
 
 
-def test_socket_close(socket_thread_fixture):
+def test_socket_server_close(socket_thread_fixture):
     a, b, d, st = socket_thread_fixture
     b.send(b'aardvark')
     b.close()
@@ -44,6 +44,15 @@ def test_socket_poison(socket_thread_fixture):
     a, b, d, st = socket_thread_fixture
 
     st.poison_ev.set()
+    st.thread.join()
+
+    assert not st.thread.is_alive()
+
+
+def test_socket_client_close(socket_thread_fixture):
+    a, b, d, st = socket_thread_fixture
+
+    a.close()
     st.thread.join()
 
     assert not st.thread.is_alive()

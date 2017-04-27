@@ -32,6 +32,9 @@ class SocketThread:
                     bytes_recv = b''
                 else:
                     continue
+            except OSError:
+                bytes_recv = b''
+
             if not len(bytes_recv):
                 self.target_obj.disconnect()
                 return
@@ -166,8 +169,9 @@ class Context:
                 self.has_new_command.notify_all()
 
     def disconnect(self):
-        # TODO sort out if this should do anything
-        ...
+        for circ in self.circuits.values():
+            circ.disconnect()
+        self.socket.close()
 
 
 class VirtualCircuit:
