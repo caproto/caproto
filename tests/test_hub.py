@@ -326,3 +326,15 @@ def test_dead_circuit(circuit_pair):
     srv_circuit.disconnect()
 
     # Check that state updates.
+    assert cli_circuit.states[ca.CLIENT] is ca.DISCONNECTED
+    assert srv_circuit.states[ca.CLIENT] is ca.DISCONNECTED
+    assert cli_circuit.states[ca.SERVER] is ca.DISCONNECTED
+    assert srv_circuit.states[ca.SERVER] is ca.DISCONNECTED
+    assert cli_channel1.states[ca.CLIENT] is ca.CLOSED
+    assert srv_channel1.states[ca.CLIENT] is ca.CLOSED
+    assert cli_channel1.states[ca.SERVER] is ca.CLOSED
+    assert srv_channel1.states[ca.SERVER] is ca.CLOSED
+    assert cli_channel2.states[ca.CLIENT] is ca.CLOSED
+    assert srv_channel2.states[ca.CLIENT] is ca.CLOSED
+    assert cli_channel2.states[ca.SERVER] is ca.CLOSED
+    assert srv_channel2.states[ca.SERVER] is ca.CLOSED
