@@ -45,7 +45,7 @@ class DatabaseAlarmStatus:
         return dbr
 
 
-class DatabaseRecordBase:
+class ChannelData:
     data_type = ChType.LONG
 
     def __init__(self, *, timestamp=None, status=0, severity=0, value=None):
@@ -189,7 +189,7 @@ class DatabaseRecordBase:
         return 3  # read-write
 
 
-class DatabaseRecordEnum(DatabaseRecordBase):
+class ChannelEnum(ChannelData):
     data_type = ChType.ENUM
 
     def __init__(self, *, strs=None, **kwargs):
@@ -216,7 +216,7 @@ class DatabaseRecordEnum(DatabaseRecordBase):
             return [self.strs.index(self.value)]
 
 
-class DatabaseRecordNumeric(DatabaseRecordBase):
+class ChannelNumeric(ChannelData):
     def __init__(self, *, units='', upper_disp_limit=0.0,
                  lower_disp_limit=0.0, upper_alarm_limit=0.0,
                  upper_warning_limit=0.0, lower_warning_limit=0.0,
@@ -235,11 +235,11 @@ class DatabaseRecordNumeric(DatabaseRecordBase):
         self.lower_ctrl_limit = lower_ctrl_limit
 
 
-class DatabaseRecordInteger(DatabaseRecordNumeric):
+class ChannelInteger(ChannelNumeric):
     data_type = ChType.LONG
 
 
-class DatabaseRecordDouble(DatabaseRecordNumeric):
+class ChannelDouble(ChannelNumeric):
     data_type = ChType.DOUBLE
 
     def __init__(self, *, precision=0, **kwargs):

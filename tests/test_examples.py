@@ -1,3 +1,6 @@
+# Helper classes to encapsulate values and metadata for a channel and pack them
+# into various DBR_TYPES with minimal copying.
+
 import os
 import datetime
 import logging
@@ -160,7 +163,7 @@ def test_curio_server():
     kernel = curio.Kernel()
 
     async def run_server():
-        pvdb = {'pi': server.DatabaseRecordDouble(value=3.14,
+        pvdb = {'pi': ca.ChannelDouble(value=3.14,
                                                   lower_disp_limit=3.13,
                                                   upper_disp_limit=3.15,
                                                   lower_alarm_limit=3.12,
@@ -368,32 +371,32 @@ async def run_caget(pv, *, dbr_type=None):
 
 
 caget_pvdb = {
-    'pi': server.DatabaseRecordDouble(value=3.14,
-                                      lower_disp_limit=3.13,
-                                      upper_disp_limit=3.15,
-                                      lower_alarm_limit=3.12,
-                                      upper_alarm_limit=3.16,
-                                      lower_warning_limit=3.11,
-                                      upper_warning_limit=3.17,
-                                      lower_ctrl_limit=3.10,
-                                      upper_ctrl_limit=3.18,
-                                      precision=5,
-                                      units='doodles',
-                                      ),
-    'enum': server.DatabaseRecordEnum(value='b',
-                                      strs=['a', 'b', 'c', 'd'],
-                                      ),
-    'int': server.DatabaseRecordInteger(value=33,
-                                        units='poodles',
-                                        lower_disp_limit=33,
-                                        upper_disp_limit=35,
-                                        lower_alarm_limit=32,
-                                        upper_alarm_limit=36,
-                                        lower_warning_limit=31,
-                                        upper_warning_limit=37,
-                                        lower_ctrl_limit=30,
-                                        upper_ctrl_limit=38,
-                                        ),
+    'pi': ca.ChannelDouble(value=3.14,
+                           lower_disp_limit=3.13,
+                           upper_disp_limit=3.15,
+                           lower_alarm_limit=3.12,
+                           upper_alarm_limit=3.16,
+                           lower_warning_limit=3.11,
+                           upper_warning_limit=3.17,
+                           lower_ctrl_limit=3.10,
+                           upper_ctrl_limit=3.18,
+                           precision=5,
+                           units='doodles',
+                           ),
+    'enum': ca.ChannelEnum(value='b',
+                           strs=['a', 'b', 'c', 'd'],
+                           ),
+    'int': ca.ChannelInteger(value=33,
+                             units='poodles',
+                             lower_disp_limit=33,
+                             upper_disp_limit=35,
+                             lower_alarm_limit=32,
+                             upper_alarm_limit=36,
+                             lower_warning_limit=31,
+                             upper_warning_limit=37,
+                             lower_ctrl_limit=30,
+                             upper_ctrl_limit=38,
+                             ),
     }
 
 

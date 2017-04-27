@@ -22,25 +22,26 @@ this to a :class:`Context` object with a given address. Calling
 
     import curio
     from caproto.curio.server import Context, find_next_tcp_port
+    from caproto import ChannelDouble, ChannelEnum, ChannelInteger
 
-    pvdb = {'pi': DatabaseRecordDouble(value=3.14,
-                                       lower_disp_limit=3.13,
-                                       upper_disp_limit=3.15,
-                                       lower_alarm_limit=3.12,
-                                       upper_alarm_limit=3.16,
-                                       lower_warning_limit=3.11,
-                                       upper_warning_limit=3.17,
-                                       lower_ctrl_limit=3.10,
-                                       upper_ctrl_limit=3.18,
-                                       precision=5,
-                                       units='doodles',
-                                       ),
-            'enum': DatabaseRecordEnum(value='b',
-                                       strs=['a', 'b', 'c', 'd'],
-                                       ),
-            'int': DatabaseRecordInteger(value=0,
-                                         units='doodles',
-                                         ),
+    pvdb = {'pi': ChannelDouble(value=3.14,
+                                lower_disp_limit=3.13,
+                                upper_disp_limit=3.15,
+                                lower_alarm_limit=3.12,
+                                upper_alarm_limit=3.16,
+                                lower_warning_limit=3.11,
+                                upper_warning_limit=3.17,
+                                lower_ctrl_limit=3.10,
+                                upper_ctrl_limit=3.18,
+                                precision=5,
+                                units='doodles',
+                                ),
+            'enum': ChannelEnum(value='b',
+                                strs=['a', 'b', 'c', 'd'],
+                                ),
+            'int': ChannelInteger(value=0,
+                                  units='doodles',
+                                  ),
             }
 
     ctx = Context('0.0.0.0', find_next_tcp_port(), pvdb)
