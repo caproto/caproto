@@ -102,3 +102,21 @@ def test_channel_kill_client_socket(cntx):
     assert not chan.circuit.connected
     with pytest.raises(ca.LocalProtocolError):
         chan.read()
+
+
+def test_context_disconnect(cntx):
+    str_pv = 'Py:ao1.DESC'
+    cntx.search(str_pv)
+    chan = cntx.create_channel(str_pv)
+    chan.read()
+    assert chan.connected
+    assert chan.circuit.connected
+    cntx.disconnect()
+    cntx.sock_thread.thread.join()
+    assert not chan.connected
+    assert not chan.circuit.connected
+
+    assert not chan.circuit.sock_thread.thread.is_alive()
+    assert not cntx.sock_thread.thread.is_alive()
+    with pytest.raises(ca.LocalProtocolError):
+        chan.read()

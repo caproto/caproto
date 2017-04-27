@@ -169,9 +169,17 @@ class Context:
                 self.has_new_command.notify_all()
 
     def disconnect(self):
+        th = [self.sock_thread.thread]
         for circ in self.circuits.values():
             circ.disconnect()
-        self.socket.close()
+            th.append(circ.sock_thread.thread)
+        self.udp_sock.close()
+        # wait for udp socket thread to stop
+        cur_thread = threading.current_thread()
+        # wait for all of the tcp socket threads to stop
+        for t in th:
+            if t is not cur_thread:
+                t.join()
 
 
 class VirtualCircuit:
@@ -229,9 +237,9 @@ class VirtualCircuit:
                 self.has_new_command.notify_all()
 
     def disconnect(self):
+        self.sock_thread.poison_ev.set()
         with self.has_new_command:
             return self.circuit.disconnect()
-        self.sock_thread.poison_ev.set()
 
 
 class Channel:
