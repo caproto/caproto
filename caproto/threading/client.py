@@ -51,17 +51,22 @@ class Context:
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
         self.broadcaster.log.setLevel('DEBUG')
 
-        # UDP socket broadcasting to CA servers
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM,
-                             socket.IPPROTO_UDP)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        self.udp_sock = sock
+        self.has_new_command = threading.Condition()
 
         self.circuits = {}  # list of VirtualCircuits
         self.unanswered_searches = {}  # map search id (cid) to name
         self.search_results = {}  # map name to address
 
-        self.has_new_command = threading.Condition()
+        self.udp_sock = None
+        self.sock_thread = None
+        self.__create_sock()
+
+    def __create_sock(self):
+        # UDP socket broadcasting to CA servers
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM,
+                             socket.IPPROTO_UDP)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        self.udp_sock = sock
         self.sock_thread = SocketThread(sock, self)
 
     def send(self, port, *commands):
@@ -75,8 +80,10 @@ class Context:
 
     def register(self):
         "Register this client with the CA Repeater."
-        command = self.broadcaster.register('127.0.0.1')
+        if self.udp_sock is None:
+            self.__create_sock()
 
+        command = self.broadcaster.register('127.0.0.1')
         self.send(ca.EPICS_CA2_PORT, command)
 
         while True:
@@ -166,20 +173,30 @@ class Context:
                 self.has_new_command.notify_all()
 
     def disconnect(self):
+        # disconnect the underlying state machine
         self.broadcaster.disconnect()
-        th = [self.sock_thread.thread]
+        th = []
+        # disconnect any circuits we have
         for circ in self.circuits.values():
             circ.disconnect()
             th.append(circ.sock_thread.thread)
+        # clear any state about circuits and search results
         self.circuits.clear()
         self.search_results.clear()
-        self.udp_sock.close()
-        # wait for udp socket thread to stop
+        # if we _have_ a socket, kill it
+        if self.udp_sock is not None:
+            self.udp_sock.close()
+            th.append(self.sock_thread.thread)
+
         cur_thread = threading.current_thread()
-        # wait for all of the tcp socket threads to stop
+        # wait for all of the socket threads to stop
         for t in th:
             if t is not cur_thread:
                 t.join()
+
+        # discard our thread and socket
+        self.sock_thread = None
+        self.udp_sock = None
 
     @property
     def registered(self):

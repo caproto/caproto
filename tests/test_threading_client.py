@@ -111,22 +111,41 @@ def test_channel_kill_client_socket(cntx):
 
 def test_context_disconnect(cntx):
     str_pv = 'Py:ao1.DESC'
-    cntx.search(str_pv)
-    chan = cntx.create_channel(str_pv)
-    chan.read()
-    assert chan.connected
-    assert chan.circuit.connected
-    assert cntx.registered
+
+    def bootstrap():
+        cntx.search(str_pv)
+        chan = cntx.create_channel(str_pv)
+        return chan
+
+    def is_happy(chan, cntx):
+        chan.read()
+        assert chan.connected
+        assert chan.circuit.connected
+        assert cntx.registered
+        assert cntx.circuits
+        assert cntx.search_results
+
+    chan = bootstrap()
+    is_happy(chan, cntx)
+
+    st = cntx.sock_thread.thread
     cntx.disconnect()
-    cntx.sock_thread.thread.join()
+    st.join()
+
     assert not chan.connected
     assert not chan.circuit.connected
     assert not cntx.registered
-
+    assert not cntx.circuits
+    assert not cntx.search_results
     assert not chan.circuit.sock_thread.thread.is_alive()
-    assert not cntx.sock_thread.thread.is_alive()
+    assert not st.is_alive()
+
     with pytest.raises(ca.LocalProtocolError):
         chan.read()
 
     with pytest.raises(ca.LocalProtocolError):
         cntx.search(str_pv)
+
+    cntx.register()
+    chan = bootstrap()
+    is_happy(chan, cntx)
