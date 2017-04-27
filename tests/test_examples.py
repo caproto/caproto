@@ -450,7 +450,8 @@ def test_curio_server_with_caget(curio_server, pv, dbr_type):
         # convert from string value to enum if requesting int
         if (db_native == ChType.ENUM and
                 not (ca.native_type(dbr_type) == ChType.STRING
-                     or dbr_type == ChType.CTRL_ENUM)):
+                     or dbr_type == ChType.CTRL_ENUM
+                     or dbr_type == ChType.GR_ENUM)):
             db_value = db_entry.strs.index(db_value)
 
         if ca.native_type(dbr_type) in (ChType.INT, ChType.LONG,
@@ -466,7 +467,8 @@ def test_curio_server_with_caget(curio_server, pv, dbr_type):
                 if data['value'].startswith(bad_string):
                     data['value'] = data['value'][len(bad_string):-1]
 
-            if db_native == ChType.ENUM and dbr_type == ChType.CTRL_ENUM:
+            if (db_native == ChType.ENUM and
+                    (dbr_type in (ChType.CTRL_ENUM, ChType.GR_ENUM))):
                 # ctrl enum gets back the full string value
                 assert data['value'] == db_value
             else:
