@@ -273,7 +273,6 @@ def test_clear(circuit_pair):
     cli_circuit, srv_circuit = circuit_pair
     cli_channel, srv_channel = make_channels(*circuit_pair, 5, 1, name='a')
 
-
     assert cli_channel.states[ca.CLIENT] is ca.CONNECTED
     assert cli_channel.states[ca.SERVER] is ca.CONNECTED
 
@@ -298,3 +297,30 @@ def test_clear(circuit_pair):
     cli_circuit.next_command()
     assert cli_channel.states[ca.CLIENT] is ca.CLOSED
     assert cli_channel.states[ca.SERVER] is ca.CLOSED
+
+
+def test_dead_circuit(circuit_pair):
+    # Connect two channels.
+    cli_circuit, srv_circuit = circuit_pair
+    cli_channel1, srv_channel1 = make_channels(*circuit_pair, 5, 1, name='a')
+    cli_channel2, srv_channel2 = make_channels(*circuit_pair, 5, 1, name='b')
+
+    # Check states.
+    assert cli_circuit.states[ca.CLIENT] is ca.CONNECTED
+    assert srv_circuit.states[ca.CLIENT] is ca.CONNECTED
+    assert cli_circuit.states[ca.SERVER] is ca.CONNECTED
+    assert srv_circuit.states[ca.SERVER] is ca.CONNECTED
+    assert cli_channel1.states[ca.CLIENT] is ca.CONNECTED
+    assert srv_channel1.states[ca.CLIENT] is ca.CONNECTED
+    assert cli_channel1.states[ca.SERVER] is ca.CONNECTED
+    assert srv_channel1.states[ca.SERVER] is ca.CONNECTED
+    assert cli_channel2.states[ca.CLIENT] is ca.CONNECTED
+    assert srv_channel2.states[ca.CLIENT] is ca.CONNECTED
+    assert cli_channel2.states[ca.SERVER] is ca.CONNECTED
+    assert srv_channel2.states[ca.SERVER] is ca.CONNECTED
+
+    # Notify the circuit that its connection was dropped.
+    cli_circuit.disconnect()
+    srv_circuit.disconnect()
+
+    # Check that state updates.

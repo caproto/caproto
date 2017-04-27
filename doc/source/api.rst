@@ -148,7 +148,6 @@ Caproto uses special constants to represent the states of the state machine:
 .. data:: SEND_SEARCH_REQUEST
           AWAIT_SEARCH_RESPONSE
           SEND_SEARCH_RESPONSE
-          NEED_CIRCUIT
           SEND_VERSION_REQUEST
           AWAIT_VERSION_RESPONSE
           SEND_VERSION_RESPONSE
@@ -158,8 +157,9 @@ Caproto uses special constants to represent the states of the state machine:
           CONNECTED
           MUST_CLOSE
           CLOSED
+          DISCONNECTED
           IDLE
-          ERROR
+          FAILED
 
 For example, a new VirtualCiruit starts with these states:
 

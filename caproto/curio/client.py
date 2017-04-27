@@ -44,7 +44,7 @@ class VirtualCircuit:
             raise RuntimeError("must await create_connection() first")
         bytes_received = await self.socket.recv(32768)
         if not len(bytes_received):
-            raise ca.DisconnectedCircuit()
+            self.circuit.disconnect()
         self.circuit.recv(bytes_received)
 
     async def get_event(self):

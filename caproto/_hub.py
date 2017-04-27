@@ -299,6 +299,15 @@ class VirtualCircuit:
                           "of {} for this circuit".format(command.priority,
                                                           self.priority))
 
+    def disconnect(self):
+        """
+        Notify all channels on this circuit that they are disconnected.
+
+        Clients are servers should call this method when a TCP connection is
+        lost.
+        """
+        self.states.disconnect()
+
     def new_channel_id(self):
         "Return a valid value for a cid or sid."
         # Return the next sequential unused id. Wrap back to 0 on overflow.

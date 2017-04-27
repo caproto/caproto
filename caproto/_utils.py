@@ -37,20 +37,16 @@ globals().update(
       'NEED_DATA',  # special sentinel for read_* functions
       # and states
       'SEND_SEARCH_REQUEST', 'AWAIT_SEARCH_RESPONSE',
-      'SEND_SEARCH_RESPONSE', 'NEED_CIRCUIT', 'SEND_VERSION_REQUEST',
+      'SEND_SEARCH_RESPONSE', 'SEND_VERSION_REQUEST',
       'AWAIT_VERSION_RESPONSE', 'SEND_VERSION_RESPONSE',
       'SEND_CREATE_CHAN_REQUEST', 'AWAIT_CREATE_CHAN_RESPONSE',
       'SEND_CREATE_CHAN_RESPONSE', 'CONNECTED', 'MUST_CLOSE', 'CLOSED',
-      'IDLE', 'FAILED')
+      'IDLE', 'FAILED', 'DISCONNECTED')
      })
 
 
 class CaprotoError(Exception):
     # All exceptions raised by this codebase inherit from this.
-    ...
-
-
-class DisconnectedCircuit(CaprotoError):
     ...
 
 

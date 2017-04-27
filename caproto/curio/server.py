@@ -31,6 +31,10 @@ def find_next_tcp_port(host='0.0.0.0', starting_port=EPICS_CA2_PORT + 1):
     return port
 
 
+class DisconnectedCircuit(Exception):
+    ...
+
+
 class VirtualCircuit:
     "Wraps a caproto.VirtualCircuit with a curio client."
     def __init__(self, circuit, client, context):
@@ -51,7 +55,7 @@ class VirtualCircuit:
         """
         bytes_received = await self.client.recv(4096)
         if not bytes_received:
-            raise ca.DisconnectedCircuit()
+            raise DisconnectedCircuit()
         self.circuit.recv(bytes_received)
 
     async def next_command(self):
@@ -200,8 +204,8 @@ class Context:
         while True:
             try:
                 await circuit.next_command()
-            except ca.DisconnectedCircuit:
-                print('disconnected')
+            except DisconnectedCircuit:
+                circuit.circuit.disconnect()
                 return
 
     async def run(self):

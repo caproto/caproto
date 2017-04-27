@@ -10,8 +10,8 @@ from ._commands import (AccessRightsResponse, ClearChannelRequest,
                         EventsOnRequest, EventsOffRequest, CreateChFailResponse
                        )
 from ._utils import (AWAIT_CREATE_CHAN_RESPONSE, AWAIT_VERSION_RESPONSE,
-                     CLIENT, CLOSED, CONNECTED, FAILED, IDLE, MUST_CLOSE,
-                     NEED_CIRCUIT, REQUEST, RESPONSE, SEND_CREATE_CHAN_REQUEST,
+                     CLIENT, CLOSED, CONNECTED, DISCONNECTED, FAILED, IDLE,
+                     MUST_CLOSE, REQUEST, RESPONSE, SEND_CREATE_CHAN_REQUEST,
                      SEND_CREATE_CHAN_RESPONSE, SEND_VERSION_REQUEST,
                      SEND_VERSION_RESPONSE, SERVER,
 
@@ -52,10 +52,9 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
             EchoResponse: CONNECTED,
 
             ErrorResponse: CONNECTED,
-            # VirtualCircuits can only be closed by timeout.
         },
-        CLOSED: {
-            # a terminal state
+        DISCONNECTED: {
+            # a terminal state that may only be reached by a special method
         },
     },
     SERVER: {
@@ -89,9 +88,8 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
 
             ErrorResponse: CONNECTED,
         },
-        # VirtualCircuits can only be closed by timeout.
-        CLOSED: {
-            # a terminal state
+        DISCONNECTED: {
+            # a terminal state that may only be reached by a special method
         },
     },
 }
@@ -196,10 +194,17 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
 STATE_TRIGGERED_TRANSITIONS = {
     # (CHANNEL_STATE, CIRCUIT_STATE)
     CLIENT: {
-        (NEED_CIRCUIT, CONNECTED): (SEND_CREATE_CHAN_REQUEST, CONNECTED),
+        (SEND_CREATE_CHAN_REQUEST, DISCONNECTED): (CLOSED, DISCONNECTED),
+        (AWAIT_CREATE_CHAN_RESPONSE, DISCONNECTED): (CLOSED, DISCONNECTED),
+        (CONNECTED, DISCONNECTED): (CLOSED, DISCONNECTED),
+        (MUST_CLOSE, DISCONNECTED): (CLOSED, DISCONNECTED),
+        (FAILED, DISCONNECTED): (CLOSED, DISCONNECTED),
     },
     SERVER: {
-        (NEED_CIRCUIT, CONNECTED): (SEND_CREATE_CHAN_REQUEST, CONNECTED),
+        (SEND_CREATE_CHAN_RESPONSE, DISCONNECTED): (CLOSED, DISCONNECTED),
+        (CONNECTED, DISCONNECTED): (CLOSED, DISCONNECTED),
+        (MUST_CLOSE, DISCONNECTED): (CLOSED, DISCONNECTED),
+        (FAILED, DISCONNECTED): (CLOSED, DISCONNECTED),
     }
 }
 
@@ -260,6 +265,12 @@ class CircuitState(_BaseState):
         for chan in self.channels.values():
             chan.states._fire_state_triggered_transitions(role)
 
+    def disconnect(self):
+        self.states = {CLIENT: DISCONNECTED, SERVER: DISCONNECTED}
+        # Notify channels on this circuit.
+        for chan in self.channels.values():
+            chan.states._fire_state_triggered_transitions(CLIENT)
+            chan.states._fire_state_triggered_transitions(SERVER)
 
 def get_exception(our_role, command):
     """
