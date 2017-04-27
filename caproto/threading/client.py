@@ -211,10 +211,7 @@ class VirtualCircuit:
                 if command is ca.NEED_DATA:
                     break
 
-                if isinstance(command, ca.CreateChanResponse):
-                    chan = self.channels[command.cid]
-                    chan.connected = True
-                elif isinstance(command, ca.ReadNotifyResponse):
+                if isinstance(command, ca.ReadNotifyResponse):
                     chan = self.ioids.pop(command.ioid)
                     chan.last_reading = command
                 elif isinstance(command, ca.WriteNotifyResponse):
@@ -236,7 +233,7 @@ class VirtualCircuit:
 class Channel:
     """Wraps a VirtualCircuit and a caproto.ClientChannel."""
     __slots__ = ('circuit', 'channel', 'last_reading', 'monitoring_tasks',
-                 '_callback', 'connected')
+                 '_callback')
 
     def __init__(self, circuit, channel):
         self.circuit = circuit  # a VirtualCircuit
@@ -244,7 +241,10 @@ class Channel:
         self.last_reading = None
         self.monitoring_tasks = {}  # maps subscriptionid to curio.Task
         self._callback = None  # user func to call when subscriptions are run
-        self.connected = False
+
+    @property
+    def connected(self):
+        return self.channel.states[ca.CLIENT] is ca.CONNECTED
 
     def register_user_callback(self, func):
         """
@@ -383,7 +383,6 @@ class PV:
         self.verbose = verbose
         self.auto_monitor = auto_monitor
         self.ftype = None
-        self.connected = False
         self.connection_timeout = connection_timeout
         self.dflt_count = count
         self._subid = None
@@ -417,7 +416,7 @@ class PV:
         # not handling lazy instantiation
         self._context.search(self.pvname)
         self.chid = self._context.create_channel(self.pvname)
-        self.connected = True
+
         self._args['type'] = ca.ChType(self.chid.channel.native_data_type)
         self._args['typefull'] = ca.promote_type(self.type,
                                                  use_time=(form == 'time'),
@@ -446,6 +445,9 @@ class PV:
         # todo move to async connect logic
         for cb in self.connection_callbacks:
             cb(pvname=pvname, conn=True, pv=self)
+    @property
+    def connected(self):
+        return self.chid is not None and self.chid.connected
 
     def force_connect(self, pvname=None, chid=None, conn=True, **kws):
         ...
