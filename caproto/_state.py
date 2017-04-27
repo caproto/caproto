@@ -252,6 +252,10 @@ class ChannelState(_BaseState):
         self._fire_command_triggered_transitions(role, command_type)
         self._fire_state_triggered_transitions(role)
 
+    def update(self):
+        self._fire_state_triggered_transitions(CLIENT)
+        self._fire_state_triggered_transitions(SERVER)
+
 
 class CircuitState(_BaseState):
     TRANSITIONS = COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS
@@ -269,8 +273,8 @@ class CircuitState(_BaseState):
         self.states = {CLIENT: DISCONNECTED, SERVER: DISCONNECTED}
         # Notify channels on this circuit.
         for chan in self.channels.values():
-            chan.states._fire_state_triggered_transitions(CLIENT)
-            chan.states._fire_state_triggered_transitions(SERVER)
+            chan.states.update()
+
 
 def get_exception(our_role, command):
     """
