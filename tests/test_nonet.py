@@ -5,6 +5,7 @@ import os
 import time
 import socket
 import getpass
+import pytest
 
 
 pv1 = "synctest1"
@@ -60,12 +61,15 @@ def cli_recv(circuit):
 
 def test_nonet():
     # Register with the repeater.
+    assert not cli_b._registered
     bytes_to_send = cli_b.send(ca.RepeaterRegisterRequest('0.0.0.0'))
+    assert not cli_b._registered
 
     # Receive response
     data = bytes(ca.RepeaterConfirmResponse('127.0.0.1'))
     cli_b.recv(data, cli_addr)
     cli_b.next_command()
+    assert cli_b._registered
 
     # Search for pv1.
     # CA requires us to send a VersionRequest and a SearchRequest bundled into
@@ -94,22 +98,62 @@ def test_nonet():
                                 priority=0)
     circuit.log.setLevel('DEBUG')
     chan1 = ca.ClientChannel(pv1, circuit)
+    assert chan1.states[ca.CLIENT] is ca.SEND_CREATE_CHAN_REQUEST
+    assert chan1.states[ca.SERVER] is ca.IDLE
 
     srv_circuit = ca.VirtualCircuit(our_role=ca.SERVER,
                                     address=address, priority=None)
 
     cli_send(chan1.circuit, ca.VersionRequest(priority=0, version=13))
+
     srv_recv(srv_circuit)
+
     srv_send(srv_circuit, ca.VersionResponse(version=13))
     cli_recv(chan1.circuit)
     cli_send(chan1.circuit, ca.HostNameRequest('localhost'))
     cli_send(chan1.circuit, ca.ClientNameRequest('username'))
     cli_send(chan1.circuit, ca.CreateChanRequest(name=pv1, cid=chan1.cid,
                                                  version=13))
+    assert chan1.states[ca.CLIENT] is ca.AWAIT_CREATE_CHAN_RESPONSE
+    assert chan1.states[ca.SERVER] is ca.SEND_CREATE_CHAN_RESPONSE
+
     srv_recv(srv_circuit)
+    assert chan1.states[ca.CLIENT] is ca.AWAIT_CREATE_CHAN_RESPONSE
+    assert chan1.states[ca.SERVER] is ca.SEND_CREATE_CHAN_RESPONSE
+    srv_chan1, = srv_circuit.channels.values()
+    assert srv_chan1.states[ca.CLIENT] is ca.AWAIT_CREATE_CHAN_RESPONSE
+    assert srv_chan1.states[ca.SERVER] is ca.SEND_CREATE_CHAN_RESPONSE
+
     srv_send(srv_circuit, ca.CreateChanResponse(cid=chan1.cid, sid=1,
                                                 data_type=5, data_count=1))
+    assert srv_chan1.states[ca.CLIENT] is ca.CONNECTED
+    assert srv_chan1.states[ca.SERVER] is ca.CONNECTED
+
+    # At this point the CLIENT is not aware that we are CONNECTED because it
+    # has not yet received the CreateChanResponse. It should not be allowed to
+    # read or write.
+    assert chan1.states[ca.CLIENT] is ca.AWAIT_CREATE_CHAN_RESPONSE
+    assert chan1.states[ca.SERVER] is ca.SEND_CREATE_CHAN_RESPONSE
+
+    # Try sending a premature read request.
+    read_req = ca.ReadNotifyRequest(sid=srv_chan1.sid,
+                                    data_type=srv_chan1.native_data_type,
+                                    data_count=srv_chan1.native_data_count,
+                                    ioid=0)
+    with pytest.raises(ca.LocalProtocolError):
+        cli_send(chan1.circuit, read_req)
+
+    # The above failed because the sid is not recognized. Remove that failure
+    # by editing the sid cache, and check that it *still* fails, this time
+    # because of the state machine prohibiting this command before the channel
+    # is in a CONNECTED state.
+    chan1.circuit.channels_sid[1] = chan1
+    with pytest.raises(ca.LocalProtocolError):
+        cli_send(chan1.circuit, read_req)
+
     cli_recv(chan1.circuit)
+    assert chan1.states[ca.CLIENT] is ca.CONNECTED
+    assert chan1.states[ca.SERVER] is ca.CONNECTED
 
     # Test subscriptions.
     assert chan1.native_data_type and chan1.native_data_count
@@ -160,6 +204,14 @@ def test_nonet():
     cli_recv(chan1.circuit)
 
     # Test "clearing" (closing) the channel.
-    cli_send(chan1.circuit, ca.ClearChannelRequest(chan1.sid, chan1.cid))
-    srv_recv(chan1.circuit)
+    cli_send(chan1.circuit, ca.ClearChannelRequest(sid=chan1.sid, cid=chan1.cid))
+    assert chan1.states[ca.CLIENT] is ca.MUST_CLOSE
+    assert chan1.states[ca.SERVER] is ca.MUST_CLOSE
 
+    srv_recv(srv_circuit)
+    assert srv_chan1.states[ca.CLIENT] is ca.MUST_CLOSE
+    assert srv_chan1.states[ca.SERVER] is ca.MUST_CLOSE
+
+    srv_send(srv_circuit, ca.ClearChannelResponse(sid=chan1.sid, cid=chan1.cid))
+    assert srv_chan1.states[ca.CLIENT] is ca.CLOSED
+    assert srv_chan1.states[ca.SERVER] is ca.CLOSED
