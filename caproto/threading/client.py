@@ -374,6 +374,7 @@ class PVContext(Context):
     def get_pv(self, pvname, *args, **kwargs):
         if not self.registered:
             self.register()
+        # TODO add PV cache to this class
         return PV(pvname, *args, context=self, **kwargs)
 
 
@@ -1021,8 +1022,11 @@ class PV:
         self.chid.clear()
 
 
+_dflt_context = PVContext()
+
+
 def get_pv(pvname, *args, **kwargs):
-    return PV(pvname)
+    return _dflt_context.get_pv(pvname)
 
 
 def caput(pvname, value, wait=False, timeout=60):
