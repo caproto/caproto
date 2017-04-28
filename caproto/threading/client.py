@@ -12,6 +12,7 @@ from collections import Iterable
 CA_REPEATER_PORT = 5065
 CA_SERVER_PORT = 5064
 AUTOMONITOR_MAXLENGTH = 65536
+STALE_SEARCH_THRESHOLD = 10.0
 
 
 class SocketThread:
@@ -58,7 +59,7 @@ class Context:
 
         self.circuits = {}  # list of VirtualCircuits
         self.unanswered_searches = {}  # map search id (cid) to name
-        self.search_results = {}  # map name to address
+        self.search_results = {}  # map name to (time, address)
 
         self.udp_sock = None
         self.sock_thread = None
@@ -102,8 +103,14 @@ class Context:
         if not self.registered:
             self.register()
 
-        # Discard any old search result for this name.
-        self.search_results.pop(name, None)
+        if name in self.search_results:
+            address, timestamp = self.search_results[name]
+            if (time.time() - timestamp) < STALE_SEARCH_THRESHOLD:
+                return address
+            else:
+                # Discard any old search result for this name.
+                self.search_results.pop(name, None)
+
         ver_command, search_command = self.broadcaster.search(name)
         # Stash the search ID for recognizes the SearchResponse later.
         self.unanswered_searches[search_command.cid] = name
@@ -114,7 +121,10 @@ class Context:
                 if search_command.cid not in self.unanswered_searches:
                     break
                 if not self.has_new_command.wait(2):
-                    raise TimeoutError()
+                    raise TimeoutError('failed to find PV {}'.format(name))
+
+        address, timestamp = self.search_results[name]
+        return address
 
     def get_circuit(self, address, priority):
         """
@@ -135,12 +145,7 @@ class Context:
         """
         Create a new channel.
         """
-        try:
-            address = self.search_results[name]
-        except KeyError:
-            # try exactly once
-            self.search(name)
-            address = self.search_results[name]
+        address = self.search(name)
 
         circuit = self.get_circuit(address, priority)
         cid = circuit.circuit.new_channel_id()
@@ -181,9 +186,11 @@ class Context:
                     # Check that the server version is one we can talk to.
                     assert command.version > 11
                 if isinstance(command, ca.SearchResponse):
-                    name = self.unanswered_searches.pop(command.cid, None)
+                    name = self.unanswered_searches.get(command.cid, None)
                     if name is not None:
-                        self.search_results[name] = ca.extract_address(command)
+                        self.search_results[name] = (ca.extract_address(command),
+                                                     time.time())
+                        self.unanswered_searches.pop(command.cid)
                     else:
                         # This is a redundant response, which the spec
                         # tell us we must ignore.
