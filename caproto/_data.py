@@ -17,7 +17,7 @@ def _ensure_iterable(value):
 
 class ChannelAlarmStatus:
     def __init__(self, *, channel_data=None, status=0, severity=0,
-                 acknowledge_transient=False, acknowledge_severity=0,
+                 acknowledge_transient=True, acknowledge_severity=0,
                  alarm_string=''):
         self.channel_data = channel_data
         self.status = status
@@ -72,9 +72,9 @@ class ChannelData:
         timestamp : float, optional
             Posix timestamp associated with the value
             Defaults to `time.time()`
-        status : int, optional
+        status : ca.AlarmStatus, optional
             Alarm status
-        severity : int, optional
+        severity : ca.AlarmSeverity, optional
             Alarm severity
         string_encoding : str, optional
             Encoding to use for strings, used both in and out

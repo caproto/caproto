@@ -164,16 +164,16 @@ def test_curio_server():
 
     async def run_server():
         pvdb = {'pi': ca.ChannelDouble(value=3.14,
-                                                  lower_disp_limit=3.13,
-                                                  upper_disp_limit=3.15,
-                                                  lower_alarm_limit=3.12,
-                                                  upper_alarm_limit=3.16,
-                                                  lower_warning_limit=3.11,
-                                                  upper_warning_limit=3.17,
-                                                  lower_ctrl_limit=3.10,
-                                                  upper_ctrl_limit=3.18,
-                                                  precision=5,
-                                                  units='doodles')}
+                                       lower_disp_limit=3.13,
+                                       upper_disp_limit=3.15,
+                                       lower_alarm_limit=3.12,
+                                       upper_alarm_limit=3.16,
+                                       lower_warning_limit=3.11,
+                                       upper_warning_limit=3.17,
+                                       lower_ctrl_limit=3.10,
+                                       upper_ctrl_limit=3.18,
+                                       precision=5,
+                                       units='doodles')}
         port = find_next_tcp_port(host=SERVER_HOST)
         print('Server will be on', (SERVER_HOST, port))
         ctx = server.Context(SERVER_HOST, port, pvdb)
@@ -301,6 +301,9 @@ async def run_caget(pv, *, dbr_type=None):
         'Timestamp': 'timestamp',
         'Precision': 'precision',
         'Enums': 'enums',
+        'Class Name': 'class_name',
+        'Ack transient?': 'ackt',
+        'Ack severity': 'acks',
     }
 
     lines = [line.strip() for line in output.split('\n')
@@ -408,7 +411,10 @@ caget_pvdb = {
                            lower_ctrl_limit=30,
                            upper_ctrl_limit=38,
                            ),
-    'str': ca.ChannelString(value='hello'),
+    'str': ca.ChannelString(value='hello',
+                            status=ca.AlarmStatus.READ,
+                            severity=ca.AlarmSeverity.MINOR_ALARM,
+                            reported_record_type='caproto'),
     }
 
 
@@ -449,6 +455,9 @@ caget_checks += [('char', ChType.CHAR),
                  ('str', ChType.STRING),
                  ('str', ChType.STS_STRING),
                  ('str', ChType.TIME_STRING),
+
+                 ('str', ChType.STSACK_STRING),
+                 ('str', ChType.CLASS_NAME),
                  ]
 
 
@@ -486,6 +495,10 @@ def test_curio_server_with_caget(curio_server, pv, dbr_type):
                 assert int(data['value']) == ord(db_value)
             else:
                 assert int(data['value']) == int(db_value)
+        elif req_native in (ChType.STSACK_STRING, ):
+            pass
+        elif req_native in (ChType.CLASS_NAME, ):
+            assert data['class_name'] == 'caproto'
         elif req_native in (ChType.FLOAT, ChType.DOUBLE):
             assert float(data['value']) == float(db_value)
         elif req_native == ChType.STRING:
@@ -535,7 +548,13 @@ def test_curio_server_with_caget(curio_server, pv, dbr_type):
 
         if dbr_type in ca.time_types or dbr_type in ca.status_types:
             for key in status_keys:
-                value = getattr(ca._dbr, data[key])
+                value = data[key]
+                if key in ('severity', ):
+                    if not value.endswith('_ALARM'):
+                        value = '{}_ALARM'.format(value)
+                    value = getattr(ca._dbr.AlarmSeverity, value)
+                elif key in ('status', ):
+                    value = getattr(ca._dbr.AlarmStatus, value)
                 assert value == getattr(db_entry, key), key
 
     async def task():

@@ -9,7 +9,6 @@ import array
 import ctypes
 import datetime
 from enum import IntEnum
-from collections import namedtuple
 
 try:
     import numpy
@@ -18,7 +17,6 @@ except ImportError:
 else:
     USE_NUMPY = True
 
-# EPICS2UNIX_EPOCH = 631173600.0 - time.timezone
 EPICS2UNIX_EPOCH = 631152000.0
 EPICS_EPOCH = datetime.datetime.utcfromtimestamp(EPICS2UNIX_EPOCH)
 
@@ -30,10 +28,38 @@ MAX_ENUM_STATES = 16
 DO_REPLY = 10
 NO_REPLY = 5
 
-NO_ALARM = 0
-MINOR_ALARM = 1
-MAJOR_ALARM = 2
-INVALID_ALARM = 3
+
+class AlarmSeverity(IntEnum):
+    NO_ALARM = 0
+    MINOR_ALARM = 1
+    MAJOR_ALARM = 2
+    INVALID_ALARM = 3
+
+
+class AlarmStatus(IntEnum):
+    NO_ALARM = 0
+    READ = 1
+    WRITE = 2
+    HIHI = 3
+    HIGH = 4
+    LOLO = 5
+    LOW = 6
+    STATE = 7
+    COS = 8
+    COMM = 9
+    TIMEOUT = 10
+    HWLIMIT = 11
+    CALC = 12
+    SCAN = 13
+    LINK = 14
+    SOFT = 15
+    BAD_SUB = 16
+    UDF = 17
+    DISABLE = 18
+    SIMM = 19
+    READ_ACCESS = 20
+    WRITE_ACCESS = 21
+
 
 DBE_VALUE = 1
 DBE_ARCHIVE = 2
