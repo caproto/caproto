@@ -154,19 +154,21 @@ class Context:
         cachan = ca.ClientChannel(name, circuit.circuit, cid=cid)
         chan = circuit.channels[cid] = Channel(circuit, cachan)
 
-        if cachan.circuit.states[ca.SERVER] is ca.IDLE:
-            circuit.create_connection()
-            circuit.send(cachan.version())
-            circuit.send(cachan.host_name())
-            circuit.send(cachan.client_name())
-            while True:
-                print('i')
-                with circuit.has_new_command:
-                    if circuit.connected:
-                        break
-                    if not circuit.has_new_command.wait(2):
-                        print(circuit.circuit.states)
-                        raise TimeoutError()
+        with circuit.has_new_command:
+            if circuit.circuit.states[ca.SERVER] is ca.IDLE:
+                circuit.create_connection()
+                circuit.send(cachan.version(),
+                             cachan.host_name(),
+                             cachan.client_name())
+        while True:
+            print('i')
+            with circuit.has_new_command:
+                if circuit.connected:
+                    break
+                if not circuit.has_new_command.wait(2):
+                    print(circuit.circuit.states)
+                    raise TimeoutError()
+
         circuit.send(cachan.create())
 
         with circuit.has_new_command:
