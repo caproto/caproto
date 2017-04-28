@@ -131,18 +131,19 @@ def test_context_disconnect(cntx):
     is_happy(chan, cntx)
 
     st = cntx.sock_thread.thread
+    ct = chan.circuit.sock_thread.thread
+
     cntx.disconnect()
     st.join()
-
     assert not chan.connected
     assert not chan.circuit.connected
     assert not cntx.registered
     assert not cntx.circuits
     assert not cntx.search_results
-    assert not chan.circuit.sock_thread.thread.is_alive()
+    assert not ct.is_alive()
     assert not st.is_alive()
 
-    with pytest.raises(ca.LocalProtocolError):
+    with pytest.raises(RuntimeError):
         chan.read()
 
     cntx.register()

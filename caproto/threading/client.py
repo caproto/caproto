@@ -196,8 +196,8 @@ class Context:
         th = []
         # disconnect any circuits we have
         for circ in self.circuits.values():
-            circ.disconnect()
             th.append(circ.sock_thread.thread)
+            circ.disconnect()
         # clear any state about circuits and search results
         self.circuits.clear()
         self.search_results.clear()
@@ -281,9 +281,18 @@ class VirtualCircuit:
                 self.has_new_command.notify_all()
 
     def disconnect(self):
-        self.sock_thread.poison_ev.set()
+        for ch in self.channels.values():
+            ch.clear()
+
         with self.has_new_command:
-            return self.circuit.disconnect()
+            self.circuit.disconnect()
+        th = self.sock_thread.thread
+        self.sock_thread.poison_ev.set()
+        th.join()
+        self.channels.clear()
+        self.ioids.clear()
+        self.socket = None
+        self.sock_thread = None
 
 
 class Channel:
@@ -332,7 +341,13 @@ class Channel:
 
     def clear(self):
         "Disconnect this Channel."
-        self.circuit.send(self.channel.clear())
+        if self.connected:
+            self.circuit.send(self.channel.clear())
+            while True:
+                if not self.connected:
+                    break
+                if not self.circuit.has_new_command.wait(2):
+                    raise TimeoutError()
         # TODO make sure it actually happens
 
     def read(self, *args, **kwargs):
@@ -1040,7 +1055,11 @@ class PV:
 
     def disconnect(self):
         "disconnect PV"
-        self.chid.clear()
+        if self.connected:
+            self.chid.clear()
+
+    def __del__(self):
+        self.disconnect()
 
 
 _dflt_context = PVContext()

@@ -464,6 +464,8 @@ class PV_Tests(unittest.TestCase):
             self.assertEquals(zerostr.get(as_string=True, as_numpy=False), '')
             numpy.testing.assert_array_equal(zerostr.get(as_string=False, as_numpy=False), [0, 0])
 
+        zerostr.disconnect()
+
     def testEnumPut(self):
         pv = PV(pvnames.enum_pv)
         self.assertIsNot(pv, None)
