@@ -48,6 +48,7 @@ class ChannelAlarmStatus:
         dbr.severity = self.severity
         dbr.ackt = 1 if self.acknowledge_transient else 0
         dbr.acks = self.acknowledge_severity
+        dbr.value = ensure_bytes(self.alarm_string)
         return dbr
 
     @property
@@ -142,8 +143,7 @@ class ChannelData:
 
     def get_dbr_data(self, type_):
         if type_ == ChType.STSACK_STRING:
-            return (self.alarm.to_dbr(),
-                    self.alarm.alarm_string.encode(self.string_encoding))
+            return (self.alarm.to_dbr(), b'')
         elif type_ == ChType.CLASS_NAME:
             class_name = DBR_TYPES[type_]()
             rtyp = self.reported_record_type.encode(self.string_encoding)

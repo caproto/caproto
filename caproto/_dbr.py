@@ -800,6 +800,7 @@ class DBR_STSACK_STRING(ctypes.BigEndianStructure):
         ('severity', short_t),
         ('ackt', ushort_t),
         ('acks', ushort_t),
+        ('value', string_t),
     ]
 
 
