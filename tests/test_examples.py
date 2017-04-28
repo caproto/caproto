@@ -372,6 +372,11 @@ async def run_caget(pv, *, dbr_type=None):
 #
 #     return lines
 
+str_alarm_status = ca.ChannelAlarmStatus(
+    status=ca.AlarmStatus.READ,
+    severity=ca.AlarmSeverity.MINOR_ALARM,
+    alarm_string='alarm string',
+)
 
 caget_pvdb = {
     'pi': ca.ChannelDouble(value=3.14,
@@ -412,8 +417,7 @@ caget_pvdb = {
                            upper_ctrl_limit=38,
                            ),
     'str': ca.ChannelString(value='hello',
-                            status=ca.AlarmStatus.READ,
-                            severity=ca.AlarmSeverity.MINOR_ALARM,
+                            alarm_status=str_alarm_status,
                             reported_record_type='caproto'),
     }
 
@@ -496,7 +500,11 @@ def test_curio_server_with_caget(curio_server, pv, dbr_type):
             else:
                 assert int(data['value']) == int(db_value)
         elif req_native in (ChType.STSACK_STRING, ):
-            pass
+            db_string_value = db_entry.alarm.alarm_string
+            string_length = len(db_string_value)
+            read_value = data['value'][:string_length]
+            assert int(data['element_count']) == string_length
+            assert read_value == db_string_value
         elif req_native in (ChType.CLASS_NAME, ):
             assert data['class_name'] == 'caproto'
         elif req_native in (ChType.FLOAT, ChType.DOUBLE):
@@ -546,16 +554,26 @@ def test_curio_server_with_caget(curio_server, pv, dbr_type):
             timestamp = datetime.datetime.fromtimestamp(db_entry.timestamp)
             assert data['timestamp'] == timestamp
 
-        if dbr_type in ca.time_types or dbr_type in ca.status_types:
-            for key in status_keys:
-                value = data[key]
-                if key in ('severity', ):
-                    if not value.endswith('_ALARM'):
-                        value = '{}_ALARM'.format(value)
-                    value = getattr(ca._dbr.AlarmSeverity, value)
-                elif key in ('status', ):
-                    value = getattr(ca._dbr.AlarmStatus, value)
-                assert value == getattr(db_entry, key), key
+        if (dbr_type in ca.time_types or dbr_type in ca.status_types or
+                dbr_type == ChType.STSACK_STRING):
+            severity = data['severity']
+            if not severity.endswith('_ALARM'):
+                severity = '{}_ALARM'.format(severity)
+            severity = getattr(ca._dbr.AlarmSeverity, severity)
+            assert severity == db_entry.severity, key
+
+            status = data['status']
+            status = getattr(ca._dbr.AlarmStatus, status)
+            assert status == db_entry.status, key
+
+            if 'ackt' in data:
+                ack_transient = data['ackt'] == 'YES'
+                assert ack_transient == db_entry.alarm.acknowledge_transient
+
+            if 'acks' in data:
+                ack_severity = data['acks']
+                ack_severity = getattr(ca._dbr.AlarmSeverity, ack_severity)
+                assert ack_severity == db_entry.alarm.acknowledge_severity
 
     async def task():
         server_task = await curio.spawn(curio_server)
