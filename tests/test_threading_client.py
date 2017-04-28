@@ -143,9 +143,6 @@ def test_context_disconnect(cntx):
     with pytest.raises(ca.LocalProtocolError):
         chan.read()
 
-    with pytest.raises(ca.LocalProtocolError):
-        cntx.search(str_pv)
-
     cntx.register()
     chan = bootstrap()
     is_happy(chan, cntx)

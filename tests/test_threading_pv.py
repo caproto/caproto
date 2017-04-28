@@ -62,3 +62,8 @@ def test_cntx_disconnect_reconnect(cntx):
     pv.get()
     assert pv.connected
     assert cntx.registered
+
+    cntx.disconnect()
+    assert not pv.connected
+    assert not cntx.registered
+    pv.get()

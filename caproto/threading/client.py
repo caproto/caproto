@@ -96,6 +96,9 @@ class Context:
 
     def search(self, name):
         "Generate, process, and the transport a search request."
+        if not self.registered:
+            self.register()
+
         # Discard any old search result for this name.
         self.search_results.pop(name, None)
         ver_command, search_command = self.broadcaster.search(name)
@@ -129,7 +132,13 @@ class Context:
         """
         Create a new channel.
         """
-        address = self.search_results[name]
+        try:
+            address = self.search_results[name]
+        except KeyError:
+            # try exactly once
+            self.search(name)
+            address = self.search_results[name]
+
         circuit = self.get_circuit(address, priority)
         cid = circuit.circuit.new_channel_id()
         cachan = ca.ClientChannel(name, circuit.circuit, cid=cid)
@@ -372,8 +381,6 @@ def ensure_connection(func):
 
 class PVContext(Context):
     def get_pv(self, pvname, *args, **kwargs):
-        if not self.registered:
-            self.register()
         # TODO add PV cache to this class
         return PV(pvname, *args, context=self, **kwargs)
 
