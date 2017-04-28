@@ -165,7 +165,7 @@ class Context:
                     if circuit.connected:
                         break
                     if not circuit.has_new_command.wait(2):
-                        print(circuit.states)
+                        print(circuit.circuit.states)
                         raise TimeoutError()
         circuit.send(cachan.create())
 
@@ -205,8 +205,11 @@ class Context:
         th = []
         # disconnect any circuits we have
         for circ in self.circuits.values():
-            th.append(circ.sock_thread.thread)
-            circ.disconnect()
+            if circ.connected:
+                st = circ.sock_thread
+                if st is not None:
+                    th.append(st.thread)
+                circ.disconnect()
 
         # clear any state about circuits and search results
         self.circuits.clear()
