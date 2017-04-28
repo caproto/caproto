@@ -115,6 +115,8 @@ def test_context_disconnect(cntx):
     def bootstrap():
         cntx.search(str_pv)
         chan = cntx.create_channel(str_pv)
+        assert chan.connected
+        assert chan.circuit.connected
         return chan
 
     def is_happy(chan, cntx):
