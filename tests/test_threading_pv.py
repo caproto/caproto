@@ -43,11 +43,14 @@ def cntx(request):
 def test_pv_disconnect_reconnect(cntx):
     str_pv = 'Py:ao1.DESC'
     pv = cntx.get_pv(str_pv)
-    pv.get()
+    print(pv.chid.channel.states)
+    print(pv.get())
+    assert pv.connected
     pv.disconnect()
     assert not pv.connected
     pv.get()
     assert pv.connected
+    pv.disconnect()
 
 
 def test_cntx_disconnect_reconnect(cntx):
@@ -67,3 +70,4 @@ def test_cntx_disconnect_reconnect(cntx):
     assert not pv.connected
     assert not cntx.registered
     pv.get()
+    pv.disconnect()

@@ -8,11 +8,13 @@ import time
 import weakref
 
 from collections import Iterable
+from itertools import count
 
 CA_REPEATER_PORT = 5065
 CA_SERVER_PORT = 5064
 AUTOMONITOR_MAXLENGTH = 65536
 STALE_SEARCH_THRESHOLD = 10.0
+global_cid_count = iter(count())
 
 
 class SocketThread:
@@ -148,7 +150,7 @@ class Context:
         address = self.search(name)
 
         circuit = self.get_circuit(address, priority)
-        cid = circuit.circuit.new_channel_id()
+        cid = next(global_cid_count)
         cachan = ca.ClientChannel(name, circuit.circuit, cid=cid)
         chan = circuit.channels[cid] = Channel(circuit, cachan)
 
@@ -157,11 +159,13 @@ class Context:
             circuit.send(cachan.version())
             circuit.send(cachan.host_name())
             circuit.send(cachan.client_name())
-            with circuit.has_new_command:
-                while True:
+            while True:
+                print('i')
+                with circuit.has_new_command:
                     if circuit.connected:
                         break
                     if not circuit.has_new_command.wait(2):
+                        print(circuit.states)
                         raise TimeoutError()
         circuit.send(cachan.create())
 
@@ -198,16 +202,16 @@ class Context:
                 self.has_new_command.notify_all()
 
     def disconnect(self):
-        # disconnect the underlying state machine
-        self.broadcaster.disconnect()
         th = []
         # disconnect any circuits we have
         for circ in self.circuits.values():
             th.append(circ.sock_thread.thread)
             circ.disconnect()
+
         # clear any state about circuits and search results
         self.circuits.clear()
         self.search_results.clear()
+
         # if we _have_ a socket, kill it
         if self.udp_sock is not None:
             self.udp_sock.close()
@@ -218,6 +222,9 @@ class Context:
         for t in th:
             if t is not cur_thread:
                 t.join()
+
+        # disconnect the underlying state machine
+        self.broadcaster.disconnect()
 
         # discard our thread and socket
         self.sock_thread = None
@@ -254,9 +261,6 @@ class VirtualCircuit:
         self.sock_thread = SocketThread(self.socket, self)
 
     def send(self, *commands):
-        if self.socket is None:
-            raise RuntimeError("must create connection first")
-
         # turn the crank on the caproto
         bytes_to_send = self.circuit.send(*commands)
         # send bytes over the wire
@@ -295,7 +299,8 @@ class VirtualCircuit:
             self.circuit.disconnect()
         th = self.sock_thread.thread
         self.sock_thread.poison_ev.set()
-        th.join()
+        if th is not threading.current_thread():
+            th.join()
         self.channels.clear()
         self.ioids.clear()
         self.socket = None
@@ -348,13 +353,18 @@ class Channel:
 
     def clear(self):
         "Disconnect this Channel."
-        if self.connected:
-            self.circuit.send(self.channel.clear())
-            while True:
-                if not self.connected:
-                    break
-                if not self.circuit.has_new_command.wait(2):
-                    raise TimeoutError()
+        with self.circuit.has_new_command:
+            if self.connected:
+                try:
+                    self.circuit.send(self.channel.clear())
+                except OSError:
+                    ...
+                else:
+                    while True:
+                        if not self.connected:
+                            break
+                        if not self.circuit.has_new_command.wait(2):
+                            raise TimeoutError()
         # TODO make sure it actually happens
 
     def read(self, *args, **kwargs):

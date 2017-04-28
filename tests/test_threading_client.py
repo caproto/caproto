@@ -143,7 +143,7 @@ def test_context_disconnect(cntx):
     assert not ct.is_alive()
     assert not st.is_alive()
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(ca.LocalProtocolError):
         chan.read()
 
     cntx.register()
