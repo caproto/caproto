@@ -231,6 +231,7 @@ class VirtualCircuit:
 
     @property
     def connected(self):
+        print(self.circuit.states, self.socket, self.sock_thread)
         return self.circuit.states[ca.CLIENT] is ca.CONNECTED
 
     def create_connection(self):
