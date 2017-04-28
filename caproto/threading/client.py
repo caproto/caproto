@@ -274,10 +274,12 @@ class VirtualCircuit:
         """Receive and process and next command from the virtual circuit.
 
         This will be run on the recv thread"""
-        with self.has_new_command:
-            self.circuit.recv(bytes_recv)
         while True:
             with self.has_new_command:
+                if bytes_recv is not None:
+                    self.circuit.recv(bytes_recv)
+                    bytes_recv = None
+
                 command = self.circuit.next_command()
                 if command is ca.NEED_DATA:
                     break
