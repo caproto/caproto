@@ -152,6 +152,12 @@ class Context:
             circuit.send(cachan.version())
             circuit.send(cachan.host_name())
             circuit.send(cachan.client_name())
+            with circuit.has_new_command:
+                while True:
+                    if circuit.connected:
+                        break
+                    if not circuit.has_new_command.wait(2):
+                        raise TimeoutError()
         circuit.send(cachan.create())
 
         with circuit.has_new_command:
