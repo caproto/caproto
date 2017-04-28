@@ -450,7 +450,7 @@ class Broadcaster:
             self._parsed_commands.extend(commands)
             if not commands:
                 # Handle rare edge case: empty datagram.
-                return NEED_DATA
+                return self.next_command()
         self.log.debug(("Processing 1/%d commands left in datagram. "
                         "%d more datagrams are cached."),
                        len(self._parsed_commands), len(self._datagram_inbox))

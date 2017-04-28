@@ -338,3 +338,19 @@ def test_dead_circuit(circuit_pair):
     assert srv_channel2.states[ca.CLIENT] is ca.CLOSED
     assert cli_channel2.states[ca.SERVER] is ca.CLOSED
     assert srv_channel2.states[ca.SERVER] is ca.CLOSED
+
+
+def test_receive_udp_noise():
+    # A Request from the CLIENT bounces back to the CLIENT. The CLIENT should
+    # ignore it, not fail.
+    b = ca.Broadcaster(ca.CLIENT)
+    req = b.register()
+    res = ca.RepeaterConfirmResponse('1.2.3.4')
+    addr = ('5.6.7.8', 6666)
+
+    bytes_to_send = b.send(req)
+    # Through the magic of UDP this bounces back to us....
+    b.recv(bytes_to_send, addr)
+    # And then we also get a response.
+    b.recv(bytes(res), addr)
+    assert res == b.next_command()

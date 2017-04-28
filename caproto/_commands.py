@@ -259,7 +259,22 @@ def read_datagram(data, address, role):
     while barray:
         header = MessageHeader.from_buffer(barray)
         barray = barray[_MessageHeaderSize:]
-        _class = get_command_class(role, header)
+        try:
+            _class = get_command_class(role, header)
+        except KeyError as origial_exc:
+            # This could be a request intended for the *other* role.
+            # For example, we could be a CLIENT seeing our own REQUEST echoed
+            # back to us. UDP is a noisy place. Confirm that theory:
+            if role is CLIENT:
+                our_role = SERVER
+            else:
+                our_role = CLIENT
+            try:
+                _class = get_command_class(our_role, header)
+            except KeyError:
+                # So much for that theory! This is some other problem. Raise.
+                raise original_exc
+            return []
         payload_size = header.payload_size
         if _class.HAS_PAYLOAD:
             payload_bytes = barray[:header.payload_size]
