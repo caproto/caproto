@@ -254,8 +254,8 @@ class VirtualCircuit:
 
     @property
     def connected(self):
-        print(self.circuit.states, self.socket, self.sock_thread)
-        return self.circuit.states[ca.CLIENT] is ca.CONNECTED
+        with self.has_new_command:
+            return self.circuit.states[ca.CLIENT] is ca.CONNECTED
 
     def create_connection(self):
         if self.sock_thread is not None:
@@ -264,10 +264,11 @@ class VirtualCircuit:
         self.sock_thread = SocketThread(self.socket, self)
 
     def send(self, *commands):
-        # turn the crank on the caproto
-        bytes_to_send = self.circuit.send(*commands)
-        # send bytes over the wire
-        self.socket.sendmsg(bytes_to_send)
+        with self.has_new_command:
+            # turn the crank on the caproto
+            bytes_to_send = self.circuit.send(*commands)
+            # send bytes over the wire
+            self.socket.sendmsg(bytes_to_send)
 
     def next_command(self, bytes_recv, address):
         """Receive and process and next command from the virtual circuit.
@@ -324,7 +325,8 @@ class Channel:
 
     @property
     def connected(self):
-        return self.channel.states[ca.CLIENT] is ca.CONNECTED
+        with self.circuit.has_new_command:
+            return self.channel.states[ca.CLIENT] is ca.CONNECTED
 
     def register_user_callback(self, func):
         """
@@ -377,8 +379,9 @@ class Channel:
         The most recent reading is always available in the ``last_reading``
         attribute.
         """
-        command = self.channel.read(*args, **kwargs)
-        # Stash the ioid to match the response to the request.
+        with self.circuit.has_new_command:
+            command = self.channel.read(*args, **kwargs)
+            # Stash the ioid to match the response to the request.
         ioid = command.ioid
         self.circuit.ioids[ioid] = self
         self.circuit.send(command)
