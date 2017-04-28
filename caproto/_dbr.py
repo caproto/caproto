@@ -1000,7 +1000,10 @@ if USE_NUMPY:
         ChType.LONG: numpy.int32,
         ChType.DOUBLE: numpy.float64,
         ChType.STRING: numpy.dtype('>S40'),
-        ChType.CHAR: numpy.dtype('>S1')
+        ChType.CHAR: numpy.dtype('>S1'),
+
+        ChType.STSACK_STRING: numpy.uint8,
+        ChType.CLASS_NAME: numpy.uint8,
     }
 
 _array_type_code_map = {
@@ -1011,6 +1014,9 @@ _array_type_code_map = {
     ChType.CHAR: 'b',
     ChType.LONG: 'i',
     ChType.DOUBLE: 'd',
+
+    ChType.STSACK_STRING: 'b',
+    ChType.CLASS_NAME: 'b',
 }
 
 for _type in set(native_types) - set([ChType.STRING]):
