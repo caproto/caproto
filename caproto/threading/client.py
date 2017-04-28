@@ -370,6 +370,13 @@ def ensure_connection(func):
     return inner
 
 
+class PVContext(Context):
+    def get_pv(self, pvname, *args, **kwargs):
+        if not self.registered:
+            self.register()
+        return PV(pvname, *args, context=self, **kwargs)
+
+
 class PV:
     """Epics Process Variable
 
