@@ -98,7 +98,6 @@ def from_buffer(data_type, data_count, buffer):
     # to make the byte-size of the payload a multiple of 8.
     data_payload = buffer[md_size:md_size + payload_size]
     return md_payload, data_payload
-    # TODO Handle padding
 
 
 def padded_len(s):
@@ -191,12 +190,14 @@ def data_payload(data, metadata, data_type, data_count):
         data_payload = data.astype(data.dtype.newbyteorder('>'))
     elif isinstance(data, collections.Iterable):
         if ntype == ChannelType.STRING:
-            data_payload = b''.join(bytes(d).ljust(40, b'\0') for d in data)
+            data_payload = b''.join(d[:39].ljust(40, b'\0') for d in data)
         else:
             data_payload = array.array(array_type_code(ntype), data)
             # Make big-endian.
             if sys.byteorder == 'little':
                 data_payload.byteswap()
+    elif data is None:
+        data_payload = b''
     else:
         raise CaprotoTypeError("data given as type we cannot handle - {}"
                                "".format(type(data)))

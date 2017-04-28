@@ -6,9 +6,16 @@ import curio
 from curio import socket
 
 import caproto as ca
-from caproto import (DatabaseRecordDouble, DatabaseRecordInteger,
-                     DatabaseRecordEnum)
+from caproto import (ChannelDouble, ChannelInteger,
+                     ChannelEnum)
 from caproto import (EPICS_CA1_PORT, EPICS_CA2_PORT)
+
+
+class DisconnectedCircuit(Exception):
+    ...
+
+
+SERVER_ENCODING = 'latin-1'
 
 
 def find_next_tcp_port(host='0.0.0.0', starting_port=EPICS_CA2_PORT + 1):
@@ -100,11 +107,11 @@ class VirtualCircuit:
     def _process_command(self, command):
         def get_db_entry():
             chan = self.circuit.channels_sid[command.sid]
-            db_entry = self.context.pvdb[chan.name.decode('latin-1')]
+            db_entry = self.context.pvdb[chan.name.decode(SERVER_ENCODING)]
             return chan, db_entry
 
         if isinstance(command, ca.CreateChanRequest):
-            db_entry = self.context.pvdb[command.name.decode('latin-1')]
+            db_entry = self.context.pvdb[command.name.decode(SERVER_ENCODING)]
             access = db_entry.check_access(command.sender_address)
 
             yield [ca.VersionResponse(13),
@@ -117,8 +124,6 @@ class VirtualCircuit:
                    ]
         elif isinstance(command, ca.ReadNotifyRequest):
             chan, db_entry = get_db_entry()
-            # TODO
-            db_entry._data['native'] = [db_entry.value]
             metadata, data = db_entry.get_dbr_data(command.data_type)
             yield chan.read(data=data, data_type=command.data_type,
                             data_count=len(data), status=1,
@@ -185,7 +190,7 @@ class Context:
                     res = ca.VersionResponse(13)
                     responses.append(res)
                 if isinstance(command, ca.SearchRequest):
-                    known_pv = command.name.decode('latin-1') in self.pvdb
+                    known_pv = command.name.decode(SERVER_ENCODING) in self.pvdb
                     if (not known_pv) and command.reply == ca.NO_REPLY:
                         responses.clear()
                         break  # Do not send any repsonse to this datagram.
@@ -246,25 +251,41 @@ def _get_my_ip():
 
 
 if __name__ == '__main__':
-    pvdb = {'pi': DatabaseRecordDouble(value=3.14,
-                                       lower_disp_limit=3.13,
-                                       upper_disp_limit=3.15,
-                                       lower_alarm_limit=3.12,
-                                       upper_alarm_limit=3.16,
-                                       lower_warning_limit=3.11,
-                                       upper_warning_limit=3.17,
-                                       lower_ctrl_limit=3.10,
-                                       upper_ctrl_limit=3.18,
-                                       precision=5,
-                                       units='doodles',
-                                       ),
-            'enum': DatabaseRecordEnum(value='b',
-                                       strs=['a', 'b', 'c', 'd'],
-                                       ),
-            'int': DatabaseRecordInteger(value=0,
-                                         units='doodles',
-                                         ),
+    pvdb = {'pi': ChannelDouble(value=3.14,
+                                lower_disp_limit=3.13,
+                                upper_disp_limit=3.15,
+                                lower_alarm_limit=3.12,
+                                upper_alarm_limit=3.16,
+                                lower_warning_limit=3.11,
+                                upper_warning_limit=3.17,
+                                lower_ctrl_limit=3.10,
+                                upper_ctrl_limit=3.18,
+                                precision=5,
+                                units='doodles',
+                                ),
+            'enum': ChannelEnum(value='b',
+                                strs=['a', 'b', 'c', 'd'],
+                                ),
+            'int': ChannelInteger(value=0,
+                                  units='doodles',
+                                  ),
+            'char': ca.ChannelChar(value=b'3',
+                                   units='poodles',
+                                   lower_disp_limit=33,
+                                   upper_disp_limit=35,
+                                   lower_alarm_limit=32,
+                                   upper_alarm_limit=36,
+                                   lower_warning_limit=31,
+                                   upper_warning_limit=37,
+                                   lower_ctrl_limit=30,
+                                   upper_ctrl_limit=38,
+                                   ),
+            'str': ca.ChannelString(value='hello',
+                                    string_encoding='latin-1'),
+            'stra': ca.ChannelString(value=['hello', 'how is it', 'going'],
+                                     string_encoding='latin-1'),
             }
 
+    pvdb['pi'].alarm.alarm_string = 'delicious'
     ctx = Context('0.0.0.0', find_next_tcp_port(), pvdb)
     curio.run(ctx.run())

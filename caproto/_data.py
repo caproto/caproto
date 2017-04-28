@@ -1,84 +1,172 @@
 import time
 from ._dbr import (DBR_TYPES, ChType, promote_type, native_type,
                    native_float_types, native_int_types, native_types,
-                   timestamp_to_epics, time_types, MAX_ENUM_STRING_SIZE)
-from ._utils import ensure_bytes
-
-# it's all about data
-ENCODING = 'latin-1'
+                   timestamp_to_epics, time_types, MAX_ENUM_STRING_SIZE,
+                   DBR_STSACK_STRING, ushort_t)
 
 
-# TODO these aren't really records. what were you thinking?
-class DatabaseRecordBase:
+def _ensure_iterable(value):
+    try:
+        len(value)
+    except TypeError:
+        return (value, )
+    else:
+        return value
+
+
+class ChannelAlarmStatus:
+    def __init__(self, *, channel_data=None, status=0, severity=0,
+                 acknowledge_transient=True, acknowledge_severity=0,
+                 alarm_string=''):
+        self.channel_data = channel_data
+        self.status = status
+        self.severity = severity
+        self.acknowledge_transient = acknowledge_transient
+        self.acknowledge_severity = acknowledge_severity
+        self.alarm_string = alarm_string
+
+    def acknowledge(self):
+        pass
+
+    def _set_instance_from_dbr(self, dbr):
+        self.status = dbr.status
+        self.severity = dbr.severity
+        self.acknowledge_transient = (dbr.ackt != 0)
+        self.acknowledge_severity = dbr.acks
+        self.alarm_string = dbr.value.decode(self.string_encoding)
+
+    @classmethod
+    def _from_dbr(cls, dbr):
+        instance = cls()
+        instance._set_instance_from_dbr(dbr)
+
+    def to_dbr(self, dbr=None):
+        if dbr is None:
+            dbr = DBR_STSACK_STRING()
+        dbr.status = self.status
+        dbr.severity = self.severity
+        dbr.ackt = 1 if self.acknowledge_transient else 0
+        dbr.acks = self.acknowledge_severity
+        dbr.value = self.alarm_string.encode(self.string_encoding)
+        return dbr
+
+    @property
+    def string_encoding(self):
+        return self.channel_data.string_encoding
+
+
+class ChannelData:
     data_type = ChType.LONG
+    _has_custom_convert = False
 
-    def __init__(self, *, timestamp=None, status=0, severity=0, value=None):
+    def __init__(self, *, value=None, timestamp=None, status=0, severity=0,
+                 string_encoding='latin-1', alarm_status=None,
+                 reported_record_type='caproto'):
+        '''Metadata and Data for a single caproto Channel
+
+        Parameters
+        ----------
+        value :
+            Data which has to match with this class's data_type
+        timestamp : float, optional
+            Posix timestamp associated with the value
+            Defaults to `time.time()`
+        status : ca.AlarmStatus, optional
+            Alarm status
+        severity : ca.AlarmSeverity, optional
+            Alarm severity
+        string_encoding : str, optional
+            Encoding to use for strings, used both in and out
+        alarm_status : ChannelAlarmStatus, optional
+            Optionally specify an allocated alarm status, which could be shared
+            among several channels
+        reported_record_type : str, optional
+            Though this is not a record, the channel access protocol supports
+            querying the record type.  This can be set to mimic an actual record
+            or be set to something arbitrary.
+            Defaults to 'caproto'
+        '''
         if timestamp is None:
             timestamp = time.time()
         self.timestamp = timestamp
-        self.status = status
-        self.severity = severity
+        if alarm_status is not None:
+            self.alarm = alarm_status
+            self.alarm.channel_data = self
+        else:
+            self.alarm = ChannelAlarmStatus(status=status, severity=severity,
+                                            channel_data=self)
         self.value = value
-
+        self.string_encoding = string_encoding
+        self.reported_record_type = reported_record_type
         self._data = {chtype: DBR_TYPES[chtype]()
                       for chtype in
                       (promote_type(self.data_type, use_ctrl=True),
                        promote_type(self.data_type, use_time=True),
                        promote_type(self.data_type, use_status=True),
-                       # pending merge of #27 which will have conflicts with
-                       # this one now:
-                       # promote_type(self.data_type, use_gr=True),
+                       promote_type(self.data_type, use_gr=True),
                        )
                       }
 
-        # additional 'array' data not stored in the base DBR types:
-        self._data['native'] = []
-
     def convert_to(self, to_dtype):
-        # this leaves a lot to be desired
-        from_dtype = self.data_type
-        native_to = native_type(to_dtype)
+        '''Convert values to another native type
 
-        # TODO metadata is expected to be of this type as well!
+        Parameters
+        ----------
+        to_dtype : ca.ChType
+        '''
+        if to_dtype not in native_types:
+            raise ValueError('Expecting a native type')
+
+        if to_dtype in (ChType.STSACK_STRING, ChType.CLASS_NAME):
+            return None
+
+        from_dtype = self.data_type
+
         no_conversion_necessary = (
-            from_dtype == native_to or
-            (from_dtype in native_float_types and native_to in
+            from_dtype == to_dtype or
+            (from_dtype in native_float_types and to_dtype in
              native_float_types) or
-            (from_dtype in native_int_types and native_to in native_int_types)
+            (from_dtype in native_int_types and to_dtype in native_int_types)
         )
 
-        try:
-            len(self.value)
-        except TypeError:
-            values = (self.value, )
-        else:
-            values = self.value
+        values = _ensure_iterable(self.value)
 
         if no_conversion_necessary:
             return values
 
-        if from_dtype in native_float_types and native_to in native_int_types:
+        if from_dtype in native_float_types and to_dtype in native_int_types:
             values = [int(v) for v in values]
-        elif native_to == ChType.STRING:
-            if self.data_type in (ChType.STRING, ChType.ENUM):
-                values = [v.encode(ENCODING) for v in values]
-            else:
-                values = [bytes(str(v), ENCODING) for v in values]
+        elif to_dtype == ChType.STRING:
+            values = [str(v).encode(self.string_encoding) for v in values]
         return values
 
     def get_dbr_data(self, type_):
-        if type_ in self._data and self.data_type != ChType.ENUM:
+        if type_ == ChType.STSACK_STRING:
+            return (self.alarm.to_dbr(), b'')
+        elif type_ == ChType.CLASS_NAME:
+            class_name = DBR_TYPES[type_]()
+            rtyp = self.reported_record_type.encode(self.string_encoding)
+            class_name.value = rtyp
+            return class_name, b''
+
+        native_to = native_type(type_)
+        if type_ in self._data:
             dbr_data = self._data[type_]
             self._set_dbr_metadata(dbr_data)
-            return dbr_data, self._data['native']
-        elif type_ in native_types:
-            return None, self.convert_to(type_)
 
-        # non-standard type request. frequent ones probably should be
-        # cached?
+            if self._has_custom_convert:
+                value = self.convert_to(native_to)
+            else:
+                value = _ensure_iterable(self.value)
+
+            return dbr_data, value
+        elif type_ in native_types:
+            return b'', self.convert_to(native_to)
+
+        # non-standard type request. frequent ones probably should be cached?
         dbr_data = DBR_TYPES[type_]()
         self._set_dbr_metadata(dbr_data)
-        return dbr_data, self.convert_to(type_)
+        return dbr_data, self.convert_to(native_to)
 
     def _set_dbr_metadata(self, dbr_data):
         'Set all metadata fields of a given DBR type instance'
@@ -109,7 +197,7 @@ class DatabaseRecordBase:
                 continue
 
             if isinstance(value, str):
-                value = bytes(value, ENCODING)
+                value = bytes(value, self.string_encoding)
             try:
                 setattr(dbr_data, attr, value)
             except TypeError as ex:
@@ -126,6 +214,22 @@ class DatabaseRecordBase:
         'EPICS timestamp as (seconds, nanoseconds) since EPICS epoch'
         return timestamp_to_epics(self.timestamp)
 
+    @property
+    def status(self):
+        return self.alarm.status
+
+    @status.setter
+    def status(self, status):
+        self.alarm.status = status
+
+    @property
+    def severity(self):
+        return self.alarm.severity
+
+    @severity.setter
+    def severity(self, severity):
+        self.alarm.severity = severity
+
     def __len__(self):
         try:
             return len(self.value)
@@ -137,8 +241,9 @@ class DatabaseRecordBase:
         return 3  # read-write
 
 
-class DatabaseRecordEnum(DatabaseRecordBase):
+class ChannelEnum(ChannelData):
     data_type = ChType.ENUM
+    _has_custom_convert = True
 
     def __init__(self, *, strs=None, **kwargs):
         self.strs = strs
@@ -152,19 +257,19 @@ class DatabaseRecordEnum(DatabaseRecordBase):
     def _set_dbr_metadata(self, dbr_data):
         if hasattr(dbr_data, 'strs'):
             for i, string in enumerate(self.strs):
-                bytes_ = bytes(string, ENCODING)
+                bytes_ = bytes(string, self.string_encoding)
                 dbr_data.strs[i][:] = bytes_.ljust(MAX_ENUM_STRING_SIZE, b'\x00')
 
         return super()._set_dbr_metadata(dbr_data)
 
     def convert_to(self, to_dtype):
         if native_type(to_dtype) == ChType.STRING:
-            return [bytes(str(self.value), ENCODING)]
+            return [self.value.encode(self.string_encoding)]
         else:
             return [self.strs.index(self.value)]
 
 
-class DatabaseRecordNumeric(DatabaseRecordBase):
+class ChannelNumeric(ChannelData):
     def __init__(self, *, units='', upper_disp_limit=0.0,
                  lower_disp_limit=0.0, upper_alarm_limit=0.0,
                  upper_warning_limit=0.0, lower_warning_limit=0.0,
@@ -172,7 +277,7 @@ class DatabaseRecordNumeric(DatabaseRecordBase):
                  lower_ctrl_limit=0.0, **kwargs):
 
         super().__init__(**kwargs)
-        self.units = ensure_bytes(units)
+        self.units = units.encode(self.string_encoding)
         self.upper_disp_limit = upper_disp_limit
         self.lower_disp_limit = lower_disp_limit
         self.upper_alarm_limit = upper_alarm_limit
@@ -183,14 +288,55 @@ class DatabaseRecordNumeric(DatabaseRecordBase):
         self.lower_ctrl_limit = lower_ctrl_limit
 
 
-class DatabaseRecordInteger(DatabaseRecordNumeric):
+class ChannelInteger(ChannelNumeric):
     data_type = ChType.LONG
 
 
-class DatabaseRecordDouble(DatabaseRecordNumeric):
+class ChannelDouble(ChannelNumeric):
     data_type = ChType.DOUBLE
 
     def __init__(self, *, precision=0, **kwargs):
         super().__init__(**kwargs)
 
         self.precision = precision
+
+
+class ChannelChar(ChannelNumeric):
+    # 'Limits' on chars do not make much sense and are rarely used.
+    data_type = ChType.CHAR
+    _has_custom_convert = True
+
+    def convert_to(self, to_dtype):
+        # if to_dtype == ChType.STRING:
+        #     return self.value.encode(self.string_encoding)
+        # else:
+        if isinstance(self.value, str):
+            return self.value.encode(self.string_encoding)
+        elif isinstance(self.value, bytes):
+            return self.value
+        else:
+            return [self.value]
+
+
+class ChannelString(ChannelData):
+    data_type = ChType.STRING
+    _has_custom_convert = True
+    # There is no CTRL or GR variant of STRING.
+
+    def convert_to(self, to_dtype):
+        if to_dtype != ChType.STRING:
+            # TODO does this actually respond with an error?
+            return b''
+
+        if isinstance(self.value, str):
+            # single string
+            return [self.value.encode(self.string_encoding)]
+        elif isinstance(self.value, bytes):
+            # single bytestring
+            return [self.value]
+        else:
+            # array of strings/bytestrings
+            return [v.encode(self.string_encoding)
+                    if isinstance(v, str)
+                    else v
+                    for v in self.value]

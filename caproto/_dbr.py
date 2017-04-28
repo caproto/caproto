@@ -9,7 +9,6 @@ import array
 import ctypes
 import datetime
 from enum import IntEnum
-from collections import namedtuple
 
 try:
     import numpy
@@ -18,7 +17,6 @@ except ImportError:
 else:
     USE_NUMPY = True
 
-# EPICS2UNIX_EPOCH = 631173600.0 - time.timezone
 EPICS2UNIX_EPOCH = 631152000.0
 EPICS_EPOCH = datetime.datetime.utcfromtimestamp(EPICS2UNIX_EPOCH)
 
@@ -30,10 +28,38 @@ MAX_ENUM_STATES = 16
 DO_REPLY = 10
 NO_REPLY = 5
 
-NO_ALARM = 0
-MINOR_ALARM = 1
-MAJOR_ALARM = 2
-INVALID_ALARM = 3
+
+class AlarmSeverity(IntEnum):
+    NO_ALARM = 0
+    MINOR_ALARM = 1
+    MAJOR_ALARM = 2
+    INVALID_ALARM = 3
+
+
+class AlarmStatus(IntEnum):
+    NO_ALARM = 0
+    READ = 1
+    WRITE = 2
+    HIHI = 3
+    HIGH = 4
+    LOLO = 5
+    LOW = 6
+    STATE = 7
+    COS = 8
+    COMM = 9
+    TIMEOUT = 10
+    HWLIMIT = 11
+    CALC = 12
+    SCAN = 13
+    LINK = 14
+    SOFT = 15
+    BAD_SUB = 16
+    UDF = 17
+    DISABLE = 18
+    SIMM = 19
+    READ_ACCESS = 20
+    WRITE_ACCESS = 21
+
 
 DBE_VALUE = 1
 DBE_ARCHIVE = 2
@@ -51,8 +77,6 @@ long_t = ctypes.c_int32  # epicsInt32
 ulong_t = ctypes.c_uint32  # epicsUInt32
 float_t = ctypes.c_float  # epicsFloat32
 double_t = ctypes.c_double  # epicsFloat64
-stsack_string_t = 40 * ctypes.c_char  # epicsOldString
-class_name_t = 40 * ctypes.c_char  # epicsOldString
 
 
 def epics_timestamp_to_unix(seconds_since_epoch, nano_seconds):
@@ -370,7 +394,7 @@ class DBR_TIME_DOUBLE(ctypes.BigEndianStructure):
     ]
 
 
-# DBR_GR_STRING (21) is not implemented by EPICS.
+# DBR_GR_STRING (21) is not implemented by EPICS. - use DBR_STS_STRING
 
 
 class DBR_GR_INT(ctypes.BigEndianStructure):
@@ -450,7 +474,7 @@ class DBR_GR_ENUM(ctypes.BigEndianStructure):
         ('status', short_t),
         ('severity', short_t),
         ('no_str', short_t),  # number of strings
-        ('strs', MAX_ENUM_STATES * MAX_ENUM_STRING_SIZE * char_t),
+        ('strs', MAX_ENUM_STATES * (MAX_ENUM_STRING_SIZE * char_t)),
     ]
 
 
@@ -481,6 +505,7 @@ class DBR_GR_CHAR(ctypes.BigEndianStructure):
         ('upper_warning_limit', char_t),
         ('lower_warning_limit', char_t),
         ('lower_alarm_limit', char_t),
+        ('RISC_pad', char_t),
     ]
 
 
@@ -546,26 +571,7 @@ class DBR_GR_DOUBLE(ctypes.BigEndianStructure):
     ]
 
 
-# DBR_GR_STRING (28) is not implemented by libca.
-class DBR_CTRL_STRING(ctypes.BigEndianStructure):
-    DBR_ID = 28
-    _pack_ = 1
-    _fields_ = [
-        ('status', short_t),
-        ('severity', short_t),
-        ('precision', short_t),
-        ('units', MAX_UNITS_SIZE * char_t),
-        ('upper_disp_limit', short_t),
-        ('lower_disp_limit', short_t),
-        ('upper_alarm_limit', short_t),
-        ('upper_warning_limit', short_t),
-        ('lower_warning_limit', short_t),
-        ('lower_alarm_limit', short_t),
-        ('upper_ctrl_limit', short_t),
-        ('lower_ctrl_limit', short_t),
-    ]
-
-
+# DBR_CTRL_STRING (28) is not implemented by libca.
 
 class DBR_CTRL_INT(ctypes.BigEndianStructure):
     DBR_ID = 29
@@ -794,6 +800,7 @@ class DBR_STSACK_STRING(ctypes.BigEndianStructure):
         ('severity', short_t),
         ('ackt', ushort_t),
         ('acks', ushort_t),
+        ('value', string_t),
     ]
 
 
@@ -801,7 +808,7 @@ class DBR_CLASS_NAME(ctypes.BigEndianStructure):
     DBR_ID = 38
     _pack_ = 1
     _fields_ = [
-        ('value', ushort_t),
+        ('value', string_t),
     ]
 
 
@@ -860,7 +867,16 @@ class ChannelType(IntEnum):
     TIME_LONG = 19
     TIME_DOUBLE = 20
 
-    CTRL_STRING = 28
+    GR_STRING = 21  # not implemented by EPICS
+    GR_SHORT = 22
+    GR_INT = GR_SHORT
+    GR_FLOAT = 23
+    GR_ENUM = 24
+    GR_CHAR = 25
+    GR_LONG = 26
+    GR_DOUBLE = 27
+
+    CTRL_STRING = 28  # not implemented by EPICS
     CTRL_INT = 29
     CTRL_SHORT = 29
     CTRL_FLOAT = 30
@@ -868,6 +884,9 @@ class ChannelType(IntEnum):
     CTRL_CHAR = 32
     CTRL_LONG = 33
     CTRL_DOUBLE = 34
+
+    STSACK_STRING = 37
+    CLASS_NAME = 38
 
 
 class SubscriptionType(IntEnum):
@@ -892,6 +911,10 @@ status_types = (ChType.STS_STRING, ChType.STS_SHORT, ChType.STS_INT,
 time_types = (ChType.TIME_STRING, ChType.TIME_INT, ChType.TIME_SHORT,
               ChType.TIME_FLOAT, ChType.TIME_ENUM, ChType.TIME_CHAR,
               ChType.TIME_LONG, ChType.TIME_DOUBLE)
+
+graphical_types = (ChType.GR_STRING, ChType.GR_SHORT, ChType.GR_INT,
+                   ChType.GR_FLOAT, ChType.GR_ENUM, ChType.GR_CHAR,
+                   ChType.GR_LONG, ChType.GR_DOUBLE)
 
 control_types = (ChType.CTRL_STRING, ChType.CTRL_INT, ChType.CTRL_SHORT,
                  ChType.CTRL_FLOAT, ChType.CTRL_ENUM, ChType.CTRL_CHAR,
@@ -928,6 +951,14 @@ DBR_TYPES = {
     ChType.LONG: ulong_t,
     ChType.DOUBLE: double_t,
 
+    ChType.GR_STRING: DBR_STS_STRING,
+    ChType.GR_INT: DBR_GR_INT,
+    ChType.GR_FLOAT: DBR_GR_FLOAT,
+    ChType.GR_ENUM: DBR_GR_ENUM,
+    ChType.GR_CHAR: DBR_GR_CHAR,
+    ChType.GR_LONG: DBR_GR_LONG,
+    ChType.GR_DOUBLE: DBR_GR_DOUBLE,
+
     ChType.STS_STRING: DBR_STS_STRING,
     ChType.STS_INT: DBR_STS_INT,
     ChType.STS_FLOAT: DBR_STS_FLOAT,
@@ -946,14 +977,19 @@ DBR_TYPES = {
     ChType.TIME_DOUBLE: DBR_TIME_DOUBLE,
 
     # Note: there is no ctrl string in the C definition
-    ChType.CTRL_STRING: DBR_CTRL_STRING,
+    ChType.CTRL_STRING: DBR_STS_STRING,
     ChType.CTRL_SHORT: DBR_CTRL_INT,
     ChType.CTRL_INT: DBR_CTRL_INT,
     ChType.CTRL_FLOAT: DBR_CTRL_FLOAT,
     ChType.CTRL_ENUM: DBR_CTRL_ENUM,
     ChType.CTRL_CHAR: DBR_CTRL_CHAR,
     ChType.CTRL_LONG: DBR_CTRL_LONG,
-    ChType.CTRL_DOUBLE: DBR_CTRL_DOUBLE
+    ChType.CTRL_DOUBLE: DBR_CTRL_DOUBLE,
+
+    # Special types:
+    ChType.STSACK_STRING: DBR_STSACK_STRING,
+    ChType.CLASS_NAME: DBR_CLASS_NAME,
+
 }
 
 if USE_NUMPY:
@@ -965,7 +1001,10 @@ if USE_NUMPY:
         ChType.LONG: numpy.int32,
         ChType.DOUBLE: numpy.float64,
         ChType.STRING: numpy.dtype('>S40'),
-        ChType.CHAR: numpy.dtype('>S1')
+        ChType.CHAR: numpy.dtype('>S1'),
+
+        ChType.STSACK_STRING: numpy.uint8,
+        ChType.CLASS_NAME: numpy.uint8,
     }
 
 _array_type_code_map = {
@@ -976,6 +1015,9 @@ _array_type_code_map = {
     ChType.CHAR: 'b',
     ChType.LONG: 'i',
     ChType.DOUBLE: 'd',
+
+    ChType.STSACK_STRING: 'b',
+    ChType.CLASS_NAME: 'b',
 }
 
 for _type in set(native_types) - set([ChType.STRING]):
@@ -1023,6 +1065,15 @@ _native_map = {
     ChType.TIME_LONG: ChType.LONG,
     ChType.TIME_DOUBLE: ChType.DOUBLE,
 
+    ChType.GR_STRING: ChType.STRING,
+    ChType.GR_INT: ChType.INT,
+    ChType.GR_SHORT: ChType.SHORT,
+    ChType.GR_FLOAT: ChType.FLOAT,
+    ChType.GR_ENUM: ChType.ENUM,
+    ChType.GR_CHAR: ChType.CHAR,
+    ChType.GR_LONG: ChType.LONG,
+    ChType.GR_DOUBLE: ChType.DOUBLE,
+
     ChType.CTRL_STRING: ChType.STRING,
     ChType.CTRL_SHORT: ChType.SHORT,
     ChType.CTRL_INT: ChType.INT,
@@ -1031,6 +1082,11 @@ _native_map = {
     ChType.CTRL_CHAR: ChType.CHAR,
     ChType.CTRL_LONG: ChType.LONG,
     ChType.CTRL_DOUBLE: ChType.DOUBLE,
+
+    # Special types:
+    ChType.STSACK_STRING: ChType.STSACK_STRING,
+    ChType.CLASS_NAME: ChType.CLASS_NAME,
+
 }
 
 
@@ -1055,24 +1111,31 @@ def native_to_builtin(value, native_type, data_count):
         return  # array.array()
 
 
-def promote_type(ftype, *, use_status=False, use_time=False, use_ctrl=False):
-    """Promotes a native field type to its TIME or CTRL variant.
+def promote_type(ftype, *, use_status=False, use_time=False, use_ctrl=False,
+                 use_gr=False):
+    """Promotes a native field type to its STS, TIME, CTRL, or GR variant.
 
     Returns
     -------
     ftype : int
         the promoted field value.
     """
+    if sum([use_status, use_time, use_ctrl, use_gr]) > 1:
+        raise ValueError("Only one of the kwargs may be True.")
     # Demote it back to a native type, if necessary
     ftype = ChType(_native_map.get(ftype, None))
 
+    # Use the fact that the types are ordered in blocks and that the STRING
+    # variant is the first element of each block.
     if use_ctrl:
         ftype += ChType.CTRL_STRING
     elif use_time:
         ftype += ChType.TIME_STRING
     elif use_status:
         ftype += ChType.STS_STRING
+    elif use_gr:
+        ftype += ChType.GR_STRING
 
     if ftype == ChType.CTRL_STRING:
         return ChType.TIME_STRING
-    return ftype
+    return ChType(ftype)

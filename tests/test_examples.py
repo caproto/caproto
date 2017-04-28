@@ -1,9 +1,11 @@
+# Helper classes to encapsulate values and metadata for a channel and pack them
+# into various DBR_TYPES with minimal copying.
+
 import os
 import datetime
 import logging
 import time
 from multiprocessing import Process
-from itertools import count
 
 import pytest
 import curio
@@ -161,17 +163,17 @@ def test_curio_server():
     kernel = curio.Kernel()
 
     async def run_server():
-        pvdb = {'pi': server.DatabaseRecordDouble(value=3.14,
-                                                  lower_disp_limit=3.13,
-                                                  upper_disp_limit=3.15,
-                                                  lower_alarm_limit=3.12,
-                                                  upper_alarm_limit=3.16,
-                                                  lower_warning_limit=3.11,
-                                                  upper_warning_limit=3.17,
-                                                  lower_ctrl_limit=3.10,
-                                                  upper_ctrl_limit=3.18,
-                                                  precision=5,
-                                                  units='doodles')}
+        pvdb = {'pi': ca.ChannelDouble(value=3.14,
+                                       lower_disp_limit=3.13,
+                                       upper_disp_limit=3.15,
+                                       lower_alarm_limit=3.12,
+                                       upper_alarm_limit=3.16,
+                                       lower_warning_limit=3.11,
+                                       upper_warning_limit=3.17,
+                                       lower_ctrl_limit=3.10,
+                                       upper_ctrl_limit=3.18,
+                                       precision=5,
+                                       units='doodles')}
         port = find_next_tcp_port(host=SERVER_HOST)
         print('Server will be on', (SERVER_HOST, port))
         ctx = server.Context(SERVER_HOST, port, pvdb)
@@ -221,8 +223,36 @@ def test_curio_server():
 
     with kernel:
         kernel.run(task)
-    # seems to hang here
     print('done')
+
+
+async def run_epics_base_binary(*args):
+    '''Run an EPICS-base binary with the environment variables set
+
+    Returns
+    -------
+    stdout, stderr
+        Decoded standard output and standard error text
+    '''
+    args = ['/usr/bin/env'] + list(args)
+
+    print()
+    print('* Executing', args)
+
+    epics_env = ca.get_environment_variables()
+    env = dict(PATH=os.environ['PATH'],
+               EPICS_CA_AUTO_ADDR_LIST=epics_env['EPICS_CA_AUTO_ADDR_LIST'],
+               EPICS_CA_ADDR_LIST=epics_env['EPICS_CA_ADDR_LIST'])
+
+    p = curio.subprocess.Popen(args, env=env,
+                               stdout=curio.subprocess.PIPE,
+                               stderr=curio.subprocess.PIPE)
+    await p.wait()
+    raw_stdout = await p.stdout.read()
+    raw_stderr = await p.stderr.read()
+    stdout = raw_stdout.decode('latin-1')
+    stderr = raw_stderr.decode('latin-1')
+    return stdout, stderr
 
 
 async def run_caget(pv, *, dbr_type=None):
@@ -236,7 +266,7 @@ async def run_caget(pv, *, dbr_type=None):
         Specific dbr_type to request
     '''
     sep = '@'
-    args = ['/usr/bin/env', 'caget', '-w', '0.2', '-F', sep]
+    args = ['caget', '-w', '0.2', '-F', sep]
     if dbr_type is None:
         args += ['-a']
         wide_mode = True
@@ -246,28 +276,11 @@ async def run_caget(pv, *, dbr_type=None):
         wide_mode = False
     args.append(pv)
 
-    print()
-    print('* Executing', args)
+    output, stderr = await run_epics_base_binary(*args)
 
-    env = dict(PATH=os.environ['PATH'],
-               EPICS_CA_AUTO_ADDR_LIST=os.environ['EPICS_CA_AUTO_ADDR_LIST'],
-               EPICS_CA_ADDR_LIST=os.environ['EPICS_CA_ADDR_LIST'])
     print('----------------------------------------------------------')
-    for j in count():
-        if j > 5:
-            raise ValueError("tried 5 times and failed")
-        p = curio.subprocess.Popen(args, env=env,
-                                   stdout=curio.subprocess.PIPE,
-                                   stderr=curio.subprocess.PIPE)
-        await p.wait()
-        raw_output = await p.stdout.read()
-        output = raw_output.decode('latin-1')
-
-        print('* output:')
-        print(output)
-        print()
-        if output:
-            break
+    print(output)
+    print()
 
     key_map = {
         'Native data type': 'native_data_type',
@@ -288,14 +301,16 @@ async def run_caget(pv, *, dbr_type=None):
         'Timestamp': 'timestamp',
         'Precision': 'precision',
         'Enums': 'enums',
+        'Class Name': 'class_name',
+        'Ack transient?': 'ackt',
+        'Ack severity': 'acks',
     }
 
     lines = [line.strip() for line in output.split('\n')
              if line.strip()]
 
     if not lines:
-        err = await p.stderr.read()
-        raise RuntimeError('caget failed: {}'.format(err))
+        raise RuntimeError('caget failed: {}'.format(stderr))
 
     if wide_mode:
         pv, timestamp, value, stat, sevr = lines[0].split(sep)
@@ -330,34 +345,80 @@ async def run_caget(pv, *, dbr_type=None):
 
     return info
 
+# ca_test does not exist in our builds
+# async def run_base_catest(pv, *, dbr_type=None):
+#     '''Execute epics-base ca_test and parse results into a dictionary
+#
+#     Parameters
+#     ----------
+#     pv : str
+#         PV name
+#     '''
+#     output, stderr = await run_epics_base_binary('ca_test', pv)
+#
+#     print('----------------------------------------------------------')
+#
+#     lines = []
+#     line_starters = ['name:', 'native type:', 'native count:']
+#     for line in output.split('\n'):
+#         line = line.rstrip()
+#         if line.startswith('DBR'):
+#             lines.append(line)
+#         else:
+#             if any(line.startswith(starter) for starter in line_starters):
+#                 lines.append(line)
+#             else:
+#                 lines[-1] += line
+#
+#     return lines
+
+str_alarm_status = ca.ChannelAlarmStatus(
+    status=ca.AlarmStatus.READ,
+    severity=ca.AlarmSeverity.MINOR_ALARM,
+    alarm_string='alarm string',
+)
 
 caget_pvdb = {
-    'pi': server.DatabaseRecordDouble(value=3.14,
-                                      lower_disp_limit=3.13,
-                                      upper_disp_limit=3.15,
-                                      lower_alarm_limit=3.12,
-                                      upper_alarm_limit=3.16,
-                                      lower_warning_limit=3.11,
-                                      upper_warning_limit=3.17,
-                                      lower_ctrl_limit=3.10,
-                                      upper_ctrl_limit=3.18,
-                                      precision=5,
-                                      units='doodles',
-                                      ),
-    'enum': server.DatabaseRecordEnum(value='b',
-                                      strs=['a', 'b', 'c', 'd'],
-                                      ),
-    'int': server.DatabaseRecordInteger(value=33,
-                                        units='poodles',
-                                        lower_disp_limit=33,
-                                        upper_disp_limit=35,
-                                        lower_alarm_limit=32,
-                                        upper_alarm_limit=36,
-                                        lower_warning_limit=31,
-                                        upper_warning_limit=37,
-                                        lower_ctrl_limit=30,
-                                        upper_ctrl_limit=38,
-                                        ),
+    'pi': ca.ChannelDouble(value=3.14,
+                           lower_disp_limit=3.13,
+                           upper_disp_limit=3.15,
+                           lower_alarm_limit=3.12,
+                           upper_alarm_limit=3.16,
+                           lower_warning_limit=3.11,
+                           upper_warning_limit=3.17,
+                           lower_ctrl_limit=3.10,
+                           upper_ctrl_limit=3.18,
+                           precision=5,
+                           units='doodles',
+                           ),
+    'enum': ca.ChannelEnum(value='b',
+                           strs=['a', 'b', 'c', 'd'],
+                           ),
+    'int': ca.ChannelInteger(value=33,
+                             units='poodles',
+                             lower_disp_limit=33,
+                             upper_disp_limit=35,
+                             lower_alarm_limit=32,
+                             upper_alarm_limit=36,
+                             lower_warning_limit=31,
+                             upper_warning_limit=37,
+                             lower_ctrl_limit=30,
+                             upper_ctrl_limit=38,
+                             ),
+    'char': ca.ChannelChar(value=b'3',
+                           units='poodles',
+                           lower_disp_limit=33,
+                           upper_disp_limit=35,
+                           lower_alarm_limit=32,
+                           upper_alarm_limit=36,
+                           lower_warning_limit=31,
+                           upper_warning_limit=37,
+                           lower_ctrl_limit=30,
+                           upper_ctrl_limit=38,
+                           ),
+    'str': ca.ChannelString(value='hello',
+                            alarm_status=str_alarm_status,
+                            reported_record_type='caproto'),
     }
 
 
@@ -383,11 +444,25 @@ caget_checks = sum(
       (pv, ca.promote_type(dtype, use_status=True)),
       (pv, ca.promote_type(dtype, use_time=True)),
       (pv, ca.promote_type(dtype, use_ctrl=True)),
+      (pv, ca.promote_type(dtype, use_gr=True)),
       ]
-     for pv in caget_pvdb
+     for pv in ('int', 'pi', 'enum')
      for dtype in ca.native_types),
     []
 )
+
+caget_checks += [('char', ChType.CHAR),
+                 ('char', ChType.STS_CHAR),
+                 ('char', ChType.TIME_CHAR),
+                 ('char', ChType.GR_CHAR),
+                 ('char', ChType.CTRL_CHAR),
+                 ('str', ChType.STRING),
+                 ('str', ChType.STS_STRING),
+                 ('str', ChType.TIME_STRING),
+
+                 ('str', ChType.STSACK_STRING),
+                 ('str', ChType.CLASS_NAME),
+                 ]
 
 
 @pytest.mark.parametrize('pv, dbr_type', caget_checks)
@@ -402,7 +477,10 @@ def test_curio_server_with_caget(curio_server, pv, dbr_type):
     async def run_client_test():
         print('* client_test', pv, dbr_type)
         db_entry = caget_pvdb[pv]
+        # native type as in the ChannelData database
         db_native = ca.native_type(db_entry.data_type)
+        # native type of the request
+        req_native = ca.native_type(dbr_type)
 
         data = await run_caget(pv, dbr_type=dbr_type)
         print('dbr_type', dbr_type, 'data:')
@@ -412,24 +490,45 @@ def test_curio_server_with_caget(curio_server, pv, dbr_type):
 
         # convert from string value to enum if requesting int
         if (db_native == ChType.ENUM and
-                not (ca.native_type(dbr_type) == ChType.STRING
-                     or dbr_type == ChType.CTRL_ENUM)):
+                not (req_native == ChType.STRING
+                     or dbr_type in (ChType.CTRL_ENUM,
+                                     ChType.GR_ENUM))):
             db_value = db_entry.strs.index(db_value)
-
-        if ca.native_type(dbr_type) in (ChType.INT, ChType.LONG,
-                                        ChType.CHAR):
-            assert int(data['value']) == int(db_value)
-        elif ca.native_type(dbr_type) in (ChType.FLOAT, ChType.DOUBLE):
+        if req_native in (ChType.INT, ChType.LONG, ChType.SHORT, ChType.CHAR):
+            if db_native == ChType.CHAR:
+                assert int(data['value']) == ord(db_value)
+            else:
+                assert int(data['value']) == int(db_value)
+        elif req_native in (ChType.STSACK_STRING, ):
+            db_string_value = db_entry.alarm.alarm_string
+            string_length = len(db_string_value)
+            read_value = data['value'][:string_length]
+            assert read_value == db_string_value
+        elif req_native in (ChType.CLASS_NAME, ):
+            assert data['class_name'] == 'caproto'
+        elif req_native in (ChType.FLOAT, ChType.DOUBLE):
             assert float(data['value']) == float(db_value)
-        elif ca.native_type(dbr_type) == ChType.STRING:
-            assert data['value'] == str(db_value)
-        elif ca.native_type(dbr_type) == ChType.ENUM:
+        elif req_native == ChType.STRING:
+            if db_native == ChType.STRING:
+                db_string_value = str(db_value)
+                string_length = len(db_string_value)
+                read_value = data['value'][:string_length]
+                assert int(data['element_count']) == string_length
+                assert read_value == db_string_value
+                # due to how we monitor the caget output, we get @@@s where
+                # null padding bytes are. so long as we verify element_count
+                # above and the set of chars that should match, this assertion
+                # should pass
+            else:
+                assert data['value'] == str(db_value)
+        elif req_native == ChType.ENUM:
             bad_strings = ['Illegal Value (', 'Enum Index Overflow (']
             for bad_string in bad_strings:
                 if data['value'].startswith(bad_string):
                     data['value'] = data['value'][len(bad_string):-1]
 
-            if db_native == ChType.ENUM and dbr_type == ChType.CTRL_ENUM:
+            if (db_native == ChType.ENUM and
+                    (dbr_type in (ChType.CTRL_ENUM, ChType.GR_ENUM))):
                 # ctrl enum gets back the full string value
                 assert data['value'] == db_value
             else:
@@ -454,10 +553,26 @@ def test_curio_server_with_caget(curio_server, pv, dbr_type):
             timestamp = datetime.datetime.fromtimestamp(db_entry.timestamp)
             assert data['timestamp'] == timestamp
 
-        if dbr_type in ca.time_types or dbr_type in ca.status_types:
-            for key in status_keys:
-                value = getattr(ca._dbr, data[key])
-                assert value == getattr(db_entry, key), key
+        if (dbr_type in ca.time_types or dbr_type in ca.status_types or
+                dbr_type == ChType.STSACK_STRING):
+            severity = data['severity']
+            if not severity.endswith('_ALARM'):
+                severity = '{}_ALARM'.format(severity)
+            severity = getattr(ca._dbr.AlarmSeverity, severity)
+            assert severity == db_entry.severity, key
+
+            status = data['status']
+            status = getattr(ca._dbr.AlarmStatus, status)
+            assert status == db_entry.status, key
+
+            if 'ackt' in data:
+                ack_transient = data['ackt'] == 'YES'
+                assert ack_transient == db_entry.alarm.acknowledge_transient
+
+            if 'acks' in data:
+                ack_severity = data['acks']
+                ack_severity = getattr(ca._dbr.AlarmSeverity, ack_severity)
+                assert ack_severity == db_entry.alarm.acknowledge_severity
 
     async def task():
         server_task = await curio.spawn(curio_server)
