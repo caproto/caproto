@@ -3,7 +3,6 @@ from ._dbr import (DBR_TYPES, ChType, promote_type, native_type,
                    native_float_types, native_int_types, native_types,
                    timestamp_to_epics, time_types, MAX_ENUM_STRING_SIZE,
                    DBR_STSACK_STRING, ushort_t)
-from ._utils import ensure_bytes
 
 
 def _ensure_iterable(value):
@@ -48,7 +47,7 @@ class ChannelAlarmStatus:
         dbr.severity = self.severity
         dbr.ackt = 1 if self.acknowledge_transient else 0
         dbr.acks = self.acknowledge_severity
-        dbr.value = ensure_bytes(self.alarm_string)
+        dbr.value = self.alarm_string.encode(self.string_encoding)
         return dbr
 
     @property
@@ -278,7 +277,7 @@ class ChannelNumeric(ChannelData):
                  lower_ctrl_limit=0.0, **kwargs):
 
         super().__init__(**kwargs)
-        self.units = ensure_bytes(units)
+        self.units = units.encode(self.string_encoding)
         self.upper_disp_limit = upper_disp_limit
         self.lower_disp_limit = lower_disp_limit
         self.upper_alarm_limit = upper_alarm_limit
