@@ -503,7 +503,6 @@ def test_curio_server_with_caget(curio_server, pv, dbr_type):
             db_string_value = db_entry.alarm.alarm_string
             string_length = len(db_string_value)
             read_value = data['value'][:string_length]
-            assert int(data['element_count']) == string_length
             assert read_value == db_string_value
         elif req_native in (ChType.CLASS_NAME, ):
             assert data['class_name'] == 'caproto'
