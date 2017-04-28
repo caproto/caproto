@@ -5,6 +5,7 @@ import itertools
 import socket
 import threading
 import time
+import weakref
 
 from collections import Iterable
 
@@ -18,7 +19,7 @@ class SocketThread:
         self.socket = socket
         if socket.timeout is None:
             socket.settimeout(.1)
-        self.target_obj = target_obj
+        self.target_obj = weakref.ref(target_obj)
         self.thread = threading.Thread(target=self, daemon=True)
         self.thread.start()
         self.poison_ev = threading.Event()
@@ -34,18 +35,20 @@ class SocketThread:
                     continue
             except OSError:
                 bytes_recv = b''
-
+            target = self.target_obj()
+            if target is None:
+                break
             if not len(bytes_recv):
-                self.target_obj.disconnect()
+                target.disconnect()
                 return
-            self.target_obj.next_command(bytes_recv, address)
+            target.next_command(bytes_recv, address)
 
 
 class Context:
     "Wraps a caproto.Broadcaster, a UDP socket, and cache of VirtualCircuits."
     __slots__ = ('broadcaster', 'udp_sock', 'circuits',
                  'unanswered_searches', 'search_results',
-                 'has_new_command', 'sock_thread')
+                 'has_new_command', 'sock_thread', '__weakref__')
 
     def __init__(self):
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
@@ -213,6 +216,10 @@ class Context:
 
 
 class VirtualCircuit:
+    __slots__ = ('circuit', 'channels', 'ioids', 'subscriptionids',
+                 'has_new_command', 'socket', 'sock_thread',
+                 '__weakref__')
+
     def __init__(self, circuit):
         self.circuit = circuit  # a caproto.VirtualCircuit
         self.channels = {}  # map cid to Channel
