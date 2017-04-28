@@ -364,10 +364,11 @@ class Channel:
                     ...
                 else:
                     while True:
-                        if not self.connected:
-                            break
-                        if not self.circuit.has_new_command.wait(2):
-                            raise TimeoutError()
+                        with self.circuit.has_new_command:
+                            if not self.connected:
+                                break
+                            if not self.circuit.has_new_command.wait(2):
+                                raise TimeoutError()
         # TODO make sure it actually happens
 
     def read(self, *args, **kwargs):
