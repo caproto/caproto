@@ -48,6 +48,8 @@ class VirtualCircuit:
         self.circuit = circuit  # a caproto.VirtualCircuit
         self.client = client
         self.context = context
+        self.client_hostname = None
+        self.client_username = None
 
     async def send(self, *commands):
         """
@@ -112,7 +114,8 @@ class VirtualCircuit:
 
         if isinstance(command, ca.CreateChanRequest):
             db_entry = self.context.pvdb[command.name.decode(SERVER_ENCODING)]
-            access = db_entry.check_access(command.sender_address)
+            access = db_entry.check_access(self.client_hostname,
+                                           self.client_username)
 
             yield [ca.VersionResponse(13),
                    ca.AccessRightsResponse(cid=command.cid,
@@ -122,6 +125,10 @@ class VirtualCircuit:
                                          cid=command.cid,
                                          sid=self.circuit.new_channel_id()),
                    ]
+        elif isinstance(command, ca.HostNameRequest):
+            self.client_hostname = command.name.decode(SERVER_ENCODING)
+        elif isinstance(command, ca.ClientNameRequest):
+            self.client_username = command.name.decode(SERVER_ENCODING)
         elif isinstance(command, ca.ReadNotifyRequest):
             chan, db_entry = get_db_entry()
             metadata, data = db_entry.get_dbr_data(command.data_type)
