@@ -79,18 +79,20 @@ class Context:
         """
         Process a command and tranport it over the UDP socket.
         """
-        bytes_to_send = self.broadcaster.send(*commands)
-        for host in ca.get_address_list():
-            print('sending to', (host, port), bytes_to_send)
-            self.udp_sock.sendto(bytes_to_send, (host, port))
+        with self.cntx_condition:
+            bytes_to_send = self.broadcaster.send(*commands)
+            for host in ca.get_address_list():
+                print('sending to', (host, port), bytes_to_send)
+                self.udp_sock.sendto(bytes_to_send, (host, port))
 
     def register(self):
         "Register this client with the CA Repeater."
         if self.udp_sock is None:
             self.__create_sock()
 
-        command = self.broadcaster.register('127.0.0.1')
-        self.send(ca.EPICS_CA2_PORT, command)
+        with self.cntx_condition:
+            command = self.broadcaster.register('127.0.0.1')
+            self.send(ca.EPICS_CA2_PORT, command)
 
         while True:
             with self.cntx_condition:
@@ -161,18 +163,15 @@ class Context:
                              cachan.host_name(),
                              cachan.client_name())
         while True:
-            print('i')
             with circuit.has_new_command:
                 if circuit.connected:
                     break
                 if not circuit.has_new_command.wait(2):
-                    print(circuit.circuit.states)
                     raise TimeoutError()
-
+        # do not need to lock here, take care of in send method
         circuit.send(cachan.create())
-
-        with circuit.has_new_command:
-            while True:
+        while True:
+            with circuit.has_new_command:
                 if chan.connected:
                     break
                 if not circuit.has_new_command.wait(2):
@@ -386,11 +385,14 @@ class Channel:
         The most recent reading is always available in the ``last_reading``
         attribute.
         """
+        # need this lock because the socket thread could be trying to
+        # update this channel due to an incoming message
         with self.circuit.has_new_command:
             command = self.channel.read(*args, **kwargs)
             # Stash the ioid to match the response to the request.
         ioid = command.ioid
         self.circuit.ioids[ioid] = self
+        # do not need lock here, happens in send
         self.circuit.send(command)
         while True:
             with self.circuit.has_new_command:
@@ -406,6 +408,7 @@ class Channel:
         # Stash the ioid to match the response to the request.
         ioid = command.ioid
         self.circuit.ioids[ioid] = self
+        # do not need to lock this, lacking happis in circuit command
         self.circuit.send(command)
         while True:
             with self.circuit.has_new_command:
