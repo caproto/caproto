@@ -135,6 +135,7 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
         },
         CLOSED: {
             # a terminal state
+            ClearChannelResponse: CLOSED,
         },
         FAILED: {
             # a terminal state
@@ -180,6 +181,7 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
             ErrorResponse: MUST_CLOSE,
         },
         CLOSED: {
+            ClearChannelResponse: CLOSED,
             # a terminal state
         },
         FAILED: {
