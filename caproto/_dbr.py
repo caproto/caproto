@@ -29,6 +29,13 @@ DO_REPLY = 10
 NO_REPLY = 5
 
 
+class AccessRights(IntEnum):
+    NO_ACCESS = 0
+    READ = 1
+    WRITE = 2
+    READ_WRITE = 3
+
+
 class AlarmSeverity(IntEnum):
     NO_ALARM = 0
     MINOR_ALARM = 1

@@ -2,7 +2,7 @@ import time
 from ._dbr import (DBR_TYPES, ChType, promote_type, native_type,
                    native_float_types, native_int_types, native_types,
                    timestamp_to_epics, time_types, MAX_ENUM_STRING_SIZE,
-                   DBR_STSACK_STRING, ushort_t)
+                   DBR_STSACK_STRING, AccessRights)
 
 
 def _ensure_iterable(value):
@@ -236,9 +236,10 @@ class ChannelData:
         except TypeError:
             return 1
 
-    def check_access(self, sender_address):
-        print('{} has full access to {}'.format(sender_address, self))
-        return 3  # read-write
+    def check_access(self, hostname, username):
+        print('{!r} from host {!r} has full access to {}'
+              ''.format(username, hostname, self))
+        return AccessRights.READ_WRITE
 
 
 class ChannelEnum(ChannelData):
