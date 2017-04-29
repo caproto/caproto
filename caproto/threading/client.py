@@ -104,19 +104,19 @@ class Context:
         "Generate, process, and the transport a search request."
         if not self.registered:
             self.register()
+        with self.cntx_condition:
+            if name in self.search_results:
+                address, timestamp = self.search_results[name]
+                if (time.time() - timestamp) < STALE_SEARCH_THRESHOLD:
+                    return address
+                else:
+                    # Discard any old search result for this name.
+                    self.search_results.pop(name, None)
 
-        if name in self.search_results:
-            address, timestamp = self.search_results[name]
-            if (time.time() - timestamp) < STALE_SEARCH_THRESHOLD:
-                return address
-            else:
-                # Discard any old search result for this name.
-                self.search_results.pop(name, None)
-
-        ver_command, search_command = self.broadcaster.search(name)
-        # Stash the search ID for recognizes the SearchResponse later.
-        self.unanswered_searches[search_command.cid] = name
-        self.send(ca.EPICS_CA1_PORT, ver_command, search_command)
+            ver_command, search_command = self.broadcaster.search(name)
+            # Stash the search ID for recognizes the SearchResponse later.
+            self.unanswered_searches[search_command.cid] = name
+            self.send(ca.EPICS_CA1_PORT, ver_command, search_command)
         # Wait for the SearchResponse.
         while True:
             with self.cntx_condition:
