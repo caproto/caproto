@@ -51,13 +51,13 @@ class Context:
     "Wraps a caproto.Broadcaster, a UDP socket, and cache of VirtualCircuits."
     __slots__ = ('broadcaster', 'udp_sock', 'circuits',
                  'unanswered_searches', 'search_results',
-                 'has_new_command', 'sock_thread', '__weakref__')
+                 'cntx_condition', 'sock_thread', '__weakref__')
 
     def __init__(self):
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
         self.broadcaster.log.setLevel('DEBUG')
 
-        self.has_new_command = threading.Condition()
+        self.cntx_condition = threading.Condition()
 
         self.circuits = {}  # list of VirtualCircuits
         self.unanswered_searches = {}  # map search id (cid) to name
@@ -93,10 +93,10 @@ class Context:
         self.send(ca.EPICS_CA2_PORT, command)
 
         while True:
-            with self.has_new_command:
+            with self.cntx_condition:
                 if self.registered:
                     break
-                if not self.has_new_command.wait(2):
+                if not self.cntx_condition.wait(2):
                     raise TimeoutError()
         print('Registered with repeater')
 
@@ -119,10 +119,10 @@ class Context:
         self.send(ca.EPICS_CA1_PORT, ver_command, search_command)
         # Wait for the SearchResponse.
         while True:
-            with self.has_new_command:
+            with self.cntx_condition:
                 if search_command.cid not in self.unanswered_searches:
                     break
-                if not self.has_new_command.wait(2):
+                if not self.cntx_condition.wait(2):
                     raise TimeoutError('failed to find PV {}'.format(name))
 
         address, timestamp = self.search_results[name]
@@ -181,9 +181,12 @@ class Context:
 
     def next_command(self, bytes_recv, address):
         "Receive and process and next command broadcasted over UDP."
-        self.broadcaster.recv(bytes_recv, address)
         while True:
-            with self.has_new_command:
+            with self.cntx_condition:
+                if bytes_recv is not None:
+                    self.broadcaster.recv(bytes_recv, address)
+                    bytes_recv = None
+
                 command = self.broadcaster.next_command()
                 if command is ca.NEED_DATA:
                     return
@@ -201,7 +204,7 @@ class Context:
                         # This is a redundant response, which the spec
                         # tell us we must ignore.
                         pass
-                self.has_new_command.notify_all()
+                self.cntx_condition.notify_all()
 
     def disconnect(self):
         th = []
