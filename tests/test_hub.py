@@ -279,7 +279,7 @@ def test_clear(circuit_pair):
     assert cli_channel.states[ca.SERVER] is ca.CONNECTED
 
     # Send request to clear.
-    buffers_to_send = cli_circuit.send(cli_channel.clear())
+    buffers_to_send = cli_circuit.send(cli_channel.disconnect())
     assert cli_channel.states[ca.CLIENT] is ca.MUST_CLOSE
     assert cli_channel.states[ca.SERVER] is ca.MUST_CLOSE
 
@@ -290,7 +290,7 @@ def test_clear(circuit_pair):
     assert srv_channel.states[ca.SERVER] is ca.MUST_CLOSE
 
     # Send confirmation.
-    buffers_to_send = srv_circuit.send(srv_channel.clear())
+    buffers_to_send = srv_circuit.send(srv_channel.disconnect())
     assert srv_channel.states[ca.CLIENT] is ca.CLOSED
     assert srv_channel.states[ca.SERVER] is ca.CLOSED
 

@@ -146,7 +146,7 @@ class VirtualCircuit:
             yield chan.unsubscribe(command.subscriptionid)
         elif isinstance(command, ca.ClearChannelRequest):
             chan, db_entry = get_db_entry()
-            yield chan.clear()
+            yield chan.disconnect()
 
 
 class Context:

@@ -707,7 +707,7 @@ class ClientChannel(_BaseChannel):
                                     self.protocol_version)
         return command
 
-    def clear(self):
+    def disconnect(self):
         """
         Generate a valid :class:`ClearChannelRequest`.
 
@@ -893,7 +893,7 @@ class ServerChannel(_BaseChannel):
         command = CreateChFailResponse(self.cid)
         return command
 
-    def clear(self):
+    def disconnect(self):
         """
         Generate a valid :class:`ClearChannelResponse`.
 
