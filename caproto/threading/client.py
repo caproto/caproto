@@ -38,13 +38,16 @@ class SocketThread:
                     continue
             except OSError:
                 bytes_recv = b''
+
             target = self.target_obj()
             if target is None:
                 break
-            if not len(bytes_recv):
+
+            if len(bytes_recv):
+                target.next_command(bytes_recv, address)
+            else:
                 target.disconnect()
                 return
-            target.next_command(bytes_recv, address)
 
 
 class Context:
