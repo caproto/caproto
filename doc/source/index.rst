@@ -115,7 +115,7 @@ In addition to its core "sans I/O" protocol library, caproto includes some
 ready-to-use client and server implementations exploring different API choices
 and networking libraries. They are organized into packages by how they handle
 network calls: :mod:`caproto.threading`, :mod:`caproto.asyncio`,
-:mod:`caproto.asyncio`, and :mod:`caproto.sync`. Some of these may grow into
+:mod:`caproto.curio`, and :mod:`caproto.sync`. Some of these may grow into
 robust packages; some may be abandoned as learning exercises. Their primary
 function is this time is testing and benchmarking the core protocol code.
 
