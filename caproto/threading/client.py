@@ -14,7 +14,6 @@ CA_REPEATER_PORT = 5065
 CA_SERVER_PORT = 5064
 AUTOMONITOR_MAXLENGTH = 65536
 STALE_SEARCH_THRESHOLD = 10.0
-global_cid_count = iter(count())
 
 
 class SocketThread:
@@ -62,7 +61,7 @@ class Context:
 
         self.cntx_condition = threading.Condition()
 
-        self.circuits = {}  # list of VirtualCircuits
+        self.circuits = {}  # map (address, priority) to VirtualCircuit
         self.unanswered_searches = {}  # map search id (cid) to name
         self.search_results = {}  # map name to (time, address)
 
@@ -155,7 +154,7 @@ class Context:
         address = self.search(name)
 
         circuit = self.get_circuit(address, priority)
-        cid = next(global_cid_count)
+        cid = circuit.circuit.new_channel_id()
         cachan = ca.ClientChannel(name, circuit.circuit, cid=cid)
         chan = circuit.channels[cid] = Channel(circuit, cachan)
 
@@ -413,7 +412,7 @@ class Channel:
         # Stash the ioid to match the response to the request.
         ioid = command.ioid
         self.circuit.ioids[ioid] = self
-        # do not need to lock this, lacking happis in circuit command
+        # do not need to lock this, locking happens in circuit command
         self.circuit.send(command)
         while True:
             with self.circuit.has_new_command:
