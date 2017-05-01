@@ -150,12 +150,13 @@ class VirtualCircuit:
 
 
 class Context:
-    def __init__(self, host, port, pvdb):
+    def __init__(self, host, port, pvdb, *, log_level='ERROR'):
         self.host = host
         self.port = port
         self.pvdb = pvdb
+        self.log_level = log_level
         self.broadcaster = ca.Broadcaster(our_role=ca.SERVER)
-        self.broadcaster.log.setLevel('DEBUG')
+        self.broadcaster.log.setLevel(self.log_level)
 
     async def udp_server(self):
         sock = ca.bcast_socket(socket)
@@ -199,7 +200,7 @@ class Context:
         circuit = VirtualCircuit(ca.VirtualCircuit(ca.SERVER, addr, None),
                                  client,
                                  self)
-        circuit.circuit.log.setLevel('DEBUG')
+        circuit.circuit.log.setLevel(self.log_level)
         while True:
             try:
                 await circuit.next_command()

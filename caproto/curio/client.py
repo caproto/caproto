@@ -201,9 +201,10 @@ class Channel:
 
 class Context:
     "Wraps a caproto.Broadcaster, a UDP socket, and cache of VirtualCircuits."
-    def __init__(self):
+    def __init__(self, *, log_level='ERROR'):
+        self.log_level = log_level
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
-        self.broadcaster.log.setLevel('DEBUG')
+        self.broadcaster.log.setLevel(self.log_level)
 
         # UDP socket broadcasting to CA servers
         self.udp_sock = ca.bcast_socket(socket)
@@ -263,7 +264,7 @@ class Context:
         circuit = VirtualCircuit(ca.VirtualCircuit(our_role=ca.CLIENT,
                                                    address=address,
                                                    priority=priority))
-        circuit.circuit.log.setLevel('DEBUG')
+        circuit.circuit.log.setLevel(self.log_level)
         self.circuits.append(circuit)
         return circuit
 

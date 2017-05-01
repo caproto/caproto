@@ -30,7 +30,7 @@ def teardown_module(module):
 
 @pytest.fixture(scope='function')
 def cntx(request):
-    cntx = PVContext()
+    cntx = PVContext(log_level='DEBUG')
 
     def cleanup():
         cntx.disconnect()

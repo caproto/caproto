@@ -51,13 +51,14 @@ class SocketThread:
 
 class Context:
     "Wraps a caproto.Broadcaster, a UDP socket, and cache of VirtualCircuits."
-    __slots__ = ('broadcaster', 'udp_sock', 'circuits',
+    __slots__ = ('broadcaster', 'udp_sock', 'circuits', 'log_level',
                  'unanswered_searches', 'search_results',
                  'cntx_condition', 'sock_thread', '__weakref__')
 
-    def __init__(self):
+    def __init__(self, *, log_level='ERROR'):
+        self.log_level = log_level
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
-        self.broadcaster.log.setLevel('DEBUG')
+        self.broadcaster.log.setLevel(self.log_level)
 
         self.cntx_condition = threading.Condition()
 
@@ -138,7 +139,7 @@ class Context:
             circuit = VirtualCircuit(ca.VirtualCircuit(our_role=ca.CLIENT,
                                                        address=address,
                                                        priority=priority))
-            circuit.circuit.log.setLevel('DEBUG')
+            circuit.circuit.log.setLevel(self.log_level)
             self.circuits[(address, priority)] = circuit
         return circuit
 
