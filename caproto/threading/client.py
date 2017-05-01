@@ -195,8 +195,8 @@ class Context:
                 if isinstance(command, ca.SearchResponse):
                     name = self.unanswered_searches.get(command.cid, None)
                     if name is not None:
-                        self.search_results[name] = (ca.extract_address(command),
-                                                     time.time())
+                        self.search_results[name] = (
+                            ca.extract_address(command), time.time())
                         self.unanswered_searches.pop(command.cid)
                     else:
                         # This is a redundant response, which the spec
