@@ -302,8 +302,9 @@ class VirtualCircuit:
                 self.has_new_command.notify_all()
 
     def disconnect(self):
-        for ch in self.channels.values():
+        for cid, ch in list(self.channels.items()):
             ch.clear()
+            self.channels.pop(cid)
 
         with self.has_new_command:
             self.circuit.disconnect()
@@ -366,18 +367,15 @@ class Channel:
         "Disconnect this Channel."
         with self.circuit.has_new_command:
             if self.connected:
-                try:
-                    self.circuit.send(self.channel.clear())
-                except OSError:
-                    ...
-                else:
-                    while True:
-                        with self.circuit.has_new_command:
-                            if not self.connected:
-                                break
-                            if not self.circuit.has_new_command.wait(2):
-                                raise TimeoutError()
-        # TODO make sure it actually happens
+                self.circuit.send(self.channel.clear())
+            else:
+                return
+        while True:
+            with self.circuit.has_new_command:
+                if self.channel.states[ca.CLIENT] is ca.CLOSED:
+                    break
+                if not self.circuit.has_new_command.wait(2):
+                    raise TimeoutError()
 
     def read(self, *args, **kwargs):
         """Request a fresh reading, wait for it, return it and stash it.
