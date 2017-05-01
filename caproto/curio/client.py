@@ -201,15 +201,13 @@ class Channel:
 
 class Context:
     "Wraps a caproto.Broadcaster, a UDP socket, and cache of VirtualCircuits."
-    def __init__(self):
+    def __init__(self, *, log_level='ERROR'):
+        self.log_level = log_level
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
-        self.broadcaster.log.setLevel('DEBUG')
+        self.broadcaster.log.setLevel(self.log_level)
 
         # UDP socket broadcasting to CA servers
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM,
-                             socket.IPPROTO_UDP)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        self.udp_sock = sock
+        self.udp_sock = ca.bcast_socket(socket)
 
         self.registered = False  # refers to RepeaterRegisterRequest
         self.circuits = []  # list of VirtualCircuits
@@ -223,7 +221,6 @@ class Context:
         """
         bytes_to_send = self.broadcaster.send(*commands)
         for host in ca.get_address_list():
-            print('sending to', (host, port), bytes_to_send)
             await self.udp_sock.sendto(bytes_to_send, (host, port))
 
     async def recv(self):
@@ -240,7 +237,6 @@ class Context:
         while not self.registered:
             event = await self.get_event()
             await event.wait()
-        print('Registered with repeater')
 
     async def search(self, name):
         "Generate, process, and the transport a search request."
@@ -268,7 +264,7 @@ class Context:
         circuit = VirtualCircuit(ca.VirtualCircuit(our_role=ca.CLIENT,
                                                    address=address,
                                                    priority=priority))
-        circuit.circuit.log.setLevel('DEBUG')
+        circuit.circuit.log.setLevel(self.log_level)
         self.circuits.append(circuit)
         return circuit
 

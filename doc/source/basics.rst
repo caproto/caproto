@@ -76,23 +76,12 @@ we don't need to work with raw bytes. Let's try this again using caproto.
     *Command*. "Event" is an overloaded term in Channel Access, so we're going
     our own way here.
 
-Set up the socket, exactly as above. Import :mod:`caproto` and make a
-:class:`Broadcaster`.
+Import :mod:`caproto` and make a :class:`Broadcaster`.
 
 .. ipython:: python
-
-    udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-    udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 
     import caproto
     b = caproto.Broadcaster(our_role=caproto.CLIENT)
-
-.. ipython:: python
-    :suppress:
-
-    udp_sock.settimeout(2)  # should never be tripped, but it help to debug
-
-Make the command we want to send.
 
 .. ipython:: python
 
@@ -105,7 +94,8 @@ translates the command to bytes.
 
     bytes_to_send = b.send(command)
 
-Transport those bytes over the wire.
+Transport those bytes over the wire, using the same ``udp_sock`` we configured
+above.
 
 .. ipython:: python
 

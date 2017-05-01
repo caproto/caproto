@@ -131,7 +131,7 @@ def setup_module(module):
 
     print('Waiting for the repeater to start up...')
     time.sleep(2)
-    PV._default_context = Context()
+    PV._default_context = Context(log_level='DEBUG')
     PV._default_context.register()
 
 

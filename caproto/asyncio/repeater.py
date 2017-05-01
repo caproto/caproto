@@ -42,11 +42,8 @@ class ProxyDatagramProtocol(asyncio.DatagramProtocol):
     def datagram_received(self, data, addr):
         self.broadcaster.recv(data, addr)
         command = self.broadcaster.next_command()
-        print('(repeater)', command, addr)
         if addr in self.remotes:
-            if not hasattr(self.remotes[addr], 'transport'):
-                print('(repeater) remote', addr, 'not connected yet')
-            else:
+            if hasattr(self.remotes[addr], 'transport'):
                 self.remotes[addr].transport.sendto(data)
             return
         loop = asyncio.get_event_loop()
@@ -61,7 +58,6 @@ class RemoteDatagramProtocol(asyncio.DatagramProtocol):
     def __init__(self, proxy, addr, data):
         self.proxy = proxy
         self.addr = addr
-        print('new remote with addr', addr)
         self.data = data
         super().__init__()
 
@@ -70,7 +66,6 @@ class RemoteDatagramProtocol(asyncio.DatagramProtocol):
         confirmation = caproto.RepeaterConfirmResponse(self.addr[0])
         confirmation_bytes = self.proxy.broadcaster.send(confirmation)
         self.transport.sendto(confirmation_bytes)
-        print('sent confirmation to', self.addr)
 
     def datagram_received(self, data, sender_addr):
         self.proxy.transport.sendto(data, self.addr)

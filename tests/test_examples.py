@@ -87,7 +87,7 @@ def test_thread_client():
         print("Subscription has received data.")
         called.append(True)
 
-    ctx = Context()
+    ctx = Context(log_level='DEBUG')
     ctx.register()
     ctx.search(pv1)
     ctx.search(pv2)
@@ -129,7 +129,7 @@ def test_thread_pv():
         print('-- user callback', value)
         called.append(True)
 
-    ctx = Context()
+    ctx = Context(log_level='DEBUG')
     ctx.register()
 
     time_pv = PV(pv1, context=ctx, form='time')
@@ -176,7 +176,7 @@ def test_curio_server():
                                        units='doodles')}
         port = find_next_tcp_port(host=SERVER_HOST)
         print('Server will be on', (SERVER_HOST, port))
-        ctx = server.Context(SERVER_HOST, port, pvdb)
+        ctx = server.Context(SERVER_HOST, port, pvdb, log_level='DEBUG')
         await ctx.run()
 
     async def run_client():
@@ -187,7 +187,7 @@ def test_curio_server():
             print("Subscription has received data.")
             called.append(True)
 
-        ctx = client.Context()
+        ctx = client.Context(log_level='DEBUG')
         await ctx.register()
         await ctx.search('pi')
         print('done searching')
@@ -427,7 +427,7 @@ def curio_server():
     async def run_server():
         port = find_next_tcp_port(host=SERVER_HOST)
         print('Server will be on', (SERVER_HOST, port))
-        ctx = server.Context(SERVER_HOST, port, caget_pvdb)
+        ctx = server.Context(SERVER_HOST, port, caget_pvdb, log_level='DEBUG')
         try:
             await ctx.run()
         except Exception as ex:

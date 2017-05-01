@@ -51,13 +51,14 @@ class SocketThread:
 
 class Context:
     "Wraps a caproto.Broadcaster, a UDP socket, and cache of VirtualCircuits."
-    __slots__ = ('broadcaster', 'udp_sock', 'circuits',
+    __slots__ = ('broadcaster', 'udp_sock', 'circuits', 'log_level',
                  'unanswered_searches', 'search_results',
                  'cntx_condition', 'sock_thread', '__weakref__')
 
-    def __init__(self):
+    def __init__(self, *, log_level='ERROR'):
+        self.log_level = log_level
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
-        self.broadcaster.log.setLevel('DEBUG')
+        self.broadcaster.log.setLevel(self.log_level)
 
         self.cntx_condition = threading.Condition()
 
@@ -71,11 +72,8 @@ class Context:
 
     def __create_sock(self):
         # UDP socket broadcasting to CA servers
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM,
-                             socket.IPPROTO_UDP)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        self.udp_sock = sock
-        self.sock_thread = SocketThread(sock, self)
+        self.udp_sock = ca.bcast_socket()
+        self.sock_thread = SocketThread(self.udp_sock, self)
 
     def send(self, port, *commands):
         """
@@ -84,7 +82,6 @@ class Context:
         with self.cntx_condition:
             bytes_to_send = self.broadcaster.send(*commands)
             for host in ca.get_address_list():
-                print('sending to', (host, port), bytes_to_send)
                 self.udp_sock.sendto(bytes_to_send, (host, port))
 
     def register(self):
@@ -102,7 +99,6 @@ class Context:
                     break
                 if not self.cntx_condition.wait(2):
                     raise TimeoutError()
-        print('Registered with repeater')
 
     def search(self, name):
         "Generate, process, and the transport a search request."
@@ -143,7 +139,7 @@ class Context:
             circuit = VirtualCircuit(ca.VirtualCircuit(our_role=ca.CLIENT,
                                                        address=address,
                                                        priority=priority))
-            circuit.circuit.log.setLevel('DEBUG')
+            circuit.circuit.log.setLevel(self.log_level)
             self.circuits[(address, priority)] = circuit
         return circuit
 
@@ -663,7 +659,6 @@ class PV:
 
     def __ingest_read_response_command(self, command):
         info = self._parse_dbr_metadata(command.metadata)
-        print('read() info', info)
         info['value'] = command.data
 
         ret = info['value']

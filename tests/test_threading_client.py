@@ -53,7 +53,7 @@ def socket_thread_fixture():
 
 @pytest.fixture(scope='function')
 def cntx(request):
-    cntx = Context()
+    cntx = Context(log_level='DEBUG')
     cntx.register()
 
     def cleanup():
