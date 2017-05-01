@@ -110,8 +110,8 @@ def test_thread_client():
     reading = chan1.read()
     assert reading.data == 6
     print('reading:', reading)
-    chan2.clear()
-    chan1.clear()
+    chan2.disconnect()
+    chan1.disconnect()
     assert called
 
 
@@ -205,7 +205,7 @@ def test_curio_server():
         await chan1.write((6,))
         reading = await chan1.read()
         print('reading:', reading)
-        await chan1.clear()
+        await chan1.disconnect()
         assert called
         await chan1.circuit.socket.close()
 

@@ -68,8 +68,8 @@ caproto as a CLI.
         await chan1.write((6,))
         reading = await chan1.read()
         print('reading:', reading)
-        await chan2.clear()
-        await chan1.clear()
+        await chan2.disconnect()
+        await chan1.disconnect()
 
         # Verify that our subscription collected some results.
         assert called

@@ -301,7 +301,7 @@ class VirtualCircuit:
 
     def disconnect(self):
         for cid, ch in list(self.channels.items()):
-            ch.clear()
+            ch.disconnect()
             self.channels.pop(cid)
 
         with self.has_new_command:
@@ -361,12 +361,12 @@ class Channel:
         """
         raise NotImplemented()
 
-    def clear(self):
+    def disconnect(self):
         "Disconnect this Channel."
         with self.circuit.has_new_command:
             if self.connected:
                 try:
-                    self.circuit.send(self.channel.clear())
+                    self.circuit.send(self.channel.disconnect())
                 except OSError:
                     # the socket is dead-dead, return
                     return
@@ -1089,7 +1089,7 @@ class PV:
     def disconnect(self):
         "disconnect PV"
         if self.connected:
-            self.chid.clear()
+            self.chid.disconnect()
 
     def __del__(self):
         self.disconnect()

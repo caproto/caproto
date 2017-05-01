@@ -139,9 +139,9 @@ class Channel:
             event = await self.circuit.get_event()
             await event.wait()
 
-    async def clear(self):
+    async def disconnect(self):
         "Disconnect this Channel."
-        await self.circuit.send(self.channel.clear())
+        await self.circuit.send(self.channel.disconnect())
         while self.channel.states[ca.CLIENT] is ca.MUST_CLOSE:
             event = await self.circuit.get_event()
             await event.wait()
@@ -374,8 +374,8 @@ async def main():
     await chan1.write((6,))
     reading = await chan1.read()
     print('reading:', reading)
-    await chan2.clear()
-    await chan1.clear()
+    await chan2.disconnect()
+    await chan1.disconnect()
     assert called
 
 
