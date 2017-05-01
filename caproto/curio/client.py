@@ -220,7 +220,6 @@ class Context:
         """
         bytes_to_send = self.broadcaster.send(*commands)
         for host in ca.get_address_list():
-            print('sending to', (host, port), bytes_to_send)
             await self.udp_sock.sendto(bytes_to_send, (host, port))
 
     async def recv(self):
@@ -237,7 +236,6 @@ class Context:
         while not self.registered:
             event = await self.get_event()
             await event.wait()
-        print('Registered with repeater')
 
     async def search(self, name):
         "Generate, process, and the transport a search request."

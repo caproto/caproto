@@ -81,7 +81,6 @@ class Context:
         with self.cntx_condition:
             bytes_to_send = self.broadcaster.send(*commands)
             for host in ca.get_address_list():
-                print('sending to', (host, port), bytes_to_send)
                 self.udp_sock.sendto(bytes_to_send, (host, port))
 
     def register(self):
@@ -99,7 +98,6 @@ class Context:
                     break
                 if not self.cntx_condition.wait(2):
                     raise TimeoutError()
-        print('Registered with repeater')
 
     def search(self, name):
         "Generate, process, and the transport a search request."
@@ -660,7 +658,6 @@ class PV:
 
     def __ingest_read_response_command(self, command):
         info = self._parse_dbr_metadata(command.metadata)
-        print('read() info', info)
         info['value'] = command.data
 
         ret = info['value']
