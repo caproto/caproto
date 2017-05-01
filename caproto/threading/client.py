@@ -313,10 +313,12 @@ class VirtualCircuit:
 
         with self.has_new_command:
             self.circuit.disconnect()
-        th = self.sock_thread.thread
-        self.sock_thread.poison_ev.set()
-        if th is not threading.current_thread():
-            th.join()
+
+        if self.sock_thread is not None:
+            th = self.sock_thread.thread
+            self.sock_thread.poison_ev.set()
+            if th is not threading.current_thread():
+                th.join()
         self.channels.clear()
         self.ioids.clear()
         self.socket = None
