@@ -8,7 +8,6 @@ import time
 import weakref
 
 from collections import Iterable
-from itertools import count
 
 CA_REPEATER_PORT = 5065
 CA_SERVER_PORT = 5064
@@ -44,6 +43,8 @@ class SocketThread:
 
             if len(bytes_recv):
                 target.next_command(bytes_recv, address)
+                # this is important to not keep a hard-ref to the target
+                target = None
             else:
                 target.disconnect()
                 return
@@ -194,8 +195,8 @@ class Context:
                 if isinstance(command, ca.SearchResponse):
                     name = self.unanswered_searches.get(command.cid, None)
                     if name is not None:
-                        self.search_results[name] = (ca.extract_address(command),
-                                                     time.time())
+                        self.search_results[name] = (
+                            ca.extract_address(command), time.time())
                         self.unanswered_searches.pop(command.cid)
                     else:
                         # This is a redundant response, which the spec
@@ -204,9 +205,17 @@ class Context:
                 self.cntx_condition.notify_all()
 
     def disconnect(self):
+
         th = []
+
+        # if we _have_ a socket, kill it
+        if self.udp_sock is not None:
+            self.sock_thread.poison_ev.set()
+            self.udp_sock.close()
+            th.append(self.sock_thread.thread)
+
         # disconnect any circuits we have
-        for circ in self.circuits.values():
+        for circ in list(self.circuits.values()):
             if circ.connected:
                 st = circ.sock_thread
                 if st is not None:
@@ -216,11 +225,6 @@ class Context:
         # clear any state about circuits and search results
         self.circuits.clear()
         self.search_results.clear()
-
-        # if we _have_ a socket, kill it
-        if self.udp_sock is not None:
-            self.udp_sock.close()
-            th.append(self.sock_thread.thread)
 
         cur_thread = threading.current_thread()
         # wait for all of the socket threads to stop
@@ -238,6 +242,9 @@ class Context:
     @property
     def registered(self):
         return self.broadcaster.registered
+
+    def __del__(self):
+        self.disconnect()
 
 
 class VirtualCircuit:
@@ -306,14 +313,19 @@ class VirtualCircuit:
 
         with self.has_new_command:
             self.circuit.disconnect()
-        th = self.sock_thread.thread
-        self.sock_thread.poison_ev.set()
-        if th is not threading.current_thread():
-            th.join()
+
+        if self.sock_thread is not None:
+            th = self.sock_thread.thread
+            self.sock_thread.poison_ev.set()
+            if th is not threading.current_thread():
+                th.join()
         self.channels.clear()
         self.ioids.clear()
         self.socket = None
         self.sock_thread = None
+
+    def __del__(self):
+        self.disconnect()
 
 
 class Channel:

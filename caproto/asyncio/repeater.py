@@ -41,16 +41,23 @@ class ProxyDatagramProtocol(asyncio.DatagramProtocol):
 
     def datagram_received(self, data, addr):
         self.broadcaster.recv(data, addr)
-        command = self.broadcaster.next_command()
-        if addr in self.remotes:
-            if hasattr(self.remotes[addr], 'transport'):
-                self.remotes[addr].transport.sendto(data)
-            return
-        loop = asyncio.get_event_loop()
-        self.remotes[addr] = RemoteDatagramProtocol(self, addr, data)
-        coro = loop.create_datagram_endpoint(
-            lambda: self.remotes[addr], remote_addr=addr)
-        asyncio.ensure_future(coro)
+        while True:
+            command = self.broadcaster.next_command()
+            if command is caproto.NEED_DATA:
+                break
+            if isinstance(command, caproto.RepeaterRegisterRequest):
+                if addr in self.remotes:
+                    return
+                loop = asyncio.get_event_loop()
+                self.remotes[addr] = RemoteDatagramProtocol(self, addr, data)
+                coro = loop.create_datagram_endpoint(
+                    lambda: self.remotes[addr], remote_addr=addr)
+                asyncio.ensure_future(coro)
+            else:
+                if addr in self.remotes:
+                    if hasattr(self.remotes[addr], 'transport'):
+                        self.remotes[addr].transport.sendto(data)
+                    return
 
 
 class RemoteDatagramProtocol(asyncio.DatagramProtocol):
