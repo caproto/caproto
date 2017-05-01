@@ -370,7 +370,11 @@ class Channel:
         "Disconnect this Channel."
         with self.circuit.has_new_command:
             if self.connected:
-                self.circuit.send(self.channel.clear())
+                try:
+                    self.circuit.send(self.channel.clear())
+                except OSError:
+                    # the socket is dead-dead, return
+                    return
             else:
                 return
         while True:
