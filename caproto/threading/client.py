@@ -244,6 +244,9 @@ class Context:
     def registered(self):
         return self.broadcaster.registered
 
+    def __del__(self):
+        self.disconnect()
+
 
 class VirtualCircuit:
     __slots__ = ('circuit', 'channels', 'ioids', 'subscriptionids',
