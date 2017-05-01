@@ -323,6 +323,9 @@ class VirtualCircuit:
         self.socket = None
         self.sock_thread = None
 
+    def __del__(self):
+        self.disconnect()
+
 
 class Channel:
     """Wraps a VirtualCircuit and a caproto.ClientChannel."""
