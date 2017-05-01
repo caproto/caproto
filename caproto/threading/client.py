@@ -208,7 +208,7 @@ class Context:
     def disconnect(self):
         th = []
         # disconnect any circuits we have
-        for circ in self.circuits.values():
+        for circ in list(self.circuits.values()):
             if circ.connected:
                 st = circ.sock_thread
                 if st is not None:
