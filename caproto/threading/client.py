@@ -206,7 +206,15 @@ class Context:
                 self.cntx_condition.notify_all()
 
     def disconnect(self):
+
         th = []
+
+        # if we _have_ a socket, kill it
+        if self.udp_sock is not None:
+            self.sock_thread.poison_ev.set()
+            self.udp_sock.close()
+            th.append(self.sock_thread.thread)
+
         # disconnect any circuits we have
         for circ in list(self.circuits.values()):
             if circ.connected:
@@ -218,11 +226,6 @@ class Context:
         # clear any state about circuits and search results
         self.circuits.clear()
         self.search_results.clear()
-
-        # if we _have_ a socket, kill it
-        if self.udp_sock is not None:
-            self.udp_sock.close()
-            th.append(self.sock_thread.thread)
 
         cur_thread = threading.current_thread()
         # wait for all of the socket threads to stop
