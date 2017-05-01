@@ -44,6 +44,8 @@ class SocketThread:
 
             if len(bytes_recv):
                 target.next_command(bytes_recv, address)
+                # this is important to not keep a hard-ref to the target
+                target = None
             else:
                 target.disconnect()
                 return
