@@ -8,7 +8,6 @@ import time
 import weakref
 
 from collections import Iterable
-from itertools import count
 
 CA_REPEATER_PORT = 5065
 CA_SERVER_PORT = 5064
