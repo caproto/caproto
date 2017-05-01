@@ -552,6 +552,13 @@ class Broadcaster:
         command = RepeaterRegisterRequest(ip)
         return command
 
+    def disconnect(self):
+        self._registered = False
+
+    @property
+    def registered(self):
+        return self._registered
+
 
 class _BaseChannel:
     # Base class for ClientChannel and ServerChannel, which add convenience
