@@ -274,7 +274,7 @@ generating valid commands.
     .. automethod:: host_name
     .. automethod:: client_name
     .. automethod:: create
-    .. automethod:: clear
+    .. automethod:: disconnect
     .. automethod:: read
     .. automethod:: write
     .. automethod:: subscribe
@@ -285,7 +285,7 @@ generating valid commands.
     .. automethod:: version
     .. automethod:: create
     .. automethod:: create_fail
-    .. automethod:: clear
+    .. automethod:: disconnect
     .. automethod:: read
     .. automethod:: write
     .. automethod:: subscribe
