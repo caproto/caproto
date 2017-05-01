@@ -3,7 +3,7 @@ caproto: a pure-Python Channel Access protocol library
 ******************************************************
 
 Caproto is a "bring your own I/O" implementation of the
-`EPICS <http://www.aps.anl.gov/epics/>`_ Channel Access protocol in
+`EPICS <http://www.aps.anl.gov/epics/>`_ Channel Access protocol in pure
 Python.
 
 This project is inspired by the broad effort in the Python community to write
