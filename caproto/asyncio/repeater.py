@@ -47,6 +47,8 @@ class ProxyDatagramProtocol(asyncio.DatagramProtocol):
             if command is ca.NEED_DATA:
                 break
             if isinstance(command,  ca.RepeaterRegisterRequest):
+                if addr in self.remotes:
+                    return
                 loop = asyncio.get_event_loop()
                 self.remotes[addr] = RemoteDatagramProtocol(self, addr, data)
                 coro = loop.create_datagram_endpoint(
