@@ -26,7 +26,6 @@ import os
 import socket
 import asyncio
 import caproto
-import caproto as ca
 
 
 class ProxyDatagramProtocol(asyncio.DatagramProtocol):
@@ -44,9 +43,9 @@ class ProxyDatagramProtocol(asyncio.DatagramProtocol):
         self.broadcaster.recv(data, addr)
         while True:
             command = self.broadcaster.next_command()
-            if command is ca.NEED_DATA:
+            if command is caproto.NEED_DATA:
                 break
-            if isinstance(command,  ca.RepeaterRegisterRequest):
+            if isinstance(command, caproto.RepeaterRegisterRequest):
                 if addr in self.remotes:
                     return
                 loop = asyncio.get_event_loop()
