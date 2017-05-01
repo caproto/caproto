@@ -206,10 +206,7 @@ class Context:
         self.broadcaster.log.setLevel('DEBUG')
 
         # UDP socket broadcasting to CA servers
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM,
-                             socket.IPPROTO_UDP)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        self.udp_sock = sock
+        self.udp_sock = ca.bcast_socket(socket)
 
         self.registered = False  # refers to RepeaterRegisterRequest
         self.circuits = []  # list of VirtualCircuits

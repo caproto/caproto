@@ -1,4 +1,5 @@
 import os
+import socket
 
 try:
     import netifaces
@@ -161,3 +162,28 @@ def ensure_bytes(s):
         return s.encode() + b'\0'
     else:
         raise CaprotoTypeError("expected str or bytes")
+
+
+def bcast_socket(socket_module=socket):
+    """
+    Make a socket and configure it for UDP broadcast.
+
+    Parameters
+    ----------
+    socket_module: module, optional
+        Default is the built-in :mod:`socket` module, but anything with the
+        same interface may be used, such as :mod:`curio.socket`.
+    """
+    socket = socket_module
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+
+    # for BSD/Darwin only
+    try:
+        socket.SO_REUSEPORT
+    except AttributeError:
+        ...
+    else:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+    return sock

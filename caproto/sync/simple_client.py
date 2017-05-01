@@ -36,9 +36,7 @@ def recv(circuit):
 
 def main(*, skip_monitor_section=False):
     # A broadcast socket
-    udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM,
-                             socket.IPPROTO_UDP)
-    udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    udp_sock = ca.bcast_socket()
 
     # Register with the repeater.
     bytes_to_send = b.send(ca.RepeaterRegisterRequest('0.0.0.0'))

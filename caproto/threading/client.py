@@ -71,11 +71,8 @@ class Context:
 
     def __create_sock(self):
         # UDP socket broadcasting to CA servers
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM,
-                             socket.IPPROTO_UDP)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        self.udp_sock = sock
-        self.sock_thread = SocketThread(sock, self)
+        self.udp_sock = ca.bcast_socket()
+        self.sock_thread = SocketThread(self.udp_sock, self)
 
     def send(self, port, *commands):
         """

@@ -158,14 +158,7 @@ class Context:
         self.broadcaster.log.setLevel('DEBUG')
 
     async def udp_server(self):
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        # for BSD/Darwin
-        try:
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-        except AttributeError:
-            pass
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock = ca.bcast_socket(socket)
         try:
             sock.bind((self.host, EPICS_CA1_PORT))
         except Exception:
