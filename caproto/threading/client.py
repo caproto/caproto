@@ -495,6 +495,9 @@ class PV:
                  verbose=False, auto_monitor=False, count=None,
                  connection_callback=None,
                  connection_timeout=None, *, context=None):
+        # TODO
+        # - connection_callback
+        # - connection_timeout
 
         if context is None:
             context = self._default_context
@@ -536,7 +539,8 @@ class PV:
         elif hasattr(callback, '__call__'):
             self.callbacks[0] = (callback, {})
 
-        # not handling lazy instantiation
+        # DIFF
+        # not handling lazy connecting, pyepics is
         self._context.search(self.pvname)
         self.chid = None
         self.wait_for_connection(form=form, count=count)
@@ -546,15 +550,20 @@ class PV:
         return self.chid is not None and self.chid.connected
 
     def force_connect(self, pvname=None, chid=None, conn=True, **kws):
+        # not quite sure what this is for in pyepics, probably should
+        # be an arias for reconnect?
         ...
 
-    def wait_for_connection(self, timeout=None, form=None, count=None):
+    def wait_for_connection(self, timeout=None, *, form=None, count=None):
         """wait for a connection that started with connect() to finish
         Returns
         -------
         connected : bool
             If the PV is connected when this method returns
         """
+        # TODO
+        # - check if there is a form or count on the object we should respect
+        # - do something with the timeout value
         if self.connected:
             return
 
@@ -630,6 +639,10 @@ class PV:
         val : Object
             The value, the type is dependent on the underlying PV
         """
+        # TODO
+        # - timeout
+        # - with_ctrlvars
+
         if count is None:
             count = self.dflt_count
         dt = self.typefull
@@ -692,6 +705,12 @@ class PV:
         complete, and optionally specifying a callback function to be run
         when the processing is complete.
         """
+        # TODO
+        # - wait
+        # - timeout
+        # - put complete (use_complete, callback, callback_data)
+        # API
+        # consider returning futures instead of storing state on the PV object
         if self._args['typefull'] in ca.enum_types:
             if isinstance(value, str):
                 try:
