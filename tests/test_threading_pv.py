@@ -71,3 +71,43 @@ def test_cntx_disconnect_reconnect(cntx):
     assert not cntx.registered
     pv.get()
     pv.disconnect()
+
+
+def test_put_complete(cntx):
+    pv = cntx.get_pv('Py:ao3')
+    mutable = []
+
+    # start in a known initial state
+    pv.put(0.0, wait=True)
+    pv.get()
+    
+    def cb(a):
+        mutable.append(a)
+
+    # put and wait
+    old_value = pv.get()
+    result = pv.put(0.1, wait=True)
+    assert result == old_value
+
+    # put and wait with callback (not interesting use of callback)
+    old_value = pv.get()
+    result = pv.put(0.2, wait=True, callback=cb, callback_data=('T2',))
+    assert result == old_value
+    assert 'T2' in mutable
+
+    # put and do not wait
+    ret_val = pv.put(0.3, wait=False)
+    assert ret_val is None
+    result = pv.get()
+    print('last_reading', pv.chid.last_reading)
+    assert result == 0.3
+
+    # put and do not wait with callback
+    ret_val = pv.put(0.4, wait=False, callback=cb, callback_data=('T4',))
+    assert ret_val is None
+    result = pv.get()
+    assert result == 0.4
+    # sleep time give callback time to process
+    time.sleep(0.1)
+    print('last_reading', pv.chid.last_reading)
+    assert 'T4' in mutable

@@ -711,6 +711,8 @@ class PV:
         # - put complete (use_complete, callback, callback_data)
         # API
         # consider returning futures instead of storing state on the PV object
+        if callback_data is None:
+            callback_data = ()
         if self._args['typefull'] in ca.enum_types:
             if isinstance(value, str):
                 try:
@@ -718,11 +720,28 @@ class PV:
                 except ValueError:
                     raise ValueError('{} is not in Enum ({}'.format(
                         value, self.enum_strs))
+
         if not isinstance(value, Iterable):
             value = (value, )
+        value = tuple(v.encode('utf-8') if isinstance(v, str)
+                      else v for v in value)
 
-        return self.chid.write(tuple(
-            v.encode('utf-8') if isinstance(v, str) else v for v in value))
+        if wait:
+            last_reading = self.chid.write(value)
+            if callback is not None:
+                callback(*callback_data)
+            if last_reading is not None:
+                return last_reading.data
+            else:
+                return None
+        else:
+            def write_and_callback():
+                self.chid.write(value)
+                if callback is not None:
+                    callback(*callback_data)
+            thread = threading.Thread(target=write_and_callback, daemon=True)
+            thread.start()
+            return None
 
     @ensure_connection
     def get_ctrlvars(self, timeout=5, warn=True):
