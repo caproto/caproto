@@ -76,15 +76,27 @@ we don't need to work with raw bytes. Let's try this again using caproto.
     *Command*. "Event" is an overloaded term in Channel Access, so we're going
     our own way here.
 
-Import :mod:`caproto` and make a :class:`Broadcaster`.
+As above, create a fresh UDP socket and configure it for broadcast. Follow the
+same steps we used above, or use a convenience function provided by caproto:
 
 .. ipython:: python
 
     import caproto
-    b = caproto.Broadcaster(our_role=caproto.CLIENT)
+    udp_sock = caproto.bcast_socket()
+
+.. ipython:: python
+    :suppress:
+
+    import caproto
+    udp_sock = caproto.bcast_socket()
+    udp_sock.settimeout(2)  # should never be tripped, but it help to debug
+
+Instantiate a caproto :class:`Broadcaster` and a command to broadcast --- a
+:class:`RepeaterRegisterRequest`.`
 
 .. ipython:: python
 
+    b = caproto.Broadcaster(our_role=caproto.CLIENT)
     command = caproto.RepeaterRegisterRequest('0.0.0.0')
 
 Pass the command to our broadcaster's :meth:`Broadcaster.send` method, which
