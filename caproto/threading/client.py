@@ -295,10 +295,10 @@ class VirtualCircuit:
 
                 if isinstance(command, ca.ReadNotifyResponse):
                     chan = self.ioids.pop(command.ioid)
-                    chan.process_readnotify(command)
+                    chan.process_read_notify(command)
                 elif isinstance(command, ca.WriteNotifyResponse):
                     chan = self.ioids.pop(command.ioid)
-                    chan.process_writenotify(command)
+                    chan.process_write_notify(command)
                 elif isinstance(command, ca.EventAddResponse):
                     chan = self.subscriptionids[command.subscriptionid]
                     chan.process_subscription(command)
@@ -332,7 +332,8 @@ class VirtualCircuit:
 class Channel:
     """Wraps a VirtualCircuit and a caproto.ClientChannel."""
     __slots__ = ('circuit', 'channel', 'last_reading', 'monitoring_tasks',
-                 '_callback')
+                 '_callback', '_read_notify_callback',
+                 '_write_notify_callback')
 
     def __init__(self, circuit, channel):
         self.circuit = circuit  # a VirtualCircuit
@@ -367,7 +368,7 @@ class Channel:
             except Exception as ex:
                 print(ex)
 
-    def process_readnotify(self, read_notify_command):
+    def process_read_notify(self, read_notify_command):
         self.last_reading = read_notify_command
 
         if self._read_notify_callback is None:
@@ -378,7 +379,7 @@ class Channel:
             except Exception as ex:
                 print(ex)
 
-    def process_writenotify(self, write_notify_command):
+    def process_write_notify(self, write_notify_command):
         if self._write_notify_callback is None:
             return
         else:
