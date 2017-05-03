@@ -333,7 +333,7 @@ class Channel:
     """Wraps a VirtualCircuit and a caproto.ClientChannel."""
     __slots__ = ('circuit', 'channel', 'last_reading', 'monitoring_tasks',
                  '_callback', '_read_notify_callback',
-                 '_write_notify_callback')
+                 '_write_notify_callback', '_pc_callbacks')
 
     def __init__(self, circuit, channel):
         self.circuit = circuit  # a VirtualCircuit
@@ -343,6 +343,7 @@ class Channel:
         self._callback = None  # user func to call when subscriptions are run
         self._read_notify_callback = None  # func to call on ReadNotifyResponse
         self._write_notify_callback = None  # func to call on WriteNotifyResponse
+        self._pc_callbacks = {}
 
     @property
     def connected(self):
@@ -380,6 +381,12 @@ class Channel:
                 print(ex)
 
     def process_write_notify(self, write_notify_command):
+        pc_cb = self._pc_callbacks.pop(write_notify_command.ioid, None)
+        if pc_cb is not None:
+            try:
+                pc_cb(write_notify_command)
+            except Exception as ex:
+                print(ex)
         if self._write_notify_callback is None:
             return
         else:
@@ -438,12 +445,14 @@ class Channel:
                     raise TimeoutError()
         return self.last_reading
 
-    def write(self, *args, wait=True, **kwargs):
+    def write(self, *args, wait=True, cb=None, **kwargs):
         "Write a new value and await confirmation from the server."
         command = self.channel.write(*args, **kwargs)
         # Stash the ioid to match the response to the request.
         ioid = command.ioid
         self.circuit.ioids[ioid] = self
+        if cb is not None:
+            self._pc_callbacks[ioid] = cb
         # do not need to lock this, locking happens in circuit command
         self.circuit.send(command)
         while wait:
@@ -752,23 +761,10 @@ class PV:
         value = tuple(v.encode('utf-8') if isinstance(v, str)
                       else v for v in value)
 
-        if wait:
-            last_reading = self.chid.write(value, wait=wait)
-            if callback is not None:
-                callback(*callback_data)
-            if last_reading is not None:
-                return last_reading.data
-            else:
-                return None
-        else:
-            # holy race conditions batman!
-            def run_callback(cmd):
-                if callback is not None:
-                    callback(*callback_data)
-                self._write_notify_callback = None
-
-            self._write_notify_callback = run_callback
-            self.chid.write(value, wait=False)
+        def run_callback(cmd):
+            callback(*callback_data)
+        cb = run_callback if callback is not None else None
+        return self.chid.write(value, wait=wait, cb=cb)
 
     @ensure_connection
     def get_ctrlvars(self, timeout=5, warn=True):
