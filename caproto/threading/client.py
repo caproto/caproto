@@ -763,7 +763,9 @@ class PV:
         def run_callback(cmd):
             callback(*callback_data)
         cb = run_callback if callback is not None else None
-        return self.chid.write(value, wait=wait, cb=cb)
+        ret = self.value
+        self.chid.write(value, wait=wait, cb=cb)
+        return ret if wait else None
 
     @ensure_connection
     def get_ctrlvars(self, timeout=5, warn=True):
