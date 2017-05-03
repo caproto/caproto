@@ -295,9 +295,10 @@ class VirtualCircuit:
 
                 if isinstance(command, ca.ReadNotifyResponse):
                     chan = self.ioids.pop(command.ioid)
-                    chan.last_reading = command
+                    chan.process_readnotify(command)
                 elif isinstance(command, ca.WriteNotifyResponse):
                     chan = self.ioids.pop(command.ioid)
+                    chan.process_writenotify(command)
                 elif isinstance(command, ca.EventAddResponse):
                     chan = self.subscriptionids[command.subscriptionid]
                     chan.process_subscription(command)
@@ -339,6 +340,8 @@ class Channel:
         self.last_reading = None
         self.monitoring_tasks = {}  # maps subscriptionid to curio.Task
         self._callback = None  # user func to call when subscriptions are run
+        self._read_notify_callback = None  # func to call on ReadNotifyResponse
+        self._write_notify_callback = None  # func to call on WriteNotifyResponse
 
     @property
     def connected(self):
@@ -361,6 +364,26 @@ class Channel:
         else:
             try:
                 return self._callback(event_add_command)
+            except Exception as ex:
+                print(ex)
+
+    def process_readnotify(self, read_notify_command):
+        self.last_reading = read_notify_command
+
+        if self._read_notify_callback is None:
+            return
+        else:
+            try:
+                return self._read_notify_callback(read_notify_command)
+            except Exception as ex:
+                print(ex)
+
+    def process_writenotify(self, write_notify_command):
+        if self._write_notify_callback is None:
+            return
+        else:
+            try:
+                return self._write_notify_callback(write_notify_command)
             except Exception as ex:
                 print(ex)
 
@@ -414,7 +437,7 @@ class Channel:
                     raise TimeoutError()
         return self.last_reading
 
-    def write(self, *args, **kwargs):
+    def write(self, *args, wait=True, **kwargs):
         "Write a new value and await confirmation from the server."
         command = self.channel.write(*args, **kwargs)
         # Stash the ioid to match the response to the request.
@@ -422,7 +445,7 @@ class Channel:
         self.circuit.ioids[ioid] = self
         # do not need to lock this, locking happens in circuit command
         self.circuit.send(command)
-        while True:
+        while wait:
             with self.circuit.has_new_command:
                 if ioid not in self.circuit.ioids:
                     break
@@ -498,6 +521,7 @@ class PV:
         # TODO
         # - connection_callback
         # - connection_timeout
+        self.chid = None
 
         if context is None:
             context = self._default_context
@@ -542,7 +566,6 @@ class PV:
         # DIFF
         # not handling lazy connecting, pyepics is
         self._context.search(self.pvname)
-        self.chid = None
         self.wait_for_connection(form=form, count=count)
 
     @property
@@ -584,6 +607,8 @@ class PV:
         self._args['access'] = access_strs[self.chid.channel.access_rights]
 
         self.chid.register_user_callback(self.__on_changes)
+        self.chid._read_notify_callback = self.__on_changes
+
         if self.auto_monitor is None:
             mcount = count if count is not None else self._args['count']
             self.auto_monitor = mcount < AUTOMONITOR_MAXLENGTH
@@ -727,7 +752,7 @@ class PV:
                       else v for v in value)
 
         if wait:
-            last_reading = self.chid.write(value)
+            last_reading = self.chid.write(value, wait=wait)
             if callback is not None:
                 callback(*callback_data)
             if last_reading is not None:
@@ -735,13 +760,14 @@ class PV:
             else:
                 return None
         else:
-            def write_and_callback():
-                self.chid.write(value)
+            # holy race conditions batman!
+            def run_callback(cmd):
                 if callback is not None:
                     callback(*callback_data)
-            thread = threading.Thread(target=write_and_callback, daemon=True)
-            thread.start()
-            return None
+                self._write_notify_callback = None
+
+            self._write_notify_callback = run_callback
+            self.chid.write(value, wait=False)
 
     @ensure_connection
     def get_ctrlvars(self, timeout=5, warn=True):
