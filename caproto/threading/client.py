@@ -617,7 +617,6 @@ class PV:
         self._args['access'] = access_strs[self.chid.channel.access_rights]
 
         self.chid.register_user_callback(self.__on_changes)
-        self.chid._read_notify_callback = self.__on_changes
 
         if self.auto_monitor is None:
             mcount = count if count is not None else self._args['count']
