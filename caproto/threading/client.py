@@ -295,9 +295,10 @@ class VirtualCircuit:
 
                 if isinstance(command, ca.ReadNotifyResponse):
                     chan = self.ioids.pop(command.ioid)
-                    chan.last_reading = command
+                    chan.process_read_notify(command)
                 elif isinstance(command, ca.WriteNotifyResponse):
                     chan = self.ioids.pop(command.ioid)
+                    chan.process_write_notify(command)
                 elif isinstance(command, ca.EventAddResponse):
                     chan = self.subscriptionids[command.subscriptionid]
                     chan.process_subscription(command)
@@ -331,7 +332,8 @@ class VirtualCircuit:
 class Channel:
     """Wraps a VirtualCircuit and a caproto.ClientChannel."""
     __slots__ = ('circuit', 'channel', 'last_reading', 'monitoring_tasks',
-                 '_callback')
+                 '_callback', '_read_notify_callback',
+                 '_write_notify_callback', '_pc_callbacks')
 
     def __init__(self, circuit, channel):
         self.circuit = circuit  # a VirtualCircuit
@@ -339,6 +341,9 @@ class Channel:
         self.last_reading = None
         self.monitoring_tasks = {}  # maps subscriptionid to curio.Task
         self._callback = None  # user func to call when subscriptions are run
+        self._read_notify_callback = None  # func to call on ReadNotifyResponse
+        self._write_notify_callback = None  # func to call on WriteNotifyResponse
+        self._pc_callbacks = {}
 
     @property
     def connected(self):
@@ -361,6 +366,32 @@ class Channel:
         else:
             try:
                 return self._callback(event_add_command)
+            except Exception as ex:
+                print(ex)
+
+    def process_read_notify(self, read_notify_command):
+        self.last_reading = read_notify_command
+
+        if self._read_notify_callback is None:
+            return
+        else:
+            try:
+                return self._read_notify_callback(read_notify_command)
+            except Exception as ex:
+                print(ex)
+
+    def process_write_notify(self, write_notify_command):
+        pc_cb = self._pc_callbacks.pop(write_notify_command.ioid, None)
+        if pc_cb is not None:
+            try:
+                pc_cb(write_notify_command)
+            except Exception as ex:
+                print(ex)
+        if self._write_notify_callback is None:
+            return
+        else:
+            try:
+                return self._write_notify_callback(write_notify_command)
             except Exception as ex:
                 print(ex)
 
@@ -414,15 +445,17 @@ class Channel:
                     raise TimeoutError()
         return self.last_reading
 
-    def write(self, *args, **kwargs):
+    def write(self, *args, wait=True, cb=None, **kwargs):
         "Write a new value and await confirmation from the server."
         command = self.channel.write(*args, **kwargs)
         # Stash the ioid to match the response to the request.
         ioid = command.ioid
         self.circuit.ioids[ioid] = self
+        if cb is not None:
+            self._pc_callbacks[ioid] = cb
         # do not need to lock this, locking happens in circuit command
         self.circuit.send(command)
-        while True:
+        while wait:
             with self.circuit.has_new_command:
                 if ioid not in self.circuit.ioids:
                     break
@@ -498,6 +531,7 @@ class PV:
         # TODO
         # - connection_callback
         # - connection_timeout
+        self.chid = None
 
         if context is None:
             context = self._default_context
@@ -542,7 +576,6 @@ class PV:
         # DIFF
         # not handling lazy connecting, pyepics is
         self._context.search(self.pvname)
-        self.chid = None
         self.wait_for_connection(form=form, count=count)
 
     @property
@@ -584,6 +617,7 @@ class PV:
         self._args['access'] = access_strs[self.chid.channel.access_rights]
 
         self.chid.register_user_callback(self.__on_changes)
+
         if self.auto_monitor is None:
             mcount = count if count is not None else self._args['count']
             self.auto_monitor = mcount < AUTOMONITOR_MAXLENGTH
@@ -711,6 +745,8 @@ class PV:
         # - put complete (use_complete, callback, callback_data)
         # API
         # consider returning futures instead of storing state on the PV object
+        if callback_data is None:
+            callback_data = ()
         if self._args['typefull'] in ca.enum_types:
             if isinstance(value, str):
                 try:
@@ -718,11 +754,18 @@ class PV:
                 except ValueError:
                     raise ValueError('{} is not in Enum ({}'.format(
                         value, self.enum_strs))
+
         if not isinstance(value, Iterable):
             value = (value, )
+        value = tuple(v.encode('utf-8') if isinstance(v, str)
+                      else v for v in value)
 
-        return self.chid.write(tuple(
-            v.encode('utf-8') if isinstance(v, str) else v for v in value))
+        def run_callback(cmd):
+            callback(*callback_data)
+        cb = run_callback if callback is not None else None
+        ret = self.value
+        self.chid.write(value, wait=wait, cb=cb)
+        return ret if wait else None
 
     @ensure_connection
     def get_ctrlvars(self, timeout=5, warn=True):

@@ -140,8 +140,8 @@ def test_thread_pv():
     print('time read', time_pv.get())
     print('ctrl read', ctrl_pv.get())
 
-    time_pv.put(3)
-    time_pv.put(6)
+    time_pv.put(3, wait=True)
+    time_pv.put(6, wait=True)
 
     time.sleep(0.1)
     assert time_pv.get() == 6
