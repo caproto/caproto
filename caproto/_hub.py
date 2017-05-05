@@ -118,13 +118,13 @@ class VirtualCircuit:
         for command in commands:
             self._process_command(self.our_role, command)
             self.log.debug("Serializing %r", command)
-            buffers_to_send.append(bytes(command.header))
+            buffers_to_send.append(memoryview(command.header))
             buffers_to_send.extend(command.buffers)
         return buffers_to_send
 
     def recv(self, *buffers):
         """
-        Add data received over TCP to our internal recieve buffer.
+        Add data received over TCP to our internal receive buffer.
 
         This does not actually do any processing on the data, just stores
         it. To trigger processing, you have to call :meth:`next_command`.
@@ -414,7 +414,7 @@ class Broadcaster:
 
     def recv(self, byteslike, address):
         """
-        Add data from a UDP broadcast to our internal recieve buffer.
+        Add data from a UDP broadcast to our internal receive buffer.
 
         This does not actually do any processing on the data, just stores
         it. To trigger processing, you have to call :meth:`next_command`.
