@@ -1,88 +1,112 @@
 import os
-import time
 import logging
+
+os.environ['EPICS_CA_MAX_ARRAY_BYTES'] = '10000000'
 
 import curio
 import epics
+import caproto as ca
+from caproto.threading.client import (PV as ThreadingPV,
+                                      SharedBroadcaster,
+                                      Context as ThreadingContext)
 
-from . import util
 from caproto.curio.client import Context as CurioContext
 
 
-WAVEFORM_PV = 'wfioc:wf'
-
-
-class _TimeWaveform:
+class _TimeBase:
     ITERS = 100
 
     def setup(self):
-        # NOTE: have to increase EPICS_CA_MAX_ARRAY_BYTES if NELM >= 4096
-        #       (remember default is 16384 bytes / sizeof(int32) = 4096)
-        MAX_ARRAY_BYTES = self.num * 10
-        env = dict(EPICS_CA_MAX_ARRAY_BYTES=str(MAX_ARRAY_BYTES))
+        # epics.ca.clear_cache()
+        self.kernel = curio.Kernel()
 
-        db_text = util.make_database(
-            {(WAVEFORM_PV, 'waveform'): dict(FTVL='LONG', NELM=self.num),
-            },
-        )
+    def teardown(self):
+        pass
 
-        self.cm = util.softioc(db_text=db_text, env=env)
-        self.cm.__enter__()
-        time.sleep(1)
 
-        os.environ['EPICS_CA_MAX_ARRAY_BYTES'] = str(MAX_ARRAY_BYTES)
-        self.pv = epics.PV(WAVEFORM_PV, auto_monitor=False)
-        assert self.pv.wait_for_connection()
+def setup():
+    shared_broadcaster = SharedBroadcaster()
+    ThreadingPV._default_context = ThreadingContext(
+        broadcaster=shared_broadcaster, log_level='DEBUG')
 
-        self.pv.put(list(range(self.num)))
-        assert self.pv.get(timeout=0.5, as_numpy=True) is not None
 
+def teardown():
+    pass
+
+
+class _TimeWaveform(_TimeBase):
+    def setup_pyepics(self):
+        self.pyepics_pv = epics.PV(self.waveform_pv, auto_monitor=False)
+        assert self.pyepics_pv.wait_for_connection()
+
+        self.pyepics_pv.put(list(range(self.num)), wait=True)
+        assert self.pyepics_pv.get(timeout=10., as_numpy=True) is not None
+
+    def setup_threading_client(self):
+        self.threading_pv = ThreadingPV(self.waveform_pv, auto_monitor=False)
+        assert self.threading_pv.wait_for_connection()
+
+    def setup_curio_client(self):
         async def curio_setup():
-            # os.environ['EPICS_CA_ADDR_LIST'] = '127.0.0.1'
-
             from caproto.curio.client import SharedBroadcaster
             broadcaster = SharedBroadcaster(log_level='ERROR')
             await broadcaster.register()
             ctx = CurioContext(broadcaster, log_level='ERROR')
 
-            await ctx.search(WAVEFORM_PV)
-            chan1 = await ctx.create_channel(WAVEFORM_PV)
+            await ctx.search(self.waveform_pv)
+            chan1 = await ctx.create_channel(self.waveform_pv)
             await chan1.wait_for_connection()
-            self.chan1 = chan1
+            self.curio_chan1 = chan1
 
-        with curio.Kernel() as kernel:
-            kernel.run(curio_setup())
+        self.kernel.run(curio_setup())
+
+        assert self.curio_chan1.channel.states[ca.CLIENT] is ca.CONNECTED
+
+    def setup(self):
+        super().setup()
+
+        os.system('caget -# 10 {}'.format(self.waveform_pv))
+        self.setup_pyepics()
+        self.setup_threading_client()
+        self.setup_curio_client()
 
     def teardown(self):
-        async def curio_cleanup():
-            await self.chan1.clear()
-
-        with curio.Kernel() as kernel:
-            kernel.run(curio_cleanup())
-
-        self.cm.__exit__(StopIteration, None, None)
+        super().teardown()
+        self.kernel.run(shutdown=True)
+        self.pyepics_pv.disconnect()
 
     def time_pyepics(self):
         for i in range(self.ITERS):
-            values = self.pv.get(timeout=0.5, as_numpy=True)
+            values = self.pyepics_pv.get(timeout=0.5, as_numpy=True)
             assert len(values) == self.num
 
     def time_caproto_curio(self):
         async def curio_reading():
             for i in range(self.ITERS):
-                reading = await self.chan1.read()
+                reading = await self.curio_chan1.read()
                 assert len(reading.data) == self.num
 
-        with curio.Kernel() as kernel:
-            kernel.run(curio_reading())
+        self.kernel.run(curio_reading())
+
+    def time_caproto_threading(self):
+        for i in range(self.ITERS):
+            values = self.threading_pv.get(timeout=0.5, as_numpy=True)
+            assert len(values) == self.num
 
 
 class TimeWaveform4000(_TimeWaveform):
+    waveform_pv = 'wfioc:wf4000'
     num = 4000
 
 
 class TimeWaveformMillion(_TimeWaveform):
+    waveform_pv = 'wfioc:wf1m'
     num = int(1e6)
+
+
+class TimeWaveform2Million(_TimeWaveform):
+    waveform_pv = 'wfioc:wf2m'
+    num = int(2e6)
 
 
 def _bench_test(cls):
@@ -102,5 +126,7 @@ def _bench_test(cls):
 if __name__ == '__main__':
     logging.basicConfig()
     logging.getLogger('caproto').setLevel('INFO')
+    setup()
     _bench_test(TimeWaveform4000)
     _bench_test(TimeWaveformMillion)
+    teardown()
