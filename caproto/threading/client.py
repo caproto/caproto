@@ -56,71 +56,91 @@ class SocketThread:
                 return
 
 
-# class SharedBroadcaster:
-
-class Context:
-    "Wraps a caproto.Broadcaster, a UDP socket, and cache of VirtualCircuits."
-    __slots__ = ('broadcaster', 'udp_sock', 'circuits', 'log_level',
-                 'unanswered_searches', 'search_results',
-                 'has_broadcast_cond', 'sock_thread', 'broadcaster_command_thread',
-                 '__weakref__')
-
+class SharedBroadcaster:
     def __init__(self, *, log_level='ERROR'):
         self.log_level = log_level
+        self.udp_sock = None
+        self.sock_thread = None
 
-        # TODO even one broadcaster per-context is too many
+        # TODO access to this needs to be locked as it's now shared in
+        # non-atomic operations
+        self.search_results = {}  # map name to (time, address)
+        self.unanswered_searches = {}  # map search id (cid) to name
+
+        self.listeners = weakref.WeakSet()
+
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
         self.broadcaster.log.setLevel(self.log_level)
 
-        self.has_broadcast_cond = threading.Condition()
+        self.command_cond = threading.Condition()
+        self.command_thread = threading.Thread(target=self.command_loop,
+                                               daemon=True)
+        self.command_thread.start()
 
-        self.circuits = {}  # map (address, priority) to VirtualCircuit
-        self.unanswered_searches = {}  # map search id (cid) to name
-        self.search_results = {}  # map name to (time, address)
-
-        self.udp_sock = None
-        self.sock_thread = None
         self.__create_sock()
-
-        self.broadcaster_command_thread = threading.Thread(
-            target=self.broadcaster_command_loop, daemon=True)
-        self.broadcaster_command_thread.start()
 
     def __create_sock(self):
         # UDP socket broadcasting to CA servers
         self.udp_sock = ca.bcast_socket()
         self.sock_thread = SocketThread(self.udp_sock, self)
 
+    def add_listener(self, listener):
+        self.listeners.add(listener)
+        weakref.finalize(listener, self._listener_removed)
+
+    def remove_listener(self, listener):
+        self.listeners.remove(listener)
+        self._listener_removed()
+
+    def _listener_removed(self):
+        if not self.listeners:
+            pass
+            # self.disconnect()
+
+    def disconnect(self):
+        th = []
+
+        if self.udp_sock is not None:
+            self.sock_thread.poison_ev.set()
+            self.udp_sock.close()
+            th.append(self.sock_thread.thread)
+
+        self.search_results.clear()
+        self.udp_sock = None
+
     def send(self, port, *commands):
         """
         Process a command and tranport it over the UDP socket.
         """
-        with self.has_broadcast_cond:
+        with self.command_cond:
             bytes_to_send = self.broadcaster.send(*commands)
             for host in ca.get_address_list():
                 self.udp_sock.sendto(bytes_to_send, (host, port))
 
     def register(self):
         "Register this client with the CA Repeater."
+        if self.registered:
+            return
+
         if self.udp_sock is None:
             self.__create_sock()
 
-        with self.has_broadcast_cond:
+        with self.command_cond:
             command = self.broadcaster.register('127.0.0.1')
             self.send(ca.EPICS_CA2_PORT, command)
 
         while True:
-            with self.has_broadcast_cond:
+            with self.command_cond:
                 if self.registered:
                     break
-                if not self.has_broadcast_cond.wait(2):
+                if not self.command_cond.wait(2):
                     raise TimeoutError()
 
     def search(self, name):
         "Generate, process, and the transport a search request."
         if not self.registered:
             self.register()
-        with self.has_broadcast_cond:
+        with self.command_cond:
             if name in self.search_results:
                 address, timestamp = self.search_results[name]
                 if (time.time() - timestamp) < STALE_SEARCH_THRESHOLD:
@@ -135,14 +155,74 @@ class Context:
             self.send(ca.EPICS_CA1_PORT, ver_command, search_command)
         # Wait for the SearchResponse.
         while True:
-            with self.has_broadcast_cond:
+            with self.command_cond:
                 if search_command.cid not in self.unanswered_searches:
                     break
-                if not self.has_broadcast_cond.wait(2):
+                if not self.command_cond.wait(2):
                     raise TimeoutError('failed to find PV {}'.format(name))
 
         address, timestamp = self.search_results[name]
         return address
+
+    def received(self, bytes_recv, address):
+        "Receive and process and next command broadcasted over UDP."
+        self.broadcaster.recv(bytes_recv, address)
+
+    def command_loop(self):
+        role = self.broadcaster.their_role
+
+        while True:
+            commands = self.broadcaster.command_queue.get()
+            for command in commands:
+                try:
+                    self.broadcaster.process_command(role, command)
+                except Exception as ex:
+                    logger.error('Broadcaster command queue evaluation '
+                                 'failed: {!r}'.format(command), exc_info=ex)
+                    continue
+
+                if isinstance(command, ca.VersionResponse):
+                    # Check that the server version is one we can talk to.
+                    assert command.version > 11
+                if isinstance(command, ca.SearchResponse):
+                    name = self.unanswered_searches.get(command.cid, None)
+                    if name is not None:
+                        self.search_results[name] = (
+                            ca.extract_address(command), time.time())
+                        self.unanswered_searches.pop(command.cid)
+                    else:
+                        # This is a redundant response, which the spec
+                        # tell us we must ignore.
+                        pass
+
+            print('broadcaster cond', self.registered)
+            with self.command_cond:
+                self.command_cond.notify_all()
+
+    @property
+    def registered(self):
+        return self.broadcaster.registered
+
+
+class Context:
+    "Wraps a caproto.Broadcaster, a UDP socket, and cache of VirtualCircuits."
+    __slots__ = ('broadcaster', 'circuits', 'log_level', '__weakref__')
+
+    def __init__(self, broadcaster, *, log_level='ERROR'):
+        self.log_level = log_level
+
+        self.broadcaster = broadcaster
+        self.broadcaster.add_listener(self)
+
+        self.circuits = {}  # map (address, priority) to VirtualCircuit
+
+    def register(self):
+        "Register this client with the CA Repeater."
+        self.broadcaster.register()
+
+    def search(self, name):
+        "Generate, process, and the transport a search request."
+        return self.broadcaster.search(name)
 
     def get_circuit(self, address, priority):
         """
@@ -163,7 +243,7 @@ class Context:
         """
         Create a new channel.
         """
-        address = self.search(name)
+        address = self.broadcaster.search(name)
 
         circuit = self.get_circuit(address, priority)
         cid = circuit.circuit.new_channel_id()
@@ -192,52 +272,8 @@ class Context:
                     raise TimeoutError()
         return chan
 
-    def received(self, bytes_recv, address):
-        "Receive and process and next command broadcasted over UDP."
-        self.broadcaster.recv(bytes_recv, address)
-
-    def broadcaster_command_loop(self):
-        queue = self.broadcaster.command_queue
-        role = self.broadcaster.their_role
-
-        while True:
-            commands = self.broadcaster.command_queue.get()
-            for command in commands:
-                try:
-                    self.broadcaster.process_command(role, command)
-                except Exception as ex:
-                    logger.error('Broadcaster command queue evaluation '
-                                 'failed: {!r}'.format(command), exc_info=ex)
-                    continue
-
-                if isinstance(command, ca.VersionResponse):
-                    # Check that the server version is one we can talk to.
-                    assert command.version > 11
-                if isinstance(command, ca.SearchResponse):
-                    name = self.unanswered_searches.get(command.cid, None)
-                    if name is not None:
-                        self.search_results[name] = (
-                            ca.extract_address(command), time.time())
-                        self.unanswered_searches.pop(command.cid)
-                    else:
-                        # This is a redundant response, which the spec
-                        # tell us we must ignore.
-                        pass
-
-            with self.has_broadcast_cond:
-                self.has_broadcast_cond.notify_all()
-
     def disconnect(self):
-
         th = []
-
-        # TODO not good how the broadcaster is tied up with this logic
-
-        # if we _have_ a socket, kill it
-        if self.udp_sock is not None:
-            self.sock_thread.poison_ev.set()
-            self.udp_sock.close()
-            th.append(self.sock_thread.thread)
 
         # disconnect any circuits we have
         for circ in list(self.circuits.values()):
@@ -249,7 +285,6 @@ class Context:
 
         # clear any state about circuits and search results
         self.circuits.clear()
-        self.search_results.clear()
 
         cur_thread = threading.current_thread()
         # wait for all of the socket threads to stop
@@ -258,15 +293,7 @@ class Context:
                 t.join()
 
         # disconnect the underlying state machine
-        self.broadcaster.disconnect()
-
-        # discard our thread and socket
-        self.sock_thread = None
-        self.udp_sock = None
-
-    @property
-    def registered(self):
-        return self.broadcaster.registered
+        self.broadcaster.remove_listener(self)
 
     def __del__(self):
         self.disconnect()
@@ -527,6 +554,12 @@ def ensure_connection(func):
 
 
 class PVContext(Context):
+    def __init__(self):
+        # TODO this needs to only be initialized if the class is used
+        #      !! this happens on import !!
+        shared_broadcaster = SharedBroadcaster()
+        super().__init__(broadcaster=shared_broadcaster)
+
     def get_pv(self, pvname, *args, **kwargs):
         # TODO add PV cache to this class
         return PV(pvname, *args, context=self, **kwargs)
@@ -1208,10 +1241,14 @@ class PV:
         self.disconnect()
 
 
-_dflt_context = PVContext()
+_dflt_context = None
 
 
 def get_pv(pvname, *args, **kwargs):
+    global _dflt_context
+    if _dflt_context is None:
+        _dflt_context = PVContext()
+
     return _dflt_context.get_pv(pvname)
 
 
@@ -1281,6 +1318,7 @@ def _test():
     logger.setLevel('DEBUG')
     logging.basicConfig()
 
+    shared_broadcaster = SharedBroadcaster()
     ca.set_default_queue_class(queue.Queue)
     pv1 = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
     pv2 = "XF:31IDA-OP{Tbl-Ax:X2}Mtr.VAL"
@@ -1292,7 +1330,7 @@ def _test():
         print("Subscription has received data.")
         called.append(True)
 
-    ctx = Context(log_level='DEBUG')
+    ctx = Context(broadcaster=shared_broadcaster, log_level='DEBUG')
     ctx.register()
     ctx.search(pv1)
     ctx.search(pv2)
