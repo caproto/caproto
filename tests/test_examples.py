@@ -163,8 +163,9 @@ def test_curio_server():
             print("Subscription has received data.")
             called.append(True)
 
-        ctx = client.Context(log_level='DEBUG')
-        await ctx.register()
+        broadcaster = client.SharedBroadcaster(log_level='DEBUG')
+        await broadcaster.register()
+        ctx = client.Context(broadcaster, log_level='DEBUG')
         await ctx.search('pi')
         print('done searching')
         chan1 = await ctx.create_channel('pi')
