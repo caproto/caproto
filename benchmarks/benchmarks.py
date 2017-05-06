@@ -1,5 +1,6 @@
 import os
 import time
+import logging
 
 import curio
 import epics
@@ -40,9 +41,9 @@ class _TimeWaveform:
             # os.environ['EPICS_CA_ADDR_LIST'] = '127.0.0.1'
 
             from caproto.curio.client import SharedBroadcaster
-            broadcaster = SharedBroadcaster(log_level='ERROR')
+            broadcaster = SharedBroadcaster(log_level='DEBUG')
             await broadcaster.register()
-            ctx = CurioContext(broadcaster, log_level='ERROR')
+            ctx = CurioContext(broadcaster, log_level='DEBUG')
 
             await ctx.search(WAVEFORM_PV)
             chan1 = await ctx.create_channel(WAVEFORM_PV)
@@ -82,3 +83,24 @@ class TimeWaveform4000(_TimeWaveform):
 
 class TimeWaveformMillion(_TimeWaveform):
     num = int(1e6)
+
+
+def _bench_test(cls):
+    inst = cls()
+    inst.setup()
+    for attr in sorted(dir(inst)):
+        if attr.startswith('time_'):
+            time_fcn = getattr(inst, attr)
+
+            print()
+            print('---- {}.{} ----'.format(cls.__name__, attr))
+            time_fcn()
+
+    inst.teardown()
+
+
+if __name__ == '__main__':
+    logging.basicConfig()
+    logging.getLogger('caproto').setLevel('INFO')
+    _bench_test(TimeWaveform4000)
+    _bench_test(TimeWaveformMillion)
