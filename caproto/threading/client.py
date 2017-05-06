@@ -247,7 +247,7 @@ class Context:
             self.circuits[(address, priority)] = circuit
         return circuit
 
-    def create_channel(self, name, priority=0):
+    def create_channel(self, name, priority=0, *, wait=True):
         """
         Create a new channel.
         """
@@ -272,12 +272,10 @@ class Context:
                     raise TimeoutError()
         # do not need to lock here, take care of in send method
         circuit.send(cachan.create())
-        while True:
-            with circuit.new_command_cond:
-                if chan.connected:
-                    break
-                if not circuit.new_command_cond.wait(2):
-                    raise TimeoutError()
+
+        if wait:
+            chan.wait_for_connection()
+
         return chan
 
     def disconnect(self):
@@ -481,14 +479,21 @@ class Channel:
             except Exception as ex:
                 print(ex)
 
-    def wait_for_connection(self):
+    def wait_for_connection(self, *, timeout=2):
         """Wait for this Channel to be connected, ready to use.
 
         The method ``Context.create_channel`` spawns an asynchronous task to
         initialize the connection in the fist place. This method waits for it
         to complete.
         """
-        raise NotImplemented()
+        if self.connected:
+            return
+        while True:
+            with self.circuit.new_command_cond:
+                if self.connected:
+                    break
+                if not self.circuit.new_command_cond.wait(2):
+                    raise TimeoutError()
 
     def disconnect(self):
         "Disconnect this Channel."
