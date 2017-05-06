@@ -74,7 +74,19 @@ def test_curio_client():
         kernel.run(main())
 
 
-def test_thread_client():
+@pytest.fixture(scope='module')
+def threading_broadcaster(request):
+    from caproto.threading.client import SharedBroadcaster
+    broadcaster = SharedBroadcaster()
+
+    def cleanup():
+        broadcaster.disconnect()
+
+    request.addfinalizer(cleanup)
+    return broadcaster
+
+
+def test_thread_client(threading_broadcaster):
     from caproto.threading.client import Context
 
     pv1 = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
@@ -87,7 +99,7 @@ def test_thread_client():
         print("Subscription has received data.")
         called.append(True)
 
-    ctx = Context(log_level='DEBUG')
+    ctx = Context(threading_broadcaster, log_level='DEBUG')
     ctx.register()
     ctx.search(pv1)
     ctx.search(pv2)
@@ -115,7 +127,7 @@ def test_thread_client():
     assert called
 
 
-def test_thread_pv():
+def test_thread_pv(threading_broadcaster):
     from caproto.threading.client import Context, PV
 
     pv1 = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
@@ -129,7 +141,7 @@ def test_thread_pv():
         print('-- user callback', value)
         called.append(True)
 
-    ctx = Context(log_level='DEBUG')
+    ctx = Context(threading_broadcaster, log_level='DEBUG')
     ctx.register()
 
     time_pv = PV(pv1, context=ctx, form='time')
