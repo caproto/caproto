@@ -70,7 +70,7 @@ class VirtualCircuit:
             raise DisconnectedCircuit()
         self.circuit.recv(bytes_received)
 
-    async def command_queue_coro(self):
+    async def command_queue_loop(self):
         """
         Coroutine which feeds from the circuit command queue.
 
@@ -162,7 +162,7 @@ class Context:
         self.broadcaster.log.setLevel(self.log_level)
         self.broadcaster_command_condition = curio.Condition()
 
-    async def broadcaster_udp_server_coro(self):
+    async def broadcaster_udp_server_loop(self):
         self.udp_sock = ca.bcast_socket(socket)
         try:
             self.udp_sock.bind((self.host, EPICS_CA1_PORT))
@@ -174,7 +174,7 @@ class Context:
             bytes_received, address = await self.udp_sock.recvfrom(4096)
             self.broadcaster.recv(bytes_received, address)
 
-    async def broadcaster_queue_coro(self):
+    async def broadcaster_queue_loop(self):
         queue = self.broadcaster.command_queue
         role = self.broadcaster.their_role
         responses = []
@@ -219,12 +219,12 @@ class Context:
         circuit = VirtualCircuit(cavc, client, self)
         circuit.circuit.log.setLevel(self.log_level)
 
-        tcp_queue_coro = await curio.spawn(circuit.command_queue_coro())
+        tcp_queue_loop = await curio.spawn(circuit.command_queue_loop())
         while True:
             try:
                 await circuit.recv()
             except DisconnectedCircuit:
-                await tcp_queue_coro.cancel()
+                await tcp_queue_loop.cancel()
                 circuit.circuit.disconnect()
                 return
 
@@ -232,15 +232,15 @@ class Context:
         try:
             tcp_server = curio.tcp_server('', self.port, self.tcp_handler)
             tcp_task = await curio.spawn(tcp_server)
-            udp_task = await curio.spawn(self.broadcaster_udp_server_coro())
-            udp_queue_coro = await curio.spawn(self.broadcaster_queue_coro())
+            udp_task = await curio.spawn(self.broadcaster_udp_server_loop())
+            udp_queue_loop = await curio.spawn(self.broadcaster_queue_loop())
             await udp_task.join()
             await tcp_task.join()
-            await udp_queue_coro.join()
+            await udp_queue_loop.join()
         except curio.TaskCancelled:
             await tcp_task.cancel()
             await udp_task.cancel()
-            await udp_queue_coro.cancel()
+            await udp_queue_loop.cancel()
 
 
 def _get_my_ip():

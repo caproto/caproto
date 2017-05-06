@@ -39,7 +39,7 @@ class VirtualCircuit:
                 break
             self.circuit.recv(bytes_received)
 
-    async def _command_queue_coro(self):
+    async def _command_queue_loop(self):
         queue = self.circuit.command_queue
         while True:
             command = await queue.get()
@@ -107,13 +107,13 @@ class Channel:
         to complete.
         """
         while not self.channel.states[ca.CLIENT] is ca.CONNECTED:
-            await self._wait_new_command()
+            await self.wait_on_new_command()
 
     async def disconnect(self):
         "Disconnect this Channel."
         await self.circuit.send(self.channel.disconnect())
         while self.channel.states[ca.CLIENT] is ca.MUST_CLOSE:
-            await self._wait_new_command()
+            await self.wait_on_new_command()
 
     async def read(self, *args, **kwargs):
         """Request a fresh reading, wait for it, return it and stash it.
@@ -127,7 +127,7 @@ class Channel:
         self.circuit.ioids[ioid] = self
         await self.circuit.send(command)
         while ioid in self.circuit.ioids:
-            await self._wait_new_command()
+            await self.wait_on_new_command()
         return self.last_reading
 
     async def write(self, *args, **kwargs):
@@ -138,7 +138,7 @@ class Channel:
         self.circuit.ioids[ioid] = self
         await self.circuit.send(command)
         while ioid in self.circuit.ioids:
-            await self._wait_new_command()
+            await self.wait_on_new_command()
         return self.last_reading
 
     async def subscribe(self, *args, **kwargs):
@@ -153,10 +153,10 @@ class Channel:
         "Cancel a subscription and await confirmation from the server."
         await self.circuit.send(self.channel.unsubscribe(subscriptionid))
         while subscriptionid in self.circuit.subscriptionids:
-            await self._wait_new_command()
+            await self.wait_on_new_command()
         del self.monitoring_tasks[subscriptionid]
 
-    async def _wait_new_command(self):
+    async def wait_on_new_command(self):
         '''Wait for a new command to come in'''
         async with self.circuit.new_command_condition:
             await self.circuit.new_command_condition.wait()
@@ -186,13 +186,13 @@ class SharedBroadcaster:
 
     async def register(self):
         "Register this client with the CA Repeater."
-        await curio.spawn(self._broadcaster_queue_coro(), daemon=True)
+        await curio.spawn(self._broadcaster_queue_loop(), daemon=True)
 
         while not self.registered:
             async with self.broadcaster_command_condition:
                 await self.broadcaster_command_condition.wait()
 
-    async def _broadcaster_recv_coro(self):
+    async def _broadcaster_recv_loop(self):
         # TODO: broadcaster info should be shared application-wide if possible,
         # as they are not really tied to a context in any way?
         # also: these coroutines could probably be merged intelligently
@@ -203,8 +203,8 @@ class SharedBroadcaster:
             bytes_received, address = await self.udp_sock.recvfrom(4096)
             self.broadcaster.recv(bytes_received, address)
 
-    async def _broadcaster_queue_coro(self):
-        await curio.spawn(self._broadcaster_recv_coro(), daemon=True)
+    async def _broadcaster_queue_loop(self):
+        await curio.spawn(self._broadcaster_recv_loop(), daemon=True)
         command = self.broadcaster.register('127.0.0.1')
         await self.send(ca.EPICS_CA2_PORT, command)
 
@@ -297,7 +297,7 @@ class Context:
         if chan.circuit.states[ca.SERVER] is ca.IDLE:
             await circuit._socket_lock.acquire()  # wrong primitive
             await curio.spawn(circuit.create_connection(), daemon=True)
-            await curio.spawn(circuit._command_queue_coro(), daemon=True)
+            await curio.spawn(circuit._command_queue_loop(), daemon=True)
             await circuit.send(chan.version())
             await circuit.send(chan.host_name())
             await circuit.send(chan.client_name())
