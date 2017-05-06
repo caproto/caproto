@@ -59,16 +59,14 @@ def test_cntx_disconnect_reconnect(cntx):
     pv.get()
     cntx.disconnect()
     assert not pv.connected
-    assert not cntx.registered
 
     pv = cntx.get_pv(str_pv)
     pv.get()
     assert pv.connected
-    assert cntx.registered
+    assert cntx.broadcaster.registered
 
     cntx.disconnect()
     assert not pv.connected
-    assert not cntx.registered
     pv.get()
     pv.disconnect()
 
@@ -80,7 +78,7 @@ def test_put_complete(cntx):
     # start in a known initial state
     pv.put(0.0, wait=True)
     pv.get()
-    
+
     def cb(a):
         mutable.append(a)
 
