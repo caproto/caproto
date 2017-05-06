@@ -41,9 +41,9 @@ class _TimeWaveform:
             # os.environ['EPICS_CA_ADDR_LIST'] = '127.0.0.1'
 
             from caproto.curio.client import SharedBroadcaster
-            broadcaster = SharedBroadcaster(log_level='DEBUG')
+            broadcaster = SharedBroadcaster(log_level='ERROR')
             await broadcaster.register()
-            ctx = CurioContext(broadcaster, log_level='DEBUG')
+            ctx = CurioContext(broadcaster, log_level='ERROR')
 
             await ctx.search(WAVEFORM_PV)
             chan1 = await ctx.create_channel(WAVEFORM_PV)
