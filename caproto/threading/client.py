@@ -61,9 +61,8 @@ class SharedBroadcaster:
         self.log_level = log_level
         self.udp_sock = None
         self.sock_thread = None
+        self._search_lock = threading.RLock()
 
-        # TODO access to this needs to be locked as it's now shared in
-        # non-atomic operations
         self.search_results = {}  # map name to (time, address)
         self.unanswered_searches = {}  # map search id (cid) to name
 
@@ -140,7 +139,7 @@ class SharedBroadcaster:
         "Generate, process, and the transport a search request."
         if not self.registered:
             self.register()
-        with self.command_cond:
+        with self._search_lock:
             if name in self.search_results:
                 address, timestamp = self.search_results[name]
                 if (time.time() - timestamp) < STALE_SEARCH_THRESHOLD:
@@ -156,13 +155,12 @@ class SharedBroadcaster:
         # Wait for the SearchResponse.
         while True:
             with self.command_cond:
-                if search_command.cid not in self.unanswered_searches:
-                    break
-                if not self.command_cond.wait(2):
-                    raise TimeoutError('failed to find PV {}'.format(name))
-
-        address, timestamp = self.search_results[name]
-        return address
+                try:
+                    address, timestamp = self.search_results[name]
+                    return address
+                except KeyError:
+                    if not self.command_cond.wait(2):
+                        raise TimeoutError('failed to find PV {}'.format(name))
 
     def received(self, bytes_recv, address):
         "Receive and process and next command broadcasted over UDP."
@@ -187,15 +185,15 @@ class SharedBroadcaster:
                 if isinstance(command, ca.SearchResponse):
                     name = self.unanswered_searches.get(command.cid, None)
                     if name is not None:
-                        self.search_results[name] = (
-                            ca.extract_address(command), time.time())
-                        self.unanswered_searches.pop(command.cid)
+                        with self._search_lock:
+                            self.search_results[name] = (
+                                ca.extract_address(command), time.time())
+                            self.unanswered_searches.pop(command.cid)
                     else:
                         # This is a redundant response, which the spec
                         # tell us we must ignore.
                         pass
 
-            print('broadcaster cond', self.registered)
             with self.command_cond:
                 self.command_cond.notify_all()
 
