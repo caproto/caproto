@@ -71,7 +71,7 @@ class Broadcaster:
                        len(commands))
         for i, command in enumerate(commands):
             self.log.debug("%d of %d %r", 1 + i, len(commands), command)
-            self._process_command(self.our_role, command, history)
+            self.process_command(self.our_role, command, history)
             bytes_to_send += bytes(command)
         return bytes_to_send
 
@@ -118,7 +118,7 @@ class Broadcaster:
                         "%d more datagrams are cached."),
                        len(self._parsed_commands), len(self._datagram_inbox))
         command = self._parsed_commands.popleft()
-        self._process_command(self.their_role, command, self._history)
+        self.process_command(self.their_role, command, self._history)
         return command
 
     def process_command(self, role, command, history):

@@ -109,7 +109,7 @@ class VirtualCircuit:
         """
         buffers_to_send = []
         for command in commands:
-            self._process_command(self.our_role, command)
+            self.process_command(self.our_role, command)
             self.log.debug("Serializing %r", command)
             buffers_to_send.append(memoryview(command.header))
             buffers_to_send.extend(command.buffers)
@@ -146,7 +146,7 @@ class VirtualCircuit:
                                "next command.", len_data)
                 break
 
-    def _process_command(self, role, command):
+    def process_command(self, role, command):
         """
         All comands go through here.
 
@@ -246,7 +246,7 @@ class VirtualCircuit:
             # If this is not a valid command, the state machine will raise
             # here. Stash the state transitions in a local var and run the
             # callbacks at the end.
-            transitions = chan._process_command(command)
+            transitions = chan.process_command(command)
 
             # If we got this far, the state machine has validated this Command.
             # Update other Channel and Circuit state.
@@ -380,7 +380,7 @@ class _BaseChannel:
         '''State changed callback for subclass usage'''
         pass
 
-    def _process_command(self, command):
+    def process_command(self, command):
         if isinstance(command, CreateChanResponse):
             self.native_data_type = command.data_type
             self.native_data_count = command.data_count

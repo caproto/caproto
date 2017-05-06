@@ -193,7 +193,7 @@ def bcast_socket(socket_module=socket):
 _default_queue_class = queue.Queue
 
 
-def get_default_queue_class(queue_class):
+def get_default_queue_class():
     '''Get the default queue class for caproto
 
     Defaults to queue.Queue.

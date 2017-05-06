@@ -9,9 +9,13 @@
 #          search results and a cache of VirtualCircuits.
 #
 import os
+import logging
 import caproto as ca
 import curio
 from curio import socket
+
+
+logger = logging.getLogger(__name__)
 
 
 class VirtualCircuit:
@@ -23,18 +27,54 @@ class VirtualCircuit:
         self.subscriptionids = {}  # map subscriptionid to Channel
         self.event = None  # used for signaling consumers about new commands
         self.socket = None
+        self.new_command_condition = curio.Condition()
+        self._socket_lock = curio.Lock()
 
     async def create_connection(self):
         self.socket = await socket.create_connection(self.circuit.address)
+        await self._socket_lock.release()
+
+        while True:
+            bytes_received = await self.socket.recv(32768)
+            if not len(bytes_received):
+                self.circuit.disconnect()
+                break
+            self.circuit.recv(bytes_received)
+
+    async def _command_queue_eval(self):
+        queue = self.circuit.command_queue
+        while True:
+            command = await queue.get()
+            try:
+                self.circuit.process_command(self.circuit.their_role, command)
+            except Exception as ex:
+                logger.error('Command queue evaluation failed: {!r}'
+                             ''.format(command), exc_info=ex)
+                continue
+
+            if isinstance(command, ca.ReadNotifyResponse):
+                chan = self.ioids.pop(command.ioid)
+                chan.last_reading = command
+            if isinstance(command, ca.WriteNotifyResponse):
+                chan = self.ioids.pop(command.ioid)
+            elif isinstance(command, ca.EventAddResponse):
+                chan = self.subscriptionids[command.subscriptionid]
+                chan.process_subscription(command)
+            elif isinstance(command, ca.EventCancelResponse):
+                self.subscriptionids.pop(command.subscriptionid)
+            async with self.new_command_condition:
+                await self.new_command_condition.notify_all()
+        print('new command cond notified')
 
     async def send(self, *commands):
         """
         Process a command and tranport it over the TCP socket for this circuit.
         """
-        if self.socket is None:
-            raise RuntimeError("must await create_connection() first")
         buffers_to_send = self.circuit.send(*commands)
-        await self.socket.sendmsg(buffers_to_send)
+        async with self._socket_lock:
+            if self.socket is None:
+                raise RuntimeError('socket connection failed')
+            await self.socket.sendmsg(buffers_to_send)
 
     async def recv(self):
         """
@@ -47,60 +87,6 @@ class VirtualCircuit:
             self.circuit.disconnect()
             return
         self.circuit.recv(bytes_received)
-
-    async def get_event(self):
-        """
-        Get a curio.Event that we will 'set' when we process the next command.
-
-        This is a signaling mechanism for notifying all corountines awaiting an
-        incoming command that a new one (maybe the one they are looking for,
-        maybe not) has been processed.
-        """
-        if self.event is not None:
-            # Some other consumer has already asked for the next command.
-            # Don't ask again (yet); just wait for the first request to
-            # process.
-            return self.event
-        else:
-            # No other consumers have asked for the next command. Ask, return
-            # an Event that will be set when the command is processed, and
-            # stash the Event in case any other consumers ask.
-            event = curio.Event()
-            self.event = event
-            task = await curio.spawn(self.next_command())
-            return event
-
-    async def next_command(self):
-        """
-        Process one incoming command.
-
-        1. Receive data from the socket if a full comannd's worth of bytes are
-           not already cached.
-        2. Dispatch to caproto.VirtualCircuit.next_command which validates.
-        3. Update Channel state if applicable.
-        4. Notify all coroutines awaiting a command that a new command has been
-           process and they should check their state for updates.
-        """
-        while True:
-            command = self.circuit.next_command()
-            if isinstance(command, ca.NEED_DATA):
-                await self.recv()
-                continue
-            break
-        if isinstance(command, ca.ReadNotifyResponse):
-            chan = self.ioids.pop(command.ioid)
-            chan.last_reading = command
-        if isinstance(command, ca.WriteNotifyResponse):
-            chan = self.ioids.pop(command.ioid)
-        elif isinstance(command, ca.EventAddResponse):
-            chan = self.subscriptionids[command.subscriptionid]
-            chan.process_subscription(command)
-        elif isinstance(command, ca.EventCancelResponse):
-            self.subscriptionids.pop(command.subscriptionid)
-        event = self.event
-        self.event = None
-        await event.set()
-        return command
 
 
 class Channel:
@@ -136,15 +122,13 @@ class Channel:
         to complete.
         """
         while not self.channel.states[ca.CLIENT] is ca.CONNECTED:
-            event = await self.circuit.get_event()
-            await event.wait()
+            await self._wait_new_command()
 
     async def disconnect(self):
         "Disconnect this Channel."
         await self.circuit.send(self.channel.disconnect())
         while self.channel.states[ca.CLIENT] is ca.MUST_CLOSE:
-            event = await self.circuit.get_event()
-            await event.wait()
+            await self._wait_new_command()
 
     async def read(self, *args, **kwargs):
         """Request a fresh reading, wait for it, return it and stash it.
@@ -158,8 +142,7 @@ class Channel:
         self.circuit.ioids[ioid] = self
         await self.circuit.send(command)
         while ioid in self.circuit.ioids:
-            event = await self.circuit.get_event()
-            await event.wait()
+            await self._wait_new_command()
         return self.last_reading
 
     async def write(self, *args, **kwargs):
@@ -170,8 +153,7 @@ class Channel:
         self.circuit.ioids[ioid] = self
         await self.circuit.send(command)
         while ioid in self.circuit.ioids:
-            event = await self.circuit.get_event()
-            await event.wait()
+            await self._wait_new_command()
         return self.last_reading
 
     async def subscribe(self, *args, **kwargs):
@@ -180,23 +162,19 @@ class Channel:
         # Stash the subscriptionid to match the response to the request.
         self.circuit.subscriptionids[command.subscriptionid] = self
         await self.circuit.send(command)
-        task = await curio.spawn(self._monitor())
-        self.monitoring_tasks[command.subscriptionid] = task
-
-    async def _monitor(self):
-        "Apply constant suction to receive EventAddResponse commands."
-        while True:
-            event = await self.circuit.get_event()
-            await event.wait()
+        self.monitoring_tasks[command.subscriptionid] = None
 
     async def unsubscribe(self, subscriptionid, *args, **kwargs):
         "Cancel a subscription and await confirmation from the server."
         await self.circuit.send(self.channel.unsubscribe(subscriptionid))
         while subscriptionid in self.circuit.subscriptionids:
-            event = await self.circuit.get_event()
-            await event.wait()
-        task = self.monitoring_tasks[subscriptionid]
-        await task.cancel()
+            await self._wait_new_command()
+        del self.monitoring_tasks[subscriptionid]
+
+    async def _wait_new_command(self):
+        '''Wait for a new command to come in'''
+        async with self.circuit.new_command_condition:
+            await self.circuit.new_command_condition.wait()
 
 
 class Context:
@@ -276,18 +254,15 @@ class Context:
         circuit = self.get_circuit(address, priority)
         chan = ca.ClientChannel(name, circuit.circuit)
 
-        async def connect():
-            if chan.circuit.states[ca.SERVER] is ca.IDLE:
-                await circuit.create_connection()
-                await circuit.send(chan.version())
-                await circuit.send(chan.host_name())
-                await circuit.send(chan.client_name())
-            await circuit.send(chan.create())
+        if chan.circuit.states[ca.SERVER] is ca.IDLE:
+            await circuit._socket_lock.acquire()  # wrong primitive
+            await curio.spawn(circuit.create_connection(), daemon=True)
+            await curio.spawn(circuit._command_queue_eval(), daemon=True)
+            await circuit.send(chan.version())
+            await circuit.send(chan.host_name())
+            await circuit.send(chan.client_name())
 
-        # Spawn an async task to connect the channel and return a Channel
-        # instance immediately. User can use ``Channel.wait_for_connection()``
-        # to wait for connect() to complete.
-        await connect()
+        await circuit.send(chan.create())
         return Channel(circuit, chan)
 
     async def get_event(self):
@@ -340,6 +315,12 @@ class Context:
 
 
 async def main():
+    logger.setLevel('DEBUG')
+    logging.basicConfig()
+
+    # this universalqueue is evil and genius
+    ca.set_default_queue_class(curio.UniversalQueue)
+
     # Connect to two motorsim PVs. Test reading, writing, and subscribing.
     pv1 = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
     pv2 = "XF:31IDA-OP{Tbl-Ax:X2}Mtr.VAL"
