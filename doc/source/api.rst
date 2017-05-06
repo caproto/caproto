@@ -196,10 +196,15 @@ Special constants are also used to represent the "direction" of a command.
           REQUEST
 
 Another special constant serves as a sentinel "Command" returned by
-:meth:`Broadcaster.next_command` and :meth:`VirtualCircuit.next_command` when
-more data needs to be received before any new Commands can be parsed.
+:meth:`read_from_bytestream` when more data needs to be received before any new
+Commands can be parsed.
 
 .. data:: NEED_DATA
+
+Similarly, one sentinel is re-used as a "Command" allowing for consistent
+handling of disconnection events through the command queues:
+
+.. data:: DISCONNECTED
 
 Borrowing a trick (one of many!) from the h11 project, these special constants
 are modeled after ``None``: they’re singletons, their ``__repr__()`` is

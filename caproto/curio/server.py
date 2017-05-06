@@ -72,12 +72,12 @@ class VirtualCircuit:
 
     async def command_queue_coro(self):
         """
-        Process incoming commands from the queue.
+        Coroutine which feeds from the circuit command queue.
 
-        1. Receive data from the socket if a full comannd's worth of bytes are
-           not already cached.
-        2. Dispatch to caproto.VirtualCircuit.next_command which validates.
-        3. Update Channel state if applicable.
+        1. Dispatch and validate through caproto.VirtualCircuit.process_command
+            - Upon server failure, respond to the client with
+              caproto.ErrorResponse
+        2. Update Channel state if applicable.
         """
         while True:
             command = await self.circuit.command_queue.get()
