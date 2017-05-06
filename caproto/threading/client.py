@@ -100,7 +100,7 @@ class SharedBroadcaster:
             pass
             # self.disconnect()
 
-    def disconnect(self):
+    def disconnect(self, *, wait=True):
         th = []
 
         if self.udp_sock is not None:
@@ -111,6 +111,12 @@ class SharedBroadcaster:
         with self._search_lock:
             self.search_results.clear()
         self.udp_sock = None
+
+        if wait:
+            cur_thread = threading.current_thread()
+            for t in th:
+                if t is not cur_thread:
+                    t.join()
 
     def send(self, port, *commands):
         """
@@ -385,19 +391,23 @@ class VirtualCircuit:
 
                 self.new_command_cond.notify_all()
 
-    def disconnect(self):
+    def disconnect(self, *, wait=True):
         for cid, ch in list(self.channels.items()):
             ch.disconnect()
             self.channels.pop(cid)
 
         with self.new_command_cond:
             self.circuit.disconnect()
-
+        threads = []
         if self.sock_thread is not None:
             th = self.sock_thread.thread
             self.sock_thread.poison_ev.set()
-            if th is not threading.current_thread():
-                th.join()
+            threads.append(th)
+        if wait:
+            cur_thread = threading.current_thread()
+            for th in threads:
+                if th is not cur_thread:
+                    th.join()
 
         # TODO
         # if self.command_thread is not None:
