@@ -28,6 +28,10 @@ import asyncio
 import caproto
 
 
+class RepeaterAlreadyRunning(RuntimeError):
+    ...
+
+
 class ProxyDatagramProtocol(asyncio.DatagramProtocol):
 
     def __init__(self):
@@ -84,8 +88,14 @@ class RemoteDatagramProtocol(asyncio.DatagramProtocol):
 async def start_datagram_proxy(bind, port):
     loop = asyncio.get_event_loop()
     protocol = ProxyDatagramProtocol()
-    return await loop.create_datagram_endpoint(
-        lambda: protocol, local_addr=(bind, port))
+    try:
+        return await loop.create_datagram_endpoint(
+            lambda: protocol, local_addr=(bind, port))
+    except OSError as ex:
+        if 'Address already in use' in str(ex):
+            raise RepeaterAlreadyRunning(str(ex))
+        else:
+            raise
 
 
 def main():
@@ -95,7 +105,12 @@ def main():
     addr = ('0.0.0.0', os.environ.get('EPICS_CA_REPEATER_PORT', 5065))
     print("Starting datagram proxy on {}...".format(addr))
     coro = start_datagram_proxy(*addr)
-    transport, _ = loop.run_until_complete(coro)
+    try:
+        transport, _ = loop.run_until_complete(coro)
+    except RepeaterAlreadyRunning as ex:
+        print('[repeater] Another repeater is already running; exiting')
+        return
+
     print("Datagram proxy is running...")
     try:
         loop.run_forever()
