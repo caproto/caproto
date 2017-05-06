@@ -163,8 +163,7 @@ class Channel:
             await self.circuit.new_command_condition.wait()
 
 
-class Context:
-    "Wraps a caproto.Broadcaster, a UDP socket, and cache of VirtualCircuits."
+class SharedBroadcaster:
     def __init__(self, *, log_level='ERROR'):
         self.log_level = log_level
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT,
@@ -174,9 +173,7 @@ class Context:
 
         # UDP socket broadcasting to CA servers
         self.udp_sock = ca.bcast_socket(socket)
-
         self.registered = False  # refers to RepeaterRegisterRequest
-        self.circuits = []  # list of VirtualCircuits
         self.unanswered_searches = {}  # map search id (cid) to name
         self.search_results = {}  # map name to address
 
@@ -243,7 +240,7 @@ class Context:
                     await self.broadcaster_command_condition.notify_all()
 
     async def search(self, name):
-        "Generate, process, and the transport a search request."
+        "Generate, process, and transport a search request."
         # Discard any old search result for this name.
         self.search_results.pop(name, None)
         ver_command, search_command = self.broadcaster.search(name)
@@ -252,7 +249,20 @@ class Context:
         await self.send(ca.EPICS_CA1_PORT, ver_command, search_command)
         # Wait for the SearchResponse.
         while search_command.cid in self.unanswered_searches:
-            await self._wait_new_broadcaster_command()
+            await self.wait_on_new_command()
+
+    async def wait_on_new_command(self):
+        '''Wait for a new broadcaster command to come in'''
+        async with self.broadcaster_command_condition:
+            await self.broadcaster_command_condition.wait()
+
+
+class Context:
+    "Wraps a caproto.Broadcaster, a UDP socket, and cache of VirtualCircuits."
+    def __init__(self, broadcaster, *, log_level='ERROR'):
+        self.log_level = log_level
+        self.circuits = []  # list of VirtualCircuits
+        self.broadcaster = broadcaster
 
     def get_circuit(self, address, priority):
         """
@@ -273,11 +283,15 @@ class Context:
         self.circuits.append(circuit)
         return circuit
 
+    async def search(self, name):
+        "Generate, process, transport a search request with the broadcaster"
+        return await self.broadcaster.search(name)
+
     async def create_channel(self, name, priority=0):
         """
         Create a new channel.
         """
-        address = self.search_results[name]
+        address = self.broadcaster.search_results[name]
         circuit = self.get_circuit(address, priority)
         chan = ca.ClientChannel(name, circuit.circuit)
 
@@ -291,11 +305,6 @@ class Context:
 
         await circuit.send(chan.create())
         return Channel(circuit, chan)
-
-    async def _wait_new_broadcaster_command(self):
-        '''Wait for a new broadcaster command to come in'''
-        async with self.broadcaster_command_condition:
-            await self.broadcaster_command_condition.wait()
 
 
 async def main():
@@ -313,11 +322,13 @@ async def main():
     called = []
 
     def user_callback(command):
-        print("Subscription has received data.")
+        print("Subscription has received data: {}".format(command))
         called.append(True)
 
-    ctx = Context()
-    await ctx.register()
+    broadcaster = SharedBroadcaster()
+    await broadcaster.register()
+
+    ctx = Context(broadcaster)
     await ctx.search(pv1)
     await ctx.search(pv2)
     # Send out connection requests without waiting for responses...
