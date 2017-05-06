@@ -121,7 +121,7 @@ class SharedBroadcaster:
             for host in ca.get_address_list():
                 self.udp_sock.sendto(bytes_to_send, (host, port))
 
-    def register(self):
+    def register(self, *, wait=True):
         "Register this client with the CA Repeater."
         if self.registered:
             return
@@ -133,7 +133,7 @@ class SharedBroadcaster:
             command = self.broadcaster.register('127.0.0.1')
             self.send(ca.EPICS_CA2_PORT, command)
 
-        while True:
+        while wait:
             with self.command_cond:
                 if self.registered:
                     break
@@ -495,7 +495,7 @@ class Channel:
                 if not self.circuit.new_command_cond.wait(2):
                     raise TimeoutError()
 
-    def disconnect(self):
+    def disconnect(self, *, wait=True):
         "Disconnect this Channel."
         with self.circuit.new_command_cond:
             if self.connected:
@@ -506,7 +506,7 @@ class Channel:
                     return
             else:
                 return
-        while True:
+        while wait:
             with self.circuit.new_command_cond:
                 if self.channel.states[ca.CLIENT] is ca.CLOSED:
                     break
