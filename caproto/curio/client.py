@@ -8,7 +8,6 @@
 # Context: has a caproto.Broadcaster, a UDP socket, a cache of
 #          search results and a cache of VirtualCircuits.
 #
-import os
 import logging
 import caproto as ca
 import curio

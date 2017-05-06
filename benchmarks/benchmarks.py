@@ -5,7 +5,7 @@ import curio
 import epics
 
 from . import util
-from caproto.curio.client import Context
+from caproto.curio.client import Context as CurioContext
 
 
 WAVEFORM_PV = 'wfioc:wf'
@@ -39,15 +39,15 @@ class _TimeWaveform:
         async def curio_setup():
             # os.environ['EPICS_CA_ADDR_LIST'] = '127.0.0.1'
 
-            ctx = Context()
-            # await ctx.register()
-            ctx.broadcaster._registered = True  # cheat
-            ctx.broadcaster.log.setLevel('ERROR')
+            from caproto.curio.client import SharedBroadcaster
+            broadcaster = SharedBroadcaster(log_level='ERROR')
+            await broadcaster.register()
+            ctx = CurioContext(broadcaster, log_level='ERROR')
+
             await ctx.search(WAVEFORM_PV)
             chan1 = await ctx.create_channel(WAVEFORM_PV)
             await chan1.wait_for_connection()
             self.chan1 = chan1
-            chan1.circuit.circuit.log.setLevel('ERROR')
 
         with curio.Kernel() as kernel:
             kernel.run(curio_setup())
