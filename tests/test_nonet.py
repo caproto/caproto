@@ -1,11 +1,8 @@
-import logging
-from multiprocessing import Process
 import caproto as ca
-import os
-import time
-import socket
-import getpass
+import queue
 import pytest
+
+from conftest import next_command
 
 
 pv1 = "synctest1"
@@ -33,7 +30,7 @@ def srv_recv(circuit):
     circuit.recv(bytes_received)
     commands = []
     while True:
-        command = circuit.next_command()
+        command = next_command(circuit)
         if type(command) is ca.NEED_DATA:
             break
         commands.append(command)
@@ -52,11 +49,33 @@ def cli_recv(circuit):
     circuit.recv(bytes_received)
     commands = []
     while True:
-        command = circuit.next_command()
+        command = next_command(circuit)
         if type(command) is ca.NEED_DATA:
             break
-        commands.append(command)
+        elif command is not None:
+            commands.append(command)
     return commands
+
+
+def broadcaster_next_commands(obj):
+    '''Re-implementation of test function to get next queue item
+
+    This yields each command received so that none are missed from
+    a multi-command broadcast packet
+    '''
+    try:
+        command = obj.command_queue.get_nowait()
+    except queue.Empty:
+        return ca.NEED_DATA
+
+    addr, commands = command
+    if not commands:
+        return ca.NEED_DATA
+
+    history = []
+    for command in commands:
+        obj.process_command(obj.their_role, command, history=history)
+        yield command
 
 
 def test_nonet():
@@ -68,7 +87,7 @@ def test_nonet():
     # Receive response
     data = bytes(ca.RepeaterConfirmResponse('127.0.0.1'))
     cli_b.recv(data, cli_addr)
-    cli_b.next_command()
+    next_command(cli_b)
     assert cli_b._registered
 
     # Search for pv1.
@@ -77,21 +96,21 @@ def test_nonet():
     bytes_to_send = cli_b.send(ca.VersionRequest(0, 13),
                                ca.SearchRequest(pv1, 0, 13))
 
-    
+
     srv_b.recv(bytes_to_send, cli_addr)
-    ver_req = srv_b.next_command()
-    search_req = srv_b.next_command()
+
+    # next_command (a test utility) gets both ver_req and search_req
+    ver_req, search_req = tuple(broadcaster_next_commands(srv_b))
     bytes_to_send = srv_b.send(ca.VersionResponse(13),
                                ca.SearchResponse(5064, None,
                                                  search_req.cid, 13))
 
     # Receive a VersionResponse and SearchResponse.
     cli_b.recv(bytes_to_send, cli_addr)
-    command = cli_b.next_command()
-    assert type(command) is ca.VersionResponse
-    command = cli_b.next_command()
-    assert type(command) is ca.SearchResponse
-    address = ca.extract_address(command)
+    ver_res, search_res = tuple(broadcaster_next_commands(cli_b))
+    assert type(ver_res) is ca.VersionResponse
+    assert type(search_res) is ca.SearchResponse
+    address = ca.extract_address(search_res)
 
     circuit = ca.VirtualCircuit(our_role=ca.CLIENT,
                                 address=address,
@@ -180,6 +199,8 @@ def test_nonet():
 
     cli_send(chan1.circuit, cancel_req)
     srv_recv(srv_circuit)
+
+    # TODO dan  don't think this should be getting DISCONNECTED here?
     cli_recv(chan1.circuit)
 
     # Test reading.

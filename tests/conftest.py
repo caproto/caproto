@@ -8,6 +8,9 @@ def next_command(obj):
         command = obj.command_queue.get_nowait()
     except queue.Empty:
         return ca.NEED_DATA
+    else:
+        if command is ca.DISCONNECTED:
+            return
 
     if isinstance(obj, ca.Broadcaster):
         addr, commands = command
