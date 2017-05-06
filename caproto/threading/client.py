@@ -303,7 +303,12 @@ class Context:
         self.broadcaster.remove_listener(self)
 
     def __del__(self):
-        self.disconnect()
+        try:
+            self.disconnect()
+        except AttributeError:
+            pass
+            # clean-up on deletion is best effort...
+            # TODO tacaswell
 
 
 class VirtualCircuit:
