@@ -178,30 +178,29 @@ class SharedBroadcaster:
 
         while True:
             addr, commands = self.broadcaster.command_queue.get()
-            for command in commands:
-                try:
-                    self.broadcaster.process_command(role, command)
-                except Exception as ex:
-                    logger.error('Broadcaster command queue evaluation '
-                                 'failed: {!r}'.format(command), exc_info=ex)
-                    continue
-
-                if isinstance(command, ca.VersionResponse):
-                    # Check that the server version is one we can talk to.
-                    assert command.version > 11
-                if isinstance(command, ca.SearchResponse):
-                    name = self.unanswered_searches.get(command.cid, None)
-                    if name is not None:
-                        with self._search_lock:
-                            self.search_results[name] = (
-                                ca.extract_address(command), time.time())
-                            self.unanswered_searches.pop(command.cid)
-                    else:
-                        # This is a redundant response, which the spec
-                        # tell us we must ignore.
-                        pass
-
             with self.command_cond:
+                for command in commands:
+                    try:
+                        self.broadcaster.process_command(role, command)
+                    except Exception as ex:
+                        logger.error('Broadcaster command queue evaluation '
+                                     'failed: {!r}'.format(command), exc_info=ex)
+                        continue
+
+                    if isinstance(command, ca.VersionResponse):
+                        # Check that the server version is one we can talk to.
+                        assert command.version > 11
+                    if isinstance(command, ca.SearchResponse):
+                        name = self.unanswered_searches.get(command.cid, None)
+                        if name is not None:
+                            with self._search_lock:
+                                self.search_results[name] = (
+                                    ca.extract_address(command), time.time())
+                                self.unanswered_searches.pop(command.cid)
+                        else:
+                            # This is a redundant response, which the spec
+                            # tell us we must ignore.
+                            pass
                 self.command_cond.notify_all()
 
     @property
@@ -356,33 +355,34 @@ class VirtualCircuit:
     def command_thread_loop(self):
         while True:
             command = self.circuit.command_queue.get()
-            if command is ca.DISCONNECTED:
-                print('disconnected!')
-                with self.new_command_cond:
-                    self.new_command_cond.notify_all()
-                break
 
-            try:
-                self.circuit.process_command(self.circuit.their_role, command)
-            except Exception as ex:
-                logger.error('Command queue evaluation failed: {!r}'
-                             ''.format(command), exc_info=ex)
-                continue
-
-            if isinstance(command, ca.ReadNotifyResponse):
-                chan = self.ioids.pop(command.ioid)
-                chan.process_read_notify(command)
-            elif isinstance(command, ca.WriteNotifyResponse):
-                chan = self.ioids.pop(command.ioid)
-                chan.process_write_notify(command)
-            elif isinstance(command, ca.EventAddResponse):
-                chan = self.subscriptionids[command.subscriptionid]
-                chan.process_subscription(command)
-            elif isinstance(command, ca.EventCancelResponse):
-                self.subscriptionids.pop(command.subscriptionid)
-
-            # notify anything waiting we may have a command for them
             with self.new_command_cond:
+
+                if command is ca.DISCONNECTED:
+                    print('disconnected!')
+                    self.new_command_cond.notify_all()
+                    break
+
+                try:
+                    self.circuit.process_command(
+                        self.circuit.their_role, command)
+                except Exception as ex:
+                    logger.error('Command queue evaluation failed: {!r}'
+                                 ''.format(command), exc_info=ex)
+                    continue
+
+                if isinstance(command, ca.ReadNotifyResponse):
+                    chan = self.ioids.pop(command.ioid)
+                    chan.process_read_notify(command)
+                elif isinstance(command, ca.WriteNotifyResponse):
+                    chan = self.ioids.pop(command.ioid)
+                    chan.process_write_notify(command)
+                elif isinstance(command, ca.EventAddResponse):
+                    chan = self.subscriptionids[command.subscriptionid]
+                    chan.process_subscription(command)
+                elif isinstance(command, ca.EventCancelResponse):
+                    self.subscriptionids.pop(command.subscriptionid)
+
                 self.new_command_cond.notify_all()
 
     def disconnect(self):
