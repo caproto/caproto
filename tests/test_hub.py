@@ -1,6 +1,8 @@
 import pytest
 import caproto as ca
 
+from conftest import next_command
+
 
 def make_channels(cli_circuit, srv_circuit, data_type, data_count, name='a'):
     cid = cli_circuit.new_channel_id()
@@ -11,11 +13,11 @@ def make_channels(cli_circuit, srv_circuit, data_type, data_count, name='a'):
     req = cli_channel.create()
     cli_circuit.send(req)
     srv_circuit.recv(bytes(req))
-    srv_circuit.next_command()
+    next_command(srv_circuit)
     res = srv_channel.create(data_type, data_count, sid)
     srv_circuit.send(res)
     cli_circuit.recv(bytes(res))
-    cli_circuit.next_command()
+    next_command(cli_circuit)
     return cli_channel, srv_channel
 
 
@@ -101,14 +103,14 @@ def test_unknown_id_errors(circuit_pair):
                                 status=1)
     circuit.recv(bytes(com))
     with pytest.raises(ca.RemoteProtocolError):
-        circuit.next_command()
+        next_command(circuit)
 
     # Receive an event with an unknown subscriptionid.
     com = ca.EventAddResponse(data=(1,), data_type=5, data_count=1,
                               status_code=1, subscriptionid=1)
     circuit.recv(bytes(com))
     with pytest.raises(ca.RemoteProtocolError):
-        circuit.next_command()
+        next_command(circuit)
 
 
 def test_mismatched_event_add_responses(circuit_pair):
@@ -124,21 +126,21 @@ def test_mismatched_event_add_responses(circuit_pair):
     res = ca.EventAddResponse(data=(1,), data_type=5, data_count=1,
                               status_code=1, subscriptionid=1)
     circuit.recv(bytes(res))
-    circuit.next_command()
+    next_command(circuit)
 
     # Bad response -- wrong data_type
     res = ca.EventAddResponse(data=(1,), data_type=6, data_count=1,
                               status_code=1, subscriptionid=1)
     circuit.recv(bytes(res))
     with pytest.raises(ca.RemoteProtocolError):
-        circuit.next_command()
+        next_command(circuit)
 
     # Bad response -- wrong data_count
     res = ca.EventAddResponse(data=(1, 2), data_type=5, data_count=2,
                               status_code=1, subscriptionid=1)
     circuit.recv(bytes(res))
     with pytest.raises(ca.RemoteProtocolError):
-        circuit.next_command()
+        next_command(circuit)
 
     # Bad request -- wrong sid for this subscriptionid
     req = ca.EventCancelRequest(data_type=5, sid=1, subscriptionid=1)
@@ -149,7 +151,7 @@ def test_mismatched_event_add_responses(circuit_pair):
 def test_empty_datagram():
     broadcaster = ca.Broadcaster(ca.CLIENT)
     broadcaster.recv(b'', ('127.0.0.1', 6666))
-    assert broadcaster.next_command() is ca.NEED_DATA
+    assert next_command(broadcaster) is ca.NEED_DATA
 
 
 def test_extract_address():
@@ -174,7 +176,7 @@ def test_broadcaster_checks():
     b.send(ca.RepeaterRegisterRequest('1.2.3.4'))
     res = ca.RepeaterConfirmResponse('5.6.7.8')
     b.recv(bytes(res), ('5.6.7.8', 6666))
-    assert b.next_command() == res
+    assert next_command(b) == res
 
     req = ca.SearchRequest(name='LIRR', cid=0, version=13)
     with pytest.raises(ca.LocalProtocolError):
@@ -185,10 +187,10 @@ def test_broadcaster_checks():
     addr = ('1.2.3.4', 6666)
     b.recv(bytes(res), addr)
     with pytest.raises(ca.RemoteProtocolError):
-        b.next_command()
+        next_command(b)
     b.recv(bytes(ca.VersionResponse(version=13)) + bytes(res), addr)
-    b.next_command()
-    b.next_command()
+    next_command(b)
+    next_command(b)
 
 
 def test_methods(circuit_pair):
@@ -223,7 +225,7 @@ def test_error_response(circuit_pair):
     req = cli_channel.read()
     buffers_to_send = cli_circuit.send(req)
     srv_circuit.recv(*buffers_to_send)
-    req_received = srv_circuit.next_command()
+    req_received = next_command(srv_circuit)
     srv_circuit.send(ca.ErrorResponse(original_request=req_received,
                                       cid=srv_channel.cid,
                                       status_code=42,
@@ -241,7 +243,7 @@ def test_create_channel_failure(circuit_pair):
     req = cli_channel.create()
     cli_circuit.send(req)
     srv_circuit.recv(bytes(req))
-    srv_circuit.next_command()
+    next_command(srv_circuit)
 
     # Send and receive CreateChFailResponse.
     res = ca.CreateChFailResponse(req.cid)
@@ -251,7 +253,7 @@ def test_create_channel_failure(circuit_pair):
     assert cli_channel.states[ca.CLIENT] is ca.AWAIT_CREATE_CHAN_RESPONSE
     assert cli_channel.states[ca.SERVER] is ca.SEND_CREATE_CHAN_RESPONSE
     cli_circuit.recv(*buffers_to_send)
-    cli_circuit.next_command()
+    next_command(cli_circuit)
     assert cli_channel.states[ca.CLIENT] is ca.FAILED
     assert cli_channel.states[ca.SERVER] is ca.FAILED
 
@@ -266,7 +268,7 @@ def test_server_disconn(circuit_pair):
     assert cli_channel.states[ca.CLIENT] is ca.CONNECTED
     assert cli_channel.states[ca.SERVER] is ca.CONNECTED
     cli_circuit.recv(*buffers_to_send)
-    cli_circuit.next_command()
+    next_command(cli_circuit)
     assert cli_channel.states[ca.CLIENT] is ca.CLOSED
     assert cli_channel.states[ca.SERVER] is ca.CLOSED
 
@@ -285,7 +287,7 @@ def test_clear(circuit_pair):
 
     # Receive request to clear.
     srv_circuit.recv(*buffers_to_send)
-    srv_circuit.next_command()
+    next_command(srv_circuit)
     assert srv_channel.states[ca.CLIENT] is ca.MUST_CLOSE
     assert srv_channel.states[ca.SERVER] is ca.MUST_CLOSE
 
@@ -296,7 +298,7 @@ def test_clear(circuit_pair):
 
     # Receive confirmation.
     cli_circuit.recv(*buffers_to_send)
-    cli_circuit.next_command()
+    next_command(cli_circuit)
     assert cli_channel.states[ca.CLIENT] is ca.CLOSED
     assert cli_channel.states[ca.SERVER] is ca.CLOSED
 
