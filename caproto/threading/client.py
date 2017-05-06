@@ -132,6 +132,9 @@ class SharedBroadcaster:
             with self.command_cond:
                 if self.registered:
                     break
+                # TODO ** this sort of loop/wait will loop forever if the right
+                # command never comes in (and others continue to within 2
+                # second intervals)
                 if not self.command_cond.wait(2):
                     raise TimeoutError()
 
@@ -553,10 +556,9 @@ def ensure_connection(func):
 
 class PVContext(Context):
     def __init__(self):
-        # TODO this needs to only be initialized if the class is used
-        #      !! this happens on import !!
         shared_broadcaster = SharedBroadcaster()
         super().__init__(broadcaster=shared_broadcaster)
+        self.register()
 
     def get_pv(self, pvname, *args, **kwargs):
         # TODO add PV cache to this class
