@@ -189,8 +189,7 @@ def test_broadcaster_checks():
     with pytest.raises(ca.RemoteProtocolError):
         next_command(b)
     b.recv(bytes(ca.VersionResponse(version=13)) + bytes(res), addr)
-    next_command(b)
-    next_command(b)
+    next_command(b)  # this gets both
 
 
 def test_methods(circuit_pair):

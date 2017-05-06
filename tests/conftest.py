@@ -1,17 +1,26 @@
 import pytest
+import queue
 import caproto as ca
 
 
 def next_command(obj):
-    command = obj.command_queue.get_nowait()
-
-    if command is None:
+    try:
+        command = obj.command_queue.get_nowait()
+    except queue.Empty:
         return ca.NEED_DATA
 
     if isinstance(obj, ca.Broadcaster):
-        obj.process_command(obj.their_role, command, history=[])
+        addr, commands = command
+        if not commands:
+            return ca.NEED_DATA
+
+        history = []
+        for command in commands:
+            obj.process_command(obj.their_role, command, history=history)
     else:
         obj.process_command(obj.their_role, command)
+
+    return command
 
 
 @pytest.fixture(scope='function')
