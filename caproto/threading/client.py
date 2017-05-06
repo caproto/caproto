@@ -572,10 +572,10 @@ def ensure_connection(func):
 
 
 class PVContext(Context):
-    def __init__(self, broadcaster=None):
+    def __init__(self, broadcaster=None, *, log_level='ERROR'):
         if broadcaster is None:
             broadcaster = SharedBroadcaster()
-        super().__init__(broadcaster=broadcaster)
+        super().__init__(broadcaster=broadcaster, log_level=log_level)
 
         if not self.broadcaster.registered:
             self.register()
