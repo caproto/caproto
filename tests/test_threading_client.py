@@ -1,9 +1,10 @@
+import sys
 import socket
 import logging
 import time
 from multiprocessing import Process
 
-from caproto.threading.client import SocketThread, Context
+from caproto.threading.client import (SocketThread, Context, SharedBroadcaster)
 import caproto as ca
 import pytest
 
@@ -39,8 +40,9 @@ def socket_thread_fixture():
         def disconnect(self):
             self.disconnected = True
 
-        def next_command(self, bytes_recv, address):
-            self.payloads.append(bytes_recv)
+        def received(self, bytes_recv, address):
+            if len(bytes_recv):
+                self.payloads.append(bytes_recv)
 
     a, b = socket.socketpair()
 
@@ -51,9 +53,20 @@ def socket_thread_fixture():
     return a, b, d, st
 
 
+@pytest.fixture(scope='module')
+def shared_broadcaster(request):
+    broadcaster = SharedBroadcaster()
+
+    def cleanup():
+        broadcaster.disconnect()
+
+    request.addfinalizer(cleanup)
+    return broadcaster
+
+
 @pytest.fixture(scope='function')
-def cntx(request):
-    cntx = Context(log_level='DEBUG')
+def cntx(request, shared_broadcaster):
+    cntx = Context(broadcaster=shared_broadcaster, log_level='DEBUG')
     cntx.register()
 
     def cleanup():
@@ -123,23 +136,29 @@ def test_context_disconnect(cntx):
         chan.read()
         assert chan.connected
         assert chan.circuit.connected
-        assert cntx.registered
+        assert cntx.broadcaster.registered
         assert cntx.circuits
-        assert cntx.search_results
 
     chan = bootstrap()
     is_happy(chan, cntx)
 
-    st = cntx.sock_thread.thread
-    ct = chan.circuit.sock_thread.thread
+    st = chan.circuit.sock_thread.thread
+    ct = chan.circuit.command_thread
 
     cntx.disconnect()
+    print('joining sock thread', end='...')
+    sys.stdout.flush()
     st.join()
+    print('joined')
+
+    print('joining command thread', end='...')
+    sys.stdout.flush()
+    ct.join()
+    print('joined')
+
     assert not chan.connected
     assert not chan.circuit.connected
-    assert not cntx.registered
     assert not cntx.circuits
-    assert not cntx.search_results
     assert not ct.is_alive()
     assert not st.is_alive()
 
