@@ -1,7 +1,8 @@
-import caproto as ca
 import copy
 import functools
 import itertools
+import logging
+import queue
 import socket
 import threading
 import time
@@ -9,10 +10,15 @@ import weakref
 
 from collections import Iterable
 
+import caproto as ca
+
 CA_REPEATER_PORT = 5065
 CA_SERVER_PORT = 5064
 AUTOMONITOR_MAXLENGTH = 65536
 STALE_SEARCH_THRESHOLD = 10.0
+
+
+logger = logging.getLogger(__name__)
 
 
 class SocketThread:
@@ -42,7 +48,7 @@ class SocketThread:
                 break
 
             if len(bytes_recv):
-                target.next_command(bytes_recv, address)
+                target.received(bytes_recv, address)
                 # this is important to not keep a hard-ref to the target
                 target = None
             else:
@@ -50,18 +56,23 @@ class SocketThread:
                 return
 
 
+# class SharedBroadcaster:
+
 class Context:
     "Wraps a caproto.Broadcaster, a UDP socket, and cache of VirtualCircuits."
     __slots__ = ('broadcaster', 'udp_sock', 'circuits', 'log_level',
                  'unanswered_searches', 'search_results',
-                 'cntx_condition', 'sock_thread', '__weakref__')
+                 'has_broadcast_cond', 'sock_thread', 'broadcaster_command_thread',
+                 '__weakref__')
 
     def __init__(self, *, log_level='ERROR'):
         self.log_level = log_level
+
+        # TODO even one broadcaster per-context is too many
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
         self.broadcaster.log.setLevel(self.log_level)
 
-        self.cntx_condition = threading.Condition()
+        self.has_broadcast_cond = threading.Condition()
 
         self.circuits = {}  # map (address, priority) to VirtualCircuit
         self.unanswered_searches = {}  # map search id (cid) to name
@@ -70,6 +81,10 @@ class Context:
         self.udp_sock = None
         self.sock_thread = None
         self.__create_sock()
+
+        self.broadcaster_command_thread = threading.Thread(
+            target=self.broadcaster_command_loop, daemon=True)
+        self.broadcaster_command_thread.start()
 
     def __create_sock(self):
         # UDP socket broadcasting to CA servers
@@ -80,7 +95,7 @@ class Context:
         """
         Process a command and tranport it over the UDP socket.
         """
-        with self.cntx_condition:
+        with self.has_broadcast_cond:
             bytes_to_send = self.broadcaster.send(*commands)
             for host in ca.get_address_list():
                 self.udp_sock.sendto(bytes_to_send, (host, port))
@@ -90,22 +105,22 @@ class Context:
         if self.udp_sock is None:
             self.__create_sock()
 
-        with self.cntx_condition:
+        with self.has_broadcast_cond:
             command = self.broadcaster.register('127.0.0.1')
             self.send(ca.EPICS_CA2_PORT, command)
 
         while True:
-            with self.cntx_condition:
+            with self.has_broadcast_cond:
                 if self.registered:
                     break
-                if not self.cntx_condition.wait(2):
+                if not self.has_broadcast_cond.wait(2):
                     raise TimeoutError()
 
     def search(self, name):
         "Generate, process, and the transport a search request."
         if not self.registered:
             self.register()
-        with self.cntx_condition:
+        with self.has_broadcast_cond:
             if name in self.search_results:
                 address, timestamp = self.search_results[name]
                 if (time.time() - timestamp) < STALE_SEARCH_THRESHOLD:
@@ -120,10 +135,10 @@ class Context:
             self.send(ca.EPICS_CA1_PORT, ver_command, search_command)
         # Wait for the SearchResponse.
         while True:
-            with self.cntx_condition:
+            with self.has_broadcast_cond:
                 if search_command.cid not in self.unanswered_searches:
                     break
-                if not self.cntx_condition.wait(2):
+                if not self.has_broadcast_cond.wait(2):
                     raise TimeoutError('failed to find PV {}'.format(name))
 
         address, timestamp = self.search_results[name]
@@ -155,39 +170,45 @@ class Context:
         cachan = ca.ClientChannel(name, circuit.circuit, cid=cid)
         chan = circuit.channels[cid] = Channel(circuit, cachan)
 
-        with circuit.has_new_command:
+        with circuit.new_command_cond:
             if circuit.circuit.states[ca.SERVER] is ca.IDLE:
                 circuit.create_connection()
                 circuit.send(cachan.version(),
                              cachan.host_name(),
                              cachan.client_name())
         while True:
-            with circuit.has_new_command:
+            with circuit.new_command_cond:
                 if circuit.connected:
                     break
-                if not circuit.has_new_command.wait(2):
+                if not circuit.new_command_cond.wait(2):
                     raise TimeoutError()
         # do not need to lock here, take care of in send method
         circuit.send(cachan.create())
         while True:
-            with circuit.has_new_command:
+            with circuit.new_command_cond:
                 if chan.connected:
                     break
-                if not circuit.has_new_command.wait(2):
+                if not circuit.new_command_cond.wait(2):
                     raise TimeoutError()
         return chan
 
-    def next_command(self, bytes_recv, address):
+    def received(self, bytes_recv, address):
         "Receive and process and next command broadcasted over UDP."
-        while True:
-            with self.cntx_condition:
-                if bytes_recv is not None:
-                    self.broadcaster.recv(bytes_recv, address)
-                    bytes_recv = None
+        self.broadcaster.recv(bytes_recv, address)
 
-                command = self.broadcaster.next_command()
-                if command is ca.NEED_DATA:
-                    return
+    def broadcaster_command_loop(self):
+        queue = self.broadcaster.command_queue
+        role = self.broadcaster.their_role
+
+        while True:
+            commands = self.broadcaster.command_queue.get()
+            for command in commands:
+                try:
+                    self.broadcaster.process_command(role, command)
+                except Exception as ex:
+                    logger.error('Broadcaster command queue evaluation '
+                                 'failed: {!r}'.format(command), exc_info=ex)
+                    continue
 
                 if isinstance(command, ca.VersionResponse):
                     # Check that the server version is one we can talk to.
@@ -202,11 +223,15 @@ class Context:
                         # This is a redundant response, which the spec
                         # tell us we must ignore.
                         pass
-                self.cntx_condition.notify_all()
+
+            with self.has_broadcast_cond:
+                self.has_broadcast_cond.notify_all()
 
     def disconnect(self):
 
         th = []
+
+        # TODO not good how the broadcaster is tied up with this logic
 
         # if we _have_ a socket, kill it
         if self.udp_sock is not None:
@@ -249,7 +274,8 @@ class Context:
 
 class VirtualCircuit:
     __slots__ = ('circuit', 'channels', 'ioids', 'subscriptionids',
-                 'has_new_command', 'socket', 'sock_thread',
+                 'new_command_cond', 'socket', 'sock_thread',
+                 'command_thread',
                  '__weakref__')
 
     def __init__(self, circuit):
@@ -257,13 +283,16 @@ class VirtualCircuit:
         self.channels = {}  # map cid to Channel
         self.ioids = {}  # map ioid to Channel
         self.subscriptionids = {}  # map subscriptionid to Channel
-        self.has_new_command = threading.Condition()
+        self.new_command_cond = threading.Condition()
         self.socket = None
         self.sock_thread = None
+        self.command_thread = threading.Thread(target=self.command_thread_loop,
+                                               daemon=True)
+        self.command_thread.start()
 
     @property
     def connected(self):
-        with self.has_new_command:
+        with self.new_command_cond:
             return self.circuit.states[ca.CLIENT] is ca.CONNECTED
 
     def create_connection(self):
@@ -273,46 +302,50 @@ class VirtualCircuit:
         self.sock_thread = SocketThread(self.socket, self)
 
     def send(self, *commands):
-        with self.has_new_command:
+        with self.new_command_cond:
             # turn the crank on the caproto
             bytes_to_send = self.circuit.send(*commands)
             # send bytes over the wire
             self.socket.sendmsg(bytes_to_send)
 
-    def next_command(self, bytes_recv, address):
+    def received(self, bytes_recv, address):
         """Receive and process and next command from the virtual circuit.
 
         This will be run on the recv thread"""
+        self.circuit.recv(bytes_recv)
+
+    def command_thread_loop(self):
         while True:
-            with self.has_new_command:
-                if bytes_recv is not None:
-                    self.circuit.recv(bytes_recv)
-                    bytes_recv = None
+            command = self.circuit.command_queue.get()
+            try:
+                self.circuit.process_command(self.circuit.their_role, command)
+            except Exception as ex:
+                logger.error('Command queue evaluation failed: {!r}'
+                             ''.format(command), exc_info=ex)
+                continue
 
-                command = self.circuit.next_command()
-                if command is ca.NEED_DATA:
-                    break
+            if isinstance(command, ca.ReadNotifyResponse):
+                chan = self.ioids.pop(command.ioid)
+                chan.process_read_notify(command)
+            elif isinstance(command, ca.WriteNotifyResponse):
+                chan = self.ioids.pop(command.ioid)
+                chan.process_write_notify(command)
+            elif isinstance(command, ca.EventAddResponse):
+                chan = self.subscriptionids[command.subscriptionid]
+                chan.process_subscription(command)
+            elif isinstance(command, ca.EventCancelResponse):
+                self.subscriptionids.pop(command.subscriptionid)
 
-                if isinstance(command, ca.ReadNotifyResponse):
-                    chan = self.ioids.pop(command.ioid)
-                    chan.process_read_notify(command)
-                elif isinstance(command, ca.WriteNotifyResponse):
-                    chan = self.ioids.pop(command.ioid)
-                    chan.process_write_notify(command)
-                elif isinstance(command, ca.EventAddResponse):
-                    chan = self.subscriptionids[command.subscriptionid]
-                    chan.process_subscription(command)
-                elif isinstance(command, ca.EventCancelResponse):
-                    self.subscriptionids.pop(command.subscriptionid)
-                # notify anything waiting we may have a command for them
-                self.has_new_command.notify_all()
+            # notify anything waiting we may have a command for them
+            with self.new_command_cond:
+                self.new_command_cond.notify_all()
 
     def disconnect(self):
         for cid, ch in list(self.channels.items()):
             ch.disconnect()
             self.channels.pop(cid)
 
-        with self.has_new_command:
+        with self.new_command_cond:
             self.circuit.disconnect()
 
         if self.sock_thread is not None:
@@ -320,6 +353,12 @@ class VirtualCircuit:
             self.sock_thread.poison_ev.set()
             if th is not threading.current_thread():
                 th.join()
+
+        # TODO
+        # if self.command_thread is not None:
+        #     if self.command_thread is not threading.current_thread():
+        #        self.command_thread.join()
+
         self.channels.clear()
         self.ioids.clear()
         self.socket = None
@@ -347,7 +386,7 @@ class Channel:
 
     @property
     def connected(self):
-        with self.circuit.has_new_command:
+        with self.circuit.new_command_cond:
             return self.channel.states[ca.CLIENT] is ca.CONNECTED
 
     def register_user_callback(self, func):
@@ -406,7 +445,7 @@ class Channel:
 
     def disconnect(self):
         "Disconnect this Channel."
-        with self.circuit.has_new_command:
+        with self.circuit.new_command_cond:
             if self.connected:
                 try:
                     self.circuit.send(self.channel.disconnect())
@@ -416,10 +455,10 @@ class Channel:
             else:
                 return
         while True:
-            with self.circuit.has_new_command:
+            with self.circuit.new_command_cond:
                 if self.channel.states[ca.CLIENT] is ca.CLOSED:
                     break
-                if not self.circuit.has_new_command.wait(2):
+                if not self.circuit.new_command_cond.wait(2):
                     raise TimeoutError()
 
     def read(self, *args, **kwargs):
@@ -430,7 +469,7 @@ class Channel:
         """
         # need this lock because the socket thread could be trying to
         # update this channel due to an incoming message
-        with self.circuit.has_new_command:
+        with self.circuit.new_command_cond:
             command = self.channel.read(*args, **kwargs)
             # Stash the ioid to match the response to the request.
         ioid = command.ioid
@@ -438,10 +477,10 @@ class Channel:
         # do not need lock here, happens in send
         self.circuit.send(command)
         while True:
-            with self.circuit.has_new_command:
+            with self.circuit.new_command_cond:
                 if ioid not in self.circuit.ioids:
                     break
-                if not self.circuit.has_new_command.wait(2):
+                if not self.circuit.new_command_cond.wait(2):
                     raise TimeoutError()
         return self.last_reading
 
@@ -456,10 +495,10 @@ class Channel:
         # do not need to lock this, locking happens in circuit command
         self.circuit.send(command)
         while wait:
-            with self.circuit.has_new_command:
+            with self.circuit.new_command_cond:
                 if ioid not in self.circuit.ioids:
                     break
-                if not self.circuit.has_new_command.wait(60):
+                if not self.circuit.new_command_cond.wait(60):
                     raise TimeoutError()
         return self.last_reading
 
@@ -1236,3 +1275,50 @@ def cainfo(pvname, print_out=True):
             ca.write(thispv.info)
         else:
             return thispv.info
+
+
+def _test():
+    logger.setLevel('DEBUG')
+    logging.basicConfig()
+
+    ca.set_default_queue_class(queue.Queue)
+    pv1 = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
+    pv2 = "XF:31IDA-OP{Tbl-Ax:X2}Mtr.VAL"
+
+    # Some user function to call when subscriptions receive data.
+    called = []
+
+    def user_callback(command):
+        print("Subscription has received data.")
+        called.append(True)
+
+    ctx = Context(log_level='DEBUG')
+    ctx.register()
+    ctx.search(pv1)
+    ctx.search(pv2)
+    # Send out connection requests without waiting for responses...
+    chan1 = ctx.create_channel(pv1)
+    chan2 = ctx.create_channel(pv2)
+    # Set up a function to call when subscriptions are received.
+    chan1.register_user_callback(user_callback)
+
+    reading = chan1.read()
+    print('reading:', reading)
+    chan1.subscribe()
+    chan2.read()
+    chan1.unsubscribe(0)
+    chan1.write((5,))
+    reading = chan1.read()
+    assert reading.data == 5
+    print('reading:', reading)
+    chan1.write((6,))
+    reading = chan1.read()
+    assert reading.data == 6
+    print('reading:', reading)
+    chan2.disconnect()
+    chan1.disconnect()
+    assert called
+
+
+if __name__ == '__main__':
+    _test()
