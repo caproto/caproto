@@ -2,15 +2,15 @@ import itertools
 import logging
 import socket
 from collections import deque
-from ._utils import (CLIENT, SERVER, NEED_DATA, CaprotoValueError,
-                     LocalProtocolError,)
+
+from ._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
+from ._utils import (CLIENT, SERVER, CaprotoValueError, LocalProtocolError,
+                     get_default_queue_class)
 from ._state import get_exception
 from ._commands import (RepeaterConfirmResponse, RepeaterRegisterRequest,
-                        SearchRequest, SearchResponse,
-                        VersionRequest, VersionResponse,
-                        read_datagram,
+                        SearchRequest, SearchResponse, VersionRequest,
+                        VersionResponse, read_datagram,
                         )
-from ._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
 
 
 class Broadcaster:
@@ -27,7 +27,8 @@ class Broadcaster:
     protocol_version : integer
         Default is ``DEFAULT_PROTOCOL_VERSION``.
     """
-    def __init__(self, our_role, protocol_version=DEFAULT_PROTOCOL_VERSION):
+    def __init__(self, our_role, protocol_version=DEFAULT_PROTOCOL_VERSION,
+                 *, queue_class=None):
         if our_role not in (SERVER, CLIENT):
             raise CaprotoValueError("role must be caproto.SERVER or "
                                     "caproto.CLIENT")
@@ -39,7 +40,7 @@ class Broadcaster:
         self.protocol_version = protocol_version
         self.unanswered_searches = {}  # map search id (cid) to name
         self._datagram_inbox = deque()  # datagrams to be parsed into Commands
-        self._history = []  # commands parsed so far from current datagram
+        self.recv_history = []  # commands parsed so far from current datagram
         self._parsed_commands = deque()  # parsed Commands to be processed
         # Unlike VirtualCircuit and Channel, there is very little state to
         # track for the Broadcaster. We don't need a full state machine, just
@@ -48,6 +49,10 @@ class Broadcaster:
         self._search_id_counter = itertools.count(0)
         logger_name = "caproto.Broadcaster"
         self.log = logging.getLogger(logger_name)
+
+        if queue_class is None:
+            queue_class = get_default_queue_class()
+        self.command_queue = queue_class()
 
     def send(self, *commands):
         """
@@ -66,12 +71,12 @@ class Broadcaster:
             bytes to send over a socket
         """
         bytes_to_send = b''
-        history = []  # commands sent as part of this datagram
         self.log.debug("Serializing %d commands into one datagram",
                        len(commands))
+        history = []
         for i, command in enumerate(commands):
             self.log.debug("%d of %d %r", 1 + i, len(commands), command)
-            self.process_command(self.our_role, command, history)
+            self.process_command(self.our_role, command, history=history)
             bytes_to_send += bytes(command)
         return bytes_to_send
 
@@ -91,37 +96,12 @@ class Broadcaster:
         logging.debug("Received datagram from %r with %d bytes.",
                       address, len(byteslike))
         self._datagram_inbox.append((byteslike, address))
-
-    def next_command(self):
-        """
-        Parse the next Command out of our internal receive buffer, update our
-        internal state machine, and return it.
-
-        Returns a :class:`Command` object or a special constant,
-        :data:`NEED_DATA`.
-        """
-        if not self._parsed_commands:
-            if not self._datagram_inbox:
-                return NEED_DATA
-            self._history.clear()
+        while self._datagram_inbox:
             byteslike, address = self._datagram_inbox.popleft()
             commands = read_datagram(byteslike, address, self.their_role)
-            self.log.debug("Parsed %d commands from first datagram in queue.",
-                           len(commands))
-            for i, command in enumerate(commands):
-                self.log.debug("%d of %d: %r", i, len(commands), command)
-            self._parsed_commands.extend(commands)
-            if not commands:
-                # Handle rare edge case: empty datagram.
-                return NEED_DATA
-        self.log.debug(("Processing 1/%d commands left in datagram. "
-                        "%d more datagrams are cached."),
-                       len(self._parsed_commands), len(self._datagram_inbox))
-        command = self._parsed_commands.popleft()
-        self.process_command(self.their_role, command, self._history)
-        return command
+            self.command_queue.put(commands)
 
-    def process_command(self, role, command, history):
+    def process_command(self, role, command, *, history=None):
         """
         All comands go through here.
 
@@ -129,9 +109,14 @@ class Broadcaster:
         ----------
         role : ``CLIENT`` or ``SERVER``
         command : Message
-        history : list
+        history : list, optional
             This input will be mutated: command will be appended at the end.
+            If None, this defaults to the Broadcaster's recv_history.
         """
+
+        if history is None:
+            history = self.recv_history
+
         # All commands go through here.
         if isinstance(command, RepeaterRegisterRequest):
             pass

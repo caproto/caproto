@@ -15,10 +15,9 @@ from ._commands import (AccessRightsResponse, CreateChFailResponse,
                         CreateChanResponse, EventAddRequest, EventAddResponse,
                         EventCancelRequest, EventCancelResponse,
                         HostNameRequest, ReadNotifyRequest, ReadNotifyResponse,
-                        SearchRequest, SearchResponse, ServerDisconnResponse,
+                        SearchResponse, ServerDisconnResponse,
                         VersionRequest, VersionResponse, WriteNotifyRequest,
                         WriteNotifyResponse,
-                        read_datagram,
                         read_from_bytestream, _MessageHeaderSize,)
 from ._state import (ChannelState, CircuitState, get_exception)
 from ._utils import (CLIENT, SERVER, NEED_DATA, CaprotoKeyError,

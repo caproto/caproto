@@ -25,7 +25,6 @@ class VirtualCircuit:
         self.channels = {}  # map cid to Channel
         self.ioids = {}  # map ioid to Channel
         self.subscriptionids = {}  # map subscriptionid to Channel
-        self.event = None  # used for signaling consumers about new commands
         self.socket = None
         self.new_command_condition = curio.Condition()
         self._socket_lock = curio.Lock()
@@ -41,7 +40,7 @@ class VirtualCircuit:
                 break
             self.circuit.recv(bytes_received)
 
-    async def _command_queue_eval(self):
+    async def _command_queue_coro(self):
         queue = self.circuit.command_queue
         while True:
             command = await queue.get()
@@ -64,7 +63,6 @@ class VirtualCircuit:
                 self.subscriptionids.pop(command.subscriptionid)
             async with self.new_command_condition:
                 await self.new_command_condition.notify_all()
-        print('new command cond notified')
 
     async def send(self, *commands):
         """
@@ -75,18 +73,6 @@ class VirtualCircuit:
             if self.socket is None:
                 raise RuntimeError('socket connection failed')
             await self.socket.sendmsg(buffers_to_send)
-
-    async def recv(self):
-        """
-        Receive bytes over TCP and cache them in this circuit's buffer.
-        """
-        if self.socket is None:
-            raise RuntimeError("must await create_connection() first")
-        bytes_received = await self.socket.recv(32768)
-        if not len(bytes_received):
-            self.circuit.disconnect()
-            return
-        self.circuit.recv(bytes_received)
 
 
 class Channel:
@@ -183,6 +169,7 @@ class Context:
         self.log_level = log_level
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
         self.broadcaster.log.setLevel(self.log_level)
+        self.broadcaster_command_condition = curio.Condition()
 
         # UDP socket broadcasting to CA servers
         self.udp_sock = ca.bcast_socket(socket)
@@ -191,7 +178,6 @@ class Context:
         self.circuits = []  # list of VirtualCircuits
         self.unanswered_searches = {}  # map search id (cid) to name
         self.search_results = {}  # map name to address
-        self.event = None  # used for signaling consumers about new commands
 
     async def send(self, port, *commands):
         """
@@ -201,20 +187,59 @@ class Context:
         for host in ca.get_address_list():
             await self.udp_sock.sendto(bytes_to_send, (host, port))
 
-    async def recv(self):
-        """
-        Receive bytes over TCP and cache them in this circuit's buffer.
-        """
-        bytes_received, address = await self.udp_sock.recvfrom(4096)
-        self.broadcaster.recv(bytes_received, address)
-
     async def register(self):
         "Register this client with the CA Repeater."
+        await curio.spawn(self._broadcaster_queue_coro(), daemon=True)
+
+        while not self.registered:
+            async with self.broadcaster_command_condition:
+                await self.broadcaster_command_condition.wait()
+
+    async def _broadcaster_recv_coro(self):
+        # TODO: broadcaster info should be shared application-wide if possible,
+        # as they are not really tied to a context in any way?
+        # also: these coroutines could probably be merged intelligently
+        # somehow, but isn't the point rather that you can break it up into
+        # these readable co-friendly routines?
+
+        while True:
+            bytes_received, address = await self.udp_sock.recvfrom(4096)
+            self.broadcaster.recv(bytes_received, address)
+
+    async def _broadcaster_queue_coro(self):
+        await curio.spawn(self._broadcaster_recv_coro(), daemon=True)
         command = self.broadcaster.register('127.0.0.1')
         await self.send(ca.EPICS_CA2_PORT, command)
-        while not self.registered:
-            event = await self.get_event()
-            await event.wait()
+
+        queue = self.broadcaster.command_queue
+        role = self.broadcaster.their_role
+
+        while True:
+            commands = await queue.get()
+            for command in commands:
+                try:
+                    self.broadcaster.process_command(role, command)
+                except Exception as ex:
+                    logger.error('Broadcaster command queue evaluation '
+                                 'failed: {!r}'.format(command), exc_info=ex)
+                    continue
+
+                if isinstance(command, ca.RepeaterConfirmResponse):
+                    self.registered = True
+                if isinstance(command, ca.VersionResponse):
+                    # Check that the server version is one we can talk to.
+                    assert command.version > 11
+                if isinstance(command, ca.SearchResponse):
+                    name = self.unanswered_searches.pop(command.cid, None)
+                    if name is not None:
+                        self.search_results[name] = ca.extract_address(command)
+                    else:
+                        # This is a redundant response, which the spec tell us
+                        # we must ignore.
+                        pass
+
+                async with self.broadcaster_command_condition:
+                    await self.broadcaster_command_condition.notify_all()
 
     async def search(self, name):
         "Generate, process, and the transport a search request."
@@ -226,8 +251,7 @@ class Context:
         await self.send(ca.EPICS_CA1_PORT, ver_command, search_command)
         # Wait for the SearchResponse.
         while search_command.cid in self.unanswered_searches:
-            event = await self.get_event()
-            await event.wait()
+            await self._wait_new_broadcaster_command()
 
     def get_circuit(self, address, priority):
         """
@@ -257,7 +281,7 @@ class Context:
         if chan.circuit.states[ca.SERVER] is ca.IDLE:
             await circuit._socket_lock.acquire()  # wrong primitive
             await curio.spawn(circuit.create_connection(), daemon=True)
-            await curio.spawn(circuit._command_queue_eval(), daemon=True)
+            await curio.spawn(circuit._command_queue_coro(), daemon=True)
             await circuit.send(chan.version())
             await circuit.send(chan.host_name())
             await circuit.send(chan.client_name())
@@ -265,53 +289,10 @@ class Context:
         await circuit.send(chan.create())
         return Channel(circuit, chan)
 
-    async def get_event(self):
-        """
-        Get a curio.Event that we will 'set' when we process the next command.
-
-        This is a signaling mechanism for notifying all corountines awaiting an
-        incoming command that a new one (maybe the one they are looking for,
-        maybe not) has been processed.
-        """
-        if self.event is not None:
-            # Some other consumer has already asked for the next command.
-            # Don't ask again (yet); just wait for the first request to
-            # process.
-            return self.event
-        else:
-            # No other consumers have asked for the next command. Ask, return
-            # an Event that will be set when the command is processed, and
-            # stash the Event in case any other consumers ask.
-            event = curio.Event()
-            self.event = event
-            task = await curio.spawn(self.next_command())
-            return event
-
-    async def next_command(self):
-        "Receive and process and next command broadcasted over UDP."
-        while True:
-            command = self.broadcaster.next_command()
-            if isinstance(command, ca.NEED_DATA):
-                await self.recv()
-                continue
-            break
-        if isinstance(command, ca.RepeaterConfirmResponse):
-            self.registered = True
-        if isinstance(command, ca.VersionResponse):
-            # Check that the server version is one we can talk to.
-            assert command.version > 11
-        if isinstance(command, ca.SearchResponse):
-            name = self.unanswered_searches.pop(command.cid, None)
-            if name is not None:
-                self.search_results[name] = ca.extract_address(command)
-            else:
-                # This is a redundant response, which the spec tell us
-                # we must ignore.
-                pass
-        event = self.event
-        self.event = None
-        await event.set()
-        return command
+    async def _wait_new_broadcaster_command(self):
+        '''Wait for a new broadcaster command to come in'''
+        async with self.broadcaster_command_condition:
+            await self.broadcaster_command_condition.wait()
 
 
 async def main():
