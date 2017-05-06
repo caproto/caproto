@@ -1347,7 +1347,7 @@ def _test():
     called = []
 
     def user_callback(command):
-        print("Subscription has received data.")
+        print("Subscription has received data: {}".format(command))
         called.append(True)
 
     ctx = Context(broadcaster=shared_broadcaster, log_level='DEBUG')
