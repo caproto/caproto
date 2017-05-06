@@ -174,7 +174,7 @@ class SharedBroadcaster:
         role = self.broadcaster.their_role
 
         while True:
-            commands = self.broadcaster.command_queue.get()
+            addr, commands = self.broadcaster.command_queue.get()
             for command in commands:
                 try:
                     self.broadcaster.process_command(role, command)

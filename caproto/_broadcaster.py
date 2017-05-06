@@ -99,7 +99,7 @@ class Broadcaster:
         while self._datagram_inbox:
             byteslike, address = self._datagram_inbox.popleft()
             commands = read_datagram(byteslike, address, self.their_role)
-            self.command_queue.put(commands)
+            self.command_queue.put((address, commands))
 
     def process_command(self, role, command, *, history=None):
         """

@@ -216,7 +216,7 @@ class Context:
         role = self.broadcaster.their_role
 
         while True:
-            commands = await queue.get()
+            addr, commands = await queue.get()
             for command in commands:
                 try:
                     self.broadcaster.process_command(role, command)
