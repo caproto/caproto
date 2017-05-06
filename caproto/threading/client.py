@@ -89,8 +89,12 @@ class SharedBroadcaster:
         weakref.finalize(listener, self._listener_removed)
 
     def remove_listener(self, listener):
-        self.listeners.remove(listener)
-        self._listener_removed()
+        try:
+            self.listeners.remove(listener)
+        except KeyError:
+            pass
+        finally:
+            self._listener_removed()
 
     def _listener_removed(self):
         if not self.listeners:
@@ -558,10 +562,13 @@ def ensure_connection(func):
 
 
 class PVContext(Context):
-    def __init__(self):
-        shared_broadcaster = SharedBroadcaster()
-        super().__init__(broadcaster=shared_broadcaster)
-        self.register()
+    def __init__(self, broadcaster=None):
+        if broadcaster is None:
+            broadcaster = SharedBroadcaster()
+        super().__init__(broadcaster=broadcaster)
+
+        if not self.broadcaster.registered:
+            self.register()
 
     def get_pv(self, pvname, *args, **kwargs):
         # TODO add PV cache to this class
