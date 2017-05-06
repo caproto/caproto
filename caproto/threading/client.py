@@ -47,10 +47,10 @@ class SocketThread:
             if target is None:
                 break
 
-            # this is important to not keep a hard-ref to the target
             target.received(bytes_recv, address)
             if not len(bytes_recv):
                 target.disconnect()
+                # this is important to not keep a hard-ref to the target
                 target = None
                 return
 
