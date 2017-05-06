@@ -108,7 +108,8 @@ class SharedBroadcaster:
             self.udp_sock.close()
             th.append(self.sock_thread.thread)
 
-        self.search_results.clear()
+        with self._search_lock:
+            self.search_results.clear()
         self.udp_sock = None
 
     def send(self, port, *commands):
@@ -191,16 +192,17 @@ class SharedBroadcaster:
                         # Check that the server version is one we can talk to.
                         assert command.version > 11
                     if isinstance(command, ca.SearchResponse):
-                        name = self.unanswered_searches.get(command.cid, None)
-                        if name is not None:
-                            with self._search_lock:
+                        with self._search_lock:
+                            name = self.unanswered_searches.get(command.cid,
+                                                                None)
+                            if name is not None:
                                 self.search_results[name] = (
                                     ca.extract_address(command), time.time())
                                 self.unanswered_searches.pop(command.cid)
-                        else:
-                            # This is a redundant response, which the spec
-                            # tell us we must ignore.
-                            pass
+                            else:
+                                # This is a redundant response, which the spec
+                                # tell us we must ignore.
+                                pass
                 self.command_cond.notify_all()
 
     @property
