@@ -47,12 +47,11 @@ class SocketThread:
             if target is None:
                 break
 
-            if len(bytes_recv):
-                target.received(bytes_recv, address)
-                # this is important to not keep a hard-ref to the target
-                target = None
-            else:
+            # this is important to not keep a hard-ref to the target
+            target.received(bytes_recv, address)
+            if not len(bytes_recv):
                 target.disconnect()
+                target = None
                 return
 
 
@@ -352,6 +351,12 @@ class VirtualCircuit:
     def command_thread_loop(self):
         while True:
             command = self.circuit.command_queue.get()
+            if command is ca.DISCONNECTED:
+                print('disconnected!')
+                with self.new_command_cond:
+                    self.new_command_cond.notify_all()
+                break
+
             try:
                 self.circuit.process_command(self.circuit.their_role, command)
             except Exception as ex:

@@ -20,9 +20,9 @@ from ._commands import (AccessRightsResponse, CreateChFailResponse,
                         WriteNotifyResponse,
                         read_from_bytestream, _MessageHeaderSize,)
 from ._state import (ChannelState, CircuitState, get_exception)
-from ._utils import (CLIENT, SERVER, NEED_DATA, CaprotoKeyError,
-                     CaprotoValueError,
-                     CaprotoRuntimeError, get_default_queue_class,
+from ._utils import (CLIENT, SERVER, NEED_DATA, DISCONNECTED, CaprotoKeyError,
+                     CaprotoValueError, CaprotoRuntimeError,
+                     get_default_queue_class,
                      )
 from ._dbr import (SubscriptionType, )
 from ._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
@@ -128,8 +128,14 @@ class VirtualCircuit:
         *buffers :
             any number of bytes-like buffers
         """
+        total_received = sum(len(byteslike) for byteslike in buffers)
+        if total_received == 0:
+            self.log.debug('Zero-length recv; sending disconnect notification')
+            self.command_queue.put(DISCONNECTED)
+            return
+
+        self.log.debug("Received %d bytes.", total_received)
         for byteslike in buffers:
-            self.log.debug("Received %d bytes.", len(byteslike))
             self._data += byteslike
 
         while len(self._data) >= _MessageHeaderSize:
