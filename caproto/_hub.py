@@ -21,13 +21,13 @@ from ._commands import (AccessRightsResponse, CreateChFailResponse,
                         SearchRequest, SearchResponse, ServerDisconnResponse,
                         VersionRequest, VersionResponse, WriteNotifyRequest,
                         WriteNotifyResponse,
-
                         read_datagram, read_from_bytestream,
+                        _MessageHeaderSize,
                         )
 from ._state import (ChannelState, CircuitState, get_exception)
 from ._utils import (CLIENT, SERVER, NEED_DATA, CaprotoKeyError,
                      CaprotoValueError, LocalProtocolError,
-                     CaprotoRuntimeError,
+                     CaprotoRuntimeError, get_default_queue_class,
                      )
 from ._dbr import (SubscriptionType, )
 
@@ -55,7 +55,7 @@ class VirtualCircuit:
         May be used by the server to prioritize requests when under high
         load. Lowest priority is 0; highest is 99.
     """
-    def __init__(self, our_role, address, priority):
+    def __init__(self, our_role, address, priority, *, queue_class=None):
         self.our_role = our_role
         if our_role is CLIENT:
             self.their_role = SERVER
@@ -78,6 +78,9 @@ class VirtualCircuit:
             raise CaprotoRuntimeError("Client-side VirtualCircuit requires a "
                                       "non-None priority at initialization "
                                       "time.")
+        if queue_class is None:
+            queue_class = get_default_queue_class()
+        self.command_queue = queue_class()
 
     @property
     def host(self):
@@ -127,7 +130,9 @@ class VirtualCircuit:
         Add data received over TCP to our internal receive buffer.
 
         This does not actually do any processing on the data, just stores
-        it. To trigger processing, you have to call :meth:`next_command`.
+        it. Commands will be unpacked and added to the command queue as
+        necessary.  Higher levels must call :meth:`process_command` as
+        they interpret the commands to keep the hub state synchronized.
 
         Parameters
         ----------
@@ -138,24 +143,18 @@ class VirtualCircuit:
             self.log.debug("Received %d bytes.", len(byteslike))
             self._data += byteslike
 
-    def next_command(self):
-        """
-        Parse the next Command out of our internal receive buffer, update our
-        internal state machine, and return it.
-
-        Returns a :class:`Command` object or a special constant,
-        :data:`NEED_DATA`.
-        """
-        len_data = len(self._data)
-        self._data, command = read_from_bytestream(self._data, self.their_role)
-        if type(command) is not NEED_DATA:
-            self._process_command(self.our_role, command)
-            self.log.debug("Parsed %d/%d cached bytes into %r.",
-                           len(command), len_data, command)
-        else:
-            self.log.debug("%d bytes are cached. Need more bytes to parse "
-                           "next command.", len(self._data))
-        return command
+        while len(self._data) >= _MessageHeaderSize:
+            len_data = len(self._data)
+            self._data, command = read_from_bytestream(self._data,
+                                                       self.their_role)
+            if type(command) is not NEED_DATA:
+                self.log.debug("Parsed %d/%d cached bytes into %r.",
+                               len(command), len_data, command)
+                self.command_queue.put(command)
+            else:
+                self.log.debug("%d bytes are cached. Need more bytes to parse "
+                               "next command.", len_data)
+                break
 
     def _process_command(self, role, command):
         """
@@ -458,7 +457,7 @@ class Broadcaster:
         self._process_command(self.their_role, command, self._history)
         return command
 
-    def _process_command(self, role, command, history):
+    def process_command(self, role, command, history):
         """
         All comands go through here.
 
