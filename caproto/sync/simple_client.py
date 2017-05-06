@@ -1,5 +1,6 @@
 import caproto as ca
 import time
+import queue
 import socket
 
 
@@ -27,11 +28,32 @@ def recv(circuit):
     circuit.recv(bytes_received)
     commands = []
     while True:
-        command = circuit.next_command()
-        if type(command) is ca.NEED_DATA:
+        try:
+            for command in next_commands(circuit):
+                commands.append(command)
+        except queue.Empty:
             break
-        commands.append(command)
+
     return commands
+
+
+def next_commands(obj):
+    command = obj.command_queue.get_nowait()
+    if command is ca.DISCONNECTED:
+        return
+
+    if isinstance(obj, ca.Broadcaster):
+        addr, commands = command
+        if not commands:
+            return ca.NEED_DATA
+
+        history = []
+        for command in commands:
+            obj.process_command(obj.their_role, command, history=history)
+            yield command
+    else:
+        obj.process_command(obj.their_role, command)
+        yield command
 
 
 def main(*, skip_monitor_section=False):
@@ -45,7 +67,7 @@ def main(*, skip_monitor_section=False):
     # Receive response
     data, address = udp_sock.recvfrom(1024)
     b.recv(data, address)
-    b.next_command()
+    commands = tuple(next_commands(b))
 
     # Search for pv1.
     # CA requires us to send a VersionRequest and a SearchRequest bundled into
@@ -58,11 +80,10 @@ def main(*, skip_monitor_section=False):
     # Receive a VersionResponse and SearchResponse.
     bytes_received, address = udp_sock.recvfrom(1024)
     b.recv(bytes_received, address)
-    command = b.next_command()
-    assert type(command) is ca.VersionResponse
-    command = b.next_command()
-    assert type(command) is ca.SearchResponse
-    address = ca.extract_address(command)
+    ver_res, search_res = tuple(next_commands(b))
+    assert type(ver_res) is ca.VersionResponse
+    assert type(search_res) is ca.SearchResponse
+    address = ca.extract_address(search_res)
 
     circuit = ca.VirtualCircuit(our_role=ca.CLIENT,
                                 address=address,
