@@ -37,7 +37,13 @@ class ProxyDatagramProtocol(asyncio.DatagramProtocol):
     def __init__(self):
         self.host = socket.gethostbyname(socket.gethostname())
         self.remotes = {}
-        self.broadcaster = caproto.Broadcaster(our_role=caproto.SERVER)
+
+        class CallbackQueue:
+            def put(_, info):
+                self.commands_received(*info)
+
+        self.broadcaster = caproto.Broadcaster(our_role=caproto.SERVER,
+                                               queue_class=CallbackQueue)
         super().__init__()
 
     def connection_made(self, transport):
@@ -45,10 +51,15 @@ class ProxyDatagramProtocol(asyncio.DatagramProtocol):
 
     def datagram_received(self, data, addr):
         self.broadcaster.recv(data, addr)
-        while True:
-            command = self.broadcaster.next_command()
-            if command is caproto.NEED_DATA:
-                break
+
+    def commands_received(self, addr, commands):
+        if not commands:
+            return
+
+        # TODO thoughts on this? far from ideal
+        data = b''.join(bytes(command) for command in commands)
+
+        for command in commands:
             if isinstance(command, caproto.RepeaterRegisterRequest):
                 if addr in self.remotes:
                     return
