@@ -238,9 +238,12 @@ The VirtualCircuit object
 
         a unique identifer for this instance: :data:`((host, port), priority)`
 
+    .. attribute:: command_queue
+
+        The queue from which higher levels feed Commands from
+
     .. automethod:: send
     .. automethod:: recv
-    .. automethod:: next_command
     .. automethod:: disconnect
     .. automethod:: new_channel_id
     .. automethod:: new_subscriptionid
@@ -259,9 +262,13 @@ The Broadcaster object
 
         Python logger instance
 
+    .. attribute:: command_queue
+
+        The queue from which higher levels feed Commands from. Entries are in
+        the format (sender_address, iterable_of_commands)
+
     .. automethod:: send
     .. automethod:: recv
-    .. automethod:: next_command
     .. automethod:: new_search_id
     .. automethod:: search
     .. automethod:: register

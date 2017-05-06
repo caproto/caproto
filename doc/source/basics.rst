@@ -136,29 +136,30 @@ broadcaster.
     bytes_received, address = udp_sock.recvfrom(1024)
     b.recv(bytes_received, address)
 
-The bytes have been cached but not yet parsed. The :class:`Broadcaster` can
-convert the bytes into *Commands* one at time.
+The bytes have been cached and parsed. The :class:`Broadcaster` puts the
+*Commands* on its `command_queue`, allowing the user to feed from that pipe as
+desired.
 
 .. ipython:: python
 
-    b.next_command()
+    addr, commands = b.command_queue.get()
 
-Think of this as a mutating operation, like using :func:`next` on an iterator.
-When there aren't enough bytes cached to interpret another complete Command,
-:meth:`Broadcaster.next_command` returns the special constant
-:class:`NEED_DATA`.
+As it's necessary for higher levels to keep in synchronization with the state
+of the :class:`Broadcaster`, the user must tell it when to process the commands:
 
 .. ipython:: python
+    history = []
+    for command in commands:
+        b.process_command(b.their_role, command, history=history)
+        # do something with the command on our end
 
-    b.next_command()
-
-When we call :meth:`Broadcaster.send` or :meth:`Broadcaster.next_command`,
-two things happen. The broadcaster translates between low-level bytes and a
-high-level *Command*. The broadcaster also updates its internal state machine
-encoding the rules of the protocol. It tracks the state of both the client and
-server (it can serve as either). If, as the client, you send an illegal
-command, it will raise :class:`LocalProtocolError`. If, as the client, you
-receive bytes from the server that constitute an illegal command, it will raise
+When we call :meth:`Broadcaster.send`, two things happen. The broadcaster
+translates between low-level bytes and a high-level *Command*. The broadcaster
+also updates its internal state machine encoding the rules of the protocol. It
+tracks the state of both the client and server (it can serve as either). If, as
+the client, you send an illegal command, it will raise
+:class:`LocalProtocolError`. If, as the client, you receive bytes from the
+server that constitute an illegal command, it will raise
 :class:`RemoteProtocolError`.
 
 Searching for a Channel
@@ -196,9 +197,7 @@ Our answer will arrive in a single datagram with multiple commands in it.
 
     bytes_received, address = udp_sock.recvfrom(1024)
     b.recv(bytes_received, address)
-    b.next_command()
-    b.next_command()
-    address
+    addr, (ver_response, search_response) = b.command_queue.get()
 
 Now we have the address of a server that has the channel we're interested in.
 Next, we'll set aside the broadcaster and initiate TCP communication with this
@@ -238,6 +237,7 @@ We'll use these two convenience functions for what follows.
         circuit.recv(bytes_received)  # Cache bytes.
         commands = []
         while True:
+            # TODO
             command = circuit.next_command()  # Parsing happens here.
             if type(command) is caproto.NEED_DATA:
                 break  # Not enough bytes to parse any more commands.
@@ -255,6 +255,7 @@ We'll use these two convenience functions for what follows.
         circuit.recv(bytes_received)
         commands = []
         while True:
+            # TODO
             command = circuit.next_command()
             if type(command) is caproto.NEED_DATA:
                 break
