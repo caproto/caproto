@@ -94,7 +94,9 @@ import time
 import unittest
 import numpy
 from contextlib import contextmanager
-from caproto.threading.client import PV, caput, caget, Context
+from caproto.threading.client import (PV, caput, caget, Context,
+                                      SharedBroadcaster)
+from caproto.threading import client as thread_client
 import logging
 from multiprocessing import Process
 
@@ -131,7 +133,11 @@ def setup_module(module):
 
     print('Waiting for the repeater to start up...')
     time.sleep(2)
-    PV._default_context = Context(log_level='DEBUG')
+
+    shared_broadcaster = SharedBroadcaster()
+    PV._default_context = Context(broadcaster=shared_broadcaster,
+                                  log_level='DEBUG')
+    thread_client._dflt_context = thread_client.PVContext(shared_broadcaster)
     PV._default_context.register()
 
 
