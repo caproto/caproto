@@ -198,6 +198,7 @@ def get_default_queue_class():
 
     Defaults to queue.Queue.
     '''
+    # dan will hate me for this
     return _default_queue_class
 
 

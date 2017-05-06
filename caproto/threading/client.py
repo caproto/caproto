@@ -68,7 +68,8 @@ class SharedBroadcaster:
 
         self.listeners = weakref.WeakSet()
 
-        self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
+        self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT,
+                                          queue_class=queue.Queue)
         self.broadcaster.log.setLevel(self.log_level)
 
         self.command_cond = threading.Condition()
@@ -235,7 +236,9 @@ class Context:
         if circuit is None or not circuit.connected:
             circuit = VirtualCircuit(ca.VirtualCircuit(our_role=ca.CLIENT,
                                                        address=address,
-                                                       priority=priority))
+                                                       priority=priority,
+                                                       queue_class=queue.Queue,
+                                                       ))
             circuit.circuit.log.setLevel(self.log_level)
             self.circuits[(address, priority)] = circuit
         return circuit

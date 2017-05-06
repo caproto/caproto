@@ -167,7 +167,8 @@ class Context:
     "Wraps a caproto.Broadcaster, a UDP socket, and cache of VirtualCircuits."
     def __init__(self, *, log_level='ERROR'):
         self.log_level = log_level
-        self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
+        self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT,
+                                          queue_class=curio.UniversalQueue)
         self.broadcaster.log.setLevel(self.log_level)
         self.broadcaster_command_condition = curio.Condition()
 
@@ -263,9 +264,11 @@ class Context:
             if (circuit.circuit.address == address and
                     circuit.circuit.priority == priority):
                 return circuit
-        circuit = VirtualCircuit(ca.VirtualCircuit(our_role=ca.CLIENT,
-                                                   address=address,
-                                                   priority=priority))
+
+        ca_circuit = ca.VirtualCircuit(our_role=ca.CLIENT, address=address,
+                                       priority=priority,
+                                       queue_class=curio.UniversalQueue)
+        circuit = VirtualCircuit(ca_circuit)
         circuit.circuit.log.setLevel(self.log_level)
         self.circuits.append(circuit)
         return circuit
@@ -300,7 +303,7 @@ async def main():
     logging.basicConfig()
 
     # this universalqueue is evil and genius
-    ca.set_default_queue_class(curio.UniversalQueue)
+    # ca.set_default_queue_class(curio.UniversalQueue)
 
     # Connect to two motorsim PVs. Test reading, writing, and subscribing.
     pv1 = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
