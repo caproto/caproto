@@ -370,6 +370,9 @@ class VirtualCircuit:
 
                 if command is ca.DISCONNECTED:
                     print('disconnected!')
+                    # if we are here something else has triggered the
+                    # disconnect just kill this loop and let other
+                    # parts of the code worry about cleanup
                     self.new_command_cond.notify_all()
                     break
 
@@ -407,16 +410,13 @@ class VirtualCircuit:
             th = self.sock_thread.thread
             self.sock_thread.poison_ev.set()
             threads.append(th)
+        if self.command_thread is not None:
+            threads.append(self.command_thread)
         if wait:
             cur_thread = threading.current_thread()
             for th in threads:
                 if th is not cur_thread:
                     th.join()
-
-        # TODO
-        # if self.command_thread is not None:
-        #     if self.command_thread is not threading.current_thread():
-        #        self.command_thread.join()
 
         self.channels.clear()
         self.ioids.clear()
