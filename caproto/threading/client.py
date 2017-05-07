@@ -215,7 +215,7 @@ class SharedBroadcaster:
 
     def __del__(self):
         try:
-            self.discard()
+            self.disconnect()
         except AttributeError:
             pass
 
