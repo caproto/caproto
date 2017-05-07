@@ -405,7 +405,7 @@ If we are done with the circuit, close the socket too.
 
     sock.close()
 
-Simplify Bookkeepinig with Channels
+Simplify Bookkeeping with Channels
 ===================================
 
 In the example above, we handled a :class:`VirtualCircuit` and several
