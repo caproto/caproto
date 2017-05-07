@@ -62,7 +62,7 @@ def main(*, skip_monitor_section=False):
 
     # Register with the repeater.
     bytes_to_send = b.send(ca.RepeaterRegisterRequest('0.0.0.0'))
-    udp_sock.sendto(bytes_to_send, ('', CA_REPEATER_PORT))
+    udp_sock.sendto(bytes_to_send, ('127.0.0.1', CA_REPEATER_PORT))
 
     # Receive response
     data, address = udp_sock.recvfrom(1024)
