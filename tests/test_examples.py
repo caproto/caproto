@@ -136,24 +136,8 @@ def test_thread_pv(threading_broadcaster):
 
 def test_curio_server():
     import caproto.curio.client as client
+    from caproto.curio.server import _test as example_server
     kernel = curio.Kernel()
-
-    async def run_server():
-        pvdb = {'pi': ca.ChannelDouble(value=3.14,
-                                       lower_disp_limit=3.13,
-                                       upper_disp_limit=3.15,
-                                       lower_alarm_limit=3.12,
-                                       upper_alarm_limit=3.16,
-                                       lower_warning_limit=3.11,
-                                       upper_warning_limit=3.17,
-                                       lower_ctrl_limit=3.10,
-                                       upper_ctrl_limit=3.18,
-                                       precision=5,
-                                       units='doodles')}
-        port = find_next_tcp_port(host=SERVER_HOST)
-        print('Server will be on', (SERVER_HOST, port))
-        ctx = server.Context(SERVER_HOST, port, pvdb, log_level='DEBUG')
-        await ctx.run()
 
     async def run_client():
         # Some user function to call when subscriptions receive data.
@@ -189,7 +173,7 @@ def test_curio_server():
     async def task():
         # os.environ['EPICS_CA_ADDR_LIST'] = '255.255.255.255'
         try:
-            server_task = await curio.spawn(run_server())
+            server_task = await curio.spawn(example_server())
             await curio.sleep(1)  # Give server some time to start up.
             await run_client()
             print('client is done')

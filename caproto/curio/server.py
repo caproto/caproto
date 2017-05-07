@@ -243,66 +243,50 @@ class Context:
             await udp_queue_loop.cancel()
 
 
-def _get_my_ip():
-    try:
-        import netifaces
-    except ImportError:
-        return '127.0.0.1'
+async def _test(pvdb=None):
+    logger.setLevel('DEBUG')
+    if pvdb is None:
+        pvdb = {'pi': ChannelDouble(value=3.14,
+                                    lower_disp_limit=3.13,
+                                    upper_disp_limit=3.15,
+                                    lower_alarm_limit=3.12,
+                                    upper_alarm_limit=3.16,
+                                    lower_warning_limit=3.11,
+                                    upper_warning_limit=3.17,
+                                    lower_ctrl_limit=3.10,
+                                    upper_ctrl_limit=3.18,
+                                    precision=5,
+                                    units='doodles',
+                                    ),
+                'enum': ChannelEnum(value='b',
+                                    strs=['a', 'b', 'c', 'd'],
+                                    ),
+                'int': ChannelInteger(value=0,
+                                      units='doodles',
+                                      ),
+                'char': ca.ChannelChar(value=b'3',
+                                       units='poodles',
+                                       lower_disp_limit=33,
+                                       upper_disp_limit=35,
+                                       lower_alarm_limit=32,
+                                       upper_alarm_limit=36,
+                                       lower_warning_limit=31,
+                                       upper_warning_limit=37,
+                                       lower_ctrl_limit=30,
+                                       upper_ctrl_limit=38,
+                                       ),
+                'str': ca.ChannelString(value='hello',
+                                        string_encoding='latin-1'),
+                'stra': ca.ChannelString(value=['hello', 'how is it', 'going'],
+                                         string_encoding='latin-1'),
+                }
+        pvdb['pi'].alarm.alarm_string = 'delicious'
 
-    interfaces = [netifaces.ifaddresses(interface)
-                  for interface in netifaces.interfaces()
-                  ]
-    ipv4s = [af_inet_info['addr']
-             for interface in interfaces
-             if netifaces.AF_INET in interface
-             for af_inet_info in interface[netifaces.AF_INET]
-             ]
-
-    if not ipv4s:
-        return '127.0.0.1'
-    return ipv4s[0]
+    ctx = Context('0.0.0.0', find_next_tcp_port(), pvdb)
+    logger.info('Server starting up on %s:%d', ctx.host, ctx.port)
+    return await ctx.run()
 
 
 if __name__ == '__main__':
-    logger.setLevel('DEBUG')
     logging.basicConfig()
-
-    pvdb = {'pi': ChannelDouble(value=3.14,
-                                lower_disp_limit=3.13,
-                                upper_disp_limit=3.15,
-                                lower_alarm_limit=3.12,
-                                upper_alarm_limit=3.16,
-                                lower_warning_limit=3.11,
-                                upper_warning_limit=3.17,
-                                lower_ctrl_limit=3.10,
-                                upper_ctrl_limit=3.18,
-                                precision=5,
-                                units='doodles',
-                                ),
-            'enum': ChannelEnum(value='b',
-                                strs=['a', 'b', 'c', 'd'],
-                                ),
-            'int': ChannelInteger(value=0,
-                                  units='doodles',
-                                  ),
-            'char': ca.ChannelChar(value=b'3',
-                                   units='poodles',
-                                   lower_disp_limit=33,
-                                   upper_disp_limit=35,
-                                   lower_alarm_limit=32,
-                                   upper_alarm_limit=36,
-                                   lower_warning_limit=31,
-                                   upper_warning_limit=37,
-                                   lower_ctrl_limit=30,
-                                   upper_ctrl_limit=38,
-                                   ),
-            'str': ca.ChannelString(value='hello',
-                                    string_encoding='latin-1'),
-            'stra': ca.ChannelString(value=['hello', 'how is it', 'going'],
-                                     string_encoding='latin-1'),
-            }
-
-    pvdb['pi'].alarm.alarm_string = 'delicious'
-    ctx = Context('0.0.0.0', find_next_tcp_port(), pvdb)
-    logger.info('Server starting up on %s:%d', ctx.host, ctx.port)
-    curio.run(ctx.run())
+    curio.run(_test())
