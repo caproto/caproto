@@ -443,13 +443,7 @@ class Message(metaclass=_MetaDirectionalMessage):
         parameters = (signature.parameters if type(self) is not Message
                       else ['header'])
 
-        d = []
-        for arg in parameters:
-            try:
-                d.append((arg, repr(getattr(self, arg))))
-            except Exception as ex:
-                d.append((arg, '(repr failure {})'.format(ex)))
-
+        d = [(arg, repr(getattr(self, arg))) for arg in parameters]
         formatted_args = ", ".join(["{!s}={}".format(k, v)
                                     for k, v in d])
         return "{}({})".format(type(self).__name__, formatted_args)
