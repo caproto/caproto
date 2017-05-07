@@ -95,8 +95,7 @@ class SharedBroadcaster:
 
     def _listener_removed(self):
         if not self.listeners:
-            pass
-            # self.disconnect()
+            self.disconnect()
 
     def disconnect(self, *, wait=True):
         th = []
@@ -109,6 +108,7 @@ class SharedBroadcaster:
         with self._search_lock:
             self.search_results.clear()
         self.udp_sock = None
+        self.broadcaster.disconnect()
 
         if wait:
             cur_thread = threading.current_thread()
@@ -213,9 +213,15 @@ class SharedBroadcaster:
     def registered(self):
         return self.broadcaster.registered
 
+    def __del__(self):
+        try:
+            self.discard()
+        except AttributeError:
+            pass
+
 
 class Context:
-    "Wraps a caproto.Broadcaster, a UDP socket, and cache of VirtualCircuits."
+    "Wraps a Broadcaster, and cache of VirtualCircuits."
     __slots__ = ('broadcaster', 'circuits', 'log_level', '__weakref__')
 
     def __init__(self, broadcaster, *, log_level='ERROR'):
