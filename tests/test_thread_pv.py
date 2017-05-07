@@ -123,16 +123,8 @@ def get_broadcast_addr_list():
 
 
 def setup_module(module):
-    global _repeater_process
-    from caproto.asyncio.repeater import main
-    logging.getLogger('caproto').setLevel(logging.DEBUG)
-    logging.basicConfig()
-
-    _repeater_process = Process(target=main)
-    _repeater_process.start()
-
-    print('Waiting for the repeater to start up...')
-    time.sleep(2)
+    from conftest import start_repeater
+    start_repeater()
 
     shared_broadcaster = SharedBroadcaster()
     PV._default_context = Context(broadcaster=shared_broadcaster,
@@ -142,10 +134,8 @@ def setup_module(module):
 
 
 def teardown_module(module):
-    global _repeater_process
-    print('teardown_module: killing repeater process')
-    _repeater_process.terminate()
-    _repeater_process = None
+    from conftest import stop_repeater
+    stop_repeater()
     PV._default_context.disconnect()
     PV._default_context = None
 

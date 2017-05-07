@@ -112,20 +112,21 @@ async def start_datagram_proxy(bind, port):
 def main():
     loop = asyncio.get_event_loop()
     addr = ('0.0.0.0', os.environ.get('EPICS_CA_REPEATER_PORT', 5065))
-    print("Starting datagram proxy on {}...".format(addr))
+    print("[repeater] Starting datagram proxy on {}...".format(addr))
     coro = start_datagram_proxy(*addr)
+
     try:
         transport, _ = loop.run_until_complete(coro)
     except RepeaterAlreadyRunning as ex:
         print('[repeater] Another repeater is already running; exiting')
         return
 
-    print("Datagram proxy is running...")
+    print("[repeater] Datagram proxy is running...")
     try:
         loop.run_forever()
     except KeyboardInterrupt:
         pass
-    print("Closing transport...")
+    print("[repeater] Closing transport...")
     transport.close()
     loop.close()
 

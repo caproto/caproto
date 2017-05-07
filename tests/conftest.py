@@ -1,6 +1,43 @@
+import os
+import sys
 import pytest
 import queue
+import subprocess
+import time
+
 import caproto as ca
+import caproto.asyncio.repeater
+
+
+_repeater_process = None
+
+
+def start_repeater():
+    global _repeater_process
+    if _repeater_process is not None:
+        return
+
+    print('Spawning repeater process')
+    full_repeater_path = os.path.abspath(ca.asyncio.repeater.__file__)
+    _repeater_process = subprocess.Popen([sys.executable, full_repeater_path],
+                                         env=os.environ)
+    print('Started')
+
+    print('Waiting for the repeater to start up...')
+    time.sleep(2)
+
+
+def stop_repeater():
+    global _repeater_process
+    if _repeater_process is None:
+        return
+
+    print('Killing repeater process')
+    _repeater_process.terminate()
+    print('Waiting')
+    _repeater_process.wait()
+    print('OK')
+    _repeater_process = None
 
 
 def next_command(obj):
