@@ -17,12 +17,17 @@ from curio import socket
 logger = logging.getLogger(__name__)
 
 
+class ChannelReadError(Exception):
+    ...
+
+
 class VirtualCircuit:
     "Wraps a caproto.VirtualCircuit and adds transport."
     def __init__(self, circuit):
         self.circuit = circuit  # a caproto.VirtualCircuit
         self.channels = {}  # map cid to Channel
         self.ioids = {}  # map ioid to Channel
+        self.ioid_data = {}  # map ioid to server response
         self.subscriptionids = {}  # map subscriptionid to Channel
         self.socket = None
         self.new_command_condition = curio.Condition()
@@ -50,16 +55,25 @@ class VirtualCircuit:
                              ''.format(command), exc_info=ex)
                 continue
 
-            if isinstance(command, ca.ReadNotifyResponse):
-                chan = self.ioids.pop(command.ioid)
-                chan.last_reading = command
-            if isinstance(command, ca.WriteNotifyResponse):
-                chan = self.ioids.pop(command.ioid)
+            if isinstance(command, (ca.ReadNotifyResponse,
+                                    ca.WriteNotifyResponse)):
+                user_event = self.ioids.pop(command.ioid)
+                self.ioid_data[command.ioid] = command
+                await user_event.set()
             elif isinstance(command, ca.EventAddResponse):
-                chan = self.subscriptionids[command.subscriptionid]
-                chan.process_subscription(command)
+                user_queue = self.subscriptionids[command.subscriptionid]
+                await user_queue.put(command)
             elif isinstance(command, ca.EventCancelResponse):
                 self.subscriptionids.pop(command.subscriptionid)
+            elif isinstance(command, ca.ErrorResponse):
+                original_req = command.original_request
+                cmd_class = ca.get_command_class(ca.CLIENT, original_req)
+                if cmd_class in (ca.ReadNotifyRequest, ca.WriteNotifyRequest):
+                    ioid = original_req.parameter2
+                    user_event = self.ioids.pop(ioid)
+                    self.ioid_data[ioid] = command
+                    await user_event.set()
+
             async with self.new_command_condition:
                 await self.new_command_condition.notify_all()
 
@@ -124,37 +138,55 @@ class Channel:
         command = self.channel.read(*args, **kwargs)
         # Stash the ioid to match the response to the request.
         ioid = command.ioid
-        self.circuit.ioids[ioid] = self
+        # TODO this could be implemented as a concurrent.Future and use
+        #      curio.traps._future_wait. A Future is really what we want here,
+        #      but it doesn't seem like curio provides such a primitive for us
+        ioid = command.ioid
+        event = curio.Event()
+        self.circuit.ioids[ioid] = event
         await self.circuit.send(command)
-        while ioid in self.circuit.ioids:
-            await self.wait_on_new_command()
-        return self.last_reading
+        await event.wait()
+
+        reading = self.circuit.ioid_data.pop(ioid)
+        if isinstance(reading, ca.ReadNotifyResponse):
+            self.last_reading = reading
+            return self.last_reading
+        else:
+            raise ChannelReadError(str(reading))
 
     async def write(self, *args, **kwargs):
         "Write a new value and await confirmation from the server."
         command = self.channel.write(*args, **kwargs)
         # Stash the ioid to match the response to the request.
         ioid = command.ioid
-        self.circuit.ioids[ioid] = self
+        event = curio.Event()
+        self.circuit.ioids[ioid] = event
         await self.circuit.send(command)
-        while ioid in self.circuit.ioids:
-            await self.wait_on_new_command()
-        return self.last_reading
+        await event.wait()
+        return self.circuit.ioid_data.pop(ioid)
 
     async def subscribe(self, *args, **kwargs):
         "Start a new subscription and spawn an async task to receive readings."
         command = self.channel.subscribe(*args, **kwargs)
         # Stash the subscriptionid to match the response to the request.
-        self.circuit.subscriptionids[command.subscriptionid] = self
+        queue = curio.Queue()
+        self.circuit.subscriptionids[command.subscriptionid] = queue
         await self.circuit.send(command)
-        self.monitoring_tasks[command.subscriptionid] = None
+
+        async def _queue_loop():
+            command = await queue.get()
+            self.process_subscription(command)
+
+        task = await curio.spawn(_queue_loop, daemon=True)
+        self.monitoring_tasks[command.subscriptionid] = task
 
     async def unsubscribe(self, subscriptionid, *args, **kwargs):
         "Cancel a subscription and await confirmation from the server."
         await self.circuit.send(self.channel.unsubscribe(subscriptionid))
         while subscriptionid in self.circuit.subscriptionids:
             await self.wait_on_new_command()
-        del self.monitoring_tasks[subscriptionid]
+        task = self.monitoring_tasks.pop(subscriptionid)
+        await task.cancel()
 
     async def wait_on_new_command(self):
         '''Wait for a new command to come in'''
