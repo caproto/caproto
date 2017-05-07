@@ -107,6 +107,26 @@ def test_socket_client_close(socket_thread_fixture):
     assert not st.thread.is_alive()
 
 
+def test_socket_thread_obj_die():
+
+    class _DummyTargetObj:
+        def disconnect(self):
+            ...
+
+        def received(self, bytes_recv, address):
+            ...
+
+    # can not use the fixture here, it seems to keep a ref to
+    # the object
+    a, b = socket.socketpair()
+    # do not even keep a local, pytest seems to grab it
+    st = SocketThread(a, _DummyTargetObj())
+    b.send(b'abc')
+    st.thread.join()
+
+    assert not st.thread.is_alive()
+
+
 def test_channel_kill_client_socket(cntx):
     str_pv = 'Py:ao1.DESC'
     cntx.search(str_pv)
