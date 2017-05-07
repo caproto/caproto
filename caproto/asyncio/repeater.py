@@ -110,8 +110,6 @@ async def start_datagram_proxy(bind, port):
 
 
 def main():
-    import logging
-    logging.getLogger('caproto').setLevel(logging.INFO)
     loop = asyncio.get_event_loop()
     addr = ('0.0.0.0', os.environ.get('EPICS_CA_REPEATER_PORT', 5065))
     print("Starting datagram proxy on {}...".format(addr))
@@ -131,5 +129,8 @@ def main():
     transport.close()
     loop.close()
 
+
 if __name__ == '__main__':
+    import logging
+    logging.getLogger('caproto').setLevel('INFO')
     main()

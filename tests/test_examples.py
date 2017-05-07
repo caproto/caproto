@@ -1,6 +1,3 @@
-# Helper classes to encapsulate values and metadata for a channel and pack them
-# into various DBR_TYPES with minimal copying.
-
 import os
 import datetime
 import logging
