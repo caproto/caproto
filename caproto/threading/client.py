@@ -76,8 +76,6 @@ class SharedBroadcaster:
                                                daemon=True)
         self.command_thread.start()
 
-        self.__create_sock()
-
     def __create_sock(self):
         # UDP socket broadcasting to CA servers
         self.udp_sock = ca.bcast_socket()
