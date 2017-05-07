@@ -95,7 +95,7 @@ import unittest
 import numpy
 from contextlib import contextmanager
 from caproto.threading.client import (PV, caput, caget, Context,
-                                      SharedBroadcaster)
+                                      SharedBroadcaster, cainfo)
 from caproto.threading import client as thread_client
 import logging
 from multiprocessing import Process
@@ -202,6 +202,13 @@ class PV_Tests(unittest.TestCase):
             self.assertIsNot(val, None)
         sval = caget(pvnames.str_pv)
         self.assertEqual(sval, 'ao')
+
+    def test_smoke_cainfo(self):
+        write('Simple Test of caget() function\n')
+        pvs = (pvnames.double_pv, pvnames.enum_pv, pvnames.str_pv)
+        for p in pvs:
+            val = cainfo(p, print_out=False)
+            self.assertIsNot(val, None)
 
     def test_get1(self):
         write('Simple Test: test value and char_value on an integer\n')

@@ -1,10 +1,8 @@
-import socket
 import logging
 import time
 from multiprocessing import Process
 
 from caproto.threading.client import PVContext
-import caproto as ca
 import pytest
 
 
