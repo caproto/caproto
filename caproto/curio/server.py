@@ -181,7 +181,6 @@ class Context:
 
         while True:
             addr, commands = await queue.get()
-            print('got', addr, commands)
             responses.clear()
             for command in commands:
                 try:
