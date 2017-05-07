@@ -62,11 +62,11 @@ class SocketThread:
                 bytes_recv, address = self.socket.recvfrom(4096)
             except socket.timeout:
                 if self.poison_ev.isSet():
-                    bytes_recv = b''
+                    bytes_recv, address = b'', None
                 else:
                     continue
             except OSError:
-                bytes_recv = b''
+                bytes_recv, address = b'', None
 
             target = self.target_obj()
             if target is None:
