@@ -299,6 +299,8 @@ class VirtualCircuit:
 
         Clients should call this method when a TCP connection is lost.
         """
+        # poison the queue
+        self.command_queue.put(DISCONNECTED)
         self.states.disconnect()
 
     def new_channel_id(self):
