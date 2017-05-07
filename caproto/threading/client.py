@@ -12,6 +12,13 @@ from collections import Iterable
 
 import caproto as ca
 
+from typing import Callable, Optional
+
+
+class ConditionType:
+    ...
+
+
 CA_REPEATER_PORT = 5065
 CA_SERVER_PORT = 5064
 AUTOMONITOR_MAXLENGTH = 65536
@@ -19,6 +26,24 @@ STALE_SEARCH_THRESHOLD = 10.0
 
 
 logger = logging.getLogger(__name__)
+
+
+def _condition_with_timeout(bail_condition: Callable[[], bool],
+                            condition: ConditionType,
+                            timeout: Optional[float]):
+    last_time = time.time() + timeout
+    wait_time = None
+    while True:
+        with condition:
+            if bail_condition():
+                break
+            if timeout is not None:
+                wait_time = last_time - time.time()
+                if not (wait_time > 0):
+                    raise TimeoutError()
+
+            if not condition.wait(wait_time):
+                raise TimeoutError()
 
 
 class SocketThread:
@@ -71,7 +96,7 @@ class SharedBroadcaster:
                                           queue_class=queue.Queue)
         self.broadcaster.log.setLevel(self.log_level)
 
-        self.command_cond = threading.Condition()
+        self.command_cond = threading.Condition()  # ConditionType
         self.command_thread = threading.Thread(target=self.command_loop,
                                                daemon=True)
         self.command_thread.start()
@@ -137,17 +162,12 @@ class SharedBroadcaster:
             command = self.broadcaster.register('127.0.0.1')
             self.send(ca.EPICS_CA2_PORT, command)
 
-        while wait:
-            with self.command_cond:
-                if self.registered:
-                    break
-                # TODO ** this sort of loop/wait will loop forever if the right
-                # command never comes in (and others continue to within 2
-                # second intervals)
-                if not self.command_cond.wait(2):
-                    raise TimeoutError()
+        if wait:
+            _condition_with_timeout(lambda: self.registered,
+                                    self.command_cond,
+                                    2)
 
-    def search(self, name):
+    def search(self, name, *, wait=True):
         "Generate, process, and the transport a search request."
         if not self.registered:
             self.register()
@@ -165,14 +185,12 @@ class SharedBroadcaster:
             self.unanswered_searches[search_command.cid] = name
             self.send(ca.EPICS_CA1_PORT, ver_command, search_command)
         # Wait for the SearchResponse.
-        while True:
-            with self.command_cond:
-                try:
-                    address, timestamp = self.search_results[name]
-                    return address
-                except KeyError:
-                    if not self.command_cond.wait(2):
-                        raise TimeoutError('failed to find PV {}'.format(name))
+        if wait:
+            _condition_with_timeout(lambda: name in self.search_results,
+                                    self.command_cond,
+                                    2)
+            address, timestamp = self.search_results[name]
+            return address
 
     def received(self, bytes_recv, address):
         "Receive and process and next command broadcasted over UDP."
@@ -274,12 +292,10 @@ class Context:
                 circuit.send(cachan.version(),
                              cachan.host_name(),
                              cachan.client_name())
-        while True:
-            with circuit.new_command_cond:
-                if circuit.connected:
-                    break
-                if not circuit.new_command_cond.wait(2):
-                    raise TimeoutError()
+        _condition_with_timeout(lambda: circuit.connected,
+                                circuit.new_command_cond,
+                                2)
+
         # do not need to lock here, take care of in send method
         circuit.send(cachan.create())
 
@@ -331,7 +347,7 @@ class VirtualCircuit:
         self.channels = {}  # map cid to Channel
         self.ioids = {}  # map ioid to Channel
         self.subscriptionids = {}  # map subscriptionid to Channel
-        self.new_command_cond = threading.Condition()
+        self.new_command_cond = threading.Condition()  # ConditionType
         self.socket = None
         self.sock_thread = None
         self.command_thread = threading.Thread(target=self.command_thread_loop,
@@ -502,14 +518,11 @@ class Channel:
         """
         if self.connected:
             return
-        while True:
-            with self.circuit.new_command_cond:
-                if self.connected:
-                    break
-                if not self.circuit.new_command_cond.wait(2):
-                    raise TimeoutError()
+        _condition_with_timeout(lambda: self.connected,
+                                self.circuit.new_command_cond,
+                                timeout)
 
-    def disconnect(self, *, wait=True):
+    def disconnect(self, *, wait=True, timeout=2):
         "Disconnect this Channel."
         with self.circuit.new_command_cond:
             if self.connected:
@@ -520,14 +533,13 @@ class Channel:
                     return
             else:
                 return
-        while wait:
-            with self.circuit.new_command_cond:
-                if self.channel.states[ca.CLIENT] is ca.CLOSED:
-                    break
-                if not self.circuit.new_command_cond.wait(2):
-                    raise TimeoutError()
+        if wait:
+            _condition_with_timeout(
+                lambda: self.channel.states[ca.CLIENT] is ca.CLOSED,
+                self.circuit.new_command_cond,
+                timeout)
 
-    def read(self, *args, **kwargs):
+    def read(self, *args, timeout=2, **kwargs):
         """Request a fresh reading, wait for it, return it and stash it.
 
         The most recent reading is always available in the ``last_reading``
@@ -537,22 +549,20 @@ class Channel:
         # update this channel due to an incoming message
         with self.circuit.new_command_cond:
             command = self.channel.read(*args, **kwargs)
-            # Stash the ioid to match the response to the request.
+        # Stash the ioid to match the response to the request.
         ioid = command.ioid
         self.circuit.ioids[ioid] = self
         # do not need lock here, happens in send
         self.circuit.send(command)
-        while True:
-            with self.circuit.new_command_cond:
-                if ioid not in self.circuit.ioids:
-                    break
-                if not self.circuit.new_command_cond.wait(2):
-                    raise TimeoutError()
+        _condition_with_timeout(lambda: ioid not in self.circuit.ioids,
+                                self.circuit.new_command_cond,
+                                timeout)
         return self.last_reading
 
-    def write(self, *args, wait=True, cb=None, **kwargs):
+    def write(self, *args, wait=True, cb=None, timeout=2, **kwargs):
         "Write a new value and await confirmation from the server."
-        command = self.channel.write(*args, **kwargs)
+        with self.circuit.new_command_cond:
+            command = self.channel.write(*args, **kwargs)
         # Stash the ioid to match the response to the request.
         ioid = command.ioid
         self.circuit.ioids[ioid] = self
@@ -560,12 +570,10 @@ class Channel:
             self._pc_callbacks[ioid] = cb
         # do not need to lock this, locking happens in circuit command
         self.circuit.send(command)
-        while wait:
-            with self.circuit.new_command_cond:
-                if ioid not in self.circuit.ioids:
-                    break
-                if not self.circuit.new_command_cond.wait(60):
-                    raise TimeoutError()
+        if wait:
+            _condition_with_timeout(lambda: ioid not in self.circuit.ioids,
+                                    self.circuit.new_command_cond,
+                                    timeout)
         return self.last_reading
 
     def subscribe(self, *args, **kwargs):
@@ -877,7 +885,7 @@ class PV:
             callback(*callback_data)
         cb = run_callback if callback is not None else None
         ret = self.value
-        self.chid.write(value, wait=wait, cb=cb)
+        self.chid.write(value, wait=wait, cb=cb, timeout=timeout)
         return ret if wait else None
 
     @ensure_connection
