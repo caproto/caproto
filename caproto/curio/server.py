@@ -230,17 +230,14 @@ class Context:
 
     async def run(self):
         try:
-            tcp_server = curio.tcp_server('', self.port, self.tcp_handler)
-            tcp_task = await curio.spawn(tcp_server)
-            udp_task = await curio.spawn(self.broadcaster_udp_server_loop())
-            udp_queue_loop = await curio.spawn(self.broadcaster_queue_loop())
-            await udp_task.join()
-            await tcp_task.join()
-            await udp_queue_loop.join()
-        except curio.TaskCancelled:
-            await tcp_task.cancel()
-            await udp_task.cancel()
-            await udp_queue_loop.cancel()
+            async with curio.TaskGroup() as g:
+                await g.spawn(curio.tcp_server('', self.port, self.tcp_handler))
+                await g.spawn(self.broadcaster_udp_server_loop())
+                await g.spawn(self.broadcaster_queue_loop())
+        except curio.TaskGroupError as ex:
+            logger.error('Curio server failed: %s', ex.errors)
+            for task in ex:
+                logger.error('Task %s failed: %s', task, task.exception)
 
 
 async def _test(pvdb=None):
