@@ -202,3 +202,27 @@ def test_condition_timeout():
                                 .1)
     end_time = time.time()
     assert .2 > end_time - start_time > .1
+
+
+def test_condition_timeout_pass():
+    condition = threading.Condition()
+    ev = threading.Event()
+
+    def spinner():
+        for j in range(5):
+            time.sleep(.01)
+            with condition:
+                condition.notify_all()
+        ev.set()
+        with condition:
+            condition.notify_all()
+
+    thread = threading.Thread(target=spinner)
+
+    thread.start()
+    start_time = time.time()
+    _condition_with_timeout(lambda: ev.is_set(),
+                            condition,
+                            .1)
+    end_time = time.time()
+    assert .1 > end_time - start_time > .05
