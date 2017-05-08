@@ -2,9 +2,12 @@ import sys
 import socket
 import logging
 import time
+import threading
+
 from multiprocessing import Process
 
-from caproto.threading.client import (SocketThread, Context, SharedBroadcaster)
+from caproto.threading.client import (SocketThread, Context, SharedBroadcaster,
+                                      _condition_with_timeout)
 import caproto as ca
 import pytest
 
@@ -178,3 +181,24 @@ def test_context_disconnect(cntx):
     cntx.register()
     chan = bootstrap()
     is_happy(chan, cntx)
+
+
+def test_condition_timeout():
+    condition = threading.Condition()
+
+    def spinner():
+        for j in range(50):
+            time.sleep(.01)
+            with condition:
+                condition.notify_all()
+
+    thread = threading.Thread(target=spinner)
+
+    with pytest.raises(TimeoutError):
+        thread.start()
+        start_time = time.time()
+        _condition_with_timeout(lambda: False,
+                                condition,
+                                .1)
+    end_time = time.time()
+    assert .2 > end_time - start_time > .1
