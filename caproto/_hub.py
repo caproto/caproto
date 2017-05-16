@@ -17,7 +17,7 @@ from ._commands import (AccessRightsResponse, CreateChFailResponse,
                         HostNameRequest, ReadNotifyRequest, ReadNotifyResponse,
                         SearchResponse, ServerDisconnResponse,
                         VersionRequest, VersionResponse, WriteNotifyRequest,
-                        WriteNotifyResponse,
+                        WriteNotifyResponse, WriteRequest,
                         read_from_bytestream, _MessageHeaderSize,)
 from ._state import (ChannelState, CircuitState, get_exception)
 from ._utils import (CLIENT, SERVER, NEED_DATA, DISCONNECTED, CaprotoKeyError,
@@ -194,6 +194,7 @@ class VirtualCircuit:
                                 CreateChFailResponse, AccessRightsResponse,
                                 ReadNotifyRequest, ReadNotifyResponse,
                                 WriteNotifyRequest, WriteNotifyResponse,
+                                WriteRequest,
                                 EventAddRequest, EventAddResponse,
                                 EventCancelRequest, EventCancelResponse,
                                 ServerDisconnResponse,)):
@@ -201,7 +202,7 @@ class VirtualCircuit:
             # do this in one of a couple different ways depenending on the
             # Command.
             if isinstance(command, (ReadNotifyRequest, WriteNotifyRequest,
-                                    EventAddRequest)):
+                                    WriteRequest, EventAddRequest)):
                 # Identify the Channel based on its sid.
                 sid = command.sid
                 try:

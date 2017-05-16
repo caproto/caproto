@@ -6,7 +6,7 @@ from ._commands import (AccessRightsResponse, ClearChannelRequest,
                         EventCancelResponse, HostNameRequest,
                         ReadNotifyRequest, ReadNotifyResponse,
                         ServerDisconnResponse, VersionRequest, VersionResponse,
-                        WriteNotifyRequest, WriteNotifyResponse,
+                        WriteNotifyRequest, WriteNotifyResponse, WriteRequest,
                         EventsOnRequest, EventsOffRequest, CreateChFailResponse
                        )
 from ._utils import (AWAIT_CREATE_CHAN_RESPONSE, AWAIT_VERSION_RESPONSE,
@@ -114,6 +114,7 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
             ReadNotifyResponse: CONNECTED,
             WriteNotifyRequest: CONNECTED,
             WriteNotifyResponse: CONNECTED,
+            WriteRequest: CONNECTED,
 
             EventAddRequest: CONNECTED,
             EventAddResponse: CONNECTED,
@@ -124,7 +125,7 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
             ServerDisconnResponse: CLOSED,
             ErrorResponse: CONNECTED,
 
-            # The commands ReadRequest, WriteRequest, WriteResponse, and
+            # The commands ReadRequest, WriteResponse, and
             # ReadSync (deprecated in 3.13) will need to be added here if we
             # want to support them.
         },
@@ -161,6 +162,7 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
             ReadNotifyResponse: CONNECTED,
             WriteNotifyRequest: CONNECTED,
             WriteNotifyResponse: CONNECTED,
+            WriteRequest: CONNECTED,
 
             EventAddRequest: CONNECTED,
             EventAddResponse: CONNECTED,
@@ -170,7 +172,7 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
             ClearChannelRequest: MUST_CLOSE,
             ServerDisconnResponse: CLOSED,
             ErrorResponse: CONNECTED,
-            # The commands ReadRequest, WriteRequest, WriteResponse, and
+            # The commands ReadRequest, WriteResponse, and
             # ReadSync (deprecated in 3.13) will need to be added here if we
             # want to support them.
         },

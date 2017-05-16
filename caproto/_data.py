@@ -168,6 +168,9 @@ class ChannelData:
         self._set_dbr_metadata(dbr_data)
         return dbr_data, self.convert_to(native_to)
 
+    def set_dbr_data(self, data):
+        return True
+
     def _set_dbr_metadata(self, dbr_data):
         'Set all metadata fields of a given DBR type instance'
         # note that this is too generic to be useful, there probably should be

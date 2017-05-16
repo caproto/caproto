@@ -141,9 +141,10 @@ class VirtualCircuit:
             yield chan.read(data=data, data_type=command.data_type,
                             data_count=len(data), status=1,
                             ioid=command.ioid, metadata=metadata)
-        elif isinstance(command, ca.WriteNotifyRequest):
+        elif isinstance(command, (ca.WriteRequest, ca.WriteNotifyRequest)):
             chan, db_entry = get_db_entry()
-            yield chan.write(ioid=command.ioid)
+            write_status = db_entry.set_dbr_data(command)
+            yield chan.write(ioid=command.ioid, status=write_status)
         elif isinstance(command, ca.EventAddRequest):
             chan, db_entry = get_db_entry()
             yield chan.subscribe((3.14,), command.subscriptionid)
