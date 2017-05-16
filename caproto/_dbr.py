@@ -1001,18 +1001,21 @@ DBR_TYPES = {
 
 if USE_NUMPY:
     _numpy_map = {
-        ChType.INT: numpy.int16,
-        ChType.FLOAT: numpy.float32,
-        ChType.ENUM: numpy.uint16,
-        ChType.CHAR: numpy.uint8,
-        ChType.LONG: numpy.int32,
-        ChType.DOUBLE: numpy.float64,
-        ChType.STRING: numpy.dtype('>S40'),
-        ChType.CHAR: numpy.dtype('>S1'),
-
-        ChType.STSACK_STRING: numpy.uint8,
-        ChType.CLASS_NAME: numpy.uint8,
+        ch_type: numpy.dtype(dtype).newbyteorder('>')
+        for ch_type, dtype in
+        [(ChType.INT, numpy.int16),
+         (ChType.FLOAT, numpy.float32),
+         (ChType.ENUM, numpy.uint16),
+         (ChType.CHAR, numpy.uint8),
+         (ChType.LONG, numpy.int32),
+         (ChType.DOUBLE, numpy.float64),
+         (ChType.STRING, numpy.dtype('>S40')),
+         (ChType.CHAR, numpy.dtype('>S1')),
+         (ChType.STSACK_STRING, numpy.uint8),
+         (ChType.CLASS_NAME, numpy.uint8),
+         ]
     }
+
 
 _array_type_code_map = {
     ChType.STRING: 'B',  # TO DO
