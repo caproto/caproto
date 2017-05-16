@@ -107,6 +107,13 @@ class ChannelData:
                        )
                       }
 
+    def convert_from(self, data, data_type):
+        '''Convert a given value to this data type'''
+        if data_type == ChType.STRING:
+            return [int(d) for d in data]
+        else:
+            raise NotImplementedError()
+
     def convert_to(self, to_dtype):
         '''Convert values to another native type
 
@@ -168,7 +175,8 @@ class ChannelData:
         self._set_dbr_metadata(dbr_data)
         return dbr_data, self.convert_to(native_to)
 
-    def set_dbr_data(self, data):
+    def set_dbr_data(self, data, data_type, metadata):
+        self.value = self.convert_from(data=data, data_type=data_type)
         return True
 
     def _set_dbr_metadata(self, dbr_data):
@@ -303,6 +311,13 @@ class ChannelDouble(ChannelNumeric):
         super().__init__(**kwargs)
 
         self.precision = precision
+
+    def convert_from(self, data, data_type):
+        '''Convert a given value to this data type'''
+        if data_type == ChType.STRING:
+            return [float(d) for d in data]
+        else:
+            raise NotImplementedError()
 
 
 class ChannelChar(ChannelNumeric):
