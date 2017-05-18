@@ -33,9 +33,20 @@ def _convert_char_values(values, to_dtype, string_encoding, enum_strings):
 
 
 def _convert_string_values(values, to_dtype, string_encoding, enum_strings):
-    if to_dtype != ChType.STRING:
-        # TODO does this actually respond with an error?
-        return b''
+    if to_dtype in native_int_types:
+        def safe_int(v):
+            try:
+                return int(v)
+            except Exception:
+                return 0
+        return [safe_int(val) for val in values]
+    elif to_dtype in native_float_types:
+        def safe_float(v):
+            try:
+                return float(v)
+            except Exception:
+                return 0.0
+        return [safe_float(val) for val in values]
 
     if isinstance(values, str):
         # single string
@@ -108,7 +119,6 @@ def convert_values(values, from_dtype, to_dtype, *, string_encoding='latin-1',
     elif to_dtype == ChType.STRING:
         values = [str(v).encode(string_encoding) for v in values]
     return values
-
 
 
 class ChannelAlarmStatus:
@@ -203,15 +213,16 @@ class ChannelData:
                        )
                       }
 
-    def convert_from(self, data, data_type):
-        '''Convert a given value to this data type'''
-        if data_type == ChType.STRING:
-            return [int(d) for d in data]
-        else:
-            raise NotImplementedError()
+    def fromtype(self, values, data_type):
+        '''Convenience function to convert given values to this data type'''
+        native_from = native_type(data_type)
+        return convert_values(values=values, from_dtype=native_from,
+                              to_dtype=self.data_type,
+                              string_encoding=self.string_encoding,
+                              enum_strings=getattr(self, 'enum_strings', None))
 
     def astype(self, to_dtype):
-        '''Convert values to a specific data type'''
+        '''Convenience function: convert stored data to a specific type'''
         native_to = native_type(to_dtype)
         return convert_values(values=self.value, from_dtype=self.data_type,
                               to_dtype=native_to,
@@ -243,7 +254,7 @@ class ChannelData:
         return dbr_data, values
 
     def set_dbr_data(self, data, data_type, metadata):
-        self.value = self.convert_from(data=data, data_type=data_type)
+        self.value = self.fromtype(values=data, data_type=data_type)
         return True
 
     def _set_dbr_metadata(self, dbr_data):
@@ -375,13 +386,6 @@ class ChannelDouble(ChannelNumeric):
         super().__init__(**kwargs)
 
         self.precision = precision
-
-    def convert_from(self, data, data_type):
-        '''Convert a given value to this data type'''
-        if data_type == ChType.STRING:
-            return [float(d) for d in data]
-        else:
-            raise NotImplementedError()
 
 
 class ChannelChar(ChannelNumeric):

@@ -5,9 +5,7 @@ import curio
 from curio import socket
 
 import caproto as ca
-from caproto import (ChannelDouble, ChannelInteger,
-                     ChannelEnum)
-from caproto import (EPICS_CA1_PORT, EPICS_CA2_PORT)
+from caproto import (ChannelDouble, ChannelInteger, ChannelEnum)
 
 
 class DisconnectedCircuit(Exception):
@@ -19,7 +17,7 @@ logger = logging.getLogger(__name__)
 SERVER_ENCODING = 'latin-1'
 
 
-def find_next_tcp_port(host='0.0.0.0', starting_port=EPICS_CA2_PORT + 1):
+def find_next_tcp_port(host='0.0.0.0', starting_port=ca.EPICS_CA2_PORT + 1):
     import socket
 
     port = starting_port
@@ -172,7 +170,7 @@ class Context:
     async def broadcaster_udp_server_loop(self):
         self.udp_sock = ca.bcast_socket(socket)
         try:
-            self.udp_sock.bind((self.host, EPICS_CA1_PORT))
+            self.udp_sock.bind((self.host, ca.EPICS_CA1_PORT))
         except Exception:
             print('[server] udp bind failure!')
             raise
