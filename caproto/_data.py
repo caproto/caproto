@@ -195,8 +195,8 @@ class ChannelData:
             among several channels
         reported_record_type : str, optional
             Though this is not a record, the channel access protocol supports
-            querying the record type.  This can be set to mimic an actual record
-            or be set to something arbitrary.
+            querying the record type.  This can be set to mimic an actual
+            record or be set to something arbitrary.
             Defaults to 'caproto'
         '''
         if timestamp is None:
@@ -211,14 +211,14 @@ class ChannelData:
         self.value = value
         self.string_encoding = string_encoding
         self.reported_record_type = reported_record_type
-        self._data = {chtype: DBR_TYPES[chtype]()
-                      for chtype in
-                      (promote_type(self.data_type, use_ctrl=True),
-                       promote_type(self.data_type, use_time=True),
-                       promote_type(self.data_type, use_status=True),
-                       promote_type(self.data_type, use_gr=True),
-                       )
-                      }
+        self._dbr_metadata = {
+            chtype: DBR_TYPES[chtype]()
+            for chtype in (promote_type(self.data_type, use_ctrl=True),
+                           promote_type(self.data_type, use_time=True),
+                           promote_type(self.data_type, use_status=True),
+                           promote_type(self.data_type, use_gr=True),
+                           )
+        }
 
     def fromtype(self, values, data_type):
         '''Convenience function to convert given values to this data type'''
@@ -251,21 +251,21 @@ class ChannelData:
         if type_ in native_types:
             return b'', values
 
-        if type_ in self._data:
-            dbr_data = self._data[type_]
+        if type_ in self._dbr_metadata:
+            dbr_metadata = self._dbr_metadata[type_]
         else:
             # TODO: non-standard type request. frequent ones probably should be
             # cached?
-            dbr_data = DBR_TYPES[type_]()
+            dbr_metadata = DBR_TYPES[type_]()
 
-        self._set_dbr_metadata(dbr_data)
-        return dbr_data, values
+        self._set_dbr_metadata(dbr_metadata)
+        return dbr_metadata, values
 
     def set_dbr_data(self, data, data_type, metadata):
         self.value = self.fromtype(values=data, data_type=data_type)
         return True
 
-    def _set_dbr_metadata(self, dbr_data):
+    def _set_dbr_metadata(self, dbr_metadata):
         'Set all metadata fields of a given DBR type instance'
         # note that this is too generic to be useful, there probably should be
         # custom handling for each dbr field as necessary
@@ -310,14 +310,14 @@ class ChannelData:
         if isinstance(units, str):
             default_values['units'] = units.encode(self.string_encoding)
 
-        to_type = native_type(ChType(dbr_data.DBR_ID))
-        for attr, _ in dbr_data._fields_:
+        to_type = native_type(ChType(dbr_metadata.DBR_ID))
+        for attr, _ in dbr_metadata._fields_:
             if attr in ignore_attrs:
                 continue
 
             if attr in no_conversion or not hasattr(self, attr):
                 if attr in default_values:
-                    setattr(dbr_data, attr, default_values[attr])
+                    setattr(dbr_metadata, attr, default_values[attr])
                 continue
 
             value = getattr(self, attr)
@@ -325,13 +325,13 @@ class ChannelData:
                                    to_dtype=to_type,
                                    string_encoding=self.string_encoding)
             try:
-                setattr(dbr_data, attr, value[0])
+                setattr(dbr_metadata, attr, value[0])
             except TypeError as ex:
-                print('failed', dbr_data, attr, value[0])
+                print('failed', dbr_metadata, attr, value[0])
 
-        if dbr_data.DBR_ID in time_types:
+        if dbr_metadata.DBR_ID in time_types:
             epics_ts = self.epics_timestamp
-            dbr_data.secondsSinceEpoch, dbr_data.nanoSeconds = epics_ts
+            dbr_metadata.secondsSinceEpoch, dbr_metadata.nanoSeconds = epics_ts
 
     @property
     def epics_timestamp(self):
@@ -382,14 +382,14 @@ class ChannelEnum(ChannelData):
     def no_str(self):
         return len(self.strs) if self.strs else 0
 
-    def _set_dbr_metadata(self, dbr_data):
-        if hasattr(dbr_data, 'strs'):
+    def _set_dbr_metadata(self, dbr_metadata):
+        if hasattr(dbr_metadata, 'strs'):
             for i, string in enumerate(self.strs):
                 bytes_ = bytes(string, self.string_encoding)
-                dbr_data.strs[i][:] = bytes_.ljust(MAX_ENUM_STRING_SIZE,
-                                                   b'\x00')
+                dbr_metadata.strs[i][:] = bytes_.ljust(MAX_ENUM_STRING_SIZE,
+                                                       b'\x00')
 
-        return super()._set_dbr_metadata(dbr_data)
+        return super()._set_dbr_metadata(dbr_metadata)
 
 
 class ChannelNumeric(ChannelData):
