@@ -195,8 +195,7 @@ class Context:
             responses.clear()
             for command in commands:
                 if isinstance(command, ca.VersionRequest):
-                    res = ca.VersionResponse(13)
-                    responses.append(res)
+                    responses.append(ca.VersionResponse(13))
                 if isinstance(command, ca.SearchRequest):
                     known_pv = command.name.decode(SERVER_ENCODING) in self.pvdb
                     if (not known_pv) and command.reply == ca.NO_REPLY:
@@ -206,8 +205,8 @@ class Context:
                     # we can get the IP but it's more reliable (AFAIK) to
                     # let the client get the ip from the packet
                     # ip = _get_my_ip()
-                    res = ca.SearchResponse(self.port, None, command.cid, 13)
-                    responses.append(res)
+                    responses.append(ca.SearchResponse(self.port, None,
+                                                       command.cid, 13))
 
                 if responses:
                     bytes_to_send = self.broadcaster.send(*responses)
