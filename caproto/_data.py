@@ -2,14 +2,20 @@ import time
 from ._dbr import (DBR_TYPES, ChType, promote_type, native_type,
                    native_float_types, native_int_types, native_types,
                    timestamp_to_epics, time_types, MAX_ENUM_STRING_SIZE,
-                   DBR_STSACK_STRING, AccessRights)
+                   DBR_STSACK_STRING, AccessRights, _numpy_map)
+
+# TODO: assuming USE_NUMPY for now
+import numpy as np
 
 
 def _convert_enum_values(values, to_dtype, string_encoding, enum_strings):
     if to_dtype == ChType.STRING:
         return [value.encode(string_encoding) for value in values]
     else:
-        return [enum_strings.index(value) for value in values]
+        if enum_strings is not None:
+            return [enum_strings.index(value) for value in values]
+        else:
+            return [0 for value in values]
 
 
 def _convert_char_values(values, to_dtype, string_encoding, enum_strings):
@@ -20,12 +26,13 @@ def _convert_char_values(values, to_dtype, string_encoding, enum_strings):
         if isinstance(values, str):
             values = values.encode(string_encoding)
 
-    if to_dtype in native_int_types or to_dtype in native_float_types:
-        # TODO: assuming USE_NUMPY for now
-        import numpy as np
+    if not isinstance(values, bytes):
+        # for single value or metadata conversion, let numpy take care of
+        # typing
+        return np.asarray(values).astype(_numpy_map[to_dtype])
+    elif to_dtype in native_int_types or to_dtype in native_float_types:
         arr = np.frombuffer(values, dtype=np.uint8)
         if to_dtype != ChType.CHAR:
-            from ._dbr import _numpy_map
             return arr.astype(_numpy_map[to_dtype])
         return arr
 
@@ -115,9 +122,9 @@ def convert_values(values, from_dtype, to_dtype, *, string_encoding='latin-1',
         return values
 
     if from_dtype in native_float_types and to_dtype in native_int_types:
-        values = [int(v) for v in values]
+        return [int(v) for v in values]
     elif to_dtype == ChType.STRING:
-        values = [str(v).encode(string_encoding) for v in values]
+        return [str(v).encode(string_encoding) for v in values]
     return values
 
 
@@ -241,15 +248,16 @@ class ChannelData:
         native_to = native_type(type_)
         values = self.astype(native_to)
 
-        if type_ in self._data:
-            dbr_data = self._data[type_]
-            self._set_dbr_metadata(dbr_data)
-            return dbr_data, values
-        elif type_ in native_types:
+        if type_ in native_types:
             return b'', values
 
-        # non-standard type request. frequent ones probably should be cached?
-        dbr_data = DBR_TYPES[type_]()
+        if type_ in self._data:
+            dbr_data = self._data[type_]
+        else:
+            # TODO: non-standard type request. frequent ones probably should be
+            # cached?
+            dbr_data = DBR_TYPES[type_]()
+
         self._set_dbr_metadata(dbr_data)
         return dbr_data, values
 
@@ -262,37 +270,64 @@ class ChannelData:
         # note that this is too generic to be useful, there probably should be
         # custom handling for each dbr field as necessary
         ts_sec, ts_ns = self.epics_timestamp
-        other_values = {
-            'secondsSinceEpoch': ts_sec,
-            'nanoSeconds': ts_ns,
+        default_values = {
             'RISC_Pad': 0,
             'RISC_pad': 0,
             'RISC_pad0': 0,
             'RISC_pad1': 0,
             'ackt': 0,  # TODO from #27
             'acks': 0,  # TODO from #27
-            'no_strs': 0,  # if not enum type
-            'strs': [],  # if not enum type
+            'no_str': 0,
+            'secondsSinceEpoch': ts_sec,
+            'nanoSeconds': ts_ns,
+            'status': self.status,
+            'severity': self.severity,
+            'units': getattr(self, 'units', ''),
+            'precision': getattr(self, 'precision', 0),
+
+            'upper_disp_limit': 0,
+            'lower_disp_limit': 0,
+            'upper_alarm_limit': 0,
+            'upper_warning_limit': 0,
+            'lower_warning_limit': 0,
+            'lower_alarm_limit': 0,
+            'upper_ctrl_limit': 0,
+            'lower_ctrl_limit': 0,
         }
 
-        to_type = ChType(dbr_data.DBR_ID)
+        no_conversion = {
+            'secondsSinceEpoch',
+            'nanoSeconds',
+            'status',
+            'severity',
+            'units',
+            'no_str',
+        }
+
+        ignore_attrs = {'strs', }
+
+        units = default_values['units']
+        if isinstance(units, str):
+            default_values['units'] = units.encode(self.string_encoding)
+
+        to_type = native_type(ChType(dbr_data.DBR_ID))
         for attr, _ in dbr_data._fields_:
-            if hasattr(self, attr):
-                value = getattr(self, attr)
-            elif attr in other_values:
-                value = other_values[attr]
-            else:
-                print('missing', attr)
+            if attr in ignore_attrs:
                 continue
 
-            if isinstance(value, str):
-                value = bytes(value, self.string_encoding)
+            if attr in no_conversion or not hasattr(self, attr):
+                if attr in default_values:
+                    setattr(dbr_data, attr, default_values[attr])
+                continue
+
+            value = getattr(self, attr)
+            value = convert_values(values=(value, ), from_dtype=self.data_type,
+                                   to_dtype=to_type,
+                                   string_encoding=self.string_encoding)
             try:
-                setattr(dbr_data, attr, value)
+                setattr(dbr_data, attr, value[0])
             except TypeError as ex:
-                if to_type in native_int_types:
-                    # you probably want to kill me at this point
-                    setattr(dbr_data, attr, int(value))
+                print('failed', dbr_data, attr, value[0])
 
         if dbr_data.DBR_ID in time_types:
             epics_ts = self.epics_timestamp
@@ -351,17 +386,17 @@ class ChannelEnum(ChannelData):
         if hasattr(dbr_data, 'strs'):
             for i, string in enumerate(self.strs):
                 bytes_ = bytes(string, self.string_encoding)
-                dbr_data.strs[i][:] = bytes_.ljust(MAX_ENUM_STRING_SIZE, b'\x00')
+                dbr_data.strs[i][:] = bytes_.ljust(MAX_ENUM_STRING_SIZE,
+                                                   b'\x00')
 
         return super()._set_dbr_metadata(dbr_data)
 
 
 class ChannelNumeric(ChannelData):
-    def __init__(self, *, units='', upper_disp_limit=0.0,
-                 lower_disp_limit=0.0, upper_alarm_limit=0.0,
-                 upper_warning_limit=0.0, lower_warning_limit=0.0,
-                 lower_alarm_limit=0.0, upper_ctrl_limit=0.0,
-                 lower_ctrl_limit=0.0, **kwargs):
+    def __init__(self, *, units='', upper_disp_limit=0, lower_disp_limit=0,
+                 upper_alarm_limit=0, upper_warning_limit=0,
+                 lower_warning_limit=0, lower_alarm_limit=0,
+                 upper_ctrl_limit=0, lower_ctrl_limit=0, **kwargs):
 
         super().__init__(**kwargs)
         self.units = units.encode(self.string_encoding)
