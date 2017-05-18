@@ -1009,8 +1009,8 @@ if USE_NUMPY:
          (ChType.CHAR, numpy.uint8),
          (ChType.LONG, numpy.int32),
          (ChType.DOUBLE, numpy.float64),
-         (ChType.STRING, numpy.dtype('>S40')),
-         (ChType.CHAR, numpy.dtype('>S1')),
+         (ChType.STRING, '>S40'),
+         (ChType.CHAR, '>S1'),
          (ChType.STSACK_STRING, numpy.uint8),
          (ChType.CLASS_NAME, numpy.uint8),
          ]
@@ -1113,8 +1113,7 @@ def native_to_builtin(value, native_type, data_count):
     # - Everything else is, straightforwardly, an array of numbers.
     if USE_NUMPY:
         # Return an ndarray
-        dt = numpy.dtype(_numpy_map[native_type])
-        dt = dt.newbyteorder('>')
+        dt = _numpy_map[native_type]
         if native_type == ChType.STRING and len(value) < MAX_STRING_SIZE:
             # caput behaves this way
             return numpy.frombuffer(value.ljust(MAX_STRING_SIZE, b'\x00'),

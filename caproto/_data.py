@@ -5,13 +5,110 @@ from ._dbr import (DBR_TYPES, ChType, promote_type, native_type,
                    DBR_STSACK_STRING, AccessRights)
 
 
-def _ensure_iterable(value):
-    try:
-        len(value)
-    except TypeError:
-        return (value, )
+def _convert_enum_values(values, to_dtype, string_encoding, enum_strings):
+    if to_dtype == ChType.STRING:
+        return [value.encode(string_encoding) for value in values]
     else:
-        return value
+        return [enum_strings.index(value) for value in values]
+
+
+def _convert_char_values(values, to_dtype, string_encoding, enum_strings):
+    # if to_dtype == ChType.STRING:
+    #     return values.encode(string_encoding)
+    # else:
+    if isinstance(values, (str, bytes)):
+        if isinstance(values, str):
+            values = values.encode(string_encoding)
+
+    if to_dtype in native_int_types or to_dtype in native_float_types:
+        # TODO: assuming USE_NUMPY for now
+        import numpy as np
+        arr = np.frombuffer(values, dtype=np.uint8)
+        if to_dtype != ChType.CHAR:
+            from ._dbr import _numpy_map
+            return arr.astype(_numpy_map[to_dtype])
+        return arr
+
+    return values
+
+
+def _convert_string_values(values, to_dtype, string_encoding, enum_strings):
+    if to_dtype != ChType.STRING:
+        # TODO does this actually respond with an error?
+        return b''
+
+    if isinstance(values, str):
+        # single string
+        return [values.encode(string_encoding)]
+    elif isinstance(values, bytes):
+        # single bytestring
+        return [values]
+    else:
+        # array of strings/bytestrings
+        return [v.encode(string_encoding)
+                if isinstance(v, str)
+                else v
+                for v in values]
+
+
+_custom_conversions = {ChType.ENUM: _convert_enum_values,
+                       ChType.CHAR: _convert_char_values,
+                       ChType.STRING: _convert_string_values,
+                       }
+
+
+def convert_values(values, from_dtype, to_dtype, *, string_encoding='latin-1',
+                   enum_strings=None):
+    '''Convert values from one ChType to another
+
+    Parameters
+    ----------
+    values :
+    from_dtype : caproto.ChannelType
+        The dtype of the values
+    to_dtype : caproto.ChannelType
+        The dtype to convert to
+    string_encoding : str, optional
+        The encoding to be used for strings
+    enum_strings : list, optional
+        List of enum strings, if available
+    '''
+
+    if to_dtype not in native_types:
+        raise ValueError('Expecting a native type')
+
+    if to_dtype in (ChType.STSACK_STRING, ChType.CLASS_NAME):
+        if from_dtype != to_dtype:
+            raise ValueError('Cannot convert values for stsack_string or '
+                             'class_name to other types')
+
+    try:
+        len(values)
+    except TypeError:
+        values = (values, )
+
+    if from_dtype in _custom_conversions:
+        convert_func = _custom_conversions[from_dtype]
+        return convert_func(values=values, to_dtype=to_dtype,
+                            string_encoding=string_encoding,
+                            enum_strings=enum_strings)
+
+    no_conversion_necessary = (
+        from_dtype == to_dtype or
+        (from_dtype in native_float_types and to_dtype in
+         native_float_types) or
+        (from_dtype in native_int_types and to_dtype in native_int_types)
+    )
+
+    if no_conversion_necessary:
+        return values
+
+    if from_dtype in native_float_types and to_dtype in native_int_types:
+        values = [int(v) for v in values]
+    elif to_dtype == ChType.STRING:
+        values = [str(v).encode(string_encoding) for v in values]
+    return values
+
 
 
 class ChannelAlarmStatus:
@@ -57,7 +154,6 @@ class ChannelAlarmStatus:
 
 class ChannelData:
     data_type = ChType.LONG
-    _has_custom_convert = False
 
     def __init__(self, *, value=None, timestamp=None, status=0, severity=0,
                  string_encoding='latin-1', alarm_status=None,
@@ -114,38 +210,13 @@ class ChannelData:
         else:
             raise NotImplementedError()
 
-    def convert_to(self, to_dtype):
-        '''Convert values to another native type
-
-        Parameters
-        ----------
-        to_dtype : ca.ChType
-        '''
-        if to_dtype not in native_types:
-            raise ValueError('Expecting a native type')
-
-        if to_dtype in (ChType.STSACK_STRING, ChType.CLASS_NAME):
-            return None
-
-        from_dtype = self.data_type
-
-        no_conversion_necessary = (
-            from_dtype == to_dtype or
-            (from_dtype in native_float_types and to_dtype in
-             native_float_types) or
-            (from_dtype in native_int_types and to_dtype in native_int_types)
-        )
-
-        values = _ensure_iterable(self.value)
-
-        if no_conversion_necessary:
-            return values
-
-        if from_dtype in native_float_types and to_dtype in native_int_types:
-            values = [int(v) for v in values]
-        elif to_dtype == ChType.STRING:
-            values = [str(v).encode(self.string_encoding) for v in values]
-        return values
+    def astype(self, to_dtype):
+        '''Convert values to a specific data type'''
+        native_to = native_type(to_dtype)
+        return convert_values(values=self.value, from_dtype=self.data_type,
+                              to_dtype=native_to,
+                              string_encoding=self.string_encoding,
+                              enum_strings=getattr(self, 'enum_strings', None))
 
     def get_dbr_data(self, type_):
         if type_ == ChType.STSACK_STRING:
@@ -157,23 +228,19 @@ class ChannelData:
             return class_name, b''
 
         native_to = native_type(type_)
+        values = self.astype(native_to)
+
         if type_ in self._data:
             dbr_data = self._data[type_]
             self._set_dbr_metadata(dbr_data)
-
-            if self._has_custom_convert:
-                value = self.convert_to(native_to)
-            else:
-                value = _ensure_iterable(self.value)
-
-            return dbr_data, value
+            return dbr_data, values
         elif type_ in native_types:
-            return b'', self.convert_to(native_to)
+            return b'', values
 
         # non-standard type request. frequent ones probably should be cached?
         dbr_data = DBR_TYPES[type_]()
         self._set_dbr_metadata(dbr_data)
-        return dbr_data, self.convert_to(native_to)
+        return dbr_data, values
 
     def set_dbr_data(self, data, data_type, metadata):
         self.value = self.convert_from(data=data, data_type=data_type)
@@ -255,12 +322,15 @@ class ChannelData:
 
 class ChannelEnum(ChannelData):
     data_type = ChType.ENUM
-    _has_custom_convert = True
 
     def __init__(self, *, strs=None, **kwargs):
         self.strs = strs
 
         super().__init__(**kwargs)
+
+    @property
+    def enum_strings(self):
+        return self.strs
 
     @property
     def no_str(self):
@@ -273,12 +343,6 @@ class ChannelEnum(ChannelData):
                 dbr_data.strs[i][:] = bytes_.ljust(MAX_ENUM_STRING_SIZE, b'\x00')
 
         return super()._set_dbr_metadata(dbr_data)
-
-    def convert_to(self, to_dtype):
-        if native_type(to_dtype) == ChType.STRING:
-            return [self.value.encode(self.string_encoding)]
-        else:
-            return [self.strs.index(self.value)]
 
 
 class ChannelNumeric(ChannelData):
@@ -323,39 +387,8 @@ class ChannelDouble(ChannelNumeric):
 class ChannelChar(ChannelNumeric):
     # 'Limits' on chars do not make much sense and are rarely used.
     data_type = ChType.CHAR
-    _has_custom_convert = True
-
-    def convert_to(self, to_dtype):
-        # if to_dtype == ChType.STRING:
-        #     return self.value.encode(self.string_encoding)
-        # else:
-        if isinstance(self.value, str):
-            return self.value.encode(self.string_encoding)
-        elif isinstance(self.value, bytes):
-            return self.value
-        else:
-            return [self.value]
 
 
 class ChannelString(ChannelData):
     data_type = ChType.STRING
-    _has_custom_convert = True
     # There is no CTRL or GR variant of STRING.
-
-    def convert_to(self, to_dtype):
-        if to_dtype != ChType.STRING:
-            # TODO does this actually respond with an error?
-            return b''
-
-        if isinstance(self.value, str):
-            # single string
-            return [self.value.encode(self.string_encoding)]
-        elif isinstance(self.value, bytes):
-            # single bytestring
-            return [self.value]
-        else:
-            # array of strings/bytestrings
-            return [v.encode(self.string_encoding)
-                    if isinstance(v, str)
-                    else v
-                    for v in self.value]
