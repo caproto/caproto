@@ -277,7 +277,6 @@ class ChannelData:
             'RISC_pad1': 0,
             'ackt': 0,  # TODO from #27
             'acks': 0,  # TODO from #27
-            'no_str': 0,
             'secondsSinceEpoch': ts_sec,
             'nanoSeconds': ts_ns,
             'status': self.status,
@@ -301,10 +300,9 @@ class ChannelData:
             'status',
             'severity',
             'units',
-            'no_str',
         }
 
-        ignore_attrs = {'strs', }
+        ignore_attrs = {'strs', 'no_str'}
 
         units = default_values['units']
         if isinstance(units, str):
@@ -383,11 +381,12 @@ class ChannelEnum(ChannelData):
         return len(self.strs) if self.strs else 0
 
     def _set_dbr_metadata(self, dbr_metadata):
-        if hasattr(dbr_metadata, 'strs'):
-            for i, string in enumerate(self.strs):
+        if hasattr(dbr_metadata, 'strs') and self.enum_strings:
+            for i, string in enumerate(self.enum_strings):
                 bytes_ = bytes(string, self.string_encoding)
                 dbr_metadata.strs[i][:] = bytes_.ljust(MAX_ENUM_STRING_SIZE,
                                                        b'\x00')
+            dbr_metadata.no_str = self.no_str
 
         return super()._set_dbr_metadata(dbr_metadata)
 
