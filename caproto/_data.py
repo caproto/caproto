@@ -322,10 +322,19 @@ class ChannelData:
             value = convert_values(values=(value, ), from_dtype=self.data_type,
                                    to_dtype=to_type,
                                    string_encoding=self.string_encoding)
+
+            if isinstance(value, np.ndarray):
+                # note that you cannot do setattr of, e.g.:
+                #   ctypes_struct.char_value = np.uint8
+                # tolist() will force these to native python types.
+                value = value.tolist()[0]
+            else:
+                value = value[0]
+
             try:
-                setattr(dbr_metadata, attr, value[0])
+                setattr(dbr_metadata, attr, value)
             except TypeError as ex:
-                print('failed', dbr_metadata, attr, value[0])
+                print('failed', dbr_metadata, attr, value, type(value))
 
         if dbr_metadata.DBR_ID in time_types:
             epics_ts = self.epics_timestamp

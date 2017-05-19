@@ -1010,7 +1010,7 @@ if USE_NUMPY:
          (ChType.LONG, numpy.int32),
          (ChType.DOUBLE, numpy.float64),
          (ChType.STRING, '>S40'),
-         (ChType.CHAR, '>S1'),
+         (ChType.CHAR, 'b'),
          (ChType.STSACK_STRING, numpy.uint8),
          (ChType.CLASS_NAME, numpy.uint8),
          ]
