@@ -19,12 +19,8 @@ def _convert_enum_values(values, to_dtype, string_encoding, enum_strings):
 
 
 def _convert_char_values(values, to_dtype, string_encoding, enum_strings):
-    # if to_dtype == ChType.STRING:
-    #     return values.encode(string_encoding)
-    # else:
-    if isinstance(values, (str, bytes)):
-        if isinstance(values, str):
-            values = values.encode(string_encoding)
+    if isinstance(values, str):
+        values = values.encode(string_encoding)
 
     if not isinstance(values, bytes):
         # for single value or metadata conversion, let numpy take care of
@@ -40,20 +36,8 @@ def _convert_char_values(values, to_dtype, string_encoding, enum_strings):
 
 
 def _convert_string_values(values, to_dtype, string_encoding, enum_strings):
-    if to_dtype in native_int_types:
-        def safe_int(v):
-            try:
-                return int(v)
-            except Exception:
-                return 0
-        return [safe_int(val) for val in values]
-    elif to_dtype in native_float_types:
-        def safe_float(v):
-            try:
-                return float(v)
-            except Exception:
-                return 0.0
-        return [safe_float(val) for val in values]
+    if to_dtype in native_int_types or to_dtype in native_float_types:
+        return np.asarray(values).astype(_numpy_map[to_dtype])
 
     if isinstance(values, str):
         # single string
@@ -122,7 +106,7 @@ def convert_values(values, from_dtype, to_dtype, *, string_encoding='latin-1',
         return values
 
     if from_dtype in native_float_types and to_dtype in native_int_types:
-        return [int(v) for v in values]
+        return np.asarray(values).astype(_numpy_map[to_dtype])
     elif to_dtype == ChType.STRING:
         return [str(v).encode(string_encoding) for v in values]
     return values
