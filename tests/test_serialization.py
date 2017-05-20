@@ -52,9 +52,9 @@ all_commands = set(ca._commands._commands) - set([ca.Message])
 
 def _np_hack(buf):
     try:
-        return bytes(buf)
-    except TypeError:
         return buf.tobytes()
+    except AttributeError:
+        return bytes(buf)
 
 
 @pytest.mark.parametrize('cmd', all_commands)
