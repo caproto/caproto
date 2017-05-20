@@ -210,6 +210,8 @@ class ChannelData:
                               enum_strings=getattr(self, 'enum_strings', None))
 
     def get_dbr_data(self, type_):
+        '''Get DBR data and native data, converted to a specific type'''
+        # special cases for alarm strings and class name
         if type_ == ChType.STSACK_STRING:
             return (self.alarm.get_dbr_data(), b'')
         elif type_ == ChType.CLASS_NAME:
@@ -218,6 +220,7 @@ class ChannelData:
             class_name.value = rtyp
             return class_name, b''
 
+        # for native types, there is no dbr metadata - just data
         native_to = native_type(type_)
         values = self.astype(native_to)
 
@@ -235,6 +238,7 @@ class ChannelData:
         return dbr_metadata, values
 
     def set_dbr_data(self, data, data_type, metadata):
+        '''Set data from DBR metadata/values'''
         self.value = self.fromtype(values=data, data_type=data_type)
         return True
 
@@ -287,6 +291,7 @@ class ChannelData:
 
     @property
     def status(self):
+        '''Alarm status'''
         return self.alarm.status
 
     @status.setter
@@ -295,6 +300,7 @@ class ChannelData:
 
     @property
     def severity(self):
+        '''Alarm severity'''
         return self.alarm.severity
 
     @severity.setter
@@ -323,6 +329,7 @@ class ChannelEnum(ChannelData):
 
     @property
     def enum_strings(self):
+        '''List of enum strings for all values'''
         return self.strs
 
     @property
@@ -347,7 +354,7 @@ class ChannelNumeric(ChannelData):
                  upper_ctrl_limit=0, lower_ctrl_limit=0, **kwargs):
 
         super().__init__(**kwargs)
-        self.units = units.encode(self.string_encoding)
+        self.units = units
         self.upper_disp_limit = upper_disp_limit
         self.lower_disp_limit = lower_disp_limit
         self.upper_alarm_limit = upper_alarm_limit
