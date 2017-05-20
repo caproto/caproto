@@ -95,21 +95,10 @@ def convert_values(values, from_dtype, to_dtype, *, string_encoding='latin-1',
                             string_encoding=string_encoding,
                             enum_strings=enum_strings)
 
-    no_conversion_necessary = (
-        from_dtype == to_dtype or
-        (from_dtype in native_float_types and to_dtype in
-         native_float_types) or
-        (from_dtype in native_int_types and to_dtype in native_int_types)
-    )
-
-    if no_conversion_necessary:
-        return values
-
-    if from_dtype in native_float_types and to_dtype in native_int_types:
-        return np.asarray(values).astype(_numpy_map[to_dtype])
-    elif to_dtype == ChType.STRING:
+    if to_dtype == ChType.STRING:
         return [str(v).encode(string_encoding) for v in values]
-    return values
+
+    return np.asarray(values).astype(_numpy_map[to_dtype])
 
 
 class ChannelAlarmStatus:
@@ -138,7 +127,7 @@ class ChannelAlarmStatus:
         instance = cls()
         instance._set_instance_from_dbr(dbr)
 
-    def to_dbr(self, dbr=None):
+    def get_dbr_data(self, dbr=None):
         if dbr is None:
             dbr = DBR_STSACK_STRING()
         dbr.status = self.status
@@ -222,7 +211,7 @@ class ChannelData:
 
     def get_dbr_data(self, type_):
         if type_ == ChType.STSACK_STRING:
-            return (self.alarm.to_dbr(), b'')
+            return (self.alarm.get_dbr_data(), b'')
         elif type_ == ChType.CLASS_NAME:
             class_name = DBR_TYPES[type_]()
             rtyp = self.reported_record_type.encode(self.string_encoding)
@@ -251,78 +240,45 @@ class ChannelData:
 
     def _set_dbr_metadata(self, dbr_metadata):
         'Set all metadata fields of a given DBR type instance'
-        # note that this is too generic to be useful, there probably should be
-        # custom handling for each dbr field as necessary
-        ts_sec, ts_ns = self.epics_timestamp
-        default_values = {
-            'RISC_Pad': 0,
-            'RISC_pad': 0,
-            'RISC_pad0': 0,
-            'RISC_pad1': 0,
-            'ackt': 0,  # TODO from #27
-            'acks': 0,  # TODO from #27
-            'secondsSinceEpoch': ts_sec,
-            'nanoSeconds': ts_ns,
-            'status': self.status,
-            'severity': self.severity,
-            'units': getattr(self, 'units', ''),
-            'precision': getattr(self, 'precision', 0),
+        to_type = ChType(dbr_metadata.DBR_ID)
 
-            'upper_disp_limit': 0,
-            'lower_disp_limit': 0,
-            'upper_alarm_limit': 0,
-            'upper_warning_limit': 0,
-            'lower_warning_limit': 0,
-            'lower_alarm_limit': 0,
-            'upper_ctrl_limit': 0,
-            'lower_ctrl_limit': 0,
-        }
+        if hasattr(dbr_metadata, 'units'):
+            units = getattr(self, 'units', '')
+            if isinstance(units, str):
+                units = units.encode(self.string_encoding)
+            dbr_metadata.units = units
 
-        no_conversion = {
-            'secondsSinceEpoch',
-            'nanoSeconds',
-            'status',
-            'severity',
-            'units',
-        }
+        if hasattr(dbr_metadata, 'precision'):
+            dbr_metadata.precision = getattr(self, 'precision', 0)
 
-        ignore_attrs = {'strs', 'no_str'}
-
-        units = default_values['units']
-        if isinstance(units, str):
-            default_values['units'] = units.encode(self.string_encoding)
-
-        to_type = native_type(ChType(dbr_metadata.DBR_ID))
-        for attr, _ in dbr_metadata._fields_:
-            if attr in ignore_attrs:
-                continue
-
-            if attr in no_conversion or not hasattr(self, attr):
-                if attr in default_values:
-                    setattr(dbr_metadata, attr, default_values[attr])
-                continue
-
-            value = getattr(self, attr)
-            value = convert_values(values=(value, ), from_dtype=self.data_type,
-                                   to_dtype=to_type,
-                                   string_encoding=self.string_encoding)
-
-            if isinstance(value, np.ndarray):
-                # note that you cannot do setattr of, e.g.:
-                #   ctypes_struct.char_value = np.uint8
-                # tolist() will force these to native python types.
-                value = value.tolist()[0]
-            else:
-                value = value[0]
-
-            try:
-                setattr(dbr_metadata, attr, value)
-            except TypeError as ex:
-                print('failed', dbr_metadata, attr, value, type(value))
-
-        if dbr_metadata.DBR_ID in time_types:
+        if to_type in time_types:
             epics_ts = self.epics_timestamp
             dbr_metadata.secondsSinceEpoch, dbr_metadata.nanoSeconds = epics_ts
+
+        if hasattr(dbr_metadata, 'status'):
+            # many have status/severity
+            dbr_metadata.status = self.status
+            dbr_metadata.severity = self.severity
+
+        convert_attrs = ('upper_disp_limit', 'lower_disp_limit',
+                         'upper_alarm_limit', 'upper_warning_limit',
+                         'lower_warning_limit', 'lower_alarm_limit',
+                         'upper_ctrl_limit', 'lower_ctrl_limit')
+
+        if not any(hasattr(dbr_metadata, attr) for attr in convert_attrs):
+            return
+
+        # convert all metadata types to the target type
+        values = convert_values(values=[getattr(self, key, 0)
+                                        for key in convert_attrs],
+                                from_dtype=self.data_type,
+                                to_dtype=native_type(to_type),
+                                string_encoding=self.string_encoding)
+        if isinstance(values, np.ndarray):
+            values = values.tolist()
+        for attr, value in zip(convert_attrs, values):
+            if hasattr(dbr_metadata, attr):
+                setattr(dbr_metadata, attr, value)
 
     @property
     def epics_timestamp(self):
