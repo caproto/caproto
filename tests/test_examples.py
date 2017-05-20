@@ -1,8 +1,6 @@
 import os
 import datetime
-import logging
 import time
-from multiprocessing import Process
 
 import pytest
 import curio
@@ -17,25 +15,6 @@ from caproto import ChType
 
 REPEATER_PORT = 5065
 SERVER_HOST = '0.0.0.0'
-
-
-def get_broadcast_addr_list():
-    import netifaces
-
-    interfaces = [netifaces.ifaddresses(interface)
-                  for interface in netifaces.interfaces()
-                  ]
-    bcast = [af_inet_info['broadcast']
-             if 'broadcast' in af_inet_info
-             else af_inet_info['peer']
-
-             for interface in interfaces
-             if netifaces.AF_INET in interface
-             for af_inet_info in interface[netifaces.AF_INET]
-             ]
-
-    print('Broadcast address list:', bcast)
-    return ' '.join(bcast)
 
 
 def setup_module(module):
@@ -418,8 +397,6 @@ def test_curio_server_with_caget(curio_server, pv, dbr_type):
                  'upper_warning_limit', 'lower_ctrl_limit',
                  'upper_ctrl_limit', 'precision')
 
-    status_keys = ('status', 'severity')
-
     async def run_client_test():
         print('* client_test', pv, dbr_type)
         db_entry = caget_pvdb[pv]
@@ -531,15 +508,3 @@ def test_curio_server_with_caget(curio_server, pv, dbr_type):
     with curio.Kernel() as kernel:
         kernel.run(task)
     print('done')
-
-
-if __name__ == '__main__':
-    setup_module(None)
-    os.environ['EPICS_CA_ADDR_LIST'] = get_broadcast_addr_list()
-    os.environ['EPICS_CA_AUTO_ADDR_LIST'] = 'no'
-    try:
-        test_curio_client()
-        test_curio_server()
-        test_curio_server_with_caget()
-    finally:
-        teardown_module(None)
