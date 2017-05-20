@@ -322,19 +322,12 @@ class ChannelData:
 class ChannelEnum(ChannelData):
     data_type = ChType.ENUM
 
-    def __init__(self, *, strs=None, **kwargs):
-        self.strs = strs
-
+    def __init__(self, *, enum_strings=None, **kwargs):
         super().__init__(**kwargs)
 
-    @property
-    def enum_strings(self):
-        '''List of enum strings for all values'''
-        return self.strs
-
-    @property
-    def no_str(self):
-        return len(self.strs) if self.strs else 0
+        if enum_strings is None:
+            enum_strings = []
+        self.enum_strings = enum_strings
 
     def _set_dbr_metadata(self, dbr_metadata):
         if hasattr(dbr_metadata, 'strs') and self.enum_strings:
@@ -342,7 +335,7 @@ class ChannelEnum(ChannelData):
                 bytes_ = bytes(string, self.string_encoding)
                 dbr_metadata.strs[i][:] = bytes_.ljust(MAX_ENUM_STRING_SIZE,
                                                        b'\x00')
-            dbr_metadata.no_str = self.no_str
+            dbr_metadata.no_str = len(self.enum_strings)
 
         return super()._set_dbr_metadata(dbr_metadata)
 

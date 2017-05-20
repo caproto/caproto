@@ -261,7 +261,7 @@ async def _test(pvdb=None):
                                     units='doodles',
                                     ),
                 'enum': ChannelEnum(value='b',
-                                    strs=['a', 'b', 'c', 'd'],
+                                    enum_strings=['a', 'b', 'c', 'd'],
                                     ),
                 'int': ChannelInteger(value=96,
                                       units='doodles',

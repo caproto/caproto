@@ -338,7 +338,7 @@ caget_pvdb = {
                            units='doodles',
                            ),
     'enum': ca.ChannelEnum(value='b',
-                           strs=['a', 'b', 'c', 'd'],
+                           enum_strings=['a', 'b', 'c', 'd'],
                            ),
     'int': ca.ChannelInteger(value=33,
                              units='poodles',
@@ -439,7 +439,7 @@ def test_curio_server_with_caget(curio_server, pv, dbr_type):
                 not (req_native == ChType.STRING
                      or dbr_type in (ChType.CTRL_ENUM,
                                      ChType.GR_ENUM))):
-            db_value = db_entry.strs.index(db_value)
+            db_value = db_entry.enum_strings.index(db_value)
         if req_native in (ChType.INT, ChType.LONG, ChType.SHORT, ChType.CHAR):
             if db_native == ChType.CHAR:
                 assert int(data['value']) == ord(db_value)

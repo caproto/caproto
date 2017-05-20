@@ -37,7 +37,7 @@ this to a :class:`Context` object with a given address. Calling
                                 units='doodles',
                                 ),
             'enum': ChannelEnum(value='b',
-                                strs=['a', 'b', 'c', 'd'],
+                                enum_strings=['a', 'b', 'c', 'd'],
                                 ),
             'int': ChannelInteger(value=0,
                                   units='doodles',
