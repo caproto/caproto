@@ -154,30 +154,21 @@ class VirtualCircuit:
                             ioid=command.ioid, metadata=metadata)
         elif isinstance(command, (ca.WriteRequest, ca.WriteNotifyRequest)):
             chan, db_entry = get_db_entry()
-            client_waiting = isinstance(command, ca.WriteNotifyRequest)
+            # client_waiting = isinstance(command, ca.WriteNotifyRequest)
             future = Future()
 
-            write_status = db_entry.set_dbr_data(data=command.data,
-                                                 data_type=command.data_type,
-                                                 metadata=command.metadata,
-                                                 future=future)
-
-            if future.done():
-                yield chan.write(ioid=command.ioid, status=write_status)
-            else:
-                if client_waiting or inspect.isawaitable(write_status):
-                    async def wait():
-                        # if we have an awaitable coroutine, use it
-                        if inspect.isawaitable(write_status):
-                            await write_status
-                        # failing that, wait on the future
-                        await self._wait_write_completion(chan, command,
-                                                          future)
-
-                    raise FutureResult(future, wait)
+            async def handle_write():
+                if curio.meta.iscoroutinefunction(db_entry.set_dbr_data):
+                    await db_entry.set_dbr_data(command.data,
+                                                command.data_type,
+                                                command.metadata, future)
                 else:
-                    yield chan.write(ioid=command.ioid, status=False)
+                    await curio.abide(db_entry.set_dbr_data, command.data,
+                                      command.data_type, command.metadata,
+                                      future)
+                await self._wait_write_completion(chan, command, future)
 
+            raise FutureResult(future, handle_write)
         elif isinstance(command, ca.EventAddRequest):
             chan, db_entry = get_db_entry()
             yield chan.subscribe((3.14,), command.subscriptionid)
