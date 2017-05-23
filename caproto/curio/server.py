@@ -1,5 +1,8 @@
 import logging
 import random
+import inspect
+from functools import partial
+from concurrent.futures import Future
 
 import curio
 from curio import socket
@@ -10,6 +13,12 @@ from caproto import (ChannelDouble, ChannelInteger, ChannelEnum)
 
 class DisconnectedCircuit(Exception):
     ...
+
+
+class FutureResult(Exception):
+    def __init__(self, future, callable):
+        self.future = future
+        self.callable = callable
 
 
 logger = logging.getLogger(__name__)
@@ -37,10 +46,6 @@ def find_next_tcp_port(host='0.0.0.0', starting_port=ca.EPICS_CA2_PORT + 1):
     return port
 
 
-class DisconnectedCircuit(Exception):
-    ...
-
-
 class VirtualCircuit:
     "Wraps a caproto.VirtualCircuit with a curio client."
     def __init__(self, circuit, client, context):
@@ -50,6 +55,8 @@ class VirtualCircuit:
         self.client_hostname = None
         self.client_username = None
         self.new_command_condition = curio.Condition()
+        # self.pending_writes = {}
+        self.pending_tasks = curio.TaskGroup()
 
     async def send(self, *commands):
         """
@@ -92,6 +99,13 @@ class VirtualCircuit:
                         await self.send(*response_command)
                     else:
                         await self.send(response_command)
+            except FutureResult as fut_res:
+                # pretty sure this is a bad way of doing things
+                # future = fut_res.future
+                await self.pending_tasks.spawn(fut_res.callable,
+                                               ignore_result=True)
+                # TODO pretty sure using the taskgroup will bog things down,
+                # but it suppresses an annoying warning message, so... there
             except Exception as ex:
                 logger.error('Curio server failed to process command: %s',
                              command, exc_info=ex)
@@ -141,10 +155,24 @@ class VirtualCircuit:
                             ioid=command.ioid, metadata=metadata)
         elif isinstance(command, (ca.WriteRequest, ca.WriteNotifyRequest)):
             chan, db_entry = get_db_entry()
+            client_waiting = isinstance(command, ca.WriteNotifyRequest)
+            future = Future()
+
             write_status = db_entry.set_dbr_data(data=command.data,
                                                  data_type=command.data_type,
-                                                 metadata=command.metadata)
-            yield chan.write(ioid=command.ioid, status=write_status)
+                                                 metadata=command.metadata,
+                                                 future=future)
+
+            if future.done():
+                yield chan.write(ioid=command.ioid, status=write_status)
+            else:
+                if client_waiting:
+                    raise FutureResult(future,
+                                       partial(self._wait_write_completion,
+                                               chan, command, future))
+                else:
+                    yield chan.write(ioid=command.ioid, status=False)
+
         elif isinstance(command, ca.EventAddRequest):
             chan, db_entry = get_db_entry()
             yield chan.subscribe((3.14,), command.subscriptionid)
@@ -154,6 +182,29 @@ class VirtualCircuit:
         elif isinstance(command, ca.ClearChannelRequest):
             chan, db_entry = get_db_entry()
             yield chan.disconnect()
+
+    async def _wait_write_completion(self, chan, command, future):
+        # key = (chan, command.ioid)
+        # self.pending_writes[key] = future
+        try:
+            await curio.traps._future_wait(future)
+            try:
+                write_status = future.result()
+            except Exception as ex:
+                cid = self.circuit.channels_sid[command.sid].cid
+                response_command = ca.ErrorResponse(
+                    command, cid,
+                    status_code=ca.ECA_INTERNAL.code_with_severity,
+                    error_message=('Python exception: {} {}'
+                                   ''.format(type(ex).__name__, ex))
+                )
+            else:
+                response_command = chan.write(ioid=command.ioid,
+                                              status=write_status)
+            await self.send(response_command)
+        finally:
+            # del self.pending_writes[key]
+            pass
 
 
 class Context:

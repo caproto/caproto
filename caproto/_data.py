@@ -6,6 +6,7 @@ from ._dbr import (DBR_TYPES, ChType, promote_type, native_type,
 
 # TODO: assuming USE_NUMPY for now
 import numpy as np
+import threading
 
 
 def _convert_enum_values(values, to_dtype, string_encoding, enum_strings):
@@ -237,9 +238,19 @@ class ChannelData:
         self._set_dbr_metadata(dbr_metadata)
         return dbr_metadata, values
 
-    def set_dbr_data(self, data, data_type, metadata):
+    def set_dbr_data(self, data, data_type, metadata, future):
         '''Set data from DBR metadata/values'''
-        self.value = self.fromtype(values=data, data_type=data_type)
+        def finish():
+            time.sleep(0.5)
+            try:
+                self.value = self.fromtype(values=data, data_type=data_type)
+            except Exception as ex:
+                future.set_exception(ex)
+            else:
+                future.set_result(True)
+
+        self._thread = threading.Thread(target=finish, daemon=True)
+        self._thread.start()
         return True
 
     def _set_dbr_metadata(self, dbr_metadata):
