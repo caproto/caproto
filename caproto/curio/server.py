@@ -1,7 +1,6 @@
 import logging
 import random
 import inspect
-from functools import partial
 from concurrent.futures import Future
 
 import curio
@@ -166,10 +165,16 @@ class VirtualCircuit:
             if future.done():
                 yield chan.write(ioid=command.ioid, status=write_status)
             else:
-                if client_waiting:
-                    raise FutureResult(future,
-                                       partial(self._wait_write_completion,
-                                               chan, command, future))
+                if client_waiting or inspect.isawaitable(write_status):
+                    async def wait():
+                        # if we have an awaitable coroutine, use it
+                        if inspect.isawaitable(write_status):
+                            await write_status
+                        # failing that, wait on the future
+                        await self._wait_write_completion(chan, command,
+                                                          future)
+
+                    raise FutureResult(future, wait)
                 else:
                     yield chan.write(ioid=command.ioid, status=False)
 
