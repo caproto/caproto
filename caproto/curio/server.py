@@ -1,6 +1,6 @@
 import logging
 import random
-import inspect
+from collections import namedtuple
 from concurrent.futures import Future
 
 import curio
@@ -12,6 +12,10 @@ from caproto import (ChannelDouble, ChannelInteger, ChannelEnum)
 
 class DisconnectedCircuit(Exception):
     ...
+
+
+Subscription = namedtuple('Subscription', ('mask', 'circuit', 'data_type',
+                                           'subscription_id'))
 
 
 class FutureResult(Exception):
@@ -48,6 +52,7 @@ def find_next_tcp_port(host='0.0.0.0', starting_port=ca.EPICS_CA2_PORT + 1):
 class VirtualCircuit:
     "Wraps a caproto.VirtualCircuit with a curio client."
     def __init__(self, circuit, client, context):
+        self.connected = True
         self.circuit = circuit  # a caproto.VirtualCircuit
         self.client = client
         self.context = context
@@ -56,6 +61,27 @@ class VirtualCircuit:
         self.new_command_condition = curio.Condition()
         # self.pending_writes = {}
         self.pending_tasks = curio.TaskGroup()
+        self.subscriptions = {}
+
+    async def run(self):
+        await self.pending_tasks.spawn(self.command_queue_loop())
+
+    async def _on_disconnect(self):
+        """Executed when disconnection detected"""
+        if not self.connected:
+            return
+
+        self.connected = False
+        for db_entry, subs in self.subscriptions.items():
+            for sub in subs:
+                self.context.subscriptions[db_entry].remove(sub)
+            if not self.context.subscriptions[db_entry]:
+                db_entry.subscribe(None)
+                del self.context.subscriptions[db_entry]
+        self.subscriptions.clear()
+
+        # TODO this may cancel some caputs in progress, need to rethink it
+        # await self.pending_tasks.cancel_remaining()
 
     async def send(self, *commands):
         """
@@ -70,6 +96,7 @@ class VirtualCircuit:
         """
         bytes_received = await self.client.recv(4096)
         if not bytes_received:
+            await self._on_disconnect()
             raise DisconnectedCircuit()
         self.circuit.recv(bytes_received)
 
@@ -106,6 +133,12 @@ class VirtualCircuit:
                 # TODO pretty sure using the taskgroup will bog things down,
                 # but it suppresses an annoying warning message, so... there
             except Exception as ex:
+                if not self.connected:
+                    if not isinstance(command, ca.ClearChannelRequest):
+                        logger.error('Curio server error after client '
+                                     'disconnection: %s', command, exc_info=ex)
+                    break
+
                 logger.error('Curio server failed to process command: %s',
                              command, exc_info=ex)
 
@@ -154,7 +187,7 @@ class VirtualCircuit:
                             ioid=command.ioid, metadata=metadata)
         elif isinstance(command, (ca.WriteRequest, ca.WriteNotifyRequest)):
             chan, db_entry = get_db_entry()
-            # client_waiting = isinstance(command, ca.WriteNotifyRequest)
+            client_waiting = isinstance(command, ca.WriteNotifyRequest)
             future = Future()
 
             async def handle_write():
@@ -166,20 +199,42 @@ class VirtualCircuit:
                     await curio.abide(db_entry.set_dbr_data, command.data,
                                       command.data_type, command.metadata,
                                       future)
-                await self._wait_write_completion(chan, command, future)
+                await self._wait_write_completion(chan, command, future,
+                                                  client_waiting)
 
             raise FutureResult(future, handle_write)
         elif isinstance(command, ca.EventAddRequest):
             chan, db_entry = get_db_entry()
-            yield chan.subscribe((3.14,), command.subscriptionid)
+            # TODO no support for deprecated low/high/to
+            sub = Subscription(mask=command.mask,
+                               circuit=self,
+                               data_type=command.data_type,
+                               subscription_id=command.subscriptionid)
+            if db_entry not in self.context.subscriptions:
+                self.context.subscriptions[db_entry] = []
+                db_entry.subscribe(self.context.subscription_queue, chan)
+            self.context.subscriptions[db_entry].append(sub)
+            if db_entry not in self.subscriptions:
+                self.subscriptions[db_entry] = []
+            self.subscriptions[db_entry].append(sub)
         elif isinstance(command, ca.EventCancelRequest):
             chan, db_entry = get_db_entry()
-            yield chan.unsubscribe(command.subscriptionid)
+            sub = [sub for sub in self.subscriptions[db_entry]
+                   if sub.subscription_id == command.subscriptionid]
+            if sub:
+                sub = sub[0]
+                yield chan.unsubscribe(command.subscriptionid)
+                self.context.subscriptions[db_entry].remove(sub)
+                if not self.context.subscriptions[db_entry]:
+                    db_entry.subscribe(None)
+                    del self.context.subscriptions[db_entry]
+                self.subscriptions[db_entry].remove(sub)
         elif isinstance(command, ca.ClearChannelRequest):
             chan, db_entry = get_db_entry()
             yield chan.disconnect()
 
-    async def _wait_write_completion(self, chan, command, future):
+    async def _wait_write_completion(self, chan, command, future,
+                                     client_waiting):
         # key = (chan, command.ioid)
         # self.pending_writes[key] = future
         try:
@@ -197,7 +252,9 @@ class VirtualCircuit:
             else:
                 response_command = chan.write(ioid=command.ioid,
                                               status=write_status)
-            await self.send(response_command)
+
+            if client_waiting:
+                await self.send(response_command)
         finally:
             # del self.pending_writes[key]
             pass
@@ -213,6 +270,9 @@ class Context:
                                           queue_class=curio.UniversalQueue)
         self.broadcaster.log.setLevel(self.log_level)
         self.broadcaster_command_condition = curio.Condition()
+
+        self.subscriptions = {}
+        self.subscription_queue = curio.UniversalQueue()
 
     async def broadcaster_udp_server_loop(self):
         self.udp_sock = ca.bcast_socket(socket)
@@ -268,21 +328,54 @@ class Context:
         circuit = VirtualCircuit(cavc, client, self)
         circuit.circuit.log.setLevel(self.log_level)
 
-        tcp_queue_loop = await curio.spawn(circuit.command_queue_loop())
+        await circuit.run()
+
         while True:
             try:
                 await circuit.recv()
             except DisconnectedCircuit:
-                await tcp_queue_loop.cancel()
                 circuit.circuit.disconnect()
                 return
+
+    async def subscription_queue_loop(self):
+        while True:
+            db_entry, mask, data, chan = await self.subscription_queue.get()
+            try:
+                subs = self.subscriptions[db_entry]
+            except KeyError:
+                continue
+
+            matching_subs = [(sub.circuit, sub.data_type, sub.subscription_id)
+                             for sub in subs
+                             if sub.mask & mask]
+            print('{} matching subs'.format(len(matching_subs)))
+            if matching_subs:
+                commands = {db_entry.data_type:
+                            chan.subscribe(data=data, subscriptionid=0,
+                                           status_code=1)}
+                for circuit, data_type, sub_id in matching_subs:
+                    try:
+                        cmd = commands[data_type]
+                    except KeyError:
+                        metadata, data = db_entry.get_dbr_data(data_type)
+                        cmd = chan.subscribe(data=data, data_type=data_type,
+                                             data_count=len(data),
+                                             subscriptionid=0,
+                                             metadata=metadata,
+                                             status_code=1)
+                        commands[data_type] = cmd
+
+                    cmd.header.parameter2 = sub_id  # TODO setter?
+                    await circuit.send(cmd)
 
     async def run(self):
         try:
             async with curio.TaskGroup() as g:
-                await g.spawn(curio.tcp_server('', self.port, self.tcp_handler))
+                await g.spawn(curio.tcp_server('', self.port,
+                                               self.tcp_handler))
                 await g.spawn(self.broadcaster_udp_server_loop())
                 await g.spawn(self.broadcaster_queue_loop())
+                await g.spawn(self.subscription_queue_loop())
         except curio.TaskGroupError as ex:
             logger.error('Curio server failed: %s', ex.errors)
             for task in ex:

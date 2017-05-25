@@ -766,6 +766,20 @@ class RepeaterRegisterRequest(Message):
 
 
 class EventAddRequestPayload(ctypes.BigEndianStructure):
+    '''
+    Attributes
+    ----------
+    low : float
+        Low delta value (deprecated)
+    high : float
+        High delta value (deprecated)
+    to : float
+        Period between samples (deprecated)
+    mask : int
+        Event selection mask
+
+
+    '''
     _fields_ = [('low', float_t),
                 ('high', float_t),
                 ('to', float_t),

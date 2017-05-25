@@ -10,7 +10,8 @@ import numpy as np
 from ._dbr import (DBR_TYPES, ChType, promote_type, native_type,
                    native_float_types, native_int_types, native_types,
                    timestamp_to_epics, time_types, MAX_ENUM_STRING_SIZE,
-                   DBR_STSACK_STRING, AccessRights, _numpy_map)
+                   DBR_STSACK_STRING, AccessRights, _numpy_map,
+                   SubscriptionType)
 
 
 def _convert_enum_values(values, to_dtype, string_encoding, enum_strings):
@@ -189,6 +190,7 @@ class ChannelData:
         self.value = value
         self.string_encoding = string_encoding
         self.reported_record_type = reported_record_type
+        self._subscription_queue = None
         self._dbr_metadata = {
             chtype: DBR_TYPES[chtype]()
             for chtype in (promote_type(self.data_type, use_ctrl=True),
@@ -197,6 +199,11 @@ class ChannelData:
                            promote_type(self.data_type, use_gr=True),
                            )
         }
+
+    def subscribe(self, queue, *sub_queue_args):
+        '''Set subscription queue'''
+        self._subscription_queue = queue
+        self._subscription_queue_args = sub_queue_args
 
     def fromtype(self, values, data_type):
         '''Convenience function to convert given values to this data type'''
@@ -266,6 +273,11 @@ class ChannelData:
             future.set_exception(ex)
         else:
             future.set_result(True)
+            sub_queue = self._subscription_queue
+            if sub_queue is not None:
+                await sub_queue.put((self, SubscriptionType.DBE_VALUE,
+                                     self.value) +
+                                    self._subscription_queue_args)
 
     def _set_dbr_metadata(self, dbr_metadata):
         'Set all metadata fields of a given DBR type instance'
