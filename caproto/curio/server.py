@@ -87,18 +87,19 @@ class VirtualCircuit:
         """
         Process a command and tranport it over the TCP socket for this circuit.
         """
-        buffers_to_send = self.circuit.send(*commands)
-        await self.client.sendmsg(buffers_to_send)
+        if self.connected:
+            buffers_to_send = self.circuit.send(*commands)
+            await self.client.sendmsg(buffers_to_send)
 
     async def recv(self):
         """
         Receive bytes over TCP and cache them in this circuit's buffer.
         """
         bytes_received = await self.client.recv(4096)
+        self.circuit.recv(bytes_received)
         if not bytes_received:
             await self._on_disconnect()
             raise DisconnectedCircuit()
-        self.circuit.recv(bytes_received)
 
     async def command_queue_loop(self):
         """
@@ -132,11 +133,15 @@ class VirtualCircuit:
                                                ignore_result=True)
                 # TODO pretty sure using the taskgroup will bog things down,
                 # but it suppresses an annoying warning message, so... there
+            except DisconnectedCircuit:
+                await self._on_disconnect()
+                self.circuit.disconnect()
+                await self.context.circuit_disconnected(self)
             except Exception as ex:
                 if not self.connected:
                     if not isinstance(command, ca.ClearChannelRequest):
                         logger.error('Curio server error after client '
-                                     'disconnection: %s', command, exc_info=ex)
+                                     'disconnection: %s', command)
                     break
 
                 logger.error('Curio server failed to process command: %s',
@@ -265,6 +270,8 @@ class Context:
         self.host = host
         self.port = port
         self.pvdb = pvdb
+
+        self.circuits = set()
         self.log_level = log_level
         self.broadcaster = ca.Broadcaster(our_role=ca.SERVER,
                                           queue_class=curio.UniversalQueue)
@@ -326,6 +333,8 @@ class Context:
         cavc = ca.VirtualCircuit(ca.SERVER, addr, None,
                                  queue_class=curio.UniversalQueue)
         circuit = VirtualCircuit(cavc, client, self)
+        self.circuits.add(circuit)
+
         circuit.circuit.log.setLevel(self.log_level)
 
         await circuit.run()
@@ -334,8 +343,11 @@ class Context:
             try:
                 await circuit.recv()
             except DisconnectedCircuit:
-                circuit.circuit.disconnect()
-                return
+                break
+
+    async def circuit_disconnected(self, circuit):
+        '''Notification from circuit that its connection has closed'''
+        self.circuits.remove(circuit)
 
     async def subscription_queue_loop(self):
         while True:
@@ -383,6 +395,9 @@ class Context:
         except curio.TaskCancelled:
             logger.info('Server task cancelled')
             await g.cancel_remaining()
+            for circuit in list(self.circuits):
+                logger.debug('Cancelling tasks from circuit %s', circuit)
+                await circuit.pending_tasks.cancel_remaining()
 
 
 async def _test(pvdb=None):

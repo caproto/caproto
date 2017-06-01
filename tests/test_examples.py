@@ -102,10 +102,10 @@ def test_curio_server():
     import caproto.curio.client as client
     from caproto.curio.server import _test as example_server
     kernel = curio.Kernel()
+    called = []
 
     async def run_client():
         # Some user function to call when subscriptions receive data.
-        called = []
 
         def user_callback(command):
             print("Subscription has received data.")
@@ -131,7 +131,6 @@ def test_curio_server():
         reading = await chan1.read()
         print('reading:', reading)
         await chan1.disconnect()
-        assert called
         await chan1.circuit.socket.close()
 
     async def task():
@@ -148,6 +147,7 @@ def test_curio_server():
 
     with kernel:
         kernel.run(task)
+    assert called, 'subscription not called in client'
     print('done')
 
 

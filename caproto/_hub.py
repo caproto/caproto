@@ -137,6 +137,8 @@ class VirtualCircuit:
             return
 
         self.log.debug("Received %d bytes.", total_received)
+
+        # TODO for performance reasons, this should probably be a b''.join()
         for byteslike in buffers:
             self._data += byteslike
 
@@ -328,9 +330,11 @@ class VirtualCircuit:
         Clients should call this method when a TCP connection is lost.
         """
         # poison the queue
-        self._backlog += 1
-        self.command_queue.put(DISCONNECTED)
-        self.states.disconnect()
+        if (self.states[CLIENT] != DISCONNECTED or
+                self.states[SERVER] != DISCONNECTED):
+            self._backlog += 1
+            self.command_queue.put(DISCONNECTED)
+            self.states.disconnect()
 
     def new_channel_id(self):
         "Return a valid value for a cid or sid."
@@ -712,17 +716,6 @@ class ServerChannel(_BaseChannel):
         CreateChFailResponse
         """
         command = CreateChFailResponse(self.cid)
-        return command
-
-    def disconnect(self):
-        """
-        Generate a valid :class:`ClearChannelResponse`.
-
-        Returns
-        -------
-        ClearChannelResponse
-        """
-        command = ClearChannelResponse(self.sid, self.cid)
         return command
 
     def read(self, data, ioid, data_type=None, data_count=None, status=1, *,

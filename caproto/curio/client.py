@@ -29,6 +29,7 @@ class VirtualCircuit:
         self.ioids = {}  # map ioid to Channel
         self.ioid_data = {}  # map ioid to server response
         self.subscriptionids = {}  # map subscriptionid to Channel
+        self.connected = True
         self.socket = None
         self.new_command_condition = curio.Condition()
         self._socket_lock = curio.Lock()
@@ -39,10 +40,10 @@ class VirtualCircuit:
 
         while True:
             bytes_received = await self.socket.recv(32768)
-            if not len(bytes_received):
-                self.circuit.disconnect()
-                break
             self.circuit.recv(bytes_received)
+            if not len(bytes_received):
+                self.connected = False
+                break
 
     async def _command_queue_loop(self):
         while True:
@@ -81,11 +82,12 @@ class VirtualCircuit:
         """
         Process a command and tranport it over the TCP socket for this circuit.
         """
-        buffers_to_send = self.circuit.send(*commands)
-        async with self._socket_lock:
-            if self.socket is None:
-                raise RuntimeError('socket connection failed')
-            await self.socket.sendmsg(buffers_to_send)
+        if self.connected:
+            buffers_to_send = self.circuit.send(*commands)
+            async with self._socket_lock:
+                if self.socket is None:
+                    raise RuntimeError('socket connection failed')
+                await self.socket.sendmsg(buffers_to_send)
 
 
 class Channel:

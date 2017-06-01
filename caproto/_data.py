@@ -251,22 +251,17 @@ class ChannelData:
 
     def set_dbr_data(self, data, data_type, metadata, future):
         '''Set data from DBR metadata/values'''
-        def finish():
-            time.sleep(0.5)
-            try:
-                self.value = self.fromtype(values=data, data_type=data_type)
-            except Exception as ex:
-                future.set_exception(ex)
-            else:
-                future.set_result(True)
-        self._thread = threading.Thread(target=finish, daemon=True)
-        self._thread.start()
+        try:
+            self.value = self.fromtype(values=data, data_type=data_type)
+        except Exception as ex:
+            future.set_exception(ex)
+        else:
+            future.set_result(True)
         return True
 
     @awaitable(set_dbr_data)
     async def set_dbr_data(self, data, data_type, metadata, future):
         '''Set data from DBR metadata/values'''
-        await curio.sleep(0.5)
         try:
             self.value = self.fromtype(values=data, data_type=data_type)
         except Exception as ex:
