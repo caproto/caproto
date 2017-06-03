@@ -137,6 +137,7 @@ class VirtualCircuit:
                 await self._on_disconnect()
                 self.circuit.disconnect()
                 await self.context.circuit_disconnected(self)
+                break
             except Exception as ex:
                 if not self.connected:
                     if not isinstance(command, ca.ClearChannelRequest):
