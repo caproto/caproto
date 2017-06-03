@@ -223,6 +223,14 @@ class VirtualCircuit:
             if db_entry not in self.subscriptions:
                 self.subscriptions[db_entry] = []
             self.subscriptions[db_entry].append(sub)
+
+            # send back a first monitor always
+            metadata, data = db_entry.get_dbr_data(command.data_type)
+            yield chan.subscribe(data=data, data_type=command.data_type,
+                                 data_count=len(data),
+                                 subscriptionid=command.subscriptionid,
+                                 metadata=metadata,
+                                 status_code=1)
         elif isinstance(command, ca.EventCancelRequest):
             chan, db_entry = get_db_entry()
             sub = [sub for sub in self.subscriptions[db_entry]
