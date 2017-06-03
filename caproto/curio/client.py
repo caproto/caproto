@@ -181,6 +181,7 @@ class Channel:
 
         task = await curio.spawn(_queue_loop, daemon=True)
         self.monitoring_tasks[command.subscriptionid] = task
+        return command.subscriptionid
 
     async def unsubscribe(self, subscriptionid, *args, **kwargs):
         "Cancel a subscription and await confirmation from the server."
@@ -393,9 +394,9 @@ async def main():
     await chan2.wait_for_connection()
     reading = await chan1.read()
     print('reading:', reading)
-    await chan1.subscribe()
+    sub_id = await chan1.subscribe()
     await chan2.read()
-    await chan1.unsubscribe(0)
+    await chan1.unsubscribe(sub_id)
     await chan1.write((5,))
     reading = await chan1.read()
     print('reading:', reading)
