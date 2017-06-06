@@ -53,7 +53,6 @@ class CurioVirtualCircuit:
         self.client_hostname = None
         self.client_username = None
         self.new_command_condition = curio.Condition()
-        # self.pending_writes = {}
         self.pending_tasks = curio.TaskGroup()
         self.subscriptions = {}
 
@@ -241,29 +240,24 @@ class CurioVirtualCircuit:
 
     async def _wait_write_completion(self, chan, command, future,
                                      client_waiting):
-        # key = (chan, command.ioid)
-        # self.pending_writes[key] = future
+        '''Wait for an asynchronous caput to finish'''
         try:
             await curio.traps._future_wait(future)
-            try:
-                write_status = future.result()
-            except Exception as ex:
-                cid = self.circuit.channels_sid[command.sid].cid
-                response_command = ca.ErrorResponse(
-                    command, cid,
-                    status_code=ca.ECA_INTERNAL.code_with_severity,
-                    error_message=('Python exception: {} {}'
-                                   ''.format(type(ex).__name__, ex))
-                )
-            else:
-                response_command = chan.write(ioid=command.ioid,
-                                              status=write_status)
+            write_status = future.result()
+        except Exception as ex:
+            cid = self.circuit.channels_sid[command.sid].cid
+            response_command = ca.ErrorResponse(
+                command, cid,
+                status_code=ca.ECA_INTERNAL.code_with_severity,
+                error_message=('Python exception: {} {}'
+                               ''.format(type(ex).__name__, ex))
+            )
+        else:
+            response_command = chan.write(ioid=command.ioid,
+                                          status=write_status)
 
-            if client_waiting:
-                await self.send(response_command)
-        finally:
-            # del self.pending_writes[key]
-            pass
+        if client_waiting:
+            await self.send(response_command)
 
 
 class Context:
