@@ -43,7 +43,7 @@ def find_next_tcp_port(host='0.0.0.0', starting_port=ca.EPICS_CA2_PORT + 1):
     return port
 
 
-class VirtualCircuit:
+class CurioVirtualCircuit:
     "Wraps a caproto.VirtualCircuit with a curio client."
     def __init__(self, circuit, client, context):
         self.connected = True
@@ -312,14 +312,14 @@ class Context:
                 if isinstance(command, ca.VersionRequest):
                     responses.append(ca.VersionResponse(13))
                 if isinstance(command, ca.SearchRequest):
-                    known_pv = command.name.decode(SERVER_ENCODING) in self.pvdb
+                    pv_name = command.name.decode(SERVER_ENCODING)
+                    known_pv = pv_name in self.pvdb
                     if (not known_pv) and command.reply == ca.NO_REPLY:
                         responses.clear()
                         break  # Do not send any repsonse to this datagram.
 
-                    # we can get the IP but it's more reliable (AFAIK) to
-                    # let the client get the ip from the packet
-                    # ip = _get_my_ip()
+                    # responding with an IP of `None` tells client to get IP
+                    # address from packet
                     responses.append(ca.SearchResponse(self.port, None,
                                                        command.cid, 13))
 
@@ -331,9 +331,10 @@ class Context:
                     await self.broadcaster_command_condition.notify_all()
 
     async def tcp_handler(self, client, addr):
+        '''Handler for each new TCP client to the server'''
         cavc = ca.VirtualCircuit(ca.SERVER, addr, None,
                                  queue_class=curio.UniversalQueue)
-        circuit = VirtualCircuit(cavc, client, self)
+        circuit = CurioVirtualCircuit(cavc, client, self)
         self.circuits.add(circuit)
 
         circuit.circuit.log.setLevel(self.log_level)
