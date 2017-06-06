@@ -18,12 +18,6 @@ Subscription = namedtuple('Subscription', ('mask', 'circuit', 'data_type',
                                            'subscription_id'))
 
 
-class FutureResult(Exception):
-    def __init__(self, future, callable):
-        self.future = future
-        self.callable = callable
-
-
 logger = logging.getLogger(__name__)
 
 SERVER_ENCODING = 'latin-1'
@@ -121,18 +115,9 @@ class VirtualCircuit:
                 continue
 
             try:
-                for response_command in self._process_command(command):
-                    if isinstance(response_command, (list, tuple)):
-                        await self.send(*response_command)
-                    else:
-                        await self.send(response_command)
-            except FutureResult as fut_res:
-                # pretty sure this is a bad way of doing things
-                # future = fut_res.future
-                await self.pending_tasks.spawn(fut_res.callable,
-                                               ignore_result=True)
-                # TODO pretty sure using the taskgroup will bog things down,
-                # but it suppresses an annoying warning message, so... there
+                response_command = await self._process_command(command)
+                if response_command is not None:
+                    await self.send(*response_command)
             except DisconnectedCircuit:
                 await self._on_disconnect()
                 self.circuit.disconnect()
@@ -162,25 +147,28 @@ class VirtualCircuit:
             async with self.new_command_condition:
                 await self.new_command_condition.notify_all()
 
-    def _process_command(self, command):
+    async def _process_command(self, command):
+        '''Process a command from a client, and return the server response'''
         def get_db_entry():
             chan = self.circuit.channels_sid[command.sid]
             db_entry = self.context.pvdb[chan.name.decode(SERVER_ENCODING)]
             return chan, db_entry
 
-        if isinstance(command, ca.CreateChanRequest):
+        if command is ca.DISCONNECTED:
+            raise DisconnectedCircuit()
+        elif isinstance(command, ca.CreateChanRequest):
             db_entry = self.context.pvdb[command.name.decode(SERVER_ENCODING)]
             access = db_entry.check_access(self.client_hostname,
                                            self.client_username)
 
-            yield [ca.VersionResponse(13),
-                   ca.AccessRightsResponse(cid=command.cid,
-                                           access_rights=access),
-                   ca.CreateChanResponse(data_type=db_entry.data_type,
-                                         data_count=len(db_entry),
-                                         cid=command.cid,
-                                         sid=self.circuit.new_channel_id()),
-                   ]
+            return [ca.VersionResponse(13),
+                    ca.AccessRightsResponse(cid=command.cid,
+                                            access_rights=access),
+                    ca.CreateChanResponse(data_type=db_entry.data_type,
+                                          data_count=len(db_entry),
+                                          cid=command.cid,
+                                          sid=self.circuit.new_channel_id()),
+                    ]
         elif isinstance(command, ca.HostNameRequest):
             self.client_hostname = command.name.decode(SERVER_ENCODING)
         elif isinstance(command, ca.ClientNameRequest):
@@ -188,9 +176,10 @@ class VirtualCircuit:
         elif isinstance(command, ca.ReadNotifyRequest):
             chan, db_entry = get_db_entry()
             metadata, data = db_entry.get_dbr_data(command.data_type)
-            yield chan.read(data=data, data_type=command.data_type,
-                            data_count=len(data), status=1,
-                            ioid=command.ioid, metadata=metadata)
+            return [chan.read(data=data, data_type=command.data_type,
+                              data_count=len(data), status=1,
+                              ioid=command.ioid, metadata=metadata)
+                    ]
         elif isinstance(command, (ca.WriteRequest, ca.WriteNotifyRequest)):
             chan, db_entry = get_db_entry()
             client_waiting = isinstance(command, ca.WriteNotifyRequest)
@@ -208,7 +197,9 @@ class VirtualCircuit:
                 await self._wait_write_completion(chan, command, future,
                                                   client_waiting)
 
-            raise FutureResult(future, handle_write)
+            await self.pending_tasks.spawn(handle_write, ignore_result=True)
+            # TODO pretty sure using the taskgroup will bog things down,
+            # but it suppresses an annoying warning message, so... there
         elif isinstance(command, ca.EventAddRequest):
             chan, db_entry = get_db_entry()
             # TODO no support for deprecated low/high/to
@@ -226,26 +217,27 @@ class VirtualCircuit:
 
             # send back a first monitor always
             metadata, data = db_entry.get_dbr_data(command.data_type)
-            yield chan.subscribe(data=data, data_type=command.data_type,
-                                 data_count=len(data),
-                                 subscriptionid=command.subscriptionid,
-                                 metadata=metadata,
-                                 status_code=1)
+            return [chan.subscribe(data=data, data_type=command.data_type,
+                                   data_count=len(data),
+                                   subscriptionid=command.subscriptionid,
+                                   metadata=metadata, status_code=1)
+                    ]
         elif isinstance(command, ca.EventCancelRequest):
             chan, db_entry = get_db_entry()
             sub = [sub for sub in self.subscriptions[db_entry]
                    if sub.subscription_id == command.subscriptionid]
             if sub:
                 sub = sub[0]
-                yield chan.unsubscribe(command.subscriptionid)
+                unsub_response = chan.unsubscribe(command.subscriptionid)
                 self.context.subscriptions[db_entry].remove(sub)
                 if not self.context.subscriptions[db_entry]:
                     db_entry.subscribe(None)
                     del self.context.subscriptions[db_entry]
                 self.subscriptions[db_entry].remove(sub)
+                return [unsub_response]
         elif isinstance(command, ca.ClearChannelRequest):
             chan, db_entry = get_db_entry()
-            yield chan.disconnect()
+            return [chan.disconnect()]
 
     async def _wait_write_completion(self, chan, command, future,
                                      client_waiting):
