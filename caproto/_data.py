@@ -1,7 +1,4 @@
 import time
-import threading
-
-import curio
 from curio.meta import awaitable
 
 # TODO: assuming USE_NUMPY for now
