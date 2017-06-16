@@ -76,7 +76,7 @@ class Broadcaster:
         history = []
         for i, command in enumerate(commands):
             self.log.debug("%d of %d %r", 1 + i, len(commands), command)
-            self.process_command(self.our_role, command, history=history)
+            self._process_command(self.our_role, command, history=history)
             bytes_to_send += bytes(command)
         return bytes_to_send
 
@@ -101,7 +101,39 @@ class Broadcaster:
             commands = read_datagram(byteslike, address, self.their_role)
             self.command_queue.put((address, commands))
 
-    def process_command(self, role, command, *, history=None):
+    def next_command(self):
+        '''Synchronous next command
+
+        Get next commands, update internal state, and return the evaluated
+        commands
+
+        Returns
+        -------
+        addr, list_of_commands
+        '''
+        addr, commands = self.command_queue.get()
+        history = []
+        for command in commands:
+            self._process_command(self.their_role, command, history=history)
+        return commands
+
+    async def async_next_command(self, *args, **kwargs):
+        '''Asynchronous next command
+
+        Get next commands, update internal state, and return the evaluated
+        commands
+
+        Returns
+        -------
+        addr, list_of_commands
+        '''
+        addr, commands = await self.command_queue.get()
+        history = []
+        for command in commands:
+            self._process_command(self.their_role, command, history=history)
+        return addr, commands
+
+    def _process_command(self, role, command, *, history=None):
         """
         All comands go through here.
 

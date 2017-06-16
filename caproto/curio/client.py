@@ -240,19 +240,17 @@ class SharedBroadcaster:
         command = self.broadcaster.register('127.0.0.1')
         await self.send(ca.EPICS_CA2_PORT, command)
 
-        queue = self.broadcaster.command_queue
-        role = self.broadcaster.their_role
-
         while True:
-            addr, commands = await queue.get()
-            for command in commands:
-                try:
-                    self.broadcaster.process_command(role, command)
-                except Exception as ex:
-                    logger.error('Broadcaster command queue evaluation '
-                                 'failed: {!r}'.format(command), exc_info=ex)
-                    continue
+            try:
+                addr, commands = await self.broadcaster.async_next_command()
+            except curio.TaskCancelled:
+                break
+            except Exception as ex:
+                logger.error('Broadcaster command queue evaluation '
+                             'failed: {!r}'.format(command), exc_info=ex)
+                continue
 
+            for command in commands:
                 if isinstance(command, ca.RepeaterConfirmResponse):
                     self.registered = True
                 if isinstance(command, ca.VersionResponse):
