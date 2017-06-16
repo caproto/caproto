@@ -39,8 +39,7 @@ class Broadcaster:
             self.their_role = CLIENT
         self.protocol_version = protocol_version
         self.unanswered_searches = {}  # map search id (cid) to name
-        self._datagram_inbox = deque()  # datagrams to be parsed into Commands
-        self.recv_history = []  # commands parsed so far from current datagram
+        self._iterable_commands = None  # commands being parsed now
         self._parsed_commands = deque()  # parsed Commands to be processed
         # Unlike VirtualCircuit and Channel, there is very little state to
         # track for the Broadcaster. We don't need a full state machine, just
@@ -95,11 +94,8 @@ class Broadcaster:
         """
         logging.debug("Received datagram from %r with %d bytes.",
                       address, len(byteslike))
-        self._datagram_inbox.append((byteslike, address))
-        while self._datagram_inbox:
-            byteslike, address = self._datagram_inbox.popleft()
-            commands = read_datagram(byteslike, address, self.their_role)
-            self.command_queue.put((address, commands))
+        commands = read_datagram(byteslike, address, self.their_role)
+        self.command_queue.put((address, commands))
 
     def next_command(self):
         '''Synchronous next command
@@ -111,11 +107,31 @@ class Broadcaster:
         -------
         addr, list_of_commands
         '''
-        addr, commands = self.command_queue.get()
-        history = []
-        for command in commands:
-            self._process_command(self.their_role, command, history=history)
-        return commands
+
+        def gen():
+            addr, commands = self.command_queue.get()
+            print('got', addr, commands)
+            history = []
+            for command in commands:
+                self._process_command(self.their_role, command,
+                                      history=history)
+                yield addr, command
+
+        def get_next():
+            if self._iterable_commands is None:
+                self._iterable_commands = gen()
+
+            try:
+                addr, command = next(self._iterable_commands)
+            except StopIteration:
+                self._iterable_commands = None
+                print('try again')
+                return get_next()
+            else:
+                print('returning', addr, command)
+                return addr, command
+
+        return get_next()
 
     async def async_next_command(self, *args, **kwargs):
         '''Asynchronous next command
