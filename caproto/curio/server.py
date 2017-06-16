@@ -1,4 +1,3 @@
-import sys
 import logging
 import random
 
@@ -80,7 +79,7 @@ class VirtualCircuit:
         2. Update Channel state if applicable.
         """
         while True:
-            command = await self.circuit.command_queue.get()
+            command = await self.circuit.async_next_command()
 
             try:
                 for response_command in self._process_command(command):
@@ -107,8 +106,6 @@ class VirtualCircuit:
                 await self.new_command_condition.notify_all()
 
     def _process_command(self, command):
-        self.circuit.process_command(self.circuit.their_role, command)
-
         def get_db_entry():
             chan = self.circuit.channels_sid[command.sid]
             db_entry = self.context.pvdb[chan.name.decode(SERVER_ENCODING)]
@@ -175,21 +172,18 @@ class Context:
             self.broadcaster.recv(bytes_received, address)
 
     async def broadcaster_queue_loop(self):
-        queue = self.broadcaster.command_queue
-        role = self.broadcaster.their_role
         responses = []
 
         while True:
-            addr, commands = await queue.get()
+            try:
+                addr, commands = await self.broadcaster.async_next_command()
+            except Exception as ex:
+                logger.error('Broadcaster command queue evaluation '
+                             'failed: {!r}'.format(commands), exc_info=ex)
+                continue
+
             responses.clear()
             for command in commands:
-                try:
-                    self.broadcaster.process_command(role, command)
-                except Exception as ex:
-                    logger.error('Broadcaster command queue evaluation '
-                                 'failed: {!r}'.format(command), exc_info=ex)
-                    continue
-
                 if isinstance(command, ca.VersionRequest):
                     res = ca.VersionResponse(13)
                     responses.append(res)

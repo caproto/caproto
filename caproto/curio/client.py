@@ -268,7 +268,7 @@ class SharedBroadcaster:
                 break
             except Exception as ex:
                 logger.error('Broadcaster command queue evaluation '
-                             'failed: {!r}'.format(command), exc_info=ex)
+                             'failed: {!r}'.format(commands), exc_info=ex)
                 continue
 
             for command in commands:
