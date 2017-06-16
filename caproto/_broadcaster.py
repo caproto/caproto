@@ -100,38 +100,32 @@ class Broadcaster:
     def next_command(self):
         '''Synchronous next command
 
-        Get next commands, update internal state, and return the evaluated
-        commands
+        Get next command, update internal state, and return the evaluated
+        command
 
         Returns
         -------
-        addr, list_of_commands
+        addr, command
         '''
 
         def gen():
             addr, commands = self.command_queue.get()
-            print('got', addr, commands)
             history = []
             for command in commands:
                 self._process_command(self.their_role, command,
                                       history=history)
                 yield addr, command
 
-        def get_next():
-            if self._iterable_commands is None:
-                self._iterable_commands = gen()
+        if self._iterable_commands is None:
+            self._iterable_commands = gen()
 
-            try:
-                addr, command = next(self._iterable_commands)
-            except StopIteration:
-                self._iterable_commands = None
-                print('try again')
-                return get_next()
-            else:
-                print('returning', addr, command)
-                return addr, command
-
-        return get_next()
+        try:
+            addr, command = next(self._iterable_commands)
+        except StopIteration:
+            self._iterable_commands = gen()
+            return next(self._iterable_commands)
+        else:
+            return addr, command
 
     async def async_next_command(self, *args, **kwargs):
         '''Asynchronous next command
@@ -143,6 +137,7 @@ class Broadcaster:
         -------
         addr, list_of_commands
         '''
+        # TODO can't use async generators until 3.6 :(
         addr, commands = await self.command_queue.get()
         history = []
         for command in commands:
