@@ -214,7 +214,28 @@ class SharedBroadcaster:
         """
         bytes_to_send = self.broadcaster.send(*commands)
         for host in ca.get_address_list():
-            await self.udp_sock.sendto(bytes_to_send, (host, port))
+            if ':' in host:
+                host, _, specified_port = host.partition(':')
+                is_register = isinstance(commands[0],
+                                         ca.RepeaterRegisterRequest)
+                if not self.registered and is_register:
+                    logger.debug('Specific IOC host/port designated in address'
+                                 'list: %s:%s.  Repeater registration '
+                                 'requirement ignored', host, specified_port)
+                    async with self.broadcaster_command_condition:
+                        # TODO how does this work with multiple addresses
+                        # listed?
+                        response = (('127.0.0.1', ca.EPICS_CA1_PORT),
+                                    [ca.RepeaterConfirmResponse(
+                                        repeater_address='127.0.0.1')]
+                                    )
+                        await self.broadcaster.command_queue.put(response)
+                        await self.broadcaster_command_condition.notify_all()
+                    continue
+                await self.udp_sock.sendto(bytes_to_send,
+                                           (host, int(specified_port)))
+            else:
+                await self.udp_sock.sendto(bytes_to_send, (host, port))
 
     async def register(self):
         "Register this client with the CA Repeater."
