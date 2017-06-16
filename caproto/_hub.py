@@ -70,6 +70,7 @@ class VirtualCircuit:
         if queue_class is None:
             queue_class = get_default_queue_class()
         self.command_queue = queue_class()
+        self._backlog = 0
 
     @property
     def host(self):
@@ -108,7 +109,7 @@ class VirtualCircuit:
         """
         buffers_to_send = []
         for command in commands:
-            self.process_command(self.our_role, command)
+            self._process_command(self.our_role, command)
             self.log.debug("Serializing %r", command)
             buffers_to_send.append(memoryview(command.header))
             buffers_to_send.extend(command.buffers)
@@ -131,6 +132,7 @@ class VirtualCircuit:
         total_received = sum(len(byteslike) for byteslike in buffers)
         if total_received == 0:
             self.log.debug('Zero-length recv; sending disconnect notification')
+            self._backlog += 1
             self.command_queue.put(DISCONNECTED)
             return
 
@@ -145,15 +147,40 @@ class VirtualCircuit:
             if type(command) is not NEED_DATA:
                 self.log.debug("Parsed %d/%d cached bytes into %r.",
                                len(command), len_data, command)
+                self._backlog += 1
                 self.command_queue.put(command)
             else:
                 self.log.debug("%d bytes are cached. Need more bytes to parse "
                                "next command.", len_data)
                 break
 
-    def process_command(self, role, command):
+    def next_command(self):
+        '''Synchronous next command
+
+        Get next command, update internal state, and return the evaluated
+        command
+        '''
+        command = self.command_queue.get()
+        self._backlog -= 1
+        if command is not DISCONNECTED:
+            self._process_command(self.their_role, command)
+        return command
+
+    async def async_next_command(self, *args, **kwargs):
+        '''Asynchronous next command
+
+        Get next command, update internal state, and return the evaluated
+        command
+        '''
+        command = await self.command_queue.get()
+        self._backlog -= 1
+        if command is not DISCONNECTED:
+            self._process_command(self.their_role, command)
+        return command
+
+    def _process_command(self, role, command):
         """
-        All comands go through here.
+        All commands go through here.
 
         Parameters
         ----------
@@ -300,6 +327,7 @@ class VirtualCircuit:
         Clients should call this method when a TCP connection is lost.
         """
         # poison the queue
+        self._backlog += 1
         self.command_queue.put(DISCONNECTED)
         self.states.disconnect()
 
@@ -344,6 +372,12 @@ class VirtualCircuit:
                 self._ioid_counter = itertools.count(0)
                 continue
             return i
+
+    @property
+    def backlog(self):
+        '''Number of commands waiting in the command queue'''
+        return self._backlog
+
 
 
 class _BaseChannel:

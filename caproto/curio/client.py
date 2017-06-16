@@ -45,11 +45,11 @@ class VirtualCircuit:
             self.circuit.recv(bytes_received)
 
     async def _command_queue_loop(self):
-        queue = self.circuit.command_queue
         while True:
-            command = await queue.get()
             try:
-                self.circuit.process_command(self.circuit.their_role, command)
+                command = await self.circuit.async_next_command()
+            except curio.TaskCancelled:
+                break
             except Exception as ex:
                 logger.error('Command queue evaluation failed: {!r}'
                              ''.format(command), exc_info=ex)
@@ -384,6 +384,7 @@ async def main():
     await chan2.disconnect()
     await chan1.disconnect()
     assert called
+    print('Done')
 
 
 if __name__ == '__main__':
