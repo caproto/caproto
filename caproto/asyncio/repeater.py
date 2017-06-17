@@ -62,6 +62,11 @@ class ProxyDatagramProtocol(asyncio.DatagramProtocol):
         for command in commands:
             if isinstance(command, caproto.RepeaterRegisterRequest):
                 if addr in self.remotes:
+                    # hack: re-sending registration can be necessary for caproto
+                    # clients
+                    remote = self.remotes[addr]
+                    if hasattr(remote, 'transport'):
+                        remote.connection_made(remote.transport)
                     return
                 loop = asyncio.get_event_loop()
                 self.remotes[addr] = RemoteDatagramProtocol(self, addr, data)
