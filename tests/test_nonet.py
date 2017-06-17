@@ -2,8 +2,6 @@ import caproto as ca
 import queue
 import pytest
 
-from conftest import next_command
-
 
 pv1 = "synctest1"
 cli_addr = ('127.0.0.1', 6666)
@@ -18,6 +16,7 @@ srv_b.log.setLevel('DEBUG')
 req_cache = bytearray()
 res_cache = bytearray()
 
+
 def srv_send(circuit, command):
     buffers_to_send = circuit.send(command)
     for buffer in buffers_to_send:
@@ -30,10 +29,10 @@ def srv_recv(circuit):
     circuit.recv(bytes_received)
     commands = []
     while True:
-        command = next_command(circuit)
-        if type(command) is ca.NEED_DATA:
-            break
+        command = circuit.next_command()
         commands.append(command)
+        if circuit.backlog == 0:
+            break
     return commands
 
 

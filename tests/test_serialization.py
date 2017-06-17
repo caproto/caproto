@@ -8,8 +8,6 @@ import caproto as ca
 import inspect
 import pytest
 
-from conftest import next_command
-
 
 ip = '255.255.255.255'
 int_encoded_ip = ca.ipv4_to_int32(ip)
@@ -111,11 +109,11 @@ def make_channels(cli_circuit, srv_circuit, data_type, data_count):
     req = cli_channel.create()
     cli_circuit.send(req)
     srv_circuit.recv(bytes(req))
-    next_command(srv_circuit)
+    srv_circuit.next_command()
     res = srv_channel.create(data_type, data_count, sid)
     srv_circuit.send(res)
     cli_circuit.recv(bytes(res))
-    next_command(cli_circuit)
+    cli_circuit.next_command()
     return cli_channel, srv_channel
 
 
@@ -181,7 +179,7 @@ def test_reads(circuit_pair, data_type, data_count, data, metadata):
     # Socket transport would happen here. Calling bytes() simulates
     # serialization over the socket.
     srv_circuit.recv(*(_np_hack(buf) for buf in buffers_to_send))
-    next_command(srv_circuit)
+    srv_circuit.next_command()
     res = ca.ReadNotifyResponse(data=data, metadata=metadata,
                                 data_count=data_count, data_type=data_type,
                                 ioid=0, status=1)
@@ -189,7 +187,7 @@ def test_reads(circuit_pair, data_type, data_count, data, metadata):
     # Socket transport would happen here. Calling bytes() simulates
     # serialization over the socket.
     cli_circuit.recv(*(_np_hack(buf) for buf in buffers_to_send))
-    res_received = next_command(cli_circuit)
+    res_received = cli_circuit.next_command()
 
     if isinstance(data, array.ArrayType):
         # Before comparing array.array (which exposes the byteorder naively)
@@ -220,7 +218,7 @@ def test_writes(circuit_pair, data_type, data_count, data, metadata):
     # Socket transport would happen here. Calling bytes() simulates
     # serialization over the socket.
     srv_circuit.recv(*(_np_hack(buf) for buf in buffers_to_send))
-    req_received = next_command(srv_circuit)
+    req_received = srv_circuit.next_command()
     res = ca.WriteNotifyResponse(data_count=data_count, data_type=data_type,
                                  ioid=0, status=1)
     buffers_to_send = srv_circuit.send(res)
@@ -228,7 +226,7 @@ def test_writes(circuit_pair, data_type, data_count, data, metadata):
     # Socket transport would happen here. Calling bytes() simulates
     # serialization over the socket.
     cli_circuit.recv(*(_np_hack(buf) for buf in buffers_to_send))
-    next_command(cli_circuit)
+    cli_circuit.next_command()
 
     if isinstance(data, array.ArrayType):
         # Before comparing array.array (which exposes the byteorder naively)
