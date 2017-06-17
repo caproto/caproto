@@ -287,6 +287,10 @@ class Context:
                 circuit.send(cachan.version(),
                              cachan.host_name(),
                              cachan.client_name())
+                # NOTE: starting the response command evaluation thread here,
+                # after having sent the VersionRequest, fixes a race condition
+                # with handling of rsrv sending VersionResponse upon connection
+                circuit.command_thread.start()
         _condition_with_timeout(lambda: circuit.connected,
                                 circuit.new_command_cond,
                                 2)
@@ -347,7 +351,6 @@ class VirtualCircuit:
         self.sock_thread = None
         self.command_thread = threading.Thread(target=self.command_thread_loop,
                                                daemon=True)
-        self.command_thread.start()
 
     @property
     def connected(self):
@@ -429,7 +432,10 @@ class VirtualCircuit:
         self.sock_thread = None
 
     def __del__(self):
-        self.disconnect()
+        try:
+            self.disconnect()
+        except AttributeError:
+            pass
 
 
 class Channel:
