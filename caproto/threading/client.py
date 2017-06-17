@@ -163,9 +163,17 @@ class SharedBroadcaster:
             self.send(ca.EPICS_CA2_PORT, command)
 
         if wait:
-            _condition_with_timeout(lambda: self.registered,
-                                    self.command_cond,
-                                    2)
+            for attempts in range(4):
+                try:
+                    _condition_with_timeout(lambda: self.registered,
+                                            self.command_cond,
+                                            0.5)
+                except TimeoutError:
+                    self.send(ca.EPICS_CA2_PORT, command)
+                else:
+                    break
+            else:
+                raise TimeoutError('Failed to register with the broadcaster')
 
     def search(self, name, *, wait=True):
         "Generate, process, and the transport a search request."
