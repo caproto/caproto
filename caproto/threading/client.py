@@ -197,34 +197,29 @@ class SharedBroadcaster:
         self.broadcaster.recv(bytes_recv, address)
 
     def command_loop(self):
-        role = self.broadcaster.their_role
-
         while True:
-            addr, commands = self.broadcaster.command_queue.get()
-            with self.command_cond:
-                for command in commands:
-                    try:
-                        self.broadcaster.process_command(role, command)
-                    except Exception as ex:
-                        logger.error('Broadcaster command queue evaluation '
-                                     'failed: {!r}'.format(command), exc_info=ex)
-                        continue
+            try:
+                addr, command = self.broadcaster.next_command()
+            except Exception as ex:
+                logger.error('Broadcaster command queue evaluation failed',
+                             exc_info=ex)
+                continue
 
-                    if isinstance(command, ca.VersionResponse):
-                        # Check that the server version is one we can talk to.
-                        assert command.version > 11
-                    if isinstance(command, ca.SearchResponse):
-                        with self._search_lock:
-                            name = self.unanswered_searches.get(command.cid,
-                                                                None)
-                            if name is not None:
-                                self.search_results[name] = (
-                                    ca.extract_address(command), time.time())
-                                self.unanswered_searches.pop(command.cid)
-                            else:
-                                # This is a redundant response, which the spec
-                                # tell us we must ignore.
-                                pass
+            with self.command_cond:
+                if isinstance(command, ca.VersionResponse):
+                    # Check that the server version is one we can talk to.
+                    assert command.version > 11
+                if isinstance(command, ca.SearchResponse):
+                    with self._search_lock:
+                        name = self.unanswered_searches.get(command.cid, None)
+                        if name is not None:
+                            self.search_results[name] = (
+                                ca.extract_address(command), time.time())
+                            self.unanswered_searches.pop(command.cid)
+                        else:
+                            # This is a redundant response, which the spec
+                            # tell us we must ignore.
+                            pass
                 self.command_cond.notify_all()
 
     @property
@@ -379,28 +374,22 @@ class VirtualCircuit:
         self.circuit.recv(bytes_recv)
 
     def command_thread_loop(self):
-        while True:
-            command = self.circuit.command_queue.get()
+        loop = True
+        while loop:
+            try:
+                command = self.circuit.next_command()
+            except Exception as ex:
+                logger.error('Command queue evaluation failed', exc_info=ex)
+                continue
 
             with self.new_command_cond:
-
                 if command is ca.DISCONNECTED:
                     print('disconnected!')
                     # if we are here something else has triggered the
                     # disconnect just kill this loop and let other
                     # parts of the code worry about cleanup
-                    self.new_command_cond.notify_all()
-                    break
-
-                try:
-                    self.circuit.process_command(
-                        self.circuit.their_role, command)
-                except Exception as ex:
-                    logger.error('Command queue evaluation failed: {!r}'
-                                 ''.format(command), exc_info=ex)
-                    continue
-
-                if isinstance(command, ca.ReadNotifyResponse):
+                    loop = False
+                elif isinstance(command, ca.ReadNotifyResponse):
                     chan = self.ioids.pop(command.ioid)
                     chan.process_read_notify(command)
                 elif isinstance(command, ca.WriteNotifyResponse):
