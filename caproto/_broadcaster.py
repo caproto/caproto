@@ -111,10 +111,13 @@ class Broadcaster:
         def gen():
             addr, commands = self.command_queue.get()
             history = []
-            for command in commands:
-                self._process_command(self.their_role, command,
-                                      history=history)
-                yield addr, command
+            if not commands:
+                yield addr, None
+            else:
+                for command in commands:
+                    self._process_command(self.their_role, command,
+                                          history=history)
+                    yield addr, command
 
         if self._iterable_commands is None:
             self._iterable_commands = gen()
