@@ -136,22 +136,22 @@ broadcaster.
 
 The bytes have been cached and parsed. The :class:`Broadcaster` puts the
 *Commands* on its `command_queue`, allowing the user to feed from that pipe as
-desired.
+desired. For frameworks that support async functions, there is
+:meth:`Broadcaster.async_next_command`. In our simple blocking, single-threaded
+example, we use instead :meth:`Broadcaster.next_command`.
 
 .. ipython:: python
 
-    addr, commands = b.command_queue.get()
+    addr, command = b.next_command()
 
 As it's necessary for higher levels to keep in synchronization with the state
-of the :class:`Broadcaster`, the user must tell it when to process the commands:
+of the :class:`Broadcaster`, :meth:`Broadcaster.next_command` pops the next
+command from the queue and updates its internal state. From our perspective, we
+only need to handle the commands as if feeding directly from the pipe itself.
 
 .. ipython:: python
 
-    history = []
-    for command in commands:
-        b.process_command(b.their_role, command, history=history)
-        # do something with the command on our end
-        print(command)
+    print('received command {} from {}'.format(command, addr))
 
 
 When we call :meth:`Broadcaster.send`, two things happen. The broadcaster
@@ -212,8 +212,9 @@ Our answer will arrive in a single datagram with multiple commands in it.
 
     bytes_received, recv_address = udp_sock.recvfrom(1024)
     b.recv(bytes_received, recv_address)
-    recv_address, (ver_response, search_response) = b.command_queue.get_nowait()
+    addr, ver_response = b.next_command()
     ver_response
+    addr, search_response = b.next_command()
     search_response
     address = caproto.extract_address(search_response)
     address
@@ -245,6 +246,8 @@ by the protocol.
             self.items = []
         def put(self, command):
             self.items.append(command)
+        def get(self):
+            return self.items.pop(0)
     circuit = caproto.VirtualCircuit(our_role=caproto.CLIENT, address=address,
                                      priority=0, queue_class=OurQueue)
 
@@ -262,12 +265,12 @@ We'll use these convenience functions for what follows.
     def recv():
         bytes_received = sock.recv(4096)
         circuit.recv(bytes_received)
-        # copy the queue items and clear them
-        commands = circuit.command_queue.items[:]
-        circuit.command_queue.items.clear()
-        # process each of the commands on the circuit-level
-        for command in commands:
-            circuit.process_command(circuit.their_role, command)
+        commands = []
+        while True:
+            command = circuit.next_command()
+            commands.append(command)
+            if circuit.backlog == 0:
+                break
         return commands
 
 

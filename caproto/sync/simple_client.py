@@ -41,9 +41,9 @@ def main(*, skip_monitor_section=False):
     # Register with the repeater.
     bytes_to_send = b.send(ca.RepeaterRegisterRequest('0.0.0.0'))
 
-    # TODO: for test environment with specific hosts listed in 
+    # TODO: for test environment with specific hosts listed in
     # EPICS_CA_ADDR_LIST
-    if True:
+    if False:
         fake_reg = (('127.0.0.1', ca.EPICS_CA1_PORT),
                     [ca.RepeaterConfirmResponse(
                         repeater_address='127.0.0.1')]

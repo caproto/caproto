@@ -244,6 +244,8 @@ The VirtualCircuit object
 
     .. automethod:: send
     .. automethod:: recv
+    .. automethod:: next_command
+    .. automethod:: async_next_command
     .. automethod:: disconnect
     .. automethod:: new_channel_id
     .. automethod:: new_subscriptionid
@@ -269,6 +271,8 @@ The Broadcaster object
 
     .. automethod:: send
     .. automethod:: recv
+    .. automethod:: next_command
+    .. automethod:: async_next_command
     .. automethod:: new_search_id
     .. automethod:: search
     .. automethod:: register
