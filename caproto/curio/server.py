@@ -79,7 +79,14 @@ class VirtualCircuit:
         2. Update Channel state if applicable.
         """
         while True:
-            command = await self.circuit.async_next_command()
+            try:
+                command = await self.circuit.async_next_command()
+            except curio.TaskCancelled:
+                break
+            except Exception as ex:
+                logger.error('Circuit command queue evaluation failed',
+                             exc_info=ex)
+                continue
 
             try:
                 for response_command in self._process_command(command):
@@ -177,9 +184,11 @@ class Context:
         while True:
             try:
                 addr, commands = await self.broadcaster.async_next_command()
+            except curio.TaskCancelled:
+                break
             except Exception as ex:
-                logger.error('Broadcaster command queue evaluation '
-                             'failed: {!r}'.format(commands), exc_info=ex)
+                logger.error('Broadcaster command queue evaluation failed',
+                             exc_info=ex)
                 continue
 
             responses.clear()
@@ -231,6 +240,9 @@ class Context:
             logger.error('Curio server failed: %s', ex.errors)
             for task in ex:
                 logger.error('Task %s failed: %s', task, task.exception)
+        except curio.TaskCancelled:
+            logger.info('Server task cancelled')
+            await g.cancel_remaining()
 
 
 async def _test(pvdb=None):

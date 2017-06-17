@@ -267,8 +267,8 @@ class SharedBroadcaster:
             except curio.TaskCancelled:
                 break
             except Exception as ex:
-                logger.error('Broadcaster command queue evaluation '
-                             'failed: {!r}'.format(commands), exc_info=ex)
+                logger.error('Broadcaster command queue evaluation failed',
+                             exc_info=ex)
                 continue
 
             for command in commands:
