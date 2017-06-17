@@ -1,5 +1,6 @@
 import os
 import socket
+import queue
 
 try:
     import netifaces
@@ -187,3 +188,28 @@ def bcast_socket(socket_module=socket):
     else:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
     return sock
+
+
+_default_queue_class = queue.Queue
+
+
+def get_default_queue_class():
+    '''Get the default queue class for caproto
+
+    Defaults to queue.Queue.
+    '''
+    # dan will hate me for this
+    return _default_queue_class
+
+
+def set_default_queue_class(queue_class):
+    '''Set the default queue class for caproto
+
+    Assumes `queue_class` is callable and at least has a `put` method.
+    Any necessary locking should be taken care of by this method and
+    is not the responsibility of caproto.
+    '''
+    global _default_queue_class
+    assert hasattr(queue_class, 'put')
+    assert callable(queue_class)
+    _default_queue_class = queue_class

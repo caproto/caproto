@@ -94,7 +94,9 @@ import time
 import unittest
 import numpy
 from contextlib import contextmanager
-from caproto.threading.client import PV, caput, caget, Context
+from caproto.threading.client import (PV, caput, caget, Context,
+                                      SharedBroadcaster, cainfo)
+from caproto.threading import client as thread_client
 import logging
 from multiprocessing import Process
 
@@ -121,25 +123,19 @@ def get_broadcast_addr_list():
 
 
 def setup_module(module):
-    global _repeater_process
-    from caproto.asyncio.repeater import main
-    logging.getLogger('caproto').setLevel(logging.DEBUG)
-    logging.basicConfig()
+    from conftest import start_repeater
+    start_repeater()
 
-    _repeater_process = Process(target=main)
-    _repeater_process.start()
-
-    print('Waiting for the repeater to start up...')
-    time.sleep(2)
-    PV._default_context = Context(log_level='DEBUG')
+    shared_broadcaster = SharedBroadcaster()
+    PV._default_context = Context(broadcaster=shared_broadcaster,
+                                  log_level='DEBUG')
+    thread_client._dflt_context = thread_client.PVContext(shared_broadcaster)
     PV._default_context.register()
 
 
 def teardown_module(module):
-    global _repeater_process
-    print('teardown_module: killing repeater process')
-    _repeater_process.terminate()
-    _repeater_process = None
+    from conftest import stop_repeater
+    stop_repeater()
     PV._default_context.disconnect()
     PV._default_context = None
 
@@ -196,6 +192,13 @@ class PV_Tests(unittest.TestCase):
             self.assertIsNot(val, None)
         sval = caget(pvnames.str_pv)
         self.assertEqual(sval, 'ao')
+
+    def test_smoke_cainfo(self):
+        write('Simple Test of caget() function\n')
+        pvs = (pvnames.double_pv, pvnames.enum_pv, pvnames.str_pv)
+        for p in pvs:
+            val = cainfo(p, print_out=False)
+            self.assertIsNot(val, None)
 
     def test_get1(self):
         write('Simple Test: test value and char_value on an integer\n')

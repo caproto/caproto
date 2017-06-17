@@ -1,10 +1,4 @@
-import logging
-from multiprocessing import Process
 import caproto as ca
-import os
-import time
-import socket
-import getpass
 import pytest
 
 
@@ -32,11 +26,8 @@ def srv_recv(circuit):
     req_cache.clear()
     circuit.recv(bytes_received)
     commands = []
-    while True:
-        command = circuit.next_command()
-        if type(command) is ca.NEED_DATA:
-            break
-        commands.append(command)
+    while circuit.backlog > 0:
+        commands.append(circuit.next_command())
     return commands
 
 
@@ -51,11 +42,8 @@ def cli_recv(circuit):
     res_cache.clear()
     circuit.recv(bytes_received)
     commands = []
-    while True:
-        command = circuit.next_command()
-        if type(command) is ca.NEED_DATA:
-            break
-        commands.append(command)
+    while circuit.backlog > 0:
+        commands.append(circuit.next_command())
     return commands
 
 
@@ -77,19 +65,19 @@ def test_nonet():
     bytes_to_send = cli_b.send(ca.VersionRequest(0, 13),
                                ca.SearchRequest(pv1, 0, 13))
 
-    
+
     srv_b.recv(bytes_to_send, cli_addr)
-    ver_req = srv_b.next_command()
-    search_req = srv_b.next_command()
+    _, ver_req = srv_b.next_command()
+    _, search_req = srv_b.next_command()
     bytes_to_send = srv_b.send(ca.VersionResponse(13),
                                ca.SearchResponse(5064, None,
                                                  search_req.cid, 13))
 
     # Receive a VersionResponse and SearchResponse.
     cli_b.recv(bytes_to_send, cli_addr)
-    command = cli_b.next_command()
+    _, command = cli_b.next_command()
     assert type(command) is ca.VersionResponse
-    command = cli_b.next_command()
+    _, command = cli_b.next_command()
     assert type(command) is ca.SearchResponse
     address = ca.extract_address(command)
 

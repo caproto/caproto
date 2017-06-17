@@ -1,5 +1,4 @@
-import sys
-import traceback
+import logging
 import random
 
 import curio
@@ -14,6 +13,8 @@ from caproto import (EPICS_CA1_PORT, EPICS_CA2_PORT)
 class DisconnectedCircuit(Exception):
     ...
 
+
+logger = logging.getLogger(__name__)
 
 SERVER_ENCODING = 'latin-1'
 
@@ -50,6 +51,7 @@ class VirtualCircuit:
         self.context = context
         self.client_hostname = None
         self.client_username = None
+        self.new_command_condition = curio.Condition()
 
     async def send(self, *commands):
         """
@@ -67,44 +69,48 @@ class VirtualCircuit:
             raise DisconnectedCircuit()
         self.circuit.recv(bytes_received)
 
-    async def next_command(self):
+    async def command_queue_loop(self):
         """
-        Process one incoming command.
+        Coroutine which feeds from the circuit command queue.
 
-        1. Receive data from the socket if a full comannd's worth of bytes are
-           not already cached.
-        2. Dispatch to caproto.VirtualCircuit.next_command which validates.
-        3. Update Channel state if applicable.
+        1. Dispatch and validate through caproto.VirtualCircuit.process_command
+            - Upon server failure, respond to the client with
+              caproto.ErrorResponse
+        2. Update Channel state if applicable.
         """
         while True:
-            command = self.circuit.next_command()
-            if isinstance(command, ca.NEED_DATA):
-                await self.recv()
+            try:
+                command = await self.circuit.async_next_command()
+            except curio.TaskCancelled:
+                break
+            except Exception as ex:
+                logger.error('Circuit command queue evaluation failed',
+                             exc_info=ex)
                 continue
-            break
 
-        try:
-            for response_command in self._process_command(command):
-                if isinstance(response_command, (list, tuple)):
-                    await self.send(*response_command)
-                else:
+            try:
+                for response_command in self._process_command(command):
+                    if isinstance(response_command, (list, tuple)):
+                        await self.send(*response_command)
+                    else:
+                        await self.send(response_command)
+            except Exception as ex:
+                logger.error('Curio server failed to process command: %s',
+                             command, exc_info=ex)
+
+                if hasattr(command, 'sid'):
+                    cid = self.circuit.channels_sid[command.sid].cid
+
+                    response_command = ca.ErrorResponse(
+                        command, cid,
+                        status_code=ca.ECA_INTERNAL.code_with_severity,
+                        error_message=('Python exception: {} {}'
+                                       ''.format(type(ex).__name__, ex))
+                    )
                     await self.send(response_command)
-        except Exception as ex:
-            print('Curio server failed to process command: {}'.format(command))
-            traceback.print_exc(file=sys.stdout)
 
-            if hasattr(command, 'sid'):
-                cid = self.circuit.channels_sid[command.sid].cid
-
-                response_command = ca.ErrorResponse(
-                    command, cid,
-                    status_code=ca.ECA_INTERNAL.code_with_severity,
-                    error_message=('Python exception: {} {}'
-                                   ''.format(type(ex).__name__, ex))
-                )
-                await self.send(response_command)
-
-        return command
+            async with self.new_command_condition:
+                await self.new_command_condition.notify_all()
 
     def _process_command(self, command):
         def get_db_entry():
@@ -155,32 +161,38 @@ class Context:
         self.port = port
         self.pvdb = pvdb
         self.log_level = log_level
-        self.broadcaster = ca.Broadcaster(our_role=ca.SERVER)
+        self.broadcaster = ca.Broadcaster(our_role=ca.SERVER,
+                                          queue_class=curio.UniversalQueue)
         self.broadcaster.log.setLevel(self.log_level)
+        self.broadcaster_command_condition = curio.Condition()
 
-    async def udp_server(self):
-        sock = ca.bcast_socket(socket)
+    async def broadcaster_udp_server_loop(self):
+        self.udp_sock = ca.bcast_socket(socket)
         try:
-            sock.bind((self.host, EPICS_CA1_PORT))
+            self.udp_sock.bind((self.host, EPICS_CA1_PORT))
         except Exception:
             print('[server] udp bind failure!')
             raise
-        responses = []
+
         while True:
-            responses.clear()
+            bytes_received, address = await self.udp_sock.recvfrom(4096)
+            self.broadcaster.recv(bytes_received, address)
+
+    async def broadcaster_queue_loop(self):
+        responses = []
+
+        while True:
             try:
-                bytes_received, addr = await sock.recvfrom(1024)
+                addr, commands = await self.broadcaster.async_next_command()
+            except curio.TaskCancelled:
+                break
             except Exception as ex:
-                print('[server] await recv fail', ex)
-                raise
-            self.broadcaster.recv(bytes_received, addr)
-            while True:
-                command = self.broadcaster.next_command()
-                if isinstance(command, ca.NEED_DATA):
-                    # Respond, and then break to receive the next datagram.
-                    bytes_to_send = self.broadcaster.send(*responses)
-                    await sock.sendto(bytes_to_send, addr)
-                    break
+                logger.error('Broadcaster command queue evaluation failed',
+                             exc_info=ex)
+                continue
+
+            responses.clear()
+            for command in commands:
                 if isinstance(command, ca.VersionRequest):
                     res = ca.VersionResponse(13)
                     responses.append(res)
@@ -196,86 +208,87 @@ class Context:
                     res = ca.SearchResponse(self.port, None, command.cid, 13)
                     responses.append(res)
 
+                if responses:
+                    bytes_to_send = self.broadcaster.send(*responses)
+                    await self.udp_sock.sendto(bytes_to_send, addr)
+
+                async with self.broadcaster_command_condition:
+                    await self.broadcaster_command_condition.notify_all()
+
     async def tcp_handler(self, client, addr):
-        circuit = VirtualCircuit(ca.VirtualCircuit(ca.SERVER, addr, None),
-                                 client,
-                                 self)
+        cavc = ca.VirtualCircuit(ca.SERVER, addr, None,
+                                 queue_class=curio.UniversalQueue)
+        circuit = VirtualCircuit(cavc, client, self)
         circuit.circuit.log.setLevel(self.log_level)
+
+        tcp_queue_loop = await curio.spawn(circuit.command_queue_loop())
         while True:
             try:
-                await circuit.next_command()
+                await circuit.recv()
             except DisconnectedCircuit:
+                await tcp_queue_loop.cancel()
                 circuit.circuit.disconnect()
                 return
 
     async def run(self):
         try:
-            tcp_server = curio.tcp_server('', self.port, self.tcp_handler)
-            tcp_task = await curio.spawn(tcp_server)
-            udp_task = await curio.spawn(self.udp_server())
-            await udp_task.join()
-            await tcp_task.join()
+            async with curio.TaskGroup() as g:
+                await g.spawn(curio.tcp_server('', self.port, self.tcp_handler))
+                await g.spawn(self.broadcaster_udp_server_loop())
+                await g.spawn(self.broadcaster_queue_loop())
+        except curio.TaskGroupError as ex:
+            logger.error('Curio server failed: %s', ex.errors)
+            for task in ex:
+                logger.error('Task %s failed: %s', task, task.exception)
         except curio.TaskCancelled:
-            await tcp_task.cancel()
-            await udp_task.cancel()
+            logger.info('Server task cancelled')
+            await g.cancel_remaining()
 
 
-def _get_my_ip():
-    try:
-        import netifaces
-    except ImportError:
-        return '127.0.0.1'
+async def _test(pvdb=None):
+    logger.setLevel('DEBUG')
+    if pvdb is None:
+        pvdb = {'pi': ChannelDouble(value=3.14,
+                                    lower_disp_limit=3.13,
+                                    upper_disp_limit=3.15,
+                                    lower_alarm_limit=3.12,
+                                    upper_alarm_limit=3.16,
+                                    lower_warning_limit=3.11,
+                                    upper_warning_limit=3.17,
+                                    lower_ctrl_limit=3.10,
+                                    upper_ctrl_limit=3.18,
+                                    precision=5,
+                                    units='doodles',
+                                    ),
+                'enum': ChannelEnum(value='b',
+                                    strs=['a', 'b', 'c', 'd'],
+                                    ),
+                'int': ChannelInteger(value=0,
+                                      units='doodles',
+                                      ),
+                'char': ca.ChannelChar(value=b'3',
+                                       units='poodles',
+                                       lower_disp_limit=33,
+                                       upper_disp_limit=35,
+                                       lower_alarm_limit=32,
+                                       upper_alarm_limit=36,
+                                       lower_warning_limit=31,
+                                       upper_warning_limit=37,
+                                       lower_ctrl_limit=30,
+                                       upper_ctrl_limit=38,
+                                       ),
+                'str': ca.ChannelString(value='hello',
+                                        string_encoding='latin-1'),
+                'stra': ca.ChannelString(value=['hello', 'how is it', 'going'],
+                                         string_encoding='latin-1'),
+                }
+        pvdb['pi'].alarm.alarm_string = 'delicious'
 
-    interfaces = [netifaces.ifaddresses(interface)
-                  for interface in netifaces.interfaces()
-                  ]
-    ipv4s = [af_inet_info['addr']
-             for interface in interfaces
-             if netifaces.AF_INET in interface
-             for af_inet_info in interface[netifaces.AF_INET]
-             ]
-
-    if not ipv4s:
-        return '127.0.0.1'
-    return ipv4s[0]
+    ctx = Context('0.0.0.0', find_next_tcp_port(), pvdb)
+    logger.info('Server starting up on %s:%d', ctx.host, ctx.port)
+    return await ctx.run()
 
 
 if __name__ == '__main__':
-    pvdb = {'pi': ChannelDouble(value=3.14,
-                                lower_disp_limit=3.13,
-                                upper_disp_limit=3.15,
-                                lower_alarm_limit=3.12,
-                                upper_alarm_limit=3.16,
-                                lower_warning_limit=3.11,
-                                upper_warning_limit=3.17,
-                                lower_ctrl_limit=3.10,
-                                upper_ctrl_limit=3.18,
-                                precision=5,
-                                units='doodles',
-                                ),
-            'enum': ChannelEnum(value='b',
-                                strs=['a', 'b', 'c', 'd'],
-                                ),
-            'int': ChannelInteger(value=0,
-                                  units='doodles',
-                                  ),
-            'char': ca.ChannelChar(value=b'3',
-                                   units='poodles',
-                                   lower_disp_limit=33,
-                                   upper_disp_limit=35,
-                                   lower_alarm_limit=32,
-                                   upper_alarm_limit=36,
-                                   lower_warning_limit=31,
-                                   upper_warning_limit=37,
-                                   lower_ctrl_limit=30,
-                                   upper_ctrl_limit=38,
-                                   ),
-            'str': ca.ChannelString(value='hello',
-                                    string_encoding='latin-1'),
-            'stra': ca.ChannelString(value=['hello', 'how is it', 'going'],
-                                     string_encoding='latin-1'),
-            }
-
-    pvdb['pi'].alarm.alarm_string = 'delicious'
-    ctx = Context('0.0.0.0', find_next_tcp_port(), pvdb)
-    curio.run(ctx.run())
+    logging.basicConfig()
+    curio.run(_test())

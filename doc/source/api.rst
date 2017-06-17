@@ -196,10 +196,15 @@ Special constants are also used to represent the "direction" of a command.
           REQUEST
 
 Another special constant serves as a sentinel "Command" returned by
-:meth:`Broadcaster.next_command` and :meth:`VirtualCircuit.next_command` when
-more data needs to be received before any new Commands can be parsed.
+:meth:`read_from_bytestream` when more data needs to be received before any new
+Commands can be parsed.
 
 .. data:: NEED_DATA
+
+Similarly, one sentinel is re-used as a "Command" allowing for consistent
+handling of disconnection events through the command queues:
+
+.. data:: DISCONNECTED
 
 Borrowing a trick (one of many!) from the h11 project, these special constants
 are modeled after ``None``: they’re singletons, their ``__repr__()`` is
@@ -233,9 +238,14 @@ The VirtualCircuit object
 
         a unique identifer for this instance: :data:`((host, port), priority)`
 
+    .. attribute:: command_queue
+
+        The queue from which higher levels feed Commands from
+
     .. automethod:: send
     .. automethod:: recv
     .. automethod:: next_command
+    .. automethod:: async_next_command
     .. automethod:: disconnect
     .. automethod:: new_channel_id
     .. automethod:: new_subscriptionid
@@ -254,9 +264,15 @@ The Broadcaster object
 
         Python logger instance
 
+    .. attribute:: command_queue
+
+        The queue from which higher levels feed Commands from. Entries are in
+        the format (sender_address, iterable_of_commands)
+
     .. automethod:: send
     .. automethod:: recv
     .. automethod:: next_command
+    .. automethod:: async_next_command
     .. automethod:: new_search_id
     .. automethod:: search
     .. automethod:: register

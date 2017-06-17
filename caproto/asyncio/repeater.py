@@ -28,12 +28,22 @@ import asyncio
 import caproto
 
 
+class RepeaterAlreadyRunning(RuntimeError):
+    ...
+
+
 class ProxyDatagramProtocol(asyncio.DatagramProtocol):
 
     def __init__(self):
         self.host = socket.gethostbyname(socket.gethostname())
         self.remotes = {}
-        self.broadcaster = caproto.Broadcaster(our_role=caproto.SERVER)
+
+        class CallbackQueue:
+            def put(_, info):
+                self.commands_received(*info)
+
+        self.broadcaster = caproto.Broadcaster(our_role=caproto.SERVER,
+                                               queue_class=CallbackQueue)
         super().__init__()
 
     def connection_made(self, transport):
@@ -41,12 +51,21 @@ class ProxyDatagramProtocol(asyncio.DatagramProtocol):
 
     def datagram_received(self, data, addr):
         self.broadcaster.recv(data, addr)
-        while True:
-            command = self.broadcaster.next_command()
-            if command is caproto.NEED_DATA:
-                break
+
+    def commands_received(self, addr, commands):
+        if not commands:
+            return
+
+        # TODO thoughts on this? far from ideal
+        data = b''.join(bytes(command) for command in commands)
+
+        for command in commands:
             if isinstance(command, caproto.RepeaterRegisterRequest):
                 if addr in self.remotes:
+                    # hack: re-sending registration can be necessary for caproto
+                    # clients
+                    remote = self.remotes[addr]
+                    remote.connection_made(remote.transport)
                     return
                 loop = asyncio.get_event_loop()
                 self.remotes[addr] = RemoteDatagramProtocol(self, addr, data)
@@ -84,26 +103,39 @@ class RemoteDatagramProtocol(asyncio.DatagramProtocol):
 async def start_datagram_proxy(bind, port):
     loop = asyncio.get_event_loop()
     protocol = ProxyDatagramProtocol()
-    return await loop.create_datagram_endpoint(
-        lambda: protocol, local_addr=(bind, port))
+    try:
+        return await loop.create_datagram_endpoint(
+            lambda: protocol, local_addr=(bind, port))
+    except OSError as ex:
+        if 'Address already in use' in str(ex):
+            raise RepeaterAlreadyRunning(str(ex))
+        else:
+            raise
 
 
 def main():
-    import logging
-    logging.getLogger('caproto').setLevel(logging.INFO)
     loop = asyncio.get_event_loop()
     addr = ('0.0.0.0', os.environ.get('EPICS_CA_REPEATER_PORT', 5065))
-    print("Starting datagram proxy on {}...".format(addr))
+    print("[repeater] Starting datagram proxy on {}...".format(addr))
     coro = start_datagram_proxy(*addr)
-    transport, _ = loop.run_until_complete(coro)
-    print("Datagram proxy is running...")
+
+    try:
+        transport, _ = loop.run_until_complete(coro)
+    except RepeaterAlreadyRunning as ex:
+        print('[repeater] Another repeater is already running; exiting')
+        return
+
+    print("[repeater] Datagram proxy is running...")
     try:
         loop.run_forever()
     except KeyboardInterrupt:
         pass
-    print("Closing transport...")
+    print("[repeater] Closing transport...")
     transport.close()
     loop.close()
 
+
 if __name__ == '__main__':
+    import logging
+    logging.getLogger('caproto').setLevel('INFO')
     main()

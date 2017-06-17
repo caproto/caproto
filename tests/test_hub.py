@@ -149,7 +149,11 @@ def test_mismatched_event_add_responses(circuit_pair):
 def test_empty_datagram():
     broadcaster = ca.Broadcaster(ca.CLIENT)
     broadcaster.recv(b'', ('127.0.0.1', 6666))
-    assert broadcaster.next_command() is ca.NEED_DATA
+    addr, command = broadcaster.next_command()
+    assert command is None
+    # TODO this is an API change from NEED_DATA, but I don't think it's
+    # necessarily wrong as these empty broadcast messages are a lack of
+    # actual commands
 
 
 def test_extract_address():
@@ -174,7 +178,7 @@ def test_broadcaster_checks():
     b.send(ca.RepeaterRegisterRequest('1.2.3.4'))
     res = ca.RepeaterConfirmResponse('5.6.7.8')
     b.recv(bytes(res), ('5.6.7.8', 6666))
-    assert b.next_command() == res
+    assert b.next_command()[1] == res
 
     req = ca.SearchRequest(name='LIRR', cid=0, version=13)
     with pytest.raises(ca.LocalProtocolError):
@@ -187,8 +191,7 @@ def test_broadcaster_checks():
     with pytest.raises(ca.RemoteProtocolError):
         b.next_command()
     b.recv(bytes(ca.VersionResponse(version=13)) + bytes(res), addr)
-    b.next_command()
-    b.next_command()
+    b.next_command()  # this gets both
 
 
 def test_methods(circuit_pair):

@@ -1,6 +1,3 @@
-# Helper classes to encapsulate values and metadata for a channel and pack them
-# into various DBR_TYPES with minimal copying.
-
 import os
 import datetime
 import logging
@@ -20,8 +17,6 @@ from caproto import ChType
 
 REPEATER_PORT = 5065
 SERVER_HOST = '0.0.0.0'
-
-_repeater_process = None
 
 
 def get_broadcast_addr_list():
@@ -44,23 +39,13 @@ def get_broadcast_addr_list():
 
 
 def setup_module(module):
-    global _repeater_process
-    from caproto.asyncio.repeater import main
-    logging.getLogger('caproto').setLevel(logging.DEBUG)
-    logging.basicConfig()
-
-    _repeater_process = Process(target=main)
-    _repeater_process.start()
-
-    print('Waiting for the repeater to start up...')
-    time.sleep(2)
+    from conftest import start_repeater
+    start_repeater()
 
 
 def teardown_module(module):
-    global _repeater_process
-    print('teardown_module: killing repeater process')
-    _repeater_process.terminate()
-    _repeater_process = None
+    from conftest import stop_repeater
+    stop_repeater()
 
 
 def test_synchronous_client():
@@ -74,48 +59,24 @@ def test_curio_client():
         kernel.run(main())
 
 
-def test_thread_client():
-    from caproto.threading.client import Context
+@pytest.fixture(scope='module')
+def threading_broadcaster(request):
+    from caproto.threading.client import SharedBroadcaster
+    broadcaster = SharedBroadcaster()
 
-    pv1 = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
-    pv2 = "XF:31IDA-OP{Tbl-Ax:X2}Mtr.VAL"
+    def cleanup():
+        broadcaster.disconnect()
 
-    # Some user function to call when subscriptions receive data.
-    called = []
-
-    def user_callback(command):
-        print("Subscription has received data.")
-        called.append(True)
-
-    ctx = Context(log_level='DEBUG')
-    ctx.register()
-    ctx.search(pv1)
-    ctx.search(pv2)
-    # Send out connection requests without waiting for responses...
-    chan1 = ctx.create_channel(pv1)
-    chan2 = ctx.create_channel(pv2)
-    # Set up a function to call when subscriptions are received.
-    chan1.register_user_callback(user_callback)
-
-    reading = chan1.read()
-    print('reading:', reading)
-    chan1.subscribe()
-    chan2.read()
-    chan1.unsubscribe(0)
-    chan1.write((5,))
-    reading = chan1.read()
-    assert reading.data == 5
-    print('reading:', reading)
-    chan1.write((6,))
-    reading = chan1.read()
-    assert reading.data == 6
-    print('reading:', reading)
-    chan2.disconnect()
-    chan1.disconnect()
-    assert called
+    request.addfinalizer(cleanup)
+    return broadcaster
 
 
-def test_thread_pv():
+def test_thread_client(threading_broadcaster):
+    from caproto.threading.client import _test as thread_client_test
+    thread_client_test()
+
+
+def test_thread_pv(threading_broadcaster):
     from caproto.threading.client import Context, PV
 
     pv1 = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
@@ -129,7 +90,7 @@ def test_thread_pv():
         print('-- user callback', value)
         called.append(True)
 
-    ctx = Context(log_level='DEBUG')
+    ctx = Context(threading_broadcaster, log_level='DEBUG')
     ctx.register()
 
     time_pv = PV(pv1, context=ctx, form='time')
@@ -160,24 +121,8 @@ def test_thread_pv():
 
 def test_curio_server():
     import caproto.curio.client as client
+    from caproto.curio.server import _test as example_server
     kernel = curio.Kernel()
-
-    async def run_server():
-        pvdb = {'pi': ca.ChannelDouble(value=3.14,
-                                       lower_disp_limit=3.13,
-                                       upper_disp_limit=3.15,
-                                       lower_alarm_limit=3.12,
-                                       upper_alarm_limit=3.16,
-                                       lower_warning_limit=3.11,
-                                       upper_warning_limit=3.17,
-                                       lower_ctrl_limit=3.10,
-                                       upper_ctrl_limit=3.18,
-                                       precision=5,
-                                       units='doodles')}
-        port = find_next_tcp_port(host=SERVER_HOST)
-        print('Server will be on', (SERVER_HOST, port))
-        ctx = server.Context(SERVER_HOST, port, pvdb, log_level='DEBUG')
-        await ctx.run()
 
     async def run_client():
         # Some user function to call when subscriptions receive data.
@@ -187,8 +132,9 @@ def test_curio_server():
             print("Subscription has received data.")
             called.append(True)
 
-        ctx = client.Context(log_level='DEBUG')
-        await ctx.register()
+        broadcaster = client.SharedBroadcaster(log_level='DEBUG')
+        await broadcaster.register()
+        ctx = client.Context(broadcaster, log_level='DEBUG')
         await ctx.search('pi')
         print('done searching')
         chan1 = await ctx.create_channel('pi')
@@ -212,7 +158,7 @@ def test_curio_server():
     async def task():
         # os.environ['EPICS_CA_ADDR_LIST'] = '255.255.255.255'
         try:
-            server_task = await curio.spawn(run_server())
+            server_task = await curio.spawn(example_server())
             await curio.sleep(1)  # Give server some time to start up.
             await run_client()
             print('client is done')
