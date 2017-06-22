@@ -6,7 +6,7 @@ import threading
 
 from multiprocessing import Process
 
-from caproto.threading.client import (SocketThread, Context, SharedBroadcaster,
+from caproto.threading.client import (Context, SharedBroadcaster,
                                       _condition_with_timeout)
 import caproto as ca
 import pytest
@@ -20,31 +20,6 @@ def setup_module(module):
 def teardown_module(module):
     from conftest import stop_repeater
     stop_repeater()
-
-
-@pytest.fixture(scope='function')
-def socket_thread_fixture():
-
-    class _DummyTargetObj:
-        def __init__(self):
-            self.disconnected = False
-            self.payloads = []
-
-        def disconnect(self):
-            self.disconnected = True
-
-        def received(self, bytes_recv, address):
-            if len(bytes_recv):
-                self.payloads.append(bytes_recv)
-            return 0
-
-    a, b = socket.socketpair()
-
-    d = _DummyTargetObj()
-
-    st = SocketThread(a, d)
-
-    return a, b, d, st
 
 
 @pytest.fixture(scope='module')
@@ -68,57 +43,6 @@ def cntx(request, shared_broadcaster):
 
     request.addfinalizer(cleanup)
     return cntx
-
-
-def test_socket_server_close(socket_thread_fixture):
-    a, b, d, st = socket_thread_fixture
-    b.send(b'aardvark')
-    b.close()
-
-    st.thread.join()
-
-    assert d.payloads[0] == b'aardvark'
-    assert len(d.payloads) == 1
-    assert d.disconnected
-    assert not st.thread.is_alive()
-
-
-def test_socket_poison(socket_thread_fixture):
-    a, b, d, st = socket_thread_fixture
-
-    st.poison_ev.set()
-    st.thread.join()
-
-    assert not st.thread.is_alive()
-
-
-def test_socket_client_close(socket_thread_fixture):
-    a, b, d, st = socket_thread_fixture
-
-    a.close()
-    st.thread.join()
-
-    assert not st.thread.is_alive()
-
-
-def test_socket_thread_obj_die():
-
-    class _DummyTargetObj:
-        def disconnect(self):
-            ...
-
-        def received(self, bytes_recv, address):
-            ...
-
-    # can not use the fixture here, it seems to keep a ref to
-    # the object
-    a, b = socket.socketpair()
-    # do not even keep a local, pytest seems to grab it
-    st = SocketThread(a, _DummyTargetObj())
-    b.send(b'abc')
-    st.thread.join()
-
-    assert not st.thread.is_alive()
 
 
 def test_channel_kill_client_socket(cntx):
