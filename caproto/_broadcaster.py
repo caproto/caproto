@@ -96,7 +96,18 @@ class Broadcaster:
         commands = read_datagram(byteslike, address, self.their_role)
         return commands
 
-    def _process_command(self, role, command, *, history=None):
+    def process_commands(self, commands):
+        """
+        Update internal state machine and raise if protocol is violated.
+
+        Received commands should be passed through here before any additional
+        processing by a server or client layer.
+        """
+        history = []
+        for command in commands:
+            self._process_command(self.their_role, command, history)
+
+    def _process_command(self, role, command, history):
         """
         All comands go through here.
 
@@ -104,14 +115,9 @@ class Broadcaster:
         ----------
         role : ``CLIENT`` or ``SERVER``
         command : Message
-        history : list, optional
+        history : list
             This input will be mutated: command will be appended at the end.
-            If None, this defaults to the Broadcaster's recv_history.
         """
-
-        if history is None:
-            history = self.recv_history
-
         # All commands go through here.
         if isinstance(command, RepeaterRegisterRequest):
             pass
