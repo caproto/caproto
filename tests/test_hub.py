@@ -328,6 +328,9 @@ def test_dead_circuit(circuit_pair):
     cli_circuit.disconnect()
     srv_circuit.disconnect()
 
+    cli_circuit.next_command()
+    srv_circuit.next_command()
+
     # Check that state updates.
     assert cli_circuit.states[ca.CLIENT] is ca.DISCONNECTED
     assert srv_circuit.states[ca.CLIENT] is ca.DISCONNECTED
