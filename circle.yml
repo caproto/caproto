@@ -34,10 +34,6 @@ dependencies:
   
     - pip install -r test-requirements.txt
 
-  override:
-    - pip install numpy
-    - pip install .
-
 test:
   override:
     - coverage run run_tests.py -v tests/
