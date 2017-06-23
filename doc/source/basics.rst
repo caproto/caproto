@@ -257,12 +257,14 @@ We'll use these convenience functions for what follows.
 .. ipython:: python
 
     def send(command):
+        "Process a command in the VirtualCircuit and then transmit its bytes."
         buffers_to_send = circuit.send(command)
         sock.sendmsg(buffers_to_send)
 
 .. ipython:: python
 
     def recv():
+        "Receive bytes; parse commands; process them in the VirtualCircuit."
         bytes_received = sock.recv(4096)
         circuit.recv(bytes_received)
         commands = []
