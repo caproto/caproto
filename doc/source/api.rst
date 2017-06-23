@@ -238,15 +238,8 @@ The VirtualCircuit object
 
         a unique identifer for this instance: :data:`((host, port), priority)`
 
-    .. attribute:: command_queue
-
-        A queue where incoming Commands are put, to be read out by calling
-        :meth:`next_command` or :meth:`async_next_command`
-
     .. automethod:: send
     .. automethod:: recv
-    .. automethod:: next_command
-    .. automethod:: async_next_command
     .. automethod:: disconnect
     .. automethod:: new_channel_id
     .. automethod:: new_subscriptionid
@@ -265,16 +258,8 @@ The Broadcaster object
 
         Python logger instance
 
-    .. attribute:: command_queue
-
-        A queue where incoming Commands are put, to be read out by calling
-        :meth:`next_command` or :meth:`async_next_command`. Entries are of the
-        form :data:`(sender_address, iterable_of_commands)`
-
     .. automethod:: send
     .. automethod:: recv
-    .. automethod:: next_command
-    .. automethod:: async_next_command
     .. automethod:: new_search_id
     .. automethod:: search
     .. automethod:: register

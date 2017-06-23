@@ -102,7 +102,11 @@ Instantiate a caproto :class:`Broadcaster` and a command to broadcast --- a
     command = caproto.RepeaterRegisterRequest('0.0.0.0')
 
 Pass the command to our broadcaster's :meth:`Broadcaster.send` method, which
-translates the command to bytes.
+translates the command to bytes. The method also checks these commands against
+the rules of the Channel Access protocol, which are encoded in the
+Broadcaster's internal state machine. It tracks the state of both the client
+and the server. (It can serve as either.) If you try to send an
+illegal command, it will raise :class:`LocalProtocolError`.
 
 .. ipython:: python
 
@@ -132,26 +136,20 @@ broadcaster.
 .. ipython:: python
 
     bytes_received, address = udp_sock.recvfrom(1024)
-    b.recv(bytes_received, address)
+    comamnds = b.recv(bytes_received, address)
 
-The bytes have been parsed into *Commands* and stashed in an internal queue.
-To feed from the queue, use one of two methods. For frameworks that support
-async functions, there is :meth:`Broadcaster.async_next_command`. In our simple
-blocking, single-threaded example, we use instead
-:meth:`Broadcaster.next_command`.
+The bytes have been parsed into *Commands*. They have not yet been checked 
+against the Channel Access protocol, so we don't know whether they are legal
+yet. When we are ready to process them, we send them into :meth:
 
 .. ipython:: python
 
-    addr, command = b.next_command()
-    print('received command {} from {}'.format(command, addr))
+    for command in commands:
+        b.process_command(command)
 
-When we call :meth:`Broadcaster.next_command`, the broadcaster pops the next
-command from its internal queue and updates its internal state machine encoding
-the rules of the protocol. The broadcaster tracks the state of both the client
-and server (it can serve as either). If, as the client, you send an illegal
-command, it will raise :class:`LocalProtocolError`. If, as the client, you
-receive bytes from the server that constitute an illegal command, it will raise
-:class:`RemoteProtocolError`.
+When we call :meth:`Broadcaster.process_command`, the Broadcaster does the same
+thing is did for :meth:`Broadcaster.send` in reverse: if one of the received
+commands is illegal, it raises :class:`RemoteProtocolError`.
 
 Searching for a Channel
 -----------------------
@@ -200,10 +198,8 @@ Our answer will arrive in a single datagram with multiple commands in it.
 .. ipython:: python
 
     bytes_received, recv_address = udp_sock.recvfrom(1024)
-    b.recv(bytes_received, recv_address)
-    addr, ver_response = b.next_command()
-    ver_response
-    addr, search_response = b.next_command()
+    version_response, search_response = b.recv(bytes_received, recv_address)
+    version_response
     search_response
     address = caproto.extract_address(search_response)
     address
@@ -247,10 +243,9 @@ We'll use these convenience functions for what follows.
     def recv():
         "Receive bytes; parse commands; process them in the VirtualCircuit."
         bytes_received = sock.recv(4096)
-        circuit.recv(bytes_received)
-        commands = []
-        while circuit.backlog > 0:
-            commands.append(circuit.next_command())
+        commands = circuit.recv(bytes_received)
+        for command in commands:
+            circuit.process_command(command)
         return commands
 
 We initialize the circuit by specifying our protocol version.

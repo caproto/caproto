@@ -22,7 +22,6 @@ from ._commands import (AccessRightsResponse, CreateChFailResponse,
 from ._state import (ChannelState, CircuitState, get_exception)
 from ._utils import (CLIENT, SERVER, NEED_DATA, DISCONNECTED, CaprotoKeyError,
                      CaprotoValueError, CaprotoRuntimeError,
-                     get_default_queue_class,
                      )
 from ._dbr import (SubscriptionType, )
 from ._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
@@ -44,7 +43,7 @@ class VirtualCircuit:
         May be used by the server to prioritize requests when under high
         load. Lowest priority is 0; highest is 99.
     """
-    def __init__(self, our_role, address, priority, *, queue_class=None):
+    def __init__(self, our_role, address, priority):
         self.our_role = our_role
         if our_role is CLIENT:
             self.their_role = SERVER
@@ -67,10 +66,6 @@ class VirtualCircuit:
             raise CaprotoRuntimeError("Client-side VirtualCircuit requires a "
                                       "non-None priority at initialization "
                                       "time.")
-        if queue_class is None:
-            queue_class = get_default_queue_class()
-        self.command_queue = queue_class()
-        self._backlog = 0
 
     @property
     def host(self):
@@ -119,62 +114,53 @@ class VirtualCircuit:
         """
         Parse commands from buffers received over TCP.
 
-        This does not return the commands or update the internal state
-        machine; it merely caches them in an internal queue. To process them
-        and trigger updates to state, call :meth:`next_command` or
-        :meth:`async_next_command`.
+        When the caller is ready to process the commands, each command should
+        first be passed to :meth:`VirtualCircuit.process_command` to validate
+        it against the protocol and update the VirtualCircuit's state.
 
         Parameters
         ----------
         *buffers :
             any number of bytes-like buffers
+
+        Returns
+        -------
+        ``(commands, num_bytes_needed)``
         """
         total_received = sum(len(byteslike) for byteslike in buffers)
+        commands = collections.deque()
         if total_received == 0:
             self.log.debug('Zero-length recv; sending disconnect notification')
-            self._backlog += 1
-            self.command_queue.put(DISCONNECTED)
+            commands.append(DISCONNECTED)
             return
 
         self.log.debug("Received %d bytes.", total_received)
-
         self._data += b''.join(buffers)
 
-        while len(self._data) >= _MessageHeaderSize:
-            len_data = len(self._data)
-            self._data, command = read_from_bytestream(self._data,
-                                                       self.their_role)
+        while True:
+            (self._data,
+             command,
+             num_bytes_needed) = read_from_bytestream(self._data,
+                                                      self.their_role)
+            len_data = len(self._data)  # just for logging
             if type(command) is not NEED_DATA:
                 self.log.debug("Parsed %d/%d cached bytes into %r.",
                                len(command), len_data, command)
-                self._backlog += 1
-                self.command_queue.put(command)
+                commands.append(command)
             else:
                 self.log.debug("%d bytes are cached. Need more bytes to parse "
                                "next command.", len_data)
                 break
+        return commands, num_bytes_needed
 
-    def next_command(self):
-        '''Synchronous next command
+    def process_command(self, command):
+        """
+        Update internal state machine and raise if protocol is violated.
 
-        Get next command, update internal state, and return the evaluated
-        command
-        '''
-        command = self.command_queue.get()
-        self._backlog -= 1
+        Received commands should be passed through here before any additional
+        processing by a server or client layer.
+        """
         self._process_command(self.their_role, command)
-        return command
-
-    async def async_next_command(self, *args, **kwargs):
-        '''Asynchronous next command
-
-        Get next command, update internal state, and return the evaluated
-        command
-        '''
-        command = await self.command_queue.get()
-        self._backlog -= 1
-        self._process_command(self.their_role, command)
-        return command
 
     def _process_command(self, role, command):
         """
@@ -329,11 +315,7 @@ class VirtualCircuit:
 
         Clients should call this method when a TCP connection is lost.
         """
-        # poison the queue
-        if (self.states[CLIENT] != DISCONNECTED or
-                self.states[SERVER] != DISCONNECTED):
-            self._backlog += 1
-            self.command_queue.put(DISCONNECTED)
+        return DISCONNECTED
 
     def new_channel_id(self):
         "Return a valid value for a cid or sid."
@@ -376,12 +358,6 @@ class VirtualCircuit:
                 self._ioid_counter = itertools.count(0)
                 continue
             return i
-
-    @property
-    def backlog(self):
-        '''Number of commands waiting in the command queue'''
-        return self._backlog
-
 
 
 class _BaseChannel:

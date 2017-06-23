@@ -4,8 +4,7 @@ import socket
 from collections import deque
 
 from ._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
-from ._utils import (CLIENT, SERVER, CaprotoValueError, LocalProtocolError,
-                     get_default_queue_class)
+from ._utils import CLIENT, SERVER, CaprotoValueError, LocalProtocolError
 from ._state import get_exception
 from ._commands import (RepeaterConfirmResponse, RepeaterRegisterRequest,
                         SearchRequest, SearchResponse, VersionRequest,
@@ -27,8 +26,7 @@ class Broadcaster:
     protocol_version : integer
         Default is ``DEFAULT_PROTOCOL_VERSION``.
     """
-    def __init__(self, our_role, protocol_version=DEFAULT_PROTOCOL_VERSION,
-                 *, queue_class=None):
+    def __init__(self, our_role, protocol_version=DEFAULT_PROTOCOL_VERSION)
         if our_role not in (SERVER, CLIENT):
             raise CaprotoValueError("role must be caproto.SERVER or "
                                     "caproto.CLIENT")
@@ -48,10 +46,6 @@ class Broadcaster:
         self._search_id_counter = itertools.count(0)
         logger_name = "caproto.Broadcaster"
         self.log = logging.getLogger(logger_name)
-
-        if queue_class is None:
-            queue_class = get_default_queue_class()
-        self.command_queue = queue_class()
 
     def send(self, *commands):
         """
@@ -83,71 +77,24 @@ class Broadcaster:
         """
         Parse commands from a UDP datagram.
 
-        This does not return the commands or update the internal state
-        machine; it merely caches them in an internal queue. To process them
-        and trigger updates to state, call :meth:`next_command` or
-        :meth:`async_next_command`.
+        When the caller is ready to process the commands, each command should
+        first be passed to :meth:`Broadcaster.process_command` to validate it
+        against the protocol and update the Broadcaster's state.
 
         Parameters
         ----------
         byteslike : bytes-like
         address : tuple
             ``(host, port)`` as a string and an integer respectively
+
+        Returns
+        -------
+        commands : list
         """
         logging.debug("Received datagram from %r with %d bytes.",
                       address, len(byteslike))
         commands = read_datagram(byteslike, address, self.their_role)
-        self.command_queue.put((address, commands))
-
-    def next_command(self):
-        '''Synchronous next command
-
-        Get next command, update internal state, and return the evaluated
-        command
-
-        Returns
-        -------
-        addr, command
-        '''
-
-        def gen():
-            addr, commands = self.command_queue.get()
-            history = []
-            if not commands:
-                yield addr, None
-            else:
-                for command in commands:
-                    self._process_command(self.their_role, command,
-                                          history=history)
-                    yield addr, command
-
-        if self._iterable_commands is None:
-            self._iterable_commands = gen()
-
-        try:
-            addr, command = next(self._iterable_commands)
-        except StopIteration:
-            self._iterable_commands = gen()
-            return next(self._iterable_commands)
-        else:
-            return addr, command
-
-    async def async_next_command(self, *args, **kwargs):
-        '''Asynchronous next command
-
-        Get next commands, update internal state, and return the evaluated
-        commands
-
-        Returns
-        -------
-        addr, list_of_commands
-        '''
-        # TODO can't use async generators until 3.6 :(
-        addr, commands = await self.command_queue.get()
-        history = []
-        for command in commands:
-            self._process_command(self.their_role, command, history=history)
-        return addr, commands
+        return commands
 
     def _process_command(self, role, command, *, history=None):
         """

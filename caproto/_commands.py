@@ -317,15 +317,15 @@ def read_from_bytestream(data, role):
 
     Returns
     -------
-    (remaining_data, command)
+    (remaining_data, command, num_bytes_needed)
         if more data is required, NEED_DATA will be returned in place of
         `command`
     '''
 
-    header, bytes_needed = bytes_needed_for_command(data, role)
+    header, num_bytes_needed = bytes_needed_for_command(data, role)
 
     if bytes_needed > 0:
-        return data, NEED_DATA
+        return data, NEED_DATA, num_bytes_needed
 
     _class = get_command_class(role, header)
 
@@ -336,7 +336,7 @@ def read_from_bytestream(data, role):
     payload_bytes = data[header_size:total_size]
     command = _class.from_wire(header, payload_bytes)
     # Advance the buffer.
-    return data[total_size:], command
+    return data[total_size:], command, 0
 
 
 Commands = {}
