@@ -1,0 +1,78 @@
+# vi: sw=2 ts=2 sts=2
+version: 2
+
+jobs:
+  build:
+    working_directory: ~/caproto
+    docker:
+      - image: klauer/caproto-docker:0.1.1
+        environment:
+          EPICS_CA_AUTO_ADDR_LIST: "NO"
+          EPICS_CA_MAX_ARRAY_BYTES: "10000000"
+    steps:
+      - checkout
+      - run: 
+          name: environment configuration
+          command: |
+            DOCKER_IP=$(ip addr show eth0 |grep 'inet ' | sed -e 's/.*inet \([^\/]*\).*/\1/')
+            EPICS_CA_ADDR_LIST=$(echo $DOCKER_IP | sed -e 's/^\([0-9]\+\)\.\([0-9]\+\)\..*$/\1.\2.255.255/' )
+            echo 'export PATH=$HOME/.linuxbrew/bin:$PATH' >> $BASH_ENV
+            echo "export DOCKER_IP=$DOCKER_IP" >> $BASH_ENV
+            echo "export EPICS_CA_ADDR_LIST=$EPICS_CA_ADDR_LIST" >> $BASH_ENV
+            echo 'source epics_env.sh' >> $BASH_ENV
+            echo '[[ -f caproto-venv/bin/activate ]] && echo "(caproto-venv)" && source caproto-venv/bin/activate' >> $BASH_ENV
+
+      - run:
+          name: Run motorsim IOC in background
+          background: true
+          command: |
+            cd /epics/iocs/motorsim/iocBoot/ioclocalhost
+            ../../bin/linux-x86_64/mtrSim ./st.cmd
+
+      - run:
+          name: Run pyepics test IOC in background
+          command: pyepics_testioc-run.sh
+          background: true
+
+      - run:
+          name: Setup virtual environment
+          # after this step, all steps run in the virtual environment using $BASH_ENV
+          command: |
+            python -m venv caproto-venv
+            . caproto-venv/bin/activate
+            pip install -r test-requirements.txt
+            python setup.py install
+      
+      - run:
+          name: Run pyepics simulator in background
+          command: |
+            cd
+            wget https://raw.githubusercontent.com/pyepics/testioc/master/simulator.py
+            python simulator.py
+          background: true
+
+      - run:
+          name: Check IOC status using caget and caproto repeater
+          command: |
+            rm `which caRepeater` || /bin/true
+            caproto-repeater &
+            REPEATER_PID=$!
+            env
+            caget XF:31IDA-OP{Tbl-Ax:X1}Mtr
+            caget Py:ao1
+            kill $REPEATER_PID
+
+      - run:
+          name: Run tests
+          no_output_timeout: 1m
+          command: |
+            coverage run run_tests.py -v tests/
+
+      - run:
+          name: Report coverage
+          command: |
+            coverage report -m
+
+      - store_artifacts:
+          path: .coverage
+          destination: coverage
