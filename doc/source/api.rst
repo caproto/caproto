@@ -196,7 +196,7 @@ Special constants are also used to represent the "direction" of a command.
           REQUEST
 
 Another special constant serves as a sentinel "Command" returned by
-:meth:`read_from_bytestream` when more data needs to be received before any new
+:func:`read_from_bytestream` when more data needs to be received before any new
 Commands can be parsed.
 
 .. data:: NEED_DATA
