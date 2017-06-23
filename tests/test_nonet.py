@@ -23,6 +23,7 @@ def srv_send(circuit, command):
 
 def srv_recv(circuit):
     bytes_received = bytes(req_cache)
+    assert len(bytes_received)
     req_cache.clear()
     circuit.recv(bytes_received)
     commands = []
@@ -39,6 +40,7 @@ def cli_send(circuit, command):
 
 def cli_recv(circuit):
     bytes_received = bytes(res_cache)
+    assert len(bytes_received)
     res_cache.clear()
     circuit.recv(bytes_received)
     commands = []
@@ -168,7 +170,6 @@ def test_nonet():
 
     cli_send(chan1.circuit, cancel_req)
     srv_recv(srv_circuit)
-    cli_recv(chan1.circuit)
 
     # Test reading.
     cli_send(chan1.circuit, ca.ReadNotifyRequest(data_type=5, data_count=1,
