@@ -196,8 +196,14 @@ class CurioVirtualCircuit:
                                        ''.format(type(ex).__name__, ex))
                     )
                 else:
+                    if write_status is None:
+                        # errors can be passed back by exceptions, and
+                        # returning none for write_status can just be
+                        # considered laziness
+                        write_status = True
                     response_command = chan.write(ioid=command.ioid,
                                                   status=write_status)
+
                 if client_waiting:
                     await self.send(response_command)
 

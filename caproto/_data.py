@@ -249,11 +249,11 @@ class ChannelData:
     async def set_dbr_data(self, data, data_type, metadata):
         '''Set data from DBR metadata/values'''
         self.value = self.fromtype(values=data, data_type=data_type)
-        sub_queue = self._subscription_queue
-        if sub_queue is not None:
-            await sub_queue.put((self, SubscriptionType.DBE_VALUE,
-                                 self.value) +
-                                self._subscription_queue_args)
+        if self._subscription_queue is not None:
+            await self._subscription_queue.put((self,
+                                                SubscriptionType.DBE_VALUE,
+                                                self.value) +
+                                               self._subscription_queue_args)
 
     def _copy_metadata_to_dbr(self, dbr_metadata):
         'Set all metadata fields of a given DBR type instance'
