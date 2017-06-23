@@ -1,7 +1,6 @@
 import logging
 import random
 from collections import namedtuple
-from concurrent.futures import Future
 
 import curio
 from curio import socket
@@ -182,14 +181,25 @@ class CurioVirtualCircuit:
         elif isinstance(command, (ca.WriteRequest, ca.WriteNotifyRequest)):
             chan, db_entry = get_db_entry()
             client_waiting = isinstance(command, ca.WriteNotifyRequest)
-            future = Future()
 
             async def handle_write():
-                await db_entry.set_dbr_data(command.data,
-                                            command.data_type,
-                                            command.metadata, future)
-                await self._wait_write_completion(chan, command, future,
-                                                  client_waiting)
+                '''Wait for an asynchronous caput to finish'''
+                try:
+                    write_status = await db_entry.set_dbr_data(
+                        command.data, command.data_type, command.metadata)
+                except Exception as ex:
+                    cid = self.circuit.channels_sid[command.sid].cid
+                    response_command = ca.ErrorResponse(
+                        command, cid,
+                        status_code=ca.ECA_INTERNAL.code_with_severity,
+                        error_message=('Python exception: {} {}'
+                                       ''.format(type(ex).__name__, ex))
+                    )
+                else:
+                    response_command = chan.write(ioid=command.ioid,
+                                                  status=write_status)
+                if client_waiting:
+                    await self.send(response_command)
 
             await self.pending_tasks.spawn(handle_write, ignore_result=True)
             # TODO pretty sure using the taskgroup will bog things down,
@@ -232,27 +242,6 @@ class CurioVirtualCircuit:
         elif isinstance(command, ca.ClearChannelRequest):
             chan, db_entry = get_db_entry()
             return [chan.disconnect()]
-
-    async def _wait_write_completion(self, chan, command, future,
-                                     client_waiting):
-        '''Wait for an asynchronous caput to finish'''
-        try:
-            await curio.traps._future_wait(future)
-            write_status = future.result()
-        except Exception as ex:
-            cid = self.circuit.channels_sid[command.sid].cid
-            response_command = ca.ErrorResponse(
-                command, cid,
-                status_code=ca.ECA_INTERNAL.code_with_severity,
-                error_message=('Python exception: {} {}'
-                               ''.format(type(ex).__name__, ex))
-            )
-        else:
-            response_command = chan.write(ioid=command.ioid,
-                                          status=write_status)
-
-        if client_waiting:
-            await self.send(response_command)
 
 
 class Context:
