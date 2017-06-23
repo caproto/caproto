@@ -230,16 +230,8 @@ by the protocol.
 
 .. ipython:: python
     
-    class OurQueue:
-        def __init__(self):
-            self.items = []
-        def put(self, command):
-            self.items.append(command)
-        def get(self):
-            return self.items.pop(0)
     circuit = caproto.VirtualCircuit(our_role=caproto.CLIENT, address=address,
-                                     priority=0, queue_class=OurQueue)
-
+                                     priority=0)
 
 We'll use these convenience functions for what follows.
 
