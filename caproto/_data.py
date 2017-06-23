@@ -128,6 +128,7 @@ class ChannelAlarmStatus:
     def _from_dbr(cls, dbr):
         instance = cls()
         instance._set_instance_from_dbr(dbr)
+        return instance
 
     def get_dbr_data(self, dbr=None):
         if dbr is None:
@@ -242,7 +243,7 @@ class ChannelData:
             # cached?
             dbr_metadata = DBR_TYPES[type_]()
 
-        self._set_dbr_metadata(dbr_metadata)
+        self._copy_metadata_to_dbr(dbr_metadata)
         return dbr_metadata, values
 
     async def set_dbr_data(self, data, data_type, metadata, future):
@@ -259,7 +260,7 @@ class ChannelData:
                                      self.value) +
                                     self._subscription_queue_args)
 
-    def _set_dbr_metadata(self, dbr_metadata):
+    def _copy_metadata_to_dbr(self, dbr_metadata):
         'Set all metadata fields of a given DBR type instance'
         to_type = ChType(dbr_metadata.DBR_ID)
 
@@ -346,7 +347,7 @@ class ChannelEnum(ChannelData):
             enum_strings = []
         self.enum_strings = enum_strings
 
-    def _set_dbr_metadata(self, dbr_metadata):
+    def _copy_metadata_to_dbr(self, dbr_metadata):
         if hasattr(dbr_metadata, 'strs') and self.enum_strings:
             for i, string in enumerate(self.enum_strings):
                 bytes_ = bytes(string, self.string_encoding)
@@ -354,7 +355,7 @@ class ChannelEnum(ChannelData):
                                                        b'\x00')
             dbr_metadata.no_str = len(self.enum_strings)
 
-        return super()._set_dbr_metadata(dbr_metadata)
+        return super()._copy_metadata_to_dbr(dbr_metadata)
 
 
 class ChannelNumeric(ChannelData):
