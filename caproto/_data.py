@@ -1,5 +1,4 @@
 import time
-from curio.meta import awaitable
 
 # TODO: assuming USE_NUMPY for now
 import numpy as np
@@ -246,17 +245,6 @@ class ChannelData:
         self._set_dbr_metadata(dbr_metadata)
         return dbr_metadata, values
 
-    def set_dbr_data(self, data, data_type, metadata, future):
-        '''Set data from DBR metadata/values'''
-        try:
-            self.value = self.fromtype(values=data, data_type=data_type)
-        except Exception as ex:
-            future.set_exception(ex)
-        else:
-            future.set_result(True)
-        return True
-
-    @awaitable(set_dbr_data)
     async def set_dbr_data(self, data, data_type, metadata, future):
         '''Set data from DBR metadata/values'''
         try:

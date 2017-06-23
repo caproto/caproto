@@ -185,14 +185,9 @@ class CurioVirtualCircuit:
             future = Future()
 
             async def handle_write():
-                if curio.meta.iscoroutinefunction(db_entry.set_dbr_data):
-                    await db_entry.set_dbr_data(command.data,
-                                                command.data_type,
-                                                command.metadata, future)
-                else:
-                    await curio.abide(db_entry.set_dbr_data, command.data,
-                                      command.data_type, command.metadata,
-                                      future)
+                await db_entry.set_dbr_data(command.data,
+                                            command.data_type,
+                                            command.metadata, future)
                 await self._wait_write_completion(chan, command, future,
                                                   client_waiting)
 
