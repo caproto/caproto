@@ -164,14 +164,13 @@ conventionally recorded in an environment variable.
 .. ipython:: python
 
     import os
-    hosts = os.environ['EPICS_CA_ADDR_LIST']  # example: '172.17.255.255'
+    hosts = os.environ['EPICS_CA_ADDR_LIST'].split()
+    # example: ['172.17.255.255']
 
-Something simple like this would work but would only support one IP address in
-the EPICS_CA_ADDR_LIST and would not handle EPICS_CA_AUTO_ADDR_LIST settings.
-A more complete implementation would supports multiple space-delimited entries,
-and check network interfaces for broadcast addresses in the case of an automatic 
-address list setting.  To that end, we offer a convenience function
-:meth:`get_address_list` that handles this.  Let's use that here instead:
+Something simple like this would work, but a more complete implementation is
+avaailable in the convenience function :func:`get_address_list`, which respects
+EPICS_CA_AUTO_ADDR_LIST settings and checks network interfaces for broadcast
+addresses in the case of an automatic address list setting.
 
 .. ipython:: python
     
