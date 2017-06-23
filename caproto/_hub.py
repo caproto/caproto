@@ -138,9 +138,7 @@ class VirtualCircuit:
 
         self.log.debug("Received %d bytes.", total_received)
 
-        # TODO for performance reasons, this should probably be a b''.join()
-        for byteslike in buffers:
-            self._data += byteslike
+        self._data += b''.join(buffers)
 
         while len(self._data) >= _MessageHeaderSize:
             len_data = len(self._data)
