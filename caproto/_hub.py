@@ -164,8 +164,7 @@ class VirtualCircuit:
         '''
         command = self.command_queue.get()
         self._backlog -= 1
-        if command is not DISCONNECTED:
-            self._process_command(self.their_role, command)
+        self._process_command(self.their_role, command)
         return command
 
     async def async_next_command(self, *args, **kwargs):
@@ -176,8 +175,7 @@ class VirtualCircuit:
         '''
         command = await self.command_queue.get()
         self._backlog -= 1
-        if command is not DISCONNECTED:
-            self._process_command(self.their_role, command)
+        self._process_command(self.their_role, command)
         return command
 
     def _process_command(self, role, command):
@@ -189,6 +187,10 @@ class VirtualCircuit:
         role : ``CLIENT`` or ``SERVER``
         command : Message
         """
+        if command is DISCONNECTED:
+            self.states.disconnect()
+            return
+
         # Filter for Commands that are pertinent to a specific Channel, as
         # opposed to the Circuit as a whole:
         if isinstance(command, (ClearChannelRequest, ClearChannelResponse,
@@ -334,7 +336,6 @@ class VirtualCircuit:
                 self.states[SERVER] != DISCONNECTED):
             self._backlog += 1
             self.command_queue.put(DISCONNECTED)
-            self.states.disconnect()
 
     def new_channel_id(self):
         "Return a valid value for a cid or sid."
