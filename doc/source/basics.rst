@@ -268,7 +268,6 @@ We'll use these convenience functions for what follows.
         bytes_received = sock.recv(4096)
         circuit.recv(bytes_received)
         commands = []
-        commands = []
         while circuit.backlog > 0:
             commands.append(circuit.next_command())
         return commands
