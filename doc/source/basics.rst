@@ -134,33 +134,23 @@ broadcaster.
     bytes_received, address = udp_sock.recvfrom(1024)
     b.recv(bytes_received, address)
 
-The bytes have been cached and parsed. The :class:`Broadcaster` puts the
-*Commands* on its `command_queue`, allowing the user to feed from that pipe as
-desired. For frameworks that support async functions, there is
-:meth:`Broadcaster.async_next_command`. In our simple blocking, single-threaded
-example, we use instead :meth:`Broadcaster.next_command`.
+The bytes have been parsed into *Commands* and stashed in an internal queue.
+To feed from the queue, use one of two methods. For frameworks that support
+async functions, there is :meth:`Broadcaster.async_next_command`. In our simple
+blocking, single-threaded example, we use instead
+:meth:`Broadcaster.next_command`.
 
 .. ipython:: python
 
     addr, command = b.next_command()
-
-As it's necessary for higher levels to keep in synchronization with the state
-of the :class:`Broadcaster`, :meth:`Broadcaster.next_command` pops the next
-command from the queue and updates its internal state. From our perspective, we
-only need to handle the commands as if feeding directly from the pipe itself.
-
-.. ipython:: python
-
     print('received command {} from {}'.format(command, addr))
 
-
-When we call :meth:`Broadcaster.send`, two things happen. The broadcaster
-translates between low-level bytes and a high-level *Command*. The broadcaster
-also updates its internal state machine encoding the rules of the protocol. It
-tracks the state of both the client and server (it can serve as either). If, as
-the client, you send an illegal command, it will raise
-:class:`LocalProtocolError`. If, as the client, you receive bytes from the
-server that constitute an illegal command, it will raise
+When we call :meth:`Broadcaster.next_command`, the broadcaster pops the next
+command from its internal queue and updates its internal state machine encoding
+the rules of the protocol. The broadcaster tracks the state of both the client
+and server (it can serve as either). If, as the client, you send an illegal
+command, it will raise :class:`LocalProtocolError`. If, as the client, you
+receive bytes from the server that constitute an illegal command, it will raise
 :class:`RemoteProtocolError`.
 
 Searching for a Channel
@@ -271,7 +261,6 @@ We'll use these convenience functions for what follows.
         while circuit.backlog > 0:
             commands.append(circuit.next_command())
         return commands
-
 
 We initialize the circuit by specifying our protocol version.
 
