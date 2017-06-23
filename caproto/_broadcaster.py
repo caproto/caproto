@@ -56,7 +56,7 @@ class Broadcaster:
     def send(self, *commands):
         """
         Convert one or more high-level Commands into bytes that may be
-        broadcast together in one UDP datagram while updating our internal
+        broadcast together in one UDP datagram. Update our internal
         state machine.
 
         Parameters
@@ -81,10 +81,12 @@ class Broadcaster:
 
     def recv(self, byteslike, address):
         """
-        Add data from a UDP broadcast to our internal receive buffer.
+        Parse commands from a UDP datagram.
 
-        This does not actually do any processing on the data, just stores
-        it. To trigger processing, you have to call :meth:`next_command`.
+        This does not return the commands or update the internal state
+        machine; it merely caches them in an internal queue. To process them
+        and trigger updates to state, call :meth:`next_command` or
+        :meth:`async_next_command`.
 
         Parameters
         ----------

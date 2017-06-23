@@ -240,7 +240,8 @@ The VirtualCircuit object
 
     .. attribute:: command_queue
 
-        The queue from which higher levels feed Commands from
+        A queue where incoming Commands are put, to be read out by calling
+        :meth:`next_command` or :meth:`async_next_command`
 
     .. automethod:: send
     .. automethod:: recv
@@ -266,8 +267,9 @@ The Broadcaster object
 
     .. attribute:: command_queue
 
-        The queue from which higher levels feed Commands from. Entries are in
-        the format (sender_address, iterable_of_commands)
+        A queue where incoming Commands are put, to be read out by calling
+        :meth:`next_command` or :meth:`async_next_command`. Entries are of the
+        form :data:`(sender_address, iterable_of_commands)`
 
     .. automethod:: send
     .. automethod:: recv

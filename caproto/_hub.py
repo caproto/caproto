@@ -94,7 +94,7 @@ class VirtualCircuit:
     def send(self, *commands):
         """
         Convert one or more high-level Commands into buffers of bytes that may
-        be broadcast together in one TCP packet while updating our internal
+        be broadcast together in one TCP packet. Update our internal
         state machine.
 
         Parameters
@@ -117,12 +117,12 @@ class VirtualCircuit:
 
     def recv(self, *buffers):
         """
-        Add data received over TCP to our internal receive buffer.
+        Parse commands from buffers received over TCP.
 
-        This does not actually do any processing on the data, just stores
-        it. Commands will be unpacked and added to the command queue as
-        necessary.  Higher levels must call :meth:`process_command` as
-        they interpret the commands to keep the hub state synchronized.
+        This does not return the commands or update the internal state
+        machine; it merely caches them in an internal queue. To process them
+        and trigger updates to state, call :meth:`next_command` or
+        :meth:`async_next_command`.
 
         Parameters
         ----------
