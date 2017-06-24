@@ -31,6 +31,7 @@ class VirtualCircuit:
         self.subscriptionids = {}  # map subscriptionid to Channel
         self.connected = True
         self.socket = None
+        self.command_queue = curio.Queue()
         self.new_command_condition = curio.Condition()
         self._socket_lock = curio.Lock()
 
@@ -38,17 +39,21 @@ class VirtualCircuit:
         self.socket = await socket.create_connection(self.circuit.address)
         await self._socket_lock.release()
 
+        num_bytes_needed = 0
         while True:
-            bytes_received = await self.socket.recv(32768)
-            self.circuit.recv(bytes_received)
+            bytes_received = await self.socket.recv(max(32768,
+                                                        num_bytes_needed))
             if not len(bytes_received):
                 self.connected = False
                 break
+            command, num_bytes_needed = self.circuit.recv(bytes_received)
+            await self.command_queue.put(command)
 
     async def _command_queue_loop(self):
         while True:
             try:
-                command = await self.circuit.async_next_command()
+                command = await self.command_queue.get()
+                self.circuit.process_command(command)
             except curio.TaskCancelled:
                 break
             except Exception as ex:
@@ -200,9 +205,9 @@ class Channel:
 class SharedBroadcaster:
     def __init__(self, *, log_level='ERROR'):
         self.log_level = log_level
-        self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT,
-                                          queue_class=curio.UniversalQueue)
+        self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
         self.broadcaster.log.setLevel(self.log_level)
+        self.command_bundle_queue = curio.Queue()
         self.broadcaster_command_condition = curio.Condition()
 
         # UDP socket broadcasting to CA servers
@@ -266,7 +271,8 @@ class SharedBroadcaster:
 
         while True:
             try:
-                addr, commands = await self.broadcaster.async_next_command()
+                commands = await self.command_bundle_queue.get()
+                self.broadcaster.process_commands(commands)
             except curio.TaskCancelled:
                 break
             except Exception as ex:

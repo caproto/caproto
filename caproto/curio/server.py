@@ -51,6 +51,7 @@ class CurioVirtualCircuit:
         self.context = context
         self.client_hostname = None
         self.client_username = None
+        self.command_queue = curio.Queue()
         self.new_command_condition = curio.Condition()
         self.pending_tasks = curio.TaskGroup()
         self.subscriptions = {}
@@ -88,7 +89,8 @@ class CurioVirtualCircuit:
         Receive bytes over TCP and cache them in this circuit's buffer.
         """
         bytes_received = await self.client.recv(4096)
-        self.circuit.recv(bytes_received)
+        command, _ = self.circuit.recv(bytes_received)
+        await self.command_queue.put(command)
         if not bytes_received:
             await self._on_disconnect()
             raise DisconnectedCircuit()
@@ -104,7 +106,8 @@ class CurioVirtualCircuit:
         """
         while True:
             try:
-                command = await self.circuit.async_next_command()
+                command = await self.command_queue.get()
+                self.circuit.process_command(command)
             except curio.TaskCancelled:
                 break
             except Exception as ex:
@@ -261,6 +264,7 @@ class Context:
         self.broadcaster = ca.Broadcaster(our_role=ca.SERVER,
                                           queue_class=curio.UniversalQueue)
         self.broadcaster.log.setLevel(self.log_level)
+        self.command_bundle_queue = curio.Queue()
         self.broadcaster_command_condition = curio.Condition()
 
         self.subscriptions = {}
@@ -276,14 +280,16 @@ class Context:
 
         while True:
             bytes_received, address = await self.udp_sock.recvfrom(4096)
-            self.broadcaster.recv(bytes_received, address)
+            commands = self.broadcaster.recv(bytes_received, address)
+            await self.command_bundle_queue.put(commands)
 
     async def broadcaster_queue_loop(self):
         responses = []
 
         while True:
             try:
-                addr, commands = await self.broadcaster.async_next_command()
+                commands = await self.command_bundle_queue.get()
+                self.broadcaster.process_commands(commands)
             except curio.TaskCancelled:
                 break
             except Exception as ex:

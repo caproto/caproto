@@ -50,9 +50,9 @@ def main(*, skip_monitor_section=False):
 
         # Receive response
         data, address = udp_sock.recvfrom(1024)
-        b.recv(data, address)
+        commands = b.recv(data, address)
 
-    b.next_command()
+    b.process_commands(commands)
 
     # Search for pv1.
     # CA requires us to send a VersionRequest and a SearchRequest bundled into
@@ -68,12 +68,12 @@ def main(*, skip_monitor_section=False):
     print('searching for %s' % pv1)
     # Receive a VersionResponse and SearchResponse.
     bytes_received, address = udp_sock.recvfrom(1024)
-    b.recv(bytes_received, address)
-    addr, command = b.next_command()
-    assert type(command) is ca.VersionResponse
-    addr, command = b.next_command()
-    assert type(command) is ca.SearchResponse
-    address = ca.extract_address(command)
+    commands = b.recv(bytes_received, address)
+    b.process_commands(commands)
+    c1, c2 = commands
+    assert type(c1) is ca.VersionResponse
+    assert type(c2) is ca.SearchResponse
+    address = ca.extract_address(c2)
 
     circuit = ca.VirtualCircuit(our_role=ca.CLIENT,
                                 address=address,
