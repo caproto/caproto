@@ -24,10 +24,9 @@ def send(circuit, command):
 
 def recv(circuit):
     bytes_received = sockets[circuit].recv(4096)
-    circuit.recv(bytes_received)
-    commands = []
-    while circuit.backlog > 0:
-        commands.append(circuit.next_command())
+    commands, _ = circuit.recv(bytes_received)
+    for c in commands:
+        circuit.process_command(c)
     return commands
 
 
