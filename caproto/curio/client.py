@@ -262,7 +262,8 @@ class SharedBroadcaster:
 
         while True:
             bytes_received, address = await self.udp_sock.recvfrom(4096)
-            self.broadcaster.recv(bytes_received, address)
+            commands = self.broadcaster.recv(bytes_received, address)
+            await self.command_bundle_queue.put((address, commands))
 
     async def _broadcaster_queue_loop(self):
         await curio.spawn(self._broadcaster_recv_loop(), daemon=True)
@@ -271,7 +272,7 @@ class SharedBroadcaster:
 
         while True:
             try:
-                commands = await self.command_bundle_queue.get()
+                addr, commands = await self.command_bundle_queue.get()
                 self.broadcaster.process_commands(commands)
             except curio.TaskCancelled:
                 break
