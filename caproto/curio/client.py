@@ -46,8 +46,9 @@ class VirtualCircuit:
             if not len(bytes_received):
                 self.connected = False
                 break
-            command, num_bytes_needed = self.circuit.recv(bytes_received)
-            await self.command_queue.put(command)
+            commands, num_bytes_needed = self.circuit.recv(bytes_received)
+            for c in commands:
+                await self.command_queue.put(c)
 
     async def _command_queue_loop(self):
         while True:
@@ -237,7 +238,8 @@ class SharedBroadcaster:
                                     [ca.RepeaterConfirmResponse(
                                         repeater_address='127.0.0.1')]
                                     )
-                        await self.broadcaster.command_queue.put(response)
+                        await self.command_queue.put(
+                            response[1][0])
                         await self.broadcaster_command_condition.notify_all()
                     continue
                 await self.udp_sock.sendto(bytes_to_send,

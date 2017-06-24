@@ -89,8 +89,9 @@ class CurioVirtualCircuit:
         Receive bytes over TCP and cache them in this circuit's buffer.
         """
         bytes_received = await self.client.recv(4096)
-        command, _ = self.circuit.recv(bytes_received)
-        await self.command_queue.put(command)
+        commands, _ = self.circuit.recv(bytes_received)
+        for c in commands:
+            await self.command_queue.put(c)
         if not bytes_received:
             await self._on_disconnect()
             raise DisconnectedCircuit()
