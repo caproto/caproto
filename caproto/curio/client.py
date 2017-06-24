@@ -238,8 +238,7 @@ class SharedBroadcaster:
                                     [ca.RepeaterConfirmResponse(
                                         repeater_address='127.0.0.1')]
                                     )
-                        await self.command_queue.put(
-                            response[1][0])
+                        await self.command_bundle_queue.put(response[1])
                         await self.broadcaster_command_condition.notify_all()
                     continue
                 await self.udp_sock.sendto(bytes_to_send,
