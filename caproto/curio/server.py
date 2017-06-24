@@ -261,8 +261,7 @@ class Context:
 
         self.circuits = set()
         self.log_level = log_level
-        self.broadcaster = ca.Broadcaster(our_role=ca.SERVER,
-                                          queue_class=curio.UniversalQueue)
+        self.broadcaster = ca.Broadcaster(our_role=ca.SERVER)
         self.broadcaster.log.setLevel(self.log_level)
         self.command_bundle_queue = curio.Queue()
         self.broadcaster_command_condition = curio.Condition()
@@ -323,8 +322,7 @@ class Context:
 
     async def tcp_handler(self, client, addr):
         '''Handler for each new TCP client to the server'''
-        cavc = ca.VirtualCircuit(ca.SERVER, addr, None,
-                                 queue_class=curio.UniversalQueue)
+        cavc = ca.VirtualCircuit(ca.SERVER, addr, None)
         circuit = CurioVirtualCircuit(cavc, client, self)
         self.circuits.add(circuit)
 
