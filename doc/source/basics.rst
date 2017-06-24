@@ -39,7 +39,7 @@ To begin, we need a socket configured for UDP broadcasting.
 .. ipython:: python
     :suppress:
 
-    udp_sock = caproto.bcast_socket()
+    import socket
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -136,20 +136,18 @@ broadcaster.
 .. ipython:: python
 
     bytes_received, address = udp_sock.recvfrom(1024)
-    comamnds = b.recv(bytes_received, address)
+    commands = b.recv(bytes_received, address)
 
-The bytes have been parsed into *Commands*. They have not yet been checked 
-against the Channel Access protocol, so we don't know whether they are legal
-yet. When we are ready to process them, we send them into :meth:
+The bytes have been parsed into *Commands*. Next, checked them against the
+Channel Access protocol.
 
 .. ipython:: python
 
-    for command in commands:
-        b.process_command(command)
+    b.process_commands(commands)
 
-When we call :meth:`Broadcaster.process_command`, the Broadcaster does the same
-thing is did for :meth:`Broadcaster.send` in reverse: if one of the received
-commands is illegal, it raises :class:`RemoteProtocolError`.
+When we call :meth:`Broadcaster.process_commands`, the Broadcaster does the
+same thing is did for :meth:`Broadcaster.send` in reverse: if one of the
+received commands is illegal, it raises :class:`RemoteProtocolError`.
 
 Searching for a Channel
 -----------------------
@@ -243,7 +241,7 @@ We'll use these convenience functions for what follows.
     def recv():
         "Receive bytes; parse commands; process them in the VirtualCircuit."
         bytes_received = sock.recv(4096)
-        commands = circuit.recv(bytes_received)
+        commands, _ = circuit.recv(bytes_received)
         for command in commands:
             circuit.process_command(command)
         return commands

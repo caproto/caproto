@@ -240,6 +240,7 @@ The VirtualCircuit object
 
     .. automethod:: send
     .. automethod:: recv
+    .. automethod:: process_command
     .. automethod:: disconnect
     .. automethod:: new_channel_id
     .. automethod:: new_subscriptionid
@@ -260,6 +261,7 @@ The Broadcaster object
 
     .. automethod:: send
     .. automethod:: recv
+    .. automethod:: process_commands
     .. automethod:: new_search_id
     .. automethod:: search
     .. automethod:: register
