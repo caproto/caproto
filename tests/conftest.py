@@ -51,9 +51,11 @@ def circuit_pair(request):
                                                          priority=priority))
 
     srv_circuit = ca.VirtualCircuit(ca.SERVER, (host, port), None)
-    srv_circuit.recv(*buffers_to_send)
-    srv_circuit.next_command()
+    commands, _ = srv_circuit.recv(*buffers_to_send)
+    for command in commands:
+        srv_circuit.process_command(command)
     buffers_to_send = srv_circuit.send(ca.VersionResponse(version=version))
-    cli_circuit.recv(*buffers_to_send)
-    cli_circuit.next_command()
+    commands, _ = cli_circuit.recv(*buffers_to_send)
+    for command in commands:
+        cli_circuit.process_command(command)
     return cli_circuit, srv_circuit
