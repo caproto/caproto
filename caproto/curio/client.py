@@ -262,8 +262,9 @@ class SharedBroadcaster:
 
         while True:
             bytes_received, address = await self.udp_sock.recvfrom(4096)
-            commands = self.broadcaster.recv(bytes_received, address)
-            await self.command_bundle_queue.put((address, commands))
+            if bytes_received:
+                commands = self.broadcaster.recv(bytes_received, address)
+                await self.command_bundle_queue.put((address, commands))
 
     async def _broadcaster_queue_loop(self):
         await curio.spawn(self._broadcaster_recv_loop(), daemon=True)
@@ -336,8 +337,7 @@ class Context:
                 return circuit
 
         ca_circuit = ca.VirtualCircuit(our_role=ca.CLIENT, address=address,
-                                       priority=priority,
-                                       queue_class=curio.UniversalQueue)
+                                       priority=priority)
         circuit = VirtualCircuit(ca_circuit)
         circuit.circuit.log.setLevel(self.log_level)
         self.circuits.append(circuit)
@@ -370,9 +370,6 @@ class Context:
 async def main():
     logger.setLevel('DEBUG')
     logging.basicConfig()
-
-    # this universalqueue is evil and genius
-    # ca.set_default_queue_class(curio.UniversalQueue)
 
     # Connect to two motorsim PVs. Test reading, writing, and subscribing.
     pv1 = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
