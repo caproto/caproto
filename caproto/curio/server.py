@@ -280,15 +280,16 @@ class Context:
 
         while True:
             bytes_received, address = await self.udp_sock.recvfrom(4096)
-            commands = self.broadcaster.recv(bytes_received, address)
-            await self.command_bundle_queue.put(commands)
+            if bytes_received:
+                commands = self.broadcaster.recv(bytes_received, address)
+                await self.command_bundle_queue.put((address, commands))
 
     async def broadcaster_queue_loop(self):
         responses = []
 
         while True:
             try:
-                commands = await self.command_bundle_queue.get()
+                addr, commands = await self.command_bundle_queue.get()
                 self.broadcaster.process_commands(commands)
             except curio.TaskCancelled:
                 break
