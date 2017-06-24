@@ -38,10 +38,6 @@ class ProxyDatagramProtocol(asyncio.DatagramProtocol):
         self.host = socket.gethostbyname(socket.gethostname())
         self.remotes = {}
 
-        class CallbackQueue:
-            def put(_, info):
-                self.commands_received(*info)
-
         self.broadcaster = caproto.Broadcaster(our_role=caproto.SERVER)
         super().__init__()
 
