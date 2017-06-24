@@ -101,19 +101,22 @@ def test_serialize(cmd):
     inst.nbytes
 
 
-def make_channels(cli_circuit, srv_circuit, data_type, data_count):
-    cid = 0
-    sid = 0
-    cli_channel = ca.ClientChannel('name', cli_circuit, cid)
-    srv_channel = ca.ServerChannel('name', srv_circuit, cid)
+def make_channels(cli_circuit, srv_circuit, data_type, data_count, name='a'):
+    cid = cli_circuit.new_channel_id()
+    sid = srv_circuit.new_channel_id()
+
+    cli_channel = ca.ClientChannel(name, cli_circuit, cid)
+    srv_channel = ca.ServerChannel(name, srv_circuit, cid)
     req = cli_channel.create()
     cli_circuit.send(req)
-    srv_circuit.recv(bytes(req))
-    srv_circuit.next_command()
+    commands, num_bytes_needed = srv_circuit.recv(bytes(req))
+    for command in commands:
+        srv_circuit.process_command(command)
     res = srv_channel.create(data_type, data_count, sid)
     srv_circuit.send(res)
-    cli_circuit.recv(bytes(res))
-    cli_circuit.next_command()
+    commands, num_bytes_needed = cli_circuit.recv(bytes(res))
+    for command in commands:
+        cli_circuit.process_command(command)
     return cli_channel, srv_channel
 
 
@@ -178,16 +181,18 @@ def test_reads(circuit_pair, data_type, data_count, data, metadata):
     buffers_to_send = cli_circuit.send(req)
     # Socket transport would happen here. Calling bytes() simulates
     # serialization over the socket.
-    srv_circuit.recv(*(_np_hack(buf) for buf in buffers_to_send))
-    srv_circuit.next_command()
+    commands, _ = srv_circuit.recv(*(_np_hack(buf) for buf in buffers_to_send))
+    for command in commands:
+        srv_circuit.process_command(command)
     res = ca.ReadNotifyResponse(data=data, metadata=metadata,
                                 data_count=data_count, data_type=data_type,
                                 ioid=0, status=1)
     buffers_to_send = srv_circuit.send(res)
     # Socket transport would happen here. Calling bytes() simulates
     # serialization over the socket.
-    cli_circuit.recv(*(_np_hack(buf) for buf in buffers_to_send))
-    res_received = cli_circuit.next_command()
+    commands, _ = cli_circuit.recv(*(_np_hack(buf) for buf in buffers_to_send))
+    res_received, = commands
+    cli_circuit.process_command(res_received)
 
     if isinstance(data, array.ArrayType):
         # Before comparing array.array (which exposes the byteorder naively)
@@ -217,16 +222,19 @@ def test_writes(circuit_pair, data_type, data_count, data, metadata):
     buffers_to_send = cli_circuit.send(req)
     # Socket transport would happen here. Calling bytes() simulates
     # serialization over the socket.
-    srv_circuit.recv(*(_np_hack(buf) for buf in buffers_to_send))
-    req_received = srv_circuit.next_command()
+    commands, _ = srv_circuit.recv(*(_np_hack(buf) for buf in buffers_to_send))
+    for command in commands:
+        srv_circuit.process_command(command)
+    req_received, = commands
     res = ca.WriteNotifyResponse(data_count=data_count, data_type=data_type,
                                  ioid=0, status=1)
     buffers_to_send = srv_circuit.send(res)
 
     # Socket transport would happen here. Calling bytes() simulates
     # serialization over the socket.
-    cli_circuit.recv(*(_np_hack(buf) for buf in buffers_to_send))
-    cli_circuit.next_command()
+    commands, _ = cli_circuit.recv(*(_np_hack(buf) for buf in buffers_to_send))
+    for command in commands:
+        cli_circuit.process_command(command)
 
     if isinstance(data, array.ArrayType):
         # Before comparing array.array (which exposes the byteorder naively)
