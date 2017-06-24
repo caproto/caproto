@@ -1,7 +1,6 @@
 import itertools
 import logging
 import socket
-from collections import deque
 
 from ._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
 from ._utils import CLIENT, SERVER, CaprotoValueError, LocalProtocolError
@@ -139,7 +138,7 @@ class Broadcaster:
                 raise err("A broadcasted SearchResponse must be preceded by a "
                           "VersionResponse in the same datagram.")
             try:
-                search_request = self.unanswered_searches.pop(command.cid)
+                self.unanswered_searches.pop(command.cid)
             except KeyError:
                 err = get_exception(self.our_role, command)
                 raise err("No SearchRequest we have seen has a cid matching "

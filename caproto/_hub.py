@@ -20,7 +20,7 @@ from ._commands import (AccessRightsResponse, CreateChFailResponse,
                         SearchResponse, ServerDisconnResponse,
                         VersionRequest, VersionResponse, WriteNotifyRequest,
                         WriteNotifyResponse, WriteRequest,
-                        read_from_bytestream, _MessageHeaderSize,)
+                        read_from_bytestream,)
 from ._state import (ChannelState, CircuitState, get_exception)
 from ._utils import (CLIENT, SERVER, NEED_DATA, DISCONNECTED, CaprotoKeyError,
                      CaprotoValueError, CaprotoRuntimeError,
