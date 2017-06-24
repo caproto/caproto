@@ -36,6 +36,7 @@ def socket_thread_fixture():
         def received(self, bytes_recv, address):
             if len(bytes_recv):
                 self.payloads.append(bytes_recv)
+            return 0
 
     a, b = socket.socketpair()
 

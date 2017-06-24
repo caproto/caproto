@@ -7,6 +7,8 @@ import itertools
 import logging
 import getpass
 import socket
+import collections
+
 # N.B. We do no networking whatsoever in caproto. We only use socket for
 # socket.gethostname() to give a nice default for a HostNameRequest command.
 from ._commands import (AccessRightsResponse, CreateChFailResponse,
@@ -132,7 +134,7 @@ class VirtualCircuit:
         if total_received == 0:
             self.log.debug('Zero-length recv; sending disconnect notification')
             commands.append(DISCONNECTED)
-            return
+            return commands, 0
 
         self.log.debug("Received %d bytes.", total_received)
         self._data += b''.join(buffers)

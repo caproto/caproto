@@ -26,7 +26,7 @@ class Broadcaster:
     protocol_version : integer
         Default is ``DEFAULT_PROTOCOL_VERSION``.
     """
-    def __init__(self, our_role, protocol_version=DEFAULT_PROTOCOL_VERSION)
+    def __init__(self, our_role, protocol_version=DEFAULT_PROTOCOL_VERSION):
         if our_role not in (SERVER, CLIENT):
             raise CaprotoValueError("role must be caproto.SERVER or "
                                     "caproto.CLIENT")

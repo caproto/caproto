@@ -42,17 +42,18 @@ class ProxyDatagramProtocol(asyncio.DatagramProtocol):
             def put(_, info):
                 self.commands_received(*info)
 
-        self.broadcaster = caproto.Broadcaster(our_role=caproto.SERVER,
-                                               queue_class=CallbackQueue)
+        self.broadcaster = caproto.Broadcaster(our_role=caproto.SERVER)
         super().__init__()
 
     def connection_made(self, transport):
         self.transport = transport
 
     def datagram_received(self, data, addr):
-        self.broadcaster.recv(data, addr)
+        commands = self.broadcaster.recv(data, addr)
+        self.broadcaster.process_commands(commands)
+        self._commands_received(addr, commands)
 
-    def commands_received(self, addr, commands):
+    def _commands_received(self, addr, commands):
         if not commands:
             return
 

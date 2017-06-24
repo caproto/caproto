@@ -55,9 +55,13 @@ class SocketThread:
         self.poison_ev = threading.Event()
 
     def __call__(self):
+        num_bytes_needed = 0
         while True:
+            if num_bytes_needed is None:
+                print(self.target_obj())
             try:
-                bytes_recv, address = self.socket.recvfrom(4096)
+                bytes_recv, address = self.socket.recvfrom(
+                    max(4096, num_bytes_needed))
             except socket.timeout:
                 if self.poison_ev.isSet():
                     bytes_recv, address = b'', None
@@ -70,7 +74,7 @@ class SocketThread:
             if target is None:
                 break
 
-            target.received(bytes_recv, address)
+            num_bytes_needed = target.received(bytes_recv, address)
             if not len(bytes_recv):
                 target.disconnect()
                 # this is important to not keep a hard-ref to the target
@@ -90,10 +94,9 @@ class SharedBroadcaster:
 
         self.listeners = weakref.WeakSet()
 
-        self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT,
-                                          queue_class=queue.Queue)
+        self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
         self.broadcaster.log.setLevel(self.log_level)
-
+        self.command_bundle_queue = queue.Queue()
         self.command_cond = threading.Condition()  # ConditionType
         self.command_thread = threading.Thread(target=self.command_loop,
                                                daemon=True)
@@ -200,33 +203,32 @@ class SharedBroadcaster:
 
     def received(self, bytes_recv, address):
         "Receive and process and next command broadcasted over UDP."
-        self.broadcaster.recv(bytes_recv, address)
+        commands = self.broadcaster.recv(bytes_recv, address)
+        self.command_bundle_queue.put(commands)
+        return 0
 
     def command_loop(self):
         while True:
-            try:
-                addr, command = self.broadcaster.next_command()
-            except Exception as ex:
-                logger.error('Broadcaster command queue evaluation failed',
-                             exc_info=ex)
-                continue
-
+            commands = self.command_bundle_queue.get()
+            self.broadcaster.process_commands(commands)
             with self.command_cond:
-                if isinstance(command, ca.VersionResponse):
-                    # Check that the server version is one we can talk to.
-                    assert command.version > 11
-                if isinstance(command, ca.SearchResponse):
-                    with self._search_lock:
-                        name = self.unanswered_searches.get(command.cid, None)
-                        if name is not None:
-                            self.search_results[name] = (
-                                ca.extract_address(command), time.time())
-                            self.unanswered_searches.pop(command.cid)
-                        else:
-                            # This is a redundant response, which the spec
-                            # tell us we must ignore.
-                            pass
-                self.command_cond.notify_all()
+                for command in commands:
+                    if isinstance(command, ca.VersionResponse):
+                        # Check that the server version is one we can talk to.
+                        assert command.version > 11
+                    if isinstance(command, ca.SearchResponse):
+                        with self._search_lock:
+                            name = self.unanswered_searches.get(command.cid,
+                                                                None)
+                            if name is not None:
+                                self.search_results[name] = (
+                                    ca.extract_address(command), time.time())
+                                self.unanswered_searches.pop(command.cid)
+                            else:
+                                # This is a redundant response, which the spec
+                                # tell us we must ignore.
+                                pass
+                    self.command_cond.notify_all()
 
     @property
     def registered(self):
@@ -270,7 +272,6 @@ class Context:
             circuit = VirtualCircuit(ca.VirtualCircuit(our_role=ca.CLIENT,
                                                        address=address,
                                                        priority=priority,
-                                                       queue_class=queue.Queue,
                                                        ))
             circuit.circuit.log.setLevel(self.log_level)
             self.circuits[(address, priority)] = circuit
@@ -344,7 +345,7 @@ class Context:
 class VirtualCircuit:
     __slots__ = ('circuit', 'channels', 'ioids', 'subscriptionids',
                  'new_command_cond', 'socket', 'sock_thread',
-                 'command_thread',
+                 'command_thread', 'command_queue',
                  '__weakref__')
 
     def __init__(self, circuit):
@@ -355,6 +356,7 @@ class VirtualCircuit:
         self.new_command_cond = threading.Condition()  # ConditionType
         self.socket = None
         self.sock_thread = None
+        self.command_queue = queue.Queue()
         self.command_thread = threading.Thread(target=self.command_thread_loop,
                                                daemon=True)
 
@@ -380,16 +382,16 @@ class VirtualCircuit:
         """Receive and process and next command from the virtual circuit.
 
         This will be run on the recv thread"""
-        self.circuit.recv(bytes_recv)
+        commands, num_bytes_needed = self.circuit.recv(bytes_recv)
+
+        for c in commands:
+            self.command_queue.put(c)
+        return num_bytes_needed
 
     def command_thread_loop(self):
-        loop = True
-        while loop:
-            try:
-                command = self.circuit.next_command()
-            except Exception as ex:
-                logger.error('Command queue evaluation failed', exc_info=ex)
-                continue
+        while True:
+            command = self.command_queue.get()
+            self.circuit.process_command(command)
 
             with self.new_command_cond:
                 if command is ca.DISCONNECTED:
@@ -397,7 +399,7 @@ class VirtualCircuit:
                     # if we are here something else has triggered the
                     # disconnect just kill this loop and let other
                     # parts of the code worry about cleanup
-                    loop = False
+                    break
                 elif isinstance(command, ca.ReadNotifyResponse):
                     chan = self.ioids.pop(command.ioid)
                     chan.process_read_notify(command)
@@ -447,7 +449,7 @@ class VirtualCircuit:
 class Channel:
     """Wraps a VirtualCircuit and a caproto.ClientChannel."""
     __slots__ = ('circuit', 'channel', 'last_reading', 'monitoring_tasks',
-                 '_callback', '_read_notify_callback',
+                 '_callback', '_read_notify_callback', 'command_bundle_queue',
                  '_write_notify_callback', '_pc_callbacks')
 
     def __init__(self, circuit, channel):
@@ -1369,7 +1371,6 @@ def _test():
     logging.basicConfig()
 
     shared_broadcaster = SharedBroadcaster()
-    ca.set_default_queue_class(queue.Queue)
     pv1 = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
     pv2 = "XF:31IDA-OP{Tbl-Ax:X2}Mtr.VAL"
 
