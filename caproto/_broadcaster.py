@@ -37,8 +37,6 @@ class Broadcaster:
             self.their_role = CLIENT
         self.protocol_version = protocol_version
         self.unanswered_searches = {}  # map search id (cid) to name
-        self._iterable_commands = None  # commands being parsed now
-        self._parsed_commands = deque()  # parsed Commands to be processed
         # Unlike VirtualCircuit and Channel, there is very little state to
         # track for the Broadcaster. We don't need a full state machine, just
         # one flag to check whether we have yet registered with a repeater.
