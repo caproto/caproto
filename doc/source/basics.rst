@@ -49,13 +49,11 @@ To begin, we need a socket configured for UDP broadcasting.
     udp_sock.settimeout(1)  # should never be tripped, but it help to debug
 
 A new Channel Access client is required to register itself with a Channel
-Access Repeater.  (What a Repeater is *for* is not really important to our
+Access *Repeater*.  (What a Repeater is *for* is not really important to our
 story here. It's an independent process that rebroadcasts incoming server
 heartbeats to all clients on our host. It exists because old systems don't
 handle broadcasts properly.) To register, we must send a *request* to the
-Repeater and receive a *response*. At the lowest level, we simply need to send
-the right bytes over the network. This is effective, but not especially
-readable.
+Repeater and receive a *response*.
 
 .. ipython:: python
     
@@ -67,10 +65,10 @@ readable.
     data, address = udp_sock.recvfrom(1024)
     data
 
-Hurray it worked? Unless you possess some Davidsaver-like talent for reading 
-Channel Access hex codes the way Neo experiences the Matrix, you may want a
-better way. Caproto provides a higher level of abstraction, *Commands*, so that
-we don't need to work with raw bytes. Let's try this again using caproto.
+Hurray it worked? Unless you can read Channel Access hex codes the way Neo
+experiences the Matrix, you may want a better way. Caproto provides a higher
+level of abstraction, *Commands*, so that we don't need to work with raw bytes.
+Let's try this again using caproto.
 
 .. note::
 
@@ -91,7 +89,7 @@ same steps we used above, or use a convenience function provided by caproto:
 
     import caproto
     udp_sock = caproto.bcast_socket()
-    udp_sock.settimeout(2)  # should never be tripped, but it help to debug
+    udp_sock.settimeout(2)  # should never be tripped, but it helps to debug
 
 Instantiate a caproto :class:`Broadcaster` and a command to broadcast --- a
 :class:`RepeaterRegisterRequest`.`
@@ -102,11 +100,11 @@ Instantiate a caproto :class:`Broadcaster` and a command to broadcast --- a
     command = caproto.RepeaterRegisterRequest('0.0.0.0')
 
 Pass the command to our broadcaster's :meth:`Broadcaster.send` method, which
-translates the command to bytes. The method also checks these commands against
-the rules of the Channel Access protocol, which are encoded in the
-Broadcaster's internal state machine. It tracks the state of both the client
-and the server. (It can serve as either.) If you try to send an
-illegal command, it will raise :class:`LocalProtocolError`.
+does two things. It translates command objects into bytes, and it checks
+them against the rules of the Channel Access protocol. The rules are encoded in
+the Broadcaster's internal state machine, which tracks the state of both the
+client and the server. (It can serve as either.) If you try to send an illegal
+command, it will raise :class:`LocalProtocolError`.
 
 .. ipython:: python
 
@@ -128,17 +126,17 @@ or when you send and receive the bytes. Its job is to make it easier to
 compose outgoing messages, interpret incoming ones, and verify that the rules
 of the protocol are obeyed by both peers.
 
-Recall that we are in the process of registering our client with a *Repeater*
-and that we are expecting a response. As with sending, receiving is a
-two-step process. First we read bytes from the socket and pass them to the
-broadcaster.
+Recall that we are in the process of registering our client with a Channel
+Access Repeater and that we are expecting a response. As with sending,
+receiving is a two-step process. First we read bytes from the socket and pass
+them to the broadcaster.
 
 .. ipython:: python
 
     bytes_received, address = udp_sock.recvfrom(1024)
     commands = b.recv(bytes_received, address)
 
-The bytes have been parsed into *Commands*. Next, checked them against the
+The bytes have been parsed into command objects. Next, check them against the
 Channel Access protocol.
 
 .. ipython:: python
@@ -179,8 +177,9 @@ specifies that all but the first response should be ignored.) We follow the
 same pattern as above, still using our broadcaster ``b``, our socket
 ``udp_sock``, and some new caproto commands.
 
-In a single UDP datagram, we need to announce which version of the protocol we
-are using and the channel name we are looking for.
+We need to announce which version of the protocol we are using and the name of
+the channel we are seraching for. These two commands must be sent in the same
+broadcast (UDP datagram), so we pass them to :meth:`Broadcaster.send` together.
 
 .. ipython:: python
 
@@ -219,7 +218,7 @@ Create a TCP connection with the server at the ``address`` we found above.
 
 A :class:`VirtualCircuit` plays the same role for a TCP connection as
 the :class:`Broadcaster` played for UDP: we'll use it to interpret
-received bytes as Commands and to ensure that incoming and outgoing bytes abide
+received bytes as commands and to ensure that incoming and outgoing bytes abide
 by the protocol.
 
 .. ipython:: python
