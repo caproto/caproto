@@ -8,10 +8,17 @@
 # Context: has a caproto.Broadcaster, a UDP socket, a cache of
 #          search results and a cache of VirtualCircuits.
 #
-import os
+import logging
 import caproto as ca
 import curio
 from curio import socket
+
+
+logger = logging.getLogger(__name__)
+
+
+class ChannelReadError(Exception):
+    ...
 
 
 class VirtualCircuit:
@@ -20,87 +27,73 @@ class VirtualCircuit:
         self.circuit = circuit  # a caproto.VirtualCircuit
         self.channels = {}  # map cid to Channel
         self.ioids = {}  # map ioid to Channel
+        self.ioid_data = {}  # map ioid to server response
         self.subscriptionids = {}  # map subscriptionid to Channel
-        self.event = None  # used for signaling consumers about new commands
+        self.connected = True
         self.socket = None
+        self.command_queue = curio.Queue()
+        self.new_command_condition = curio.Condition()
+        self._socket_lock = curio.Lock()
 
     async def create_connection(self):
         self.socket = await socket.create_connection(self.circuit.address)
+        await self._socket_lock.release()
+
+        num_bytes_needed = 0
+        while True:
+            bytes_received = await self.socket.recv(max(32768,
+                                                        num_bytes_needed))
+            if not len(bytes_received):
+                self.connected = False
+                break
+            commands, num_bytes_needed = self.circuit.recv(bytes_received)
+            for c in commands:
+                await self.command_queue.put(c)
+
+    async def _command_queue_loop(self):
+        while True:
+            try:
+                command = await self.command_queue.get()
+                self.circuit.process_command(command)
+            except curio.TaskCancelled:
+                break
+            except Exception as ex:
+                logger.error('Command queue evaluation failed: {!r}'
+                             ''.format(command), exc_info=ex)
+                continue
+
+            if isinstance(command, (ca.ReadNotifyResponse,
+                                    ca.WriteNotifyResponse)):
+                user_event = self.ioids.pop(command.ioid)
+                self.ioid_data[command.ioid] = command
+                await user_event.set()
+            elif isinstance(command, ca.EventAddResponse):
+                user_queue = self.subscriptionids[command.subscriptionid]
+                await user_queue.put(command)
+            elif isinstance(command, ca.EventCancelResponse):
+                self.subscriptionids.pop(command.subscriptionid)
+            elif isinstance(command, ca.ErrorResponse):
+                original_req = command.original_request
+                cmd_class = ca.get_command_class(ca.CLIENT, original_req)
+                if cmd_class in (ca.ReadNotifyRequest, ca.WriteNotifyRequest):
+                    ioid = original_req.parameter2
+                    user_event = self.ioids.pop(ioid)
+                    self.ioid_data[ioid] = command
+                    await user_event.set()
+
+            async with self.new_command_condition:
+                await self.new_command_condition.notify_all()
 
     async def send(self, *commands):
         """
         Process a command and tranport it over the TCP socket for this circuit.
         """
-        if self.socket is None:
-            raise RuntimeError("must await create_connection() first")
-        buffers_to_send = self.circuit.send(*commands)
-        await self.socket.sendmsg(buffers_to_send)
-
-    async def recv(self):
-        """
-        Receive bytes over TCP and cache them in this circuit's buffer.
-        """
-        if self.socket is None:
-            raise RuntimeError("must await create_connection() first")
-        bytes_received = await self.socket.recv(32768)
-        if not len(bytes_received):
-            self.circuit.disconnect()
-            return
-        self.circuit.recv(bytes_received)
-
-    async def get_event(self):
-        """
-        Get a curio.Event that we will 'set' when we process the next command.
-
-        This is a signaling mechanism for notifying all corountines awaiting an
-        incoming command that a new one (maybe the one they are looking for,
-        maybe not) has been processed.
-        """
-        if self.event is not None:
-            # Some other consumer has already asked for the next command.
-            # Don't ask again (yet); just wait for the first request to
-            # process.
-            return self.event
-        else:
-            # No other consumers have asked for the next command. Ask, return
-            # an Event that will be set when the command is processed, and
-            # stash the Event in case any other consumers ask.
-            event = curio.Event()
-            self.event = event
-            task = await curio.spawn(self.next_command())
-            return event
-
-    async def next_command(self):
-        """
-        Process one incoming command.
-
-        1. Receive data from the socket if a full comannd's worth of bytes are
-           not already cached.
-        2. Dispatch to caproto.VirtualCircuit.next_command which validates.
-        3. Update Channel state if applicable.
-        4. Notify all coroutines awaiting a command that a new command has been
-           process and they should check their state for updates.
-        """
-        while True:
-            command = self.circuit.next_command()
-            if isinstance(command, ca.NEED_DATA):
-                await self.recv()
-                continue
-            break
-        if isinstance(command, ca.ReadNotifyResponse):
-            chan = self.ioids.pop(command.ioid)
-            chan.last_reading = command
-        if isinstance(command, ca.WriteNotifyResponse):
-            chan = self.ioids.pop(command.ioid)
-        elif isinstance(command, ca.EventAddResponse):
-            chan = self.subscriptionids[command.subscriptionid]
-            chan.process_subscription(command)
-        elif isinstance(command, ca.EventCancelResponse):
-            self.subscriptionids.pop(command.subscriptionid)
-        event = self.event
-        self.event = None
-        await event.set()
-        return command
+        if self.connected:
+            buffers_to_send = self.circuit.send(*commands)
+            async with self._socket_lock:
+                if self.socket is None:
+                    raise RuntimeError('socket connection failed')
+                await self.socket.sendmsg(buffers_to_send)
 
 
 class Channel:
@@ -136,15 +129,13 @@ class Channel:
         to complete.
         """
         while not self.channel.states[ca.CLIENT] is ca.CONNECTED:
-            event = await self.circuit.get_event()
-            await event.wait()
+            await self.wait_on_new_command()
 
     async def disconnect(self):
         "Disconnect this Channel."
         await self.circuit.send(self.channel.disconnect())
         while self.channel.states[ca.CLIENT] is ca.MUST_CLOSE:
-            event = await self.circuit.get_event()
-            await event.wait()
+            await self.wait_on_new_command()
 
     async def read(self, *args, **kwargs):
         """Request a fresh reading, wait for it, return it and stash it.
@@ -155,65 +146,76 @@ class Channel:
         command = self.channel.read(*args, **kwargs)
         # Stash the ioid to match the response to the request.
         ioid = command.ioid
-        self.circuit.ioids[ioid] = self
+        # TODO this could be implemented as a concurrent.Future and use
+        #      curio.traps._future_wait. A Future is really what we want here,
+        #      but it doesn't seem like curio provides such a primitive for us
+        ioid = command.ioid
+        event = curio.Event()
+        self.circuit.ioids[ioid] = event
         await self.circuit.send(command)
-        while ioid in self.circuit.ioids:
-            event = await self.circuit.get_event()
-            await event.wait()
-        return self.last_reading
+        await event.wait()
+
+        reading = self.circuit.ioid_data.pop(ioid)
+        if isinstance(reading, ca.ReadNotifyResponse):
+            self.last_reading = reading
+            return self.last_reading
+        else:
+            raise ChannelReadError(str(reading))
 
     async def write(self, *args, **kwargs):
         "Write a new value and await confirmation from the server."
         command = self.channel.write(*args, **kwargs)
         # Stash the ioid to match the response to the request.
         ioid = command.ioid
-        self.circuit.ioids[ioid] = self
+        event = curio.Event()
+        self.circuit.ioids[ioid] = event
         await self.circuit.send(command)
-        while ioid in self.circuit.ioids:
-            event = await self.circuit.get_event()
-            await event.wait()
-        return self.last_reading
+        await event.wait()
+        return self.circuit.ioid_data.pop(ioid)
 
     async def subscribe(self, *args, **kwargs):
         "Start a new subscription and spawn an async task to receive readings."
         command = self.channel.subscribe(*args, **kwargs)
         # Stash the subscriptionid to match the response to the request.
-        self.circuit.subscriptionids[command.subscriptionid] = self
+        queue = curio.Queue()
+        self.circuit.subscriptionids[command.subscriptionid] = queue
         await self.circuit.send(command)
-        task = await curio.spawn(self._monitor())
-        self.monitoring_tasks[command.subscriptionid] = task
 
-    async def _monitor(self):
-        "Apply constant suction to receive EventAddResponse commands."
-        while True:
-            event = await self.circuit.get_event()
-            await event.wait()
+        async def _queue_loop():
+            command = await queue.get()
+            self.process_subscription(command)
+
+        task = await curio.spawn(_queue_loop, daemon=True)
+        self.monitoring_tasks[command.subscriptionid] = task
+        return command.subscriptionid
 
     async def unsubscribe(self, subscriptionid, *args, **kwargs):
         "Cancel a subscription and await confirmation from the server."
         await self.circuit.send(self.channel.unsubscribe(subscriptionid))
         while subscriptionid in self.circuit.subscriptionids:
-            event = await self.circuit.get_event()
-            await event.wait()
-        task = self.monitoring_tasks[subscriptionid]
+            await self.wait_on_new_command()
+        task = self.monitoring_tasks.pop(subscriptionid)
         await task.cancel()
 
+    async def wait_on_new_command(self):
+        '''Wait for a new command to come in'''
+        async with self.circuit.new_command_condition:
+            await self.circuit.new_command_condition.wait()
 
-class Context:
-    "Wraps a caproto.Broadcaster, a UDP socket, and cache of VirtualCircuits."
+
+class SharedBroadcaster:
     def __init__(self, *, log_level='ERROR'):
         self.log_level = log_level
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
         self.broadcaster.log.setLevel(self.log_level)
+        self.command_bundle_queue = curio.Queue()
+        self.broadcaster_command_condition = curio.Condition()
 
         # UDP socket broadcasting to CA servers
         self.udp_sock = ca.bcast_socket(socket)
-
         self.registered = False  # refers to RepeaterRegisterRequest
-        self.circuits = []  # list of VirtualCircuits
         self.unanswered_searches = {}  # map search id (cid) to name
         self.search_results = {}  # map name to address
-        self.event = None  # used for signaling consumers about new commands
 
     async def send(self, port, *commands):
         """
@@ -221,25 +223,86 @@ class Context:
         """
         bytes_to_send = self.broadcaster.send(*commands)
         for host in ca.get_address_list():
-            await self.udp_sock.sendto(bytes_to_send, (host, port))
-
-    async def recv(self):
-        """
-        Receive bytes over TCP and cache them in this circuit's buffer.
-        """
-        bytes_received, address = await self.udp_sock.recvfrom(4096)
-        self.broadcaster.recv(bytes_received, address)
+            if ':' in host:
+                host, _, specified_port = host.partition(':')
+                is_register = isinstance(commands[0],
+                                         ca.RepeaterRegisterRequest)
+                if not self.registered and is_register:
+                    logger.debug('Specific IOC host/port designated in address'
+                                 'list: %s:%s.  Repeater registration '
+                                 'requirement ignored', host, specified_port)
+                    async with self.broadcaster_command_condition:
+                        # TODO how does this work with multiple addresses
+                        # listed?
+                        response = (('127.0.0.1', ca.EPICS_CA1_PORT),
+                                    [ca.RepeaterConfirmResponse(
+                                        repeater_address='127.0.0.1')]
+                                    )
+                        await self.command_bundle_queue.put(response[1])
+                        await self.broadcaster_command_condition.notify_all()
+                    continue
+                await self.udp_sock.sendto(bytes_to_send,
+                                           (host, int(specified_port)))
+            else:
+                await self.udp_sock.sendto(bytes_to_send, (host, port))
 
     async def register(self):
         "Register this client with the CA Repeater."
+        await curio.spawn(self._broadcaster_queue_loop(), daemon=True)
+
+        while not self.registered:
+            async with self.broadcaster_command_condition:
+                await self.broadcaster_command_condition.wait()
+
+    async def _broadcaster_recv_loop(self):
+        # TODO: broadcaster info should be shared application-wide if possible,
+        # as they are not really tied to a context in any way?
+        # also: these coroutines could probably be merged intelligently
+        # somehow, but isn't the point rather that you can break it up into
+        # these readable co-friendly routines?
+
+        while True:
+            bytes_received, address = await self.udp_sock.recvfrom(4096)
+            if bytes_received:
+                commands = self.broadcaster.recv(bytes_received, address)
+                await self.command_bundle_queue.put(commands)
+
+    async def _broadcaster_queue_loop(self):
+        await curio.spawn(self._broadcaster_recv_loop(), daemon=True)
         command = self.broadcaster.register('127.0.0.1')
         await self.send(ca.EPICS_CA2_PORT, command)
-        while not self.registered:
-            event = await self.get_event()
-            await event.wait()
+
+        while True:
+            try:
+                commands = await self.command_bundle_queue.get()
+                self.broadcaster.process_commands(commands)
+            except curio.TaskCancelled:
+                break
+            except Exception as ex:
+                logger.error('Broadcaster command queue evaluation failed',
+                             exc_info=ex)
+                continue
+
+            for command in commands:
+                if isinstance(command, ca.RepeaterConfirmResponse):
+                    self.registered = True
+                if isinstance(command, ca.VersionResponse):
+                    # Check that the server version is one we can talk to.
+                    assert command.version > 11
+                if isinstance(command, ca.SearchResponse):
+                    name = self.unanswered_searches.pop(command.cid, None)
+                    if name is not None:
+                        self.search_results[name] = ca.extract_address(command)
+                    else:
+                        # This is a redundant response, which the spec tell us
+                        # we must ignore.
+                        pass
+
+                async with self.broadcaster_command_condition:
+                    await self.broadcaster_command_condition.notify_all()
 
     async def search(self, name):
-        "Generate, process, and the transport a search request."
+        "Generate, process, and transport a search request."
         # Discard any old search result for this name.
         self.search_results.pop(name, None)
         ver_command, search_command = self.broadcaster.search(name)
@@ -248,8 +311,20 @@ class Context:
         await self.send(ca.EPICS_CA1_PORT, ver_command, search_command)
         # Wait for the SearchResponse.
         while search_command.cid in self.unanswered_searches:
-            event = await self.get_event()
-            await event.wait()
+            await self.wait_on_new_command()
+
+    async def wait_on_new_command(self):
+        '''Wait for a new broadcaster command to come in'''
+        async with self.broadcaster_command_condition:
+            await self.broadcaster_command_condition.wait()
+
+
+class Context:
+    "Wraps a caproto.Broadcaster, a UDP socket, and cache of VirtualCircuits."
+    def __init__(self, broadcaster, *, log_level='ERROR'):
+        self.log_level = log_level
+        self.circuits = []  # list of VirtualCircuits
+        self.broadcaster = broadcaster
 
     def get_circuit(self, address, priority):
         """
@@ -261,85 +336,42 @@ class Context:
             if (circuit.circuit.address == address and
                     circuit.circuit.priority == priority):
                 return circuit
-        circuit = VirtualCircuit(ca.VirtualCircuit(our_role=ca.CLIENT,
-                                                   address=address,
-                                                   priority=priority))
+
+        ca_circuit = ca.VirtualCircuit(our_role=ca.CLIENT, address=address,
+                                       priority=priority)
+        circuit = VirtualCircuit(ca_circuit)
         circuit.circuit.log.setLevel(self.log_level)
         self.circuits.append(circuit)
         return circuit
+
+    async def search(self, name):
+        "Generate, process, transport a search request with the broadcaster"
+        return await self.broadcaster.search(name)
 
     async def create_channel(self, name, priority=0):
         """
         Create a new channel.
         """
-        address = self.search_results[name]
+        address = self.broadcaster.search_results[name]
         circuit = self.get_circuit(address, priority)
         chan = ca.ClientChannel(name, circuit.circuit)
 
-        async def connect():
-            if chan.circuit.states[ca.SERVER] is ca.IDLE:
-                await circuit.create_connection()
-                await circuit.send(chan.version())
-                await circuit.send(chan.host_name())
-                await circuit.send(chan.client_name())
-            await circuit.send(chan.create())
+        if chan.circuit.states[ca.SERVER] is ca.IDLE:
+            await circuit._socket_lock.acquire()  # wrong primitive
+            await curio.spawn(circuit.create_connection(), daemon=True)
+            await curio.spawn(circuit._command_queue_loop(), daemon=True)
+            await circuit.send(chan.version())
+            await circuit.send(chan.host_name())
+            await circuit.send(chan.client_name())
 
-        # Spawn an async task to connect the channel and return a Channel
-        # instance immediately. User can use ``Channel.wait_for_connection()``
-        # to wait for connect() to complete.
-        await connect()
+        await circuit.send(chan.create())
         return Channel(circuit, chan)
-
-    async def get_event(self):
-        """
-        Get a curio.Event that we will 'set' when we process the next command.
-
-        This is a signaling mechanism for notifying all corountines awaiting an
-        incoming command that a new one (maybe the one they are looking for,
-        maybe not) has been processed.
-        """
-        if self.event is not None:
-            # Some other consumer has already asked for the next command.
-            # Don't ask again (yet); just wait for the first request to
-            # process.
-            return self.event
-        else:
-            # No other consumers have asked for the next command. Ask, return
-            # an Event that will be set when the command is processed, and
-            # stash the Event in case any other consumers ask.
-            event = curio.Event()
-            self.event = event
-            task = await curio.spawn(self.next_command())
-            return event
-
-    async def next_command(self):
-        "Receive and process and next command broadcasted over UDP."
-        while True:
-            command = self.broadcaster.next_command()
-            if isinstance(command, ca.NEED_DATA):
-                await self.recv()
-                continue
-            break
-        if isinstance(command, ca.RepeaterConfirmResponse):
-            self.registered = True
-        if isinstance(command, ca.VersionResponse):
-            # Check that the server version is one we can talk to.
-            assert command.version > 11
-        if isinstance(command, ca.SearchResponse):
-            name = self.unanswered_searches.pop(command.cid, None)
-            if name is not None:
-                self.search_results[name] = ca.extract_address(command)
-            else:
-                # This is a redundant response, which the spec tell us
-                # we must ignore.
-                pass
-        event = self.event
-        self.event = None
-        await event.set()
-        return command
 
 
 async def main():
+    logger.setLevel('DEBUG')
+    logging.basicConfig()
+
     # Connect to two motorsim PVs. Test reading, writing, and subscribing.
     pv1 = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
     pv2 = "XF:31IDA-OP{Tbl-Ax:X2}Mtr.VAL"
@@ -348,11 +380,13 @@ async def main():
     called = []
 
     def user_callback(command):
-        print("Subscription has received data.")
+        print("Subscription has received data: {}".format(command))
         called.append(True)
 
-    ctx = Context()
-    await ctx.register()
+    broadcaster = SharedBroadcaster()
+    await broadcaster.register()
+
+    ctx = Context(broadcaster)
     await ctx.search(pv1)
     await ctx.search(pv2)
     # Send out connection requests without waiting for responses...
@@ -365,9 +399,9 @@ async def main():
     await chan2.wait_for_connection()
     reading = await chan1.read()
     print('reading:', reading)
-    await chan1.subscribe()
+    sub_id = await chan1.subscribe()
     await chan2.read()
-    await chan1.unsubscribe(0)
+    await chan1.unsubscribe(sub_id)
     await chan1.write((5,))
     reading = await chan1.read()
     print('reading:', reading)
@@ -377,6 +411,7 @@ async def main():
     await chan2.disconnect()
     await chan1.disconnect()
     assert called
+    print('Done')
 
 
 if __name__ == '__main__':

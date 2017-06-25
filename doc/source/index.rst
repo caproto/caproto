@@ -78,7 +78,7 @@ How's the performance?
 ======================
 
 Caproto is fast. See its
-`published benchmarks <https://danielballan.github.io/caproto/bench/#/summarylist>`_.
+`published benchmarks <https://nsls-ii.github.io/caproto/bench/#/summarylist>`_.
 
 There has been next to no performance tuning at this stage in the development,
 but caproto gets some important basics right, such as reading bytes directly
@@ -107,7 +107,7 @@ Contents
 
    basics
    api
-   Performance Benchmarks <https://danielballan.github.io/caproto/bench/#/summarylist>
+   Performance Benchmarks <https://nsls-ii.github.io/caproto/bench/#/summarylist>
    references
    release-notes
 

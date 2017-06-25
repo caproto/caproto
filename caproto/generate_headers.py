@@ -2,11 +2,9 @@
 # http://www.aps.anl.gov/epics/docs/CAproto.html#secVirtualCircuitLifeCycle
 # and generate Python functions that return bytestrings.
 import re
-import string
 import os
 from collections import namedtuple
 from jinja2 import Environment, FileSystemLoader
-import requests
 from bs4 import BeautifulSoup
 
 

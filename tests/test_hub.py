@@ -10,12 +10,14 @@ def make_channels(cli_circuit, srv_circuit, data_type, data_count, name='a'):
     srv_channel = ca.ServerChannel(name, srv_circuit, cid)
     req = cli_channel.create()
     cli_circuit.send(req)
-    srv_circuit.recv(bytes(req))
-    srv_circuit.next_command()
+    commands, num_bytes_needed = srv_circuit.recv(bytes(req))
+    for command in commands:
+        srv_circuit.process_command(command)
     res = srv_channel.create(data_type, data_count, sid)
     srv_circuit.send(res)
-    cli_circuit.recv(bytes(res))
-    cli_circuit.next_command()
+    commands, num_bytes_needed = cli_circuit.recv(bytes(res))
+    for command in commands:
+        cli_circuit.process_command(command)
     return cli_channel, srv_channel
 
 
@@ -29,6 +31,7 @@ def test_counter_wraparound(circuit_pair):
         assert i % MAX == circuit.new_subscriptionid()
         assert i % MAX == circuit.new_ioid()
         assert i % MAX == broadcaster.new_search_id()
+
 
 def test_counter_skipping(circuit_pair):
     circuit, _ = circuit_pair
@@ -99,16 +102,16 @@ def test_unknown_id_errors(circuit_pair):
     # Receive a reading with an unknown ioid.
     com = ca.ReadNotifyResponse(data=(1,), data_type=5, data_count=1, ioid=1,
                                 status=1)
-    circuit.recv(bytes(com))
+    (command,), _ = circuit.recv(bytes(com))
     with pytest.raises(ca.RemoteProtocolError):
-        circuit.next_command()
+        circuit.process_command(command)
 
     # Receive an event with an unknown subscriptionid.
     com = ca.EventAddResponse(data=(1,), data_type=5, data_count=1,
                               status_code=1, subscriptionid=1)
-    circuit.recv(bytes(com))
+    (command,), _ = circuit.recv(bytes(com))
     with pytest.raises(ca.RemoteProtocolError):
-        circuit.next_command()
+        circuit.process_command(command)
 
 
 def test_mismatched_event_add_responses(circuit_pair):
@@ -123,22 +126,22 @@ def test_mismatched_event_add_responses(circuit_pair):
     # Good response
     res = ca.EventAddResponse(data=(1,), data_type=5, data_count=1,
                               status_code=1, subscriptionid=1)
-    circuit.recv(bytes(res))
-    circuit.next_command()
+    (command,), _ = circuit.recv(bytes(res))
+    circuit.process_command(command)
 
     # Bad response -- wrong data_type
     res = ca.EventAddResponse(data=(1,), data_type=6, data_count=1,
                               status_code=1, subscriptionid=1)
-    circuit.recv(bytes(res))
+    (command,), _ = circuit.recv(bytes(res))
     with pytest.raises(ca.RemoteProtocolError):
-        circuit.next_command()
+        circuit.process_command(command)
 
     # Bad response -- wrong data_count
     res = ca.EventAddResponse(data=(1, 2), data_type=5, data_count=2,
                               status_code=1, subscriptionid=1)
-    circuit.recv(bytes(res))
+    (command,), _ = circuit.recv(bytes(res))
     with pytest.raises(ca.RemoteProtocolError):
-        circuit.next_command()
+        circuit.process_command(command)
 
     # Bad request -- wrong sid for this subscriptionid
     req = ca.EventCancelRequest(data_type=5, sid=1, subscriptionid=1)
@@ -148,8 +151,11 @@ def test_mismatched_event_add_responses(circuit_pair):
 
 def test_empty_datagram():
     broadcaster = ca.Broadcaster(ca.CLIENT)
-    broadcaster.recv(b'', ('127.0.0.1', 6666))
-    assert broadcaster.next_command() is ca.NEED_DATA
+    commands = broadcaster.recv(b'', ('127.0.0.1', 6666))
+    assert commands == []
+    # TODO this is an API change from NEED_DATA, but I don't think it's
+    # necessarily wrong as these empty broadcast messages are a lack of
+    # actual commands
 
 
 def test_extract_address():
@@ -173,8 +179,9 @@ def test_broadcaster_checks():
 
     b.send(ca.RepeaterRegisterRequest('1.2.3.4'))
     res = ca.RepeaterConfirmResponse('5.6.7.8')
-    b.recv(bytes(res), ('5.6.7.8', 6666))
-    assert b.next_command() == res
+    commands = b.recv(bytes(res), ('5.6.7.8', 6666))
+    assert commands[0] == res
+    b.process_commands(commands)
 
     req = ca.SearchRequest(name='LIRR', cid=0, version=13)
     with pytest.raises(ca.LocalProtocolError):
@@ -183,12 +190,11 @@ def test_broadcaster_checks():
 
     res = ca.SearchResponse(port=6666, ip='1.2.3.4', cid=0, version=13)
     addr = ('1.2.3.4', 6666)
-    b.recv(bytes(res), addr)
+    commands = b.recv(bytes(res), addr)
     with pytest.raises(ca.RemoteProtocolError):
-        b.next_command()
-    b.recv(bytes(ca.VersionResponse(version=13)) + bytes(res), addr)
-    b.next_command()
-    b.next_command()
+        b.process_commands(commands)
+    commands = b.recv(bytes(ca.VersionResponse(version=13)) + bytes(res), addr)
+    b.process_commands(commands)  # this gets both
 
 
 def test_methods(circuit_pair):
@@ -222,8 +228,8 @@ def test_error_response(circuit_pair):
     cli_channel, srv_channel = make_channels(*circuit_pair, 5, 1, name='a')
     req = cli_channel.read()
     buffers_to_send = cli_circuit.send(req)
-    srv_circuit.recv(*buffers_to_send)
-    req_received = srv_circuit.next_command()
+    (req_received,), _ = srv_circuit.recv(*buffers_to_send)
+    srv_circuit.process_command(req_received)
     srv_circuit.send(ca.ErrorResponse(original_request=req_received,
                                       cid=srv_channel.cid,
                                       status_code=42,
@@ -240,8 +246,9 @@ def test_create_channel_failure(circuit_pair):
     # Send and receive CreateChanRequest
     req = cli_channel.create()
     cli_circuit.send(req)
-    srv_circuit.recv(bytes(req))
-    srv_circuit.next_command()
+    commands, _ = srv_circuit.recv(bytes(req))
+    for command in commands:
+        srv_circuit.process_command(command)
 
     # Send and receive CreateChFailResponse.
     res = ca.CreateChFailResponse(req.cid)
@@ -250,8 +257,9 @@ def test_create_channel_failure(circuit_pair):
     assert srv_channel.states[ca.SERVER] is ca.FAILED
     assert cli_channel.states[ca.CLIENT] is ca.AWAIT_CREATE_CHAN_RESPONSE
     assert cli_channel.states[ca.SERVER] is ca.SEND_CREATE_CHAN_RESPONSE
-    cli_circuit.recv(*buffers_to_send)
-    cli_circuit.next_command()
+    commands, _ = cli_circuit.recv(*buffers_to_send)
+    for command in commands:
+        cli_circuit.process_command(command)
     assert cli_channel.states[ca.CLIENT] is ca.FAILED
     assert cli_channel.states[ca.SERVER] is ca.FAILED
 
@@ -265,8 +273,9 @@ def test_server_disconn(circuit_pair):
     assert srv_channel.states[ca.SERVER] is ca.CLOSED
     assert cli_channel.states[ca.CLIENT] is ca.CONNECTED
     assert cli_channel.states[ca.SERVER] is ca.CONNECTED
-    cli_circuit.recv(*buffers_to_send)
-    cli_circuit.next_command()
+    commands, _ = cli_circuit.recv(*buffers_to_send)
+    for command in commands:
+        cli_circuit.process_command(command)
     assert cli_channel.states[ca.CLIENT] is ca.CLOSED
     assert cli_channel.states[ca.SERVER] is ca.CLOSED
 
@@ -284,8 +293,9 @@ def test_clear(circuit_pair):
     assert cli_channel.states[ca.SERVER] is ca.MUST_CLOSE
 
     # Receive request to clear.
-    srv_circuit.recv(*buffers_to_send)
-    srv_circuit.next_command()
+    commands, _ = srv_circuit.recv(*buffers_to_send)
+    for command in commands:
+        srv_circuit.process_command(command)
     assert srv_channel.states[ca.CLIENT] is ca.MUST_CLOSE
     assert srv_channel.states[ca.SERVER] is ca.MUST_CLOSE
 
@@ -295,8 +305,9 @@ def test_clear(circuit_pair):
     assert srv_channel.states[ca.SERVER] is ca.CLOSED
 
     # Receive confirmation.
-    cli_circuit.recv(*buffers_to_send)
-    cli_circuit.next_command()
+    commands, _ = cli_circuit.recv(*buffers_to_send)
+    for command in commands:
+        cli_circuit.process_command(command)
     assert cli_channel.states[ca.CLIENT] is ca.CLOSED
     assert cli_channel.states[ca.SERVER] is ca.CLOSED
 
@@ -322,8 +333,10 @@ def test_dead_circuit(circuit_pair):
     assert srv_channel2.states[ca.SERVER] is ca.CONNECTED
 
     # Notify the circuit that its connection was dropped.
-    cli_circuit.disconnect()
-    srv_circuit.disconnect()
+    command = cli_circuit.disconnect()
+    cli_circuit.process_command(command)
+    command = srv_circuit.disconnect()
+    srv_circuit.process_command(command)
 
     # Check that state updates.
     assert cli_circuit.states[ca.CLIENT] is ca.DISCONNECTED

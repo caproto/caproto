@@ -273,30 +273,70 @@ def read_datagram(data, address, role):
     return commands
 
 
-def read_from_bytestream(data, role):
+def bytes_needed_for_command(data, role):
+    '''
+    Parameters
+    ----------
+    data
+    role
+
+    Returns
+    -------
+    (header, num_bytes_needed)
+    '''
+
     header_size = _MessageHeaderSize
+    data_len = len(data)
+
     # We need at least one header's worth of bytes to interpret anything.
-    if len(data) < header_size:
-        return data, NEED_DATA
+    if data_len < header_size:
+        return None, header_size - data_len
+
     header = MessageHeader.from_buffer(data)
     # Looks for sentinels that mark this as an "extended header".
     if header.payload_size == 0xFFFF and header.data_count == 0:
         header_size = _ExtendedMessageHeaderSize
         # Do we have enough bytes to interpret the extended header?
-        if len(data) < header_size:
-            return data, NEED_DATA
+        if data_len < header_size:
+            return None, header_size - data_len
         header = ExtendedMessageHeader.from_buffer(data)
-    _class = get_command_class(role, header)
-    payload_size = header.payload_size
-    total_size = header_size + payload_size
+
+    total_size = header_size + header.payload_size
     # Do we have all the bytes in the payload?
-    if len(data) < total_size:
-        return data, NEED_DATA
+    if data_len < total_size:
+        return header, total_size - data_len
+    return header, 0
+
+
+def read_from_bytestream(data, role):
+    '''
+    Parameters
+    ----------
+    data
+    role
+
+    Returns
+    -------
+    (remaining_data, command, num_bytes_needed)
+        if more data is required, NEED_DATA will be returned in place of
+        `command`
+    '''
+
+    header, num_bytes_needed = bytes_needed_for_command(data, role)
+
+    if num_bytes_needed > 0:
+        return data, NEED_DATA, num_bytes_needed
+
+    _class = get_command_class(role, header)
+
+    header_size = ctypes.sizeof(header)
+    total_size = header_size + header.payload_size
+
     # Receive the buffer (zero-copy).
     payload_bytes = data[header_size:total_size]
     command = _class.from_wire(header, payload_bytes)
     # Advance the buffer.
-    return data[total_size:], command
+    return data[total_size:], command, 0
 
 
 Commands = {}
@@ -403,13 +443,7 @@ class Message(metaclass=_MetaDirectionalMessage):
         parameters = (signature.parameters if type(self) is not Message
                       else ['header'])
 
-        d = []
-        for arg in parameters:
-            try:
-                d.append((arg, repr(getattr(self, arg))))
-            except Exception as ex:
-                d.append((arg, '(repr failure {})'.format(ex)))
-
+        d = [(arg, repr(getattr(self, arg))) for arg in parameters]
         formatted_args = ", ".join(["{!s}={}".format(k, v)
                                     for k, v in d])
         return "{}({})".format(type(self).__name__, formatted_args)
@@ -732,6 +766,20 @@ class RepeaterRegisterRequest(Message):
 
 
 class EventAddRequestPayload(ctypes.BigEndianStructure):
+    '''
+    Attributes
+    ----------
+    low : float
+        Low delta value (deprecated)
+    high : float
+        High delta value (deprecated)
+    to : float
+        Period between samples (deprecated)
+    mask : int
+        Event selection mask
+
+
+    '''
     _fields_ = [('low', float_t),
                 ('high', float_t),
                 ('to', float_t),

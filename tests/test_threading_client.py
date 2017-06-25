@@ -1,31 +1,25 @@
+import sys
 import socket
 import logging
 import time
+import threading
+
 from multiprocessing import Process
 
-from caproto.threading.client import SocketThread, Context
+from caproto.threading.client import (SocketThread, Context, SharedBroadcaster,
+                                      _condition_with_timeout)
 import caproto as ca
 import pytest
 
 
 def setup_module(module):
-    global _repeater_process
-    from caproto.asyncio.repeater import main
-    logging.getLogger('caproto').setLevel(logging.DEBUG)
-    logging.basicConfig()
-
-    _repeater_process = Process(target=main)
-    _repeater_process.start()
-
-    print('Waiting for the repeater to start up...')
-    time.sleep(2)
+    from conftest import start_repeater
+    start_repeater()
 
 
 def teardown_module(module):
-    global _repeater_process
-    print('teardown_module: killing repeater process')
-    _repeater_process.terminate()
-    _repeater_process = None
+    from conftest import stop_repeater
+    stop_repeater()
 
 
 @pytest.fixture(scope='function')
@@ -39,8 +33,10 @@ def socket_thread_fixture():
         def disconnect(self):
             self.disconnected = True
 
-        def next_command(self, bytes_recv, address):
-            self.payloads.append(bytes_recv)
+        def received(self, bytes_recv, address):
+            if len(bytes_recv):
+                self.payloads.append(bytes_recv)
+            return 0
 
     a, b = socket.socketpair()
 
@@ -51,9 +47,20 @@ def socket_thread_fixture():
     return a, b, d, st
 
 
+@pytest.fixture(scope='module')
+def shared_broadcaster(request):
+    broadcaster = SharedBroadcaster()
+
+    def cleanup():
+        broadcaster.disconnect()
+
+    request.addfinalizer(cleanup)
+    return broadcaster
+
+
 @pytest.fixture(scope='function')
-def cntx(request):
-    cntx = Context(log_level='DEBUG')
+def cntx(request, shared_broadcaster):
+    cntx = Context(broadcaster=shared_broadcaster, log_level='DEBUG')
     cntx.register()
 
     def cleanup():
@@ -94,6 +101,26 @@ def test_socket_client_close(socket_thread_fixture):
     assert not st.thread.is_alive()
 
 
+def test_socket_thread_obj_die():
+
+    class _DummyTargetObj:
+        def disconnect(self):
+            ...
+
+        def received(self, bytes_recv, address):
+            ...
+
+    # can not use the fixture here, it seems to keep a ref to
+    # the object
+    a, b = socket.socketpair()
+    # do not even keep a local, pytest seems to grab it
+    st = SocketThread(a, _DummyTargetObj())
+    b.send(b'abc')
+    st.thread.join()
+
+    assert not st.thread.is_alive()
+
+
 def test_channel_kill_client_socket(cntx):
     str_pv = 'Py:ao1.DESC'
     cntx.search(str_pv)
@@ -123,23 +150,29 @@ def test_context_disconnect(cntx):
         chan.read()
         assert chan.connected
         assert chan.circuit.connected
-        assert cntx.registered
+        assert cntx.broadcaster.registered
         assert cntx.circuits
-        assert cntx.search_results
 
     chan = bootstrap()
     is_happy(chan, cntx)
 
-    st = cntx.sock_thread.thread
-    ct = chan.circuit.sock_thread.thread
+    st = chan.circuit.sock_thread.thread
+    ct = chan.circuit.command_thread
 
     cntx.disconnect()
+    print('joining sock thread', end='...')
+    sys.stdout.flush()
     st.join()
+    print('joined')
+
+    print('joining command thread', end='...')
+    sys.stdout.flush()
+    ct.join()
+    print('joined')
+
     assert not chan.connected
     assert not chan.circuit.connected
-    assert not cntx.registered
     assert not cntx.circuits
-    assert not cntx.search_results
     assert not ct.is_alive()
     assert not st.is_alive()
 
@@ -149,3 +182,48 @@ def test_context_disconnect(cntx):
     cntx.register()
     chan = bootstrap()
     is_happy(chan, cntx)
+
+
+def test_condition_timeout():
+    condition = threading.Condition()
+
+    def spinner():
+        for j in range(50):
+            time.sleep(.01)
+            with condition:
+                condition.notify_all()
+
+    thread = threading.Thread(target=spinner)
+
+    with pytest.raises(TimeoutError):
+        thread.start()
+        start_time = time.time()
+        _condition_with_timeout(lambda: False,
+                                condition,
+                                .1)
+    end_time = time.time()
+    assert .2 > end_time - start_time > .1
+
+
+def test_condition_timeout_pass():
+    condition = threading.Condition()
+    ev = threading.Event()
+
+    def spinner():
+        for j in range(5):
+            time.sleep(.01)
+            with condition:
+                condition.notify_all()
+        ev.set()
+        with condition:
+            condition.notify_all()
+
+    thread = threading.Thread(target=spinner)
+
+    thread.start()
+    start_time = time.time()
+    _condition_with_timeout(lambda: ev.is_set(),
+                            condition,
+                            .1)
+    end_time = time.time()
+    assert .1 > end_time - start_time > .05

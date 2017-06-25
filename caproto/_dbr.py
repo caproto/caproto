@@ -68,13 +68,6 @@ class AlarmStatus(IntEnum):
     WRITE_ACCESS = 21
 
 
-DBE_VALUE = 1
-DBE_ARCHIVE = 2
-DBE_LOG = DBE_ARCHIVE
-DBE_ALARM = 4
-DBE_PROPERTY = 8
-
-
 string_t = MAX_STRING_SIZE * ctypes.c_char  # epicsOldString
 char_t = ctypes.c_char  # epicsUint8
 short_t = ctypes.c_int16  # epicsInt16
@@ -897,11 +890,30 @@ class ChannelType(IntEnum):
 
 
 class SubscriptionType(IntEnum):
-    # create_subscription mask constants
+    '''Subscription masks
+
+    DBE_VALUE
+    Trigger an event when a significant change in the channel's value occurs.
+    (in epics-base, relies on the monitor deadband field under DCT.)
+
+    DBE_ARCHIVE (DBE_LOG)
+    Trigger an event when an archive significant change in the channel's valuue
+    occurs.
+    (in epics-base, relies on the archiver monitor deadband field under DCT.)
+
+    DBE_ALARM
+    Trigger an event when the alarm state changes
+
+    DBE_PROPERTY
+    Trigger an event when a property change (control limit, graphical limit,
+    status string, enum string ...) occurs.
+    '''
+
     DBE_VALUE = 1
     DBE_LOG = 2
     DBE_ALARM = 4
     DBE_PROPERTY = 8
+
 
 ChType = ChannelType
 
@@ -1001,18 +1013,21 @@ DBR_TYPES = {
 
 if USE_NUMPY:
     _numpy_map = {
-        ChType.INT: numpy.int16,
-        ChType.FLOAT: numpy.float32,
-        ChType.ENUM: numpy.uint16,
-        ChType.CHAR: numpy.uint8,
-        ChType.LONG: numpy.int32,
-        ChType.DOUBLE: numpy.float64,
-        ChType.STRING: numpy.dtype('>S40'),
-        ChType.CHAR: numpy.dtype('>S1'),
-
-        ChType.STSACK_STRING: numpy.uint8,
-        ChType.CLASS_NAME: numpy.uint8,
+        ch_type: numpy.dtype(dtype).newbyteorder('>')
+        for ch_type, dtype in
+        [(ChType.INT, numpy.int16),
+         (ChType.FLOAT, numpy.float32),
+         (ChType.ENUM, numpy.uint16),
+         (ChType.CHAR, numpy.uint8),
+         (ChType.LONG, numpy.int32),
+         (ChType.DOUBLE, numpy.float64),
+         (ChType.STRING, '>S40'),
+         (ChType.CHAR, 'b'),
+         (ChType.STSACK_STRING, numpy.uint8),
+         (ChType.CLASS_NAME, numpy.uint8),
+         ]
     }
+
 
 _array_type_code_map = {
     ChType.STRING: 'B',  # TO DO
@@ -1110,8 +1125,12 @@ def native_to_builtin(value, native_type, data_count):
     # - Everything else is, straightforwardly, an array of numbers.
     if USE_NUMPY:
         # Return an ndarray
-        dt = numpy.dtype(_numpy_map[native_type])
-        dt = dt.newbyteorder('>')
+        dt = _numpy_map[native_type]
+        if native_type == ChType.STRING and len(value) < MAX_STRING_SIZE:
+            # caput behaves this way
+            return numpy.frombuffer(value.ljust(MAX_STRING_SIZE, b'\x00'),
+                                    dtype=dt)
+
         return numpy.frombuffer(value, dtype=dt)
     else:
         # TODO

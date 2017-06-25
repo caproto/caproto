@@ -24,13 +24,9 @@ def send(circuit, command):
 
 def recv(circuit):
     bytes_received = sockets[circuit].recv(4096)
-    circuit.recv(bytes_received)
-    commands = []
-    while True:
-        command = circuit.next_command()
-        if type(command) is ca.NEED_DATA:
-            break
-        commands.append(command)
+    commands, _ = circuit.recv(bytes_received)
+    for c in commands:
+        circuit.process_command(c)
     return commands
 
 
@@ -40,12 +36,23 @@ def main(*, skip_monitor_section=False):
 
     # Register with the repeater.
     bytes_to_send = b.send(ca.RepeaterRegisterRequest('0.0.0.0'))
-    udp_sock.sendto(bytes_to_send, ('', CA_REPEATER_PORT))
 
-    # Receive response
-    data, address = udp_sock.recvfrom(1024)
-    b.recv(data, address)
-    b.next_command()
+    # TODO: for test environment with specific hosts listed in
+    # EPICS_CA_ADDR_LIST
+    if False:
+        fake_reg = (('127.0.0.1', ca.EPICS_CA1_PORT),
+                    [ca.RepeaterConfirmResponse(
+                        repeater_address='127.0.0.1')]
+                    )
+        b.command_queue.put(fake_reg)
+    else:
+        udp_sock.sendto(bytes_to_send, ('', CA_REPEATER_PORT))
+
+        # Receive response
+        data, address = udp_sock.recvfrom(1024)
+        commands = b.recv(data, address)
+
+    b.process_commands(commands)
 
     # Search for pv1.
     # CA requires us to send a VersionRequest and a SearchRequest bundled into
@@ -53,16 +60,20 @@ def main(*, skip_monitor_section=False):
     bytes_to_send = b.send(ca.VersionRequest(0, 13),
                            ca.SearchRequest(pv1, 0, 13))
     for host in ca.get_address_list():
-        udp_sock.sendto(bytes_to_send, (host, CA_SERVER_PORT))
+        if ':' in host:
+            host, _, specified_port = host.partition(':')
+            udp_sock.sendto(bytes_to_send, (host, int(specified_port)))
+        else:
+            udp_sock.sendto(bytes_to_send, (host, CA_SERVER_PORT))
     print('searching for %s' % pv1)
     # Receive a VersionResponse and SearchResponse.
     bytes_received, address = udp_sock.recvfrom(1024)
-    b.recv(bytes_received, address)
-    command = b.next_command()
-    assert type(command) is ca.VersionResponse
-    command = b.next_command()
-    assert type(command) is ca.SearchResponse
-    address = ca.extract_address(command)
+    commands = b.recv(bytes_received, address)
+    b.process_commands(commands)
+    c1, c2 = commands
+    assert type(c1) is ca.VersionResponse
+    assert type(c2) is ca.SearchResponse
+    address = ca.extract_address(c2)
 
     circuit = ca.VirtualCircuit(our_role=ca.CLIENT,
                                 address=address,
@@ -79,7 +90,6 @@ def main(*, skip_monitor_section=False):
     send(chan1.circuit, ca.ClientNameRequest('username'))
     send(chan1.circuit, ca.CreateChanRequest(name=pv1, cid=chan1.cid,
                                              version=13))
-    commands = []
     commands = recv(chan1.circuit)
 
     # Test subscriptions.

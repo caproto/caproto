@@ -33,7 +33,8 @@ To begin, we need a socket configured for UDP broadcasting.
     udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     # for BSD/Darwin only
-    # udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+    if hasattr(socket, 'SO_REUSEPORT'):
+        udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
 
 .. ipython:: python
     :suppress:
@@ -43,32 +44,31 @@ To begin, we need a socket configured for UDP broadcasting.
     udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     # for BSD/Darwin only
-    # udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-    udp_sock.settimeout(2)  # should never be tripped, but it help to debug
+    if hasattr(socket, 'SO_REUSEPORT'):
+        udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+    udp_sock.settimeout(1)  # should never be tripped, but it help to debug
 
 A new Channel Access client is required to register itself with a Channel
-Access Repeater.  (What a Repeater is *for* is not really important to our
+Access *Repeater*.  (What a Repeater is *for* is not really important to our
 story here. It's an independent process that rebroadcasts incoming server
 heartbeats to all clients on our host. It exists because old systems don't
 handle broadcasts properly.) To register, we must send a *request* to the
-Repeater and receive a *response*. At the lowest level, we simply need to send
-the right bytes over the network. This is effective, but not especially
-readable:
+Repeater and receive a *response*.
 
 .. ipython:: python
-
+    
     bytes_to_send = b'\x00\x18\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
-    udp_sock.sendto(bytes_to_send, ('', 5065))
+    udp_sock.sendto(bytes_to_send, ('127.0.0.1', 5065))
 
 .. ipython:: python
 
     data, address = udp_sock.recvfrom(1024)
     data
 
-Hurray it worked? Unless you possess some Davidsaver-like talent for reading 
-Channel Access hex codes the way Neo experiences the Matrix, you may want a
-better way. Caproto provides a higher level of abstraction, *Commands*, so that
-we don't need to work with raw bytes. Let's try this again using caproto.
+Hurray it worked? Unless you can read Channel Access hex codes the way Neo
+experiences the Matrix, you may want a better way. Caproto provides a higher
+level of abstraction, *Commands*, so that we don't need to work with raw bytes.
+Let's try this again using caproto.
 
 .. note::
 
@@ -89,36 +89,36 @@ same steps we used above, or use a convenience function provided by caproto:
 
     import caproto
     udp_sock = caproto.bcast_socket()
-    udp_sock.settimeout(2)  # should never be tripped, but it help to debug
+    udp_sock.settimeout(2)  # should never be tripped, but it helps to debug
 
 Instantiate a caproto :class:`Broadcaster` and a command to broadcast --- a
 :class:`RepeaterRegisterRequest`.`
 
 .. ipython:: python
-
+    
     b = caproto.Broadcaster(our_role=caproto.CLIENT)
     command = caproto.RepeaterRegisterRequest('0.0.0.0')
 
 Pass the command to our broadcaster's :meth:`Broadcaster.send` method, which
-translates the command to bytes.
+does two things. It translates command objects into bytes, and it checks
+them against the rules of the Channel Access protocol. The rules are encoded in
+the Broadcaster's internal state machine, which tracks the state of both the
+client and the server. (It can serve as either.) If you try to send an illegal
+command, it will raise :class:`LocalProtocolError`.
 
 .. ipython:: python
 
     bytes_to_send = b.send(command)
+    bytes_to_send
 
 Transport those bytes over the wire, using the same ``udp_sock`` we configured
-above.
+above.  A quick comparison will show that these bytes are the same bytes we
+spelled out manually before.
 
 .. ipython:: python
 
-    udp_sock.sendto(bytes_to_send, ('', 5065))
+    udp_sock.sendto(bytes_to_send, ('127.0.0.1', 5065))
 
-These bytes are the same bytes we spelled out manually before:
-
-.. ipython:: python
-
-    bytes_to_send
-    
 Why do we need two steps here? Why doesn't caproto just send the bytes for us?
 Because it's designed to support any socket API you might want to use ---
 synchronous (like this example), asynchronous, etc. Caproto does not care how
@@ -126,40 +126,26 @@ or when you send and receive the bytes. Its job is to make it easier to
 compose outgoing messages, interpret incoming ones, and verify that the rules
 of the protocol are obeyed by both peers.
 
-Recall that we are in the process of registering our client with a *Repeater*
-and that we are expecting a response. As with sending, receiving is a
-two-step process. First we read bytes from the socket and pass them to the
-broadcaster.
+Recall that we are in the process of registering our client with a Channel
+Access Repeater and that we are expecting a response. As with sending,
+receiving is a two-step process. First we read bytes from the socket and pass
+them to the broadcaster.
 
 .. ipython:: python
 
     bytes_received, address = udp_sock.recvfrom(1024)
-    b.recv(bytes_received, address)
+    commands = b.recv(bytes_received, address)
 
-The bytes have been cached but not yet parsed. The :class:`Broadcaster` can
-convert the bytes into *Commands* one at time.
-
-.. ipython:: python
-
-    b.next_command()
-
-Think of this as a mutating operation, like using :func:`next` on an iterator.
-When there aren't enough bytes cached to interpret another complete Command,
-:meth:`Broadcaster.next_command` returns the special constant
-:class:`NEED_DATA`.
+The bytes have been parsed into command objects. Next, check them against the
+Channel Access protocol.
 
 .. ipython:: python
 
-    b.next_command()
+    b.process_commands(commands)
 
-When we call :meth:`Broadcaster.send` or :meth:`Broadcaster.next_command`,
-two things happen. The broadcaster translates between low-level bytes and a
-high-level *Command*. The broadcaster also updates its internal state machine
-encoding the rules of the protocol. It tracks the state of both the client and
-server (it can serve as either). If, as the client, you send an illegal
-command, it will raise :class:`LocalProtocolError`. If, as the client, you
-receive bytes from the server that constitute an illegal command, it will raise
-:class:`RemoteProtocolError`.
+When we call :meth:`Broadcaster.process_commands`, the Broadcaster does the
+same thing is did for :meth:`Broadcaster.send` in reverse: if one of the
+received commands is illegal, it raises :class:`RemoteProtocolError`.
 
 Searching for a Channel
 -----------------------
@@ -172,32 +158,47 @@ conventionally recorded in an environment variable.
 .. ipython:: python
 
     import os
-    hosts = os.environ['EPICS_CA_ADDR_LIST']  # example: '172.17.255.255'
+    hosts = os.environ['EPICS_CA_ADDR_LIST'].split()
+    # example: ['172.17.255.255']
 
+Something simple like this would work, but a more complete implementation is
+avaailable in the convenience function :func:`get_address_list`, which respects
+EPICS_CA_AUTO_ADDR_LIST settings and checks network interfaces for broadcast
+addresses in the case of an automatic address list setting.
+
+.. ipython:: python
+    
+    import caproto
+    hosts = caproto.get_address_list()
+    
 We need to broadcast a search request to the servers on our network and receive
 a response. (In the event that multiple responses arrive, Channel Access
 specifies that all but the first response should be ignored.) We follow the
 same pattern as above, still using our broadcaster ``b``, our socket
 ``udp_sock``, and some new caproto commands.
 
-In a single UDP datagram, we need to announce which version of the protocol we
-are using and the channel name we are looking for.
+We need to announce which version of the protocol we are using and the name of
+the channel we are seraching for. These two commands must be sent in the same
+broadcast (UDP datagram), so we pass them to :meth:`Broadcaster.send` together.
 
 .. ipython:: python
 
     name  = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
     bytes_to_send = b.send(caproto.VersionRequest(priority=0, version=13),
                            caproto.SearchRequest(name=name, cid=0, version=13))
-    udp_sock.sendto(bytes_to_send, (hosts, 5064))
+    bytes_to_send
+    for host in hosts:
+        udp_sock.sendto(bytes_to_send, (host, 5064))
 
 Our answer will arrive in a single datagram with multiple commands in it.
 
 .. ipython:: python
 
-    bytes_received, address = udp_sock.recvfrom(1024)
-    b.recv(bytes_received, address)
-    b.next_command()
-    b.next_command()
+    bytes_received, recv_address = udp_sock.recvfrom(1024)
+    version_response, search_response = b.recv(bytes_received, recv_address)
+    version_response
+    search_response
+    address = caproto.extract_address(search_response)
     address
 
 Now we have the address of a server that has the channel we're interested in.
@@ -210,55 +211,38 @@ Creating a Channel
 Create a TCP connection with the server at the ``address`` we found above.
 
 .. ipython:: python
-
+    
+    import socket
     sock = socket.create_connection(address)
 
 
 A :class:`VirtualCircuit` plays the same role for a TCP connection as
 the :class:`Broadcaster` played for UDP: we'll use it to interpret
-received bytes as Commands and to ensure that incoming and outgoing bytes abide
+received bytes as commands and to ensure that incoming and outgoing bytes abide
 by the protocol.
 
 .. ipython:: python
+    
+    circuit = caproto.VirtualCircuit(our_role=caproto.CLIENT, address=address,
+                                     priority=0)
 
-    circuit = caproto.VirtualCircuit(our_role=caproto.CLIENT, address=address, priority=0)
-
-We'll use these two convenience functions for what follows.
-
-.. code-block:: python
-
-    def send(command):
-        "Process a Command in the VirtualCircuit and then transmit its bytes."
-        buffers_to_send = circuit.send(command)  # Update state machine.
-        sock.sendmsg(buffers_to_send)  # Actually transmit bytes.
-
-    def recv():
-        "Receive some bytes and parse all the Commands in them."
-        bytes_received = sock.recv(4096)
-        circuit.recv(bytes_received)  # Cache bytes.
-        commands = []
-        while True:
-            command = circuit.next_command()  # Parsing happens here.
-            if type(command) is caproto.NEED_DATA:
-                break  # Not enough bytes to parse any more commands.
-            commands.append(command)
-        return commands
+We'll use these convenience functions for what follows.
 
 .. ipython:: python
-    :suppress:
 
     def send(command):
+        "Process a command in the VirtualCircuit and then transmit its bytes."
         buffers_to_send = circuit.send(command)
         sock.sendmsg(buffers_to_send)
+
+.. ipython:: python
+
     def recv():
+        "Receive bytes; parse commands; process them in the VirtualCircuit."
         bytes_received = sock.recv(4096)
-        circuit.recv(bytes_received)
-        commands = []
-        while True:
-            command = circuit.next_command()
-            if type(command) is caproto.NEED_DATA:
-                break
-            commands.append(command)
+        commands, _ = circuit.recv(bytes_received)
+        for command in commands:
+            circuit.process_command(command)
         return commands
 
 We initialize the circuit by specifying our protocol version.
@@ -395,7 +379,7 @@ If we are done with the circuit, close the socket too.
 
     sock.close()
 
-Simplify Bookkeepinig with Channels
+Simplify Bookkeeping with Channels
 ===================================
 
 In the example above, we handled a :class:`VirtualCircuit` and several

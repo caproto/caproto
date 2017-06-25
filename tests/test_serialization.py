@@ -1,14 +1,13 @@
 import array
 import copy
 import ctypes
-import struct
-import socket
 from numpy.testing import assert_array_equal, assert_array_almost_equal
 import numpy
 
 import caproto as ca
 import inspect
 import pytest
+
 
 ip = '255.255.255.255'
 int_encoded_ip = ca.ipv4_to_int32(ip)
@@ -53,9 +52,9 @@ all_commands = set(ca._commands._commands) - set([ca.Message])
 
 def _np_hack(buf):
     try:
-        return bytes(buf)
-    except TypeError:
         return buf.tobytes()
+    except AttributeError:
+        return bytes(buf)
 
 
 @pytest.mark.parametrize('cmd', all_commands)
@@ -102,20 +101,24 @@ def test_serialize(cmd):
     inst.nbytes
 
 
-def make_channels(cli_circuit, srv_circuit, data_type, data_count):
-    cid = 0
-    sid = 0
-    cli_channel = ca.ClientChannel('name', cli_circuit, cid)
-    srv_channel = ca.ServerChannel('name', srv_circuit, cid)
+def make_channels(cli_circuit, srv_circuit, data_type, data_count, name='a'):
+    cid = cli_circuit.new_channel_id()
+    sid = srv_circuit.new_channel_id()
+
+    cli_channel = ca.ClientChannel(name, cli_circuit, cid)
+    srv_channel = ca.ServerChannel(name, srv_circuit, cid)
     req = cli_channel.create()
     cli_circuit.send(req)
-    srv_circuit.recv(bytes(req))
-    srv_circuit.next_command()
+    commands, num_bytes_needed = srv_circuit.recv(bytes(req))
+    for command in commands:
+        srv_circuit.process_command(command)
     res = srv_channel.create(data_type, data_count, sid)
     srv_circuit.send(res)
-    cli_circuit.recv(bytes(res))
-    cli_circuit.next_command()
+    commands, num_bytes_needed = cli_circuit.recv(bytes(res))
+    for command in commands:
+        cli_circuit.process_command(command)
     return cli_channel, srv_channel
+
 
 # Define big-endian arrays for use below in test_reads and test_writes.
 int_arr = array.array('h', [7, 21, 2, 4, 5])
@@ -178,16 +181,18 @@ def test_reads(circuit_pair, data_type, data_count, data, metadata):
     buffers_to_send = cli_circuit.send(req)
     # Socket transport would happen here. Calling bytes() simulates
     # serialization over the socket.
-    srv_circuit.recv(*(_np_hack(buf) for buf in buffers_to_send))
-    req_received = srv_circuit.next_command()
+    commands, _ = srv_circuit.recv(*(_np_hack(buf) for buf in buffers_to_send))
+    for command in commands:
+        srv_circuit.process_command(command)
     res = ca.ReadNotifyResponse(data=data, metadata=metadata,
                                 data_count=data_count, data_type=data_type,
                                 ioid=0, status=1)
     buffers_to_send = srv_circuit.send(res)
     # Socket transport would happen here. Calling bytes() simulates
     # serialization over the socket.
-    cli_circuit.recv(*(_np_hack(buf) for buf in buffers_to_send))
-    res_received = cli_circuit.next_command()
+    commands, _ = cli_circuit.recv(*(_np_hack(buf) for buf in buffers_to_send))
+    res_received, = commands
+    cli_circuit.process_command(res_received)
 
     if isinstance(data, array.ArrayType):
         # Before comparing array.array (which exposes the byteorder naively)
@@ -217,16 +222,19 @@ def test_writes(circuit_pair, data_type, data_count, data, metadata):
     buffers_to_send = cli_circuit.send(req)
     # Socket transport would happen here. Calling bytes() simulates
     # serialization over the socket.
-    srv_circuit.recv(*(_np_hack(buf) for buf in buffers_to_send))
-    req_received = srv_circuit.next_command()
+    commands, _ = srv_circuit.recv(*(_np_hack(buf) for buf in buffers_to_send))
+    for command in commands:
+        srv_circuit.process_command(command)
+    req_received, = commands
     res = ca.WriteNotifyResponse(data_count=data_count, data_type=data_type,
                                  ioid=0, status=1)
     buffers_to_send = srv_circuit.send(res)
 
     # Socket transport would happen here. Calling bytes() simulates
     # serialization over the socket.
-    cli_circuit.recv(*(_np_hack(buf) for buf in buffers_to_send))
-    res_received = cli_circuit.next_command()
+    commands, _ = cli_circuit.recv(*(_np_hack(buf) for buf in buffers_to_send))
+    for command in commands:
+        cli_circuit.process_command(command)
 
     if isinstance(data, array.ArrayType):
         # Before comparing array.array (which exposes the byteorder naively)
@@ -253,7 +261,7 @@ def test_extended():
 
 def test_bytelen():
     with pytest.raises(ca.CaprotoNotImplementedError):
-        ca.bytelen([1,2,3])
+        ca.bytelen([1, 2, 3])
     assert ca.bytelen(b'abc') == 3
     assert ca.bytelen(bytearray(b'abc')) == 3
     assert ca.bytelen(array.array('d', [1, 2, 3])) == 3 * 8
@@ -265,3 +273,46 @@ def test_bytelen():
 def test_overlong_strings():
     with pytest.raises(ca.CaprotoValueError):
         ca.SearchRequest(name='a' * 41, cid=0, version=13)
+
+
+skip_ext_headers = [
+    'MessageHeader',
+    'ExtendedMessageHeader',
+
+    # TODO: these have no args, and cannot get an extended header
+    'EchoRequestHeader',
+    'EchoResponseHeader',
+    'EventsOffRequestHeader',
+    'EventsOnRequestHeader',
+    'ReadSyncRequestHeader',
+]
+
+
+all_headers = [header_name
+               for header_name in dir(ca._headers)
+               if header_name.endswith('Header')
+               and not header_name.startswith('_')
+               and header_name not in skip_ext_headers]
+
+
+@pytest.mark.parametrize('header_name', all_headers)
+def test_extended_headers_smoke(header_name):
+    header = getattr(ca, header_name)
+    sig = inspect.signature(header)
+
+    regular_bind_args = {}
+    extended_bind_args = {}
+    for param in sig.parameters.keys():
+        regular_bind_args[param] = 0
+        extended_bind_args[param] = 2 ** 32
+
+    reg_args = sig.bind(**regular_bind_args)
+    reg_hdr = header(*reg_args.args, **reg_args.kwargs)
+
+    ext_args = sig.bind(**extended_bind_args)
+    ext_hdr = header(*ext_args.args, **ext_args.kwargs)
+
+    print(reg_hdr)
+    assert isinstance(reg_hdr, ca.MessageHeader)
+    print(ext_hdr)
+    assert isinstance(ext_hdr, ca.ExtendedMessageHeader)

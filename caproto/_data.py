@@ -1,17 +1,106 @@
 import time
+
+# TODO: assuming USE_NUMPY for now
+import numpy as np
+
 from ._dbr import (DBR_TYPES, ChType, promote_type, native_type,
                    native_float_types, native_int_types, native_types,
                    timestamp_to_epics, time_types, MAX_ENUM_STRING_SIZE,
-                   DBR_STSACK_STRING, AccessRights)
+                   DBR_STSACK_STRING, AccessRights, _numpy_map,
+                   SubscriptionType)
 
 
-def _ensure_iterable(value):
-    try:
-        len(value)
-    except TypeError:
-        return (value, )
+def _convert_enum_values(values, to_dtype, string_encoding, enum_strings):
+    if to_dtype == ChType.STRING:
+        return [value.encode(string_encoding) for value in values]
     else:
-        return value
+        if enum_strings is not None:
+            return [enum_strings.index(value) for value in values]
+        else:
+            return [0 for value in values]
+
+
+def _convert_char_values(values, to_dtype, string_encoding, enum_strings):
+    if isinstance(values, str):
+        values = values.encode(string_encoding)
+
+    if not isinstance(values, bytes):
+        # for single value or metadata conversion, let numpy take care of
+        # typing
+        return np.asarray(values).astype(_numpy_map[to_dtype])
+    elif to_dtype in native_int_types or to_dtype in native_float_types:
+        arr = np.frombuffer(values, dtype=np.uint8)
+        if to_dtype != ChType.CHAR:
+            return arr.astype(_numpy_map[to_dtype])
+        return arr
+
+    return values
+
+
+def _convert_string_values(values, to_dtype, string_encoding, enum_strings):
+    if to_dtype in native_int_types or to_dtype in native_float_types:
+        return np.asarray(values).astype(_numpy_map[to_dtype])
+
+    if isinstance(values, str):
+        # single string
+        return [values.encode(string_encoding)]
+    elif isinstance(values, bytes):
+        # single bytestring
+        return [values]
+    else:
+        # array of strings/bytestrings
+        return [v.encode(string_encoding)
+                if isinstance(v, str)
+                else v
+                for v in values]
+
+
+_custom_conversions = {ChType.ENUM: _convert_enum_values,
+                       ChType.CHAR: _convert_char_values,
+                       ChType.STRING: _convert_string_values,
+                       }
+
+
+def convert_values(values, from_dtype, to_dtype, *, string_encoding='latin-1',
+                   enum_strings=None):
+    '''Convert values from one ChType to another
+
+    Parameters
+    ----------
+    values :
+    from_dtype : caproto.ChannelType
+        The dtype of the values
+    to_dtype : caproto.ChannelType
+        The dtype to convert to
+    string_encoding : str, optional
+        The encoding to be used for strings
+    enum_strings : list, optional
+        List of enum strings, if available
+    '''
+
+    if to_dtype not in native_types:
+        raise ValueError('Expecting a native type')
+
+    if to_dtype in (ChType.STSACK_STRING, ChType.CLASS_NAME):
+        if from_dtype != to_dtype:
+            raise ValueError('Cannot convert values for stsack_string or '
+                             'class_name to other types')
+
+    try:
+        len(values)
+    except TypeError:
+        values = (values, )
+
+    if from_dtype in _custom_conversions:
+        convert_func = _custom_conversions[from_dtype]
+        return convert_func(values=values, to_dtype=to_dtype,
+                            string_encoding=string_encoding,
+                            enum_strings=enum_strings)
+
+    if to_dtype == ChType.STRING:
+        return [str(v).encode(string_encoding) for v in values]
+
+    return np.asarray(values).astype(_numpy_map[to_dtype])
 
 
 class ChannelAlarmStatus:
@@ -39,8 +128,9 @@ class ChannelAlarmStatus:
     def _from_dbr(cls, dbr):
         instance = cls()
         instance._set_instance_from_dbr(dbr)
+        return instance
 
-    def to_dbr(self, dbr=None):
+    def get_dbr_data(self, dbr=None):
         if dbr is None:
             dbr = DBR_STSACK_STRING()
         dbr.status = self.status
@@ -57,7 +147,6 @@ class ChannelAlarmStatus:
 
 class ChannelData:
     data_type = ChType.LONG
-    _has_custom_convert = False
 
     def __init__(self, *, value=None, timestamp=None, status=0, severity=0,
                  string_encoding='latin-1', alarm_status=None,
@@ -82,8 +171,8 @@ class ChannelData:
             among several channels
         reported_record_type : str, optional
             Though this is not a record, the channel access protocol supports
-            querying the record type.  This can be set to mimic an actual record
-            or be set to something arbitrary.
+            querying the record type.  This can be set to mimic an actual
+            record or be set to something arbitrary.
             Defaults to 'caproto'
         '''
         if timestamp is None:
@@ -98,116 +187,115 @@ class ChannelData:
         self.value = value
         self.string_encoding = string_encoding
         self.reported_record_type = reported_record_type
-        self._data = {chtype: DBR_TYPES[chtype]()
-                      for chtype in
-                      (promote_type(self.data_type, use_ctrl=True),
-                       promote_type(self.data_type, use_time=True),
-                       promote_type(self.data_type, use_status=True),
-                       promote_type(self.data_type, use_gr=True),
-                       )
-                      }
+        self._subscription_queue = None
+        self._dbr_metadata = {
+            chtype: DBR_TYPES[chtype]()
+            for chtype in (promote_type(self.data_type, use_ctrl=True),
+                           promote_type(self.data_type, use_time=True),
+                           promote_type(self.data_type, use_status=True),
+                           promote_type(self.data_type, use_gr=True),
+                           )
+        }
 
-    def convert_to(self, to_dtype):
-        '''Convert values to another native type
+    def subscribe(self, queue, *sub_queue_args):
+        '''Set subscription queue'''
+        self._subscription_queue = queue
+        self._subscription_queue_args = sub_queue_args
 
-        Parameters
-        ----------
-        to_dtype : ca.ChType
-        '''
-        if to_dtype not in native_types:
-            raise ValueError('Expecting a native type')
+    def fromtype(self, values, data_type):
+        '''Convenience function to convert given values to this data type'''
+        native_from = native_type(data_type)
+        return convert_values(values=values, from_dtype=native_from,
+                              to_dtype=self.data_type,
+                              string_encoding=self.string_encoding,
+                              enum_strings=getattr(self, 'enum_strings', None))
 
-        if to_dtype in (ChType.STSACK_STRING, ChType.CLASS_NAME):
-            return None
-
-        from_dtype = self.data_type
-
-        no_conversion_necessary = (
-            from_dtype == to_dtype or
-            (from_dtype in native_float_types and to_dtype in
-             native_float_types) or
-            (from_dtype in native_int_types and to_dtype in native_int_types)
-        )
-
-        values = _ensure_iterable(self.value)
-
-        if no_conversion_necessary:
-            return values
-
-        if from_dtype in native_float_types and to_dtype in native_int_types:
-            values = [int(v) for v in values]
-        elif to_dtype == ChType.STRING:
-            values = [str(v).encode(self.string_encoding) for v in values]
-        return values
+    def astype(self, to_dtype):
+        '''Convenience function: convert stored data to a specific type'''
+        native_to = native_type(to_dtype)
+        return convert_values(values=self.value, from_dtype=self.data_type,
+                              to_dtype=native_to,
+                              string_encoding=self.string_encoding,
+                              enum_strings=getattr(self, 'enum_strings', None))
 
     def get_dbr_data(self, type_):
+        '''Get DBR data and native data, converted to a specific type'''
+        # special cases for alarm strings and class name
         if type_ == ChType.STSACK_STRING:
-            return (self.alarm.to_dbr(), b'')
+            return (self.alarm.get_dbr_data(), b'')
         elif type_ == ChType.CLASS_NAME:
             class_name = DBR_TYPES[type_]()
             rtyp = self.reported_record_type.encode(self.string_encoding)
             class_name.value = rtyp
             return class_name, b''
 
+        # for native types, there is no dbr metadata - just data
         native_to = native_type(type_)
-        if type_ in self._data:
-            dbr_data = self._data[type_]
-            self._set_dbr_metadata(dbr_data)
+        values = self.astype(native_to)
 
-            if self._has_custom_convert:
-                value = self.convert_to(native_to)
-            else:
-                value = _ensure_iterable(self.value)
+        if type_ in native_types:
+            return b'', values
 
-            return dbr_data, value
-        elif type_ in native_types:
-            return b'', self.convert_to(native_to)
+        if type_ in self._dbr_metadata:
+            dbr_metadata = self._dbr_metadata[type_]
+        else:
+            # TODO: non-standard type request. frequent ones probably should be
+            # cached?
+            dbr_metadata = DBR_TYPES[type_]()
 
-        # non-standard type request. frequent ones probably should be cached?
-        dbr_data = DBR_TYPES[type_]()
-        self._set_dbr_metadata(dbr_data)
-        return dbr_data, self.convert_to(native_to)
+        self._copy_metadata_to_dbr(dbr_metadata)
+        return dbr_metadata, values
 
-    def _set_dbr_metadata(self, dbr_data):
+    async def set_dbr_data(self, data, data_type, metadata):
+        '''Set data from DBR metadata/values'''
+        self.value = self.fromtype(values=data, data_type=data_type)
+        if self._subscription_queue is not None:
+            await self._subscription_queue.put((self,
+                                                SubscriptionType.DBE_VALUE,
+                                                self.value) +
+                                               self._subscription_queue_args)
+
+    def _copy_metadata_to_dbr(self, dbr_metadata):
         'Set all metadata fields of a given DBR type instance'
-        # note that this is too generic to be useful, there probably should be
-        # custom handling for each dbr field as necessary
-        ts_sec, ts_ns = self.epics_timestamp
-        other_values = {
-            'secondsSinceEpoch': ts_sec,
-            'nanoSeconds': ts_ns,
-            'RISC_Pad': 0,
-            'RISC_pad': 0,
-            'RISC_pad0': 0,
-            'RISC_pad1': 0,
-            'ackt': 0,  # TODO from #27
-            'acks': 0,  # TODO from #27
-            'no_strs': 0,  # if not enum type
-            'strs': [],  # if not enum type
-        }
+        to_type = ChType(dbr_metadata.DBR_ID)
 
-        to_type = ChType(dbr_data.DBR_ID)
-        for attr, _ in dbr_data._fields_:
-            if hasattr(self, attr):
-                value = getattr(self, attr)
-            elif attr in other_values:
-                value = other_values[attr]
-            else:
-                print('missing', attr)
-                continue
+        if hasattr(dbr_metadata, 'units'):
+            units = getattr(self, 'units', '')
+            if isinstance(units, str):
+                units = units.encode(self.string_encoding)
+            dbr_metadata.units = units
 
-            if isinstance(value, str):
-                value = bytes(value, self.string_encoding)
-            try:
-                setattr(dbr_data, attr, value)
-            except TypeError as ex:
-                if to_type in native_int_types:
-                    # you probably want to kill me at this point
-                    setattr(dbr_data, attr, int(value))
+        if hasattr(dbr_metadata, 'precision'):
+            dbr_metadata.precision = getattr(self, 'precision', 0)
 
-        if dbr_data.DBR_ID in time_types:
+        if to_type in time_types:
             epics_ts = self.epics_timestamp
-            dbr_data.secondsSinceEpoch, dbr_data.nanoSeconds = epics_ts
+            dbr_metadata.secondsSinceEpoch, dbr_metadata.nanoSeconds = epics_ts
+
+        if hasattr(dbr_metadata, 'status'):
+            # many have status/severity
+            dbr_metadata.status = self.status
+            dbr_metadata.severity = self.severity
+
+        convert_attrs = ('upper_disp_limit', 'lower_disp_limit',
+                         'upper_alarm_limit', 'upper_warning_limit',
+                         'lower_warning_limit', 'lower_alarm_limit',
+                         'upper_ctrl_limit', 'lower_ctrl_limit')
+
+        if not any(hasattr(dbr_metadata, attr) for attr in convert_attrs):
+            return
+
+        # convert all metadata types to the target type
+        values = convert_values(values=[getattr(self, key, 0)
+                                        for key in convert_attrs],
+                                from_dtype=self.data_type,
+                                to_dtype=native_type(to_type),
+                                string_encoding=self.string_encoding)
+        if isinstance(values, np.ndarray):
+            values = values.tolist()
+        for attr, value in zip(convert_attrs, values):
+            if hasattr(dbr_metadata, attr):
+                setattr(dbr_metadata, attr, value)
 
     @property
     def epics_timestamp(self):
@@ -216,6 +304,7 @@ class ChannelData:
 
     @property
     def status(self):
+        '''Alarm status'''
         return self.alarm.status
 
     @status.setter
@@ -224,6 +313,7 @@ class ChannelData:
 
     @property
     def severity(self):
+        '''Alarm severity'''
         return self.alarm.severity
 
     @severity.setter
@@ -244,41 +334,33 @@ class ChannelData:
 
 class ChannelEnum(ChannelData):
     data_type = ChType.ENUM
-    _has_custom_convert = True
 
-    def __init__(self, *, strs=None, **kwargs):
-        self.strs = strs
-
+    def __init__(self, *, enum_strings=None, **kwargs):
         super().__init__(**kwargs)
 
-    @property
-    def no_str(self):
-        return len(self.strs) if self.strs else 0
+        if enum_strings is None:
+            enum_strings = []
+        self.enum_strings = enum_strings
 
-    def _set_dbr_metadata(self, dbr_data):
-        if hasattr(dbr_data, 'strs'):
-            for i, string in enumerate(self.strs):
+    def _copy_metadata_to_dbr(self, dbr_metadata):
+        if hasattr(dbr_metadata, 'strs') and self.enum_strings:
+            for i, string in enumerate(self.enum_strings):
                 bytes_ = bytes(string, self.string_encoding)
-                dbr_data.strs[i][:] = bytes_.ljust(MAX_ENUM_STRING_SIZE, b'\x00')
+                dbr_metadata.strs[i][:] = bytes_.ljust(MAX_ENUM_STRING_SIZE,
+                                                       b'\x00')
+            dbr_metadata.no_str = len(self.enum_strings)
 
-        return super()._set_dbr_metadata(dbr_data)
-
-    def convert_to(self, to_dtype):
-        if native_type(to_dtype) == ChType.STRING:
-            return [self.value.encode(self.string_encoding)]
-        else:
-            return [self.strs.index(self.value)]
+        return super()._copy_metadata_to_dbr(dbr_metadata)
 
 
 class ChannelNumeric(ChannelData):
-    def __init__(self, *, units='', upper_disp_limit=0.0,
-                 lower_disp_limit=0.0, upper_alarm_limit=0.0,
-                 upper_warning_limit=0.0, lower_warning_limit=0.0,
-                 lower_alarm_limit=0.0, upper_ctrl_limit=0.0,
-                 lower_ctrl_limit=0.0, **kwargs):
+    def __init__(self, *, units='', upper_disp_limit=0, lower_disp_limit=0,
+                 upper_alarm_limit=0, upper_warning_limit=0,
+                 lower_warning_limit=0, lower_alarm_limit=0,
+                 upper_ctrl_limit=0, lower_ctrl_limit=0, **kwargs):
 
         super().__init__(**kwargs)
-        self.units = units.encode(self.string_encoding)
+        self.units = units
         self.upper_disp_limit = upper_disp_limit
         self.lower_disp_limit = lower_disp_limit
         self.upper_alarm_limit = upper_alarm_limit
@@ -305,39 +387,8 @@ class ChannelDouble(ChannelNumeric):
 class ChannelChar(ChannelNumeric):
     # 'Limits' on chars do not make much sense and are rarely used.
     data_type = ChType.CHAR
-    _has_custom_convert = True
-
-    def convert_to(self, to_dtype):
-        # if to_dtype == ChType.STRING:
-        #     return self.value.encode(self.string_encoding)
-        # else:
-        if isinstance(self.value, str):
-            return self.value.encode(self.string_encoding)
-        elif isinstance(self.value, bytes):
-            return self.value
-        else:
-            return [self.value]
 
 
 class ChannelString(ChannelData):
     data_type = ChType.STRING
-    _has_custom_convert = True
     # There is no CTRL or GR variant of STRING.
-
-    def convert_to(self, to_dtype):
-        if to_dtype != ChType.STRING:
-            # TODO does this actually respond with an error?
-            return b''
-
-        if isinstance(self.value, str):
-            # single string
-            return [self.value.encode(self.string_encoding)]
-        elif isinstance(self.value, bytes):
-            # single bytestring
-            return [self.value]
-        else:
-            # array of strings/bytestrings
-            return [v.encode(self.string_encoding)
-                    if isinstance(v, str)
-                    else v
-                    for v in self.value]

@@ -1,10 +1,4 @@
-import logging
-from multiprocessing import Process
 import caproto as ca
-import os
-import time
-import socket
-import getpass
 import pytest
 
 
@@ -29,15 +23,11 @@ def srv_send(circuit, command):
 
 def srv_recv(circuit):
     bytes_received = bytes(req_cache)
+    assert len(bytes_received)
     req_cache.clear()
-    circuit.recv(bytes_received)
-    commands = []
-    while True:
-        command = circuit.next_command()
-        if type(command) is ca.NEED_DATA:
-            break
-        commands.append(command)
-    return commands
+    commands, num_bytes_needed = circuit.recv(bytes_received)
+    for command in commands:
+        circuit.process_command(command)
 
 
 def cli_send(circuit, command):
@@ -48,15 +38,11 @@ def cli_send(circuit, command):
 
 def cli_recv(circuit):
     bytes_received = bytes(res_cache)
+    assert len(bytes_received)
     res_cache.clear()
-    circuit.recv(bytes_received)
-    commands = []
-    while True:
-        command = circuit.next_command()
-        if type(command) is ca.NEED_DATA:
-            break
-        commands.append(command)
-    return commands
+    commands, num_bytes_needed = circuit.recv(bytes_received)
+    for command in commands:
+        circuit.process_command(command)
 
 
 def test_nonet():
@@ -67,8 +53,8 @@ def test_nonet():
 
     # Receive response
     data = bytes(ca.RepeaterConfirmResponse('127.0.0.1'))
-    cli_b.recv(data, cli_addr)
-    cli_b.next_command()
+    commands = cli_b.recv(data, cli_addr)
+    cli_b.process_commands(commands)
     assert cli_b._registered
 
     # Search for pv1.
@@ -77,19 +63,19 @@ def test_nonet():
     bytes_to_send = cli_b.send(ca.VersionRequest(0, 13),
                                ca.SearchRequest(pv1, 0, 13))
 
-    
-    srv_b.recv(bytes_to_send, cli_addr)
-    ver_req = srv_b.next_command()
-    search_req = srv_b.next_command()
+
+    commands = srv_b.recv(bytes_to_send, cli_addr)
+    srv_b.process_commands(commands)
+    ver_req, search_req = commands
     bytes_to_send = srv_b.send(ca.VersionResponse(13),
                                ca.SearchResponse(5064, None,
                                                  search_req.cid, 13))
 
     # Receive a VersionResponse and SearchResponse.
-    cli_b.recv(bytes_to_send, cli_addr)
-    command = cli_b.next_command()
+    commands = iter(cli_b.recv(bytes_to_send, cli_addr))
+    command = next(commands)
     assert type(command) is ca.VersionResponse
-    command = cli_b.next_command()
+    command = next(commands)
     assert type(command) is ca.SearchResponse
     address = ca.extract_address(command)
 
@@ -180,7 +166,6 @@ def test_nonet():
 
     cli_send(chan1.circuit, cancel_req)
     srv_recv(srv_circuit)
-    cli_recv(chan1.circuit)
 
     # Test reading.
     cli_send(chan1.circuit, ca.ReadNotifyRequest(data_type=5, data_count=1,
@@ -190,7 +175,7 @@ def test_nonet():
     srv_send(srv_circuit, ca.ReadNotifyResponse(data=(3,),
                                                 data_type=5, data_count=1,
                                                 ioid=12, status=1))
-    commands, = cli_recv(chan1.circuit)
+    cli_recv(chan1.circuit)
 
     # Test writing.
     request = ca.WriteNotifyRequest(data_type=2, data_count=1,
