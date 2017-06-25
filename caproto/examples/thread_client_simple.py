@@ -11,8 +11,6 @@ def main(pv1="XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL",
     '''
 
     shared_broadcaster = SharedBroadcaster()
-    pv1 = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
-    pv2 = "XF:31IDA-OP{Tbl-Ax:X2}Mtr.VAL"
 
     # Some user function to call when subscriptions receive data.
     called = []
