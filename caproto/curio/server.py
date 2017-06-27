@@ -267,7 +267,6 @@ class Context:
         self.broadcaster = ca.Broadcaster(our_role=ca.SERVER)
         self.broadcaster.log.setLevel(self.log_level)
         self.command_bundle_queue = curio.Queue()
-        self.broadcaster_command_condition = curio.Condition()
 
         self.subscriptions = {}
         self.subscription_queue = curio.UniversalQueue()
@@ -319,9 +318,6 @@ class Context:
                 if responses:
                     bytes_to_send = self.broadcaster.send(*responses)
                     await self.udp_sock.sendto(bytes_to_send, addr)
-
-                async with self.broadcaster_command_condition:
-                    await self.broadcaster_command_condition.notify_all()
 
     async def tcp_handler(self, client, addr):
         '''Handler for each new TCP client to the server'''
