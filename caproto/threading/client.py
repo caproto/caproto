@@ -8,6 +8,10 @@ import threading
 import time
 import weakref
 import selectors
+import array
+import fcntl
+import termios
+import struct
 
 from collections import Iterable
 
@@ -93,14 +97,19 @@ class SelectorThread:
 
     def __call__(self):
         '''Selector poll loop'''
+        avail_buf = array.array('i', [0])
         while self._running:
             events = self.selector.select(timeout=0.5)
             for key, mask in events:
                 sock = key.fileobj
                 obj, close_ev = self.socket_to_object[sock]
                 # TODO: consider thread pool for recv and command_loop
+
                 try:
-                    bytes_recv, address = sock.recvfrom(4096)
+                    if fcntl.ioctl(sock, termios.FIONREAD, avail_buf) < 0:
+                        raise OSError('ioctl failed')
+                    bytes_available = struct.unpack('I', avail_buf)[0]
+                    bytes_recv, address = sock.recvfrom(bytes_available)
                 except OSError:
                     bytes_recv, address = b'', None
 
