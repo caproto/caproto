@@ -520,10 +520,11 @@ class Channel:
         to complete.
         """
         if self.connected:
-            return
+            return self.connected
         _condition_with_timeout(lambda: self.connected,
                                 self.circuit.new_command_cond,
                                 timeout)
+        return self.connected
 
     def disconnect(self, *, wait=True, timeout=2):
         "Disconnect this Channel."
@@ -722,7 +723,7 @@ class PV:
         # - check if there is a form or count on the object we should respect
         # - do something with the timeout value
         if self.connected:
-            return
+            return self.connected
 
         self.chid = self._context.create_channel(self.pvname)
 
@@ -755,6 +756,7 @@ class PV:
         # todo move to async connect logic
         for cb in self.connection_callbacks:
             cb(pvname=self.pvname, conn=True, pv=self)
+        return self.connected
 
     def connect(self, timeout=None):
         """check that a PV is connected, forcing a connection if needed
