@@ -252,6 +252,8 @@ class CurioVirtualCircuit:
         elif isinstance(command, ca.ClearChannelRequest):
             chan, db_entry = get_db_entry()
             return [chan.disconnect()]
+        elif isinstance(command, ca.EchoRequest):
+            return [ca.EchoResponse()]
 
 
 class Context:
