@@ -6,7 +6,9 @@ import curio
 from curio import socket
 
 import caproto as ca
-from caproto import (ChannelDouble, ChannelInteger, ChannelEnum)
+from caproto import (ChannelDouble, ChannelInteger, ChannelEnum,
+                     get_address_list)
+
 
 
 class DisconnectedCircuit(Exception):
@@ -271,6 +273,11 @@ class Context:
         self.subscriptions = {}
         self.subscription_queue = curio.UniversalQueue()
 
+        self.heartbeat_count = 0
+
+        # todo make CAS aware
+        self.bcast_list = get_address_list()
+
     async def broadcaster_udp_server_loop(self):
         self.udp_sock = ca.bcast_socket(socket)
         try:
@@ -370,14 +377,26 @@ class Context:
                     cmd.header.parameter2 = sub_id  # TODO setter?
                     await circuit.send(cmd)
 
+    async def heartbeat(self):
+        while True:
+            beacon = ca.RsrvIsUpResponse(13, self.port,
+                                         self.heartbeat_count, self.host)
+
+            bytes_to_send = self.broadcaster.send(beacon)
+            for addr in self.bcast_list:
+                await self.udp_sock.sendto(bytes_to_send, (addr, self.port+1))
+            self.heartbeat_count += 1
+            await curio.sleep(15)
+
     async def run(self):
         try:
             async with curio.TaskGroup() as g:
-                await g.spawn(curio.tcp_server('', self.port,
-                                               self.tcp_handler))
-                await g.spawn(self.broadcaster_udp_server_loop())
-                await g.spawn(self.broadcaster_queue_loop())
-                await g.spawn(self.subscription_queue_loop())
+                await g.spawn(curio.tcp_server,
+                              '', self.port, self.tcp_handler)
+                await g.spawn(self.broadcaster_udp_server_loop)
+                await g.spawn(self.broadcaster_queue_loop)
+                await g.spawn(self.subscription_queue_loop)
+                await g.spawn(self.heartbeat)
         except curio.TaskGroupError as ex:
             logger.error('Curio server failed: %s', ex.errors)
             for task in ex:
