@@ -273,6 +273,10 @@ class Context:
         self.subscriptions = {}
         self.subscription_queue = curio.UniversalQueue()
         self.beacon_count = 0
+        self.environ = get_environment_variables()
+
+        ignore_addresses = self.environ['EPICS_CAS_IGNORE_ADDR_LIST']
+        self.ignore_addresses = ignore_addresses.split(' ')
 
     async def broadcaster_udp_server_loop(self):
         self.udp_sock = ca.bcast_socket(socket)
@@ -300,6 +304,9 @@ class Context:
             except Exception as ex:
                 logger.error('Broadcaster command queue evaluation failed',
                              exc_info=ex)
+                continue
+
+            if addr in self.ignore_addresses:
                 continue
 
             responses.clear()
@@ -374,7 +381,7 @@ class Context:
                     await circuit.send(cmd)
 
     async def broadcast_beacon_loop(self):
-        beacon_period = get_environment_variables()['EPICS_CAS_BEACON_PERIOD']
+        beacon_period = self.environ['EPICS_CAS_BEACON_PERIOD']
         addresses = get_beacon_address_list()
 
         while True:
