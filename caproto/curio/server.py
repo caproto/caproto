@@ -324,10 +324,9 @@ class Context:
                     # address from packet
                     responses.append(ca.SearchResponse(self.port, None,
                                                        command.cid, 13))
-
-                if responses:
-                    bytes_to_send = self.broadcaster.send(*responses)
-                    await self.udp_sock.sendto(bytes_to_send, addr)
+            if responses:
+                bytes_to_send = self.broadcaster.send(*responses)
+                await self.udp_sock.sendto(bytes_to_send, addr)
 
     async def tcp_handler(self, client, addr):
         '''Handler for each new TCP client to the server'''
