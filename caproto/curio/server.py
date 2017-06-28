@@ -7,8 +7,8 @@ from curio import socket
 
 import caproto as ca
 from caproto import (ChannelDouble, ChannelInteger, ChannelEnum,
-                     get_address_list)
-
+                     get_address_list, get_beacon_address_list,
+                     get_environment_variables)
 
 
 class DisconnectedCircuit(Exception):
@@ -272,11 +272,7 @@ class Context:
 
         self.subscriptions = {}
         self.subscription_queue = curio.UniversalQueue()
-
-        self.heartbeat_count = 0
-
-        # todo make CAS aware
-        self.bcast_list = get_address_list()
+        self.beacon_count = 0
 
     async def broadcaster_udp_server_loop(self):
         self.udp_sock = ca.bcast_socket(socket)
@@ -377,16 +373,18 @@ class Context:
                     cmd.header.parameter2 = sub_id  # TODO setter?
                     await circuit.send(cmd)
 
-    async def heartbeat(self):
-        while True:
-            beacon = ca.RsrvIsUpResponse(13, self.port,
-                                         self.heartbeat_count, self.host)
+    async def broadcast_beacon_loop(self):
+        beacon_period = get_environment_variables()['EPICS_CAS_BEACON_PERIOD']
+        addresses = get_beacon_address_list()
 
+        while True:
+            beacon = ca.RsrvIsUpResponse(13, self.port, self.beacon_count,
+                                         self.host)
             bytes_to_send = self.broadcaster.send(beacon)
-            for addr in self.bcast_list:
-                await self.udp_sock.sendto(bytes_to_send, (addr, self.port+1))
-            self.heartbeat_count += 1
-            await curio.sleep(15)
+            for addr_port in addresses:
+                await self.udp_sock.sendto(bytes_to_send, addr_port)
+            self.beacon_count += 1
+            await curio.sleep(beacon_period)
 
     async def run(self):
         try:
@@ -396,7 +394,7 @@ class Context:
                 await g.spawn(self.broadcaster_udp_server_loop)
                 await g.spawn(self.broadcaster_queue_loop)
                 await g.spawn(self.subscription_queue_loop)
-                await g.spawn(self.heartbeat)
+                await g.spawn(self.broadcast_beacon_loop)
         except curio.TaskGroupError as ex:
             logger.error('Curio server failed: %s', ex.errors)
             for task in ex:
