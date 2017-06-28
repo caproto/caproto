@@ -102,6 +102,13 @@ def get_environment_variables():
                     EPICS_CA_MAX_ARRAY_BYTES=16384,
                     EPICS_CA_MAX_SEARCH_PERIOD=300,
                     EPICS_TS_MIN_WEST=360,
+                    EPICS_CAS_SERVER_PORT=5064,
+                    EPICS_CAS_AUTO_BEACON_ADDR_LIST='YES',
+                    EPICS_CAS_BEACON_ADDR_LIST='',
+                    EPICS_CAS_BEACON_PERIOD=15.0,
+                    EPICS_CAS_BEACON_PORT=5065,
+                    EPICS_CAS_INTF_ADDR_LIST='',
+                    EPICS_CAS_IGNORE_ADDR_LIST='',
                     )
 
     def get_value(env_var):
@@ -113,7 +120,7 @@ def get_environment_variables():
 
 
 def get_address_list():
-    '''Get channel access address list based on environment variables
+    '''Get channel access client address list based on environment variables
 
     If the address list is set to be automatic, the network interfaces will be
     scanned and used to determine the broadcast addresses available.
@@ -126,6 +133,34 @@ def get_address_list():
         return broadcast_address_list_from_interfaces()
 
     return addr_list.split(' ')
+
+
+def get_beacon_address_list():
+    '''Get channel access beacon address list based on environment variables
+
+    If the address list is set to be automatic, the network interfaces will be
+    scanned and used to determine the broadcast addresses available.
+
+    Returns
+    -------
+    addr_list : list of (addr, beacon_port)
+    '''
+    env = get_environment_variables()
+    auto_addr_list = env['EPICS_CAS_AUTO_BEACON_ADDR_LIST']
+    addr_list = env['EPICS_CAS_BEACON_ADDR_LIST']
+    beacon_port = env['EPICS_CAS_BEACON_PORT']
+
+    def get_addr_port(addr):
+        if ':' in addr:
+            addr, _, specified_port = addr.partition(':')
+            return (addr, int(specified_port))
+        return (addr, beacon_port)
+
+    if not addr_list or auto_addr_list.lower() == 'yes':
+        return [get_addr_port(addr) for addr in
+                broadcast_address_list_from_interfaces()]
+
+    return [get_addr_port(addr) for addr in addr_list.split(' ')]
 
 
 def broadcast_address_list_from_interfaces():

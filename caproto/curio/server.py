@@ -6,7 +6,9 @@ import curio
 from curio import socket
 
 import caproto as ca
-from caproto import (ChannelDouble, ChannelInteger, ChannelEnum)
+from caproto import (ChannelDouble, ChannelInteger, ChannelEnum,
+                     get_address_list, get_beacon_address_list,
+                     get_environment_variables)
 
 
 class DisconnectedCircuit(Exception):
@@ -252,6 +254,8 @@ class CurioVirtualCircuit:
         elif isinstance(command, ca.ClearChannelRequest):
             chan, db_entry = get_db_entry()
             return [chan.disconnect()]
+        elif isinstance(command, ca.EchoRequest):
+            return [ca.EchoResponse()]
 
 
 class Context:
@@ -265,10 +269,14 @@ class Context:
         self.broadcaster = ca.Broadcaster(our_role=ca.SERVER)
         self.broadcaster.log.setLevel(self.log_level)
         self.command_bundle_queue = curio.Queue()
-        self.broadcaster_command_condition = curio.Condition()
 
         self.subscriptions = {}
         self.subscription_queue = curio.UniversalQueue()
+        self.beacon_count = 0
+        self.environ = get_environment_variables()
+
+        ignore_addresses = self.environ['EPICS_CAS_IGNORE_ADDR_LIST']
+        self.ignore_addresses = ignore_addresses.split(' ')
 
     async def broadcaster_udp_server_loop(self):
         self.udp_sock = ca.bcast_socket(socket)
@@ -298,6 +306,9 @@ class Context:
                              exc_info=ex)
                 continue
 
+            if addr in self.ignore_addresses:
+                continue
+
             responses.clear()
             for command in commands:
                 if isinstance(command, ca.VersionRequest):
@@ -317,9 +328,6 @@ class Context:
                 if responses:
                     bytes_to_send = self.broadcaster.send(*responses)
                     await self.udp_sock.sendto(bytes_to_send, addr)
-
-                async with self.broadcaster_command_condition:
-                    await self.broadcaster_command_condition.notify_all()
 
     async def tcp_handler(self, client, addr):
         '''Handler for each new TCP client to the server'''
@@ -372,14 +380,28 @@ class Context:
                     cmd.header.parameter2 = sub_id  # TODO setter?
                     await circuit.send(cmd)
 
+    async def broadcast_beacon_loop(self):
+        beacon_period = self.environ['EPICS_CAS_BEACON_PERIOD']
+        addresses = get_beacon_address_list()
+
+        while True:
+            beacon = ca.RsrvIsUpResponse(13, self.port, self.beacon_count,
+                                         self.host)
+            bytes_to_send = self.broadcaster.send(beacon)
+            for addr_port in addresses:
+                await self.udp_sock.sendto(bytes_to_send, addr_port)
+            self.beacon_count += 1
+            await curio.sleep(beacon_period)
+
     async def run(self):
         try:
             async with curio.TaskGroup() as g:
-                await g.spawn(curio.tcp_server('', self.port,
-                                               self.tcp_handler))
-                await g.spawn(self.broadcaster_udp_server_loop())
-                await g.spawn(self.broadcaster_queue_loop())
-                await g.spawn(self.subscription_queue_loop())
+                await g.spawn(curio.tcp_server,
+                              '', self.port, self.tcp_handler)
+                await g.spawn(self.broadcaster_udp_server_loop)
+                await g.spawn(self.broadcaster_queue_loop)
+                await g.spawn(self.subscription_queue_loop)
+                await g.spawn(self.broadcast_beacon_loop)
         except curio.TaskGroupError as ex:
             logger.error('Curio server failed: %s', ex.errors)
             for task in ex:
