@@ -10,11 +10,10 @@ import pytest
 
 
 ip = '255.255.255.255'
-int_encoded_ip = ca.ipv4_to_int32(ip)
 
 
 parameter_values = {
-    'address': [int_encoded_ip],
+    'address': [ip],
     'client_address': [ip],
     'ip': [ip],
     'repeater_address': [ip],
