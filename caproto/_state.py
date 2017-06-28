@@ -41,6 +41,9 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
             ErrorResponse: AWAIT_VERSION_RESPONSE,
         },
         CONNECTED: {
+            VersionResponse: CONNECTED,
+            VersionRequest: CONNECTED,
+
             # Host and Client requests may come before or after we connect.
             HostNameRequest: CONNECTED,
             ClientNameRequest: CONNECTED,
@@ -76,6 +79,9 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
             ErrorResponse: SEND_VERSION_RESPONSE,
         },
         CONNECTED: {
+            VersionResponse: CONNECTED,
+            VersionRequest: CONNECTED,
+
             # Host and Client requests may come before or after we connect.
             HostNameRequest: CONNECTED,
             ClientNameRequest: CONNECTED,
