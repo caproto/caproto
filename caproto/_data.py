@@ -11,6 +11,9 @@ from ._dbr import (DBR_TYPES, ChType, promote_type, native_type,
 
 
 def _convert_enum_values(values, to_dtype, string_encoding, enum_strings):
+    if isinstance(values, (str, bytes)):
+        values = [values]
+
     if to_dtype == ChType.STRING:
         return [value.encode(string_encoding) for value in values]
     else:
@@ -38,7 +41,26 @@ def _convert_char_values(values, to_dtype, string_encoding, enum_strings):
 
 
 def _convert_string_values(values, to_dtype, string_encoding, enum_strings):
-    if to_dtype in native_int_types or to_dtype in native_float_types:
+    if to_dtype == ChType.ENUM:
+        if not isinstance(values, (str, bytes)):
+            values = values[0]
+        if enum_strings:
+            if isinstance(values, bytes):
+                byte_value = values
+                str_value = values.decode(string_encoding)
+            else:
+                byte_value = values.encode(string_encoding)
+                str_value = values
+
+            if byte_value in enum_strings:
+                return byte_value
+            elif str_value in enum_strings:
+                return str_value
+            else:
+                raise ValueError('Invalid enum string')
+        else:
+            return 0
+    elif to_dtype in native_int_types or to_dtype in native_float_types:
         return np.asarray(values).astype(_numpy_map[to_dtype])
 
     if isinstance(values, str):
