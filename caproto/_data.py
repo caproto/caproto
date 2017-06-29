@@ -270,8 +270,8 @@ class ChannelData:
 
     async def set_dbr_data(self, data, data_type, metadata):
         '''Set data from DBR metadata/values'''
-        self.timestamp = time.time()
         self.value = self.fromtype(values=data, data_type=data_type)
+        self.timestamp = time.time()
         if self._subscription_queue is not None:
             await self._subscription_queue.put((self,
                                                 SubscriptionType.DBE_VALUE,
