@@ -96,7 +96,7 @@ def from_buffer(data_type, data_count, buffer):
         md_size = 0
     # Use payload_size to strip off any right-padding that may have been added
     # to make the byte-size of the payload a multiple of 8.
-    data_payload = buffer[md_size:md_size + payload_size]
+    data_payload = memoryview(buffer)[md_size:md_size + payload_size]
     return md_payload, data_payload
 
 
