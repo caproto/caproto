@@ -448,6 +448,7 @@ async def _test(pvdb=None):
                                        lower_ctrl_limit=30,
                                        upper_ctrl_limit=38,
                                        ),
+                'chararray': ca.ChannelChar(value=b'1234567890' * 2),
                 'str': ca.ChannelString(value='hello',
                                         string_encoding='latin-1'),
                 'stra': ca.ChannelString(value=['hello', 'how is it', 'going'],

@@ -411,6 +411,13 @@ class ChannelChar(ChannelNumeric):
     # 'Limits' on chars do not make much sense and are rarely used.
     data_type = ChType.CHAR
 
+    def __init__(self, *, max_length=100, **kwargs):
+        super().__init__(**kwargs)
+        self.max_length = max_length
+
+    def __len__(self):
+        return self.max_length
+
 
 class ChannelString(ChannelData):
     data_type = ChType.STRING
