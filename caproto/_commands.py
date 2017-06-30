@@ -333,7 +333,7 @@ def read_from_bytestream(data, role):
     total_size = header_size + header.payload_size
 
     # Receive the buffer (zero-copy).
-    payload_bytes = data[header_size:total_size]
+    payload_bytes = memoryview(data)[header_size:total_size]
     command = _class.from_wire(header, payload_bytes)
     # Advance the buffer.
     return data[total_size:], command, 0
