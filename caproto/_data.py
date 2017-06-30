@@ -210,6 +210,7 @@ class ChannelData:
         self.string_encoding = string_encoding
         self.reported_record_type = reported_record_type
         self._subscription_queue = None
+        # a dict of un-filled structs for possible future use
         self._dbr_metadata = {
             chtype: DBR_TYPES[chtype]()
             for chtype in (promote_type(self.data_type, use_ctrl=True),
@@ -323,7 +324,12 @@ class ChannelData:
 
     @property
     def epics_timestamp(self):
-        'EPICS timestamp as (seconds, nanoseconds) since EPICS epoch'
+        """
+        EPICS timestamp as (seconds, nanoseconds) since EPICS epoch
+
+        The innocent may be surprised to learn that the EPICS epoch is not the
+        same as the UNIX epoch.
+        """
         return timestamp_to_epics(self.timestamp)
 
     @property
