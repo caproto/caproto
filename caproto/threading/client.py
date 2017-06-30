@@ -53,6 +53,7 @@ class SelectorThread:
     def __init__(self):
         self._running = False
         self.selector = selectors.DefaultSelector()
+        self.socket_lock = threading.RLock()
         self.object_to_socket = {}
         self.socket_to_object = {}
         self.thread = threading.Thread(target=self, daemon=True)
@@ -74,24 +75,29 @@ class SelectorThread:
         ref = target_obj  # weakref.proxy(target_obj, self._object_removed)
         close_event = threading.Event()
 
-        self.object_to_socket[ref] = (socket, close_event)
-        self.socket_to_object[socket] = (ref, close_event)
-        self.selector.register(socket, selectors.EVENT_READ)
+        with self.socket_lock:
+            self.object_to_socket[ref] = (socket, close_event)
+            self.socket_to_object[socket] = (ref, close_event)
+            self.selector.register(socket, selectors.EVENT_READ)
         return close_event
 
     def remove_socket(self, socket):
-        obj, close_event = self.socket_to_object.pop(socket)
-        del self.object_to_socket[obj]
-        self.selector.unregister(socket)
+        with self.socket_lock:
+            obj, close_event = self.socket_to_object.pop(socket)
+            del self.object_to_socket[obj]
+            obj.received(b'', None)
+            self.selector.unregister(socket)
+
         if not close_event.isSet():
             close_event.set()
         if not self.socket_to_object:
             self.stop()
 
     def _object_removed(self, ref):
-        socket, close_event = self.object_to_socket.pop(ref)
-        del self.socket_to_object[socket]
-        self.selector.unregister(socket)
+        with self.socket_lock:
+            socket, close_event = self.object_to_socket.pop(ref)
+            del self.socket_to_object[socket]
+            self.selector.unregister(socket)
         if not close_event.isSet():
             close_event.set()
 
@@ -99,7 +105,8 @@ class SelectorThread:
         '''Selector poll loop'''
         avail_buf = array.array('i', [0])
         while self._running:
-            events = self.selector.select(timeout=0.5)
+            with self.socket_lock:
+                events = self.selector.select(timeout=0.5)
             for key, mask in events:
                 sock = key.fileobj
                 obj, close_ev = self.socket_to_object[sock]
@@ -478,12 +485,14 @@ class VirtualCircuit:
             self.circuit.disconnect()
         if self.socket is not None:
             _selector.remove_socket(self.socket)
+            self.socket.shutdown(socket.SHUT_WR)
+            self.socket.close()
+            self.socket = None
         if wait and self.command_thread is not threading.current_thread():
             self.command_thread.join()
 
         self.channels.clear()
         self.ioids.clear()
-        self.socket = None
 
     def __del__(self):
         try:
@@ -1453,6 +1462,7 @@ def _test():
     chan2.disconnect()
     chan1.disconnect()
     assert called
+    print('done')
 
 
 if __name__ == '__main__':
