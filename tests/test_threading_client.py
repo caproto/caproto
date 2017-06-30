@@ -1,10 +1,7 @@
 import sys
 import socket
-import logging
 import time
 import threading
-
-from multiprocessing import Process
 
 from caproto.threading.client import (Context, SharedBroadcaster,
                                       _condition_with_timeout)
@@ -45,21 +42,6 @@ def cntx(request, shared_broadcaster):
     return cntx
 
 
-def test_channel_kill_client_socket(cntx):
-    str_pv = 'Py:ao1.DESC'
-    cntx.search(str_pv)
-    chan = cntx.create_channel(str_pv)
-    chan.read()
-    assert chan.connected
-    assert chan.circuit.connected
-    chan.circuit.socket.close()
-    chan.circuit.sock_thread.thread.join()
-    assert not chan.connected
-    assert not chan.circuit.connected
-    with pytest.raises(ca.LocalProtocolError):
-        chan.read()
-
-
 def test_context_disconnect(cntx):
     str_pv = 'Py:ao1.DESC'
 
@@ -80,15 +62,9 @@ def test_context_disconnect(cntx):
     chan = bootstrap()
     is_happy(chan, cntx)
 
-    st = chan.circuit.sock_thread.thread
-    ct = chan.circuit.command_thread
-
     cntx.disconnect()
-    print('joining sock thread', end='...')
-    sys.stdout.flush()
-    st.join()
-    print('joined')
 
+    ct = chan.circuit.command_thread
     print('joining command thread', end='...')
     sys.stdout.flush()
     ct.join()
@@ -98,7 +74,6 @@ def test_context_disconnect(cntx):
     assert not chan.circuit.connected
     assert not cntx.circuits
     assert not ct.is_alive()
-    assert not st.is_alive()
 
     with pytest.raises(ca.LocalProtocolError):
         chan.read()
