@@ -168,7 +168,8 @@ class ChannelAlarmStatus:
 
 
 class ChannelData:
-    data_type = ChType.LONG
+    # subclass must define a `data_type` class attribute, set to a value of the
+    # ChType enum
 
     def __init__(self, *, value=None, timestamp=None, status=0, severity=0,
                  string_encoding='latin-1', alarm_status=None,
@@ -210,15 +211,8 @@ class ChannelData:
         self.string_encoding = string_encoding
         self.reported_record_type = reported_record_type
         self._subscription_queue = None
-        # a dict of un-filled structs for possible future use
-        self._dbr_metadata = {
-            chtype: DBR_TYPES[chtype]()
-            for chtype in (promote_type(self.data_type, use_ctrl=True),
-                           promote_type(self.data_type, use_time=True),
-                           promote_type(self.data_type, use_status=True),
-                           promote_type(self.data_type, use_gr=True),
-                           )
-        }
+        # cache DBR_* structs, filled on demand
+        self._dbr_metadata = {}
 
     def subscribe(self, queue, *sub_queue_args):
         '''Set subscription queue'''
@@ -260,12 +254,11 @@ class ChannelData:
         if type_ in native_types:
             return b'', values
 
-        if type_ in self._dbr_metadata:
+        try:
             dbr_metadata = self._dbr_metadata[type_]
-        else:
-            # TODO: non-standard type request. frequent ones probably should be
-            # cached?
+        except KeyError:
             dbr_metadata = DBR_TYPES[type_]()
+            self._dbr_metadata[type_] = dbr_metadata  # cache for reuse
 
         self._copy_metadata_to_dbr(dbr_metadata)
         return dbr_metadata, values
