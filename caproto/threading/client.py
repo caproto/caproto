@@ -249,14 +249,17 @@ class SharedBroadcaster:
                         with self.command_cond:
                             # TODO how does this work with multiple addresses
                             # listed?
-                            response = (('127.0.0.1', ca.EPICS_CA1_PORT),
-                                        [ca.RepeaterConfirmResponse(
-                                            repeater_address='127.0.0.1')]
-                                        )
-                            self.broadcaster.command_queue.put(response)
+                            response = ca.RepeaterConfirmResponse(
+                                repeater_address='127.0.0.1')
+                            response.sender_address = ('127.0.0.1',
+                                                       ca.EPICS_CA1_PORT)
+                            self.command_bundle_queue.put([response])
                             self.command_cond.notify_all()
                         continue
-                self.udp_sock.sendto(bytes_to_send, (host, port))
+                    self.udp_sock.sendto(bytes_to_send, (host,
+                                                         int(specified_port)))
+                else:
+                    self.udp_sock.sendto(bytes_to_send, (host, port))
 
     def register(self, *, wait=True, timeout=0.5, attempts=4):
         "Register this client with the CA Repeater."
@@ -517,7 +520,8 @@ class VirtualCircuit:
                 if hasattr(ex, 'channel'):
                     channel = ex.channel
                     logger.warning('Invalid command %s for Channel %s in '
-                                   'state %s', command, channel, channel.states,
+                                   'state %s', command, channel,
+                                   channel.states,
                                    exc_info=ex)
                     # channel exceptions are not fatal
                     continue

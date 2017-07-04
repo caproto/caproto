@@ -1,6 +1,7 @@
-import logging
+import caproto
+import caproto._utils
+import caproto.threading.client
 import time
-from multiprocessing import Process
 
 from caproto.threading.client import PVContext
 import pytest
@@ -97,3 +98,27 @@ def test_put_complete(cntx):
     time.sleep(0.1)
     print('last_reading', pv.chid.last_reading)
     assert 'T4' in mutable
+
+
+def test_specified_port(monkeypatch, cntx):
+    pv = cntx.get_pv('Py:ao3')
+    pv.wait_for_connection()
+    circuit = pv.chid.circuit.circuit
+    address_list = list(caproto.get_address_list())
+    address_list.append('{}:{}'.format(circuit.host, circuit.port))
+
+    def get_address_list():
+        return address_list
+
+    for module in (caproto._utils, caproto, caproto.threading.client):
+        if hasattr(module, 'get_address_list'):
+            print('patching', module)
+            monkeypatch.setattr(module, 'get_address_list', get_address_list)
+
+    print()
+    print('- address list is now:', address_list)
+    new_cntx = PVContext(log_level='DEBUG')
+    pv1 = new_cntx.get_pv('Py:ao1')
+    pv1.get()
+    assert pv1.connected
+    new_cntx.disconnect()
