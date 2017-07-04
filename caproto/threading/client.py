@@ -491,7 +491,22 @@ class VirtualCircuit:
     def command_thread_loop(self):
         while True:
             command = self.command_queue.get()
-            self.circuit.process_command(command)
+            try:
+                self.circuit.process_command(command)
+            except ca.CaprotoError as ex:
+                if hasattr(ex, 'channel'):
+                    channel = ex.channel
+                    logger.warning('Invalid command %s for Channel %s in '
+                                   'state %s', command, channel, channel.states,
+                                   exc_info=ex)
+                    # channel exceptions are not fatal
+                    continue
+                else:
+                    logger.error('Invalid command %s for VirtualCircuit %s in '
+                                 'state %s', command, self, self.circuit.states,
+                                 exc_info=ex)
+                    # circuit exceptions are fatal; exit the loop
+                    break
 
             with self.new_command_cond:
                 if command is ca.DISCONNECTED:
