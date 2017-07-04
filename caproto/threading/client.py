@@ -10,6 +10,7 @@ import weakref
 import selectors
 import array
 import fcntl
+import errno
 import termios
 import struct
 import inspect
@@ -155,7 +156,10 @@ class SelectorThread:
                         raise OSError('ioctl failed')
                     bytes_available = struct.unpack('I', avail_buf)[0]
                     bytes_recv, address = sock.recvfrom(bytes_available)
-                except OSError:
+                except OSError as ex:
+                    if ex.errno == errno.EAGAIN and bytes_available == 0:
+                        continue
+
                     bytes_recv, address = b'', None
 
                 try:
