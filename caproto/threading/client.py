@@ -684,7 +684,7 @@ class Channel:
                                          not self.connected),
                                 self.circuit.new_command_cond,
                                 timeout)
-        if not self.connected:
+        if ioid in self.circuit.ioids and not self.connected:
             raise DisconnectedError('disconnected during read request')
 
         return self.last_reading
@@ -705,7 +705,7 @@ class Channel:
                                              not self.connected),
                                     self.circuit.new_command_cond,
                                     timeout)
-            if not self.connected:
+            if ioid in self.circuit.ioids and not self.connected:
                 raise DisconnectedError('disconnected during write request')
 
     def subscribe(self, *args, **kwargs):
