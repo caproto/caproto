@@ -320,7 +320,12 @@ class SharedBroadcaster:
     def command_loop(self):
         while True:
             commands = self.command_bundle_queue.get()
-            self.broadcaster.process_commands(commands)
+            try:
+                self.broadcaster.process_commands(commands)
+            except ca.CaprotoError as ex:
+                logger.warning('Broadcaster command error', exc_info=ex)
+                continue
+
             with self.command_cond:
                 for command in commands:
                     if isinstance(command, ca.VersionResponse):
