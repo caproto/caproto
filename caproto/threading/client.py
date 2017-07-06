@@ -144,33 +144,32 @@ class SelectorThread:
                 self._register_sockets.clear()
 
             events = self.selector.select(timeout=0.1)
-            for key, mask in events:
-                sock = key.fileobj
-                try:
-                    obj_id = self.socket_to_id[sock]
-                except KeyError:
+            with self._socket_map_lock:
+                if self._unregister_sockets or self._register_sockets:
                     continue
 
+                ready_ids = [self.socket_to_id[key.fileobj]
+                             for key, mask in events]
+                ready_objs = [(self.objects[obj_id], self.id_to_socket[obj_id])
+                              for obj_id in ready_ids]
+
+            for obj, sock in ready_objs:
                 # TODO: consider thread pool for recv and command_loop
 
-                try:
-                    if fcntl.ioctl(sock, termios.FIONREAD, avail_buf) < 0:
-                        raise OSError('ioctl failed')
-                    bytes_available = struct.unpack('I', avail_buf)[0]
-                    bytes_recv, address = sock.recvfrom(bytes_available)
-                except OSError as ex:
-                    if ex.errno == errno.EAGAIN and bytes_available == 0:
-                        continue
+                if fcntl.ioctl(sock, termios.FIONREAD, avail_buf) < 0:
+                    continue
 
+                bytes_available = avail_buf[0]
+
+                try:
+                    bytes_recv, address = sock.recvfrom(max((4096,
+                                                             bytes_available)))
+                except OSError as ex:
+                    if ex.errno == errno.EAGAIN:
+                        continue
                     bytes_recv, address = b'', None
 
-                try:
-                    obj = self.objects[obj_id]
-                except KeyError:
-                    self._object_removed(obj_id)
-                    return
-                else:
-                    obj.received(bytes_recv, address)
+                obj.received(bytes_recv, address)
 
 
 class SharedBroadcaster:
