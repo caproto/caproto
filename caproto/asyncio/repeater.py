@@ -35,7 +35,6 @@ class RepeaterAlreadyRunning(RuntimeError):
 class ProxyDatagramProtocol(asyncio.DatagramProtocol):
 
     def __init__(self):
-        self.host = socket.gethostbyname(socket.gethostname())
         self.remotes = {}
 
         self.broadcaster = caproto.Broadcaster(our_role=caproto.SERVER)
