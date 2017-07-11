@@ -160,6 +160,8 @@ class CurioVirtualCircuit:
 
         if command is ca.DISCONNECTED:
             raise DisconnectedCircuit()
+        elif isinstance(command, ca.VersionRequest):
+            return [ca.VersionResponse(13)]
         elif isinstance(command, ca.CreateChanRequest):
             db_entry = self.context.pvdb[command.name.decode(SERVER_ENCODING)]
             access = db_entry.check_access(self.client_hostname,
