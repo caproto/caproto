@@ -1,9 +1,10 @@
 import os
 import sys
 import pytest
-import queue
+import functools
 import subprocess
 import time
+import curio
 
 import caproto as ca
 import caproto.asyncio.repeater
@@ -59,3 +60,33 @@ def circuit_pair(request):
     for command in commands:
         cli_circuit.process_command(command)
     return cli_circuit, srv_circuit
+
+
+def threaded_in_curio_wrapper(fcn):
+    '''Run a threaded test with curio support
+
+    Usage
+    -----
+    Wrap the threaded function using this wrapper, call the wrapped function
+    using `curio.run_in_thread` and then await wrapped_function.wait() inside
+    the test kernel.
+    '''
+    uqueue = curio.UniversalQueue()
+
+    @functools.wraps(fcn)
+    def wrapped():
+        try:
+            fcn()
+        except Exception as ex:
+            uqueue.put(ex)
+        else:
+            uqueue.put(None)
+
+    async def wait():
+        'Wait for the test function completion'
+        res = await uqueue.get()
+        if res is not None:
+            raise res
+
+    wrapped.wait = wait
+    return wrapped
