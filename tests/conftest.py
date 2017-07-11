@@ -1,7 +1,9 @@
+import curio
+import functools
 import os
-import sys
 import pytest
 import subprocess
+import sys
 import time
 
 import caproto as ca
@@ -76,3 +78,33 @@ except ImportError as ex:
 else:
     from _asv_shim import get_conftest_globals
     globals().update(**get_conftest_globals())
+
+
+def threaded_in_curio_wrapper(fcn):
+    '''Run a threaded test with curio support
+
+    Usage
+    -----
+    Wrap the threaded function using this wrapper, call the wrapped function
+    using `curio.run_in_thread` and then await wrapped_function.wait() inside
+    the test kernel.
+    '''
+    uqueue = curio.UniversalQueue()
+
+    @functools.wraps(fcn)
+    def wrapped():
+        try:
+            fcn()
+        except Exception as ex:
+            uqueue.put(ex)
+        else:
+            uqueue.put(None)
+
+    async def wait():
+        'Wait for the test function completion'
+        res = await uqueue.get()
+        if res is not None:
+            raise res
+
+    wrapped.wait = wait
+    return wrapped

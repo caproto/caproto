@@ -244,7 +244,6 @@ def test_curio_server_example():
         assert len(commands) == 2 + 2 + 2
 
     async def task():
-        # os.environ['EPICS_CA_ADDR_LIST'] = '255.255.255.255'
         try:
             server_task = await curio.spawn(server_main(pvdb))
             await curio.sleep(1)  # Give server some time to start up.
@@ -258,3 +257,49 @@ def test_curio_server_example():
     with kernel:
         kernel.run(task)
     print('done')
+
+
+def test_curio_server_and_thread_client(curio_server):
+    from caproto.threading.client import (SharedBroadcaster, PV,
+                                          PVContext)
+    from conftest import threaded_in_curio_wrapper
+
+    @threaded_in_curio_wrapper
+    def client_test():
+        shared_broadcaster = SharedBroadcaster()
+        cntx = PVContext(broadcaster=shared_broadcaster, log_level='DEBUG')
+
+        pv = PV('int', context=cntx)
+        assert pv.get() == caget_pvdb['int'].value
+        print('get', pv.get())
+
+        monitor_values = []
+
+        def callback(value=None, **kwargs):
+            print('monitor', value)
+            monitor_values.append(value[0])
+
+        pv.add_callback(callback)
+        pv.put(1, wait=True)
+        pv.put(2, wait=True)
+        pv.put(3, wait=True)
+
+        for i in range(3):
+            if pv.get() == 3:
+                break
+            else:
+                time.sleep(0.1)
+
+        assert len(monitor_values) == 4
+
+    async def task():
+        server_task = await curio.spawn(curio_server)
+
+        try:
+            await curio.run_in_thread(client_test)
+            await client_test.wait()
+        finally:
+            await server_task.cancel()
+
+    with curio.Kernel() as kernel:
+        kernel.run(task)
