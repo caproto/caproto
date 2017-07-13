@@ -1499,7 +1499,7 @@ def cainfo(pvname, print_out=True):
         thispv.get()
         thispv.get_ctrlvars()
         if print_out:
-            ca.write(thispv.info)
+            print(thispv.info)
         else:
             return thispv.info
 
