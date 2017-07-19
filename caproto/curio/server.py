@@ -179,7 +179,7 @@ class CurioVirtualCircuit:
             self.client_username = command.name.decode(SERVER_ENCODING)
         elif isinstance(command, ca.ReadNotifyRequest):
             chan, db_entry = get_db_entry()
-            metadata, data = db_entry.get_dbr_data(command.data_type)
+            metadata, data = await db_entry.get_dbr_data(command.data_type)
             return [chan.read(data=data, data_type=command.data_type,
                               data_count=len(data), status=1,
                               ioid=command.ioid, metadata=metadata)
@@ -232,7 +232,7 @@ class CurioVirtualCircuit:
             self.subscriptions[db_entry].append(sub)
 
             # send back a first monitor always
-            metadata, data = db_entry.get_dbr_data(command.data_type)
+            metadata, data = await db_entry.get_dbr_data(command.data_type)
             return [chan.subscribe(data=data, data_type=command.data_type,
                                    data_count=len(data),
                                    subscriptionid=command.subscriptionid,

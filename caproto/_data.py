@@ -152,7 +152,7 @@ class ChannelAlarmStatus:
         instance._set_instance_from_dbr(dbr)
         return instance
 
-    def get_dbr_data(self, dbr=None):
+    async def get_dbr_data(self, dbr=None):
         if dbr is None:
             dbr = DBR_STSACK_STRING()
         dbr.status = self.status
@@ -240,7 +240,7 @@ class ChannelData:
                               string_encoding=self.string_encoding,
                               enum_strings=getattr(self, 'enum_strings', None))
 
-    def get_dbr_data(self, type_):
+    async def get_dbr_data(self, type_):
         '''Get DBR data and native data, converted to a specific type'''
         # special cases for alarm strings and class name
         if type_ == ChType.STSACK_STRING:
