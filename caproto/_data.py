@@ -377,10 +377,12 @@ class ChannelEnum(ChannelData):
 
 
 class ChannelNumeric(ChannelData):
-    def __init__(self, *, units='', upper_disp_limit=0, lower_disp_limit=0,
+    def __init__(self, *, units='',
+                 upper_disp_limit=0, lower_disp_limit=0,
                  upper_alarm_limit=0, upper_warning_limit=0,
                  lower_warning_limit=0, lower_alarm_limit=0,
-                 upper_ctrl_limit=0, lower_ctrl_limit=0, **kwargs):
+                 upper_ctrl_limit=0, lower_ctrl_limit=0,
+                 **kwargs):
 
         super().__init__(**kwargs)
         self.units = units
