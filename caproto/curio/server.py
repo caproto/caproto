@@ -368,7 +368,7 @@ class Context:
                     try:
                         cmd = commands[data_type]
                     except KeyError:
-                        metadata, data = db_entry.get_dbr_data(data_type)
+                        metadata, data = await db_entry.get_dbr_data(data_type)
                         cmd = chan.subscribe(data=data, data_type=data_type,
                                              data_count=len(data),
                                              subscriptionid=0,

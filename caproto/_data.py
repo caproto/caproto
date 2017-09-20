@@ -244,7 +244,8 @@ class ChannelData:
         '''Get DBR data and native data, converted to a specific type'''
         # special cases for alarm strings and class name
         if type_ == ChType.STSACK_STRING:
-            return (self.alarm.get_dbr_data(), b'')
+            ret = await self.alarm.get_dbr_data()
+            return (ret, b'')
         elif type_ == ChType.CLASS_NAME:
             class_name = DBR_TYPES[type_]()
             rtyp = self.reported_record_type.encode(self.string_encoding)
