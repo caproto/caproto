@@ -231,14 +231,13 @@ class ChannelData:
             class_name.value = rtyp
             return class_name, b''
 
-        # for native types, there is no dbr metadata - just data
         native_to = native_type(data_type)
         values = convert_values(values=self.data, from_dtype=self.data_type,
                                 to_dtype=native_to,
                                 string_encoding=self.string_encoding,
                                 enum_strings=getattr(self, 'enum_strings', None))
 
-
+        # for native types, there is no dbr metadata - just data
         if data_type in native_types:
             return b'', values
 
