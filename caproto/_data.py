@@ -171,14 +171,14 @@ class ChannelData:
     # subclass must define a `data_type` class attribute, set to a value of the
     # ChType enum
 
-    def __init__(self, *, value=None, timestamp=None, status=0, severity=0,
+    def __init__(self, *, data=None, timestamp=None, status=0, severity=0,
                  string_encoding='latin-1', alarm_status=None,
                  reported_record_type='caproto'):
         '''Metadata and Data for a single caproto Channel
 
         Parameters
         ----------
-        value :
+        data : tuple, ``numpy.ndarray``, ``array.array``, or bytes
             Data which has to match with this class's data_type
         timestamp : float, optional
             Posix timestamp associated with the value
@@ -207,7 +207,7 @@ class ChannelData:
         else:
             self.alarm = ChannelAlarmStatus(status=status, severity=severity,
                                             channel_data=self)
-        self.value = value
+        self.data = data
         self.string_encoding = string_encoding
         self.reported_record_type = reported_record_type
         self._subscription_queue = None
@@ -219,10 +219,10 @@ class ChannelData:
         self._subscription_queue = queue
         self._subscription_queue_args = sub_queue_args
 
-    def fromtype(self, values, data_type):
-        '''Convenience function to convert given values to this data type'''
+    def fromtype(self, data, data_type):
+        '''Convenience function to convert given data to this data type'''
         native_from = native_type(data_type)
-        return convert_values(values=values, from_dtype=native_from,
+        return convert_values(values=data, from_dtype=native_from,
                               to_dtype=self.data_type,
                               string_encoding=self.string_encoding,
                               enum_strings=getattr(self, 'enum_strings', None))
@@ -230,7 +230,7 @@ class ChannelData:
     def astype(self, to_dtype):
         '''Convenience function: convert stored data to a specific type'''
         native_to = native_type(to_dtype)
-        return convert_values(values=self.value, from_dtype=self.data_type,
+        return convert_values(values=self.data, from_dtype=self.data_type,
                               to_dtype=native_to,
                               string_encoding=self.string_encoding,
                               enum_strings=getattr(self, 'enum_strings', None))
@@ -265,12 +265,12 @@ class ChannelData:
 
     async def set_dbr_data(self, data, data_type, metadata):
         '''Set data from DBR metadata/values'''
-        self.value = self.fromtype(values=data, data_type=data_type)
+        self.data = self.fromtype(data=data, data_type=data_type)
         self.timestamp = time.time()
         if self._subscription_queue is not None:
             await self._subscription_queue.put((self,
                                                 SubscriptionType.DBE_VALUE,
-                                                self.value) +
+                                                self.data) +
                                                self._subscription_queue_args)
 
     def _copy_metadata_to_dbr(self, dbr_metadata):
@@ -345,7 +345,7 @@ class ChannelData:
 
     def __len__(self):
         try:
-            return len(self.value)
+            return len(self.data)
         except TypeError:
             return 1
 
