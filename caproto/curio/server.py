@@ -179,7 +179,7 @@ class CurioVirtualCircuit:
             self.client_username = command.name.decode(SERVER_ENCODING)
         elif isinstance(command, ca.ReadNotifyRequest):
             chan, db_entry = get_db_entry()
-            metadata, data = db_entry.get_dbr_data(command.data_type)
+            metadata, data = await db_entry.get_dbr_data(command.data_type)
             return [chan.read(data=data, data_type=command.data_type,
                               data_count=len(data), status=1,
                               ioid=command.ioid, metadata=metadata)
@@ -232,7 +232,7 @@ class CurioVirtualCircuit:
             self.subscriptions[db_entry].append(sub)
 
             # send back a first monitor always
-            metadata, data = db_entry.get_dbr_data(command.data_type)
+            metadata, data = await db_entry.get_dbr_data(command.data_type)
             return [chan.subscribe(data=data, data_type=command.data_type,
                                    data_count=len(data),
                                    subscriptionid=command.subscriptionid,
@@ -368,7 +368,7 @@ class Context:
                     try:
                         cmd = commands[data_type]
                     except KeyError:
-                        metadata, data = db_entry.get_dbr_data(data_type)
+                        metadata, data = await db_entry.get_dbr_data(data_type)
                         cmd = chan.subscribe(data=data, data_type=data_type,
                                              data_count=len(data),
                                              subscriptionid=0,
@@ -431,6 +431,9 @@ async def _test(pvdb=None):
                 'enum': ChannelEnum(value='b',
                                     enum_strings=['a', 'b', 'c', 'd'],
                                     ),
+                'enum2': ChannelEnum(value='bb',
+                                     enum_strings=['aa', 'bb', 'cc', 'dd'],
+                                     ),
                 'int': ChannelInteger(value=96,
                                       units='doodles',
                                       ),
@@ -445,6 +448,7 @@ async def _test(pvdb=None):
                                        lower_ctrl_limit=30,
                                        upper_ctrl_limit=38,
                                        ),
+                'chararray': ca.ChannelChar(value=b'1234567890' * 2),
                 'str': ca.ChannelString(value='hello',
                                         string_encoding='latin-1'),
                 'stra': ca.ChannelString(value=['hello', 'how is it', 'going'],

@@ -11,6 +11,9 @@ from ._dbr import (DBR_TYPES, ChType, promote_type, native_type,
 
 
 def _convert_enum_values(values, to_dtype, string_encoding, enum_strings):
+    if isinstance(values, (str, bytes)):
+        values = [values]
+
     if to_dtype == ChType.STRING:
         return [value.encode(string_encoding) for value in values]
     else:
@@ -38,7 +41,26 @@ def _convert_char_values(values, to_dtype, string_encoding, enum_strings):
 
 
 def _convert_string_values(values, to_dtype, string_encoding, enum_strings):
-    if to_dtype in native_int_types or to_dtype in native_float_types:
+    if to_dtype == ChType.ENUM:
+        if not isinstance(values, (str, bytes)):
+            values = values[0]
+        if enum_strings:
+            if isinstance(values, bytes):
+                byte_value = values
+                str_value = values.decode(string_encoding)
+            else:
+                byte_value = values.encode(string_encoding)
+                str_value = values
+
+            if byte_value in enum_strings:
+                return byte_value
+            elif str_value in enum_strings:
+                return str_value
+            else:
+                raise ValueError('Invalid enum string')
+        else:
+            return 0
+    elif to_dtype in native_int_types or to_dtype in native_float_types:
         return np.asarray(values).astype(_numpy_map[to_dtype])
 
     if isinstance(values, str):
@@ -130,7 +152,7 @@ class ChannelAlarmStatus:
         instance._set_instance_from_dbr(dbr)
         return instance
 
-    def get_dbr_data(self, dbr=None):
+    async def get_dbr_data(self, dbr=None):
         if dbr is None:
             dbr = DBR_STSACK_STRING()
         dbr.status = self.status
@@ -218,11 +240,12 @@ class ChannelData:
                               string_encoding=self.string_encoding,
                               enum_strings=getattr(self, 'enum_strings', None))
 
-    def get_dbr_data(self, type_):
+    async def get_dbr_data(self, type_):
         '''Get DBR data and native data, converted to a specific type'''
         # special cases for alarm strings and class name
         if type_ == ChType.STSACK_STRING:
-            return (self.alarm.get_dbr_data(), b'')
+            ret = await self.alarm.get_dbr_data()
+            return (ret, b'')
         elif type_ == ChType.CLASS_NAME:
             class_name = DBR_TYPES[type_]()
             rtyp = self.reported_record_type.encode(self.string_encoding)
@@ -249,6 +272,7 @@ class ChannelData:
     async def set_dbr_data(self, data, data_type, metadata):
         '''Set data from DBR metadata/values'''
         self.value = self.fromtype(values=data, data_type=data_type)
+        self.timestamp = time.time()
         if self._subscription_queue is not None:
             await self._subscription_queue.put((self,
                                                 SubscriptionType.DBE_VALUE,
@@ -354,10 +378,12 @@ class ChannelEnum(ChannelData):
 
 
 class ChannelNumeric(ChannelData):
-    def __init__(self, *, units='', upper_disp_limit=0, lower_disp_limit=0,
+    def __init__(self, *, units='',
+                 upper_disp_limit=0, lower_disp_limit=0,
                  upper_alarm_limit=0, upper_warning_limit=0,
                  lower_warning_limit=0, lower_alarm_limit=0,
-                 upper_ctrl_limit=0, lower_ctrl_limit=0, **kwargs):
+                 upper_ctrl_limit=0, lower_ctrl_limit=0,
+                 **kwargs):
 
         super().__init__(**kwargs)
         self.units = units
@@ -387,6 +413,10 @@ class ChannelDouble(ChannelNumeric):
 class ChannelChar(ChannelNumeric):
     # 'Limits' on chars do not make much sense and are rarely used.
     data_type = ChType.CHAR
+
+    def __init__(self, *, max_length=100, **kwargs):
+        super().__init__(**kwargs)
+        self.max_length = max_length
 
 
 class ChannelString(ChannelData):
