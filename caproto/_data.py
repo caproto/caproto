@@ -168,16 +168,17 @@ class ChannelAlarmStatus:
 
 
 class ChannelData:
-    data_type = ChType.LONG
+    # subclass must define a `data_type` class attribute, set to a value of the
+    # ChType enum
 
-    def __init__(self, *, value=None, timestamp=None, status=0, severity=0,
+    def __init__(self, *, data=None, timestamp=None, status=0, severity=0,
                  string_encoding='latin-1', alarm_status=None,
                  reported_record_type='caproto'):
         '''Metadata and Data for a single caproto Channel
 
         Parameters
         ----------
-        value :
+        data : tuple, ``numpy.ndarray``, ``array.array``, or bytes
             Data which has to match with this class's data_type
         timestamp : float, optional
             Posix timestamp associated with the value
@@ -206,77 +207,61 @@ class ChannelData:
         else:
             self.alarm = ChannelAlarmStatus(status=status, severity=severity,
                                             channel_data=self)
-        self.value = value
+        self.data = data
         self.string_encoding = string_encoding
         self.reported_record_type = reported_record_type
         self._subscription_queue = None
-        self._dbr_metadata = {
-            chtype: DBR_TYPES[chtype]()
-            for chtype in (promote_type(self.data_type, use_ctrl=True),
-                           promote_type(self.data_type, use_time=True),
-                           promote_type(self.data_type, use_status=True),
-                           promote_type(self.data_type, use_gr=True),
-                           )
-        }
+        # cache DBR_* structs, filled on demand
+        self._dbr_metadata = {}
 
     def subscribe(self, queue, *sub_queue_args):
         '''Set subscription queue'''
         self._subscription_queue = queue
         self._subscription_queue_args = sub_queue_args
 
-    def fromtype(self, values, data_type):
-        '''Convenience function to convert given values to this data type'''
-        native_from = native_type(data_type)
-        return convert_values(values=values, from_dtype=native_from,
-                              to_dtype=self.data_type,
-                              string_encoding=self.string_encoding,
-                              enum_strings=getattr(self, 'enum_strings', None))
-
-    def astype(self, to_dtype):
-        '''Convenience function: convert stored data to a specific type'''
-        native_to = native_type(to_dtype)
-        return convert_values(values=self.value, from_dtype=self.data_type,
-                              to_dtype=native_to,
-                              string_encoding=self.string_encoding,
-                              enum_strings=getattr(self, 'enum_strings', None))
-
-    async def get_dbr_data(self, type_):
+    async def get_dbr_data(self, data_type):
         '''Get DBR data and native data, converted to a specific type'''
         # special cases for alarm strings and class name
-        if type_ == ChType.STSACK_STRING:
+        if data_type == ChType.STSACK_STRING:
             ret = await self.alarm.get_dbr_data()
             return (ret, b'')
-        elif type_ == ChType.CLASS_NAME:
-            class_name = DBR_TYPES[type_]()
+        elif data_type == ChType.CLASS_NAME:
+            class_name = DBR_TYPES[data_type]()
             rtyp = self.reported_record_type.encode(self.string_encoding)
             class_name.value = rtyp
             return class_name, b''
 
-        # for native types, there is no dbr metadata - just data
-        native_to = native_type(type_)
-        values = self.astype(native_to)
+        native_to = native_type(data_type)
+        values = convert_values(values=self.data, from_dtype=self.data_type,
+                                to_dtype=native_to,
+                                string_encoding=self.string_encoding,
+                                enum_strings=getattr(self, 'enum_strings', None))
 
-        if type_ in native_types:
+        # for native types, there is no dbr metadata - just data
+        if data_type in native_types:
             return b'', values
 
-        if type_ in self._dbr_metadata:
-            dbr_metadata = self._dbr_metadata[type_]
-        else:
-            # TODO: non-standard type request. frequent ones probably should be
-            # cached?
-            dbr_metadata = DBR_TYPES[type_]()
+        try:
+            dbr_metadata = self._dbr_metadata[data_type]
+        except KeyError:
+            dbr_metadata = DBR_TYPES[data_type]()
+            self._dbr_metadata[data_type] = dbr_metadata  # cache for reuse
 
         self._copy_metadata_to_dbr(dbr_metadata)
         return dbr_metadata, values
 
-    async def set_dbr_data(self, data, data_type, metadata):
+    async def set_dbr_data(self, data, data_type, data_count):
         '''Set data from DBR metadata/values'''
-        self.value = self.fromtype(values=data, data_type=data_type)
+        native_from = native_type(data_type)
+        self.data = convert_values(values=data, from_dtype=native_from,
+                                   to_dtype=self.data_type,
+                                   string_encoding=self.string_encoding,
+                                   enum_strings=getattr(self, 'enum_strings', None))
         self.timestamp = time.time()
         if self._subscription_queue is not None:
             await self._subscription_queue.put((self,
                                                 SubscriptionType.DBE_VALUE,
-                                                self.value) +
+                                                self.data) +
                                                self._subscription_queue_args)
 
     def _copy_metadata_to_dbr(self, dbr_metadata):
@@ -323,7 +308,12 @@ class ChannelData:
 
     @property
     def epics_timestamp(self):
-        'EPICS timestamp as (seconds, nanoseconds) since EPICS epoch'
+        """
+        EPICS timestamp as (seconds, nanoseconds) since EPICS epoch
+
+        The innocent may be surprised to learn that the EPICS epoch is not the
+        same as the UNIX epoch.
+        """
         return timestamp_to_epics(self.timestamp)
 
     @property
@@ -346,7 +336,7 @@ class ChannelData:
 
     def __len__(self):
         try:
-            return len(self.value)
+            return len(self.data)
         except TypeError:
             return 1
 

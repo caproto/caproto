@@ -238,10 +238,10 @@ async def run_caget(pv, *, dbr_type=None):
         raise RuntimeError('caget failed: {}'.format(stderr))
 
     if wide_mode:
-        pv, timestamp, value, stat, sevr = lines[0].split(sep)
+        pv, timestamp, data, stat, sevr = lines[0].split(sep)
         info = dict(pv=pv,
                     timestamp=timestamp,
-                    value=value,
+                    data=data,
                     status=stat,
                     severity=sevr)
     else:
@@ -304,7 +304,7 @@ str_alarm_status = ca.ChannelAlarmStatus(
 )
 
 caget_pvdb = {
-    'pi': ca.ChannelDouble(value=3.14,
+    'pi': ca.ChannelDouble(data=3.14,
                            lower_disp_limit=3.13,
                            upper_disp_limit=3.15,
                            lower_alarm_limit=3.12,
@@ -316,10 +316,10 @@ caget_pvdb = {
                            precision=5,
                            units='doodles',
                            ),
-    'enum': ca.ChannelEnum(value='b',
+    'enum': ca.ChannelEnum(data='b',
                            enum_strings=['a', 'b', 'c', 'd'],
                            ),
-    'int': ca.ChannelInteger(value=33,
+    'int': ca.ChannelInteger(data=33,
                              units='poodles',
                              lower_disp_limit=33,
                              upper_disp_limit=35,
@@ -330,7 +330,7 @@ caget_pvdb = {
                              lower_ctrl_limit=30,
                              upper_ctrl_limit=38,
                              ),
-    'char': ca.ChannelChar(value=b'3',
+    'char': ca.ChannelChar(data=b'3',
                            units='poodles',
                            lower_disp_limit=33,
                            upper_disp_limit=35,
@@ -341,7 +341,7 @@ caget_pvdb = {
                            lower_ctrl_limit=30,
                            upper_ctrl_limit=38,
                            ),
-    'str': ca.ChannelString(value='hello',
+    'str': ca.ChannelString(data='hello',
                             alarm_status=str_alarm_status,
                             reported_record_type='caproto'),
     }
@@ -409,7 +409,7 @@ def test_curio_server_with_caget(curio_server, pv, dbr_type):
         print('dbr_type', dbr_type, 'data:')
         print(data)
 
-        db_value = db_entry.value
+        db_value = db_entry.data
 
         # convert from string value to enum if requesting int
         if (db_native == ChType.ENUM and

@@ -192,7 +192,8 @@ class CurioVirtualCircuit:
                 '''Wait for an asynchronous caput to finish'''
                 try:
                     write_status = await db_entry.set_dbr_data(
-                        command.data, command.data_type, command.metadata)
+                        command.data, command.data_type, command.data_count,
+                        command.metadata)
                 except Exception as ex:
                     cid = self.circuit.channels_sid[command.sid].cid
                     response_command = ca.ErrorResponse(
@@ -416,7 +417,7 @@ class Context:
 async def _test(pvdb=None):
     logger.setLevel('DEBUG')
     if pvdb is None:
-        pvdb = {'pi': ChannelDouble(value=3.14,
+        pvdb = {'pi': ChannelDouble(data=3.14,
                                     lower_disp_limit=3.13,
                                     upper_disp_limit=3.15,
                                     lower_alarm_limit=3.12,
@@ -428,16 +429,16 @@ async def _test(pvdb=None):
                                     precision=5,
                                     units='doodles',
                                     ),
-                'enum': ChannelEnum(value='b',
+                'enum': ChannelEnum(data='b',
                                     enum_strings=['a', 'b', 'c', 'd'],
                                     ),
-                'enum2': ChannelEnum(value='bb',
+                'enum2': ChannelEnum(data='bb',
                                      enum_strings=['aa', 'bb', 'cc', 'dd'],
                                      ),
-                'int': ChannelInteger(value=96,
+                'int': ChannelInteger(data=96,
                                       units='doodles',
                                       ),
-                'char': ca.ChannelChar(value=b'3',
+                'char': ca.ChannelChar(data=b'3',
                                        units='poodles',
                                        lower_disp_limit=33,
                                        upper_disp_limit=35,
@@ -448,10 +449,10 @@ async def _test(pvdb=None):
                                        lower_ctrl_limit=30,
                                        upper_ctrl_limit=38,
                                        ),
-                'chararray': ca.ChannelChar(value=b'1234567890' * 2),
-                'str': ca.ChannelString(value='hello',
+                'chararray': ca.ChannelChar(data=b'1234567890' * 2),
+                'str': ca.ChannelString(data='hello',
                                         string_encoding='latin-1'),
-                'stra': ca.ChannelString(value=['hello', 'how is it', 'going'],
+                'stra': ca.ChannelString(data=['hello', 'how is it', 'going'],
                                          string_encoding='latin-1'),
                 }
         pvdb['pi'].alarm.alarm_string = 'delicious'
