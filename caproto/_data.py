@@ -219,53 +219,45 @@ class ChannelData:
         self._subscription_queue = queue
         self._subscription_queue_args = sub_queue_args
 
-    def fromtype(self, data, data_type):
-        '''Convenience function to convert given data to this data type'''
-        native_from = native_type(data_type)
-        return convert_values(values=data, from_dtype=native_from,
-                              to_dtype=self.data_type,
-                              string_encoding=self.string_encoding,
-                              enum_strings=getattr(self, 'enum_strings', None))
-
-    def astype(self, to_dtype):
-        '''Convenience function: convert stored data to a specific type'''
-        native_to = native_type(to_dtype)
-        return convert_values(values=self.data, from_dtype=self.data_type,
-                              to_dtype=native_to,
-                              string_encoding=self.string_encoding,
-                              enum_strings=getattr(self, 'enum_strings', None))
-
-    async def get_dbr_data(self, type_):
+    async def get_dbr_data(self, data_type):
         '''Get DBR data and native data, converted to a specific type'''
         # special cases for alarm strings and class name
-        if type_ == ChType.STSACK_STRING:
+        if data_type == ChType.STSACK_STRING:
             ret = await self.alarm.get_dbr_data()
             return (ret, b'')
-        elif type_ == ChType.CLASS_NAME:
-            class_name = DBR_TYPES[type_]()
+        elif data_type == ChType.CLASS_NAME:
+            class_name = DBR_TYPES[data_type]()
             rtyp = self.reported_record_type.encode(self.string_encoding)
             class_name.value = rtyp
             return class_name, b''
 
         # for native types, there is no dbr metadata - just data
-        native_to = native_type(type_)
-        values = self.astype(native_to)
+        native_to = native_type(data_type)
+        values = convert_values(values=self.data, from_dtype=self.data_type,
+                                to_dtype=native_to,
+                                string_encoding=self.string_encoding,
+                                enum_strings=getattr(self, 'enum_strings', None))
 
-        if type_ in native_types:
+
+        if data_type in native_types:
             return b'', values
 
         try:
-            dbr_metadata = self._dbr_metadata[type_]
+            dbr_metadata = self._dbr_metadata[data_type]
         except KeyError:
-            dbr_metadata = DBR_TYPES[type_]()
-            self._dbr_metadata[type_] = dbr_metadata  # cache for reuse
+            dbr_metadata = DBR_TYPES[data_type]()
+            self._dbr_metadata[data_type] = dbr_metadata  # cache for reuse
 
         self._copy_metadata_to_dbr(dbr_metadata)
         return dbr_metadata, values
 
-    async def set_dbr_data(self, data, data_type, metadata):
+    async def set_dbr_data(self, data, data_type, data_count, metadata):
         '''Set data from DBR metadata/values'''
-        self.data = self.fromtype(data=data, data_type=data_type)
+        native_from = native_type(data_type)
+        self.data = convert_values(values=data, from_dtype=native_from,
+                                   to_dtype=self.data_type,
+                                   string_encoding=self.string_encoding,
+                                   enum_strings=getattr(self, 'enum_strings', None))
         self.timestamp = time.time()
         if self._subscription_queue is not None:
             await self._subscription_queue.put((self,

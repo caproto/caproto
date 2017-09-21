@@ -192,7 +192,8 @@ class CurioVirtualCircuit:
                 '''Wait for an asynchronous caput to finish'''
                 try:
                     write_status = await db_entry.set_dbr_data(
-                        command.data, command.data_type, command.metadata)
+                        command.data, command.data_type, command.data_count,
+                        command.metadata)
                 except Exception as ex:
                     cid = self.circuit.channels_sid[command.sid].cid
                     response_command = ca.ErrorResponse(
