@@ -418,9 +418,6 @@ class ChannelChar(ChannelNumeric):
         super().__init__(**kwargs)
         self.max_length = max_length
 
-    def __len__(self):
-        return self.max_length
-
 
 class ChannelString(ChannelData):
     data_type = ChType.STRING
