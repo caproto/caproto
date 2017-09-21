@@ -250,7 +250,7 @@ class ChannelData:
         self._copy_metadata_to_dbr(dbr_metadata)
         return dbr_metadata, values
 
-    async def set_dbr_data(self, data, data_type, data_count, metadata):
+    async def set_dbr_data(self, data, data_type, data_count):
         '''Set data from DBR metadata/values'''
         native_from = native_type(data_type)
         self.data = convert_values(values=data, from_dtype=native_from,
