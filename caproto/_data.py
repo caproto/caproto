@@ -250,14 +250,16 @@ class ChannelData:
         self._copy_metadata_to_dbr(dbr_metadata)
         return dbr_metadata, values
 
-    async def set_dbr_data(self, data, data_type, data_count):
+    async def set_dbr_data(self, data, data_type, timestamp=None):
         '''Set data from DBR metadata/values'''
         native_from = native_type(data_type)
         self.data = convert_values(values=data, from_dtype=native_from,
                                    to_dtype=self.data_type,
                                    string_encoding=self.string_encoding,
                                    enum_strings=getattr(self, 'enum_strings', None))
-        self.timestamp = time.time()
+        if timestamp is None:
+            timestamp = time.time()
+        self.timestamp = timestamp
         if self._subscription_queue is not None:
             await self._subscription_queue.put((self,
                                                 SubscriptionType.DBE_VALUE,
