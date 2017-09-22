@@ -10,6 +10,10 @@ from ._dbr import (DBR_TYPES, ChType, promote_type, native_type,
                    SubscriptionType)
 
 
+class Forbidden(Exception):
+    ...
+
+
 def _convert_enum_values(values, to_dtype, string_encoding, enum_strings):
     if isinstance(values, (str, bytes)):
         values = [values]
@@ -125,10 +129,18 @@ def convert_values(values, from_dtype, to_dtype, *, string_encoding='latin-1',
     return np.asarray(values).astype(_numpy_map[to_dtype])
 
 
-class ChannelAlarmStatus:
-    def __init__(self, *, channel_data=None, status=0, severity=0,
+class ChannelAlarm:
+    def __init__(self, *, status=0, severity=0,
                  acknowledge_transient=True, acknowledge_severity=0,
                  alarm_string=''):
+        """
+        Parameters
+        ----------
+        status : ca.AlarmStatus, optional
+            Alarm status
+        severity : ca.AlarmSeverity, optional
+            Alarm severity
+        """
         self.channel_data = channel_data
         self.status = status
         self.severity = severity
@@ -171,56 +183,46 @@ class ChannelData:
     # subclass must define a `data_type` class attribute, set to a value of the
     # ChType enum
 
-    def __init__(self, *, data=None, timestamp=None, status=0, severity=0,
-                 string_encoding='latin-1', alarm_status=None,
+    def __init__(self, *, alarm=None, string_encoding='latin-1',
                  reported_record_type='caproto'):
         '''Metadata and Data for a single caproto Channel
 
         Parameters
         ----------
-        data : tuple, ``numpy.ndarray``, ``array.array``, or bytes
-            Data which has to match with this class's data_type
-        timestamp : float, optional
-            Posix timestamp associated with the value
-            Defaults to `time.time()`
-        status : ca.AlarmStatus, optional
-            Alarm status
-        severity : ca.AlarmSeverity, optional
-            Alarm severity
-        string_encoding : str, optional
-            Encoding to use for strings, used both in and out
-        alarm_status : ChannelAlarmStatus, optional
+        alarm : ChannelAlarm, optional
             Optionally specify an allocated alarm status, which could be shared
             among several channels
+        string_encoding : str, optional
+            Encoding to use for strings, used both in and out
         reported_record_type : str, optional
             Though this is not a record, the channel access protocol supports
             querying the record type.  This can be set to mimic an actual
             record or be set to something arbitrary.
             Defaults to 'caproto'
         '''
-        if timestamp is None:
-            timestamp = time.time()
-        self.timestamp = timestamp
-        if alarm_status is not None:
-            self.alarm = alarm_status
-            self.alarm.channel_data = self
-        else:
-            self.alarm = ChannelAlarmStatus(status=status, severity=severity,
-                                            channel_data=self)
-        self.data = data
+        self.alarm = alarm
         self.string_encoding = string_encoding
         self.reported_record_type = reported_record_type
         self._subscription_queue = None
-        # cache DBR_* structs, filled on demand
+        # cache of DBR_* structs, filled on demand
         self._dbr_metadata = {}
+        self._initialized = False
 
     def subscribe(self, queue, *sub_queue_args):
         '''Set subscription queue'''
         self._subscription_queue = queue
         self._subscription_queue_args = sub_queue_args
 
-    async def get_dbr_data(self, data_type):
+    async def read(self, hostname, username, data_type, data_count=None):
         '''Get DBR data and native data, converted to a specific type'''
+        access = self.check_access(hostname, username)
+ 	if access not in (AccessRights.READ, AccessRights.READ_WRITE):
+            raise Forbidden("Client with hostname {} and username {} "
+                            "does not have permission to read."
+                            "".format(hostname, username))
+        if not self._initialized:
+            raise RuntimeError("Channel must be written to before "
+                               "it can be read.")
         # special cases for alarm strings and class name
         if data_type == ChType.STSACK_STRING:
             ret = await self.alarm.get_dbr_data()
@@ -232,14 +234,18 @@ class ChannelData:
             return class_name, b''
 
         native_to = native_type(data_type)
-        values = convert_values(values=self.data, from_dtype=self.data_type,
-                                to_dtype=native_to,
-                                string_encoding=self.string_encoding,
-                                enum_strings=getattr(self, 'enum_strings', None))
+        data = convert_values(values=self.data, from_dtype=self.data_type,
+                              to_dtype=native_to,
+                              string_encoding=self.string_encoding,
+                              enum_strings=getattr(self, 'enum_strings', None))
+
+        # TODO Do something with data_count
+        if data_count is not None:
+            raise NotImplementedError("cannot handle non-default data_count")
 
         # for native types, there is no dbr metadata - just data
         if data_type in native_types:
-            return b'', values
+            return b'', data
 
         try:
             dbr_metadata = self._dbr_metadata[data_type]
@@ -248,10 +254,26 @@ class ChannelData:
             self._dbr_metadata[data_type] = dbr_metadata  # cache for reuse
 
         self._copy_metadata_to_dbr(dbr_metadata)
-        return dbr_metadata, values
+        return dbr_metadata, data
 
-    async def set_dbr_data(self, data, data_type, timestamp=None):
-        '''Set data from DBR metadata/values'''
+    async def write(self, hostname, username, data, data_type, metadata=None):
+        """
+        Set data from DBR metadata/values
+
+        Parameters
+        ---------
+        data : tuple, ``numpy.ndarray``, ``array.array``, or bytes
+            Data which has to match with this class's data_type
+        data_type : a :class:`DBR_TYPE` or its designation integer ID
+        timestamp : float, optional
+            Posix timestamp associated with the value
+            Defaults to `time.time()`
+        """
+        access = self.check_access(hostname, username)
+ 	if access not in (AccessRights.WRITE, AccessRights.READ_WRITE):
+            raise Forbidden("Client with hostname {} and username {} "
+                            "does not have permission to read."
+                            "".format(hostname, username))
         native_from = native_type(data_type)
         self.data = convert_values(values=data, from_dtype=native_from,
                                    to_dtype=self.data_type,
@@ -343,8 +365,24 @@ class ChannelData:
             return 1
 
     def check_access(self, hostname, username):
-        print('{!r} from host {!r} has full access to {}'
-              ''.format(username, hostname, self))
+        """
+        This always returns AccessRights.READ_WRITE.
+
+        A subclass may override it to return one of
+        ``{AccessRights.READ, AccessRights.WRITE, AccessRights.READ_WRITE}``
+        based on the given ``hostname`` or ``username``.
+
+        Parameters
+        ----------
+        hostname : string
+            hostname of client requesting to read, subscribe, or write
+        username : string
+            username of client requesting to read, subscribe, or write
+
+        Returns
+        -------
+        access : AccessRights.READ_WRITE
+        """
         return AccessRights.READ_WRITE
 
 
