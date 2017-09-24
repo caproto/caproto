@@ -244,35 +244,35 @@ class ChannelData:
                               string_encoding=self.string_encoding,
                               enum_strings=getattr(self, 'enum_strings', None))
 
-    async def read(self, hostname, username, type_):
+    async def read(self, hostname, username, data_type):
         '''Get DBR data and native data, converted to a specific type'''
         access = self.check_access(hostname, username)
         if access not in (AccessRights.READ, AccessRights.READ_WRITE):
             raise Forbidden("Client with hostname {} and username {} cannot "
                             "read.".format(hostname, username))
         # special cases for alarm strings and class name
-        if type_ == ChType.STSACK_STRING:
+        if data_type == ChType.STSACK_STRING:
             ret = await self.alarm.read()
             return (ret, b'')
-        elif type_ == ChType.CLASS_NAME:
-            class_name = DBR_TYPES[type_]()
+        elif data_type == ChType.CLASS_NAME:
+            class_name = DBR_TYPES[data_type]()
             rtyp = self.reported_record_type.encode(self.string_encoding)
             class_name.value = rtyp
             return class_name, b''
 
         # for native types, there is no dbr metadata - just data
-        native_to = native_type(type_)
+        native_to = native_type(data_type)
         values = self.astype(native_to)
 
-        if type_ in native_types:
+        if data_type in native_types:
             return b'', values
 
-        if type_ in self._dbr_metadata:
-            dbr_metadata = self._dbr_metadata[type_]
+        if data_type in self._dbr_metadata:
+            dbr_metadata = self._dbr_metadata[data_type]
         else:
             # TODO: non-standard type request. frequent ones probably should be
             # cached?
-            dbr_metadata = DBR_TYPES[type_]()
+            dbr_metadata = DBR_TYPES[data_type]()
 
         self._copy_metadata_to_dbr(dbr_metadata)
         return dbr_metadata, values
