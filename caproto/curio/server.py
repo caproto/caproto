@@ -179,7 +179,9 @@ class CurioVirtualCircuit:
             self.client_username = command.name.decode(SERVER_ENCODING)
         elif isinstance(command, ca.ReadNotifyRequest):
             chan, db_entry = get_db_entry()
-            metadata, data = await db_entry.get_dbr_data(command.data_type)
+            metadata, data = await db_entry.read(self.client_hostname,
+                                                 self.client_username,
+                                                 command.data_type)
             return [chan.read(data=data, data_type=command.data_type,
                               data_count=len(data), status=1,
                               ioid=command.ioid, metadata=metadata)
@@ -191,8 +193,10 @@ class CurioVirtualCircuit:
             async def handle_write():
                 '''Wait for an asynchronous caput to finish'''
                 try:
-                    write_status = await db_entry.set_dbr_data(
-                        command.data, command.data_type, command.metadata)
+                    write_status = await db_entry.write(
+                        self.client_hostname, self.client_username,
+                        command.data, command.data_type,
+                        command.metadata)
                 except Exception as ex:
                     cid = self.circuit.channels_sid[command.sid].cid
                     response_command = ca.ErrorResponse(
@@ -232,7 +236,9 @@ class CurioVirtualCircuit:
             self.subscriptions[db_entry].append(sub)
 
             # send back a first monitor always
-            metadata, data = await db_entry.get_dbr_data(command.data_type)
+            metadata, data = await db_entry.read(self.client_hostname,
+                                                 self.client_username,
+                                                 command.data_type)
             return [chan.subscribe(data=data, data_type=command.data_type,
                                    data_count=len(data),
                                    subscriptionid=command.subscriptionid,
@@ -368,7 +374,10 @@ class Context:
                     try:
                         cmd = commands[data_type]
                     except KeyError:
-                        metadata, data = await db_entry.get_dbr_data(data_type)
+                        metadata, data = await db_entry.read(
+                            self.client_hostname,
+                            self.client_username,
+                            data_type)
                         cmd = chan.subscribe(data=data, data_type=data_type,
                                              data_count=len(data),
                                              subscriptionid=0,
@@ -416,7 +425,7 @@ class Context:
 async def _test(pvdb=None):
     logger.setLevel('DEBUG')
     if pvdb is None:
-        pvdb = {'pi': ChannelDouble(value=3.14,
+        pvdb = {'pi': ChannelDouble(data=3.14,
                                     lower_disp_limit=3.13,
                                     upper_disp_limit=3.15,
                                     lower_alarm_limit=3.12,
@@ -428,16 +437,16 @@ async def _test(pvdb=None):
                                     precision=5,
                                     units='doodles',
                                     ),
-                'enum': ChannelEnum(value='b',
+                'enum': ChannelEnum(data='b',
                                     enum_strings=['a', 'b', 'c', 'd'],
                                     ),
-                'enum2': ChannelEnum(value='bb',
+                'enum2': ChannelEnum(data='bb',
                                      enum_strings=['aa', 'bb', 'cc', 'dd'],
                                      ),
-                'int': ChannelInteger(value=96,
+                'int': ChannelInteger(data=96,
                                       units='doodles',
                                       ),
-                'char': ca.ChannelChar(value=b'3',
+                'char': ca.ChannelChar(data=b'3',
                                        units='poodles',
                                        lower_disp_limit=33,
                                        upper_disp_limit=35,
@@ -448,10 +457,10 @@ async def _test(pvdb=None):
                                        lower_ctrl_limit=30,
                                        upper_ctrl_limit=38,
                                        ),
-                'chararray': ca.ChannelChar(value=b'1234567890' * 2),
-                'str': ca.ChannelString(value='hello',
+                'chararray': ca.ChannelChar(data=b'1234567890' * 2),
+                'str': ca.ChannelString(data='hello',
                                         string_encoding='latin-1'),
-                'stra': ca.ChannelString(value=['hello', 'how is it', 'going'],
+                'stra': ca.ChannelString(data=['hello', 'how is it', 'going'],
                                          string_encoding='latin-1'),
                 }
         pvdb['pi'].alarm.alarm_string = 'delicious'
