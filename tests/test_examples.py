@@ -126,9 +126,15 @@ def test_curio_server():
         await chan1.unsubscribe(sub_id)
         await chan1.write((5,))
         reading = await chan1.read()
+        expected = 5
+        actual, = reading.data
+        assert actual == expected
         print('reading:', reading)
         await chan1.write((6,))
         reading = await chan1.read()
+        expected = 6
+        actual, = reading.data
+        assert actual == expected
         print('reading:', reading)
         await chan1.disconnect()
         await chan1.circuit.socket.close()

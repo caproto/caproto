@@ -227,14 +227,15 @@ class ChannelData:
         '''
         if timestamp is None:
             timestamp = time.time()
-        self.timestamp = timestamp
         if alarm is None:
             alarm = ChannelAlarm()
         self.alarm = alarm
         self.alarm.connect(self)
-        self.value = value
         self.string_encoding = string_encoding
         self.reported_record_type = reported_record_type
+        self._data = {}
+        self._data['value'] = value
+        self._data['timestamp'] = timestamp
         self._subscription_queue = None
         self._dbr_metadata = {
             chtype: DBR_TYPES[chtype]()
@@ -244,6 +245,9 @@ class ChannelData:
                            promote_type(self.data_type, use_gr=True),
                            )
         }
+
+    value = property(lambda self: self._data['value'])
+    timestamp = property(lambda self: self._data['timestamp'])
 
     def subscribe(self, queue, *sub_queue_args):
         '''Set subscription queue'''
@@ -289,18 +293,26 @@ class ChannelData:
 
     async def write(self, hostname, username, data, data_type, metadata):
         '''Set data from DBR metadata/values'''
+        timestamp = time.time()  # will only be used if metadata is None
         access = self.check_access(hostname, username)
         if access not in (AccessRights.WRITE, AccessRights.READ_WRITE):
             raise Forbidden("Client with hostname {} and username {} cannot "
                             "write.".format(hostname, username))
 
         native_from = native_type(data_type)
-        self.value = convert_values(values=data, from_dtype=native_from,
-                              to_dtype=self.data_type,
-                              string_encoding=self.string_encoding,
-                              enum_strings=getattr(self, 'enum_strings', None))
+        self._data['value'] = convert_values(
+            values=data,
+            from_dtype=native_from,
+            to_dtype=self.data_type,
+            string_encoding=self.string_encoding,
+            enum_strings=getattr(self, 'enum_strings', None))
 
-        self.timestamp = time.time()
+        if metadata is None:
+            self._data['timestamp'] = timestamp
+        else:
+            # Use data_payload code.
+            raise NotImplementedError('cannot handle metadata not None')
+
         if self._subscription_queue is not None:
             await self._subscription_queue.put((self,
                                                 SubscriptionType.DBE_VALUE,
@@ -401,7 +413,9 @@ class ChannelEnum(ChannelData):
 
         if enum_strings is None:
             enum_strings = []
-        self.enum_strings = enum_strings
+        self._data['enum_strings'] = enum_strings
+
+    enum_strings = property(lambda self: self._data['enum_strings'])
 
     def _copy_metadata_to_dbr(self, dbr_metadata):
         if hasattr(dbr_metadata, 'strs') and self.enum_strings:
@@ -423,15 +437,25 @@ class ChannelNumeric(ChannelData):
                  **kwargs):
 
         super().__init__(**kwargs)
-        self.units = units
-        self.upper_disp_limit = upper_disp_limit
-        self.lower_disp_limit = lower_disp_limit
-        self.upper_alarm_limit = upper_alarm_limit
-        self.upper_warning_limit = upper_warning_limit
-        self.lower_warning_limit = lower_warning_limit
-        self.lower_alarm_limit = lower_alarm_limit
-        self.upper_ctrl_limit = upper_ctrl_limit
-        self.lower_ctrl_limit = lower_ctrl_limit
+        self._data['units'] = units
+        self._data['upper_disp_limit'] = upper_disp_limit
+        self._data['lower_disp_limit'] = lower_disp_limit
+        self._data['upper_alarm_limit'] = upper_alarm_limit
+        self._data['upper_warning_limit'] = upper_warning_limit
+        self._data['lower_warning_limit'] = lower_warning_limit
+        self._data['lower_alarm_limit'] = lower_alarm_limit
+        self._data['upper_ctrl_limit'] = upper_ctrl_limit
+        self._data['lower_ctrl_limit'] = lower_ctrl_limit
+
+    units = property(lambda self: self._data['units'])
+    upper_disp_limit = property(lambda self: self._data['upper_disp_limit'])
+    lower_disp_limit = property(lambda self: self._data['lower_disp_limit'])
+    upper_alarm_limit = property(lambda self: self._data['upper_alarm_limit'])
+    upper_warning_limit = property(lambda self: self._data['upper_warning_limit'])
+    lower_warning_limit = property(lambda self: self._data['lower_warning_limit'])
+    lower_alarm_limit = property(lambda self: self._data['lower_alarm_limit'])
+    upper_ctrl_limit = property(lambda self: self._data['upper_ctrl_limit'])
+    lower_ctrl_limit = property(lambda self: self._data['lower_ctrl_limit'])
 
 
 class ChannelInteger(ChannelNumeric):
@@ -444,7 +468,9 @@ class ChannelDouble(ChannelNumeric):
     def __init__(self, *, precision=0, **kwargs):
         super().__init__(**kwargs)
 
-        self.precision = precision
+        self._data['precision'] = precision
+
+    precision = property(lambda self: self._data['precision'])
 
 
 class ChannelChar(ChannelNumeric):
