@@ -130,15 +130,23 @@ def convert_values(values, from_dtype, to_dtype, *, string_encoding='latin-1',
 
 
 class ChannelAlarm:
-    def __init__(self, *, channel_data=None, status=0, severity=0,
+    def __init__(self, *, status=0, severity=0,
                  acknowledge_transient=True, acknowledge_severity=0,
-                 alarm_string=''):
-        self.channel_data = channel_data
+                 alarm_string='', string_encoding='latin-1'):
+        self._channels = []
+        self.string_encoding = 'latin-1'
+
         self.status = status
         self.severity = severity
         self.acknowledge_transient = acknowledge_transient
         self.acknowledge_severity = acknowledge_severity
         self.alarm_string = alarm_string
+
+    def connect(self, channel_data):
+        self._channels.append(channel_data)
+
+    def disconnect(self, channel_data):
+        self._channels.remove(channel_data)
 
     def acknowledge(self):
         pass
@@ -166,16 +174,13 @@ class ChannelAlarm:
         dbr.value = self.alarm_string.encode(self.string_encoding)
         return dbr
 
-    @property
-    def string_encoding(self):
-        return self.channel_data.string_encoding
-
 
 class ChannelData:
     data_type = ChType.LONG
 
-    def __init__(self, *, value=None, timestamp=None, status=0, severity=0,
-                 string_encoding='latin-1', alarm_status=None,
+    def __init__(self, *, alarm=None,
+                 value=None, timestamp=None,
+                 string_encoding='latin-1',
                  reported_record_type='caproto'):
         '''Metadata and Data for a single caproto Channel
 
@@ -186,15 +191,8 @@ class ChannelData:
         timestamp : float, optional
             Posix timestamp associated with the value
             Defaults to `time.time()`
-        status : ca.AlarmStatus, optional
-            Alarm status
-        severity : ca.AlarmSeverity, optional
-            Alarm severity
         string_encoding : str, optional
             Encoding to use for strings, used both in and out
-        alarm_status : ChannelAlarmStatus, optional
-            Optionally specify an allocated alarm status, which could be shared
-            among several channels
         reported_record_type : str, optional
             Though this is not a record, the channel access protocol supports
             querying the record type.  This can be set to mimic an actual
@@ -204,12 +202,10 @@ class ChannelData:
         if timestamp is None:
             timestamp = time.time()
         self.timestamp = timestamp
-        if alarm_status is not None:
-            self.alarm = alarm_status
-            self.alarm.channel_data = self
-        else:
-            self.alarm = ChannelAlarm(status=status, severity=severity,
-                                      channel_data=self)
+        if alarm is None:
+            alarm = ChannelAlarm()
+        self.alarm = alarm
+        self.alarm.connect(self)
         self.value = value
         self.string_encoding = string_encoding
         self.reported_record_type = reported_record_type
@@ -380,6 +376,9 @@ class ChannelData:
         access : :data:`AccessRights.READ_WRITE`
         """
         return AccessRights.READ_WRITE
+
+    def __del__(self):
+        self.alarm.disconnect(self)
 
 
 class ChannelEnum(ChannelData):

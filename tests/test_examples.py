@@ -342,7 +342,7 @@ caget_pvdb = {
                            upper_ctrl_limit=38,
                            ),
     'str': ca.ChannelString(value='hello',
-                            alarm_status=str_alarm_status,
+                            alarm=str_alarm_status,
                             reported_record_type='caproto'),
     }
 
