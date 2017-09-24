@@ -129,7 +129,7 @@ def convert_values(values, from_dtype, to_dtype, *, string_encoding='latin-1',
     return np.asarray(values).astype(_numpy_map[to_dtype])
 
 
-class ChannelAlarmStatus:
+class ChannelAlarm:
     def __init__(self, *, channel_data=None, status=0, severity=0,
                  acknowledge_transient=True, acknowledge_severity=0,
                  alarm_string=''):
@@ -208,8 +208,8 @@ class ChannelData:
             self.alarm = alarm_status
             self.alarm.channel_data = self
         else:
-            self.alarm = ChannelAlarmStatus(status=status, severity=severity,
-                                            channel_data=self)
+            self.alarm = ChannelAlarm(status=status, severity=severity,
+                                      channel_data=self)
         self.value = value
         self.string_encoding = string_encoding
         self.reported_record_type = reported_record_type
