@@ -297,7 +297,7 @@ async def run_caget(pv, *, dbr_type=None):
 #
 #     return lines
 
-str_alarm_status = ca.ChannelAlarmStatus(
+str_alarm_status = ca.ChannelAlarm(
     status=ca.AlarmStatus.READ,
     severity=ca.AlarmSeverity.MINOR_ALARM,
     alarm_string='alarm string',
