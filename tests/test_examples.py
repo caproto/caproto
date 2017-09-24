@@ -32,8 +32,8 @@ def test_synchronous_client():
     main(skip_monitor_section=True)
 
 
-def test_curio_client():
-    from caproto.curio.client import main
+def test_curio_client_example():
+    from caproto.examples.curio_client_simple import main
     with curio.Kernel() as kernel:
         kernel.run(main())
 
@@ -50,9 +50,9 @@ def threading_broadcaster(request):
     return broadcaster
 
 
-def test_thread_client(threading_broadcaster):
-    from caproto.threading.client import _test as thread_client_test
-    thread_client_test()
+def test_thread_client_example(threading_broadcaster):
+    from caproto.examples.thread_client_simple import main
+    main()
 
 
 def test_thread_pv(threading_broadcaster):
@@ -98,9 +98,10 @@ def test_thread_pv(threading_broadcaster):
             getattr(ctrl_pv, k)
 
 
-def test_curio_server():
+def test_curio_server_example():
     import caproto.curio.client as client
-    from caproto.curio.server import _test as example_server
+    from caproto.examples.curio_server_simple import (pvdb,
+                                                      main as server_main)
     kernel = curio.Kernel()
     commands = []
 
@@ -207,7 +208,7 @@ def test_curio_server():
     async def task():
         # os.environ['EPICS_CA_ADDR_LIST'] = '255.255.255.255'
         try:
-            server_task = await curio.spawn(example_server())
+            server_task = await curio.spawn(server_main(pvdb))
             await curio.sleep(1)  # Give server some time to start up.
             await run_client()
             print('client is done')

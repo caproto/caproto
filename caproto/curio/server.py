@@ -403,63 +403,9 @@ class Context:
                 await circuit.pending_tasks.cancel_remaining()
 
 
-async def _test(pvdb=None):
-    logger.setLevel('DEBUG')
-    if pvdb is None:
-        alarm = ca.ChannelAlarm(
-            status=ca.AlarmStatus.READ,
-            severity=ca.AlarmSeverity.MINOR_ALARM,
-            alarm_string='alarm string',
-        )
-        pvdb = {'pi': ChannelDouble(value=3.14,
-                                    lower_disp_limit=3.13,
-                                    upper_disp_limit=3.15,
-                                    lower_alarm_limit=3.12,
-                                    upper_alarm_limit=3.16,
-                                    lower_warning_limit=3.11,
-                                    upper_warning_limit=3.17,
-                                    lower_ctrl_limit=3.10,
-                                    upper_ctrl_limit=3.18,
-                                    precision=5,
-                                    units='doodles',
-                                    ),
-                'enum': ChannelEnum(value='b',
-                                    enum_strings=['a', 'b', 'c', 'd'],
-                                    ),
-                'enum2': ChannelEnum(value='bb',
-                                     enum_strings=['aa', 'bb', 'cc', 'dd'],
-                                     ),
-                'int': ChannelInteger(value=96,
-                                      units='doodles',
-                                      ),
-                'char': ca.ChannelChar(value=b'3',
-                                       units='poodles',
-                                       lower_disp_limit=33,
-                                       upper_disp_limit=35,
-                                       lower_alarm_limit=32,
-                                       upper_alarm_limit=36,
-                                       lower_warning_limit=31,
-                                       upper_warning_limit=37,
-                                       lower_ctrl_limit=30,
-                                       upper_ctrl_limit=38,
-                                       ),
-                'chararray': ca.ChannelChar(value=b'1234567890' * 2),
-                'str': ca.ChannelString(value='hello',
-                                        string_encoding='latin-1',
-                                        alarm=alarm),
-                'str2': ca.ChannelString(value='hello',
-                                        string_encoding='latin-1',
-                                        alarm=alarm),
-                'stra': ca.ChannelString(value=['hello', 'how is it', 'going'],
-                                         string_encoding='latin-1'),
-                }
-        await pvdb['pi'].alarm.write(alarm_string='delicious')
-
-    ctx = Context('0.0.0.0', find_next_tcp_port(), pvdb, log_level='DEBUG')
+async def start_server(pvdb, log_level='DEBUG'):
+    '''Start a curio server with a given PV database'''
+    logger.setLevel(log_level)
+    ctx = Context('0.0.0.0', find_next_tcp_port(), pvdb, log_level=log_level)
     logger.info('Server starting up on %s:%d', ctx.host, ctx.port)
     return await ctx.run()
-
-
-if __name__ == '__main__':
-    logging.basicConfig()
-    curio.run(_test())
