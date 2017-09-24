@@ -224,22 +224,6 @@ class ChannelData:
         self._subscription_queue = queue
         self._subscription_queue_args = sub_queue_args
 
-    def fromtype(self, values, data_type):
-        '''Convenience function to convert given values to this data type'''
-        native_from = native_type(data_type)
-        return convert_values(values=values, from_dtype=native_from,
-                              to_dtype=self.data_type,
-                              string_encoding=self.string_encoding,
-                              enum_strings=getattr(self, 'enum_strings', None))
-
-    def astype(self, to_dtype):
-        '''Convenience function: convert stored data to a specific type'''
-        native_to = native_type(to_dtype)
-        return convert_values(values=self.value, from_dtype=self.data_type,
-                              to_dtype=native_to,
-                              string_encoding=self.string_encoding,
-                              enum_strings=getattr(self, 'enum_strings', None))
-
     async def read(self, hostname, username, data_type):
         '''Get DBR data and native data, converted to a specific type'''
         access = self.check_access(hostname, username)
@@ -258,7 +242,11 @@ class ChannelData:
 
         # for native types, there is no dbr metadata - just data
         native_to = native_type(data_type)
-        values = self.astype(native_to)
+        values = convert_values(values=self.value, from_dtype=self.data_type,
+                              to_dtype=native_to,
+                              string_encoding=self.string_encoding,
+                              enum_strings=getattr(self, 'enum_strings', None))
+
 
         if data_type in native_types:
             return b'', values
@@ -279,7 +267,13 @@ class ChannelData:
         if access not in (AccessRights.WRITE, AccessRights.READ_WRITE):
             raise Forbidden("Client with hostname {} and username {} cannot "
                             "write.".format(hostname, username))
-        self.value = self.fromtype(values=data, data_type=data_type)
+
+        native_from = native_type(data_type)
+        self.value = convert_values(values=data, from_dtype=native_from,
+                              to_dtype=self.data_type,
+                              string_encoding=self.string_encoding,
+                              enum_strings=getattr(self, 'enum_strings', None))
+
         self.timestamp = time.time()
         if self._subscription_queue is not None:
             await self._subscription_queue.put((self,
