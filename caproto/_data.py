@@ -156,7 +156,7 @@ class ChannelAlarmStatus:
         instance._set_instance_from_dbr(dbr)
         return instance
 
-    async def get_dbr_data(self, dbr=None):
+    async def read(self, dbr=None):
         if dbr is None:
             dbr = DBR_STSACK_STRING()
         dbr.status = self.status
@@ -244,7 +244,7 @@ class ChannelData:
                               string_encoding=self.string_encoding,
                               enum_strings=getattr(self, 'enum_strings', None))
 
-    async def get_dbr_data(self, hostname, username, type_):
+    async def read(self, hostname, username, type_):
         '''Get DBR data and native data, converted to a specific type'''
         access = self.check_access(hostname, username)
         if access not in (AccessRights.READ, AccessRights.READ_WRITE):
@@ -252,7 +252,7 @@ class ChannelData:
                             "read.".format(hostname, username))
         # special cases for alarm strings and class name
         if type_ == ChType.STSACK_STRING:
-            ret = await self.alarm.get_dbr_data()
+            ret = await self.alarm.read()
             return (ret, b'')
         elif type_ == ChType.CLASS_NAME:
             class_name = DBR_TYPES[type_]()
@@ -277,7 +277,7 @@ class ChannelData:
         self._copy_metadata_to_dbr(dbr_metadata)
         return dbr_metadata, values
 
-    async def set_dbr_data(self, hostname, username, data, data_type, metadata):
+    async def write(self, hostname, username, data, data_type, metadata):
         '''Set data from DBR metadata/values'''
         access = self.check_access(hostname, username)
         if access not in (AccessRights.WRITE, AccessRights.READ_WRITE):
