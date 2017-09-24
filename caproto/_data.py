@@ -135,12 +135,19 @@ class ChannelAlarm:
                  alarm_string='', string_encoding='latin-1'):
         self._channels = []
         self.string_encoding = 'latin-1'
+        data = {}
+        data['status'] = status
+        data['severity'] = severity
+        data['acknowledge_transient'] = acknowledge_transient
+        data['acknowledge_severity'] = acknowledge_severity
+        data['alarm_string'] = alarm_string
+        self._data = data
 
-        self.status = status
-        self.severity = severity
-        self.acknowledge_transient = acknowledge_transient
-        self.acknowledge_severity = acknowledge_severity
-        self.alarm_string = alarm_string
+    status = property(lambda self: self._data['status'])
+    severity = property(lambda self: self._data['severity'])
+    acknowledge_transient = property(lambda self: self._data['acknowledge_transient'])
+    acknowledge_severity = property(lambda self: self._data['acknowledge_severity'])
+    alarm_string = property(lambda self: self._data['alarm_string'])
 
     def connect(self, channel_data):
         self._channels.append(channel_data)
@@ -152,15 +159,16 @@ class ChannelAlarm:
         pass
 
     def _set_instance_from_dbr(self, dbr):
-        self.status = dbr.status
-        self.severity = dbr.severity
-        self.acknowledge_transient = (dbr.ackt != 0)
-        self.acknowledge_severity = dbr.acks
-        self.alarm_string = dbr.value.decode(self.string_encoding)
+        data = self._data
+        data['status'] = dbr.status
+        data['severity'] = dbr.severity
+        data['acknowledge_transient'] = (dbr.ackt != 0)
+        data['acknowledge_severity'] = dbr.acks
+        data['alarm_string'] = dbr.value.decode(self.string_encoding)
 
     @classmethod
-    def _from_dbr(cls, dbr):
-        instance = cls()
+    def _from_dbr(cls, dbr, **kwargs):
+        instance = cls(**kwargs)
         instance._set_instance_from_dbr(dbr)
         return instance
 
@@ -174,6 +182,24 @@ class ChannelAlarm:
         dbr.value = self.alarm_string.encode(self.string_encoding)
         return dbr
 
+    async def write(self, *, status=None, severity=None,
+                    acknowledge_transient=None,
+                    acknowledge_severity=None,
+                    alarm_string=None, caller=None):
+        data = self._data
+        if status is not None:
+            data['status'] = status
+        if severity is not None:
+            data['severity'] = severity
+        if acknowledge_transient is not None:
+            data['acknowledge_transient'] = acknowledge_transient
+        if acknowledge_severity is not None:
+            data['acknowledge_severity'] = acknowledge_severity
+        if alarm_string is not None:
+            data['alarm_string'] = alarm_string
+        for channel in self._channels:
+            # TODO
+            ...
 
 class ChannelData:
     data_type = ChType.LONG
@@ -333,18 +359,10 @@ class ChannelData:
         '''Alarm status'''
         return self.alarm.status
 
-    @status.setter
-    def status(self, status):
-        self.alarm.status = status
-
     @property
     def severity(self):
         '''Alarm severity'''
         return self.alarm.severity
-
-    @severity.setter
-    def severity(self, severity):
-        self.alarm.severity = severity
 
     def __len__(self):
         try:

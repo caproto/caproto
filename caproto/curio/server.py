@@ -461,7 +461,7 @@ async def _test(pvdb=None):
                 'stra': ca.ChannelString(value=['hello', 'how is it', 'going'],
                                          string_encoding='latin-1'),
                 }
-        pvdb['pi'].alarm.alarm_string = 'delicious'
+        await pvdb['pi'].alarm.write(alarm_string='delicious')
 
     ctx = Context('0.0.0.0', find_next_tcp_port(), pvdb)
     logger.info('Server starting up on %s:%d', ctx.host, ctx.port)
