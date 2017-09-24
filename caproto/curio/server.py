@@ -179,7 +179,9 @@ class CurioVirtualCircuit:
             self.client_username = command.name.decode(SERVER_ENCODING)
         elif isinstance(command, ca.ReadNotifyRequest):
             chan, db_entry = get_db_entry()
-            metadata, data = await db_entry.get_dbr_data(command.data_type)
+            metadata, data = await db_entry.get_dbr_data(
+                self.client_hostname, self.client_username,
+                command.data_type)
             return [chan.read(data=data, data_type=command.data_type,
                               data_count=len(data), status=1,
                               ioid=command.ioid, metadata=metadata)
@@ -192,6 +194,7 @@ class CurioVirtualCircuit:
                 '''Wait for an asynchronous caput to finish'''
                 try:
                     write_status = await db_entry.set_dbr_data(
+                        self.client_hostname, self.client_username,
                         command.data, command.data_type, command.metadata)
                 except Exception as ex:
                     cid = self.circuit.channels_sid[command.sid].cid
@@ -232,7 +235,9 @@ class CurioVirtualCircuit:
             self.subscriptions[db_entry].append(sub)
 
             # send back a first monitor always
-            metadata, data = await db_entry.get_dbr_data(command.data_type)
+            metadata, data = await db_entry.get_dbr_data(
+                self.client_hostname, self.client_username,
+                command.data_type)
             return [chan.subscribe(data=data, data_type=command.data_type,
                                    data_count=len(data),
                                    subscriptionid=command.subscriptionid,
@@ -368,7 +373,9 @@ class Context:
                     try:
                         cmd = commands[data_type]
                     except KeyError:
-                        metadata, data = await db_entry.get_dbr_data(data_type)
+                        metadata, data = await db_entry.get_dbr_data(
+                            self.client_hostname, self.client_username,
+                            data_type)
                         cmd = chan.subscribe(data=data, data_type=data_type,
                                              data_count=len(data),
                                              subscriptionid=0,
