@@ -135,7 +135,7 @@ class ChannelAlarm:
                  acknowledge_transient=True, acknowledge_severity=0,
                  alarm_string='', string_encoding='latin-1'):
         self._channels = []
-        self.string_encoding = 'latin-1'
+        self.string_encoding = string_encoding
         data = {}
         data['status'] = status
         data['severity'] = severity
