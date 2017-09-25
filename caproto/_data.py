@@ -8,8 +8,9 @@ from ._dbr import (DBR_TYPES, ChType, promote_type, native_type,
                    native_float_types, native_int_types, native_types,
                    timestamp_to_epics, time_types, MAX_ENUM_STRING_SIZE,
                    DBR_STSACK_STRING, AccessRights, _numpy_map,
-                   SubscriptionType)
+                   SubscriptionType, epics_timestamp_to_unix)
 from ._utils import CaprotoError
+from ._commands import parse_metadata
 
 
 class Forbidden(CaprotoError):
@@ -318,8 +319,13 @@ class ChannelData:
         if metadata is None:
             self._data['timestamp'] = timestamp
         else:
+            # Convert `metadata` to bytes-like (or pass it through).
             md_payload = parse_metadata(metadata, data_type)
-            # TODO Do something with this.
+            # Depending on the type of `metdata` above,
+            # `md_payload` could be a DBR struct or plain bytes.
+            # Load it into a struct (zero-copy) to be sure.
+            dbr_metadata = DBR_TYPES[data_type].from_buffer(md_payload)
+            self._update_metadata_from_dbr(dbr_metadata)
 
         if self._subscription_queue is not None:
             await self._subscription_queue.put((self,
@@ -369,6 +375,34 @@ class ChannelData:
         for attr, value in zip(convert_attrs, values):
             if hasattr(dbr_metadata, attr):
                 setattr(dbr_metadata, attr, value)
+
+    def _update_metadata_from_dbr(self, dbr_metadata):
+        dbr_type = ChType(dbr_metadata.DBR_ID)
+        data = self._data
+
+        if hasattr(dbr_metadata, 'units'):
+            data['units'] = dbr_metadata.units.decode(self.string_encoding)
+
+        if hasattr(dbr_metadata, 'precision'):
+            data['precision'] = dbr_metdata.precision
+
+        if dbr_type in time_types:
+            timestamp = epics_timestamp_to_unix(dbr_metadata.secondsSinceEpoch,
+                                                dbr_metadata.nanoSeconds)
+            data['timestamp'] = timestamp
+
+        # if hasattr(dbr_metadata, 'status'):
+        #     # many have status/severity
+        #     dbr_metadata.status = self.status
+        #     dbr_metadata.severity = self.severity
+
+        convert_attrs = ('upper_disp_limit', 'lower_disp_limit',
+                         'upper_alarm_limit', 'upper_warning_limit',
+                         'lower_warning_limit', 'lower_alarm_limit',
+                         'upper_ctrl_limit', 'lower_ctrl_limit')
+
+        if not any(hasattr(dbr_metadata, attr) for attr in convert_attrs):
+            return
 
     @property
     def epics_timestamp(self):

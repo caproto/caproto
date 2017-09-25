@@ -136,6 +136,28 @@ def test_curio_server():
         actual, = reading.data
         assert actual == expected
         print('reading:', reading)
+
+        # Test updating metadata...
+        # _fields_ = [
+        #     ('status', short_t),
+        #     ('severity', short_t),
+        #     ('secondsSinceEpoch', ctypes.c_uint32),
+        #     ('nanoSeconds', ctypes.c_uint32),
+        #     ('RISC_Pad', long_t),
+        # ]
+        metadata = (0, 0, 4, 0, 0)  # set timestamp to 4 seconds
+        await chan1.write((7,), data_type=20, metadata=metadata)
+        reading = await chan1.read(data_type=20)
+        # check reading
+        expected = 7
+        actual, = reading.data
+        assert actual == expected
+        # check timestamp
+        expected = 4
+        actual = reading.metadata.secondsSinceEpoch
+        assert actual == expected
+        print('reading:', reading)
+
         await chan1.disconnect()
         await chan1.circuit.socket.close()
 
