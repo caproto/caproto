@@ -423,6 +423,11 @@ class Context:
 async def _test(pvdb=None):
     logger.setLevel('DEBUG')
     if pvdb is None:
+        alarm = ca.ChannelAlarm(
+            status=ca.AlarmStatus.READ,
+            severity=ca.AlarmSeverity.MINOR_ALARM,
+            alarm_string='alarm string',
+        )
         pvdb = {'pi': ChannelDouble(value=3.14,
                                     lower_disp_limit=3.13,
                                     upper_disp_limit=3.15,
@@ -457,7 +462,11 @@ async def _test(pvdb=None):
                                        ),
                 'chararray': ca.ChannelChar(value=b'1234567890' * 2),
                 'str': ca.ChannelString(value='hello',
-                                        string_encoding='latin-1'),
+                                        string_encoding='latin-1',
+                                        alarm=alarm),
+                'str2': ca.ChannelString(value='hello',
+                                        string_encoding='latin-1',
+                                        alarm=alarm),
                 'stra': ca.ChannelString(value=['hello', 'how is it', 'going'],
                                          string_encoding='latin-1'),
                 }

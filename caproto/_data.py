@@ -161,7 +161,7 @@ class ChannelAlarm:
     def acknowledge(self):
         pass
 
-    def write_from_dbr(self, dbr):
+    async def write_from_dbr(self, dbr, caller=None):
         data = self._data
         if hasattr(dbr, 'status'):
             data['status'] = dbr.status
@@ -173,12 +173,12 @@ class ChannelAlarm:
             data['acknowledge_severity'] = dbr.acks
         if hasattr(dbr, 'value'):
             data['alarm_string'] = dbr.value.decode(self.string_encoding)
-
-    @classmethod
-    def _from_dbr(cls, dbr, **kwargs):
-        instance = cls(**kwargs)
-        instance.write_from_dbr(dbr)
-        return instance
+        for channel in self._channels:
+            if channel is caller:
+                # Do not redundantly update the channel whose
+                # write called this update in the first place.
+                continue
+            await channel.publish()
 
     async def read(self, dbr=None):
         if dbr is None:
@@ -206,8 +206,8 @@ class ChannelAlarm:
         if alarm_string is not None:
             data['alarm_string'] = alarm_string
         for channel in self._channels:
-            # TODO
-            ...
+            await channel.publish()
+
 
 class ChannelData:
     data_type = ChType.LONG
@@ -339,10 +339,14 @@ class ChannelData:
             dbr_metadata = DBR_TYPES[data_type].from_buffer(md_payload)
             self._update_metadata_from_dbr(dbr_metadata)
 
-        # Update alarm, which in turn updates all other channels
-        # connected to this alarm.
-        await self.alarm.write_from_dbr(dbr_metadata)
+            # Update alarm, which in turn updates all other channels
+            # connected to this alarm.
+            await self.alarm.write_from_dbr(dbr_metadata, caller=self)
 
+        # Send a new event to subscribers.
+        await self.publish()
+
+    async def publish(self):
         if self._subscription_queue is not None:
             await self._subscription_queue.put((self,
                                                 SubscriptionType.DBE_VALUE,

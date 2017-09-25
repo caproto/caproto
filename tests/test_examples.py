@@ -102,14 +102,14 @@ def test_curio_server():
     import caproto.curio.client as client
     from caproto.curio.server import _test as example_server
     kernel = curio.Kernel()
-    called = []
+    commands = []
 
     async def run_client():
         # Some user function to call when subscriptions receive data.
 
         def user_callback(command):
             print("Subscription has received data.")
-            called.append(True)
+            commands.append(command)
 
         broadcaster = client.SharedBroadcaster(log_level='DEBUG')
         await broadcaster.register()
@@ -159,7 +159,7 @@ def test_curio_server():
         print('reading:', reading)
 
         # test updating alarm status/severity
-        metadata = (13, 14, 4, 0, 0)  # set timestamp to 4 seconds
+        metadata = (13, 14, 0, 0, 0)  # set alarm status and severity
         await chan1.write((8,), data_type=20, metadata=metadata)
         reading = await chan1.read(data_type=20)
         # check reading
@@ -176,7 +176,33 @@ def test_curio_server():
         assert actual == expected
 
         await chan1.disconnect()
-        await chan1.circuit.socket.close()
+        assert commands, 'subscription not called in client'
+        # await chan1.circuit.socket.close()
+
+        commands.clear()
+        await ctx.search('str')
+        await ctx.search('str2')
+        print('done searching')
+        chan2 = await ctx.create_channel('str')
+        chan3 = await ctx.create_channel('str2')
+        chan2.register_user_callback(user_callback)
+        chan3.register_user_callback(user_callback)
+        await chan2.wait_for_connection()
+        await chan3.wait_for_connection()
+        sub_id2 = await chan2.subscribe()
+        sub_id3 = await chan3.subscribe()
+        await curio.sleep(0.5)
+        print('write...')
+        await chan2.write(b'hell')
+        await chan3.write(b'good')
+        print('write again...')
+        metadata = (13, 14, 0, 0)  # set alarm status and severity
+        await chan2.write(b'hell', data_type=14, metadata=metadata)
+        await chan3.write(b'good', data_type=14, metadata=metadata)
+        await curio.sleep(0.5)
+        await chan2.unsubscribe(sub_id2)
+        await chan3.unsubscribe(sub_id3)
+        print(commands)
 
     async def task():
         # os.environ['EPICS_CA_ADDR_LIST'] = '255.255.255.255'
@@ -192,7 +218,6 @@ def test_curio_server():
 
     with kernel:
         kernel.run(task)
-    assert called, 'subscription not called in client'
     print('done')
 
 
