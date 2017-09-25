@@ -35,10 +35,11 @@ class VirtualCircuit:
         self.new_command_condition = curio.Condition()
         self._socket_lock = curio.Lock()
 
-    async def create_connection(self):
-        self.socket = await socket.create_connection(self.circuit.address)
-        await self._socket_lock.release()
+    async def connect(self):
+        async with self._socket_lock:
+            self.socket = await socket.create_connection(self.circuit.address)
 
+    async def _receive_loop(self):
         num_bytes_needed = 0
         while True:
             bytes_received = await self.socket.recv(max(32768,
@@ -357,13 +358,18 @@ class Context:
         chan = ca.ClientChannel(name, circuit.circuit)
 
         if chan.circuit.states[ca.SERVER] is ca.IDLE:
-            await circuit._socket_lock.acquire()  # wrong primitive
-            await curio.spawn(circuit.create_connection(), daemon=True)
+            await circuit.connect()  # wait for a connected socket
+            # Kick off background loops that read from the socket
+            # and process the commands read from it.
+            await curio.spawn(circuit._receive_loop(), daemon=True)
             await curio.spawn(circuit._command_queue_loop(), daemon=True)
+            # Send commands that initialize the Circuit.
             await circuit.send(chan.version())
             await circuit.send(chan.host_name())
             await circuit.send(chan.client_name())
 
+        assert circuit.socket is not None
+        # Send command that creates the Channel.
         await circuit.send(chan.create())
         return Channel(circuit, chan)
 
