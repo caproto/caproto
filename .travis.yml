@@ -4,49 +4,53 @@ python:
   - 3.6
   - nightly
 
-sudo: required
-dist: trusty
 env:
+  matrix:
+    - BASE=R3.14.12.6 STATIC=static BUSY=1-6-1 SEQ=2.2.5 ASYN=4-31 CALC=R3-6-1 MOTOR=6-9
+    - BASE=R3.15.5 STATIC=static BUSY=1-6-1 SEQ=2.2.5 ASYN=4-31 CALC=R3-6-1 MOTOR=6-9
+    # - BASE=R3.16.1 STATIC=static BUSY=1-6-1 SEQ=2.2.5 ASYN=4-31 CALC=4aab3c4 MOTOR=6-9
   global:
     - secure: "Hnz9c6x13kaAc7IqH4/wJWNel2rzEC8/x0KhFoGLVLHjmiH1LMmpGh/P5CPADlmKS80WFz4vhJ0YtSjtHCPI+9Y2aBGn8z732WM86OyGHITviCMTxtyVZfRFCkOAVlU0qpIyWu4p0rEfxrXCztSKE4bBO/wWnFhGGw9CJROnFhJwoJlbI9i28zscyeGsdqHNUfXHkyUAN3c3LKoYZgnJco5HiHLwXVvsy3DMkvOizLgslf6lrHwnQOT1F49ShgPcGGWpkuRARXkGII7lB0LOn2TBoTzmhgjoC3OmC4nZGJfzitwH9+nHc+iJ3mTlshsXb366B/D5TNVIL/4rzYV8zw49DogQIWYtECK4/z7fOzG61yCU33b3aeXU2OI4k5eZ2qN3gp3KQ4+PWyCMTHsBVgs6o49K1HWtFuuFLuhUPT4FVs2Pzz6yTka9NUukPO1LoTeQAUvGxRbc/15CjIWXtqqzEGmlPi8AFEo2kw33EtTawMU9w8nzAfdk5DX28Qcuzh9XA9nVUD0j7Rum7nGY1f5+icXh0FsOuP1uHt82bXIYvw3rey3RkWcqVcniJXlkq0bAZM/ZSXWX5VHyQ2e7C4kxCdnzVqjgtlGT2ARSlD6o8FKKRKTAKD7kQ9ajTjZHRhO+xbvP+X4K9GlbGvPyU9bnDFa14fXBJS4dTMd8GgQ="
 
-services:
-  - docker
+# matrix:
+#   fast_finish: true
+#   allow_failures:
+#     - env: BASE=3.16
 
+dist: trusty
 addons:
   apt:
     packages:
       - graphviz  # for building docs
+      - libreadline6-dev  # epics build deps
+      - libncurses5-dev
+      - perl
+      - re2c
+      - tmux
+      - strace
 
 cache:
   directories:
-    - $HOME/.cache/pip
+    - $HOME/.cache/support
+    - $HOME/.cache/iocs
 
 before_install:
-  - export DOCKER0_IP=$(/sbin/ifconfig docker0 |grep 'inet addr' | sed -e 's/.*addr:\([^ ]*\).*/\1/')
-  - export EPICS_CA_ADDR_LIST=$( echo $DOCKER0_IP | sed -e 's/^\([0-9]\+\)\.\([0-9]\+\)\..*$/\1.\2.255.255/' )
-  - export EPICS_CA_AUTO_ADDR_LIST="no"
+  - export EPICS_CA_ADDR_LIST=127.255.255.255
+  - export EPICS_CA_AUTO_ADDR_LIST=NO
   - export EPICS_CA_MAX_ARRAY_BYTES=10000000
-  - export DOCKERIMAGE="klauer/epics-docker"
-  - export EPICS_BASE=/usr/lib/epics
-  - export PE_DOCKERIMAGE="klauer/simioc-docker"
-  - export PE_DOCKERTAG="pyepics-docker"
-  - perl --version
-  - git fetch --unshallow
-  - sudo bash install_epics_on_travis.sh
-  - docker pull ${DOCKERIMAGE}
-  - docker pull ${PE_DOCKERIMAGE}:${PE_DOCKERTAG}
-  - docker images
-  - docker run -d -p $DOCKER0_IP:7000-9000:5064/tcp  ${DOCKERIMAGE}
-  - docker run -d -p $DOCKER0_IP:7000-9000:5064/tcp ${PE_DOCKERIMAGE}:${PE_DOCKERTAG}
-  - docker ps -a
   - ip addr
+  - git fetch --unshallow
+  - source .ci/epics-config.sh
+  - bash .ci/install-epics-base.sh
+  - bash .ci/install-epics-modules.sh
+  - bash .ci/install-epics-iocs.sh
+  - bash .ci/run-epics-iocs.sh
 
 install:
-  - pip install numpy
   - pip install .
 
 script:
+  - caget Py:ao1 sim:mtr1
   - pip install -r test-requirements.txt
   - coverage run run_tests.py -v tests/
   - coverage report -m
