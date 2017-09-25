@@ -256,12 +256,15 @@ class ChannelData:
         self._subscription_queue = queue
         self._subscription_queue_args = sub_queue_args
 
-    async def read(self, hostname, username, data_type):
+    async def auth_read(self, hostname, username, data_type):
         '''Get DBR data and native data, converted to a specific type'''
         access = self.check_access(hostname, username)
         if access not in (AccessRights.READ, AccessRights.READ_WRITE):
             raise Forbidden("Client with hostname {} and username {} cannot "
                             "read.".format(hostname, username))
+        return (await self.read(data_type))
+
+    async def read(self, data_type):
         # special cases for alarm strings and class name
         if data_type == ChType.STSACK_STRING:
             ret = await self.alarm.read()
@@ -293,14 +296,17 @@ class ChannelData:
         self._copy_metadata_to_dbr(dbr_metadata)
         return dbr_metadata, values
 
-    async def write(self, hostname, username, data, data_type, metadata):
-        '''Set data from DBR metadata/values'''
-        timestamp = time.time()  # will only be used if metadata is None
+    async def auth_write(self, hostname, username,
+                         data, data_type,metadata):
         access = self.check_access(hostname, username)
         if access not in (AccessRights.WRITE, AccessRights.READ_WRITE):
             raise Forbidden("Client with hostname {} and username {} cannot "
                             "write.".format(hostname, username))
+        return (await self.write(data, data_type, metadata))
 
+    async def write(self, data, data_type, metadata):
+        '''Set data from DBR metadata/values'''
+        timestamp = time.time()  # will only be used if metadata is None
         native_from = native_type(data_type)
         self._data['value'] = convert_values(
             values=data,

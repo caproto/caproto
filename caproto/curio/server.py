@@ -179,7 +179,7 @@ class CurioVirtualCircuit:
             self.client_username = command.name.decode(SERVER_ENCODING)
         elif isinstance(command, ca.ReadNotifyRequest):
             chan, db_entry = get_db_entry()
-            metadata, data = await db_entry.read(
+            metadata, data = await db_entry.auth_read(
                 self.client_hostname, self.client_username,
                 command.data_type)
             return [chan.read(data=data, data_type=command.data_type,
@@ -193,7 +193,7 @@ class CurioVirtualCircuit:
             async def handle_write():
                 '''Wait for an asynchronous caput to finish'''
                 try:
-                    write_status = await db_entry.write(
+                    write_status = await db_entry.auth_write(
                         self.client_hostname, self.client_username,
                         command.data, command.data_type, command.metadata)
                 except Exception as ex:
@@ -235,7 +235,7 @@ class CurioVirtualCircuit:
             self.subscriptions[db_entry].append(sub)
 
             # send back a first monitor always
-            metadata, data = await db_entry.read(
+            metadata, data = await db_entry.auth_read(
                 self.client_hostname, self.client_username,
                 command.data_type)
             return [chan.subscribe(data=data, data_type=command.data_type,
@@ -373,7 +373,7 @@ class Context:
                     try:
                         cmd = commands[data_type]
                     except KeyError:
-                        metadata, data = await db_entry.read(
+                        metadata, data = await db_entry.auth_read(
                             self.client_hostname, self.client_username,
                             data_type)
                         cmd = chan.subscribe(data=data, data_type=data_type,
