@@ -310,8 +310,8 @@ class ChannelData:
         if metadata is None:
             self._data['timestamp'] = timestamp
         else:
-            # Use data_payload code.
-            raise NotImplementedError('cannot handle metadata not None')
+            md_payload = parse_metadata(metadata, data_type)
+            # TODO Do something with this.
 
         if self._subscription_queue is not None:
             await self._subscription_queue.put((self,
