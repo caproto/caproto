@@ -161,18 +161,23 @@ class ChannelAlarm:
     def acknowledge(self):
         pass
 
-    def _set_instance_from_dbr(self, dbr):
+    def write_from_dbr(self, dbr):
         data = self._data
-        data['status'] = dbr.status
-        data['severity'] = dbr.severity
-        data['acknowledge_transient'] = (dbr.ackt != 0)
-        data['acknowledge_severity'] = dbr.acks
-        data['alarm_string'] = dbr.value.decode(self.string_encoding)
+        if hasattr(dbr, 'status'):
+            data['status'] = dbr.status
+        if hasattr(dbr, 'severity'):
+            data['severity'] = dbr.severity
+        if hasattr(dbr, 'ackt'):
+            data['acknowledge_transient'] = (dbr.ackt != 0)
+        if hasattr(dbr, 'acks'):
+            data['acknowledge_severity'] = dbr.acks
+        if hasattr(dbr, 'value'):
+            data['alarm_string'] = dbr.value.decode(self.string_encoding)
 
     @classmethod
     def _from_dbr(cls, dbr, **kwargs):
         instance = cls(**kwargs)
-        instance._set_instance_from_dbr(dbr)
+        instance.write_from_dbr(dbr)
         return instance
 
     async def read(self, dbr=None):
@@ -295,6 +300,13 @@ class ChannelData:
             dbr_metadata = DBR_TYPES[data_type]()
 
         self._copy_metadata_to_dbr(dbr_metadata)
+
+        # Copy alarm fields also.
+        alarm_dbr = await self.alarm.read()
+        for field, _ in alarm_dbr._fields_:
+            if hasattr(dbr_metadata, field):
+                setattr(dbr_metadata, field, getattr(alarm_dbr, field))
+
         return dbr_metadata, values
 
     async def auth_write(self, hostname, username,
@@ -327,6 +339,10 @@ class ChannelData:
             dbr_metadata = DBR_TYPES[data_type].from_buffer(md_payload)
             self._update_metadata_from_dbr(dbr_metadata)
 
+        # Update alarm, which in turn updates all other channels
+        # connected to this alarm.
+        await self.alarm.write_from_dbr(dbr_metadata)
+
         if self._subscription_queue is not None:
             await self._subscription_queue.put((self,
                                                 SubscriptionType.DBE_VALUE,
@@ -350,11 +366,6 @@ class ChannelData:
         if to_type in time_types:
             epics_ts = timestamp_to_epics(data['timestamp'])
             dbr_metadata.secondsSinceEpoch, dbr_metadata.nanoSeconds = epics_ts
-
-        if hasattr(dbr_metadata, 'status'):
-            # many have status/severity
-            dbr_metadata.status = self.status
-            dbr_metadata.severity = self.severity
 
         convert_attrs = ('upper_disp_limit', 'lower_disp_limit',
                          'upper_alarm_limit', 'upper_warning_limit',
@@ -390,11 +401,6 @@ class ChannelData:
             timestamp = epics_timestamp_to_unix(dbr_metadata.secondsSinceEpoch,
                                                 dbr_metadata.nanoSeconds)
             data['timestamp'] = timestamp
-
-        # if hasattr(dbr_metadata, 'status'):
-        #     # many have status/severity
-        #     dbr_metadata.status = self.status
-        #     dbr_metadata.severity = self.severity
 
         convert_attrs = ('upper_disp_limit', 'lower_disp_limit',
                          'upper_alarm_limit', 'upper_warning_limit',

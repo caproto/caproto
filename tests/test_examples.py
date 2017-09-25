@@ -158,6 +158,23 @@ def test_curio_server():
         assert actual == expected
         print('reading:', reading)
 
+        # test updating alarm status/severity
+        metadata = (13, 14, 4, 0, 0)  # set timestamp to 4 seconds
+        await chan1.write((8,), data_type=20, metadata=metadata)
+        reading = await chan1.read(data_type=20)
+        # check reading
+        expected = 8
+        actual, = reading.data
+        assert actual == expected
+        # check status
+        expected = 13
+        actual = reading.metadata.status
+        assert actual == expected
+        # check severity
+        expected = 14
+        actual = reading.metadata.severity
+        assert actual == expected
+
         await chan1.disconnect()
         await chan1.circuit.socket.close()
 
