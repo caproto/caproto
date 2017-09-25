@@ -8,9 +8,10 @@ from ._dbr import (DBR_TYPES, ChType, promote_type, native_type,
                    timestamp_to_epics, time_types, MAX_ENUM_STRING_SIZE,
                    DBR_STSACK_STRING, AccessRights, _numpy_map,
                    SubscriptionType)
+from ._utils import CaprotoError
 
 
-class Forbidden(Exception):
+class Forbidden(CaprotoError):
     ...
 
 
