@@ -1,4 +1,5 @@
 import time
+import weakref
 
 # TODO: assuming USE_NUMPY for now
 import numpy as np
@@ -134,7 +135,7 @@ class ChannelAlarm:
     def __init__(self, *, status=0, severity=0,
                  acknowledge_transient=True, acknowledge_severity=0,
                  alarm_string='', string_encoding='latin-1'):
-        self._channels = []
+        self._channels = weakref.WeakSet()
         self.string_encoding = string_encoding
         data = {}
         data['status'] = status
@@ -151,7 +152,7 @@ class ChannelAlarm:
     alarm_string = property(lambda self: self._data['alarm_string'])
 
     def connect(self, channel_data):
-        self._channels.append(channel_data)
+        self._channels.add(channel_data)
 
     def disconnect(self, channel_data):
         self._channels.remove(channel_data)
@@ -401,9 +402,6 @@ class ChannelData:
         access : :data:`AccessRights.READ_WRITE`
         """
         return AccessRights.READ_WRITE
-
-    def __del__(self):
-        self.alarm.disconnect(self)
 
 
 class ChannelEnum(ChannelData):
