@@ -330,18 +330,19 @@ class ChannelData:
     def _copy_metadata_to_dbr(self, dbr_metadata):
         'Set all metadata fields of a given DBR type instance'
         to_type = ChType(dbr_metadata.DBR_ID)
+        data = self._data
 
         if hasattr(dbr_metadata, 'units'):
-            units = getattr(self, 'units', '')
+            units = data.get('units', '')
             if isinstance(units, str):
                 units = units.encode(self.string_encoding)
             dbr_metadata.units = units
 
         if hasattr(dbr_metadata, 'precision'):
-            dbr_metadata.precision = getattr(self, 'precision', 0)
+            dbr_metadata.precision = data.get('precision', 0)
 
         if to_type in time_types:
-            epics_ts = self.epics_timestamp
+            epics_ts = timestamp_to_epics(data['timestamp'])
             dbr_metadata.secondsSinceEpoch, dbr_metadata.nanoSeconds = epics_ts
 
         if hasattr(dbr_metadata, 'status'):
@@ -358,7 +359,7 @@ class ChannelData:
             return
 
         # convert all metadata types to the target type
-        values = convert_values(values=[getattr(self, key, 0)
+        values = convert_values(values=[data.get(key, 0)
                                         for key in convert_attrs],
                                 from_dtype=self.data_type,
                                 to_dtype=native_type(to_type),
@@ -372,7 +373,7 @@ class ChannelData:
     @property
     def epics_timestamp(self):
         'EPICS timestamp as (seconds, nanoseconds) since EPICS epoch'
-        return timestamp_to_epics(self.timestamp)
+        return timestamp_to_epics(self._data['timestamp'])
 
     @property
     def status(self):
