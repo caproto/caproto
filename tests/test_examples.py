@@ -191,18 +191,18 @@ def test_curio_server():
         await chan3.wait_for_connection()
         sub_id2 = await chan2.subscribe()
         sub_id3 = await chan3.subscribe()
-        await curio.sleep(0.5)
         print('write...')
         await chan2.write(b'hell')
         await chan3.write(b'good')
         print('write again...')
         metadata = (13, 14, 0, 0)  # set alarm status and severity
+        # Because this write touches the alarm, it should cause
+        # chan3 to issue an EventAddResponse also.
         await chan2.write(b'hell', data_type=14, metadata=metadata)
-        await chan3.write(b'good', data_type=14, metadata=metadata)
-        await curio.sleep(0.5)
         await chan2.unsubscribe(sub_id2)
         await chan3.unsubscribe(sub_id3)
-        print(commands)
+        await curio.sleep(0.2)  # Ensure the subs have time to spin.
+        assert len(commands) == 2 + 2 + 2
 
     async def task():
         # os.environ['EPICS_CA_ADDR_LIST'] = '255.255.255.255'
