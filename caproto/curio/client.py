@@ -183,8 +183,9 @@ class Channel:
         await self.circuit.send(command)
 
         async def _queue_loop():
-            command = await queue.get()
-            self.process_subscription(command)
+            while True:
+                command = await queue.get()
+                self.process_subscription(command)
 
         task = await curio.spawn(_queue_loop, daemon=True)
         self.monitoring_tasks[command.subscriptionid] = task
