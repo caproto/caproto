@@ -49,12 +49,14 @@ class VirtualCircuit:
         self.our_role = our_role
         if our_role is CLIENT:
             self.their_role = SERVER
+            abbrev = 'cli'  # just for logger
         else:
             self.their_role = CLIENT
+            abbrev = 'srv'
         self.address = address
         self.priority = priority
         self.channels = {}  # map cid to Channel
-        self.log = logging.getLogger("caproto.VC")
+        self.log = logging.getLogger("[{} circuit]".format(abbrev))
         self.states = CircuitState(self.channels)
         self._data = bytearray()
         self.channels_sid = {}  # map sid to Channel
@@ -146,8 +148,7 @@ class VirtualCircuit:
                                                       self.their_role)
             len_data = len(self._data)  # just for logging
             if type(command) is not NEED_DATA:
-                self.log.debug("Parsed %d/%d cached bytes into %r.",
-                               len(command), len_data, command)
+                self.log.debug("%d bytes -> %r", len(command), command)
                 commands.append(command)
             else:
                 self.log.debug("%d bytes are cached. Need more bytes to parse "
