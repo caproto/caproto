@@ -471,7 +471,7 @@ async def _test(pvdb=None):
                 }
         await pvdb['pi'].alarm.write(alarm_string='delicious')
 
-    ctx = Context('0.0.0.0', find_next_tcp_port(), pvdb)
+    ctx = Context('0.0.0.0', find_next_tcp_port(), pvdb, log_level='DEBUG')
     logger.info('Server starting up on %s:%d', ctx.host, ctx.port)
     return await ctx.run()
 
