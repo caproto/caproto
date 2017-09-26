@@ -225,6 +225,7 @@ class CurioVirtualCircuit:
             sub = Subscription(mask=command.mask,
                                circuit=self,
                                data_type=command.data_type,
+                               # TODO data_count?
                                subscription_id=command.subscriptionid)
             if db_entry not in self.context.subscriptions:
                 self.context.subscriptions[db_entry] = []
@@ -365,13 +366,23 @@ class Context:
                              for sub in subs
                              if sub.mask & mask]
             if matching_subs:
+                # Compose an EventAddResponse instance for the native data_type.
                 commands = {db_entry.data_type:
-                            chan.subscribe(data=data, subscriptionid=0,
+                            chan.subscribe(data=data,
+                                           data_type=db_entry.data_type,
+                                           data_count=len(data),
+                                           subscriptionid=0,  # placeholder
                                            status_code=1)}
+                # Monkey-patch the subscriptionid to match each subscription
+                # we are processing.
                 for circuit, data_type, sub_id in matching_subs:
                     try:
                         cmd = commands[data_type]
                     except KeyError:
+                        # This subscription wants something other than
+                        # db_entry.data_type. Read db_entry with a different
+                        # data_type and make a new EventAddResponse.
+                        # TODO Do the conversion without a fresh read.
                         metadata, data = await db_entry.auth_read(
                             self.client_hostname, self.client_username,
                             data_type)
