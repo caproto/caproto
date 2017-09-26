@@ -503,10 +503,10 @@ def test_curio_server_with_caget(curio_server, pv, dbr_type):
             assert float(data['value']) == float(db_value)
         elif req_native == ChType.STRING:
             if db_native == ChType.STRING:
-                db_string_value = str(db_value)
+                db_string_value = str(db_value[0])
                 string_length = len(db_string_value)
                 read_value = data['value'][:string_length]
-                assert int(data['element_count']) == string_length
+                assert int(data['element_count']) == 1
                 assert read_value == db_string_value
                 # due to how we monitor the caget output, we get @@@s where
                 # null padding bytes are. so long as we verify element_count

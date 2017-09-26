@@ -535,3 +535,13 @@ class ChannelChar(ChannelNumeric):
 class ChannelString(ChannelData):
     data_type = ChType.STRING
     # There is no CTRL or GR variant of STRING.
+
+    def __init__(self, *, alarm=None,
+                 value=None, timestamp=None,
+                 string_encoding='latin-1',
+                 reported_record_type='caproto'):
+        if isinstance(value, (str, bytes)):
+            value = [value]
+        super().__init__(alarm=alarm, value=value, timestamp=timestamp,
+                         string_encoding=string_encoding,
+                         reported_record_type=reported_record_type)
