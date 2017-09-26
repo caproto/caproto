@@ -364,7 +364,6 @@ class Context:
             matching_subs = [(sub.circuit, sub.data_type, sub.subscription_id)
                              for sub in subs
                              if sub.mask & mask]
-            print('{} matching subs'.format(len(matching_subs)))
             if matching_subs:
                 commands = {db_entry.data_type:
                             chan.subscribe(data=data, subscriptionid=0,
