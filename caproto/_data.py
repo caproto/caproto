@@ -1,3 +1,4 @@
+from collections import defaultdict
 import time
 import weakref
 
@@ -244,7 +245,7 @@ class ChannelData:
         self._data = {}
         self._data['value'] = value
         self._data['timestamp'] = timestamp
-        self._subscription_queue = None
+        self._subscriptions = defaultdict(set)  # maps sub_spec to queues
         self._dbr_metadata = {
             chtype: DBR_TYPES[chtype]()
             for chtype in (promote_type(self.data_type, use_ctrl=True),
@@ -257,10 +258,14 @@ class ChannelData:
     value = property(lambda self: self._data['value'])
     timestamp = property(lambda self: self._data['timestamp'])
 
-    def subscribe(self, queue, *sub_queue_args):
-        '''Set subscription queue'''
-        self._subscription_queue = queue
-        self._subscription_queue_args = sub_queue_args
+    async def subscribe(self, queue, sub_spec):
+        self._subscriptions[sub_spec].add(queue)
+        # Always send current reading immediately upon subscription.
+        metadata, values = await self._read(sub_spec.data_type)
+        await queue.put((sub_spec, metadata, values))
+
+    async def unsubscribe(self, queue, sub_spec):
+        self._subscriptions[sub_spec].remove(queue)
 
     async def auth_read(self, hostname, username, data_type):
         '''Get DBR data and native data, converted to a specific type'''
@@ -271,6 +276,11 @@ class ChannelData:
         return (await self.read(data_type))
 
     async def read(self, data_type):
+        # Subclass might trigger a write here to update self._data
+        # before reading it out.
+        return (await self._read(data_type))
+
+    async def _read(self, data_type):
         # special cases for alarm strings and class name
         if data_type == ChType.STSACK_STRING:
             ret = await self.alarm.read()
@@ -281,14 +291,14 @@ class ChannelData:
             class_name.value = rtyp
             return class_name, b''
 
-        # for native types, there is no dbr metadata - just data
         native_to = native_type(data_type)
-        values = convert_values(values=self.value, from_dtype=self.data_type,
-                              to_dtype=native_to,
-                              string_encoding=self.string_encoding,
-                              enum_strings=getattr(self, 'enum_strings', None))
+        values = convert_values(values=self._data['value'],
+                                from_dtype=self.data_type,
+                                to_dtype=native_to,
+                                string_encoding=self.string_encoding,
+                                enum_strings=self._data.get('enum_strings'))
 
-
+        # for native types, there is no dbr metadata - just data
         if data_type in native_types:
             return b'', values
 
@@ -347,11 +357,14 @@ class ChannelData:
         await self.publish()
 
     async def publish(self):
-        if self._subscription_queue is not None:
-            await self._subscription_queue.put((self,
-                                                SubscriptionType.DBE_VALUE,
-                                                self.value) +
-                                               self._subscription_queue_args)
+        # Only read out as many data types as we actually need,
+        # as specificed by the sub_specs currently registered.
+        # If, for example, no subscribers have asked for non-native
+        # data_type, we save time by never filling in metadata.
+        for sub_spec, queues in self._subscriptions.items():
+            metadata, values = await self._read(sub_spec.data_type)
+            for queue in queues:
+                await queue.put((sub_spec, metadata, values))
 
     def _copy_metadata_to_dbr(self, dbr_metadata):
         'Set all metadata fields of a given DBR type instance'
