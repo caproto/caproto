@@ -134,25 +134,28 @@ def convert_values(values, from_dtype, to_dtype, *, string_encoding='latin-1',
     return np.asarray(values).astype(_numpy_map[to_dtype])
 
 
+def _read_only_property(key):
+    '''Create property that gives read-only access to instance._data[key]'''
+    return property(lambda self: self._data[key],
+                    doc='data from key {!r}'.format(key))
+
+
 class ChannelAlarm:
-    def __init__(self, *, status=0, severity=0,
-                 acknowledge_transient=True, acknowledge_severity=0,
-                 alarm_string='', string_encoding='latin-1'):
+    def __init__(self, *, status=0, severity=0, acknowledge_transient=True,
+                 acknowledge_severity=0, alarm_string='',
+                 string_encoding='latin-1'):
         self._channels = weakref.WeakSet()
         self.string_encoding = string_encoding
-        data = {}
-        data['status'] = status
-        data['severity'] = severity
-        data['acknowledge_transient'] = acknowledge_transient
-        data['acknowledge_severity'] = acknowledge_severity
-        data['alarm_string'] = alarm_string
-        self._data = data
+        self._data = dict(status=status, severity=severity,
+                          acknowledge_transient=acknowledge_transient,
+                          acknowledge_severity=acknowledge_severity,
+                          alarm_string=alarm_string)
 
-    status = property(lambda self: self._data['status'])
-    severity = property(lambda self: self._data['severity'])
-    acknowledge_transient = property(lambda self: self._data['acknowledge_transient'])
-    acknowledge_severity = property(lambda self: self._data['acknowledge_severity'])
-    alarm_string = property(lambda self: self._data['alarm_string'])
+    status = _read_only_property('status')
+    severity = _read_only_property('severity')
+    acknowledge_transient = _read_only_property('acknowledge_transient')
+    acknowledge_severity = _read_only_property('acknowledge_severity')
+    alarm_string = _read_only_property('alarm_string')
 
     def connect(self, channel_data):
         self._channels.add(channel_data)
@@ -243,9 +246,8 @@ class ChannelData:
         self.alarm.connect(self)
         self.string_encoding = string_encoding
         self.reported_record_type = reported_record_type
-        self._data = {}
-        self._data['value'] = value
-        self._data['timestamp'] = timestamp
+        self._data = dict(value=value,
+                          timestamp=timestamp)
         self._subscriptions = defaultdict(set)  # maps sub_spec to queues
         self._dbr_metadata = {
             chtype: DBR_TYPES[chtype]()
@@ -256,8 +258,8 @@ class ChannelData:
                            )
         }
 
-    value = property(lambda self: self._data['value'])
-    timestamp = property(lambda self: self._data['timestamp'])
+    value = _read_only_property('value')
+    timestamp = _read_only_property('timestamp')
 
     async def subscribe(self, queue, sub_spec):
         self._subscriptions[sub_spec].add(queue)
@@ -461,7 +463,7 @@ class ChannelData:
         ----------
         hostname : string
         username : string
-        
+
         Returns
         -------
         access : :data:`AccessRights.READ_WRITE`
@@ -479,7 +481,7 @@ class ChannelEnum(ChannelData):
             enum_strings = []
         self._data['enum_strings'] = enum_strings
 
-    enum_strings = property(lambda self: self._data['enum_strings'])
+    enum_strings = _read_only_property('enum_strings')
 
     def _copy_metadata_to_dbr(self, dbr_metadata):
         if hasattr(dbr_metadata, 'strs') and self.enum_strings:
@@ -511,15 +513,15 @@ class ChannelNumeric(ChannelData):
         self._data['upper_ctrl_limit'] = upper_ctrl_limit
         self._data['lower_ctrl_limit'] = lower_ctrl_limit
 
-    units = property(lambda self: self._data['units'])
-    upper_disp_limit = property(lambda self: self._data['upper_disp_limit'])
-    lower_disp_limit = property(lambda self: self._data['lower_disp_limit'])
-    upper_alarm_limit = property(lambda self: self._data['upper_alarm_limit'])
-    upper_warning_limit = property(lambda self: self._data['upper_warning_limit'])
-    lower_warning_limit = property(lambda self: self._data['lower_warning_limit'])
-    lower_alarm_limit = property(lambda self: self._data['lower_alarm_limit'])
-    upper_ctrl_limit = property(lambda self: self._data['upper_ctrl_limit'])
-    lower_ctrl_limit = property(lambda self: self._data['lower_ctrl_limit'])
+    units = _read_only_property('units')
+    upper_disp_limit = _read_only_property('upper_disp_limit')
+    lower_disp_limit = _read_only_property('lower_disp_limit')
+    upper_alarm_limit = _read_only_property('upper_alarm_limit')
+    upper_warning_limit = _read_only_property('upper_warning_limit')
+    lower_warning_limit = _read_only_property('lower_warning_limit')
+    lower_alarm_limit = _read_only_property('lower_alarm_limit')
+    upper_ctrl_limit = _read_only_property('upper_ctrl_limit')
+    lower_ctrl_limit = _read_only_property('lower_ctrl_limit')
 
 
 class ChannelInteger(ChannelNumeric):
@@ -534,7 +536,7 @@ class ChannelDouble(ChannelNumeric):
 
         self._data['precision'] = precision
 
-    precision = property(lambda self: self._data['precision'])
+    precision = _read_only_property('precision')
 
 
 class ChannelChar(ChannelNumeric):
