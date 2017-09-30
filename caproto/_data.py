@@ -9,7 +9,8 @@ from ._dbr import (DBR_TYPES, ChType, promote_type, native_type,
                    native_float_types, native_int_types, native_types,
                    timestamp_to_epics, time_types, MAX_ENUM_STRING_SIZE,
                    DBR_STSACK_STRING, AccessRights, _numpy_map,
-                   SubscriptionType, epics_timestamp_to_unix)
+                   SubscriptionType, epics_timestamp_to_unix,
+                   AlarmStatus, AlarmSeverity)
 from ._utils import CaprotoError
 from ._commands import parse_metadata
 
@@ -165,9 +166,9 @@ class ChannelAlarm:
     async def write_from_dbr(self, dbr, caller=None):
         data = self._data
         if hasattr(dbr, 'status'):
-            data['status'] = dbr.status
+            data['status'] = AlarmStatus(dbr.status)
         if hasattr(dbr, 'severity'):
-            data['severity'] = dbr.severity
+            data['severity'] = AlarmSeverity(dbr.severity)
         if hasattr(dbr, 'ackt'):
             data['acknowledge_transient'] = (dbr.ackt != 0)
         if hasattr(dbr, 'acks'):
@@ -197,9 +198,9 @@ class ChannelAlarm:
                     alarm_string=None, caller=None):
         data = self._data
         if status is not None:
-            data['status'] = status
+            data['status'] = AlarmStatus(status)
         if severity is not None:
-            data['severity'] = severity
+            data['severity'] = AlarmSeverity(severity)
         if acknowledge_transient is not None:
             data['acknowledge_transient'] = acknowledge_transient
         if acknowledge_severity is not None:
