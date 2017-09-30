@@ -1,4 +1,3 @@
-import copy
 import logging
 import random
 from collections import defaultdict, deque, namedtuple
@@ -7,9 +6,7 @@ import curio
 from curio import socket
 
 import caproto as ca
-from caproto import (ChannelDouble, ChannelInteger, ChannelEnum,
-                     get_address_list, get_beacon_address_list,
-                     get_environment_variables)
+from caproto import (get_beacon_address_list, get_environment_variables)
 
 
 class DisconnectedCircuit(Exception):
