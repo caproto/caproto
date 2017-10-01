@@ -1,3 +1,4 @@
+import ast
 import datetime
 
 import pytest
@@ -9,7 +10,7 @@ from caproto.curio.server import find_next_tcp_port
 import caproto.curio.server as server
 
 from caproto import ChType
-from epics_test_utils import run_caget
+from epics_test_utils import (run_caget, run_caput)
 
 
 REPEATER_PORT = 5065
@@ -110,13 +111,13 @@ caget_checks += [('char', ChType.CHAR),
 
 
 @pytest.mark.parametrize('pv, dbr_type', caget_checks)
-def test_curio_server_with_caget(curio_server, pv, dbr_type):
+def test_with_caget(curio_server, pv, dbr_type):
     ctrl_keys = ('upper_disp_limit', 'lower_alarm_limit',
                  'upper_alarm_limit', 'lower_warning_limit',
                  'upper_warning_limit', 'lower_ctrl_limit',
                  'upper_ctrl_limit', 'precision')
 
-    async def run_client_test():
+    async def client():
         print('* client_test', pv, dbr_type)
         db_entry = caget_pvdb[pv]
         # native type as in the ChannelData database
@@ -220,7 +221,63 @@ def test_curio_server_with_caget(curio_server, pv, dbr_type):
         server_task = await curio.spawn(curio_server)
 
         try:
-            await run_client_test()
+            await client()
+        finally:
+            await server_task.cancel()
+
+    with curio.Kernel() as kernel:
+        kernel.run(task)
+    print('done')
+
+
+caput_checks = [('int', '1', [1]),
+                ('pi', '3.18', [3.18]),
+                ('enum', 'd', 'd'),  # TODO inconsistency
+                # ('enum2', 'cc', 'cc'),  # TODO inconsistency
+                # ('str', 'resolve', [b'resolve']),  # TODO inconsistency - encoding
+                # ('char', 'testing', 'testing'),  # TODO comes in as byte array
+                # TODO string array, longer char array
+                ]
+
+@pytest.mark.parametrize('pv, put_value, check_value', caput_checks)
+# @pytest.mark.parametrize('async_put', [True, False])
+def test_with_caput(curio_server, pv, put_value, check_value, async_put=True):
+    async def client():
+        print('* client_test', pv, 'put value', put_value, 'check value',
+              check_value)
+
+        db_entry = caget_pvdb[pv]
+        db_old = db_entry.value
+        data = await run_caput(pv, put_value,
+                               as_string=isinstance(db_entry, ca.ChannelChar))
+        db_new = db_entry.value
+
+        if isinstance(db_entry, (ca.ChannelInteger, ca.ChannelDouble)):
+            clean_func = ast.literal_eval
+        # elif isinstance(db_entry, ca.ChannelString):
+        #     clean_func = lambda v: v.split(' ', 1)[1]
+        else:
+            clean_func = None
+
+        if clean_func is not None:
+            for key in ('old', 'new'):
+                data[key] = clean_func(data[key])
+        print('caput data', data)
+        print('old from db', db_old)
+        print('new from db', db_new)
+        print('old from caput', data['old'])
+        print('new from caput', data['new'])
+
+        # check value from database compared to value from caput output
+        assert db_new == data['new']
+        # check value from database compared to value the test expects
+        assert db_new == check_value
+
+    async def task():
+        server_task = await curio.spawn(curio_server)
+
+        try:
+            await client()
         finally:
             await server_task.cancel()
 
