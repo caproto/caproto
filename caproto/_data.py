@@ -322,19 +322,19 @@ class ChannelData:
 
         return dbr_metadata, values
 
-    async def auth_write(self, hostname, username,
-                         data, data_type,metadata):
+    async def auth_write(self, hostname, username, data, data_type, metadata):
         access = self.check_access(hostname, username)
         if access not in (AccessRights.WRITE, AccessRights.READ_WRITE):
             raise Forbidden("Client with hostname {} and username {} cannot "
                             "write.".format(hostname, username))
-        return (await self.write(data, data_type, metadata))
+        return (await self.write_from_dbr(data, data_type, metadata))
 
-    async def write(self, data, data_type, metadata):
+    async def write_from_dbr(self, data, data_type, metadata):
         '''Set data from DBR metadata/values'''
         timestamp = time.time()  # will only be used if metadata is None
+        data = self._data
         native_from = native_type(data_type)
-        self._data['value'] = convert_values(
+        data['value'] = convert_values(
             values=data,
             from_dtype=native_from,
             to_dtype=self.data_type,
@@ -342,7 +342,7 @@ class ChannelData:
             enum_strings=getattr(self, 'enum_strings', None))
 
         if metadata is None:
-            self._data['timestamp'] = timestamp
+            data['timestamp'] = timestamp
         else:
             # Convert `metadata` to bytes-like (or pass it through).
             md_payload = parse_metadata(metadata, data_type)
@@ -392,20 +392,18 @@ class ChannelData:
                          'lower_warning_limit', 'lower_alarm_limit',
                          'upper_ctrl_limit', 'lower_ctrl_limit')
 
-        if not any(hasattr(dbr_metadata, attr) for attr in convert_attrs):
-            return
-
-        # convert all metadata types to the target type
-        values = convert_values(values=[data.get(key, 0)
-                                        for key in convert_attrs],
-                                from_dtype=self.data_type,
-                                to_dtype=native_type(to_type),
-                                string_encoding=self.string_encoding)
-        if isinstance(values, np.ndarray):
-            values = values.tolist()
-        for attr, value in zip(convert_attrs, values):
-            if hasattr(dbr_metadata, attr):
-                setattr(dbr_metadata, attr, value)
+        if any(hasattr(dbr_metadata, attr) for attr in convert_attrs):
+            # convert all metadata types to the target type
+            values = convert_values(values=[data.get(key, 0)
+                                            for key in convert_attrs],
+                                    from_dtype=self.data_type,
+                                    to_dtype=native_type(to_type),
+                                    string_encoding=self.string_encoding)
+            if isinstance(values, np.ndarray):
+                values = values.tolist()
+            for attr, value in zip(convert_attrs, values):
+                if hasattr(dbr_metadata, attr):
+                    setattr(dbr_metadata, attr, value)
 
     def _update_metadata_from_dbr(self, dbr_metadata):
         dbr_type = ChType(dbr_metadata.DBR_ID)
