@@ -134,6 +134,29 @@ def convert_values(values, from_dtype, to_dtype, *, string_encoding='latin-1',
     return np.asarray(values).astype(_numpy_map[to_dtype])
 
 
+def dbr_metadata_to_dict(dbr_metadata, string_encoding):
+    '''Return a dictionary of metadata keys to values'''
+    kw = {attr: getattr(metadata, attr, None)
+          for attr in ('precision', 'upper_disp_limit', 'lower_disp_limit',
+                       'upper_alarm_limit', 'upper_warning_limit',
+                       'lower_warning_limit', 'lower_alarm_limit',
+                       'upper_ctrl_limit', 'lower_ctrl_limit')}
+
+    if hasattr(dbr_metadata, 'units'):
+        kw['units'] = dbr_metadata.units.decode(string_encoding)
+
+    if hasattr(dbr_metadata, 'precision'):
+        kw['precision'] = dbr_metadata.precision
+
+    dbr_type = ChType(dbr_metadata.DBR_ID)
+    if dbr_type in time_types:
+        timestamp = epics_timestamp_to_unix(dbr_metadata.secondsSinceEpoch,
+                                            dbr_metadata.nanoSeconds)
+        kw['timestamp'] = timestamp
+
+    return kw
+
+
 def _read_only_property(key):
     '''Create property that gives read-only access to instance._data[key]'''
     return property(lambda self: self._data[key],
@@ -249,14 +272,6 @@ class ChannelData:
         self._data = dict(value=value,
                           timestamp=timestamp)
         self._subscriptions = defaultdict(set)  # maps sub_spec to queues
-        self._dbr_metadata = {
-            chtype: DBR_TYPES[chtype]()
-            for chtype in (promote_type(self.data_type, use_ctrl=True),
-                           promote_type(self.data_type, use_time=True),
-                           promote_type(self.data_type, use_status=True),
-                           promote_type(self.data_type, use_gr=True),
-                           )
-        }
 
     value = _read_only_property('value')
     timestamp = _read_only_property('timestamp')
@@ -305,14 +320,8 @@ class ChannelData:
         if data_type in native_types:
             return b'', values
 
-        if data_type in self._dbr_metadata:
-            dbr_metadata = self._dbr_metadata[data_type]
-        else:
-            # TODO: non-standard type request. frequent ones probably should be
-            # cached?
-            dbr_metadata = DBR_TYPES[data_type]()
-
-        self._copy_metadata_to_dbr(dbr_metadata)
+        dbr_metadata = DBR_TYPES[data_type]()
+        self._read_metadata(dbr_metadata)
 
         # Copy alarm fields also.
         alarm_dbr = await self.alarm.read()
@@ -346,16 +355,26 @@ class ChannelData:
         else:
             # Convert `metadata` to bytes-like (or pass it through).
             md_payload = parse_metadata(metadata, data_type)
+
             # Depending on the type of `metdata` above,
             # `md_payload` could be a DBR struct or plain bytes.
             # Load it into a struct (zero-copy) to be sure.
             dbr_metadata = DBR_TYPES[data_type].from_buffer(md_payload)
-            self._update_metadata_from_dbr(dbr_metadata)
+            await self.write_metadata(publish=False,
+                                      **dbr_metadata_to_dict(dbr_metadata))
 
             # Update alarm, which in turn updates all other channels
             # connected to this alarm.
             await self.alarm.write_from_dbr(dbr_metadata, caller=self)
 
+        # Send a new event to subscribers.
+        await self.publish()
+
+    async def write(self, data, **metadata):
+        '''Set data from native Python types'''
+        metadata['timestamp'] = metadata.get('timestamp', time.time())
+        self._data['value'] = data
+        await self.write_metadata(publish=False, **metadata)
         # Send a new event to subscribers.
         await self.publish()
 
@@ -369,7 +388,7 @@ class ChannelData:
             for queue in queues:
                 await queue.put((sub_spec, metadata, values))
 
-    def _copy_metadata_to_dbr(self, dbr_metadata):
+    def _read_metadata(self, dbr_metadata):
         'Set all metadata fields of a given DBR type instance'
         to_type = ChType(dbr_metadata.DBR_ID)
         data = self._data
@@ -405,28 +424,24 @@ class ChannelData:
                 if hasattr(dbr_metadata, attr):
                     setattr(dbr_metadata, attr, value)
 
-    def _update_metadata_from_dbr(self, dbr_metadata):
-        dbr_type = ChType(dbr_metadata.DBR_ID)
+    async def write_metadata(self, publish=True, units=None, precision=None,
+                             timestamp=None, upper_disp_limit=None,
+                             lower_disp_limit=None, upper_alarm_limit=None,
+                             upper_warning_limit=None,
+                             lower_warning_limit=None, lower_alarm_limit=None,
+                             upper_ctrl_limit=None, lower_ctrl_limit=None):
+        '''Write metadata, optionally publishing information to clients'''
         data = self._data
+        for kw in ('units', 'precision', 'timestamp', 'upper_disp_limit',
+                   'lower_disp_limit', 'upper_alarm_limit',
+                   'upper_warning_limit', 'lower_warning_limit',
+                   'lower_alarm_limit', 'upper_ctrl_limit', 'lower_ctrl_limit'):
+            value = locals()[kw]
+            if value is not None and kw in data:
+                data[kw] = value
 
-        if hasattr(dbr_metadata, 'units'):
-            data['units'] = dbr_metadata.units.decode(self.string_encoding)
-
-        if hasattr(dbr_metadata, 'precision'):
-            data['precision'] = dbr_metdata.precision
-
-        if dbr_type in time_types:
-            timestamp = epics_timestamp_to_unix(dbr_metadata.secondsSinceEpoch,
-                                                dbr_metadata.nanoSeconds)
-            data['timestamp'] = timestamp
-
-        convert_attrs = ('upper_disp_limit', 'lower_disp_limit',
-                         'upper_alarm_limit', 'upper_warning_limit',
-                         'lower_warning_limit', 'lower_alarm_limit',
-                         'upper_ctrl_limit', 'lower_ctrl_limit')
-
-        if not any(hasattr(dbr_metadata, attr) for attr in convert_attrs):
-            return
+        if publish:
+            await self.publish()
 
     @property
     def epics_timestamp(self):
@@ -481,7 +496,7 @@ class ChannelEnum(ChannelData):
 
     enum_strings = _read_only_property('enum_strings')
 
-    def _copy_metadata_to_dbr(self, dbr_metadata):
+    def _read_metadata(self, dbr_metadata):
         if hasattr(dbr_metadata, 'strs') and self.enum_strings:
             for i, string in enumerate(self.enum_strings):
                 bytes_ = bytes(string, self.string_encoding)
@@ -489,7 +504,7 @@ class ChannelEnum(ChannelData):
                                                        b'\x00')
             dbr_metadata.no_str = len(self.enum_strings)
 
-        return super()._copy_metadata_to_dbr(dbr_metadata)
+        return super()._read_metadata(dbr_metadata)
 
 
 class ChannelNumeric(ChannelData):
