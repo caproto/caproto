@@ -160,7 +160,8 @@ def test_curio_server_example():
         print('reading:', reading)
 
         # test updating alarm status/severity
-        metadata = (13, 14, 0, 0, 0)  # set alarm status and severity
+        status, severity = ca.AlarmStatus.SCAN, ca.AlarmSeverity.MAJOR_ALARM
+        metadata = (status, severity, 0, 0, 0)  # set alarm status and severity
         await chan1.write((8,), data_type=20, metadata=metadata)
         reading = await chan1.read(data_type=20)
         # check reading
@@ -168,13 +169,11 @@ def test_curio_server_example():
         actual, = reading.data
         assert actual == expected
         # check status
-        expected = 13
         actual = reading.metadata.status
-        assert actual == expected
+        assert actual == status
         # check severity
-        expected = 14
         actual = reading.metadata.severity
-        assert actual == expected
+        assert actual == severity
 
         await chan1.disconnect()
         assert commands, 'subscription not called in client'
@@ -196,7 +195,7 @@ def test_curio_server_example():
         await chan2.write(b'hell')
         await chan3.write(b'good')
         print('write again...')
-        metadata = (13, 14, 0, 0)  # set alarm status and severity
+        metadata = (status, severity, 0, 0)  # set alarm status and severity
         # Because this write touches the alarm, it should cause
         # chan3 to issue an EventAddResponse also.
         await chan2.write(b'hell', data_type=14, metadata=metadata)

@@ -5,11 +5,10 @@ import weakref
 # TODO: assuming USE_NUMPY for now
 import numpy as np
 
-from ._dbr import (DBR_TYPES, ChType, promote_type, native_type,
-                   native_float_types, native_int_types, native_types,
-                   timestamp_to_epics, time_types, MAX_ENUM_STRING_SIZE,
-                   DBR_STSACK_STRING, AccessRights, _numpy_map,
-                   SubscriptionType, epics_timestamp_to_unix,
+from ._dbr import (DBR_TYPES, ChType, native_type, native_float_types,
+                   native_int_types, native_types, timestamp_to_epics,
+                   time_types, MAX_ENUM_STRING_SIZE, DBR_STSACK_STRING,
+                   AccessRights, _numpy_map, epics_timestamp_to_unix,
                    AlarmStatus, AlarmSeverity)
 from ._utils import CaprotoError
 from ._commands import parse_metadata
@@ -136,7 +135,10 @@ def convert_values(values, from_dtype, to_dtype, *, string_encoding='latin-1',
 
 def dbr_metadata_to_dict(dbr_metadata, string_encoding):
     '''Return a dictionary of metadata keys to values'''
-    kw = {attr: getattr(metadata, attr, None)
+    # TODO: Note that if dbr.py is restructured to be more like pypvasync
+    # (again, but correctly this time) this could be handled nicely as a method
+    # on the dbr types
+    kw = {attr: getattr(dbr_metadata, attr, None)
           for attr in ('precision', 'upper_disp_limit', 'lower_disp_limit',
                        'upper_alarm_limit', 'upper_warning_limit',
                        'lower_warning_limit', 'lower_alarm_limit',
@@ -338,20 +340,31 @@ class ChannelData:
                             "write.".format(hostname, username))
         return (await self.write_from_dbr(data, data_type, metadata))
 
+    async def verify_value(self, data):
+        '''Verify a value prior to it being written by CA or Python
+
+        To reject a value, raise an exception. Otherwise, return the
+        original value or a modified version of it.
+        '''
+        return data
+
     async def write_from_dbr(self, data, data_type, metadata):
         '''Set data from DBR metadata/values'''
         timestamp = time.time()  # will only be used if metadata is None
-        data = self._data
         native_from = native_type(data_type)
-        data['value'] = convert_values(
-            values=data,
-            from_dtype=native_from,
-            to_dtype=self.data_type,
-            string_encoding=self.string_encoding,
-            enum_strings=getattr(self, 'enum_strings', None))
+        value = convert_values(values=data, from_dtype=native_from,
+                               to_dtype=self.data_type,
+                               string_encoding=self.string_encoding,
+                               enum_strings=getattr(self, 'enum_strings',
+                                                    None))
+
+        modified_value = await self.verify_value(value)
+        self._data['value'] = (modified_value
+                               if modified_value is not None
+                               else value)
 
         if metadata is None:
-            data['timestamp'] = timestamp
+            self._data['timestamp'] = timestamp
         else:
             # Convert `metadata` to bytes-like (or pass it through).
             md_payload = parse_metadata(metadata, data_type)
@@ -360,8 +373,9 @@ class ChannelData:
             # `md_payload` could be a DBR struct or plain bytes.
             # Load it into a struct (zero-copy) to be sure.
             dbr_metadata = DBR_TYPES[data_type].from_buffer(md_payload)
-            await self.write_metadata(publish=False,
-                                      **dbr_metadata_to_dict(dbr_metadata))
+            metadata_dict = dbr_metadata_to_dict(dbr_metadata,
+                                                 self.string_encoding)
+            await self.write_metadata(publish=False, **metadata_dict)
 
             # Update alarm, which in turn updates all other channels
             # connected to this alarm.
@@ -370,10 +384,13 @@ class ChannelData:
         # Send a new event to subscribers.
         await self.publish()
 
-    async def write(self, data, **metadata):
+    async def write(self, value, **metadata):
         '''Set data from native Python types'''
         metadata['timestamp'] = metadata.get('timestamp', time.time())
-        self._data['value'] = data
+        modified_value = await self.verify_value(value)
+        self._data['value'] = (modified_value
+                               if modified_value is not None
+                               else value)
         await self.write_metadata(publish=False, **metadata)
         # Send a new event to subscribers.
         await self.publish()
@@ -435,7 +452,8 @@ class ChannelData:
         for kw in ('units', 'precision', 'timestamp', 'upper_disp_limit',
                    'lower_disp_limit', 'upper_alarm_limit',
                    'upper_warning_limit', 'lower_warning_limit',
-                   'lower_alarm_limit', 'upper_ctrl_limit', 'lower_ctrl_limit'):
+                   'lower_alarm_limit', 'upper_ctrl_limit',
+                   'lower_ctrl_limit'):
             value = locals()[kw]
             if value is not None and kw in data:
                 data[kw] = value
