@@ -157,6 +157,50 @@ def bytelen(item):
                                          "".format(type(item)))
 
 
+def parse_metadata(metadata, data_type):
+    """
+    Parse metadata tuple into bytes or DBR.
+
+    If input is:
+
+    * tuple -> DBR struct
+    * DBR struct or bytes -> no-op
+    * None -> empty bytes object
+
+    Parameters
+    ----------
+    metadata : a DBR struct, any iterable, or bytes
+    data_type : integer
+
+    Returns
+    -------
+    md_payload : a DBR struct or bytes
+    """
+    if hasattr(metadata, 'DBR_ID'):
+        # This is already a DBR.
+        md_payload = metadata
+    elif isinstance(metadata, bytes):
+        md_payload = metadata
+    elif metadata is None:
+        md_payload = b''
+    elif isinstance(metadata, collections.Iterable):
+        # This is a tuple of values to be encoded into a DBR.
+        justified_md = []
+        for val in metadata:
+            if isinstance(val, str):
+                if len(val) > 40:  # 39?
+                    raise CaprotoValueError("The protocol limits strings to "
+                                            "40 characters.")
+                val = val.ljust(MAX_ENUM_STRING_SIZE, b'\x00')
+            justified_md.append(val)
+        md_payload = DBR_TYPES[data_type](*justified_md)
+    else:
+        raise CaprotoTypeError("metadata given as type we cannot handle - {}"
+                               "".format(type(metadata)))
+    return md_payload
+
+
+
 def data_payload(data, metadata, data_type, data_count):
     """
     Pack bytes into a set of buffers for usage as a single payload
@@ -201,29 +245,7 @@ def data_payload(data, metadata, data_type, data_count):
     else:
         raise CaprotoTypeError("data given as type we cannot handle - {}"
                                "".format(type(data)))
-
-    if hasattr(metadata, 'DBR_ID'):
-        # This is already a DBR.
-        md_payload = metadata
-    elif isinstance(metadata, bytes):
-        md_payload = metadata
-    elif metadata is None:
-        md_payload = b''
-    elif isinstance(metadata, collections.Iterable):
-        # This is a tuple of values to be encoded into a DBR.
-        justified_md = []
-        for val in metadata:
-            if isinstance(val, str):
-                if len(val) > 40:  # 39?
-                    raise CaprotoValueError("The protocol limits strings to "
-                                            "40 characters.")
-                val = val.ljust(MAX_ENUM_STRING_SIZE, b'\x00')
-            justified_md.append(val)
-        md_payload = DBR_TYPES[data_type](*justified_md)
-    else:
-        raise CaprotoTypeError("metadata given as type we cannot handle - {}"
-                               "".format(type(metadata)))
-
+    md_payload = parse_metadata(metadata, data_type)
     size, pad_payload = pad_buffers(md_payload, data_payload)
     if pad_payload:
         return size, md_payload, data_payload, pad_payload

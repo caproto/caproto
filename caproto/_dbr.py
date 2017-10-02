@@ -1128,8 +1128,8 @@ def native_to_builtin(value, native_type, data_count):
         dt = _numpy_map[native_type]
         if native_type == ChType.STRING and len(value) < MAX_STRING_SIZE:
             # caput behaves this way
-            return numpy.frombuffer(value.ljust(MAX_STRING_SIZE, b'\x00'),
-                                    dtype=dt)
+            return numpy.frombuffer(
+                bytes(value).ljust(MAX_STRING_SIZE,b'\x00'), dtype=dt)
 
         return numpy.frombuffer(value, dtype=dt)
     else:

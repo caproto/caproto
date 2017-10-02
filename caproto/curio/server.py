@@ -1,22 +1,22 @@
 import logging
 import random
-from collections import namedtuple
+from collections import defaultdict, deque, namedtuple
 
 import curio
 from curio import socket
 
 import caproto as ca
-from caproto import (ChannelDouble, ChannelInteger, ChannelEnum,
-                     get_address_list, get_beacon_address_list,
-                     get_environment_variables)
+from caproto import (get_beacon_address_list, get_environment_variables)
 
 
 class DisconnectedCircuit(Exception):
     ...
 
 
-Subscription = namedtuple('Subscription', ('mask', 'circuit', 'data_type',
-                                           'subscription_id'))
+Subscription = namedtuple('Subscription', ('mask', 'circuit', 'channel',
+                                           'data_type',
+                                           'data_count', 'subscriptionid'))
+SubscriptionSpec = namedtuple('SubscriptionSpec', ('db_entry', 'data_type',))
 
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,6 @@ def find_next_tcp_port(host='0.0.0.0', starting_port=ca.EPICS_CA2_PORT + 1):
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.bind((host, port))
         except IOError as ex:
-            print(ex, port)
             port = random.randint(49152, 65535)
             attempts += 1
         else:
@@ -56,7 +55,7 @@ class CurioVirtualCircuit:
         self.command_queue = curio.Queue()
         self.new_command_condition = curio.Condition()
         self.pending_tasks = curio.TaskGroup()
-        self.subscriptions = {}
+        self.subscriptions = defaultdict(deque)
 
     async def run(self):
         await self.pending_tasks.spawn(self.command_queue_loop())
@@ -67,12 +66,14 @@ class CurioVirtualCircuit:
             return
 
         self.connected = False
-        for db_entry, subs in self.subscriptions.items():
+        queue = self.context.subscription_queue
+        for sub_spec, subs in self.subscriptions.items():
             for sub in subs:
-                self.context.subscriptions[db_entry].remove(sub)
-            if not self.context.subscriptions[db_entry]:
-                db_entry.subscribe(None)
-                del self.context.subscriptions[db_entry]
+                self.context.subscriptions[sub_spec].remove(sub)
+            # Does anything else on the Context still care about this sub_spec?
+            # If not unsubscribe the Context's queue from the db_entry.
+            if not self.context.subscriptions[sub_spec]:
+                await sub_spec.db_entry.unsubscribe(queue, sub_spec)
         self.subscriptions.clear()
 
         # TODO this may cancel some caputs in progress, need to rethink it
@@ -179,7 +180,9 @@ class CurioVirtualCircuit:
             self.client_username = command.name.decode(SERVER_ENCODING)
         elif isinstance(command, ca.ReadNotifyRequest):
             chan, db_entry = get_db_entry()
-            metadata, data = await db_entry.get_dbr_data(command.data_type)
+            metadata, data = await db_entry.auth_read(
+                self.client_hostname, self.client_username,
+                command.data_type)
             return [chan.read(data=data, data_type=command.data_type,
                               data_count=len(data), status=1,
                               ioid=command.ioid, metadata=metadata)
@@ -191,7 +194,8 @@ class CurioVirtualCircuit:
             async def handle_write():
                 '''Wait for an asynchronous caput to finish'''
                 try:
-                    write_status = await db_entry.set_dbr_data(
+                    write_status = await db_entry.auth_write(
+                        self.client_hostname, self.client_username,
                         command.data, command.data_type, command.metadata)
                 except Exception as ex:
                     cid = self.circuit.channels_sid[command.sid].cid
@@ -220,36 +224,35 @@ class CurioVirtualCircuit:
             chan, db_entry = get_db_entry()
             # TODO no support for deprecated low/high/to
             sub = Subscription(mask=command.mask,
+                               channel=chan,
                                circuit=self,
                                data_type=command.data_type,
-                               subscription_id=command.subscriptionid)
-            if db_entry not in self.context.subscriptions:
-                self.context.subscriptions[db_entry] = []
-                db_entry.subscribe(self.context.subscription_queue, chan)
-            self.context.subscriptions[db_entry].append(sub)
-            if db_entry not in self.subscriptions:
-                self.subscriptions[db_entry] = []
-            self.subscriptions[db_entry].append(sub)
-
-            # send back a first monitor always
-            metadata, data = await db_entry.get_dbr_data(command.data_type)
-            return [chan.subscribe(data=data, data_type=command.data_type,
-                                   data_count=len(data),
-                                   subscriptionid=command.subscriptionid,
-                                   metadata=metadata, status_code=1)
-                    ]
+                               data_count=command.data_count,
+                               subscriptionid=command.subscriptionid)
+            sub_spec = SubscriptionSpec(db_entry=db_entry,
+                                        data_type=command.data_type)
+            self.subscriptions[sub_spec].append(sub)
+            self.context.subscriptions[sub_spec].append(sub)
+            await db_entry.subscribe(self.context.subscription_queue, sub_spec)
         elif isinstance(command, ca.EventCancelRequest):
             chan, db_entry = get_db_entry()
-            sub = [sub for sub in self.subscriptions[db_entry]
-                   if sub.subscription_id == command.subscriptionid]
+            # Search self.subscriptions for a Subscription with a matching id.
+            for _sub_spec, _subs in self.subscriptions.items():
+                for _sub in _subs:
+                    if _sub.subscriptionid == command.subscriptionid:
+                        sub_spec = _sub_spec
+                        sub = _sub
+
+            unsub_response = chan.unsubscribe(command.subscriptionid)
+
             if sub:
-                sub = sub[0]
-                unsub_response = chan.unsubscribe(command.subscriptionid)
-                self.context.subscriptions[db_entry].remove(sub)
-                if not self.context.subscriptions[db_entry]:
-                    db_entry.subscribe(None)
-                    del self.context.subscriptions[db_entry]
-                self.subscriptions[db_entry].remove(sub)
+                self.subscriptions[sub_spec].remove(sub)
+                self.context.subscriptions[sub_spec].remove(sub)
+                # Does anything else on the Context still care about sub_spec?
+                # If not unsubscribe the Context's queue from the db_entry.
+                if not self.context.subscriptions[sub_spec]:
+                    queue = self.context.subscription_queue
+                    await sub_spec.db_entry.unsubscribe(queue, sub_spec)
                 return [unsub_response]
         elif isinstance(command, ca.ClearChannelRequest):
             chan, db_entry = get_db_entry()
@@ -270,7 +273,7 @@ class Context:
         self.broadcaster.log.setLevel(self.log_level)
         self.command_bundle_queue = curio.Queue()
 
-        self.subscriptions = {}
+        self.subscriptions = defaultdict(deque)
         self.subscription_queue = curio.UniversalQueue()
         self.beacon_count = 0
         self.environ = get_environment_variables()
@@ -283,7 +286,7 @@ class Context:
         try:
             self.udp_sock.bind((self.host, ca.EPICS_CA1_PORT))
         except Exception:
-            print('[server] udp bind failure!')
+            logger.error('[server] udp bind failure!')
             raise
 
         while True:
@@ -350,34 +353,18 @@ class Context:
 
     async def subscription_queue_loop(self):
         while True:
-            db_entry, mask, data, chan = await self.subscription_queue.get()
-            try:
-                subs = self.subscriptions[db_entry]
-            except KeyError:
-                continue
-
-            matching_subs = [(sub.circuit, sub.data_type, sub.subscription_id)
-                             for sub in subs
-                             if sub.mask & mask]
-            print('{} matching subs'.format(len(matching_subs)))
-            if matching_subs:
-                commands = {db_entry.data_type:
-                            chan.subscribe(data=data, subscriptionid=0,
-                                           status_code=1)}
-                for circuit, data_type, sub_id in matching_subs:
-                    try:
-                        cmd = commands[data_type]
-                    except KeyError:
-                        metadata, data = await db_entry.get_dbr_data(data_type)
-                        cmd = chan.subscribe(data=data, data_type=data_type,
-                                             data_count=len(data),
-                                             subscriptionid=0,
-                                             metadata=metadata,
-                                             status_code=1)
-                        commands[data_type] = cmd
-
-                    cmd.header.parameter2 = sub_id  # TODO setter?
-                    await circuit.send(cmd)
+            sub_spec, metadata, values = await self.subscription_queue.get()
+            subs = self.subscriptions[sub_spec]
+            matching_subs = subs  # [sub for sub in subs if sub.mask & mask]
+            for sub in matching_subs:
+                chan = sub.channel
+                command = chan.subscribe(data=values,
+                                         metadata=metadata,
+                                         data_type=sub.data_type,
+                                         data_count=sub.data_count,
+                                         subscriptionid=sub.subscriptionid,
+                                         status_code=1)
+                await sub.circuit.send(command)
 
     async def broadcast_beacon_loop(self):
         beacon_period = self.environ['EPICS_CAS_BEACON_PERIOD']
@@ -413,54 +400,9 @@ class Context:
                 await circuit.pending_tasks.cancel_remaining()
 
 
-async def _test(pvdb=None):
-    logger.setLevel('DEBUG')
-    if pvdb is None:
-        pvdb = {'pi': ChannelDouble(value=3.14,
-                                    lower_disp_limit=3.13,
-                                    upper_disp_limit=3.15,
-                                    lower_alarm_limit=3.12,
-                                    upper_alarm_limit=3.16,
-                                    lower_warning_limit=3.11,
-                                    upper_warning_limit=3.17,
-                                    lower_ctrl_limit=3.10,
-                                    upper_ctrl_limit=3.18,
-                                    precision=5,
-                                    units='doodles',
-                                    ),
-                'enum': ChannelEnum(value='b',
-                                    enum_strings=['a', 'b', 'c', 'd'],
-                                    ),
-                'enum2': ChannelEnum(value='bb',
-                                     enum_strings=['aa', 'bb', 'cc', 'dd'],
-                                     ),
-                'int': ChannelInteger(value=96,
-                                      units='doodles',
-                                      ),
-                'char': ca.ChannelChar(value=b'3',
-                                       units='poodles',
-                                       lower_disp_limit=33,
-                                       upper_disp_limit=35,
-                                       lower_alarm_limit=32,
-                                       upper_alarm_limit=36,
-                                       lower_warning_limit=31,
-                                       upper_warning_limit=37,
-                                       lower_ctrl_limit=30,
-                                       upper_ctrl_limit=38,
-                                       ),
-                'chararray': ca.ChannelChar(value=b'1234567890' * 2),
-                'str': ca.ChannelString(value='hello',
-                                        string_encoding='latin-1'),
-                'stra': ca.ChannelString(value=['hello', 'how is it', 'going'],
-                                         string_encoding='latin-1'),
-                }
-        pvdb['pi'].alarm.alarm_string = 'delicious'
-
-    ctx = Context('0.0.0.0', find_next_tcp_port(), pvdb)
+async def start_server(pvdb, log_level='DEBUG'):
+    '''Start a curio server with a given PV database'''
+    logger.setLevel(log_level)
+    ctx = Context('0.0.0.0', find_next_tcp_port(), pvdb, log_level=log_level)
     logger.info('Server starting up on %s:%d', ctx.host, ctx.port)
     return await ctx.run()
-
-
-if __name__ == '__main__':
-    logging.basicConfig()
-    curio.run(_test())
