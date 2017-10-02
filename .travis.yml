@@ -60,8 +60,9 @@ script:
   # Run a CA Repeater for the docs examples to use.
   - caproto-repeater &
   # Build the docs.
-  - cd doc
+  - pushd doc
   - make html
+  - popd
   # Upload the docs to gh-pages.
   - doctr deploy .
   - cd ..
