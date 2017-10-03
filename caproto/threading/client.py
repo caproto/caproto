@@ -12,36 +12,12 @@ from collections import Iterable
 
 import caproto as ca
 
-from typing import Callable, Optional
-
-
-class ConditionType:
-    ...
-
 
 AUTOMONITOR_MAXLENGTH = 65536
 STALE_SEARCH_THRESHOLD = 10.0
 
 
 logger = logging.getLogger(__name__)
-
-
-def _condition_with_timeout(bail_condition: Callable[[], bool],
-                            condition: ConditionType,
-                            timeout: Optional[float]):
-    last_time = time.time() + timeout
-    wait_time = None
-    while True:
-        with condition:
-            if bail_condition():
-                break
-            if timeout is not None:
-                wait_time = last_time - time.time()
-                if not (wait_time > 0):
-                    raise TimeoutError()
-
-            if not condition.wait(wait_time):
-                raise TimeoutError()
 
 
 class SocketThread:
@@ -97,7 +73,7 @@ class SharedBroadcaster:
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
         self.broadcaster.log.setLevel(self.log_level)
         self.command_bundle_queue = queue.Queue()
-        self.command_cond = threading.Condition()  # ConditionType
+        self.command_cond = threading.Condition()
         self.command_thread = threading.Thread(target=self.command_loop,
                                                daemon=True)
         self.command_thread.start()
@@ -151,7 +127,7 @@ class SharedBroadcaster:
             for host in ca.get_address_list():
                 self.udp_sock.sendto(bytes_to_send, (host, port))
 
-    def register(self, *, wait=True):
+    def register(self, *, wait=True, timeout=0.5, attempts=4):
         "Register this client with the CA Repeater."
         if self.registered:
             return
@@ -164,19 +140,17 @@ class SharedBroadcaster:
             self.send(ca.EPICS_CA2_PORT, command)
 
         if wait:
-            for attempts in range(4):
-                try:
-                    _condition_with_timeout(lambda: self.registered,
-                                            self.command_cond,
-                                            0.5)
-                except TimeoutError:
+            for attempts in range(attempts):
+                with self.command_cond:
+                    done = self.command_cond.wait_for(lambda: self.registered,
+                                                      timeout)
                     self.send(ca.EPICS_CA2_PORT, command)
-                else:
+                if done:
                     break
             else:
                 raise TimeoutError('Failed to register with the broadcaster')
 
-    def search(self, name, *, wait=True):
+    def search(self, name, *, wait=True, timeout=2):
         "Generate, process, and the transport a search request."
         if not self.registered:
             self.register()
@@ -195,9 +169,12 @@ class SharedBroadcaster:
             self.send(ca.EPICS_CA1_PORT, ver_command, search_command)
         # Wait for the SearchResponse.
         if wait:
-            _condition_with_timeout(lambda: name in self.search_results,
-                                    self.command_cond,
-                                    2)
+            with self.command_cond:
+                 result_found = lambda: name in self.search_results
+                 done = self.command_cond.wait_for(result_found, timeout)
+            if not done:
+                 raise TimeoutError("No search result received for {}"
+                                    "".format(name))
             address, timestamp = self.search_results[name]
             return address
 
@@ -277,7 +254,7 @@ class Context:
             self.circuits[(address, priority)] = circuit
         return circuit
 
-    def create_channel(self, name, priority=0, *, wait=True):
+    def create_channel(self, name, priority=0, *, wait=True, timeout=2):
         """
         Create a new channel.
         """
@@ -298,9 +275,13 @@ class Context:
                 # after having sent the VersionRequest, fixes a race condition
                 # with handling of rsrv sending VersionResponse upon connection
                 circuit.command_thread.start()
-        _condition_with_timeout(lambda: circuit.connected,
-                                circuit.new_command_cond,
-                                2)
+        cond = circuit.new_command_cond
+        with cond:
+            done = cond.wait_for(lambda: circuit.connected, timeout)
+            if not done:
+                raise TimeoutError("Circuit with server at {} did not "
+                                   "connected within {}-second timeout."
+                                   "".format(address, timeout))
 
         # do not need to lock here, take care of in send method
         circuit.send(cachan.create())
@@ -521,9 +502,14 @@ class Channel:
         """
         if self.connected:
             return
-        _condition_with_timeout(lambda: self.connected,
-                                self.circuit.new_command_cond,
-                                timeout)
+        cond = self.circuit.new_command_cond
+        with cond:
+            done = cond.wait_for(lambda: self.connected, timeout)
+        if not done:
+            raise TimeoutError("Server at {} did not respond to attempt "
+                               "to create channel named {} within {}-second "
+                               "timeout."
+                               "".format(address, cachan.name, timeout))
 
     def disconnect(self, *, wait=True, timeout=2):
         "Disconnect this Channel."
@@ -537,10 +523,15 @@ class Channel:
             else:
                 return
         if wait:
-            _condition_with_timeout(
-                lambda: self.channel.states[ca.CLIENT] is ca.CLOSED,
-                self.circuit.new_command_cond,
-                timeout)
+            is_closed = lambda: self.channel.states[ca.CLIENT] is ca.CLOSED
+            cond = self.circuit.new_command_cond
+            with cond:
+                done = cond.wait_for(is_closed, timeout)
+            if not done:
+                raise TimeoutError("Server at {} did not respond to attempt "
+                                   "to close channel named {} within {}-second "
+                                   "timeout."
+                                   "".format(address, self.name, timeout))
 
     def read(self, *args, timeout=2, **kwargs):
         """Request a fresh reading, wait for it, return it and stash it.
@@ -557,9 +548,16 @@ class Channel:
         self.circuit.ioids[ioid] = self
         # do not need lock here, happens in send
         self.circuit.send(command)
-        _condition_with_timeout(lambda: ioid not in self.circuit.ioids,
-                                self.circuit.new_command_cond,
-                                timeout)
+        has_reading = lambda: ioid not in self.circuit.ioids
+        cond = self.circuit.new_command_cond
+        with cond:
+            done = cond.wait_for(has_reading, timeout)
+        if not done:
+            raise TimeoutError("Server at {} did not respond to attempt "
+                               "to read channel named {} within {}-second "
+                               "timeout."
+                               "".format(self.circuit.address,
+                                         self.name, timeout))
         return self.last_reading
 
     def write(self, *args, wait=True, cb=None, timeout=2, **kwargs):
@@ -573,10 +571,16 @@ class Channel:
             self._pc_callbacks[ioid] = cb
         # do not need to lock this, locking happens in circuit command
         self.circuit.send(command)
-        if wait:
-            _condition_with_timeout(lambda: ioid not in self.circuit.ioids,
-                                    self.circuit.new_command_cond,
-                                    timeout)
+        has_reading = lambda: ioid not in self.circuit.ioids
+        cond = self.circuit.new_command_cond
+        with cond:
+            done = cond.wait_for(has_reading, timeout)
+        if not done:
+            raise TimeoutError("Server at {} did not respond to attempt "
+                               "to write to channel named {} within {}-second "
+                               "timeout."
+                               "".format(self.circuit.address,
+                                         self.name, timeout))
         return self.last_reading
 
     def subscribe(self, *args, **kwargs):
