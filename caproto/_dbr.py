@@ -68,6 +68,104 @@ class AlarmStatus(IntEnum):
     WRITE_ACCESS = 21
 
 
+# EPICS Constants
+class ECA(IntEnum):
+    NORMAL = 1
+    TIMEOUT = 80
+    IODONE = 339
+    ISATTACHED = 424
+    BADCHID = 410
+
+
+class ConnStatus(IntEnum):
+    CS_CONN = 2
+    OP_CONN_UP = 6
+    OP_CONN_DOWN = 7
+    CS_NEVER_SEARCH = 4
+
+
+class ChannelType(IntEnum):
+    STRING = 0
+    INT = 1
+    SHORT = 1
+    FLOAT = 2
+    ENUM = 3
+    CHAR = 4
+    LONG = 5
+    DOUBLE = 6
+
+    STS_STRING = 7
+    STS_SHORT = 8
+    STS_INT = 8
+    STS_FLOAT = 9
+    STS_ENUM = 10
+    STS_CHAR = 11
+    STS_LONG = 12
+    STS_DOUBLE = 13
+
+    TIME_STRING = 14
+    TIME_INT = 15
+    TIME_SHORT = 15
+    TIME_FLOAT = 16
+    TIME_ENUM = 17
+    TIME_CHAR = 18
+    TIME_LONG = 19
+    TIME_DOUBLE = 20
+
+    GR_STRING = 21  # not implemented by EPICS
+    GR_SHORT = 22
+    GR_INT = GR_SHORT
+    GR_FLOAT = 23
+    GR_ENUM = 24
+    GR_CHAR = 25
+    GR_LONG = 26
+    GR_DOUBLE = 27
+
+    CTRL_STRING = 28  # not implemented by EPICS
+    CTRL_INT = 29
+    CTRL_SHORT = 29
+    CTRL_FLOAT = 30
+    CTRL_ENUM = 31
+    CTRL_CHAR = 32
+    CTRL_LONG = 33
+    CTRL_DOUBLE = 34
+
+    PUT_ACKT = 35
+    PUT_ACKS = 36
+
+    STSACK_STRING = 37
+    CLASS_NAME = 38
+
+
+class SubscriptionType(IntEnum):
+    '''Subscription masks
+
+    DBE_VALUE
+    Trigger an event when a significant change in the channel's value occurs.
+    (in epics-base, relies on the monitor deadband field under DCT.)
+
+    DBE_ARCHIVE (DBE_LOG)
+    Trigger an event when an archive significant change in the channel's valuue
+    occurs.
+    (in epics-base, relies on the archiver monitor deadband field under DCT.)
+
+    DBE_ALARM
+    Trigger an event when the alarm state changes
+
+    DBE_PROPERTY
+    Trigger an event when a property change (control limit, graphical limit,
+    status string, enum string ...) occurs.
+    '''
+
+    DBE_VALUE = 1
+    DBE_LOG = 2
+    DBE_ALARM = 4
+    DBE_PROPERTY = 8
+
+
+ChType = ChannelType
+
+
 string_t = MAX_STRING_SIZE * ctypes.c_char  # epicsOldString
 char_t = ctypes.c_char  # epicsUint8
 short_t = ctypes.c_int16  # epicsInt16
@@ -195,100 +293,100 @@ class DbrValueType(DbrTypeBase):
 
 
 class DBR_STRING(DbrValueType):
-    DBR_ID = 0
+    DBR_ID = ChannelType.STRING
     _fields_ = [('value', string_t)]
 
 
 class DBR_INT(DbrValueType):
-    DBR_ID = 1
+    DBR_ID = ChannelType.INT
     _fields_ = [('value', int_t)]
 
 
 class DBR_FLOAT(DbrValueType):
-    DBR_ID = 2
+    DBR_ID = ChannelType.FLOAT
     _fields_ = [('value', float_t)]
 
 
 class DBR_ENUM(DbrValueType):
-    DBR_ID = 3
+    DBR_ID = ChannelType.ENUM
     _fields_ = [('value', ushort_t)]
 
 
 class DBR_CHAR(DbrValueType):
-    DBR_ID = 4
+    DBR_ID = ChannelType.CHAR
     _fields_ = [('value', char_t)]
 
 
 class DBR_LONG(DbrValueType):
-    DBR_ID = 5
+    DBR_ID = ChannelType.LONG
     _fields_ = [('value', long_t)]
 
 
 class DBR_DOUBLE(DbrValueType):
-    DBR_ID = 6
+    DBR_ID = ChannelType.DOUBLE
     _fields_ = [('value', double_t)]
 
 
 class DBR_STS_STRING(StatusTypeBase):
-    DBR_ID = 7
+    DBR_ID = ChannelType.STS_STRING
 
 
 class DBR_STS_INT(StatusTypeBase):
-    DBR_ID = 8
+    DBR_ID = ChannelType.STS_SHORT
 
 
 class DBR_STS_FLOAT(StatusTypeBase):
-    DBR_ID = 9
+    DBR_ID = ChannelType.STS_FLOAT
 
 
 class DBR_STS_ENUM(StatusTypeBase):
-    DBR_ID = 10
+    DBR_ID = ChannelType.STS_ENUM
 
 
 class DBR_STS_CHAR(StatusTypeBase):
-    DBR_ID = 11
+    DBR_ID = ChannelType.STS_CHAR
     _fields_ = [
         ('RISC_pad', char_t),
     ]
 
 
 class DBR_STS_LONG(StatusTypeBase):
-    DBR_ID = 12
+    DBR_ID = ChannelType.STS_LONG
 
 
 class DBR_STS_DOUBLE(StatusTypeBase):
-    DBR_ID = 13
+    DBR_ID = ChannelType.STS_DOUBLE
     _fields_ = [
         ('RISC_pad', long_t),
     ]
 
 
 class DBR_TIME_STRING(TimeTypeBase):
-    DBR_ID = 14
+    DBR_ID = ChannelType.TIME_STRING
     _fields_ = []
 
 
 class DBR_TIME_INT(TimeTypeBase):
-    DBR_ID = 15
+    DBR_ID = ChannelType.TIME_INT
     _fields_ = [
         ('RISC_pad', short_t),
     ]
 
 
 class DBR_TIME_FLOAT(TimeTypeBase):
-    DBR_ID = 16
+    DBR_ID = ChannelType.TIME_FLOAT
     _fields_ = []
 
 
 class DBR_TIME_ENUM(TimeTypeBase):
-    DBR_ID = 17
+    DBR_ID = ChannelType.TIME_ENUM
     _fields_ = [
         ('RISC_pad', short_t),
     ]
 
 
 class DBR_TIME_CHAR(TimeTypeBase):
-    DBR_ID = 18
+    DBR_ID = ChannelType.TIME_CHAR
     _fields_ = [
         ('RISC_pad0', short_t),
         ('RISC_pad1', char_t),
@@ -296,12 +394,12 @@ class DBR_TIME_CHAR(TimeTypeBase):
 
 
 class DBR_TIME_LONG(TimeTypeBase):
-    DBR_ID = 19
+    DBR_ID = ChannelType.TIME_LONG
     _fields_ = []
 
 
 class DBR_TIME_DOUBLE(TimeTypeBase):
-    DBR_ID = 20
+    DBR_ID = ChannelType.TIME_DOUBLE
     _fields_ = [
         ('RISC_pad', long_t),
     ]
@@ -311,17 +409,17 @@ class DBR_TIME_DOUBLE(TimeTypeBase):
 
 
 class DBR_GR_INT(GraphicTypeUnits):
-    DBR_ID = 22
+    DBR_ID = ChannelType.GR_SHORT
     _fields_ = GraphicTypeUnits.build_graphic_fields(short_t)
 
 
 class DBR_GR_FLOAT(GraphicTypePrecision):
-    DBR_ID = 23
+    DBR_ID = ChannelType.GR_FLOAT
     _fields_ = GraphicTypeUnits.build_graphic_fields(float_t)
 
 
 class DBR_GR_ENUM(GraphicControlBase):
-    DBR_ID = 24
+    DBR_ID = ChannelType.GR_ENUM
     graphic_fields = ()
     control_fields = ()
     info_fields = ('status', 'severity', 'enum_strs', )
@@ -339,35 +437,35 @@ class DBR_GR_ENUM(GraphicControlBase):
 
 
 class DBR_GR_CHAR(GraphicTypeUnits):
-    DBR_ID = 25
+    DBR_ID = ChannelType.GR_CHAR
     _fields_ = (GraphicTypeUnits.build_graphic_fields(char_t) +
                 [('RISC_pad', char_t)])
 
 
 class DBR_GR_LONG(GraphicTypeUnits):
-    DBR_ID = 26
+    DBR_ID = ChannelType.GR_LONG
     _fields_ = GraphicTypeUnits.build_graphic_fields(long_t)
 
 
 class DBR_GR_DOUBLE(GraphicTypePrecision):
-    DBR_ID = 27
+    DBR_ID = ChannelType.GR_DOUBLE
     _fields_ = GraphicTypePrecision.build_graphic_fields(double_t)
 
 
 # DBR_CTRL_STRING (28) is not implemented by libca.
 
 class DBR_CTRL_INT(ControlTypeUnits):
-    DBR_ID = 29
+    DBR_ID = ChannelType.CTRL_INT
     _fields_ = ControlTypeUnits.build_control_fields(short_t)
 
 
 class DBR_CTRL_FLOAT(ControlTypePrecision):
-    DBR_ID = 30
+    DBR_ID = ChannelType.CTRL_FLOAT
     _fields_ = ControlTypePrecision.build_control_fields(float_t)
 
 
 class DBR_CTRL_ENUM(GraphicControlBase):
-    DBR_ID = 31
+    DBR_ID = ChannelType.CTRL_ENUM
     control_fields = ()
     graphic_fields = ()
     info_fields = ('status', 'severity', 'enum_strs', )
@@ -384,18 +482,18 @@ class DBR_CTRL_ENUM(GraphicControlBase):
 
 
 class DBR_CTRL_CHAR(ControlTypeUnits):
-    DBR_ID = 32
+    DBR_ID = ChannelType.CTRL_CHAR
     _fields_ = (ControlTypeUnits.build_control_fields(char_t) +
                 [('RISC_pad', char_t)])
 
 
 class DBR_CTRL_LONG(ControlTypeUnits):
-    DBR_ID = 33
+    DBR_ID = ChannelType.CTRL_LONG
     _fields_ = ControlTypeUnits.build_control_fields(long_t)
 
 
 class DBR_CTRL_DOUBLE(ControlTypePrecision):
-    DBR_ID = 34
+    DBR_ID = ChannelType.CTRL_DOUBLE
     _fields_ = ControlTypePrecision.build_control_fields(double_t)
 
 
@@ -404,19 +502,19 @@ class DbrSpecialType(DbrTypeBase):
 
 
 class DBR_PUT_ACKT(DbrSpecialType):
-    DBR_ID = 35
+    DBR_ID = ChannelType.PUT_ACKT
     info_fields = ('value', )
     _fields_ = [('value', ushort_t)]
 
 
 class DBR_PUT_ACKS(DbrSpecialType):
-    DBR_ID = 36
+    DBR_ID = ChannelType.PUT_ACKS
     info_fields = ('value', )
     _fields_ = [('value', ushort_t)]
 
 
 class DBR_STSACK_STRING(DbrSpecialType):
-    DBR_ID = 37
+    DBR_ID = ChannelType.STSACK_STRING
     info_fields = ('status', 'severity', 'ackt', 'acks', 'value')
     _fields_ = [
         ('status', short_t),
@@ -428,7 +526,7 @@ class DBR_STSACK_STRING(DbrSpecialType):
 
 
 class DBR_CLASS_NAME(DbrSpecialType):
-    DBR_ID = 38
+    DBR_ID = ChannelType.CLASS_NAME
     info_fields = ('value', )
     _fields_ = [('value', string_t)]
 
@@ -438,103 +536,6 @@ DBR_STS_SHORT = DBR_STS_INT
 DBR_TIME_SHORT = DBR_TIME_INT
 DBR_GR_SHORT = DBR_GR_INT
 DBR_CTRL_SHORT = DBR_CTRL_INT
-
-
-# EPICS Constants
-class ECA(IntEnum):
-    NORMAL = 1
-    TIMEOUT = 80
-    IODONE = 339
-    ISATTACHED = 424
-    BADCHID = 410
-
-
-class ConnStatus(IntEnum):
-    CS_CONN = 2
-    OP_CONN_UP = 6
-    OP_CONN_DOWN = 7
-    CS_NEVER_SEARCH = 4
-
-
-class ChannelType(IntEnum):
-    STRING = 0
-    INT = 1
-    SHORT = 1
-    FLOAT = 2
-    ENUM = 3
-    CHAR = 4
-    LONG = 5
-    DOUBLE = 6
-
-    STS_STRING = 7
-    STS_SHORT = 8
-    STS_INT = 8
-    STS_FLOAT = 9
-    STS_ENUM = 10
-    STS_CHAR = 11
-    STS_LONG = 12
-    STS_DOUBLE = 13
-
-    TIME_STRING = 14
-    TIME_INT = 15
-    TIME_SHORT = 15
-    TIME_FLOAT = 16
-    TIME_ENUM = 17
-    TIME_CHAR = 18
-    TIME_LONG = 19
-    TIME_DOUBLE = 20
-
-    GR_STRING = 21  # not implemented by EPICS
-    GR_SHORT = 22
-    GR_INT = GR_SHORT
-    GR_FLOAT = 23
-    GR_ENUM = 24
-    GR_CHAR = 25
-    GR_LONG = 26
-    GR_DOUBLE = 27
-
-    CTRL_STRING = 28  # not implemented by EPICS
-    CTRL_INT = 29
-    CTRL_SHORT = 29
-    CTRL_FLOAT = 30
-    CTRL_ENUM = 31
-    CTRL_CHAR = 32
-    CTRL_LONG = 33
-    CTRL_DOUBLE = 34
-
-    STSACK_STRING = 37
-    CLASS_NAME = 38
-
-
-class SubscriptionType(IntEnum):
-    '''Subscription masks
-
-    DBE_VALUE
-    Trigger an event when a significant change in the channel's value occurs.
-    (in epics-base, relies on the monitor deadband field under DCT.)
-
-    DBE_ARCHIVE (DBE_LOG)
-    Trigger an event when an archive significant change in the channel's valuue
-    occurs.
-    (in epics-base, relies on the archiver monitor deadband field under DCT.)
-
-    DBE_ALARM
-    Trigger an event when the alarm state changes
-
-    DBE_PROPERTY
-    Trigger an event when a property change (control limit, graphical limit,
-    status string, enum string ...) occurs.
-    '''
-
-    DBE_VALUE = 1
-    DBE_LOG = 2
-    DBE_ALARM = 4
-    DBE_PROPERTY = 8
-
-
-ChType = ChannelType
-
-enum_types = (ChType.ENUM, ChType.STS_ENUM, ChType.TIME_ENUM, ChType.CTRL_ENUM)
 
 # ChannelTypes grouped by included metadata
 native_types = (ChType.STRING, ChType.INT, ChType.SHORT, ChType.FLOAT,
@@ -573,6 +574,7 @@ float_types = (ChType.FLOAT, ChType.TIME_FLOAT,
                ChType.DOUBLE, ChType.TIME_DOUBLE,
                ChType.CTRL_DOUBLE, ChType.CTRL_DOUBLE)
 
+enum_types = (ChType.ENUM, ChType.STS_ENUM, ChType.TIME_ENUM, ChType.CTRL_ENUM)
 char_types = (ChType.CHAR, ChType.TIME_CHAR, ChType.CTRL_CHAR)
 native_float_types = (ChType.FLOAT, ChType.DOUBLE)
 native_int_types = (ChType.INT, ChType.CHAR, ChType.LONG, ChType.ENUM)
