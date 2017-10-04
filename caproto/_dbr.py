@@ -9,6 +9,8 @@ import array
 import ctypes
 import datetime
 from enum import IntEnum
+from ._constants import (EPICS2UNIX_EPOCH, EPICS_EPOCH, MAX_STRING_SIZE,
+                         MAX_UNITS_SIZE, MAX_ENUM_STRING_SIZE, MAX_ENUM_STATES)
 
 try:
     import numpy
@@ -16,17 +18,6 @@ except ImportError:
     USE_NUMPY = False
 else:
     USE_NUMPY = True
-
-EPICS2UNIX_EPOCH = 631152000.0
-EPICS_EPOCH = datetime.datetime.utcfromtimestamp(EPICS2UNIX_EPOCH)
-
-MAX_STRING_SIZE = 40
-MAX_UNITS_SIZE = 8
-MAX_ENUM_STRING_SIZE = 26
-MAX_ENUM_STATES = 16
-
-DO_REPLY = 10
-NO_REPLY = 5
 
 
 class AccessRights(IntEnum):
