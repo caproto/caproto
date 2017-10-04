@@ -93,6 +93,33 @@ def timestamp_to_epics(ts):
     return int(dt.total_seconds()), int(dt.microseconds * 1e3)
 
 
+class TimeStamp(ctypes.BigEndianStructure):
+    "emulate epics timestamp"
+    _pack_ = 1
+    _fields_ = [('secondsSinceEpoch', ctypes.c_uint32),
+                ('nanoSeconds', ctypes.c_uint32)]
+
+    @property
+    def timestamp(self):
+        "UNIX timestamp (seconds) from Epics TimeStamp structure"
+        return epics_timestamp_to_unix(self.secondsSinceEpoch,
+                                       self.nanoSeconds)
+
+
+class TimeType(ctypes.Structure):
+    _pack_ = 1
+    _fields_ = [('status', short_t),
+                ('severity', short_t),
+                ('stamp', TimeStamp)
+                ]
+
+    def to_dict(self):
+        return dict(status=self.status,
+                    severity=self.severity,
+                    timestamp=self.stamp.timestamp,
+                    )
+
+
 class DBR_STRING(ctypes.BigEndianStructure):
     DBR_ID = 0
     _pack_ = 1
@@ -257,139 +284,53 @@ class DBR_STS_DOUBLE(ctypes.BigEndianStructure):
     ]
 
 
-class DBR_TIME_STRING(ctypes.BigEndianStructure):
-    # /* structure for a  string time field */
-    # struct dbr_time_string{
-    #     short_t    status;             /* status of value */
-    #     short_t    severity;        /* severity of alarm */
-    #     epicsTimeStamp    stamp;            /* time stamp */
-    #     string_t    value;            /* current value */
-    # };
+class DBR_TIME_STRING(TimeType):
     DBR_ID = 14
     _pack_ = 1
-    _fields_ = [
-        ('status', short_t),
-        ('severity', short_t),
-        ('secondsSinceEpoch', ctypes.c_uint32),
-        ('nanoSeconds', ctypes.c_uint32),
-    ]
+    _fields_ = []
 
 
-class DBR_TIME_INT(ctypes.BigEndianStructure):
-    # /* structure for an short time field */
-    # struct dbr_time_short{
-    #     short_t    status;             /* status of value */
-    #     short_t    severity;        /* severity of alarm */
-    #     epicsTimeStamp    stamp;            /* time stamp */
-    #     short_t    RISC_pad;        /* RISC alignment */
-    #     short_t    value;            /* current value */
-    # };
+class DBR_TIME_INT(TimeType):
     DBR_ID = 15
     _pack_ = 1
     _fields_ = [
-        ('status', short_t),
-        ('severity', short_t),
-        ('secondsSinceEpoch', ctypes.c_uint32),
-        ('nanoSeconds', ctypes.c_uint32),
         ('RISC_pad', short_t),
     ]
 
 
-class DBR_TIME_FLOAT(ctypes.BigEndianStructure):
-    # /* structure for a  float time field */
-    # struct dbr_time_float{
-    #     short_t    status;             /* status of value */
-    #     short_t    severity;        /* severity of alarm */
-    #     epicsTimeStamp    stamp;            /* time stamp */
-    #     float_t    value;            /* current value */
-    # };
+class DBR_TIME_FLOAT(TimeType):
     DBR_ID = 16
     _pack_ = 1
-    _fields_ = [
-        ('status', short_t),
-        ('severity', short_t),
-        ('secondsSinceEpoch', ctypes.c_uint32),
-        ('nanoSeconds', ctypes.c_uint32),
-    ]
+    _fields_ = []
 
 
-class DBR_TIME_ENUM(ctypes.BigEndianStructure):
-    # /* structure for a  enum time field */
-    # struct dbr_time_enum{
-    #     short_t    status;             /* status of value */
-    #     short_t    severity;        /* severity of alarm */
-    #     epicsTimeStamp    stamp;            /* time stamp */
-    #     short_t    RISC_pad;        /* RISC alignment */
-    #     ushort_t    value;            /* current value */
-    # };
-    #
+class DBR_TIME_ENUM(TimeType):
     DBR_ID = 17
     _pack_ = 1
     _fields_ = [
-        ('status', short_t),
-        ('severity', short_t),
-        ('secondsSinceEpoch', ctypes.c_uint32),
-        ('nanoSeconds', ctypes.c_uint32),
         ('RISC_pad', short_t),
     ]
 
 
-class DBR_TIME_CHAR(ctypes.BigEndianStructure):
-    # /* structure for a char time field */
-    # struct dbr_time_char{
-    #     short_t    status;             /* status of value */
-    #     short_t    severity;        /* severity of alarm */
-    #     epicsTimeStamp    stamp;            /* time stamp */
-    #     short_t    RISC_pad0;        /* RISC alignment */
-    #     char_t    RISC_pad1;        /* RISC alignment */
-    #     char_t    value;            /* current value */
-    # };
+class DBR_TIME_CHAR(TimeType):
     DBR_ID = 18
     _pack_ = 1
     _fields_ = [
-        ('status', short_t),
-        ('severity', short_t),
-        ('secondsSinceEpoch', ctypes.c_uint32),
-        ('nanoSeconds', ctypes.c_uint32),
         ('RISC_pad0', short_t),
         ('RISC_pad1', char_t),
     ]
 
 
-class DBR_TIME_LONG(ctypes.BigEndianStructure):
-    # /* structure for a long time field */
-    # struct dbr_time_long{
-    #     short_t    status;             /* status of value */
-    #     short_t    severity;        /* severity of alarm */
-    #     epicsTimeStamp    stamp;            /* time stamp */
-    #     long_t    value;            /* current value */
-    # };
+class DBR_TIME_LONG(TimeType):
     DBR_ID = 19
     _pack_ = 1
-    _fields_ = [
-        ('status', short_t),
-        ('severity', short_t),
-        ('secondsSinceEpoch', ctypes.c_uint32),
-        ('nanoSeconds', ctypes.c_uint32),
-    ]
+    _fields_ = []
 
 
-class DBR_TIME_DOUBLE(ctypes.BigEndianStructure):
-    # /* structure for a double time field */
-    # struct dbr_time_double{
-    #     short_t    status;             /* status of value */
-    #     short_t    severity;        /* severity of alarm */
-    #     epicsTimeStamp    stamp;            /* time stamp */
-    #     long_t    RISC_pad;        /* RISC alignment */
-    #     double_t    value;            /* current value */
-    # };
+class DBR_TIME_DOUBLE(TimeType):
     DBR_ID = 20
     _pack_ = 1
     _fields_ = [
-        ('status', short_t),
-        ('severity', short_t),
-        ('secondsSinceEpoch', ctypes.c_uint32),
-        ('nanoSeconds', ctypes.c_uint32),
         ('RISC_Pad', long_t),
     ]
 

@@ -155,7 +155,8 @@ payloads = [
     (ca.ChType.DOUBLE, 3, double_arr, None),
     (ca.ChType.DOUBLE, 3, bytes(double_arr), None),
 
-    (ca.ChType.TIME_DOUBLE, 1, (7,), ca.DBR_TIME_DOUBLE(1, 0, 3, 5)),
+    (ca.ChType.TIME_DOUBLE, 1, (7,), ca.DBR_TIME_DOUBLE(1, 0,
+                                                        ca.TimeStamp(3, 5))),
     (ca.ChType.TIME_DOUBLE, 1, (7,), (1, 0, 3, 5)),
     (ca.ChType.TIME_DOUBLE, 2, (7, 3.4), (1, 0, 3, 5)),
 

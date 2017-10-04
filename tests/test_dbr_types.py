@@ -459,10 +459,19 @@ def test_dbr_types(dbr, expected_dbr):
     assert ctypes.sizeof(dbr) == expected
 
     for field, type_ in expected_dbr._fields_:
-        dbr_offset = getattr(dbr, field).offset
+        if field == 'secondsSinceEpoch':
+            dbr_offset = (dbr.stamp.offset +
+                          ca.TimeStamp.secondsSinceEpoch.offset)
+            dbr_size = ca.TimeStamp.secondsSinceEpoch.size
+        elif field == 'nanoSeconds':
+            dbr_offset = dbr.stamp.offset + ca.TimeStamp.nanoSeconds.offset
+            dbr_size = ca.TimeStamp.nanoSeconds.size
+        else:
+            dbr_offset = getattr(dbr, field).offset
+            dbr_size = getattr(dbr, field).size
+
         expected_offset = getattr(expected_dbr, field).offset
         assert dbr_offset == expected_offset
 
-        dbr_size = getattr(dbr, field).size
         expected_size = getattr(expected_dbr, field).size
         assert dbr_size == expected_size
