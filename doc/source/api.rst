@@ -323,7 +323,6 @@ in the :class:`ChannelType` enum:
     Other types build on the native types by including a struct of metadata.
 
     .. attribute:: STS_STRING = 7
-    .. attribute:: STS_SHORT = 8
     .. attribute:: STS_INT = 8
     .. attribute:: STS_FLOAT = 9
     .. attribute:: STS_ENUM = 10
@@ -333,7 +332,6 @@ in the :class:`ChannelType` enum:
 
     .. attribute:: TIME_STRING = 14
     .. attribute:: TIME_INT = 15
-    .. attribute:: TIME_SHORT = 15
     .. attribute:: TIME_FLOAT = 16
     .. attribute:: TIME_ENUM = 17
     .. attribute:: TIME_CHAR = 18
@@ -341,7 +339,6 @@ in the :class:`ChannelType` enum:
     .. attribute:: TIME_DOUBLE = 20
 
     .. attribute:: GR_STRING = 21
-    .. attribute:: GR_SHORT = 22
     .. attribute:: GR_INT = 22
     .. attribute:: GR_FLOAT = 23
     .. attribute:: GR_ENUM = 24
@@ -351,7 +348,6 @@ in the :class:`ChannelType` enum:
 
     .. attribute:: CTRL_STRING = 28
     .. attribute:: CTRL_INT = 29
-    .. attribute:: CTRL_SHORT = 29
     .. attribute:: CTRL_FLOAT = 30
     .. attribute:: CTRL_ENUM = 31
     .. attribute:: CTRL_CHAR = 32

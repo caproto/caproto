@@ -87,7 +87,6 @@ class ConnStatus(IntEnum):
 class ChannelType(IntEnum):
     STRING = 0
     INT = 1
-    SHORT = 1
     FLOAT = 2
     ENUM = 3
     CHAR = 4
@@ -95,7 +94,6 @@ class ChannelType(IntEnum):
     DOUBLE = 6
 
     STS_STRING = 7
-    STS_SHORT = 8
     STS_INT = 8
     STS_FLOAT = 9
     STS_ENUM = 10
@@ -105,7 +103,6 @@ class ChannelType(IntEnum):
 
     TIME_STRING = 14
     TIME_INT = 15
-    TIME_SHORT = 15
     TIME_FLOAT = 16
     TIME_ENUM = 17
     TIME_CHAR = 18
@@ -113,8 +110,7 @@ class ChannelType(IntEnum):
     TIME_DOUBLE = 20
 
     GR_STRING = 21  # not implemented by EPICS
-    GR_SHORT = 22
-    GR_INT = GR_SHORT
+    GR_INT = 22
     GR_FLOAT = 23
     GR_ENUM = 24
     GR_CHAR = 25
@@ -123,7 +119,6 @@ class ChannelType(IntEnum):
 
     CTRL_STRING = 28  # not implemented by EPICS
     CTRL_INT = 29
-    CTRL_SHORT = 29
     CTRL_FLOAT = 30
     CTRL_ENUM = 31
     CTRL_CHAR = 32
@@ -181,6 +176,7 @@ def native_type(ftype):
     '''return native field type from TIME or CTRL variant'''
     return _native_map[ftype]
 
+
 def promote_type(ftype, *, use_status=False, use_time=False, use_ctrl=False,
                  use_gr=False):
     """Promotes a native field type to its STS, TIME, CTRL, or GR variant.
@@ -192,11 +188,13 @@ def promote_type(ftype, *, use_status=False, use_time=False, use_ctrl=False,
     """
     if sum([use_status, use_time, use_ctrl, use_gr]) > 1:
         raise ValueError("Only one of the kwargs may be True.")
-    # Demote it back to a native type, if necessary
-    ftype = _native_map[ChType(ftype)]
-
-    if ftype in (ChType.STSACK_STRING, ChType.CLASS_NAME):
+    elif ftype in special_types:
+        # Special types have no promoted versions
         return ftype
+
+    if _native_map:  # only during initialization
+        # Demote it back to a native type, if necessary
+        ftype = _native_map[ChType(ftype)]
 
     # Use the fact that the types are ordered in blocks and that the STRING
     # variant is the first element of each block.
@@ -369,7 +367,7 @@ class DBR_STS_STRING(StatusTypeBase):
 
 
 class DBR_STS_INT(StatusTypeBase):
-    DBR_ID = ChannelType.STS_SHORT
+    DBR_ID = ChannelType.STS_INT
 
 
 class DBR_STS_FLOAT(StatusTypeBase):
@@ -446,7 +444,7 @@ class DBR_TIME_DOUBLE(TimeTypeBase):
 
 
 class DBR_GR_INT(GraphicTypeUnits):
-    DBR_ID = ChannelType.GR_SHORT
+    DBR_ID = ChannelType.GR_INT
     _fields_ = GraphicTypeUnits.build_graphic_fields(short_t)
 
 
@@ -568,20 +566,21 @@ class DBR_CLASS_NAME(DbrSpecialType):
     _fields_ = [('value', string_t)]
 
 
-DBR_SHORT = DBR_INT
-DBR_STS_SHORT = DBR_STS_INT
-DBR_TIME_SHORT = DBR_TIME_INT
-DBR_GR_SHORT = DBR_GR_INT
-DBR_CTRL_SHORT = DBR_CTRL_INT
+# All native types available
+native_types = (ChType.STRING, ChType.INT, ChType.FLOAT, ChType.ENUM,
+                ChType.CHAR, ChType.LONG, ChType.DOUBLE)
+# Special types without any corresponding promoted versions
+special_types = (ChType.PUT_ACKS, ChType.PUT_ACKS, ChType.STSACK_STRING,
+                 ChType.CLASS_NAME)
+
+# Map of promoted types to native types, to be filled below
+_native_map = {}
 
 # ChannelTypes grouped by included metadata
-native_types = (ChType.STRING, ChType.INT, ChType.SHORT, ChType.FLOAT,
-                ChType.ENUM, ChType.CHAR, ChType.LONG, ChType.DOUBLE)
-
 status_types = tuple(promote_type(nt, use_status=True) for nt in native_types)
 time_types = tuple(promote_type(nt, use_time=True) for nt in native_types)
 graphical_types = tuple(promote_type(nt, use_gr=True) for nt in native_types)
-control_types = tuple(promote_type(nt, use_control=True) for nt in native_types)
+control_types = tuple(promote_type(nt, use_ctrl=True) for nt in native_types)
 
 # ChannelTypes grouped by value data type
 char_types = (ChType.CHAR, ChType.TIME_CHAR, ChType.CTRL_CHAR, ChType.STS_CHAR)
@@ -601,12 +600,30 @@ char_types = (ChType.CHAR, ChType.TIME_CHAR, ChType.CTRL_CHAR)
 native_float_types = (ChType.FLOAT, ChType.DOUBLE)
 native_int_types = (ChType.INT, ChType.CHAR, ChType.LONG, ChType.ENUM)
 
+# Fill in the map of promoted types to native types
+_native_map.update({promote_type(native_type, **kw): native_type
+                    for kw in [dict(),
+                               dict(use_status=True),
+                               dict(use_time=True),
+                               dict(use_gr=True),
+                               dict(use_ctrl=True)]
+                    for native_type in native_types
+                    })
+
+# Special types need to be added as well:
+_native_map.update({
+    ChType.PUT_ACKS: ChType.PUT_ACKS,
+    ChType.PUT_ACKT: ChType.PUT_ACKT,
+    ChType.STSACK_STRING: ChType.STSACK_STRING,
+    ChType.CLASS_NAME: ChType.CLASS_NAME,
+})
+
 # map of Epics DBR types to ctypes types
 DBR_TYPES = {cls.DBR_ID: cls
              for name, cls in globals().items()
-             if name.startswith('DBR_') and hasattr(cls, 'DBR_ID')
+             if (name.startswith('DBR_') and issubclass(cls, DbrTypeBase)
+                 and hasattr(cls, 'DBR_ID'))
              }
-
 
 if USE_NUMPY:
     _numpy_map = {
@@ -656,59 +673,6 @@ dbr_data_offsets = {
 
 def array_type_code(native_type):
     return _array_type_code_map[native_type]
-
-
-_native_map = {
-    ChType.STRING: ChType.STRING,
-    ChType.INT: ChType.INT,
-    ChType.FLOAT: ChType.FLOAT,
-    ChType.ENUM: ChType.ENUM,
-    ChType.CHAR: ChType.CHAR,
-    ChType.LONG: ChType.LONG,
-    ChType.DOUBLE: ChType.DOUBLE,
-
-    ChType.STS_STRING: ChType.STRING,
-    ChType.STS_INT: ChType.INT,
-    ChType.STS_FLOAT: ChType.FLOAT,
-    ChType.STS_ENUM: ChType.ENUM,
-    ChType.STS_CHAR: ChType.CHAR,
-    ChType.STS_LONG: ChType.LONG,
-    ChType.STS_DOUBLE: ChType.DOUBLE,
-
-    ChType.TIME_STRING: ChType.STRING,
-    ChType.TIME_INT: ChType.INT,
-    ChType.TIME_SHORT: ChType.SHORT,
-    ChType.TIME_FLOAT: ChType.FLOAT,
-    ChType.TIME_ENUM: ChType.ENUM,
-    ChType.TIME_CHAR: ChType.CHAR,
-    ChType.TIME_LONG: ChType.LONG,
-    ChType.TIME_DOUBLE: ChType.DOUBLE,
-
-    ChType.GR_STRING: ChType.STRING,
-    ChType.GR_INT: ChType.INT,
-    ChType.GR_SHORT: ChType.SHORT,
-    ChType.GR_FLOAT: ChType.FLOAT,
-    ChType.GR_ENUM: ChType.ENUM,
-    ChType.GR_CHAR: ChType.CHAR,
-    ChType.GR_LONG: ChType.LONG,
-    ChType.GR_DOUBLE: ChType.DOUBLE,
-
-    ChType.CTRL_STRING: ChType.STRING,
-    ChType.CTRL_SHORT: ChType.SHORT,
-    ChType.CTRL_INT: ChType.INT,
-    ChType.CTRL_FLOAT: ChType.FLOAT,
-    ChType.CTRL_ENUM: ChType.ENUM,
-    ChType.CTRL_CHAR: ChType.CHAR,
-    ChType.CTRL_LONG: ChType.LONG,
-    ChType.CTRL_DOUBLE: ChType.DOUBLE,
-
-    # Special types:
-    ChType.PUT_ACKS: ChType.PUT_ACKS,
-    ChType.PUT_ACKT: ChType.PUT_ACKT,
-    ChType.STSACK_STRING: ChType.STSACK_STRING,
-    ChType.CLASS_NAME: ChType.CLASS_NAME,
-
-}
 
 
 def native_to_builtin(value, native_type, data_count):
