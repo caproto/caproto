@@ -213,7 +213,7 @@ class DBR_TIME_DOUBLE(ctypes.BigEndianStructure):
         ('severity', short_t),
         ('secondsSinceEpoch', ctypes.c_uint32),
         ('nanoSeconds', ctypes.c_uint32),
-        ('RISC_Pad', long_t),
+        ('RISC_pad', long_t),
     ]
 
 
@@ -448,7 +448,7 @@ class DBR_STSACK_STRING(ctypes.BigEndianStructure):
 
 
 dbr_types = [(getattr(ca, attr), globals()[attr])
-             for attr in globals()
+             for attr in sorted(globals())
              if attr.startswith('DBR_')
              and issubclass(globals()[attr], ctypes.BigEndianStructure)]
 
@@ -471,7 +471,41 @@ def test_dbr_types(dbr, expected_dbr):
             dbr_size = getattr(dbr, field).size
 
         expected_offset = getattr(expected_dbr, field).offset
-        assert dbr_offset == expected_offset
+        msg = 'offset of field {}/{} incorrect'.format(field, type_)
+        assert dbr_offset == expected_offset, msg
 
         expected_size = getattr(expected_dbr, field).size
-        assert dbr_size == expected_size
+        msg = 'size of field {}/{} incorrect'.format(field, type_)
+        assert dbr_size == expected_size, msg
+
+
+def get_all_fields(cls):
+    fields = []
+    for base_cls in cls.__bases__:
+        fields.extend(get_all_fields(base_cls))
+
+    if hasattr(cls, '_fields_'):
+        for field, type_ in cls._fields_:
+            fields.append((field, type_))
+
+    print('checking', cls, '->', fields)
+    return fields
+
+
+@pytest.mark.parametrize('dbr, expected_dbr', dbr_types)
+def test_dict_parameters(dbr, expected_dbr):
+    inst = dbr()
+    info_dict = inst.to_dict()
+    fields = get_all_fields(dbr)
+    field_names = set(field for field, type_ in fields)
+    valid_to_skip = {
+                     # RISC padding bytes
+                     'RISC_pad', 'RISC_pad0', 'RISC_pad1',
+                     # timestamp is a structure now, auto-converted to unix timestamp
+                     # in the field 'timestamp'
+                     'stamp',
+                     # enum strings come back as 'enum_strs' key, so count of strings
+                     # and the ctypes 'strs' are not useful
+                     'no_str', 'strs'}
+    remaining = field_names - set(info_dict.keys()) - valid_to_skip
+    assert len(remaining) == 0, 'fields not captured in info_keys'
