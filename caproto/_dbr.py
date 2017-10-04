@@ -1149,7 +1149,10 @@ def promote_type(ftype, *, use_status=False, use_time=False, use_ctrl=False,
     if sum([use_status, use_time, use_ctrl, use_gr]) > 1:
         raise ValueError("Only one of the kwargs may be True.")
     # Demote it back to a native type, if necessary
-    ftype = ChType(_native_map.get(ftype, None))
+    ftype = _native_map[ChType(ftype)]
+
+    if ftype in (ChType.STSACK_STRING, ChType.CLASS_NAME):
+        return ftype
 
     # Use the fact that the types are ordered in blocks and that the STRING
     # variant is the first element of each block.
