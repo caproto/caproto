@@ -224,14 +224,12 @@ class Context:
 
     def __init__(self, broadcaster, *, log_level='ERROR'):
         self.log_level = log_level
-
         self.broadcaster = broadcaster
-        self.broadcaster.add_listener(self)
-
         self.circuits = {}  # map (address, priority) to VirtualCircuit
 
     def register(self):
         "Register this client with the CA Repeater."
+        self.broadcaster.add_listener(self)
         self.broadcaster.register()
 
     def search(self, name):
