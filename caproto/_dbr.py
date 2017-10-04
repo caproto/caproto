@@ -580,56 +580,11 @@ native_float_types = (ChType.FLOAT, ChType.DOUBLE)
 native_int_types = (ChType.INT, ChType.CHAR, ChType.LONG, ChType.ENUM)
 
 # map of Epics DBR types to ctypes types
-DBR_TYPES = {
-    ChType.STRING: string_t,
-    ChType.INT: int_t,
-    ChType.SHORT: int_t,
-    ChType.FLOAT: float_t,
-    ChType.ENUM: ushort_t,
-    ChType.CHAR: char_t,
-    ChType.LONG: ulong_t,
-    ChType.DOUBLE: double_t,
+DBR_TYPES = {cls.DBR_ID: cls
+             for name, cls in globals().items()
+             if name.startswith('DBR_') and hasattr(cls, 'DBR_ID')
+             }
 
-    ChType.GR_STRING: DBR_STS_STRING,
-    ChType.GR_INT: DBR_GR_INT,
-    ChType.GR_FLOAT: DBR_GR_FLOAT,
-    ChType.GR_ENUM: DBR_GR_ENUM,
-    ChType.GR_CHAR: DBR_GR_CHAR,
-    ChType.GR_LONG: DBR_GR_LONG,
-    ChType.GR_DOUBLE: DBR_GR_DOUBLE,
-
-    ChType.STS_STRING: DBR_STS_STRING,
-    ChType.STS_INT: DBR_STS_INT,
-    ChType.STS_FLOAT: DBR_STS_FLOAT,
-    ChType.STS_ENUM: DBR_STS_ENUM,
-    ChType.STS_CHAR: DBR_STS_CHAR,
-    ChType.STS_LONG: DBR_STS_LONG,
-    ChType.STS_DOUBLE: DBR_STS_DOUBLE,
-
-    ChType.TIME_STRING: DBR_TIME_STRING,
-    ChType.TIME_INT: DBR_TIME_INT,
-    ChType.TIME_SHORT: DBR_TIME_INT,
-    ChType.TIME_FLOAT: DBR_TIME_FLOAT,
-    ChType.TIME_ENUM: DBR_TIME_ENUM,
-    ChType.TIME_CHAR: DBR_TIME_CHAR,
-    ChType.TIME_LONG: DBR_TIME_LONG,
-    ChType.TIME_DOUBLE: DBR_TIME_DOUBLE,
-
-    # Note: there is no ctrl string in the C definition
-    ChType.CTRL_STRING: DBR_STS_STRING,
-    ChType.CTRL_SHORT: DBR_CTRL_INT,
-    ChType.CTRL_INT: DBR_CTRL_INT,
-    ChType.CTRL_FLOAT: DBR_CTRL_FLOAT,
-    ChType.CTRL_ENUM: DBR_CTRL_ENUM,
-    ChType.CTRL_CHAR: DBR_CTRL_CHAR,
-    ChType.CTRL_LONG: DBR_CTRL_LONG,
-    ChType.CTRL_DOUBLE: DBR_CTRL_DOUBLE,
-
-    # Special types:
-    ChType.STSACK_STRING: DBR_STSACK_STRING,
-    ChType.CLASS_NAME: DBR_CLASS_NAME,
-
-}
 
 if USE_NUMPY:
     _numpy_map = {
@@ -726,6 +681,8 @@ _native_map = {
     ChType.CTRL_DOUBLE: ChType.DOUBLE,
 
     # Special types:
+    ChType.PUT_ACKS: ChType.PUT_ACKS,
+    ChType.PUT_ACKT: ChType.PUT_ACKT,
     ChType.STSACK_STRING: ChType.STSACK_STRING,
     ChType.CLASS_NAME: ChType.CLASS_NAME,
 
