@@ -177,6 +177,43 @@ float_t = ctypes.c_float  # epicsFloat32
 double_t = ctypes.c_double  # epicsFloat64
 
 
+def native_type(ftype):
+    '''return native field type from TIME or CTRL variant'''
+    return _native_map[ftype]
+
+def promote_type(ftype, *, use_status=False, use_time=False, use_ctrl=False,
+                 use_gr=False):
+    """Promotes a native field type to its STS, TIME, CTRL, or GR variant.
+
+    Returns
+    -------
+    ftype : int
+        the promoted field value.
+    """
+    if sum([use_status, use_time, use_ctrl, use_gr]) > 1:
+        raise ValueError("Only one of the kwargs may be True.")
+    # Demote it back to a native type, if necessary
+    ftype = _native_map[ChType(ftype)]
+
+    if ftype in (ChType.STSACK_STRING, ChType.CLASS_NAME):
+        return ftype
+
+    # Use the fact that the types are ordered in blocks and that the STRING
+    # variant is the first element of each block.
+    if use_ctrl:
+        ftype += ChType.CTRL_STRING
+    elif use_time:
+        ftype += ChType.TIME_STRING
+    elif use_status:
+        ftype += ChType.STS_STRING
+    elif use_gr:
+        ftype += ChType.GR_STRING
+
+    if ftype == ChType.CTRL_STRING:
+        return ChType.TIME_STRING
+    return ChType(ftype)
+
+
 def epics_timestamp_to_unix(seconds_since_epoch, nano_seconds):
     '''UNIX timestamp (seconds) from Epics TimeStamp structure'''
     return (EPICS2UNIX_EPOCH + seconds_since_epoch + 1.e-6 *
@@ -541,37 +578,22 @@ DBR_CTRL_SHORT = DBR_CTRL_INT
 native_types = (ChType.STRING, ChType.INT, ChType.SHORT, ChType.FLOAT,
                 ChType.ENUM, ChType.CHAR, ChType.LONG, ChType.DOUBLE)
 
-status_types = (ChType.STS_STRING, ChType.STS_SHORT, ChType.STS_INT,
-                ChType.STS_FLOAT, ChType.STS_ENUM, ChType.STS_CHAR,
-                ChType.STS_LONG, ChType.STS_DOUBLE)
-
-time_types = (ChType.TIME_STRING, ChType.TIME_INT, ChType.TIME_SHORT,
-              ChType.TIME_FLOAT, ChType.TIME_ENUM, ChType.TIME_CHAR,
-              ChType.TIME_LONG, ChType.TIME_DOUBLE)
-
-graphical_types = (ChType.GR_STRING, ChType.GR_SHORT, ChType.GR_INT,
-                   ChType.GR_FLOAT, ChType.GR_ENUM, ChType.GR_CHAR,
-                   ChType.GR_LONG, ChType.GR_DOUBLE)
-
-control_types = (ChType.CTRL_STRING, ChType.CTRL_INT, ChType.CTRL_SHORT,
-                 ChType.CTRL_FLOAT, ChType.CTRL_ENUM, ChType.CTRL_CHAR,
-                 ChType.CTRL_LONG, ChType.CTRL_DOUBLE)
+status_types = tuple(promote_type(nt, use_status=True) for nt in native_types)
+time_types = tuple(promote_type(nt, use_time=True) for nt in native_types)
+graphical_types = tuple(promote_type(nt, use_gr=True) for nt in native_types)
+control_types = tuple(promote_type(nt, use_control=True) for nt in native_types)
 
 # ChannelTypes grouped by value data type
-char_types = (ChType.CHAR, ChType.TIME_CHAR,
-              ChType.CTRL_CHAR, ChType.STS_CHAR)
+char_types = (ChType.CHAR, ChType.TIME_CHAR, ChType.CTRL_CHAR, ChType.STS_CHAR)
 
-string_types = (ChType.STRING, ChType.TIME_STRING,
-                ChType.CTRL_STRING, ChType.STS_STRING)
+string_types = (ChType.STRING, ChType.TIME_STRING, ChType.CTRL_STRING,
+                ChType.STS_STRING)
 
-int_types = (ChType.INT, ChType.TIME_INT,
-             ChType.CTRL_INT, ChType.CTRL_INT,
-             ChType.LONG, ChType.TIME_LONG,
-             ChType.CTRL_LONG, ChType.CTRL_LONG)
+int_types = (ChType.INT, ChType.TIME_INT, ChType.CTRL_INT, ChType.CTRL_INT,
+             ChType.LONG, ChType.TIME_LONG, ChType.CTRL_LONG, ChType.CTRL_LONG)
 
-float_types = (ChType.FLOAT, ChType.TIME_FLOAT,
-               ChType.CTRL_FLOAT, ChType.CTRL_FLOAT,
-               ChType.DOUBLE, ChType.TIME_DOUBLE,
+float_types = (ChType.FLOAT, ChType.TIME_FLOAT, ChType.CTRL_FLOAT,
+               ChType.CTRL_FLOAT, ChType.DOUBLE, ChType.TIME_DOUBLE,
                ChType.CTRL_DOUBLE, ChType.CTRL_DOUBLE)
 
 enum_types = (ChType.ENUM, ChType.STS_ENUM, ChType.TIME_ENUM, ChType.CTRL_ENUM)
@@ -689,11 +711,6 @@ _native_map = {
 }
 
 
-def native_type(ftype):
-    '''return native field type from TIME or CTRL variant'''
-    return _native_map[ftype]
-
-
 def native_to_builtin(value, native_type, data_count):
     # - A waveform of characters is just a bytestring.
     # - A waveform of strings is an array whose elements are fixed-length (40-
@@ -712,36 +729,3 @@ def native_to_builtin(value, native_type, data_count):
     else:
         # TODO
         return  # array.array()
-
-
-def promote_type(ftype, *, use_status=False, use_time=False, use_ctrl=False,
-                 use_gr=False):
-    """Promotes a native field type to its STS, TIME, CTRL, or GR variant.
-
-    Returns
-    -------
-    ftype : int
-        the promoted field value.
-    """
-    if sum([use_status, use_time, use_ctrl, use_gr]) > 1:
-        raise ValueError("Only one of the kwargs may be True.")
-    # Demote it back to a native type, if necessary
-    ftype = _native_map[ChType(ftype)]
-
-    if ftype in (ChType.STSACK_STRING, ChType.CLASS_NAME):
-        return ftype
-
-    # Use the fact that the types are ordered in blocks and that the STRING
-    # variant is the first element of each block.
-    if use_ctrl:
-        ftype += ChType.CTRL_STRING
-    elif use_time:
-        ftype += ChType.TIME_STRING
-    elif use_status:
-        ftype += ChType.STS_STRING
-    elif use_gr:
-        ftype += ChType.GR_STRING
-
-    if ftype == ChType.CTRL_STRING:
-        return ChType.TIME_STRING
-    return ChType(ftype)
