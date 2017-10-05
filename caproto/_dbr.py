@@ -308,15 +308,15 @@ class GraphicControlBase(DbrTypeBase):
                 ]
 
     @classmethod
-    def build_control_fields(cls, type_):
-        '''Build list of _fields_ for a specific type_'''
-        return [(field, type_) for field in
+    def build_control_fields(cls, data_type):
+        '''Build list of _fields_ for a specific data_type'''
+        return [(field, data_type) for field in
                 cls.graphic_fields + cls.control_fields]
 
     @classmethod
-    def build_graphic_fields(cls, type_):
-        '''Build list of _fields_ for a specific type_'''
-        return [(field, type_) for field in cls.graphic_fields]
+    def build_graphic_fields(cls, data_type):
+        '''Build list of _fields_ for a specific data_type'''
+        return [(field, data_type) for field in cls.graphic_fields]
 
 
 class GraphicControlUnits(GraphicControlBase):
