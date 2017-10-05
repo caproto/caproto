@@ -620,8 +620,10 @@ _native_map = {}
 # ChannelTypes grouped by included metadata
 status_types = tuple(promote_type(nt, use_status=True) for nt in native_types)
 time_types = tuple(promote_type(nt, use_time=True) for nt in native_types)
-graphical_types = tuple(promote_type(nt, use_gr=True) for nt in native_types)
-control_types = tuple(promote_type(nt, use_ctrl=True) for nt in native_types)
+graphical_types = tuple(promote_type(nt, use_gr=True) for nt in native_types
+                        if nt != ChannelType.STRING)
+control_types = tuple(promote_type(nt, use_ctrl=True) for nt in native_types
+                      if nt != ChannelType.STRING)
 
 # ChannelTypes grouped by value data type
 char_types = (ChannelType.CHAR, ChannelType.TIME_CHAR, ChannelType.CTRL_CHAR,
