@@ -190,16 +190,17 @@ def promote_type(ftype, *, use_status=False, use_time=False, use_ctrl=False,
     # Use the fact that the types are ordered in blocks and that the STRING
     # variant is the first element of each block.
     if use_ctrl:
+        if ftype == ChType.STRING:
+            return ChType.TIME_STRING
         ftype += ChType.CTRL_STRING
     elif use_time:
         ftype += ChType.TIME_STRING
     elif use_status:
         ftype += ChType.STS_STRING
     elif use_gr:
+        if ftype == ChType.STRING:
+            return ChType.STS_STRING
         ftype += ChType.GR_STRING
-
-    if ftype == ChType.CTRL_STRING:
-        return ChType.TIME_STRING
     return ChType(ftype)
 
 
@@ -609,6 +610,7 @@ class DBR_CLASS_NAME(DbrSpecialType):
 # All native types available
 native_types = (ChType.STRING, ChType.INT, ChType.FLOAT, ChType.ENUM,
                 ChType.CHAR, ChType.LONG, ChType.DOUBLE)
+
 # Special types without any corresponding promoted versions
 special_types = (ChType.PUT_ACKS, ChType.PUT_ACKS, ChType.STSACK_STRING,
                  ChType.CLASS_NAME)
