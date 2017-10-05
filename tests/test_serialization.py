@@ -157,8 +157,8 @@ payloads = [
 
     (ca.ChannelType.TIME_DOUBLE, 1, (7,),
      ca.DBR_TIME_DOUBLE(1, 0, ca.TimeStamp(3, 5))),
-    (ca.ChannelType.TIME_DOUBLE, 1, (7,), (1, 0, 3, 5)),
-    (ca.ChannelType.TIME_DOUBLE, 2, (7, 3.4), (1, 0, 3, 5)),
+    (ca.ChannelType.TIME_DOUBLE, 1, (7,), (1, 0, ca.TimeStamp(3, 5))),
+    (ca.ChannelType.TIME_DOUBLE, 2, (7, 3.4), (1, 0, ca.TimeStamp(3, 5))),
 
     (ca.ChannelType.STRING, 1, b'abc'.ljust(40, b'\x00'), None),
     (ca.ChannelType.STRING, 3, 3 * b'abc'.ljust(40, b'\x00'), None),
