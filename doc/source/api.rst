@@ -311,9 +311,8 @@ in the :class:`ChannelType` enum:
 
     "Native" types hold a scalar or a homogeous array of values.
 
-    .. attribute:: STRING = 1
+    .. attribute:: STRING = 0
     .. attribute:: INT = 1
-    .. attribute:: SHORT = 1
     .. attribute:: FLOAT = 2
     .. attribute:: ENUM = 3
     .. attribute:: CHAR = 4
