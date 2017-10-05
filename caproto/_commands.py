@@ -47,9 +47,10 @@ from ._headers import (MessageHeader, ExtendedMessageHeader,
                        WriteNotifyResponseHeader, WriteRequestHeader,
                        )
 
-from ._dbr import (DBR_INT, DBR_TYPES, DO_REPLY, NO_REPLY, ChannelType,
-                   float_t, short_t, ushort_t, native_type,
-                   MAX_ENUM_STRING_SIZE, USE_NUMPY, array_type_code)
+from ._constants import (DO_REPLY, NO_REPLY)
+from ._dbr import (DBR_INT, DBR_TYPES, ChannelType, float_t, short_t, ushort_t,
+                   native_type, MAX_ENUM_STRING_SIZE, USE_NUMPY,
+                   array_type_code)
 
 from . import _dbr as dbr
 from ._utils import (CLIENT, NEED_DATA, REQUEST, RESPONSE, SERVER,
