@@ -218,6 +218,7 @@ def timestamp_to_epics(ts):
 
 
 class DbrTypeBase(ctypes.BigEndianStructure):
+    '''Base class for all DBR types'''
     _pack_ = 1
     info_fields = ()
 
@@ -227,7 +228,7 @@ class DbrTypeBase(ctypes.BigEndianStructure):
 
 
 class TimeStamp(DbrTypeBase):
-    "emulate epics timestamp"
+    '''An EPICS timestamp with 32-bit seconds and nanoseconds'''
     _fields_ = [('secondsSinceEpoch', ctypes.c_uint32),
                 ('nanoSeconds', ctypes.c_uint32)]
 
@@ -241,6 +242,7 @@ class TimeStamp(DbrTypeBase):
 
 
 class TimeTypeBase(DbrTypeBase):
+    '''DBR_TIME_* base'''
     # access to secondsSinceEpoch and nanoSeconds:
     _anonymous_ = ('stamp', )
     _fields_ = [('status', short_t),
@@ -256,6 +258,7 @@ class TimeTypeBase(DbrTypeBase):
 
 
 class StatusTypeBase(DbrTypeBase):
+    '''DBR_STS_* base'''
     info_fields = ('status', 'severity', )
     _fields_ = [('status', short_t),
                 ('severity', short_t)
@@ -263,6 +266,7 @@ class StatusTypeBase(DbrTypeBase):
 
 
 class GraphicControlBase(DbrTypeBase):
+    '''DBR_CTRL_* and DBR_GR_* base'''
     graphic_fields = ('upper_disp_limit', 'lower_disp_limit',
                       'upper_alarm_limit', 'upper_warning_limit',
                       'lower_warning_limit', 'lower_alarm_limit')
@@ -274,29 +278,35 @@ class GraphicControlBase(DbrTypeBase):
 
     @classmethod
     def build_control_fields(cls, type_):
+        '''Build list of _fields_ for a specific type_'''
         return [(field, type_) for field in
                 cls.graphic_fields + cls.control_fields]
 
     @classmethod
     def build_graphic_fields(cls, type_):
+        '''Build list of _fields_ for a specific type_'''
         return [(field, type_) for field in cls.graphic_fields]
 
 
 class GraphicControlUnits(GraphicControlBase):
+    '''DBR_CTRL/DBR_GR with units'''
     _fields_ = [('units', char_t * MAX_UNITS_SIZE),
                 ]
 
 
 class ControlTypeUnits(GraphicControlUnits):
+    '''DBR_CTRL with units'''
     info_fields = (GraphicControlBase.info_fields +
                    GraphicControlBase.control_fields + ('units', ))
 
 
 class GraphicTypeUnits(GraphicControlUnits):
+    '''DBR_GR with units'''
     info_fields = GraphicControlBase.info_fields + ('units', )
 
 
 class GraphicControlPrecision(GraphicControlBase):
+    '''DBR_CTRL/DBR_GR with precision and units'''
     _fields_ = [('precision', short_t),
                 ('RISC_pad0', short_t),
                 ('units', char_t * MAX_UNITS_SIZE),
@@ -304,55 +314,60 @@ class GraphicControlPrecision(GraphicControlBase):
 
 
 class ControlTypePrecision(GraphicControlPrecision):
+    '''DBR_CTRL with precision and units'''
     info_fields = (GraphicControlBase.info_fields +
                    GraphicControlBase.control_fields +
                    ('precision', 'units', ))
 
 
 class GraphicTypePrecision(GraphicControlPrecision):
+    '''DBR_GR with precision and units'''
     info_fields = (GraphicControlBase.info_fields +
                    ('precision', 'units', ))
 
 
-class DbrValueType(DbrTypeBase):
+class DbrNativeValueType(DbrTypeBase):
+    '''Native DBR_ types: no metadata, value only'''
     info_fields = ('value', )
 
 
-class DBR_STRING(DbrValueType):
+# Native value types
+class DBR_STRING(DbrNativeValueType):
     DBR_ID = ChannelType.STRING
     _fields_ = [('value', string_t)]
 
 
-class DBR_INT(DbrValueType):
+class DBR_INT(DbrNativeValueType):
     DBR_ID = ChannelType.INT
     _fields_ = [('value', int_t)]
 
 
-class DBR_FLOAT(DbrValueType):
+class DBR_FLOAT(DbrNativeValueType):
     DBR_ID = ChannelType.FLOAT
     _fields_ = [('value', float_t)]
 
 
-class DBR_ENUM(DbrValueType):
+class DBR_ENUM(DbrNativeValueType):
     DBR_ID = ChannelType.ENUM
     _fields_ = [('value', ushort_t)]
 
 
-class DBR_CHAR(DbrValueType):
+class DBR_CHAR(DbrNativeValueType):
     DBR_ID = ChannelType.CHAR
     _fields_ = [('value', char_t)]
 
 
-class DBR_LONG(DbrValueType):
+class DBR_LONG(DbrNativeValueType):
     DBR_ID = ChannelType.LONG
     _fields_ = [('value', long_t)]
 
 
-class DBR_DOUBLE(DbrValueType):
+class DBR_DOUBLE(DbrNativeValueType):
     DBR_ID = ChannelType.DOUBLE
     _fields_ = [('value', double_t)]
 
 
+# Status types
 class DBR_STS_STRING(StatusTypeBase):
     DBR_ID = ChannelType.STS_STRING
 
@@ -387,6 +402,7 @@ class DBR_STS_DOUBLE(StatusTypeBase):
     ]
 
 
+# Time types
 class DBR_TIME_STRING(TimeTypeBase):
     DBR_ID = ChannelType.TIME_STRING
     _fields_ = []
@@ -434,6 +450,7 @@ class DBR_TIME_DOUBLE(TimeTypeBase):
 # DBR_GR_STRING (21) is not implemented by EPICS. - use DBR_STS_STRING
 
 
+# Graphic types
 class DBR_GR_INT(GraphicTypeUnits):
     DBR_ID = ChannelType.GR_INT
     _fields_ = GraphicTypeUnits.build_graphic_fields(short_t)
@@ -461,7 +478,6 @@ class DBR_GR_ENUM(GraphicControlBase):
                      for i in range(self.no_str))
 
 
-
 class DBR_GR_CHAR(GraphicTypeUnits):
     DBR_ID = ChannelType.GR_CHAR
     _fields_ = (GraphicTypeUnits.build_graphic_fields(char_t) +
@@ -480,6 +496,7 @@ class DBR_GR_DOUBLE(GraphicTypePrecision):
 
 # DBR_CTRL_STRING (28) is not implemented by libca.
 
+# Control types
 class DBR_CTRL_INT(ControlTypeUnits):
     DBR_ID = ChannelType.CTRL_INT
     _fields_ = ControlTypeUnits.build_control_fields(short_t)
@@ -523,6 +540,7 @@ class DBR_CTRL_DOUBLE(ControlTypePrecision):
     _fields_ = ControlTypePrecision.build_control_fields(double_t)
 
 
+# Remaining "special" types
 class DbrSpecialType(DbrTypeBase):
     ...
 
@@ -556,6 +574,7 @@ class DBR_CLASS_NAME(DbrSpecialType):
     info_fields = ('value', )
     _fields_ = [('value', string_t)]
 
+# End of DBR type classes
 
 # All native types available
 native_types = (ChType.STRING, ChType.INT, ChType.FLOAT, ChType.ENUM,
