@@ -217,6 +217,36 @@ def timestamp_to_epics(ts):
     return int(dt.total_seconds()), int(dt.microseconds * 1e3)
 
 
+def array_type_code(native_type):
+    '''Get an array.array type code for a given native type'''
+    return _array_type_code_map[native_type]
+
+
+def native_to_builtin(value, native_type, data_count):
+    '''Convert from a native EPICS DBR type to a builtin Python type
+
+    Notes:
+     - A waveform of characters is just a bytestring.
+     - A waveform of strings is an array whose elements are fixed-length (40-
+       character) strings.
+     - Enums are just integers that happen to have special significance.
+     - Everything else is, straightforwardly, an array of numbers.
+    '''
+
+    if USE_NUMPY:
+        # Return an ndarray
+        dt = _numpy_map[native_type]
+        if native_type == ChType.STRING and len(value) < MAX_STRING_SIZE:
+            # caput behaves this way
+            return numpy.frombuffer(
+                bytes(value).ljust(MAX_STRING_SIZE, b'\x00'), dtype=dt)
+
+        return numpy.frombuffer(value, dtype=dt)
+    else:
+        # TODO
+        return  # array.array()
+
+
 class DbrTypeBase(ctypes.BigEndianStructure):
     '''Base class for all DBR types'''
     _pack_ = 1
@@ -671,27 +701,3 @@ for _type in set(native_types) - set([ChType.STRING]):
             ctypes.sizeof(DBR_TYPES[_type])), '{!r} check failed'.format(_type)
 
 del _type
-
-
-def array_type_code(native_type):
-    return _array_type_code_map[native_type]
-
-
-def native_to_builtin(value, native_type, data_count):
-    # - A waveform of characters is just a bytestring.
-    # - A waveform of strings is an array whose elements are fixed-length (40-
-    #   character) strings.
-    # - Enums are just integers that happen to have special significance.
-    # - Everything else is, straightforwardly, an array of numbers.
-    if USE_NUMPY:
-        # Return an ndarray
-        dt = _numpy_map[native_type]
-        if native_type == ChType.STRING and len(value) < MAX_STRING_SIZE:
-            # caput behaves this way
-            return numpy.frombuffer(
-                bytes(value).ljust(MAX_STRING_SIZE, b'\x00'), dtype=dt)
-
-        return numpy.frombuffer(value, dtype=dt)
-    else:
-        # TODO
-        return  # array.array()
