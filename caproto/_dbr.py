@@ -658,6 +658,9 @@ _native_map.update({promote_type(native_type, **kw): native_type
 
 # Special types need to be added as well:
 _native_map.update({
+    ChannelType.GR_STRING: ChannelType.STRING,
+    ChannelType.CTRL_STRING: ChannelType.STRING,
+
     ChannelType.PUT_ACKS: ChannelType.PUT_ACKS,
     ChannelType.PUT_ACKT: ChannelType.PUT_ACKT,
     ChannelType.STSACK_STRING: ChannelType.STSACK_STRING,
@@ -670,6 +673,11 @@ DBR_TYPES = {cls.DBR_ID: cls
              if (name.startswith('DBR_') and issubclass(cls, DbrTypeBase)
                  and hasattr(cls, 'DBR_ID'))
              }
+
+# Unimplemented STRING types are mapped to DBR_TIME_STRING
+DBR_TYPES[ChannelType.GR_STRING] = DBR_STS_STRING
+DBR_TYPES[ChannelType.CTRL_STRING] = DBR_TIME_STRING
+
 
 if USE_NUMPY:
     _numpy_map = {
