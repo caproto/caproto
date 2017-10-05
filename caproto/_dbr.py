@@ -672,14 +672,6 @@ for _type in set(native_types) - set([ChType.STRING]):
 
 del _type
 
-# Offset of the data in bytes, according to the DBR type
-dbr_data_offsets = {
-    data_type: ctypes.sizeof(DBR_TYPES[data_type])
-    if data_type not in native_types
-    else 0
-    for data_type in DBR_TYPES
-}
-
 
 def array_type_code(native_type):
     return _array_type_code_map[native_type]
