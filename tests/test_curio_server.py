@@ -9,7 +9,7 @@ import caproto as ca
 from caproto.curio.server import find_next_tcp_port
 import caproto.curio.server as server
 
-from caproto import ChType
+from caproto import ChannelType
 from epics_test_utils import (run_caget, run_caput)
 
 
@@ -96,17 +96,17 @@ caget_checks = sum(
     []
 )
 
-caget_checks += [('char', ChType.CHAR),
-                 ('char', ChType.STS_CHAR),
-                 ('char', ChType.TIME_CHAR),
-                 ('char', ChType.GR_CHAR),
-                 ('char', ChType.CTRL_CHAR),
-                 ('str', ChType.STRING),
-                 ('str', ChType.STS_STRING),
-                 ('str', ChType.TIME_STRING),
+caget_checks += [('char', ChannelType.CHAR),
+                 ('char', ChannelType.STS_CHAR),
+                 ('char', ChannelType.TIME_CHAR),
+                 ('char', ChannelType.GR_CHAR),
+                 ('char', ChannelType.CTRL_CHAR),
+                 ('str', ChannelType.STRING),
+                 ('str', ChannelType.STS_STRING),
+                 ('str', ChannelType.TIME_STRING),
 
-                 ('str', ChType.STSACK_STRING),
-                 ('str', ChType.CLASS_NAME),
+                 ('str', ChannelType.STSACK_STRING),
+                 ('str', ChannelType.CLASS_NAME),
                  ]
 
 
@@ -132,27 +132,27 @@ def test_with_caget(curio_server, pv, dbr_type):
         db_value = db_entry.value
 
         # convert from string value to enum if requesting int
-        if (db_native == ChType.ENUM and
-                not (req_native == ChType.STRING
-                     or dbr_type in (ChType.CTRL_ENUM,
-                                     ChType.GR_ENUM))):
+        if (db_native == ChannelType.ENUM and
+                not (req_native == ChannelType.STRING
+                     or dbr_type in (ChannelType.CTRL_ENUM,
+                                     ChannelType.GR_ENUM))):
             db_value = db_entry.enum_strings.index(db_value)
-        if req_native in (ChType.INT, ChType.LONG, ChType.CHAR):
-            if db_native == ChType.CHAR:
+        if req_native in (ChannelType.INT, ChannelType.LONG, ChannelType.CHAR):
+            if db_native == ChannelType.CHAR:
                 assert int(data['value']) == ord(db_value)
             else:
                 assert int(data['value']) == int(db_value)
-        elif req_native in (ChType.STSACK_STRING, ):
+        elif req_native in (ChannelType.STSACK_STRING, ):
             db_string_value = db_entry.alarm.alarm_string
             string_length = len(db_string_value)
             read_value = data['value'][:string_length]
             assert read_value == db_string_value
-        elif req_native in (ChType.CLASS_NAME, ):
+        elif req_native in (ChannelType.CLASS_NAME, ):
             assert data['class_name'] == 'caproto'
-        elif req_native in (ChType.FLOAT, ChType.DOUBLE):
+        elif req_native in (ChannelType.FLOAT, ChannelType.DOUBLE):
             assert float(data['value']) == float(db_value)
-        elif req_native == ChType.STRING:
-            if db_native == ChType.STRING:
+        elif req_native == ChannelType.STRING:
+            if db_native == ChannelType.STRING:
                 db_string_value = str(db_value[0])
                 string_length = len(db_string_value)
                 read_value = data['value'][:string_length]
@@ -164,14 +164,15 @@ def test_with_caget(curio_server, pv, dbr_type):
                 # should pass
             else:
                 assert data['value'] == str(db_value)
-        elif req_native == ChType.ENUM:
+        elif req_native == ChannelType.ENUM:
             bad_strings = ['Illegal Value (', 'Enum Index Overflow (']
             for bad_string in bad_strings:
                 if data['value'].startswith(bad_string):
                     data['value'] = data['value'][len(bad_string):-1]
 
-            if (db_native == ChType.ENUM and
-                    (dbr_type in (ChType.CTRL_ENUM, ChType.GR_ENUM))):
+            if (db_native == ChannelType.ENUM and
+                    (dbr_type in (ChannelType.CTRL_ENUM,
+                                  ChannelType.GR_ENUM))):
                 # ctrl enum gets back the full string value
                 assert data['value'] == db_value
             else:
@@ -183,10 +184,10 @@ def test_with_caget(curio_server, pv, dbr_type):
         same_type = (ca.native_type(dbr_type) == db_native)
 
         if (dbr_type in ca.control_types and same_type
-                and dbr_type != ChType.CTRL_ENUM):
+                and dbr_type != ChannelType.CTRL_ENUM):
             for key in ctrl_keys:
                 if (key == 'precision' and
-                        ca.native_type(dbr_type) != ChType.DOUBLE):
+                        ca.native_type(dbr_type) != ChannelType.DOUBLE):
                     print('skipping', key)
                     continue
                 print('checking', key)
@@ -197,7 +198,7 @@ def test_with_caget(curio_server, pv, dbr_type):
             assert data['timestamp'] == timestamp
 
         if (dbr_type in ca.time_types or dbr_type in ca.status_types or
-                dbr_type == ChType.STSACK_STRING):
+                dbr_type == ChannelType.STSACK_STRING):
             severity = data['severity']
             if not severity.endswith('_ALARM'):
                 severity = '{}_ALARM'.format(severity)
@@ -238,6 +239,7 @@ caput_checks = [('int', '1', [1]),
                 # ('char', 'testing', 'testing'),  # TODO comes in as byte array
                 # TODO string array, longer char array
                 ]
+
 
 @pytest.mark.parametrize('pv, put_value, check_value', caput_checks)
 # @pytest.mark.parametrize('async_put', [True, False])

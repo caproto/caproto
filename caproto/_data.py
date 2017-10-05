@@ -5,7 +5,7 @@ import weakref
 # TODO: assuming USE_NUMPY for now
 import numpy as np
 
-from ._dbr import (DBR_TYPES, ChType, native_type, native_float_types,
+from ._dbr import (DBR_TYPES, ChannelType, native_type, native_float_types,
                    native_int_types, native_types, timestamp_to_epics,
                    time_types, MAX_ENUM_STRING_SIZE, DBR_STSACK_STRING,
                    AccessRights, _numpy_map, epics_timestamp_to_unix,
@@ -22,7 +22,7 @@ def _convert_enum_values(values, to_dtype, string_encoding, enum_strings):
     if isinstance(values, (str, bytes)):
         values = [values]
 
-    if to_dtype == ChType.STRING:
+    if to_dtype == ChannelType.STRING:
         return [value.encode(string_encoding) for value in values]
     else:
         if enum_strings is not None:
@@ -41,7 +41,7 @@ def _convert_char_values(values, to_dtype, string_encoding, enum_strings):
         return np.asarray(values).astype(_numpy_map[to_dtype])
     elif to_dtype in native_int_types or to_dtype in native_float_types:
         arr = np.frombuffer(values, dtype=np.uint8)
-        if to_dtype != ChType.CHAR:
+        if to_dtype != ChannelType.CHAR:
             return arr.astype(_numpy_map[to_dtype])
         return arr
 
@@ -49,7 +49,7 @@ def _convert_char_values(values, to_dtype, string_encoding, enum_strings):
 
 
 def _convert_string_values(values, to_dtype, string_encoding, enum_strings):
-    if to_dtype == ChType.ENUM:
+    if to_dtype == ChannelType.ENUM:
         if not isinstance(values, (str, bytes)):
             values = values[0]
         if enum_strings:
@@ -85,15 +85,15 @@ def _convert_string_values(values, to_dtype, string_encoding, enum_strings):
                 for v in values]
 
 
-_custom_conversions = {ChType.ENUM: _convert_enum_values,
-                       ChType.CHAR: _convert_char_values,
-                       ChType.STRING: _convert_string_values,
+_custom_conversions = {ChannelType.ENUM: _convert_enum_values,
+                       ChannelType.CHAR: _convert_char_values,
+                       ChannelType.STRING: _convert_string_values,
                        }
 
 
 def convert_values(values, from_dtype, to_dtype, *, string_encoding='latin-1',
                    enum_strings=None):
-    '''Convert values from one ChType to another
+    '''Convert values from one ChannelType to another
 
     Parameters
     ----------
@@ -111,7 +111,7 @@ def convert_values(values, from_dtype, to_dtype, *, string_encoding='latin-1',
     if to_dtype not in native_types:
         raise ValueError('Expecting a native type')
 
-    if to_dtype in (ChType.STSACK_STRING, ChType.CLASS_NAME):
+    if to_dtype in (ChannelType.STSACK_STRING, ChannelType.CLASS_NAME):
         if from_dtype != to_dtype:
             raise ValueError('Cannot convert values for stsack_string or '
                              'class_name to other types')
@@ -127,7 +127,7 @@ def convert_values(values, from_dtype, to_dtype, *, string_encoding='latin-1',
                             string_encoding=string_encoding,
                             enum_strings=enum_strings)
 
-    if to_dtype == ChType.STRING:
+    if to_dtype == ChannelType.STRING:
         return [str(v).encode(string_encoding) for v in values]
 
     return np.asarray(values).astype(_numpy_map[to_dtype])
@@ -150,7 +150,7 @@ def dbr_metadata_to_dict(dbr_metadata, string_encoding):
     if hasattr(dbr_metadata, 'precision'):
         kw['precision'] = dbr_metadata.precision
 
-    dbr_type = ChType(dbr_metadata.DBR_ID)
+    dbr_type = ChannelType(dbr_metadata.DBR_ID)
     if dbr_type in time_types:
         timestamp = epics_timestamp_to_unix(dbr_metadata.secondsSinceEpoch,
                                             dbr_metadata.nanoSeconds)
@@ -240,7 +240,7 @@ class ChannelAlarm:
 
 
 class ChannelData:
-    data_type = ChType.LONG
+    data_type = ChannelType.LONG
 
     def __init__(self, *, alarm=None,
                  value=None, timestamp=None,
@@ -302,10 +302,10 @@ class ChannelData:
 
     async def _read(self, data_type):
         # special cases for alarm strings and class name
-        if data_type == ChType.STSACK_STRING:
+        if data_type == ChannelType.STSACK_STRING:
             ret = await self.alarm.read()
             return (ret, b'')
-        elif data_type == ChType.CLASS_NAME:
+        elif data_type == ChannelType.CLASS_NAME:
             class_name = DBR_TYPES[data_type]()
             rtyp = self.reported_record_type.encode(self.string_encoding)
             class_name.value = rtyp
@@ -407,7 +407,7 @@ class ChannelData:
 
     def _read_metadata(self, dbr_metadata):
         'Set all metadata fields of a given DBR type instance'
-        to_type = ChType(dbr_metadata.DBR_ID)
+        to_type = ChannelType(dbr_metadata.DBR_ID)
         data = self._data
 
         if hasattr(dbr_metadata, 'units'):
@@ -503,7 +503,7 @@ class ChannelData:
 
 
 class ChannelEnum(ChannelData):
-    data_type = ChType.ENUM
+    data_type = ChannelType.ENUM
 
     def __init__(self, *, enum_strings=None, **kwargs):
         super().__init__(**kwargs)
@@ -556,11 +556,11 @@ class ChannelNumeric(ChannelData):
 
 
 class ChannelInteger(ChannelNumeric):
-    data_type = ChType.LONG
+    data_type = ChannelType.LONG
 
 
 class ChannelDouble(ChannelNumeric):
-    data_type = ChType.DOUBLE
+    data_type = ChannelType.DOUBLE
 
     def __init__(self, *, precision=0, **kwargs):
         super().__init__(**kwargs)
@@ -572,7 +572,7 @@ class ChannelDouble(ChannelNumeric):
 
 class ChannelChar(ChannelNumeric):
     # 'Limits' on chars do not make much sense and are rarely used.
-    data_type = ChType.CHAR
+    data_type = ChannelType.CHAR
 
     def __init__(self, *, max_length=100, **kwargs):
         super().__init__(**kwargs)
@@ -580,7 +580,7 @@ class ChannelChar(ChannelNumeric):
 
 
 class ChannelString(ChannelData):
-    data_type = ChType.STRING
+    data_type = ChannelType.STRING
     # There is no CTRL or GR variant of STRING.
 
     def __init__(self, *, alarm=None,

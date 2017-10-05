@@ -47,7 +47,7 @@ async def run_caget(pv, *, dbr_type=None):
     ----------
     pv : str
         PV name
-    dbr_type : caproto.ChType, optional
+    dbr_type : caproto.ChannelType, optional
         Specific dbr_type to request
     '''
     sep = '@'

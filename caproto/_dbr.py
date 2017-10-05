@@ -149,9 +149,6 @@ class SubscriptionType(IntEnum):
     DBE_PROPERTY = 8
 
 
-ChType = ChannelType
-
-
 string_t = MAX_STRING_SIZE * ctypes.c_char  # epicsOldString
 char_t = ctypes.c_char  # epicsUint8
 short_t = ctypes.c_int16  # epicsInt16
@@ -185,23 +182,23 @@ def promote_type(ftype, *, use_status=False, use_time=False, use_ctrl=False,
 
     if _native_map:  # only during initialization
         # Demote it back to a native type, if necessary
-        ftype = _native_map[ChType(ftype)]
+        ftype = _native_map[ChannelType(ftype)]
 
     # Use the fact that the types are ordered in blocks and that the STRING
     # variant is the first element of each block.
     if use_ctrl:
-        if ftype == ChType.STRING:
-            return ChType.TIME_STRING
-        ftype += ChType.CTRL_STRING
+        if ftype == ChannelType.STRING:
+            return ChannelType.TIME_STRING
+        ftype += ChannelType.CTRL_STRING
     elif use_time:
-        ftype += ChType.TIME_STRING
+        ftype += ChannelType.TIME_STRING
     elif use_status:
-        ftype += ChType.STS_STRING
+        ftype += ChannelType.STS_STRING
     elif use_gr:
-        if ftype == ChType.STRING:
-            return ChType.STS_STRING
-        ftype += ChType.GR_STRING
-    return ChType(ftype)
+        if ftype == ChannelType.STRING:
+            return ChannelType.STS_STRING
+        ftype += ChannelType.GR_STRING
+    return ChannelType(ftype)
 
 
 def epics_timestamp_to_unix(seconds_since_epoch, nano_seconds):
@@ -237,7 +234,7 @@ def native_to_builtin(value, native_type, data_count):
     if USE_NUMPY:
         # Return an ndarray
         dt = _numpy_map[native_type]
-        if native_type == ChType.STRING and len(value) < MAX_STRING_SIZE:
+        if native_type == ChannelType.STRING and len(value) < MAX_STRING_SIZE:
             # caput behaves this way
             return numpy.frombuffer(
                 bytes(value).ljust(MAX_STRING_SIZE, b'\x00'), dtype=dt)
@@ -607,13 +604,15 @@ class DBR_CLASS_NAME(DbrSpecialType):
 
 # End of DBR type classes
 
+
 # All native types available
-native_types = (ChType.STRING, ChType.INT, ChType.FLOAT, ChType.ENUM,
-                ChType.CHAR, ChType.LONG, ChType.DOUBLE)
+native_types = (ChannelType.STRING, ChannelType.INT, ChannelType.FLOAT,
+                ChannelType.ENUM, ChannelType.CHAR, ChannelType.LONG,
+                ChannelType.DOUBLE)
 
 # Special types without any corresponding promoted versions
-special_types = (ChType.PUT_ACKS, ChType.PUT_ACKS, ChType.STSACK_STRING,
-                 ChType.CLASS_NAME)
+special_types = (ChannelType.PUT_ACKS, ChannelType.PUT_ACKS,
+                 ChannelType.STSACK_STRING, ChannelType.CLASS_NAME)
 
 # Map of promoted types to native types, to be filled below
 _native_map = {}
@@ -625,22 +624,27 @@ graphical_types = tuple(promote_type(nt, use_gr=True) for nt in native_types)
 control_types = tuple(promote_type(nt, use_ctrl=True) for nt in native_types)
 
 # ChannelTypes grouped by value data type
-char_types = (ChType.CHAR, ChType.TIME_CHAR, ChType.CTRL_CHAR, ChType.STS_CHAR)
+char_types = (ChannelType.CHAR, ChannelType.TIME_CHAR, ChannelType.CTRL_CHAR,
+              ChannelType.STS_CHAR)
 
-string_types = (ChType.STRING, ChType.TIME_STRING, ChType.CTRL_STRING,
-                ChType.STS_STRING)
+string_types = (ChannelType.STRING, ChannelType.TIME_STRING,
+                ChannelType.CTRL_STRING, ChannelType.STS_STRING)
 
-int_types = (ChType.INT, ChType.TIME_INT, ChType.CTRL_INT, ChType.CTRL_INT,
-             ChType.LONG, ChType.TIME_LONG, ChType.CTRL_LONG, ChType.CTRL_LONG)
+int_types = (ChannelType.INT, ChannelType.TIME_INT, ChannelType.CTRL_INT,
+             ChannelType.CTRL_INT, ChannelType.LONG, ChannelType.TIME_LONG,
+             ChannelType.CTRL_LONG, ChannelType.CTRL_LONG)
 
-float_types = (ChType.FLOAT, ChType.TIME_FLOAT, ChType.CTRL_FLOAT,
-               ChType.CTRL_FLOAT, ChType.DOUBLE, ChType.TIME_DOUBLE,
-               ChType.CTRL_DOUBLE, ChType.CTRL_DOUBLE)
+float_types = (ChannelType.FLOAT, ChannelType.TIME_FLOAT,
+               ChannelType.CTRL_FLOAT, ChannelType.CTRL_FLOAT,
+               ChannelType.DOUBLE, ChannelType.TIME_DOUBLE,
+               ChannelType.CTRL_DOUBLE, ChannelType.CTRL_DOUBLE)
 
-enum_types = (ChType.ENUM, ChType.STS_ENUM, ChType.TIME_ENUM, ChType.CTRL_ENUM)
-char_types = (ChType.CHAR, ChType.TIME_CHAR, ChType.CTRL_CHAR)
-native_float_types = (ChType.FLOAT, ChType.DOUBLE)
-native_int_types = (ChType.INT, ChType.CHAR, ChType.LONG, ChType.ENUM)
+enum_types = (ChannelType.ENUM, ChannelType.STS_ENUM, ChannelType.TIME_ENUM,
+              ChannelType.CTRL_ENUM)
+char_types = (ChannelType.CHAR, ChannelType.TIME_CHAR, ChannelType.CTRL_CHAR)
+native_float_types = (ChannelType.FLOAT, ChannelType.DOUBLE)
+native_int_types = (ChannelType.INT, ChannelType.CHAR, ChannelType.LONG,
+                    ChannelType.ENUM)
 
 # Fill in the map of promoted types to native types
 _native_map.update({promote_type(native_type, **kw): native_type
@@ -654,10 +658,10 @@ _native_map.update({promote_type(native_type, **kw): native_type
 
 # Special types need to be added as well:
 _native_map.update({
-    ChType.PUT_ACKS: ChType.PUT_ACKS,
-    ChType.PUT_ACKT: ChType.PUT_ACKT,
-    ChType.STSACK_STRING: ChType.STSACK_STRING,
-    ChType.CLASS_NAME: ChType.CLASS_NAME,
+    ChannelType.PUT_ACKS: ChannelType.PUT_ACKS,
+    ChannelType.PUT_ACKT: ChannelType.PUT_ACKT,
+    ChannelType.STSACK_STRING: ChannelType.STSACK_STRING,
+    ChannelType.CLASS_NAME: ChannelType.CLASS_NAME,
 })
 
 # map of Epics DBR types to ctypes types
@@ -671,34 +675,34 @@ if USE_NUMPY:
     _numpy_map = {
         ch_type: numpy.dtype(dtype).newbyteorder('>')
         for ch_type, dtype in
-        [(ChType.INT, numpy.int16),
-         (ChType.FLOAT, numpy.float32),
-         (ChType.ENUM, numpy.uint16),
-         (ChType.CHAR, numpy.uint8),
-         (ChType.LONG, numpy.int32),
-         (ChType.DOUBLE, numpy.float64),
-         (ChType.STRING, '>S40'),
-         (ChType.CHAR, 'b'),
-         (ChType.STSACK_STRING, numpy.uint8),
-         (ChType.CLASS_NAME, numpy.uint8),
+        [(ChannelType.INT, numpy.int16),
+         (ChannelType.FLOAT, numpy.float32),
+         (ChannelType.ENUM, numpy.uint16),
+         (ChannelType.CHAR, numpy.uint8),
+         (ChannelType.LONG, numpy.int32),
+         (ChannelType.DOUBLE, numpy.float64),
+         (ChannelType.STRING, '>S40'),
+         (ChannelType.CHAR, 'b'),
+         (ChannelType.STSACK_STRING, numpy.uint8),
+         (ChannelType.CLASS_NAME, numpy.uint8),
          ]
     }
 
 
 _array_type_code_map = {
-    ChType.STRING: 'B',  # TO DO
-    ChType.INT: 'h',
-    ChType.FLOAT: 'f',
-    ChType.ENUM: 'H',
-    ChType.CHAR: 'b',
-    ChType.LONG: 'i',
-    ChType.DOUBLE: 'd',
+    ChannelType.STRING: 'B',  # TO DO
+    ChannelType.INT: 'h',
+    ChannelType.FLOAT: 'f',
+    ChannelType.ENUM: 'H',
+    ChannelType.CHAR: 'b',
+    ChannelType.LONG: 'i',
+    ChannelType.DOUBLE: 'd',
 
-    ChType.STSACK_STRING: 'b',
-    ChType.CLASS_NAME: 'b',
+    ChannelType.STSACK_STRING: 'b',
+    ChannelType.CLASS_NAME: 'b',
 }
 
-for _type in set(native_types) - set([ChType.STRING]):
+for _type in set(native_types) - set([ChannelType.STRING]):
     assert (array.array(_array_type_code_map[_type]).itemsize ==
             ctypes.sizeof(DBR_TYPES[_type])), '{!r} check failed'.format(_type)
 

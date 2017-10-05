@@ -726,7 +726,7 @@ class PV:
 
         self.chid = self._context.create_channel(self.pvname)
 
-        self._args['type'] = ca.ChType(self.chid.channel.native_data_type)
+        self._args['type'] = ca.ChannelType(self.chid.channel.native_data_type)
         self._args['typefull'] = ca.promote_type(self.type,
                                                  use_time=(form == 'time'),
                                                  use_ctrl=(form != 'time'))
@@ -805,10 +805,10 @@ class PV:
             count = self.dflt_count
         dt = self.typefull
         if not as_string and self.typefull in ca.char_types:
-            re_map = {ca.ChType.CHAR: ca.ChType.INT,
-                      ca.ChType.CTRL_CHAR: ca.ChType.CTRL_INT,
-                      ca.ChType.TIME_CHAR: ca.ChType.TIME_INT,
-                      ca.ChType.STS_CHAR: ca.ChType.STS_INT}
+            re_map = {ca.ChannelType.CHAR: ca.ChannelType.INT,
+                      ca.ChannelType.CTRL_CHAR: ca.ChannelType.CTRL_INT,
+                      ca.ChannelType.TIME_CHAR: ca.ChannelType.TIME_INT,
+                      ca.ChannelType.STS_CHAR: ca.ChannelType.STS_INT}
             dt = re_map[self.typefull]
             # TODO if you want char arrays not as_string
             # force no-monitor rather than
@@ -1193,9 +1193,9 @@ class PV:
         nt_type = ca.native_type(xtype)
         fmt = '%i'
 
-        if nt_type in (ca.ChType.FLOAT, ca.ChType.DOUBLE):
+        if nt_type in (ca.ChannelType.FLOAT, ca.ChannelType.DOUBLE):
             fmt = '%g'
-        elif nt_type in (ca.ChType.CHAR, ca.ChType.STRING):
+        elif nt_type in (ca.ChannelType.CHAR, ca.ChannelType.STRING):
             fmt = '%s'
 
         # self._set_charval(self._args['value'], call_ca=False)
@@ -1204,7 +1204,7 @@ class PV:
             val = self._args['value']
             out.append('   value      = %s' % fmt % val)
         else:
-            ext  = {True:'...', False:''}[self.count > 10]
+            ext  = {True: '...', False: ''}[self.count > 10]
             elems = range(min(5, self.count))
             try:
                 aval = [fmt % self._args['value'][i] for i in elems]
