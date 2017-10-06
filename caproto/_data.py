@@ -9,7 +9,7 @@ from ._dbr import (DBR_TYPES, ChannelType, native_type, native_float_types,
                    native_int_types, native_types, timestamp_to_epics,
                    time_types, MAX_ENUM_STRING_SIZE, DBR_STSACK_STRING,
                    AccessRights, _numpy_map, epics_timestamp_to_unix,
-                   AlarmStatus, AlarmSeverity, SubscriptionType)
+                   GraphicControlBase, AlarmStatus, AlarmSeverity)
 from ._utils import CaprotoError
 from ._commands import parse_metadata
 
@@ -138,25 +138,12 @@ def dbr_metadata_to_dict(dbr_metadata, string_encoding):
     # TODO: Note that if dbr.py is restructured to be more like pypvasync
     # (again, but correctly this time) this could be handled nicely as a method
     # on the dbr types
-    kw = {attr: getattr(dbr_metadata, attr, None)
-          for attr in ('precision', 'upper_disp_limit', 'lower_disp_limit',
-                       'upper_alarm_limit', 'upper_warning_limit',
-                       'lower_warning_limit', 'lower_alarm_limit',
-                       'upper_ctrl_limit', 'lower_ctrl_limit')}
 
-    if hasattr(dbr_metadata, 'units'):
-        kw['units'] = dbr_metadata.units.decode(string_encoding)
+    info = dbr_metadata.to_dict()
+    if 'units' in info:
+        info['units'] = info['units'].decode(string_encoding)
 
-    if hasattr(dbr_metadata, 'precision'):
-        kw['precision'] = dbr_metadata.precision
-
-    dbr_type = ChannelType(dbr_metadata.DBR_ID)
-    if dbr_type in time_types:
-        timestamp = epics_timestamp_to_unix(dbr_metadata.secondsSinceEpoch,
-                                            dbr_metadata.nanoSeconds)
-        kw['timestamp'] = timestamp
-
-    return kw
+    return info
 
 
 def _read_only_property(key, doc=None):
@@ -447,10 +434,8 @@ class ChannelData:
             epics_ts = timestamp_to_epics(data['timestamp'])
             dbr_metadata.secondsSinceEpoch, dbr_metadata.nanoSeconds = epics_ts
 
-        convert_attrs = ('upper_disp_limit', 'lower_disp_limit',
-                         'upper_alarm_limit', 'upper_warning_limit',
-                         'lower_warning_limit', 'lower_alarm_limit',
-                         'upper_ctrl_limit', 'lower_ctrl_limit')
+        convert_attrs = (GraphicControlBase.control_fields +
+                         GraphicControlBase.graphic_fields)
 
         if any(hasattr(dbr_metadata, attr) for attr in convert_attrs):
             # convert all metadata types to the target type
@@ -539,7 +524,8 @@ class ChannelEnum(ChannelData):
     enum_strings = _read_only_property('enum_strings')
 
     def _read_metadata(self, dbr_metadata):
-        if hasattr(dbr_metadata, 'strs') and self.enum_strings:
+        if isinstance(dbr_metadata, (DBR_TYPES[ChannelType.GR_ENUM],
+                                     DBR_TYPES[ChannelType.CTRL_ENUM])):
             for i, string in enumerate(self.enum_strings):
                 bytes_ = bytes(string, self.string_encoding)
                 dbr_metadata.strs[i][:] = bytes_.ljust(MAX_ENUM_STRING_SIZE,
