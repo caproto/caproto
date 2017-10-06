@@ -188,21 +188,21 @@ class ChannelAlarm:
     def disconnect(self, channel_data):
         self._channels.remove(channel_data)
 
-    def acknowledge(self):
-        pass
-
     async def write_from_dbr(self, dbr, caller=None):
-        data = self._data
+        write_kw = {}
         if hasattr(dbr, 'status'):
-            data['status'] = AlarmStatus(dbr.status)
+            write_kw['status'] = AlarmStatus(dbr.status)
         if hasattr(dbr, 'severity'):
-            data['severity'] = AlarmSeverity(dbr.severity)
+            write_kw['severity'] = AlarmSeverity(dbr.severity)
         if hasattr(dbr, 'ackt'):
-            data['acknowledge_transient'] = (dbr.ackt != 0)
+            write_kw['acknowledge_transient'] = dbr.ackt
         if hasattr(dbr, 'acks'):
-            data['acknowledge_severity'] = dbr.acks
+            write_kw['acknowledge_severity'] = dbr.acks
         if hasattr(dbr, 'value'):
-            data['alarm_string'] = dbr.value.decode(self.string_encoding)
+            write_kw['alarm_string'] = dbr.value.decode(self.string_encoding)
+
+        await self.write(**write_kw)
+
         for channel in self._channels:
             if channel is caller:
                 # Do not redundantly update the channel whose
@@ -221,8 +221,7 @@ class ChannelAlarm:
         return dbr
 
     async def write(self, *, status=None, severity=None,
-                    acknowledge_transient=None,
-                    acknowledge_severity=None,
+                    acknowledge_transient=None, acknowledge_severity=None,
                     alarm_string=None, caller=None):
         data = self._data
         if status is not None:
@@ -231,11 +230,22 @@ class ChannelAlarm:
             data['severity'] = AlarmSeverity(severity)
         if acknowledge_transient is not None:
             data['acknowledge_transient'] = acknowledge_transient
+            # Transient acknowledge - when set back to 0, acknowledge alarms up
+            # to the acknowledge severity
+            if (acknowledge_transient == 0 and
+                    data['acknowledge_severity'] > data['severity']):
+                data['acknowledge_severity'] = data['severity']
+
         if acknowledge_severity is not None:
-            data['acknowledge_severity'] = acknowledge_severity
+            # To clear, set greater than or equal to the acknowledge_severity
+            if acknowledge_severity >= data['acknowledge_severity']:
+                data['acknowledge_severity'] = 0
+
         if alarm_string is not None:
             data['alarm_string'] = alarm_string
+
         for channel in self._channels:
+            # TODO should publish with a mask of DBE_ALARM
             await channel.publish()
 
 
@@ -350,6 +360,13 @@ class ChannelData:
 
     async def write_from_dbr(self, data, data_type, metadata):
         '''Set data from DBR metadata/values'''
+        if data_type in ChannelType.PUT_ACKS:
+            await self.alarm.write(acknowledge_severity=data.value)
+            return
+        elif data_type in ChannelType.PUT_ACKT:
+            await self.alarm.write(acknowledge_transient=data.value)
+            return
+
         timestamp = time.time()  # will only be used if metadata is None
         native_from = native_type(data_type)
         value = convert_values(values=data, from_dtype=native_from,
@@ -359,6 +376,8 @@ class ChannelData:
                                                     None))
 
         modified_value = await self.verify_value(value)
+        # TODO: on exception raised, set alarm
+
         self._data['value'] = (modified_value
                                if modified_value is not None
                                else value)
@@ -380,8 +399,11 @@ class ChannelData:
             # Update alarm, which in turn updates all other channels
             # connected to this alarm.
             await self.alarm.write_from_dbr(dbr_metadata, caller=self)
+            # TODO event publishing should be combined below into
+            # DBE_VALUE | DBE_ALARM
 
         # Send a new event to subscribers.
+        # TODO: mask should be at least DBE_VALUE
         await self.publish()
 
     async def write(self, value, **metadata):
