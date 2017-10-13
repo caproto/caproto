@@ -17,18 +17,14 @@ caproto as a CLI.
 
 .. code-block:: python
 
-    from caproto.threading.client import PV, caput, caget, Context
+    from caproto.threading.client import caget, caput, get_pv
 
-    # Simple functions (using a default Context)
+    # Simple functions
     caget('pvname')
     caput('pvname', 3)
 
-    # Setup for object-oriented interface
-    PV._default_context = Context()
-    PV._default_context.register()  # register with the CA repeater
-
     # Object-oriented interface
-    pv = PV('pvname')
+    pv = get_pv('pvname')
     pv.wait_for_connection()
     pv.get()
     pv.put(3)
