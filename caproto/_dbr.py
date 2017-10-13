@@ -251,8 +251,19 @@ class DbrTypeBase(ctypes.BigEndianStructure):
     info_fields = ()
 
     def to_dict(self):
-        return {field: getattr(self, field)
-                for field in self.info_fields}
+        d = {field: getattr(self, field)
+             for field in self.info_fields}
+        if 'status' in d:
+            d['status'] = AlarmStatus(d['status'])
+        if 'severity' in d:
+            d['severity'] = AlarmSeverity(d['severity'])
+        return d
+
+    def __repr__(self):
+        formatted_args = ", ".join(["{!s}={!r}".format(k, v)
+                                    for k, v in self.to_dict().items()])
+        return "{}({})".format(type(self).__name__, formatted_args)
+
 
 
 class TimeStamp(DbrTypeBase):
