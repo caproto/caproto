@@ -50,7 +50,7 @@ from ._headers import (MessageHeader, ExtendedMessageHeader,
 from ._constants import (DO_REPLY, NO_REPLY)
 from ._dbr import (DBR_INT, DBR_TYPES, ChannelType, float_t, short_t, ushort_t,
                    native_type, MAX_ENUM_STRING_SIZE, USE_NUMPY,
-                   array_type_code)
+                   array_type_code, AccessRights)
 
 from . import _dbr as dbr
 from ._utils import (CLIENT, NEED_DATA, REQUEST, RESPONSE, SERVER,
@@ -886,7 +886,7 @@ class EventAddRequest(Message):
         return EventAddRequestPayload.from_buffer(self.buffers[0])
 
 
-    data_type = property(lambda self: self.header.data_type)
+    data_type = property(lambda self: ChannelType(self.header.data_type))
     data_count = property(lambda self: self.header.data_count)
     sid = property(lambda self: self.header.parameter1)
     subscriptionid = property(lambda self: self.header.parameter2)
@@ -939,7 +939,7 @@ class EventAddResponse(Message):
         super().__init__(header, *buffers)
 
     payload_size = property(lambda self: self.header.payload_size)
-    data_type = property(lambda self: self.header.data_type)
+    data_type = property(lambda self: ChannelType(self.header.data_type))
     data_count = property(lambda self: self.header.data_count)
     status_code = property(lambda self: self.header.parameter1)
     subscriptionid = property(lambda self: self.header.parameter2)
@@ -991,7 +991,7 @@ class EventCancelRequest(Message):
         header = EventCancelRequestHeader(data_type, 0, sid, subscriptionid)
         super().__init__(header)
 
-    data_type = property(lambda self: self.header.data_type)
+    data_type = property(lambda self: ChannelType(self.header.data_type))
     sid = property(lambda self: self.header.parameter1)
     subscriptionid = property(lambda self: self.header.parameter2)
 
@@ -1026,7 +1026,7 @@ class EventCancelResponse(Message):
         header = EventCancelResponseHeader(data_type, sid, subscriptionid)
         super().__init__(header)
 
-    data_type = property(lambda self: self.header.data_type)
+    data_type = property(lambda self: ChannelType(self.header.data_type))
     sid = property(lambda self: self.header.parameter1)
     subscriptionid = property(lambda self: self.header.parameter2)
 
@@ -1053,7 +1053,7 @@ class ReadRequest(Message):
         header = ReadRequestHeader(data_type, data_count, sid, ioid)
         super().__init__(header, validate=False)
 
-    data_type = property(lambda self: self.header.data_type)
+    data_type = property(lambda self: ChannelType(self.header.data_type))
     data_count = property(lambda self: self.header.data_count)
     sid = property(lambda self: self.header.parameter1)
     ioid = property(lambda self: self.header.parameter2)
@@ -1099,7 +1099,7 @@ class WriteRequest(Message):
         super().__init__(header, *buffers)
 
     payload_size = property(lambda self: self.header.payload_size)
-    data_type = property(lambda self: self.header.data_type)
+    data_type = property(lambda self: ChannelType(self.header.data_type))
     data_count = property(lambda self: self.header.data_count)
     sid = property(lambda self: self.header.parameter1)
     ioid = property(lambda self: self.header.parameter2)
@@ -1283,7 +1283,7 @@ class ReadNotifyRequest(Message):
         header = ReadNotifyRequestHeader(data_type, data_count, sid, ioid)
         super().__init__(header)
 
-    data_type = property(lambda self: self.header.data_type)
+    data_type = property(lambda self: ChannelType(self.header.data_type))
     data_count = property(lambda self: self.header.data_count)
     sid = property(lambda self: self.header.parameter1)
     ioid = property(lambda self: self.header.parameter2)
@@ -1341,7 +1341,7 @@ class ReadNotifyResponse(Message):
     def metadata(self):
         return extract_metadata(self.buffers[0], self.data_type)
 
-    data_type = property(lambda self: self.header.data_type)
+    data_type = property(lambda self: ChannelType(self.header.data_type))
     data_count = property(lambda self: self.header.data_count)
     status = property(lambda self: self.header.parameter1)
     ioid = property(lambda self: self.header.parameter2)
@@ -1427,7 +1427,7 @@ class CreateChanResponse(Message):
         header = CreateChanResponseHeader(data_type, data_count, cid, sid)
         super().__init__(header)
 
-    data_type = property(lambda self: self.header.data_type)
+    data_type = property(lambda self: ChannelType(self.header.data_type))
     data_count = property(lambda self: self.header.data_count)
     cid = property(lambda self: self.header.parameter1)
     sid = property(lambda self: self.header.parameter2)
@@ -1476,7 +1476,7 @@ class WriteNotifyRequest(Message):
         super().__init__(header, *buffers)
 
     payload_size = property(lambda self: self.header.payload_size)
-    data_type = property(lambda self: self.header.data_type)
+    data_type = property(lambda self: ChannelType(self.header.data_type))
     data_count = property(lambda self: self.header.data_count)
     sid = property(lambda self: self.header.parameter1)
     ioid = property(lambda self: self.header.parameter2)
@@ -1525,7 +1525,7 @@ class WriteNotifyResponse(Message):
         header = WriteNotifyResponseHeader(data_type, data_count, status, ioid)
         super().__init__(header)
 
-    data_type = property(lambda self: self.header.data_type)
+    data_type = property(lambda self: ChannelType(self.header.data_type))
     data_count = property(lambda self: self.header.data_count)
     status = property(lambda self: self.header.parameter1)
     ioid = property(lambda self: self.header.parameter2)
@@ -1617,7 +1617,7 @@ class AccessRightsResponse(Message):
         super().__init__(header)
 
     cid = property(lambda self: self.header.parameter1)
-    access_rights = property(lambda self: self.header.parameter2)
+    access_rights = property(lambda self: AccessRights(self.header.parameter2))
 
 
 class CreateChFailResponse(Message):
