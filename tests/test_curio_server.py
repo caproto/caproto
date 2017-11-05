@@ -211,12 +211,12 @@ def test_with_caget(curio_server, pv, dbr_type):
 
             if 'ackt' in data:
                 ack_transient = data['ackt'] == 'YES'
-                assert ack_transient == db_entry.alarm.acknowledge_transient
+                assert ack_transient == db_entry.alarm.must_acknowledge_transient
 
             if 'acks' in data:
                 ack_severity = data['acks']
                 ack_severity = getattr(ca._dbr.AlarmSeverity, ack_severity)
-                assert ack_severity == db_entry.alarm.acknowledge_severity
+                assert ack_severity == db_entry.alarm.severity_to_acknowledge
 
     async def task():
         server_task = await curio.spawn(curio_server)

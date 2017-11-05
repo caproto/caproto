@@ -99,7 +99,7 @@ def test_curio_server_example():
         # Some user function to call when subscriptions receive data.
 
         def user_callback(command):
-            print("Subscription has received data.")
+            print("Subscription has received data: {}".format(command))
             commands.append(command)
 
         broadcaster = client.SharedBroadcaster(log_level='DEBUG')
@@ -114,6 +114,7 @@ def test_curio_server_example():
         reading = await chan1.read()
         print('reading:', reading)
         sub_id = await chan1.subscribe()
+        await curio.sleep(0.2)
         await chan1.unsubscribe(sub_id)
         await chan1.write((5,))
         reading = await chan1.read()
@@ -150,14 +151,51 @@ def test_curio_server_example():
         assert actual == expected
         print('reading:', reading)
 
-        # test updating alarm status/severity
         status, severity = ca.AlarmStatus.SCAN, ca.AlarmSeverity.MAJOR_ALARM
-        metadata = (status, severity, ca.TimeStamp(0, 0), 0)
-        await chan1.write((8,), data_type=ca.ChannelType.TIME_DOUBLE,
-                          metadata=metadata)
+        server_alarm = pvdb['pi'].alarm
+
+        await server_alarm.write(status=status, severity=severity)
+
+        # test acknowledge alarm status/severity
         reading = await chan1.read(data_type=ca.ChannelType.TIME_DOUBLE)
-        # check reading
-        expected = 8
+        assert reading.metadata.status == status
+        assert reading.metadata.severity == severity
+
+        # acknowledge the severity
+        metadata = (severity + 1, )
+        await chan1.write((),
+                          data_type=ca.ChannelType.PUT_ACKS,
+                          metadata=metadata)
+
+        assert server_alarm.severity_to_acknowledge == 0
+
+        # now make a transient alarm and toggle the severity
+        # now require transients to be acknowledged
+        metadata = (1, )
+        await chan1.write((),
+                          data_type=ca.ChannelType.PUT_ACKT,
+                          metadata=metadata)
+
+        assert server_alarm.must_acknowledge_transient
+
+        await server_alarm.write(severity=severity)
+        await server_alarm.write(severity=ca.AlarmSeverity.NO_ALARM)
+
+        assert server_alarm.severity_to_acknowledge == severity
+
+        # acknowledge the severity
+        metadata = (severity + 1, )
+        await chan1.write((),
+                          data_type=ca.ChannelType.PUT_ACKS,
+                          metadata=metadata)
+
+        assert server_alarm.severity_to_acknowledge == 0
+
+        severity = ca.AlarmSeverity.NO_ALARM
+
+        reading = await chan1.read(data_type=ca.ChannelType.TIME_DOUBLE)
+        # check reading (unchanged since last time)
+        expected = 7
         actual, = reading.data
         assert actual == expected
         # check status
@@ -186,15 +224,20 @@ def test_curio_server_example():
         print('write...')
         await chan2.write(b'hell')
         await chan3.write(b'good')
-        print('write again...')
-        metadata = (status, severity, ca.TimeStamp(0, 0))
-        # Because this write touches the alarm, it should cause
-        # chan3 to issue an EventAddResponse also.
-        await chan2.write(b'hell', data_type=ca.ChannelType.TIME_STRING,
-                          metadata=metadata)
+
+        print('setting alarm status...')
+        await pvdb['str'].alarm.write(severity=ca.AlarmSeverity.MAJOR_ALARM)
+
+        await curio.sleep(0.5)
+
         await chan2.unsubscribe(sub_id2)
         await chan3.unsubscribe(sub_id3)
-        await curio.sleep(0.2)  # Ensure the subs have time to spin.
+        # expecting that the subscription callback should get called:
+        #   1. on connection (2)
+        #   2. when chan2 is written to (1)
+        #   3. when chan3 is written to (1)
+        #   4. when alarm status is updated for both channels (2)
+        # for a total of 6
         assert len(commands) == 2 + 2 + 2
 
     async def task():
