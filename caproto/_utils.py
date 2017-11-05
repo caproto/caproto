@@ -163,6 +163,32 @@ def get_beacon_address_list():
     return [get_addr_port(addr) for addr in addr_list.split(' ')]
 
 
+def get_netifaces_addresses():
+    '''Get a list of addresses + broadcast using netifaces
+
+    Yields (address, broadcast_address)
+    '''
+    if netifaces is None:
+        raise RuntimeError('netifaces unavailable')
+
+    for iface in netifaces.interfaces():
+        interface = netifaces.ifaddresses(iface)
+        if netifaces.AF_INET in interface:
+            for af_inet_info in interface[netifaces.AF_INET]:
+                addr = af_inet_info.get('addr', None)
+                peer = af_inet_info.get('peer', None)
+                broadcast = af_inet_info.get('broadcast', None)
+
+                if addr is not None and broadcast is not None:
+                    yield (addr, broadcast)
+                elif peer is not None and broadcast is not None:
+                    yield (peer, broadcast)
+                elif addr is not None:
+                    yield (addr, addr)
+                elif peer is not None:
+                    yield (peer, peer)
+
+
 def broadcast_address_list_from_interfaces():
     '''Get a list of broadcast addresses using netifaces
 
@@ -172,20 +198,7 @@ def broadcast_address_list_from_interfaces():
     if netifaces is None:
         return ['255.255.255.255']
 
-    interfaces = [netifaces.ifaddresses(interface)
-                  for interface in netifaces.interfaces()
-                  ]
-
-    bcast = [af_inet_info['broadcast']
-             if 'broadcast' in af_inet_info
-             else af_inet_info['peer']
-
-             for interface in interfaces
-             if netifaces.AF_INET in interface
-             for af_inet_info in interface[netifaces.AF_INET]
-             ]
-
-    return bcast
+    return [bcast for addr, bcast in get_netifaces_addresses()]
 
 
 def ensure_bytes(s):
