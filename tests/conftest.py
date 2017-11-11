@@ -1,12 +1,10 @@
 import os
 import sys
 import pytest
-import queue
 import subprocess
 import time
 
 import caproto as ca
-import caproto.asyncio.repeater
 
 
 _repeater_process = None
@@ -59,3 +57,16 @@ def circuit_pair(request):
     for command in commands:
         cli_circuit.process_command(command)
     return cli_circuit, srv_circuit
+
+
+
+@pytest.mark.hookwrapper(trylast=True)
+def pytest_benchmark_update_json(config, benchmarks, output_json):
+    from _asv_shim import pytest_bench_to_asv, save_asv_results
+    yield
+
+    results = pytest_bench_to_asv(output_json)
+
+    # TODO get pytest root
+    pytest_root = '.'
+    save_asv_results(os.path.join(pytest_root, '.asv'), **results)
