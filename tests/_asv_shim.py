@@ -3,6 +3,7 @@ import asv
 import json
 import pytest
 import logging
+import inspect
 import pytest_benchmark
 
 from collections import defaultdict
@@ -28,6 +29,8 @@ def pytest_bench_machine_to_asv(root, *, node, machine, system, release, cpu,
 
 
 def get_bench_name(fullname, name):
+    logger.debug('Benchmark name is: full=%s short=%s -> %s', fullname,
+                 name, name)
     return name
 
 
@@ -65,10 +68,13 @@ def asv_bench_outline(*, fullname, options, stats, extra_info, params, name,
                       **kwargs):
     'Single pytest benchmark outline -> asv'
     # TODO everything here!
+    name = get_bench_name(fullname, name)
+    print(name, AsvBenchmarkFixture.asv_metadata.keys())
+
     return dict(
-        code='TODO',
+        code=AsvBenchmarkFixture.asv_metadata[name]['code'],
         goal_time=2.0,
-        name=get_bench_name(fullname, name),
+        name=name,
         number=0,
         param_names=[],
         params=[],
@@ -187,7 +193,9 @@ class AsvBenchmarkFixture(BenchmarkFixture):
             end_dt = datetime.now()
 
             md = dict(start_dt=start_dt,
-                      end_dt=end_dt)
+                      end_dt=end_dt,
+                      code=''.join(inspect.getsourcelines(function_to_benchmark)[0]),
+                      )
 
             AsvBenchmarkFixture.asv_metadata[self.name] = md
         return ret
