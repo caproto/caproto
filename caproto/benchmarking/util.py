@@ -136,7 +136,9 @@ class IocHandler:
     Runs multiple IOCs and handles their cleanup.
     '''
 
-    def __init__(self):
+    def __init__(self, logger=None):
+        self.logger = (logger if logger is not None
+                       else globals()['logger'])
         self._cms = []
         self._softioc_processes = []
 
@@ -153,18 +155,43 @@ class IocHandler:
         cm = softioc(db_text=db_text, env=env)
         self._cms.append(cm)
         self._softioc_processes.append(cm.__enter__())
+        self.logger.debug('Starting IOC with max_array_bytes=%s '
+                          'env vars: %r database: %r', max_array_bytes,
+                          env_vars, db_text)
         return cm
 
     def teardown(self):
-        for cm in self._cms[:]:
+        for i, cm in enumerate(self._cms[:]):
+            self.logger.debug('Tearing down soft IOC context manager #%d', i)
             cm.__exit__(StopIteration, None, None)
             self._cms.remove(cm)
 
-        for proc in self._softioc_processes[:]:
+        for i, proc in enumerate(self._softioc_processes[:]):
+            self.logger.debug('Killing soft IOC process #%d', i)
             proc.kill()
+            self.logger.debug('Waiting for soft IOC process #%d', i)
             proc.wait()
             self._softioc_processes.remove(proc)
 
+        self.logger.debug('IOC teardown complete')
+
     def wait(self):
-        for proc in self._softioc_processes:
+        for i, proc in enumerate(self._softioc_processes[:]):
+            self.logger.debug('Waiting for soft IOC process #%d', i)
             proc.wait()
+
+        self.logger.debug('Waiting complete')
+
+
+def set_logging_level(level, *, logger=None):
+    'Set logging level of all caproto submodules to the specified level'
+    if logger is None:
+        logger = globals()['logger']
+
+    for key, logger_ in logging.Logger.manager.loggerDict.items():
+        if key.startswith('caproto.'):
+            if getattr(logger_, 'level', 0) != level:
+                logger_ = logging.getLogger(key)
+                logger_.setLevel(level)
+                logger.debug('Setting log level of %s to %s', key,
+                             logger_.level)

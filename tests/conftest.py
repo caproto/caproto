@@ -5,6 +5,14 @@ import subprocess
 import time
 
 import caproto as ca
+import caproto.asyncio
+import caproto.asyncio.repeater
+import caproto.benchmarking  # noqa
+import caproto.curio  # noqa
+import caproto.curio.client  # noqa
+import caproto.curio.server  # noqa
+import caproto.threading  # noqa
+import caproto.threading.client  # noqa
 
 
 _repeater_process = None
