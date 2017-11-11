@@ -37,19 +37,22 @@ def get_bench_name(fullname, name):
 def asv_bench_result(*, fullname, options, stats, extra_info, params, name,
                      **kwargs):
     'Single benchmark result -> asv format'
-    approx_time = stats['mean']
-
     asv_metadata = AsvBenchmarkFixture.asv_metadata[name]
-    # end_dt = datetime.now()
-    # start_dt = end_dt - timedelta(seconds=approx_time)
     start_dt = asv_metadata['start_dt']
     end_dt = asv_metadata['end_dt']
 
     return dict(
+        name=get_bench_name(fullname, name),
         started_at=asv.util.datetime_to_js_timestamp(start_dt),
         ended_at=asv.util.datetime_to_js_timestamp(end_dt),
-        results=approx_time,
-        name=get_bench_name(fullname, name),
+        results=dict(stats=dict(min=stats['min'],
+                                max=stats['max'],
+                                mean=stats['mean'],
+                                std=stats['stddev'],
+                                n=stats['iterations'],
+                                ),
+                     result=stats['mean']
+                     ),
     )
 
 
@@ -59,6 +62,7 @@ def pytest_bench_results_to_asv(root):
     for bench in root['benchmarks']:
         info = asv_bench_result(**bench)
         name = info.pop('name')
+        benches['results'][name] = info.pop('results')
         for key, value in info.items():
             benches[key][name] = value
     return benches
@@ -227,6 +231,8 @@ def asv_bench(request):
         )
         request.addfinalizer(fixture._cleanup)
         return fixture
+
+
 def get_conftest_globals():
     'Globals to be in conftest for this shim to work'
     return dict(pytest_benchmark_update_json=pytest_benchmark_update_json,
