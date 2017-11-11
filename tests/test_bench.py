@@ -1,4 +1,3 @@
-import sys
 import pytest
 import time
 import logging
@@ -6,8 +5,6 @@ import contextlib
 import curio
 
 import caproto as ca
-import caproto.benchmarking  # noqa
-import caproto.curio.client  # noqa
 
 
 ioc_handler = None
@@ -30,7 +27,7 @@ def setup_module():
          },
     )
 
-    ioc_handler = ca.benchmarking.IocHandler()
+    ioc_handler = ca.benchmarking.IocHandler(logger=logger)
     ioc_handler.setup_ioc(db_text=db_text, max_array_bytes='10000000')
     # give time for the server to startup
     time.sleep(1.0)
@@ -61,6 +58,8 @@ def bench_pyepics_get_speed(pvname, initial_value=None):
         if initial_value is not None:
             pv.put(initial_value, wait=True)
         yield pyepics
+        logger.debug('Disconnecting pyepics pv %s', pv)
+        pv.disconnect()
 
 
 @contextlib.contextmanager
@@ -72,15 +71,20 @@ def bench_threading_get_speed(pvname, initial_value=None):
     context = ThreadingContext(broadcaster=shared_broadcaster,
                                log_level='ERROR')
 
-    pv = PV(pvname, auto_monitor=False, context=context)
     def threading():
         value = pv.get(use_monitor=False)
         if initial_value is not None:
             assert len(value) == len(initial_value)
 
+    pv = PV(pvname, auto_monitor=False, context=context)
     if initial_value is not None:
         pv.put(initial_value, wait=True)
     yield threading
+    logger.debug('Disconnecting threading pv %s', pv)
+    pv.disconnect()
+    logger.debug('Disconnecting shared broadcaster %s', shared_broadcaster)
+    shared_broadcaster.disconnect()
+    logger.debug('Done')
 
 
 @contextlib.contextmanager
@@ -102,7 +106,10 @@ def bench_curio_get_speed(pvname, initial_value=None):
         logger.debug('Connected to %s', pvname)
 
         if initial_value is not None:
+            logger.debug('Writing initial value')
             await chan.write(initial_value)
+            logger.debug('Wrote initial value')
+        logger.debug('Init complete')
         return chan
 
     def curio_client():
@@ -123,20 +130,11 @@ def bench_curio_get_speed(pvname, initial_value=None):
     logger.debug('Done')
 
 
-def _set_logging_level(level):
-    for key, logger_ in logging.Logger.manager.loggerDict.items():
-        if key.startswith('caproto.'):
-            if getattr(logger_, 'level', 0):
-                logger_.setLevel(level)
-                logger.debug('Increasing log level of %s to %s', key,
-                             logger_.level)
-
-
 @pytest.mark.parametrize('waveform_size', [4000, 8000, ])
 @pytest.mark.parametrize('backend', ['pyepics', 'curio', 'threading'])
 def test_waveform_get(benchmark, waveform_size, backend):
     pvname = 'wfioc:wf{}'.format(waveform_size)
-    _set_logging_level(logging.ERROR)
+    ca.benchmarking.set_logging_level(logging.DEBUG, logger=logger)
 
     context = {'pyepics': bench_pyepics_get_speed,
                'curio': bench_curio_get_speed,
