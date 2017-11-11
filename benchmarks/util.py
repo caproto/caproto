@@ -1,9 +1,13 @@
 import os
 import subprocess
 import shutil
+import logging
 import time
 from contextlib import contextmanager
 from tempfile import NamedTemporaryFile
+
+
+logger = logging.getLogger(__name__)
 
 
 def find_dbd_path():
@@ -60,6 +64,10 @@ def softioc(*, db_text='', access_rules_text='', additional_args=None,
     if env is not None:
         proc_env.update(**env)
 
+    logger.debug('soft ioc environment is:')
+    for key, val in sorted(proc_env.items()):
+        logger.debug('%s = %r', key, val)
+
     # if 'EPICS_' not in proc_env:
 
     macros = ','.join('{}={}'.format(k, v) for k, v in macros.items())
@@ -68,14 +76,17 @@ def softioc(*, db_text='', access_rules_text='', additional_args=None,
         cf.write(access_rules_text)
         cf.flush()
 
+        logger.debug('access rules filename is: %s', cf.name)
         with NamedTemporaryFile(mode='w+') as df:
             df.write(db_text)
             df.flush()
 
+            logger.debug('db filename is: %s', df.name)
             if dbd_path is None:
                 dbd_path = find_dbd_path()
 
             dbd_path = os.path.join(dbd_path, dbd_name)
+            logger.debug('dbd path is: %s', dbd_path)
             assert os.path.exists(dbd_path)
 
             popen_args = ['softIoc',
@@ -83,6 +94,7 @@ def softioc(*, db_text='', access_rules_text='', additional_args=None,
                           '-m', macros,
                           '-a', cf.name,
                           '-d', df.name]
+
             proc = subprocess.Popen(popen_args + additional_args, env=proc_env,
                                     stdin=subprocess.PIPE,
                                     stdout=subprocess.PIPE)
