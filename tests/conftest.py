@@ -59,14 +59,12 @@ def circuit_pair(request):
     return cli_circuit, srv_circuit
 
 
-
-@pytest.mark.hookwrapper(trylast=True)
-def pytest_benchmark_update_json(config, benchmarks, output_json):
-    from _asv_shim import pytest_bench_to_asv, save_asv_results
-    yield
-
-    results = pytest_bench_to_asv(output_json)
-
-    # TODO get pytest root
-    pytest_root = '.'
-    save_asv_results(os.path.join(pytest_root, '.asv'), **results)
+# Import the pytest-benchmark -> asv shim if both are available
+try:
+    __import__('pytest_benchmark')
+    __import__('asv')
+except ImportError as ex:
+    print('{} is missing'.format(ex))
+else:
+    from _asv_shim import get_conftest_globals
+    globals().update(**get_conftest_globals())
