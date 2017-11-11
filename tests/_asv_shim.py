@@ -1,14 +1,15 @@
 import os
-import asv
+import sys
 import json
 import pytest
 import logging
 import inspect
-import pytest_benchmark
 
-from collections import defaultdict
+import asv
 
-from datetime import datetime, timedelta
+from collections import OrderedDict, defaultdict
+
+from datetime import datetime
 from pytest_benchmark.fixture import BenchmarkFixture
 from pytest_benchmark.utils import NameWrapper
 
@@ -75,11 +76,15 @@ def asv_bench_outline(*, fullname, options, stats, extra_info, params, name,
     name = get_bench_name(fullname, name)
     print(name, AsvBenchmarkFixture.asv_metadata.keys())
 
+    md = AsvBenchmarkFixture.asv_metadata[name]
+
     return dict(
-        code=AsvBenchmarkFixture.asv_metadata[name]['code'],
+        code=md['code'],
         goal_time=2.0,
         name=name,
         number=0,
+        # param_names=list(md['params'].keys()),
+        # params=[[param] for param in md['params'].values()],
         param_names=[],
         params=[],
         pretty_name=name,
@@ -111,9 +116,12 @@ def pytest_bench_to_asv(root):
                                   "%Y-%m-%dT%H:%M:%S")
 
     machine_info = pytest_bench_machine_to_asv(root, **root['machine_info'])
+
+    # copy over the machine info for the params
     params = dict(machine_info)
-    # params.update(numpy='')
-    params['python'] = '3.5'  # TODO
+    python_version = root['machine_info']['python_version']
+    params['python'] = python_version
+    # but remove version as it's for the top-level
     del params['version']
 
     bench_outline = pytest_bench_outline_to_asv(root)
@@ -121,7 +129,7 @@ def pytest_bench_to_asv(root):
     bench_results = dict(
         commit_hash=commit_info['id'],
         date=asv.util.datetime_to_js_timestamp(commit_dt),
-        python=root['machine_info']['python_version'],
+        python=python_version,
         params=params,  # TODO
         profiles={},  # TODO
         requirements={},  # TODO
@@ -189,6 +197,10 @@ def pytest_benchmark_update_json(config, benchmarks, output_json):
 class AsvBenchmarkFixture(BenchmarkFixture):
     asv_metadata = {}
 
+    def __init__(self, *, node, **kwargs):
+        self.node = node
+        super().__init__(node=node, **kwargs)
+
     def __call__(self, function_to_benchmark, *args, **kwargs):
         start_dt = datetime.now()
         try:
@@ -196,9 +208,17 @@ class AsvBenchmarkFixture(BenchmarkFixture):
         finally:
             end_dt = datetime.now()
 
+            callspec = self.node.callspec
+            params = OrderedDict(
+                (arg, callspec.params[arg])
+                for arg in callspec.metafunc.funcargnames
+                if arg in callspec.params
+            )
+
             md = dict(start_dt=start_dt,
                       end_dt=end_dt,
                       code=''.join(inspect.getsourcelines(function_to_benchmark)[0]),
+                      params=params,
                       )
 
             AsvBenchmarkFixture.asv_metadata[self.name] = md
@@ -222,7 +242,7 @@ def asv_bench(request):
         logger.debug('Added fixture instance for %s', node.name)
 
         fixture = AsvBenchmarkFixture(
-            node,
+            node=node,
             add_stats=bs.benchmarks.append,
             logger=bs.logger,
             warner=request.node.warn,
