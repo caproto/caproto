@@ -179,10 +179,10 @@ def pytest_benchmark_update_json(config, benchmarks, output_json):
 class AsvBenchmarkFixture(BenchmarkFixture):
     asv_metadata = {}
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, function_to_benchmark, *args, **kwargs):
         start_dt = datetime.now()
         try:
-            ret = super().__call__(*args, **kwargs)
+            ret = super().__call__(function_to_benchmark, *args, **kwargs)
         finally:
             end_dt = datetime.now()
 
@@ -194,7 +194,7 @@ class AsvBenchmarkFixture(BenchmarkFixture):
 
 
 @pytest.fixture(scope="function")
-def asvbench(request):
+def asv_bench(request):
     bs = request.config._benchmarksession
 
     if bs.skip:
@@ -219,9 +219,8 @@ def asvbench(request):
         )
         request.addfinalizer(fixture._cleanup)
         return fixture
-
-
 def get_conftest_globals():
     'Globals to be in conftest for this shim to work'
     return dict(pytest_benchmark_update_json=pytest_benchmark_update_json,
-                benchmark=asvbench)
+                benchmark=asv_bench,
+                )

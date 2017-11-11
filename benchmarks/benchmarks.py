@@ -3,14 +3,14 @@ import logging
 
 os.environ['EPICS_CA_MAX_ARRAY_BYTES'] = '10000000'
 
-import curio
-import epics
-import caproto as ca
-from caproto.threading.client import (PV as ThreadingPV,
+import curio  # noqa
+import epics  # noqa
+import caproto as ca  # noqa
+from caproto.threading.client import (PV as ThreadingPV,  # noqa
                                       SharedBroadcaster,
                                       Context as ThreadingContext)
 
-from caproto.curio.client import Context as CurioContext
+from caproto.curio.client import Context as CurioContext  # noqa
 
 
 class _TimeBase:
@@ -111,6 +111,7 @@ class TimeWaveform2Million(_TimeWaveform):
 
 def _bench_test(cls):
     inst = cls()
+    print('Setting up bench test...')
     inst.setup()
     for attr in sorted(dir(inst)):
         if attr.startswith('time_'):
@@ -126,6 +127,7 @@ def _bench_test(cls):
 if __name__ == '__main__':
     logging.basicConfig()
     logging.getLogger('caproto').setLevel('INFO')
+    logging.getLogger('benchmarks.util').setLevel('DEBUG')
     setup()
     _bench_test(TimeWaveform4000)
     _bench_test(TimeWaveformMillion)

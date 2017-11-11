@@ -1,4 +1,6 @@
 import os
+import logging
+
 from . import util
 
 
@@ -39,6 +41,10 @@ class IocHandler:
 
 
 def main():
+    logging.basicConfig()
+    logging.getLogger('caproto').setLevel('INFO')
+    logging.getLogger('benchmarks.util').setLevel('DEBUG')
+
     db_text = util.make_database(
         {('wfioc:wf4000', 'waveform'): dict(FTVL='LONG', NELM=4000),
          ('wfioc:wf1m', 'waveform'): dict(FTVL='LONG', NELM=1000000),
