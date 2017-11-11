@@ -9,7 +9,8 @@ from ._dbr import (DBR_TYPES, ChannelType, native_type, native_float_types,
                    native_int_types, native_types, timestamp_to_epics,
                    time_types, MAX_ENUM_STRING_SIZE, DBR_STSACK_STRING,
                    AccessRights, _numpy_map, epics_timestamp_to_unix,
-                   GraphicControlBase, AlarmStatus, AlarmSeverity)
+                   GraphicControlBase, AlarmStatus, AlarmSeverity,
+                   SubscriptionType)
 from ._utils import CaprotoError
 from ._commands import parse_metadata
 
