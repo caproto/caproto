@@ -54,8 +54,13 @@ install:
 script:
   - caget Py:ao1 sim:mtr1
   - pip install -r test-requirements.txt
-  - coverage run run_tests.py -v tests/
+  - coverage run run_tests.py -v tests/ --benchmark-disable
   - coverage report -m
+
+  - export ASV_ENV_NAME=${BASE}_${STATIC}
+  - py.test -v tests/ -k bench --benchmark-json=pytest_bench.json
+  # deploy asv results here?
+  
   - set -e
   # Install deps for building the docs.
   - pip install -r docs-requirements.txt

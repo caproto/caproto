@@ -5,3 +5,5 @@ netifaces
 pyepics
 pytest
 numpy
+pytest_benchmark
+asv
