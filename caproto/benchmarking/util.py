@@ -2,7 +2,6 @@ import os
 import subprocess
 import shutil
 import logging
-import time
 from contextlib import contextmanager
 from tempfile import NamedTemporaryFile
 
@@ -131,39 +130,41 @@ def make_database(records):
     return '\n'.join(gen())
 
 
-def _main():
-    # simple test
-    test_db = make_database(
-        {('$(P):bo', 'bo'): dict(ZNAM='OUT', ONAM='IN'),
-         ('$(P):ao', 'ao'): dict(DRVH=5, DRVL=1),
-         },
-    )
-    with softioc(db_text=test_db):
-        time.sleep(5)
+class IocHandler:
+    '''Benchmarking helper class
 
-
-@contextmanager
-def timer():
-    '''Timing context manager
-
-    Yields
-    ------
-    tr : TimeResults
-        with attributes t0, t1, elapsed
+    Runs multiple IOCs and handles their cleanup.
     '''
-    class TimeResults:
-        t0 = None
-        t1 = None
-        elapsed = None
 
-    tr = TimeResults()
-    tr.t0 = time.time()
+    def __init__(self):
+        self._cms = []
+        self._softioc_processes = []
 
-    try:
-        yield tr
-    finally:
-        tr.t1 = time.time()
-        tr.elapsed = tr.t1 - tr.t0
+    def setup_ioc(self, *, db_text, max_array_bytes=16384, env_vars=None,
+                  **kwargs):
+        if env_vars is None:
+            env_vars = {}
 
-if __name__ == '__main__':
-    _main()
+        # NOTE: have to increase EPICS_CA_MAX_ARRAY_BYTES if NELM >= 4096
+        #       (remember default is 16384 bytes / sizeof(int32) = 4096)
+        env = dict(EPICS_CA_MAX_ARRAY_BYTES=str(max_array_bytes))
+        env.update(**env_vars)
+
+        cm = softioc(db_text=db_text, env=env)
+        self._cms.append(cm)
+        self._softioc_processes.append(cm.__enter__())
+        return cm
+
+    def teardown(self):
+        for cm in self._cms[:]:
+            cm.__exit__(StopIteration, None, None)
+            self._cms.remove(cm)
+
+        for proc in self._softioc_processes[:]:
+            proc.kill()
+            proc.wait()
+            self._softioc_processes.remove(proc)
+
+    def wait(self):
+        for proc in self._softioc_processes:
+            proc.wait()

@@ -6,10 +6,8 @@ import contextlib
 import curio
 
 import caproto as ca
-
-# poor form, I know - should benchmarks belong in the main package though?
-sys.path.insert(0, '..')
-import benchmarks  # noqa
+import caproto.benchmarking  # noqa
+import caproto.curio.client  # noqa
 
 
 ioc_handler = None
@@ -26,13 +24,13 @@ def setup_module():
     logging.getLogger('benchmarks.util').setLevel('DEBUG')
     logging.getLogger('caproto').setLevel('INFO')
 
-    db_text = benchmarks.util.make_database(
+    db_text = ca.benchmarking.make_database(
         {('wfioc:wf{}'.format(sz), 'waveform'): dict(FTVL='LONG', NELM=sz)
          for sz in (4000, 8000, 1000000, 2000000)
          },
     )
 
-    ioc_handler = benchmarks.IocHandler()
+    ioc_handler = ca.benchmarking.IocHandler()
     ioc_handler.setup_ioc(db_text=db_text, max_array_bytes='10000000')
     # give time for the server to startup
     time.sleep(1.0)
@@ -120,7 +118,9 @@ def bench_curio_get_speed(pvname, initial_value=None):
 
     yield curio_client
 
+    logger.debug('Shutting down the kernel')
     kernel.run(shutdown=True)
+    logger.debug('Done')
 
 
 def _set_logging_level(level):
@@ -132,8 +132,7 @@ def _set_logging_level(level):
                              logger_.level)
 
 
-@pytest.mark.benchmark()
-@pytest.mark.parametrize('waveform_size', [4000, 8000])
+@pytest.mark.parametrize('waveform_size', [4000, 8000, ])
 @pytest.mark.parametrize('backend', ['pyepics', 'curio', 'threading'])
 def test_waveform_get(benchmark, waveform_size, backend):
     pvname = 'wfioc:wf{}'.format(waveform_size)

@@ -58,7 +58,7 @@ script:
   - coverage report -m
 
   - export ASV_ENV_NAME=${BASE}_${STATIC}
-  - py.test -v tests/ -k bench --benchmark-json=pytest_bench.json
+  - py.test -v tests/ --benchmark-only --benchmark-json=pytest_bench.json --benchmark-columns=mean,median,rounds,iterations --benchmark-group-by=param:waveform_size
   # deploy asv results here?
   
   - set -e
