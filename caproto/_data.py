@@ -360,7 +360,7 @@ class ChannelData:
         elif data_type in (ChannelType.STSACK_STRING, ChannelType.CLASS_NAME):
             raise ValueError('Bad request')
 
-        timestamp = time.time()  # will only be used if metadata is None
+        timestamp = time.time()
         native_from = native_type(data_type)
         value = convert_values(values=data, from_dtype=native_from,
                                to_dtype=self.data_type,
@@ -455,7 +455,8 @@ class ChannelData:
                              lower_disp_limit=None, upper_alarm_limit=None,
                              upper_warning_limit=None,
                              lower_warning_limit=None, lower_alarm_limit=None,
-                             upper_ctrl_limit=None, lower_ctrl_limit=None):
+                             upper_ctrl_limit=None, lower_ctrl_limit=None,
+                             status=None, severity=None):
         '''Write metadata, optionally publishing information to clients'''
         data = self._data
         for kw in ('units', 'precision', 'timestamp', 'upper_disp_limit',
@@ -466,6 +467,10 @@ class ChannelData:
             value = locals()[kw]
             if value is not None and kw in data:
                 data[kw] = value
+
+        if any(alarm_val is not None
+               for alarm_val in (status, severity)):
+            await self.alarm.write(status=status, severity=severity)
 
         if publish:
             await self.publish()

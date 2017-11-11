@@ -274,9 +274,18 @@ class TimeStamp(DbrTypeBase):
 
     @property
     def timestamp(self):
-        "UNIX timestamp (seconds) from Epics TimeStamp structure"
+        'Timestamp as UNIX timestamp (seconds)'
         return epics_timestamp_to_unix(self.secondsSinceEpoch,
                                        self.nanoSeconds)
+
+    @classmethod
+    def from_unix_timestamp(cls, timestamp):
+        sec, nano = timestamp_to_epics(timestamp)
+        return cls(secondsSinceEpoch=sec, nanoSeconds=nano)
+
+    def as_datetime(self):
+        'Timestamp as a datetime'
+        return datetime.datetime.utcfromtimestamp(self.timestamp)
 
 
 class TimeTypeBase(DbrTypeBase):

@@ -208,7 +208,6 @@ def parse_metadata(metadata, data_type):
     return md_payload
 
 
-
 def data_payload(data, metadata, data_type, data_count):
     """
     Pack bytes into a set of buffers for usage as a single payload
