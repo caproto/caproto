@@ -23,7 +23,7 @@ def setup_module():
 
     db_text = ca.benchmarking.make_database(
         {('wfioc:wf{}'.format(sz), 'waveform'): dict(FTVL='LONG', NELM=sz)
-         for sz in (4000, 8000, 1000000, 2000000)
+         for sz in (4000, 8000, 50000, 1000000)
          },
     )
 
@@ -48,7 +48,7 @@ def temporary_pyepics_access(pvname, **kwargs):
 
 
 @contextlib.contextmanager
-def bench_pyepics_get_speed(pvname, initial_value=None):
+def bench_pyepics_get_speed(pvname, *, initial_value=None, log_level='DEBUG'):
     with temporary_pyepics_access(pvname) as pv:
         def pyepics():
             value = pv.get(use_monitor=False)
@@ -63,13 +63,13 @@ def bench_pyepics_get_speed(pvname, initial_value=None):
 
 
 @contextlib.contextmanager
-def bench_threading_get_speed(pvname, initial_value=None):
+def bench_threading_get_speed(pvname, *, initial_value=None, log_level='ERROR'):
     from caproto.threading.client import (PV, SharedBroadcaster,
                                           Context as ThreadingContext)
 
     shared_broadcaster = SharedBroadcaster()
     context = ThreadingContext(broadcaster=shared_broadcaster,
-                               log_level='ERROR')
+                               log_level=log_level)
 
     def threading():
         value = pv.get(use_monitor=False)
@@ -88,14 +88,14 @@ def bench_threading_get_speed(pvname, initial_value=None):
 
 
 @contextlib.contextmanager
-def bench_curio_get_speed(pvname, initial_value=None):
+def bench_curio_get_speed(pvname, *, initial_value=None, log_level='DEBUG'):
     kernel = curio.Kernel()
 
     async def curio_setup():
         logger.debug('Registering...')
-        broadcaster = ca.curio.client.SharedBroadcaster(log_level='ERROR')
+        broadcaster = ca.curio.client.SharedBroadcaster(log_level=log_level)
         await broadcaster.register()
-        ctx = ca.curio.client.Context(broadcaster, log_level='ERROR')
+        ctx = ca.curio.client.Context(broadcaster, log_level=log_level)
         logger.debug('Registered')
 
         logger.debug('Searching for %s...', pvname)
@@ -130,9 +130,10 @@ def bench_curio_get_speed(pvname, initial_value=None):
     logger.debug('Done')
 
 
-@pytest.mark.parametrize('waveform_size', [4000, 8000, ])
+@pytest.mark.parametrize('waveform_size', [4000, 8000, 50000])
 @pytest.mark.parametrize('backend', ['pyepics', 'curio', 'threading'])
-def test_waveform_get(benchmark, waveform_size, backend):
+@pytest.mark.parametrize('log_level', ['INFO'])
+def test_waveform_get(benchmark, waveform_size, backend, log_level):
     pvname = 'wfioc:wf{}'.format(waveform_size)
     ca.benchmarking.set_logging_level(logging.DEBUG, logger=logger)
 
@@ -142,5 +143,5 @@ def test_waveform_get(benchmark, waveform_size, backend):
                }[backend]
 
     val = list(range(waveform_size))
-    with context(pvname, initial_value=val) as bench_fcn:
+    with context(pvname, initial_value=val, log_level=log_level) as bench_fcn:
         benchmark(bench_fcn)
