@@ -315,6 +315,8 @@ class SharedBroadcaster:
         while search_command.cid in self.unanswered_searches:
             await self.wait_on_new_command()
 
+        return name
+
     async def wait_on_new_command(self):
         '''Wait for a new broadcaster command to come in'''
         async with self.broadcaster_command_condition:
