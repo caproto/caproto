@@ -272,7 +272,7 @@ def test_bytelen():
 
 def test_overlong_strings():
     with pytest.raises(ca.CaprotoValueError):
-        ca.SearchRequest(name='a' * 41, cid=0, version=13)
+        ca.SearchRequest(name='a' * (ca.MAX_RECORD_LENGTH + 1), cid=0, version=13)
 
 
 skip_ext_headers = [
