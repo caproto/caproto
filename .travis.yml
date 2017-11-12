@@ -57,8 +57,8 @@ script:
   - coverage run run_tests.py -v tests/ --benchmark-disable
   - coverage report -m
 
-  - export ASV_ENV_NAME=${BASE}_${STATIC}
-  - py.test -v tests/ --benchmark-only --benchmark-json=pytest_bench.json --benchmark-columns=mean,median,rounds,iterations --benchmark-group-by=param:waveform_size -k bench
+  - export ASV_ENV_NAME=${TRAVIS_PYTHON_VERSION}_${BASE}
+  - py.test -v tests/ --benchmark-only --benchmark-json=pytest_bench.json --benchmark-columns=mean,median,rounds,iterations -k bench
   # deploy asv results here?
   
   - set -e
