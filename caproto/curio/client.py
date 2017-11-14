@@ -94,6 +94,7 @@ class VirtualCircuit:
             async with self._socket_lock:
                 if self.socket is None:
                     raise RuntimeError('socket connection failed')
+
                 await self.socket.sendmsg(buffers_to_send)
 
 

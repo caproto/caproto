@@ -235,3 +235,37 @@ def bcast_socket(socket_module=socket):
     else:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
     return sock
+
+
+def buffer_list_slice(*buffers, offset):
+    'Helper function for slicing a list of buffers'
+    if offset < 0:
+        raise ValueError('Negative offset')
+
+    buffers = tuple(memoryview(b).cast('b') for b in buffers)
+
+    start = 0
+    for bufidx, buf in enumerate(buffers):
+        end = start + len(buf)
+        if offset < end:
+            offset -= start
+            return (buf[offset:], ) + buffers[bufidx + 1:]
+
+        start = end
+
+    raise ValueError('Offset beyond end of buffers (total length={} offset={})'
+                     ''.format(end, offset))
+
+
+def incremental_buffer_list_slice(*buffers):
+    'Incrementally slice a list of buffers'
+    buffers = tuple(memoryview(b).cast('b') for b in buffers)
+    total_size = sum(len(b) for b in buffers)
+    total_sent = 0
+
+    while total_sent < total_size:
+        sent = yield buffers
+        total_sent += sent
+        if total_sent == total_size:
+            break
+        buffers = buffer_list_slice(*buffers, offset=sent)
