@@ -95,7 +95,17 @@ class VirtualCircuit:
                 if self.socket is None:
                     raise RuntimeError('socket connection failed')
 
-                await self.socket.sendmsg(buffers_to_send)
+                gen = ca.incremental_buffer_list_slice(*buffers_to_send)
+                # prime the generator
+                gen.send(None)
+
+                while buffers_to_send:
+                    sent = await self.socket.sendmsg(buffers_to_send)
+                    try:
+                        buffers_to_send = gen.send(sent)
+                    except StopIteration:
+                        # finished sending
+                        break
 
 
 class Channel:
