@@ -2,6 +2,7 @@ import pytest
 import time
 import logging
 import contextlib
+import numpy as np
 import curio
 
 import caproto as ca
@@ -154,6 +155,102 @@ def test_waveform_get(benchmark, waveform_size, backend, log_level):
 
     val = list(range(waveform_size))
     with context(pvname, initial_value=val, log_level=log_level) as bench_fcn:
+        benchmark(bench_fcn)
+
+
+@contextlib.contextmanager
+def bench_pyepics_put_speed(pvname, *, value, log_level='DEBUG'):
+    with temporary_pyepics_access(pvname) as pv:
+        def pyepics():
+            pv.put(value, wait=True)
+
+        yield pyepics
+
+        np.testing.assert_array_almost_equal(pv.get(), value)
+
+        logger.debug('Disconnecting pyepics pv %s', pv)
+        pv.disconnect()
+
+
+@contextlib.contextmanager
+def bench_threading_put_speed(pvname, *, value, log_level='ERROR'):
+    from caproto.threading.client import (PV, SharedBroadcaster,
+                                          Context as ThreadingContext)
+
+    shared_broadcaster = SharedBroadcaster()
+    context = ThreadingContext(broadcaster=shared_broadcaster,
+                               log_level=log_level)
+
+    def threading():
+        pv.put(value, wait=True)
+
+    pv = PV(pvname, auto_monitor=False, context=context)
+
+    yield threading
+
+    np.testing.assert_array_almost_equal(pv.get(), value)
+
+    logger.debug('Disconnecting threading pv %s', pv)
+    pv.disconnect()
+    logger.debug('Disconnecting shared broadcaster %s', shared_broadcaster)
+    shared_broadcaster.disconnect()
+    logger.debug('Done')
+
+
+@contextlib.contextmanager
+def bench_curio_put_speed(pvname, *, value, log_level='DEBUG'):
+    kernel = curio.Kernel()
+
+    async def curio_setup():
+        logger.debug('Registering...')
+        broadcaster = ca.curio.client.SharedBroadcaster(log_level=log_level)
+        await broadcaster.register()
+        ctx = ca.curio.client.Context(broadcaster, log_level=log_level)
+        logger.debug('Registered')
+
+        logger.debug('Searching for %s...', pvname)
+        await ctx.search(pvname)
+        logger.debug('... found!')
+        chan = await ctx.create_channel(pvname)
+        await chan.wait_for_connection()
+        logger.debug('Connected to %s', pvname)
+        return chan
+
+    def curio_client():
+        async def put():
+            await chan.write(value)
+        kernel.run(put())
+
+    chan = kernel.run(curio_setup())
+
+    assert chan.channel.states[ca.CLIENT] is ca.CONNECTED, 'Not connected'
+
+    yield curio_client
+
+    async def check():
+        reading = await chan.read()
+        np.testing.assert_array_almost_equal(reading.data, value)
+
+    kernel.run(check())
+    logger.debug('Shutting down the kernel')
+    kernel.run(shutdown=True)
+    logger.debug('Done')
+
+
+@pytest.mark.parametrize('waveform_size', [4000, 8000, 50000])
+@pytest.mark.parametrize('backend', ['pyepics', 'curio', 'threading'])
+@pytest.mark.parametrize('log_level', ['INFO'])
+def test_waveform_put(benchmark, waveform_size, backend, log_level):
+    pvname = 'wfioc:wf{}'.format(waveform_size)
+    ca.benchmarking.set_logging_level(logging.DEBUG, logger=logger)
+
+    context = {'pyepics': bench_pyepics_put_speed,
+               'curio': bench_curio_put_speed,
+               'threading': bench_threading_put_speed
+               }[backend]
+
+    value = list(range(waveform_size))
+    with context(pvname, value=value, log_level=log_level) as bench_fcn:
         benchmark(bench_fcn)
 
 
