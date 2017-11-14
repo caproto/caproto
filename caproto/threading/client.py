@@ -833,7 +833,12 @@ class PV:
             return info['char_value']
         elif as_string and self.typefull in ca.enum_types:
             enum_strs = self.enum_strs
-            ret = [enum_strs[r] for r in info['value']]
+            ret = []
+            for r in info['value']:
+                try:
+                    ret.append(enum_strs[r])
+                except IndexError:
+                    ret.append('')
             if len(ret) == 1:
                 ret, = ret
             return ret

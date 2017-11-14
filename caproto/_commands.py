@@ -47,7 +47,7 @@ from ._headers import (MessageHeader, ExtendedMessageHeader,
                        WriteNotifyResponseHeader, WriteRequestHeader,
                        )
 
-from ._constants import (DO_REPLY, NO_REPLY)
+from ._constants import (DO_REPLY, NO_REPLY, MAX_RECORD_LENGTH)
 from ._dbr import (DBR_INT, DBR_TYPES, ChannelType, float_t, short_t, ushort_t,
                    native_type, MAX_STRING_SIZE, USE_NUMPY,
                    array_type_code, AccessRights)
@@ -569,11 +569,13 @@ class SearchRequest(Message):
 
     def __init__(self, name, cid, version):
         size, payload = padded_string_payload(name)
-        _len = len(name)
-        if _len > 40:
-            raise CaprotoValueError("EPICS imposes a 40-character limit on "
-                                    "strings. The " "string {!r} is {} "
-                                    "characters.".format(name, _len))
+        rec, _, field = name.partition('.')
+        _len = len(rec)
+        if _len > MAX_RECORD_LENGTH:
+            raise CaprotoValueError('EPICS 3.14 imposes a {}-character limit '
+                                    'on record names. The record {!r} is {} '
+                                    'characters.'
+                                    ''.format(MAX_RECORD_LENGTH, name, _len))
         header = SearchRequestHeader(size, NO_REPLY, version, cid)
         super().__init__(header, b'', payload)
 
