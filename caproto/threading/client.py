@@ -353,9 +353,20 @@ class VirtualCircuit:
     def send(self, *commands):
         with self.new_command_cond:
             # turn the crank on the caproto
-            bytes_to_send = self.circuit.send(*commands)
+            buffers_to_send = self.circuit.send(*commands)
             # send bytes over the wire
-            self.socket.sendmsg(bytes_to_send)
+
+            gen = ca.incremental_buffer_list_slice(*buffers_to_send)
+            # prime the generator
+            gen.send(None)
+
+            while buffers_to_send:
+                sent = self.socket.sendmsg(buffers_to_send)
+                try:
+                    buffers_to_send = gen.send(sent)
+                except StopIteration:
+                    # finished sending
+                    break
 
     def received(self, bytes_recv, address):
         """Receive and process and next command from the virtual circuit.
