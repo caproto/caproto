@@ -147,6 +147,9 @@ def test_curio_server_example():
         assert actual == expected
         # check timestamp
         expected = 4
+
+        print('timestamp is', reading.metadata.stamp.as_datetime())
+
         actual = reading.metadata.secondsSinceEpoch
         assert actual == expected
         print('reading:', reading)

@@ -49,7 +49,7 @@ from ._headers import (MessageHeader, ExtendedMessageHeader,
 
 from ._constants import (DO_REPLY, NO_REPLY)
 from ._dbr import (DBR_INT, DBR_TYPES, ChannelType, float_t, short_t, ushort_t,
-                   native_type, MAX_ENUM_STRING_SIZE, USE_NUMPY,
+                   native_type, MAX_STRING_SIZE, USE_NUMPY,
                    array_type_code, AccessRights)
 
 from . import _dbr as dbr
@@ -196,17 +196,16 @@ def parse_metadata(metadata, data_type):
         justified_md = []
         for val in metadata:
             if isinstance(val, str):
-                if len(val) > 40:  # 39?
+                if len(val) > MAX_STRING_SIZE:  # 39?
                     raise CaprotoValueError("The protocol limits strings to "
                                             "40 characters.")
-                val = val.ljust(MAX_ENUM_STRING_SIZE, b'\x00')
+                val = val.ljust(MAX_STRING_SIZE, b'\x00')
             justified_md.append(val)
         md_payload = DBR_TYPES[data_type](*justified_md)
     else:
         raise CaprotoTypeError("metadata given as type we cannot handle - {}"
                                "".format(type(metadata)))
     return md_payload
-
 
 
 def data_payload(data, metadata, data_type, data_count):

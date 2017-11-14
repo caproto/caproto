@@ -274,9 +274,18 @@ class TimeStamp(DbrTypeBase):
 
     @property
     def timestamp(self):
-        "UNIX timestamp (seconds) from Epics TimeStamp structure"
+        'Timestamp as UNIX timestamp (seconds)'
         return epics_timestamp_to_unix(self.secondsSinceEpoch,
                                        self.nanoSeconds)
+
+    @classmethod
+    def from_unix_timestamp(cls, timestamp):
+        sec, nano = timestamp_to_epics(timestamp)
+        return cls(secondsSinceEpoch=sec, nanoSeconds=nano)
+
+    def as_datetime(self):
+        'Timestamp as a datetime'
+        return datetime.datetime.utcfromtimestamp(self.timestamp)
 
 
 class TimeTypeBase(DbrTypeBase):
@@ -503,14 +512,14 @@ class DBR_GR_ENUM(GraphicControlBase):
     DBR_ID = ChannelType.GR_ENUM
     graphic_fields = ()
     control_fields = ()
-    info_fields = ('status', 'severity', 'enum_strs', )
+    info_fields = ('status', 'severity', 'enum_strings', )
     _fields_ = [
         ('no_str', short_t),  # number of strings
         ('strs', MAX_ENUM_STATES * (MAX_ENUM_STRING_SIZE * char_t)),
     ]
 
     @property
-    def enum_strs(self):
+    def enum_strings(self):
         '''Enum byte strings as a tuple'''
         return tuple(self.strs[i].value
                      for i in range(self.no_str))
@@ -549,14 +558,14 @@ class DBR_CTRL_ENUM(GraphicControlBase):
     DBR_ID = ChannelType.CTRL_ENUM
     control_fields = ()
     graphic_fields = ()
-    info_fields = ('status', 'severity', 'enum_strs', )
+    info_fields = ('status', 'severity', 'enum_strings', )
 
     _fields_ = [('no_str', short_t),
                 ('strs', (char_t * MAX_ENUM_STRING_SIZE) * MAX_ENUM_STATES),
                 ]
 
     @property
-    def enum_strs(self):
+    def enum_strings(self):
         '''Enum byte strings as a tuple'''
         return tuple(self.strs[i].value
                      for i in range(self.no_str))
