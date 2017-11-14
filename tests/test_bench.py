@@ -141,7 +141,7 @@ def bench_curio_get_speed(pvname, *, initial_value=None, log_level='DEBUG'):
     logger.debug('Done')
 
 
-@pytest.mark.parametrize('waveform_size', [4000, 8000, 50000])
+@pytest.mark.parametrize('waveform_size', [4000, 8000, 50000, 1000000])
 @pytest.mark.parametrize('backend', ['pyepics', 'curio', 'threading'])
 @pytest.mark.parametrize('log_level', ['INFO'])
 def test_waveform_get(benchmark, waveform_size, backend, log_level):
@@ -237,7 +237,7 @@ def bench_curio_put_speed(pvname, *, value, log_level='DEBUG'):
     logger.debug('Done')
 
 
-@pytest.mark.parametrize('waveform_size', [4000, 8000, 50000])
+@pytest.mark.parametrize('waveform_size', [4000, 8000, 50000, 1000000])
 @pytest.mark.parametrize('backend', ['pyepics', 'curio', 'threading'])
 @pytest.mark.parametrize('log_level', ['INFO'])
 def test_waveform_put(benchmark, waveform_size, backend, log_level):
