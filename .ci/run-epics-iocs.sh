@@ -30,8 +30,3 @@ do
   sleep 0.5
 done
 echo "All IOCs are running!"
-
-echo "Running pyepics simulator program..."
-pip install pyepics
-python ${PYEPICS_IOC}/simulator.py &
-sleep 1
