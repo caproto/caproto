@@ -9,7 +9,7 @@ from ._dbr import (DBR_TYPES, ChannelType, native_type, native_float_types,
                    native_int_types, native_types, timestamp_to_epics,
                    time_types, MAX_ENUM_STRING_SIZE, DBR_STSACK_STRING,
                    AccessRights, _numpy_map, epics_timestamp_to_unix,
-                   AlarmStatus, AlarmSeverity)
+                   AlarmStatus, AlarmSeverity, SubscriptionType)
 from ._utils import CaprotoError
 from ._commands import parse_metadata
 
@@ -159,28 +159,40 @@ def dbr_metadata_to_dict(dbr_metadata, string_encoding):
     return kw
 
 
-def _read_only_property(key):
+def _read_only_property(key, doc=None):
     '''Create property that gives read-only access to instance._data[key]'''
+    if doc is None:
+        doc = 'data from key {!r}'.format(key)
     return property(lambda self: self._data[key],
-                    doc='data from key {!r}'.format(key))
+                    doc=doc)
 
 
 class ChannelAlarm:
-    def __init__(self, *, status=0, severity=0, acknowledge_transient=True,
-                 acknowledge_severity=0, alarm_string='',
-                 string_encoding='latin-1'):
+    def __init__(self, *, status=0, severity=0,
+                 must_acknowledge_transient=True, severity_to_acknowledge=0,
+                 alarm_string='', string_encoding='latin-1'):
         self._channels = weakref.WeakSet()
         self.string_encoding = string_encoding
-        self._data = dict(status=status, severity=severity,
-                          acknowledge_transient=acknowledge_transient,
-                          acknowledge_severity=acknowledge_severity,
-                          alarm_string=alarm_string)
+        self._data = dict(
+            status=status, severity=severity,
+            must_acknowledge_transient=must_acknowledge_transient,
+            severity_to_acknowledge=severity_to_acknowledge,
+            alarm_string=alarm_string)
 
-    status = _read_only_property('status')
-    severity = _read_only_property('severity')
-    acknowledge_transient = _read_only_property('acknowledge_transient')
-    acknowledge_severity = _read_only_property('acknowledge_severity')
-    alarm_string = _read_only_property('alarm_string')
+    status = _read_only_property('status',
+                                 doc='Current alarm status')
+    severity = _read_only_property('severity',
+                                   doc='Current alarm severity')
+    must_acknowledge_transient = _read_only_property(
+        'must_acknowledge_transient',
+        doc='Toggle whether or not transient alarms must be acknowledged')
+
+    severity_to_acknowledge = _read_only_property(
+        'severity_to_acknowledge',
+        doc='The alarm severity that has been acknowledged')
+
+    alarm_string = _read_only_property('alarm_string',
+                                       doc='String associated with alarm')
 
     def connect(self, channel_data):
         self._channels.add(channel_data)
@@ -188,55 +200,57 @@ class ChannelAlarm:
     def disconnect(self, channel_data):
         self._channels.remove(channel_data)
 
-    def acknowledge(self):
-        pass
-
-    async def write_from_dbr(self, dbr, caller=None):
-        data = self._data
-        if hasattr(dbr, 'status'):
-            data['status'] = AlarmStatus(dbr.status)
-        if hasattr(dbr, 'severity'):
-            data['severity'] = AlarmSeverity(dbr.severity)
-        if hasattr(dbr, 'ackt'):
-            data['acknowledge_transient'] = (dbr.ackt != 0)
-        if hasattr(dbr, 'acks'):
-            data['acknowledge_severity'] = dbr.acks
-        if hasattr(dbr, 'value'):
-            data['alarm_string'] = dbr.value.decode(self.string_encoding)
-        for channel in self._channels:
-            if channel is caller:
-                # Do not redundantly update the channel whose
-                # write called this update in the first place.
-                continue
-            await channel.publish()
-
     async def read(self, dbr=None):
         if dbr is None:
             dbr = DBR_STSACK_STRING()
         dbr.status = self.status
         dbr.severity = self.severity
-        dbr.ackt = 1 if self.acknowledge_transient else 0
-        dbr.acks = self.acknowledge_severity
+        dbr.ackt = 1 if self.must_acknowledge_transient else 0
+        dbr.acks = self.severity_to_acknowledge
         dbr.value = self.alarm_string.encode(self.string_encoding)
         return dbr
 
     async def write(self, *, status=None, severity=None,
-                    acknowledge_transient=None,
-                    acknowledge_severity=None,
+                    must_acknowledge_transient=None, severity_to_acknowledge=None,
                     alarm_string=None, caller=None):
         data = self._data
+        flags = 0
+
         if status is not None:
             data['status'] = AlarmStatus(status)
+            flags |= SubscriptionType.DBE_VALUE
+
         if severity is not None:
             data['severity'] = AlarmSeverity(severity)
-        if acknowledge_transient is not None:
-            data['acknowledge_transient'] = acknowledge_transient
-        if acknowledge_severity is not None:
-            data['acknowledge_severity'] = acknowledge_severity
+
+            if (not self.must_acknowledge_transient or
+                    self.severity_to_acknowledge < self.severity):
+                data['severity_to_acknowledge'] = self.severity
+
+            flags |= SubscriptionType.DBE_ALARM
+
+        if must_acknowledge_transient is not None:
+            data['must_acknowledge_transient'] = must_acknowledge_transient
+            if (not must_acknowledge_transient and
+                    self.severity_to_acknowledge > self.severity):
+                # Reset the severity to acknowledge if disabling transient
+                # requirement
+                data['severity_to_acknowledge'] = self.severity
+            flags |= SubscriptionType.DBE_ALARM
+
+        if severity_to_acknowledge is not None:
+            # To clear, set greater than or equal to the
+            # severity_to_acknowledge
+            if severity_to_acknowledge >= self.severity:
+                data['severity_to_acknowledge'] = 0
+                flags |= SubscriptionType.DBE_ALARM
+
         if alarm_string is not None:
             data['alarm_string'] = alarm_string
+            flags |= SubscriptionType.DBE_ALARM
+
         for channel in self._channels:
-            await channel.publish()
+            await channel.publish(flags=flags)
 
 
 class ChannelData:
@@ -350,6 +364,15 @@ class ChannelData:
 
     async def write_from_dbr(self, data, data_type, metadata):
         '''Set data from DBR metadata/values'''
+        if data_type == ChannelType.PUT_ACKS:
+            await self.alarm.write(severity_to_acknowledge=metadata.value)
+            return
+        elif data_type == ChannelType.PUT_ACKT:
+            await self.alarm.write(must_acknowledge_transient=metadata.value)
+            return
+        elif data_type in (ChannelType.STSACK_STRING, ChannelType.CLASS_NAME):
+            raise ValueError('Bad request')
+
         timestamp = time.time()  # will only be used if metadata is None
         native_from = native_type(data_type)
         value = convert_values(values=data, from_dtype=native_from,
@@ -359,6 +382,8 @@ class ChannelData:
                                                     None))
 
         modified_value = await self.verify_value(value)
+        # TODO: on exception raised, set alarm
+
         self._data['value'] = (modified_value
                                if modified_value is not None
                                else value)
@@ -377,11 +402,8 @@ class ChannelData:
                                                  self.string_encoding)
             await self.write_metadata(publish=False, **metadata_dict)
 
-            # Update alarm, which in turn updates all other channels
-            # connected to this alarm.
-            await self.alarm.write_from_dbr(dbr_metadata, caller=self)
-
         # Send a new event to subscribers.
+        # TODO: mask should be at least DBE_VALUE
         await self.publish()
 
     async def write(self, value, **metadata):
@@ -395,7 +417,9 @@ class ChannelData:
         # Send a new event to subscribers.
         await self.publish()
 
-    async def publish(self):
+    async def publish(self, flags=None):
+        # TODO: implement flags
+
         # Only read out as many data types as we actually need,
         # as specificed by the sub_specs currently registered.
         # If, for example, no subscribers have asked for non-native

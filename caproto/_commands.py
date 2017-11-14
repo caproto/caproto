@@ -84,12 +84,19 @@ def ipv4_from_int32(int_packed_ip: int) -> str:
     return socket.inet_ntop(socket.AF_INET, encoded_ip)
 
 
+def has_metadata(data_type):
+    'Does data_type have associated metadata?'
+    return (data_type in (ChannelType.PUT_ACKS, ChannelType.PUT_ACKT,
+                          ChannelType.STSACK_STRING, ChannelType.CLASS_NAME)
+            or data_type != native_type(data_type)
+            )
+
+
 def from_buffer(data_type, data_count, buffer):
     "Wraps dbr_type.from_buffer and special-case strings."
     payload_size = data_count * ctypes.sizeof(
         DBR_TYPES[native_type(data_type)])
-    if data_type != native_type(data_type):
-        # This payload has a metadata component.
+    if has_metadata(data_type):
         md_payload = DBR_TYPES[data_type].from_buffer(buffer)
         md_size = ctypes.sizeof(DBR_TYPES[data_type])
     else:

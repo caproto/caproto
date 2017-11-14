@@ -265,7 +265,6 @@ class DbrTypeBase(ctypes.BigEndianStructure):
         return "{}({})".format(type(self).__name__, formatted_args)
 
 
-
 class TimeStamp(DbrTypeBase):
     '''An EPICS timestamp with 32-bit seconds and nanoseconds'''
     _fields_ = [('secondsSinceEpoch', ctypes.c_uint32),
@@ -706,6 +705,8 @@ if USE_NUMPY:
          (ChannelType.CHAR, 'b'),
          (ChannelType.STSACK_STRING, numpy.uint8),
          (ChannelType.CLASS_NAME, numpy.uint8),
+         (ChannelType.PUT_ACKT, numpy.ushort),
+         (ChannelType.PUT_ACKS, numpy.ushort),
          ]
     }
 
@@ -721,6 +722,9 @@ _array_type_code_map = {
 
     ChannelType.STSACK_STRING: 'b',
     ChannelType.CLASS_NAME: 'b',
+
+    ChannelType.PUT_ACKS: 'H',  # ushort_t
+    ChannelType.PUT_ACKT: 'H',
 }
 
 for _type in set(native_types) - set([ChannelType.STRING]):
