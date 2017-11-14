@@ -66,7 +66,7 @@ script:
   - make html
   - popd
   # Upload the docs to gh-pages.
-  - doctr deploy --key-path=doc/github_deploy_key .
+  - doctr deploy --key-path=doc/github_deploy_key.enc .
   - cd ..
 
 after_success:
