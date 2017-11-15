@@ -60,7 +60,7 @@ def temporary_pyepics_access(pvname, **kwargs):
 
 @contextlib.contextmanager
 def bench_pyepics_get_speed(pvname, *, initial_value=None, log_level='DEBUG'):
-    with temporary_pyepics_access(pvname) as pv:
+    with temporary_pyepics_access(pvname, auto_monitor=False) as pv:
         def pyepics():
             value = pv.get(use_monitor=False)
             if initial_value is not None:
@@ -160,7 +160,7 @@ def test_waveform_get(benchmark, waveform_size, backend, log_level):
 
 @contextlib.contextmanager
 def bench_pyepics_put_speed(pvname, *, value, log_level='DEBUG'):
-    with temporary_pyepics_access(pvname) as pv:
+    with temporary_pyepics_access(pvname, auto_monitor=False) as pv:
         def pyepics():
             pv.put(value, wait=True)
 
