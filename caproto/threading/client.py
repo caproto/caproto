@@ -897,10 +897,11 @@ class PV:
                     raise ValueError('{} is not in Enum ({}'.format(
                         value, self.enum_strs))
 
-        if not isinstance(value, Iterable):
+        if isinstance(value, str) or not isinstance(value, Iterable):
             value = (value, )
-        value = tuple(v.encode('utf-8') if isinstance(v, str)
-                      else v for v in value)
+
+        if isinstance(value[0], str):
+            value = tuple(v.encode('utf-8') for v in value)
 
         def run_callback(cmd):
             callback(*callback_data)
