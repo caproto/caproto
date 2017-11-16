@@ -74,7 +74,8 @@ def bench_pyepics_get_speed(pvname, *, initial_value=None, log_level='DEBUG'):
 
 
 @contextlib.contextmanager
-def bench_threading_get_speed(pvname, *, initial_value=None, log_level='ERROR'):
+def bench_threading_get_speed(pvname, *, initial_value=None,
+                              log_level='ERROR'):
     from caproto.threading.client import (PV, SharedBroadcaster,
                                           Context as ThreadingContext)
 
