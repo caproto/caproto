@@ -107,9 +107,7 @@ def pytest_bench_results_to_asv():
         info = asv_bench_result(name, md_list)
         if 'params' in info:
             # parameterized ones have a dictionary of their own
-            # benches['results'][name] = info
-            benches[name] = info
-            print('info is', info)
+            benches['results'][name] = info
         else:
             # ... whereas others are just part of general 'results'/etc dicts
             # and keyed by name
@@ -316,7 +314,8 @@ def asv_bench(request):
     bs = request.config._benchmarksession
 
     if bs.skip:
-        pytest.skip("[asv] Benchmarks are skipped (--benchmark-skip was used).")
+        pytest.skip("[asv] Benchmarks are skipped (--benchmark-skip was "
+                    "used).")
     else:
         node = request.node
         marker = node.get_marker("benchmark")
