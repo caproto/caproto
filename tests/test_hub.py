@@ -37,10 +37,10 @@ def test_counter_skipping(circuit_pair):
     circuit, _ = circuit_pair
     broadcaster = ca.Broadcaster(ca.CLIENT)
 
-    broadcaster.unanswered_searches[0] = 'placeholder'
-    broadcaster.unanswered_searches[2] = 'placeholder'
+    broadcaster.searches[0] = 'placeholder'
+    broadcaster.searches[2] = 'placeholder'
     assert broadcaster.new_search_id() == 1
-    assert list(broadcaster.unanswered_searches) == [0, 2]
+    assert list(broadcaster.searches) == [0, 2]
     assert broadcaster.new_search_id() == 3
 
     circuit.channels[2] = 'placeholder'
