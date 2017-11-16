@@ -20,8 +20,6 @@ from collections import Iterable
 
 import caproto as ca
 
-from typing import Callable, Optional
-
 
 class ThreadingClientException(Exception):
     ...
@@ -31,34 +29,12 @@ class DisconnectedError(ThreadingClientException):
     ...
 
 
-class ConditionType:
-    ...
-
-
 AUTOMONITOR_MAXLENGTH = 65536
 STALE_SEARCH_THRESHOLD = 10.0
 STR_ENC = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
 
 
 logger = logging.getLogger(__name__)
-
-
-def _condition_with_timeout(bail_condition: Callable[[], bool],
-                            condition: ConditionType,
-                            timeout: Optional[float]):
-    last_time = time.time() + timeout
-    wait_time = None
-    while True:
-        with condition:
-            if bail_condition():
-                break
-            if timeout is not None:
-                wait_time = last_time - time.time()
-                if not (wait_time > 0):
-                    raise TimeoutError()
-
-            if not condition.wait(wait_time):
-                raise TimeoutError()
 
 
 class SelectorThread:
@@ -186,7 +162,7 @@ class SharedBroadcaster:
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
         self.broadcaster.log.setLevel(self.log_level)
         self.command_bundle_queue = queue.Queue()
-        self.command_cond = threading.Condition()  # ConditionType
+        self.command_cond = threading.Condition()
 
         self.selector = SelectorThread()
         self.command_thread = threading.Thread(target=self.command_loop,
@@ -468,7 +444,7 @@ class VirtualCircuit:
         self.channels = {}  # map cid to Channel
         self.ioids = {}  # map ioid to Channel
         self.subscriptionids = {}  # map subscriptionid to Channel
-        self.new_command_cond = threading.Condition()  # ConditionType
+        self.new_command_cond = threading.Condition()
         self.socket = None
         self.command_queue = queue.Queue()
         self.command_thread = threading.Thread(target=self.command_thread_loop,

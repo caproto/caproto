@@ -3,8 +3,7 @@ import socket
 import time
 import threading
 
-from caproto.threading.client import (Context, SharedBroadcaster,
-                                      _condition_with_timeout)
+from caproto.threading.client import (Context, SharedBroadcaster)
 import caproto as ca
 import pytest
 
