@@ -888,9 +888,8 @@ class PV:
 
         if not isinstance(value, Iterable):
             value = (value, )
-        # assume input is homogeneous type
-        if isinstance(value[0], str):
-            value = tuple(map(str.encode, value))
+        value = tuple(v.encode('utf-8') if isinstance(v, str)
+                      else v for v in value)
 
         def run_callback(cmd):
             callback(*callback_data)
