@@ -46,7 +46,7 @@ class VirtualCircuit:
         await self.send(ca.VersionRequest(version=13,
                                           priority=self.circuit.priority))
         host_name = await socket.gethostname()
-        await self.send(ca.HostNameRequest(host_name=host_name))
+        await self.send(ca.HostNameRequest(name=host_name))
         client_name = getpass.getuser()
         await self.send(ca.ClientNameRequest(client_name=client_name))
 
