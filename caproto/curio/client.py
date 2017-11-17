@@ -8,10 +8,11 @@
 # Context: has a caproto.Broadcaster, a UDP socket, a cache of
 #          search results and a cache of VirtualCircuits.
 #
-import logging
 import caproto as ca
 import curio
 from curio import socket
+import logging
+import getpass
 
 
 logger = logging.getLogger(__name__)
