@@ -49,7 +49,7 @@ class VirtualCircuit:
         host_name = await socket.gethostname()
         await self.send(ca.HostNameRequest(name=host_name))
         client_name = getpass.getuser()
-        await self.send(ca.ClientNameRequest(client_name=client_name))
+        await self.send(ca.ClientNameRequest(name=client_name))
 
     async def _receive_loop(self):
         num_bytes_needed = 0
