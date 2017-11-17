@@ -2,6 +2,7 @@ import copy
 import functools
 import itertools
 import logging
+import os
 import queue
 import socket
 import threading
@@ -15,6 +16,7 @@ import caproto as ca
 
 AUTOMONITOR_MAXLENGTH = 65536
 STALE_SEARCH_THRESHOLD = 10.0
+STR_ENC = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
 
 
 logger = logging.getLogger(__name__)
@@ -864,10 +866,10 @@ class PV:
 
         ret = info['value']
         if self.typefull in ca.char_types:
-            ret = ret.tobytes().partition(b'\x00')[0].decode('utf-8')
+            ret = ret.tobytes().partition(b'\x00')[0].decode(STR_ENC)
             info['char_value'] = ret
         elif self.typefull in ca.string_types:
-            ret = [v.decode('utf-8').strip() for v in ret]
+            ret = [v.decode(STR_ENC).strip() for v in ret]
             if len(ret) == 1:
                 ret = ret[0]
             info['char_value'] = ret
@@ -901,7 +903,7 @@ class PV:
             value = (value, )
 
         if isinstance(value[0], str):
-            value = tuple(v.encode('utf-8') for v in value)
+            value = tuple(v.encode(STR_ENC) for v in value)
 
         def run_callback(cmd):
             callback(*callback_data)
@@ -954,7 +956,7 @@ class PV:
                 ret[arg] = getattr(dbr_data, attr)
 
         if ret.get('enum_strs', None):
-            ret['enum_strs'] = tuple(k.value.decode('utf-8') for
+            ret['enum_strs'] = tuple(k.value.decode(STR_ENC) for
                                      k in ret['enum_strs'] if k.value)
 
         if hasattr(dbr_data, 'nanoSeconds'):
@@ -965,7 +967,7 @@ class PV:
             ret['timestamp'] = timestamp
 
         if 'units' in ret:
-            ret['units'] = ret['units'].decode('latin-1')
+            ret['units'] = ret['units'].decode(STR_ENC)
 
         return ret
 
@@ -1077,7 +1079,7 @@ class PV:
     @property
     def host(self):
         "pv host"
-        return self.chid.channel.host_name().name.decode('utf-8')
+        return self.chid.channel.host_name().name.decode(STR_ENC)
 
     @property
     def count(self):
