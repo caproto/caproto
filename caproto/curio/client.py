@@ -38,6 +38,17 @@ class VirtualCircuit:
     async def connect(self):
         async with self._socket_lock:
             self.socket = await socket.create_connection(self.circuit.address)
+        # Kick off background loops that read from the socket
+        # and process the commands read from it.
+        await curio.spawn(self._receive_loop(), daemon=True)
+        await curio.spawn(self._command_queue_loop(), daemon=True)
+        # Send commands that initialize the Circuit.
+        await self.send(ca.VersionRequest(version=13,
+                                          priority=self.circuit.priority))
+        host_name = await socket.gethostname()
+        await self.send(ca.HostNameRequest(host_name=host_name))
+        client_name = getpass.getuser()
+        await self.send(ca.ClientNameRequest(client_name=client_name))
 
     async def _receive_loop(self):
         num_bytes_needed = 0
@@ -81,7 +92,6 @@ class VirtualCircuit:
                     user_event = self.ioids.pop(ioid)
                     self.ioid_data[ioid] = command
                     await user_event.set()
-
             async with self.new_command_condition:
                 await self.new_command_condition.notify_all()
 
@@ -341,7 +351,7 @@ class Context:
         self.circuits = []  # list of VirtualCircuits
         self.broadcaster = broadcaster
 
-    def get_circuit(self, address, priority):
+    async def get_circuit(self, address, priority):
         """
         Return a VirtualCircuit with this address, priority.
 
@@ -357,6 +367,7 @@ class Context:
         circuit = VirtualCircuit(ca_circuit)
         circuit.circuit.log.setLevel(self.log_level)
         self.circuits.append(circuit)
+        await curio.spawn(circuit.connect())
         return circuit
 
     async def search(self, name):
@@ -368,21 +379,15 @@ class Context:
         Create a new channel.
         """
         address = self.broadcaster.search_results[name]
-        circuit = self.get_circuit(address, priority)
+        circuit = await self.get_circuit(address, priority)
         chan = ca.ClientChannel(name, circuit.circuit)
-
-        if chan.circuit.states[ca.SERVER] is ca.IDLE:
-            await circuit.connect()  # wait for a connected socket
-            # Kick off background loops that read from the socket
-            # and process the commands read from it.
-            await curio.spawn(circuit._receive_loop(), daemon=True)
-            await curio.spawn(circuit._command_queue_loop(), daemon=True)
-            # Send commands that initialize the Circuit.
-            await circuit.send(chan.version())
-            await circuit.send(chan.host_name())
-            await circuit.send(chan.client_name())
-
-        assert circuit.socket is not None
+        # Wait for the SERVER to agree that we have an initialized circuit.
+        while True:
+            async with circuit.new_command_condition:
+                state = circuit.circuit.states[ca.SERVER]
+                if state is ca.CONNECTED:
+                    break
+                await circuit.new_command_condition.wait()
         # Send command that creates the Channel.
         await circuit.send(chan.create())
         return Channel(circuit, chan)
