@@ -11,4 +11,4 @@ export CALC=R3-6-1
 export MOTOR=6-9
 # mock Travis
 export TRAVIS_BUILD_DIR=${PWD}
-export PYEPICS_LIBCA=$HOME/.cache/support/epics-base/lib/${EPICS_HOST_ARCH}/libca.so
+source ${TRAVIS_BUILD_DIR}/.ci/epics-config.sh

@@ -31,3 +31,5 @@ if [[ ":$PATH:" != *":${EPICS_BIN_PATH}:"* ]]; then
     export PATH="${EPICS_BIN_PATH}:${PATH}"
     echo "${EPICS_BIN_PATH} added to path"
 fi
+
+export PYEPICS_LIBCA=$EPICS_BASE/lib/${EPICS_HOST_ARCH}/libca.so
