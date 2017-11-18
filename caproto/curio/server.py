@@ -1,6 +1,7 @@
-import logging
-import random
 from collections import defaultdict, deque, namedtuple
+import logging
+import os
+import random
 
 import curio
 from curio import socket
@@ -21,7 +22,7 @@ SubscriptionSpec = namedtuple('SubscriptionSpec', ('db_entry', 'data_type',))
 
 logger = logging.getLogger(__name__)
 
-SERVER_ENCODING = 'latin-1'
+STR_ENC = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
 
 
 def find_next_tcp_port(host='0.0.0.0', starting_port=ca.EPICS_CA2_PORT + 1):
@@ -156,7 +157,7 @@ class CurioVirtualCircuit:
         '''Process a command from a client, and return the server response'''
         def get_db_entry():
             chan = self.circuit.channels_sid[command.sid]
-            db_entry = self.context.pvdb[chan.name.decode(SERVER_ENCODING)]
+            db_entry = self.context.pvdb[chan.name.decode(STR_ENC)]
             return chan, db_entry
 
         if command is ca.DISCONNECTED:
@@ -164,7 +165,7 @@ class CurioVirtualCircuit:
         elif isinstance(command, ca.VersionRequest):
             return [ca.VersionResponse(13)]
         elif isinstance(command, ca.CreateChanRequest):
-            db_entry = self.context.pvdb[command.name.decode(SERVER_ENCODING)]
+            db_entry = self.context.pvdb[command.name.decode(STR_ENC)]
             access = db_entry.check_access(self.client_hostname,
                                            self.client_username)
 
@@ -176,9 +177,9 @@ class CurioVirtualCircuit:
                                           sid=self.circuit.new_channel_id()),
                     ]
         elif isinstance(command, ca.HostNameRequest):
-            self.client_hostname = command.name.decode(SERVER_ENCODING)
+            self.client_hostname = command.name.decode(STR_ENC)
         elif isinstance(command, ca.ClientNameRequest):
-            self.client_username = command.name.decode(SERVER_ENCODING)
+            self.client_username = command.name.decode(STR_ENC)
         elif isinstance(command, ca.ReadNotifyRequest):
             chan, db_entry = get_db_entry()
             metadata, data = await db_entry.auth_read(
@@ -318,7 +319,7 @@ class Context:
                 if isinstance(command, ca.VersionRequest):
                     responses.append(ca.VersionResponse(13))
                 if isinstance(command, ca.SearchRequest):
-                    pv_name = command.name.decode(SERVER_ENCODING)
+                    pv_name = command.name.decode(STR_ENC)
                     known_pv = pv_name in self.pvdb
                     if (not known_pv) and command.reply == ca.NO_REPLY:
                         responses.clear()
