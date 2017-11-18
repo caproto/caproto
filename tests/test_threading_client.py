@@ -1,10 +1,6 @@
 import sys
 import socket
 import logging
-import time
-import threading
-
-from multiprocessing import Process
 
 from caproto.threading.client import (SocketThread, Context, SharedBroadcaster)
 import caproto as ca

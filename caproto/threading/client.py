@@ -246,10 +246,11 @@ class Context:
         """
         circuit = self.circuits.get((address, priority), None)
         if circuit is None or not circuit.connected:
-            circuit = VirtualCircuit(ca.VirtualCircuit(our_role=ca.CLIENT,
-                                                       address=address,
-                                                       priority=priority,
-                                                       ))
+            circuit = ThreadingVirtualCircuit(
+                ca.VirtualCircuit(our_role=ca.CLIENT,
+                                  address=address,
+                                  priority=priority,
+                                 ))
             circuit.circuit.log.setLevel(self.log_level)
             self.circuits[(address, priority)] = circuit
         return circuit
@@ -263,7 +264,7 @@ class Context:
         circuit = self.get_circuit(address, priority)
         cid = circuit.circuit.new_channel_id()
         cachan = ca.ClientChannel(name, circuit.circuit, cid=cid)
-        chan = circuit.channels[cid] = Channel(circuit, cachan)
+        chan = circuit.channels[cid] = ThreadingChannel(circuit, cachan)
 
         with circuit.new_command_cond:
             if circuit.circuit.states[ca.SERVER] is ca.IDLE:
@@ -323,7 +324,7 @@ class Context:
             # TODO tacaswell
 
 
-class VirtualCircuit:
+class ThreadingVirtualCircuit:
     __slots__ = ('circuit', 'channels', 'ioids', 'subscriptionids',
                  'new_command_cond', 'socket', 'sock_thread',
                  'command_thread', 'command_queue',
@@ -331,9 +332,9 @@ class VirtualCircuit:
 
     def __init__(self, circuit):
         self.circuit = circuit  # a caproto.VirtualCircuit
-        self.channels = {}  # map cid to Channel
-        self.ioids = {}  # map ioid to Channel
-        self.subscriptionids = {}  # map subscriptionid to Channel
+        self.channels = {}  # map cid to ThreadingChannel
+        self.ioids = {}  # map ioid to ThreadingChannel
+        self.subscriptionids = {}  # map subscriptionid to ThreadingChannel
         self.new_command_cond = threading.Condition()  # ConditionType
         self.socket = None
         self.sock_thread = None
@@ -438,14 +439,14 @@ class VirtualCircuit:
             pass
 
 
-class Channel:
-    """Wraps a VirtualCircuit and a caproto.ClientChannel."""
+class ThreadingChannel:
+    """Wraps a ThreadingVirtualCircuit and a caproto.ClientChannel."""
     __slots__ = ('circuit', 'channel', 'last_reading', 'monitoring_tasks',
                  '_callback', '_read_notify_callback', 'command_bundle_queue',
                  '_write_notify_callback', '_pc_callbacks')
 
     def __init__(self, circuit, channel):
-        self.circuit = circuit  # a VirtualCircuit
+        self.circuit = circuit  # a ThreadingVirtualCircuit
         self.channel = channel  # a caproto.ClientChannel
         self.last_reading = None
         self.monitoring_tasks = {}  # maps subscriptionid to curio.Task

@@ -3,8 +3,8 @@
 # It builds on the abstractions used in caproto, adding transport and some
 # caches for matching requests with responses.
 #
-# VirtualCircuit: has a caproto.VirtualCircuit, a socket, and some caches.
-# Channel: has a VirtualCircuit and a caproto.ClientChannel.
+# CurioVirtualCircuit: has a caproto.VirtualCircuit, a socket, and some caches.
+# CurioChannel: has a CurioVirtualCircuit and a caproto.ClientChannel.
 # Context: has a caproto.Broadcaster, a UDP socket, a cache of
 #          search results and a cache of VirtualCircuits.
 #
@@ -22,14 +22,14 @@ class ChannelReadError(Exception):
     ...
 
 
-class VirtualCircuit:
+class CurioVirtualCircuit:
     "Wraps a caproto.VirtualCircuit and adds transport."
     def __init__(self, circuit):
         self.circuit = circuit  # a caproto.VirtualCircuit
-        self.channels = {}  # map cid to Channel
-        self.ioids = {}  # map ioid to Channel
+        self.channels = {}  # map cid to CurioChannel
+        self.ioids = {}  # map ioid to CurioChannel
         self.ioid_data = {}  # map ioid to server response
-        self.subscriptionids = {}  # map subscriptionid to Channel
+        self.subscriptionids = {}  # map subscriptionid to CurioChannel
         self.connected = True
         self.socket = None
         self.command_queue = curio.Queue()
@@ -119,10 +119,10 @@ class VirtualCircuit:
                         break
 
 
-class Channel:
-    """Wraps a VirtualCircuit and a caproto.ClientChannel."""
+class CurioChannel:
+    """Wraps a CurioVirtualCircuit and a caproto.ClientChannel."""
     def __init__(self, circuit, channel):
-        self.circuit = circuit  # a VirtualCircuit
+        self.circuit = circuit  # a CurioVirtualCircuit
         self.channel = channel  # a caproto.ClientChannel
         self.last_reading = None
         self.monitoring_tasks = {}  # maps subscriptionid to curio.Task
@@ -346,15 +346,15 @@ class SharedBroadcaster:
 
 
 class Context:
-    "Wraps a caproto.Broadcaster, a UDP socket, and cache of VirtualCircuits."
+    "Wraps a caproto.Broadcaster, a UDP socket, and CurioVirtualCircuits."
     def __init__(self, broadcaster, *, log_level='ERROR'):
         self.log_level = log_level
-        self.circuits = []  # list of VirtualCircuits
+        self.circuits = []  # list of CurioVirtualCircuits
         self.broadcaster = broadcaster
 
     async def get_circuit(self, address, priority):
         """
-        Return a VirtualCircuit with this address, priority.
+        Return a CurioVirtualCircuit with this address, priority.
 
         Make a new one if necessary.
         """
@@ -365,7 +365,7 @@ class Context:
 
         ca_circuit = ca.VirtualCircuit(our_role=ca.CLIENT, address=address,
                                        priority=priority)
-        circuit = VirtualCircuit(ca_circuit)
+        circuit = CurioVirtualCircuit(ca_circuit)
         circuit.circuit.log.setLevel(self.log_level)
         self.circuits.append(circuit)
         await curio.spawn(circuit.connect())
@@ -391,4 +391,4 @@ class Context:
                 await circuit.new_command_condition.wait()
         # Send command that creates the Channel.
         await circuit.send(chan.create())
-        return Channel(circuit, chan)
+        return CurioChannel(circuit, chan)
