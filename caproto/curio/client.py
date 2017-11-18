@@ -8,11 +8,12 @@
 # Context: has a caproto.Broadcaster, a UDP socket, a cache of
 #          search results and a cache of VirtualCircuits.
 #
-import caproto as ca
-import curio
-from curio import socket
 import logging
 import getpass
+import caproto as ca
+import curio
+from collections import OrderedDict
+from curio import socket
 
 
 logger = logging.getLogger(__name__)
@@ -392,3 +393,55 @@ class Context:
         # Send command that creates the Channel.
         await circuit.send(chan.create())
         return Channel(circuit, chan)
+
+    async def create_many_channels(self, *names, priority=0,
+                                   wait_for_connection=True):
+        '''Create many channels in parallel through this context
+
+        Parameters
+        ----------
+        *names : str
+            Channel / PV names
+        priority : int, optional
+            Set priority of circuits
+        wait_for_connection : bool, optional
+            Wait for connections
+
+        Returns
+        -------
+        channel_dict : OrderedDict
+            Ordered dictionary of name to Channel
+        '''
+
+        channels = OrderedDict()
+        async with curio.TaskGroup() as wait_task:
+            async with curio.TaskGroup() as connect_task:
+                async with curio.TaskGroup() as search_task:
+                    for name in names:
+                        await search_task.spawn(self.search, name)
+
+                    while True:
+                        res = await search_task.next_done()
+                        if res is None:
+                            break
+                        name = res.result
+                        await connect_task.spawn(self.create_channel,
+                                                 name, priority)
+
+                # TODO: async with curio.timeout_after()
+                # this may put us in a bad state for some channels as tasks
+                # will be canceled?
+                while True:
+                    res = await connect_task.next_done()
+                    if res is None:
+                        break
+                    curio_chan = res.result
+                    channels[curio_chan.channel.name] = curio_chan
+                    if wait_for_connection:
+                        await wait_task.spawn(curio_chan.wait_for_connection)
+
+            while wait_for_connection:
+                res = await wait_task.next_done()
+                if res is None:
+                    break
+        return channels
