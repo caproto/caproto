@@ -341,7 +341,7 @@ def bench_curio_many_connections(pv_names, *, initial_value=None,
     logger.debug('Done')
 
 
-@pytest.mark.parametrize('connection_count', [5, 100, 1000])
+@pytest.mark.parametrize('connection_count', [5, 100])
 @pytest.mark.parametrize('pv_format', ['connections:{}'])
 @pytest.mark.parametrize('backend', ['pyepics', 'curio'])
 @pytest.mark.parametrize('log_level', ['INFO'])
