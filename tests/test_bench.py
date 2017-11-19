@@ -324,31 +324,12 @@ def bench_curio_many_connections(pv_names, *, initial_value=None,
         await broadcaster.register()
         ctx = ca.curio.client.Context(broadcaster, log_level=log_level)
 
-        pvs = {}
-        async with curio.TaskGroup() as connect_task:
-            async with curio.TaskGroup() as search_task:
-                for pvname in pv_names:
-                    await search_task.spawn(ctx.search, pvname)
+        channels = await ctx.create_many_channels(*pv_names,
+                                                  wait_for_connection=True)
 
-                while True:
-                    res = await search_task.next_done()
-                    if res is None:
-                        break
-                    pvname = res.result
-                    await connect_task.spawn(ctx.create_channel, pvname)
-
-            while True:
-                res = await connect_task.next_done()
-                if res is None:
-                    break
-                curio_channel = res.result
-                pvname = curio_channel.channel.name
-                pvs[pvname] = curio_channel
-
-        assert len(pvs) == len(pv_names)
-        # TODO: can't successfully test as this hammers file creation; this
-        # will be important to resolve...
-        await curio.sleep(1)
+        connected_channels = [ch for ch in channels.values()
+                              if ch.channel.states[ca.CLIENT] is ca.CONNECTED]
+        assert len(connected_channels) == len(pv_names)
 
     def curio_client():
         kernel.run(test())
@@ -360,9 +341,9 @@ def bench_curio_many_connections(pv_names, *, initial_value=None,
     logger.debug('Done')
 
 
-@pytest.mark.parametrize('connection_count', [5])
+@pytest.mark.parametrize('connection_count', [5, 100])
 @pytest.mark.parametrize('pv_format', ['connections:{}'])
-@pytest.mark.parametrize('backend', ['curio', 'pyepics', 'threading'])
+@pytest.mark.parametrize('backend', ['pyepics', 'curio'])
 @pytest.mark.parametrize('log_level', ['INFO'])
 def test_many_connections(benchmark, backend, connection_count, pv_format,
                           log_level):
