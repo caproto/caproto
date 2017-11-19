@@ -2,6 +2,7 @@ import time
 
 import pytest
 import curio
+import trio
 
 import caproto as ca
 
@@ -14,6 +15,11 @@ def test_curio_client_example():
     from caproto.examples.curio_client_simple import main
     with curio.Kernel() as kernel:
         kernel.run(main())
+
+
+def test_trio_client_example():
+    from caproto.examples.trio_client_simple import main
+    trio.run(main)
 
 
 def test_thread_client_example(curio_server):
@@ -211,7 +217,6 @@ def test_curio_server_example(prefix):
 
     with curio.Kernel() as kernel:
         kernel.run(task)
-
     print('done')
 
 

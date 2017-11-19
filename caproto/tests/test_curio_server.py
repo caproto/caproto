@@ -2,8 +2,6 @@ import ast
 import datetime
 
 import pytest
-import curio
-
 
 import caproto as ca
 
@@ -37,23 +35,27 @@ caget_checks += [('char', ChannelType.CHAR),
 
 
 @pytest.mark.parametrize('pv, dbr_type', caget_checks)
-def test_with_caget(curio_server, pv, dbr_type):
+def test_with_caget(prefix, pvdb_from_server_example, server, pv, dbr_type):
+    caget_pvdb = {prefix + pv_: value
+                  for pv_, value in pvdb_from_server_example.items()}
+    pv = prefix + pv
     ctrl_keys = ('upper_disp_limit', 'lower_alarm_limit',
                  'upper_alarm_limit', 'lower_warning_limit',
                  'upper_warning_limit', 'lower_ctrl_limit',
                  'upper_ctrl_limit', 'precision')
-    server_runner, prefix, caget_pvdb = curio_server
-    pv = prefix + pv
 
-    async def client():
-        print('* client_test', pv, dbr_type)
+    async def client(*client_args):
+        # args are ignored for curio and trio servers.
+        print('* client caget test: pv={} dbr_type={}'.format(pv, dbr_type))
+        print('(client args: %s)'.format(client_args))
+
         db_entry = caget_pvdb[pv]
         # native type as in the ChannelData database
         db_native = ca.native_type(db_entry.data_type)
         # native type of the request
         req_native = ca.native_type(dbr_type)
 
-        data = await run_caget(pv, dbr_type=dbr_type)
+        data = await run_caget(server.backend, pv, dbr_type=dbr_type)
         print('dbr_type', dbr_type, 'data:')
         print(data)
 
@@ -61,9 +63,9 @@ def test_with_caget(curio_server, pv, dbr_type):
 
         # convert from string value to enum if requesting int
         if (db_native == ChannelType.ENUM and
-                not (req_native == ChannelType.STRING
-                     or dbr_type in (ChannelType.CTRL_ENUM,
-                                     ChannelType.GR_ENUM))):
+                not (req_native == ChannelType.STRING or
+                     dbr_type in (ChannelType.CTRL_ENUM,
+                                  ChannelType.GR_ENUM))):
             db_value = db_entry.enum_strings.index(db_value)
         if req_native in (ChannelType.INT, ChannelType.LONG, ChannelType.CHAR):
             if db_native == ChannelType.CHAR:
@@ -111,8 +113,8 @@ def test_with_caget(curio_server, pv, dbr_type):
         # TODO metadata should be cast to requested type as well!
         same_type = (ca.native_type(dbr_type) == db_native)
 
-        if (dbr_type in ca.control_types and same_type
-                and dbr_type != ChannelType.CTRL_ENUM):
+        if (dbr_type in ca.control_types and same_type and
+                dbr_type != ChannelType.CTRL_ENUM):
             for key in ctrl_keys:
                 if (key == 'precision' and
                         ca.native_type(dbr_type) != ChannelType.DOUBLE):
@@ -146,9 +148,7 @@ def test_with_caget(curio_server, pv, dbr_type):
                 ack_severity = getattr(ca._dbr.AlarmSeverity, ack_severity)
                 assert ack_severity == db_entry.alarm.severity_to_acknowledge
 
-    with curio.Kernel() as kernel:
-        kernel.run(server_runner(client))
-
+    server(pvdb=caget_pvdb, client=client)
     print('done')
 
 
@@ -164,17 +164,23 @@ caput_checks = [('int', '1', [1]),
 
 @pytest.mark.parametrize('pv, put_value, check_value', caput_checks)
 # @pytest.mark.parametrize('async_put', [True, False])
-def test_with_caput(curio_server, pv, put_value, check_value, async_put=True):
-    server_runner, prefix, caget_pvdb = curio_server
+def test_with_caput(prefix, pvdb_from_server_example, server, pv, put_value,
+                    check_value, async_put=True):
+
+    caget_pvdb = {prefix + pv_: value
+                  for pv_, value in pvdb_from_server_example.items()
+                  }
     pv = prefix + pv
 
-    async def client():
-        print('* client_test', pv, 'put value', put_value, 'check value',
-              check_value)
+    async def client(*client_args):
+        # args are ignored for curio and trio servers.
+        print('* client put test: {} put value: {} check value: {}'
+              ''.format(pv, put_value, check_value))
+        print('(client args: %s)'.format(client_args))
 
         db_entry = caget_pvdb[pv]
         db_old = db_entry.value
-        data = await run_caput(pv, put_value,
+        data = await run_caput(server.backend, pv, put_value,
                                as_string=isinstance(db_entry, ca.ChannelChar))
         db_new = db_entry.value
 
@@ -199,7 +205,5 @@ def test_with_caput(curio_server, pv, put_value, check_value, async_put=True):
         # check value from database compared to value the test expects
         assert db_new == check_value
 
-    with curio.Kernel() as kernel:
-        kernel.run(server_runner(client))
-
+    server(pvdb=caget_pvdb, client=client)
     print('done')

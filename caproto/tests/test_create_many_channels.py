@@ -1,3 +1,4 @@
+import logging
 import pytest
 import curio
 
@@ -7,8 +8,9 @@ from .conftest import default_teardown_module as teardown_module  # noqa
 from . import conftest
 
 
-@pytest.mark.parametrize('backend', ['curio'])
+@pytest.mark.parametrize('backend', ['curio', 'trio'])
 def test_create_many_channels(backend):
+    logging.getLogger('caproto.{}.client'.format(backend)).setLevel('DEBUG')
     async def client_test(context):
         if context is None:
             context = await conftest.get_curio_context()
@@ -19,6 +21,8 @@ def test_create_many_channels(backend):
 
     if backend == 'curio':
         channels = curio.run(client_test, None)
+    elif backend == 'trio':
+        channels = conftest.run_with_trio_context(client_test)
 
     print('got channels:', channels)
     connected_channels = [ch for ch in channels.values()
@@ -26,7 +30,7 @@ def test_create_many_channels(backend):
     assert len(connected_channels) == len(pvnames)
 
 
-@pytest.mark.parametrize('backend', ['curio'])
+@pytest.mark.parametrize('backend', ['curio', 'trio'])
 def test_create_many_channels_with_bad_pv(backend):
     async def client_test(context):
         if context is None:
@@ -39,6 +43,8 @@ def test_create_many_channels_with_bad_pv(backend):
 
     if backend == 'curio':
         channels = curio.run(client_test, None)
+    elif backend == 'trio':
+        channels = conftest.run_with_trio_context(client_test)
 
     assert 'nonexistent_pv' not in channels
     assert len(channels) == 3

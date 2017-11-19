@@ -18,7 +18,7 @@ def test_sync_repeater(ioc):
 
     async def check_repeater():
         for pv in (ioc.pvs['float'], ioc.pvs['str']):
-            data = await run_caget(pv)
+            data = await run_caget('curio', pv)
             print(data)
 
         udp_sock = ca.bcast_socket()

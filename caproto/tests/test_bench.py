@@ -7,6 +7,7 @@ import curio
 
 import caproto as ca
 from .conftest import default_setup_module, default_teardown_module
+from .conftest import get_curio_context, run_with_trio_context
 from . import _asv_shim
 
 from .conftest import get_curio_context
@@ -321,9 +322,29 @@ def bench_curio_many_connections(pv_names, *, initial_value=None,
     yield curio_client
 
 
+@contextlib.contextmanager
+def bench_trio_many_connections(pv_names, *, initial_value=None,
+                                log_level='DEBUG'):
+    async def test(context):
+        context.log_level = log_level
+        channels = await context.create_many_channels(
+            *pv_names, wait_for_connection=True,
+            move_on_after=10)
+
+        connected_channels = [ch for ch in channels.values()
+                              if ch.channel.states[ca.CLIENT] is ca.CONNECTED]
+        assert len(connected_channels) == len(pv_names)
+
+    def trio_test():
+        run_with_trio_context(test)
+
+    yield trio_test
+    logger.debug('Done')
+
+
 @pytest.mark.parametrize('connection_count', [5, 100, 500])
 @pytest.mark.parametrize('pv_format', ['connections:{}'])
-@pytest.mark.parametrize('backend', ['curio', 'pyepics', 'threading'])
+@pytest.mark.parametrize('backend', ['pyepics', 'curio', 'trio'])
 @pytest.mark.parametrize('log_level', ['INFO'])
 def test_many_connections_same_ioc(benchmark, backend, connection_count,
                                    pv_format, log_level):
@@ -332,6 +353,7 @@ def test_many_connections_same_ioc(benchmark, backend, connection_count,
     context = {'pyepics': bench_pyepics_many_connections,
                'curio': bench_curio_many_connections,
                'threading': bench_threading_many_connections,
+               'trio': bench_trio_many_connections,
                }[backend]
 
     pv_names = [pv_format.format(i) for i in range(connection_count)]
