@@ -303,45 +303,20 @@ def bench_threading_many_connections(pv_names, *, initial_value=None,
 @contextlib.contextmanager
 def bench_curio_many_connections(pv_names, *, initial_value=None,
                                  log_level='DEBUG'):
-    kernel = curio.Kernel()
 
     async def test():
         broadcaster = ca.curio.client.SharedBroadcaster(
             log_level=log_level)
         await broadcaster.register()
         ctx = ca.curio.client.Context(broadcaster, log_level=log_level)
-
-        pvs = {}
-        async with curio.TaskGroup() as connect_task:
-            async with curio.TaskGroup() as search_task:
-                for pvname in pv_names:
-                    await search_task.spawn(ctx.search, pvname)
-
-                while True:
-                    res = await search_task.next_done()
-                    if res is None:
-                        break
-                    pvname = res.result
-                    await connect_task.spawn(ctx.create_channel, pvname)
-
-            while True:
-                res = await connect_task.next_done()
-                if res is None:
-                    break
-                curio_channel = res.result
-                pvname = curio_channel.channel.name
-                pvs[pvname] = curio_channel
-
+        pvs = await ctx.create_many_channels(*pv_names, move_on_after=20)
         assert len(pvs) == len(pv_names)
 
     def curio_client():
-        kernel.run(test())
+        with curio.Kernel() as kernel:
+            kernel.run(test)
 
     yield curio_client
-
-    logger.debug('Shutting down the kernel')
-    kernel.run(shutdown=True)
-    logger.debug('Done')
 
 
 @pytest.mark.parametrize('connection_count', [5, 100, 500])

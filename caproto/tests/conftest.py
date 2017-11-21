@@ -17,6 +17,7 @@ import caproto.curio.client  # noqa
 import caproto.curio.server  # noqa
 import caproto.threading  # noqa
 import caproto.threading.client  # noqa
+
 from caproto.curio.server import find_next_tcp_port
 import caproto.curio.server as server
 
@@ -261,6 +262,13 @@ def curio_server(prefix):
             await server_task.cancel()
 
     return run_server, prefix, caget_pvdb
+
+
+async def get_curio_context(log_level='DEBUG'):
+    broadcaster = caproto.curio.client.SharedBroadcaster(log_level=log_level)
+
+    await broadcaster.register()
+    return caproto.curio.client.Context(broadcaster, log_level=log_level)
 
 
 def pytest_make_parametrize_id(config, val, argname):
