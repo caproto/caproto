@@ -260,16 +260,17 @@ def test_curio_server_example():
 
 
 def test_curio_server_and_thread_client(curio_server):
-    from caproto.threading.client import (SharedBroadcaster, PV,
+    from caproto.threading.client import (SharedBroadcaster,
                                           PVContext)
     from conftest import threaded_in_curio_wrapper
+    curio_server, caget_pvdb = curio_server
 
     @threaded_in_curio_wrapper
     def client_test():
         shared_broadcaster = SharedBroadcaster()
         cntx = PVContext(broadcaster=shared_broadcaster, log_level='DEBUG')
 
-        pv = PV('int', context=cntx)
+        pv = cntx.get_pv('int')
         assert pv.get() == caget_pvdb['int'].value
         print('get', pv.get())
 

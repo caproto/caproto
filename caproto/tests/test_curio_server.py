@@ -6,83 +6,9 @@ import curio
 import curio.subprocess
 
 import caproto as ca
-from caproto.curio.server import find_next_tcp_port
-import caproto.curio.server as server
 
 from caproto import ChannelType
 from epics_test_utils import (run_caget, run_caput)
-
-
-REPEATER_PORT = 5065
-SERVER_HOST = '0.0.0.0'
-
-
-str_alarm_status = ca.ChannelAlarm(
-    status=ca.AlarmStatus.READ,
-    severity=ca.AlarmSeverity.MINOR_ALARM,
-    alarm_string='alarm string',
-)
-
-caget_pvdb = {
-    'pi': ca.ChannelDouble(value=3.14,
-                           lower_disp_limit=3.13,
-                           upper_disp_limit=3.15,
-                           lower_alarm_limit=3.12,
-                           upper_alarm_limit=3.16,
-                           lower_warning_limit=3.11,
-                           upper_warning_limit=3.17,
-                           lower_ctrl_limit=3.10,
-                           upper_ctrl_limit=3.18,
-                           precision=5,
-                           units='doodles',
-                           ),
-    'enum': ca.ChannelEnum(value='b',
-                           enum_strings=['a', 'b', 'c', 'd'],
-                           ),
-    'int': ca.ChannelInteger(value=33,
-                             units='poodles',
-                             lower_disp_limit=33,
-                             upper_disp_limit=35,
-                             lower_alarm_limit=32,
-                             upper_alarm_limit=36,
-                             lower_warning_limit=31,
-                             upper_warning_limit=37,
-                             lower_ctrl_limit=30,
-                             upper_ctrl_limit=38,
-                             ),
-    'char': ca.ChannelChar(value=b'3',
-                           units='poodles',
-                           lower_disp_limit=33,
-                           upper_disp_limit=35,
-                           lower_alarm_limit=32,
-                           upper_alarm_limit=36,
-                           lower_warning_limit=31,
-                           upper_warning_limit=37,
-                           lower_ctrl_limit=30,
-                           upper_ctrl_limit=38,
-                           ),
-    'str': ca.ChannelString(value='hello',
-                            alarm=str_alarm_status,
-                            reported_record_type='caproto'),
-    }
-
-
-@pytest.fixture(scope='function')
-def curio_server():
-    async def run_server():
-        port = find_next_tcp_port(host=SERVER_HOST)
-        print('Server will be on', (SERVER_HOST, port))
-        ctx = server.Context(SERVER_HOST, port, caget_pvdb, log_level='DEBUG')
-        try:
-            await ctx.run()
-        except Exception as ex:
-            print('Server failed', ex)
-            raise
-        finally:
-            print('Server exiting')
-
-    return run_server
-
 
 caget_checks = sum(
     ([(pv, dtype),
@@ -116,6 +42,7 @@ def test_with_caget(curio_server, pv, dbr_type):
                  'upper_alarm_limit', 'lower_warning_limit',
                  'upper_warning_limit', 'lower_ctrl_limit',
                  'upper_ctrl_limit', 'precision')
+    curio_server, caget_pvdb = curio_server
 
     async def client():
         print('* client_test', pv, dbr_type)
@@ -244,6 +171,8 @@ caput_checks = [('int', '1', [1]),
 @pytest.mark.parametrize('pv, put_value, check_value', caput_checks)
 # @pytest.mark.parametrize('async_put', [True, False])
 def test_with_caput(curio_server, pv, put_value, check_value, async_put=True):
+    curio_server, caget_pvdb = curio_server
+
     async def client():
         print('* client_test', pv, 'put value', put_value, 'check value',
               check_value)
