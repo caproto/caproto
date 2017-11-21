@@ -13,7 +13,6 @@ import array
 import fcntl
 import errno
 import termios
-import struct
 import inspect
 
 from collections import Iterable
