@@ -9,6 +9,8 @@ import caproto as ca
 from .conftest import default_setup_module, default_teardown_module
 from . import _asv_shim
 
+from .conftest import get_curio_context
+
 
 ioc_handler = None
 logger = logging.getLogger(__name__)
@@ -110,11 +112,7 @@ def bench_curio_get_speed(pvname, *, initial_value=None, log_level='DEBUG'):
     kernel = curio.Kernel()
 
     async def curio_setup():
-        logger.debug('Registering...')
-        broadcaster = ca.curio.client.SharedBroadcaster(log_level=log_level)
-        await broadcaster.register()
-        ctx = ca.curio.client.Context(broadcaster, log_level=log_level)
-        logger.debug('Registered')
+        ctx = await get_curio_context(log_level=log_level)
 
         logger.debug('Searching for %s...', pvname)
         await ctx.search(pvname)
@@ -203,11 +201,7 @@ def bench_curio_put_speed(pvname, *, value, log_level='DEBUG'):
     kernel = curio.Kernel()
 
     async def curio_setup():
-        logger.debug('Registering...')
-        broadcaster = ca.curio.client.SharedBroadcaster(log_level=log_level)
-        await broadcaster.register()
-        ctx = ca.curio.client.Context(broadcaster, log_level=log_level)
-        logger.debug('Registered')
+        ctx = await get_curio_context(log_level=log_level)
 
         logger.debug('Searching for %s...', pvname)
         await ctx.search(pvname)
@@ -311,12 +305,14 @@ def bench_curio_many_connections(pv_names, *, initial_value=None,
                                  log_level='DEBUG'):
 
     async def test():
-        broadcaster = ca.curio.client.SharedBroadcaster(
-            log_level=log_level)
-        await broadcaster.register()
-        ctx = ca.curio.client.Context(broadcaster, log_level=log_level)
-        pvs = await ctx.create_many_channels(*pv_names, move_on_after=20)
-        assert len(pvs) == len(pv_names)
+        ctx = await get_curio_context(log_level=log_level)
+        channels = await ctx.create_many_channels(*pv_names,
+                                                  wait_for_connection=True,
+                                                  move_on_after=20)
+
+        connected_channels = [ch for ch in channels.values()
+                              if ch.channel.states[ca.CLIENT] is ca.CONNECTED]
+        assert len(connected_channels) == len(pv_names)
 
     def curio_client():
         with curio.Kernel() as kernel:

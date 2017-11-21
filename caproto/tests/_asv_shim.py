@@ -130,7 +130,7 @@ def asv_bench_outline(name, md_list):
         param_names=md['param_names'],
         params=md['all_params'],
         pretty_name=name,
-        repeat=md['pytest_result']['stats']['iterations'],  # ?
+        repeat=1,
         # timeout=60.0,
         type='time',
         unit='seconds',
