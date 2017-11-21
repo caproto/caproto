@@ -390,10 +390,6 @@ class Context:
                 circuit.send(cachan.version(),
                              cachan.host_name(),
                              cachan.client_name())
-                # NOTE: starting the response command evaluation thread here,
-                # after having sent the VersionRequest, fixes a race condition
-                # with handling of rsrv sending VersionResponse upon connection
-                circuit.command_thread.start()
         cond = circuit.new_command_cond
         with cond:
             done = cond.wait_for(lambda: circuit.connected, timeout)
@@ -434,8 +430,7 @@ class Context:
 
 class VirtualCircuit:
     __slots__ = ('circuit', 'channels', 'ioids', 'subscriptionids',
-                 'new_command_cond', 'socket', 'command_thread',
-                 'command_queue', 'selector',
+                 'new_command_cond', 'socket', 'selector',
                  '__weakref__')
 
     def __init__(self, circuit, selector):
@@ -445,9 +440,7 @@ class VirtualCircuit:
         self.subscriptionids = {}  # map subscriptionid to Channel
         self.new_command_cond = threading.Condition()
         self.socket = None
-        self.command_queue = queue.Queue()
-        self.command_thread = threading.Thread(target=self.command_thread_loop,
-                                               daemon=True)
+
         self.selector = selector
 
     @property
@@ -487,16 +480,9 @@ class VirtualCircuit:
         commands, num_bytes_needed = self.circuit.recv(bytes_recv)
 
         for c in commands:
-            self.command_queue.put(c)
-        return num_bytes_needed
+            self._process_command(c)
 
-    def command_thread_loop(self):
-        while True:
-            command = self.command_queue.get()
-            try:
-                self._process_command(command)
-            except ca.CaprotoError:
-                break
+        return num_bytes_needed
 
     def _process_command(self, command):
             try:
@@ -512,18 +498,19 @@ class VirtualCircuit:
                     return
                 else:
                     logger.error('Invalid command %s for VirtualCircuit %s in '
-                                 'state %s', command, self, self.circuit.states,
+                                 'state %s', command, self,
+                                 self.circuit.states,
                                  exc_info=ex)
                     # circuit exceptions are fatal; exit the loop
-                    raise
+                    self.disconnect()
+                    return
 
             with self.new_command_cond:
                 if command is ca.DISCONNECTED:
-                    print('disconnected!')
                     # if we are here something else has triggered the
                     # disconnect just kill this loop and let other
                     # parts of the code worry about cleanup
-                    raise ca.CaprotoError()
+                    pass
                 elif isinstance(command, ca.ReadNotifyResponse):
                     chan = self.ioids.pop(command.ioid)
                     chan.process_read_notify(command)
@@ -553,8 +540,6 @@ class VirtualCircuit:
             except OSError:
                 pass
             self.socket = None
-        if wait and self.command_thread is not threading.current_thread():
-            self.command_thread.join()
 
         self.channels.clear()
         self.ioids.clear()

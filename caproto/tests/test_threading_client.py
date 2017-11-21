@@ -63,16 +63,11 @@ def test_context_disconnect(cntx):
 
     cntx.disconnect()
 
-    ct = chan.circuit.command_thread
-    print('joining command thread', end='...')
     sys.stdout.flush()
-    ct.join()
-    print('joined')
 
     assert not chan.connected
     assert not chan.circuit.connected
     assert not cntx.circuits
-    assert not ct.is_alive()
 
     with pytest.raises(ca.LocalProtocolError):
         chan.read()
