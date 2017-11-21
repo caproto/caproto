@@ -494,6 +494,12 @@ class VirtualCircuit:
         while True:
             command = self.command_queue.get()
             try:
+                self._process_command(command)
+            except ca.CaprotoError:
+                break
+
+    def _process_command(self, command):
+            try:
                 self.circuit.process_command(command)
             except ca.CaprotoError as ex:
                 if hasattr(ex, 'channel'):
@@ -503,13 +509,13 @@ class VirtualCircuit:
                                    channel.states,
                                    exc_info=ex)
                     # channel exceptions are not fatal
-                    continue
+                    return
                 else:
                     logger.error('Invalid command %s for VirtualCircuit %s in '
                                  'state %s', command, self, self.circuit.states,
                                  exc_info=ex)
                     # circuit exceptions are fatal; exit the loop
-                    break
+                    raise
 
             with self.new_command_cond:
                 if command is ca.DISCONNECTED:
@@ -517,7 +523,7 @@ class VirtualCircuit:
                     # if we are here something else has triggered the
                     # disconnect just kill this loop and let other
                     # parts of the code worry about cleanup
-                    break
+                    raise ca.CaprotoError()
                 elif isinstance(command, ca.ReadNotifyResponse):
                     chan = self.ioids.pop(command.ioid)
                     chan.process_read_notify(command)
