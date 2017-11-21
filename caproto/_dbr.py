@@ -242,7 +242,7 @@ def native_to_builtin(value, native_type, data_count):
         return numpy.frombuffer(value, dtype=dt)
     else:
         # TODO
-        return  # array.array()
+        raise NotImplemented("the non-numpy version has not been written yet")
 
 
 class DbrTypeBase(ctypes.BigEndianStructure):
