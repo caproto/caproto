@@ -35,7 +35,7 @@ class Broadcaster:
         else:
             self.their_role = CLIENT
         self.protocol_version = protocol_version
-        self.searches = {}  # map search id (cid) to name
+        self.unanswered_searches = {}  # map search id (cid) to name
         # Unlike VirtualCircuit and Channel, there is very little state to
         # track for the Broadcaster. We don't need a full state machine, just
         # one flag to check whether we have yet registered with a repeater.
@@ -131,12 +131,14 @@ class Broadcaster:
                 err = get_exception(self.our_role, command)
                 raise err("A broadcasted SearchResponse must be preceded by a "
                           "VersionResponse in the same datagram.")
-            self.searches[command.cid] = command.name
+            self.unanswered_searches[command.cid] = command.name
         elif isinstance(command, SearchResponse):
             if VersionResponse not in map(type, history):
                 err = get_exception(self.our_role, command)
                 raise err("A broadcasted SearchResponse must be preceded by a "
                           "VersionResponse in the same datagram.")
+            self.unanswered_searches.pop(command.cid, None)
+
         history.append(command)
 
     ### CONVENIENCE METHODS ###
@@ -145,7 +147,7 @@ class Broadcaster:
         # Return the next sequential unused id. Wrap back to 0 on overflow.
         while True:
             i = next(self._search_id_counter)
-            if i in self.searches:
+            if i in self.unanswered_searches:
                 continue
             if i == MAX_ID:
                 self._search_id_counter = itertools.count(0)
