@@ -526,8 +526,10 @@ class Context:
     async def run(self):
         try:
             async with curio.TaskGroup() as g:
-                await g.spawn(curio.tcp_server,
-                              '', self.port, self.tcp_handler)
+                for addr, port in ca.get_server_address_list(self.port):
+                    logger.debug('Listening on %s:%d', addr, port)
+                    await g.spawn(curio.tcp_server,
+                                  addr, port, self.tcp_handler)
                 await g.spawn(self.broadcaster_udp_server_loop)
                 await g.spawn(self.broadcaster_queue_loop)
                 await g.spawn(self.subscription_queue_loop)
