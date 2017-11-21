@@ -531,11 +531,12 @@ class VirtualCircuit:
 
         with self.new_command_cond:
             self.circuit.disconnect()
-        if self.socket is not None:
-            self.selector.remove_socket(self.socket)
+        sock = self.socket
+        if sock is not None:
+            self.selector.remove_socket(sock)
             try:
-                self.socket.shutdown(socket.SHUT_WR)
-                self.socket.close()
+                sock.shutdown(socket.SHUT_WR)
+                sock.close()
             except OSError:
                 pass
             self.socket = None
