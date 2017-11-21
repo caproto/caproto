@@ -466,7 +466,10 @@ class VirtualCircuit:
             gen.send(None)
 
             while buffers_to_send:
-                sent = self.socket.sendmsg(buffers_to_send)
+                try:
+                    sent = self.socket.sendmsg(buffers_to_send)
+                except BlockingIOError:
+                    continue
                 try:
                     buffers_to_send = gen.send(sent)
                 except StopIteration:
