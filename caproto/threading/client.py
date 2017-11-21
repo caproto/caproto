@@ -508,8 +508,7 @@ class VirtualCircuit:
             with self.new_command_cond:
                 if command is ca.DISCONNECTED:
                     # if we are here something else has triggered the
-                    # disconnect just kill this loop and let other
-                    # parts of the code worry about cleanup
+                    # disconnect.
                     pass
                 elif isinstance(command, ca.ReadNotifyResponse):
                     chan = self.ioids.pop(command.ioid)
