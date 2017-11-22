@@ -23,7 +23,7 @@ from ._commands import (AccessRightsResponse, CreateChFailResponse,
                         read_from_bytestream,)
 from ._state import (ChannelState, CircuitState, get_exception)
 from ._utils import (CLIENT, SERVER, NEED_DATA, DISCONNECTED, CaprotoKeyError,
-                     CaprotoValueError, CaprotoRuntimeError,
+                     CaprotoValueError, CaprotoRuntimeError, CaprotoError,
                      )
 from ._dbr import (SubscriptionType, )
 from ._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
@@ -412,7 +412,12 @@ class _BaseChannel:
         transitions = []
         for role in (self.circuit.our_role, self.circuit.their_role):
             initial_state = self.states[role]
-            self.states.process_command_type(role, type(command))
+            try:
+                self.states.process_command_type(role, type(command))
+            except CaprotoError as ex:
+                ex.channel = self
+                raise
+
             new_state = self.states[role]
             # Assemble arguments needed by state_changed, to be called later.
             if initial_state is not new_state:

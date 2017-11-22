@@ -8,10 +8,24 @@ import socket
 import threading
 import time
 import weakref
+import selectors
+import array
+import fcntl
+import errno
+import termios
+import inspect
 
 from collections import Iterable
 
 import caproto as ca
+
+
+class ThreadingClientException(Exception):
+    ...
+
+
+class DisconnectedError(ThreadingClientException):
+    ...
 
 
 AUTOMONITOR_MAXLENGTH = 65536
@@ -22,49 +36,121 @@ STR_ENC = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
 logger = logging.getLogger(__name__)
 
 
-class SocketThread:
-    def __init__(self, socket, target_obj):
-        self.socket = socket
-        if socket.timeout is None:
-            socket.settimeout(.1)
-        self.target_obj = weakref.ref(target_obj)
+class SelectorThread:
+    def __init__(self):
+        self._running = False
+        self.selector = selectors.DefaultSelector()
+
+        self._socket_map_lock = threading.RLock()
+        self.objects = weakref.WeakValueDictionary()
+        self.id_to_socket = {}
+        self.socket_to_id = {}
+
+        self._register_sockets = []
+        self._unregister_sockets = []
+        self._object_id = 0
+
+    @property
+    def running(self):
+        '''Selector thread is running'''
+        return self._running
+
+    def stop(self):
+        self._running = False
+
+    def start(self):
+        if self._running:
+            return
+
+        self._running = True
         self.thread = threading.Thread(target=self, daemon=True)
         self.thread.start()
-        self.poison_ev = threading.Event()
+
+    def add_socket(self, socket, target_obj):
+        with self._socket_map_lock:
+            if socket in self.socket_to_id:
+                raise ValueError('Socket already added')
+
+            socket.setblocking(False)
+
+            # assumption: only one socket per object
+            self._object_id += 1
+            self.objects[self._object_id] = target_obj
+            self.id_to_socket[self._object_id] = socket
+            self.socket_to_id[socket] = self._object_id
+            weakref.finalize(target_obj,
+                             lambda obj_id=self._object_id:
+                             self._object_removed(obj_id))
+            self._register_sockets.append(socket)
+
+    def remove_socket(self, sock):
+        with self._socket_map_lock:
+            if sock not in self.socket_to_id:
+                return
+
+            obj_id = self.socket_to_id.pop(sock)
+            del self.id_to_socket[obj_id]
+            obj = self.objects.pop(obj_id, None)
+            if obj is not None:
+                obj.received(b'', None)
+            self._unregister_sockets.append(sock)
+
+        if not self.socket_to_id:
+            self.stop()
+
+    def _object_removed(self, obj_id):
+        with self._socket_map_lock:
+            if obj_id in self.id_to_socket:
+                sock = self.id_to_socket.pop(obj_id)
+                del self.socket_to_id[sock]
+                self._unregister_sockets.append(sock)
 
     def __call__(self):
-        num_bytes_needed = 0
-        while True:
-            if num_bytes_needed is None:
-                print(self.target_obj())
-            try:
-                bytes_recv, address = self.socket.recvfrom(
-                    max(4096, num_bytes_needed))
-            except socket.timeout:
-                if self.poison_ev.isSet():
-                    bytes_recv, address = b'', None
-                else:
+        '''Selector poll loop'''
+        avail_buf = array.array('i', [0])
+        while self._running:
+            with self._socket_map_lock:
+                for sock in self._unregister_sockets:
+                    self.selector.unregister(sock)
+                self._unregister_sockets.clear()
+
+                for sock in self._register_sockets:
+                    self.selector.register(sock, selectors.EVENT_READ)
+                self._register_sockets.clear()
+
+            events = self.selector.select(timeout=0.1)
+            with self._socket_map_lock:
+                if self._unregister_sockets or self._register_sockets:
                     continue
-            except OSError:
-                bytes_recv, address = b'', None
 
-            target = self.target_obj()
-            if target is None:
-                break
+                ready_ids = [self.socket_to_id[key.fileobj]
+                             for key, mask in events]
+                ready_objs = [(self.objects[obj_id], self.id_to_socket[obj_id])
+                              for obj_id in ready_ids]
 
-            num_bytes_needed = target.received(bytes_recv, address)
-            if not len(bytes_recv):
-                target.disconnect()
-                # this is important to not keep a hard-ref to the target
-                target = None
-                return
+            for obj, sock in ready_objs:
+                # TODO: consider thread pool for recv and command_loop
+
+                if fcntl.ioctl(sock, termios.FIONREAD, avail_buf) < 0:
+                    continue
+
+                bytes_available = avail_buf[0]
+
+                try:
+                    bytes_recv, address = sock.recvfrom(max((4096,
+                                                             bytes_available)))
+                except OSError as ex:
+                    if ex.errno == errno.EAGAIN:
+                        continue
+                    bytes_recv, address = b'', None
+
+                obj.received(bytes_recv, address)
 
 
 class SharedBroadcaster:
     def __init__(self, *, log_level='ERROR'):
         self.log_level = log_level
         self.udp_sock = None
-        self.sock_thread = None
         self._search_lock = threading.RLock()
 
         self.search_results = {}  # map name to (time, address)
@@ -76,14 +162,19 @@ class SharedBroadcaster:
         self.broadcaster.log.setLevel(self.log_level)
         self.command_bundle_queue = queue.Queue()
         self.command_cond = threading.Condition()
+
+        self.selector = SelectorThread()
         self.command_thread = threading.Thread(target=self.command_loop,
                                                daemon=True)
         self.command_thread.start()
 
     def __create_sock(self):
         # UDP socket broadcasting to CA servers
+        if self.udp_sock is not None:
+            self.selector.remove_socket(self.udp_sock)
+        self.selector.start()
         self.udp_sock = ca.bcast_socket()
-        self.sock_thread = SocketThread(self.udp_sock, self)
+        self.selector.add_socket(self.udp_sock, self)
 
     def add_listener(self, listener):
         self.listeners.add(listener)
@@ -101,33 +192,48 @@ class SharedBroadcaster:
         if not self.listeners:
             self.disconnect()
 
-    def disconnect(self, *, wait=True):
-        th = []
-
+    def disconnect(self, *, wait=True, timeout=2):
         if self.udp_sock is not None:
-            self.sock_thread.poison_ev.set()
-            self.udp_sock.close()
-            th.append(self.sock_thread.thread)
+            self.selector.remove_socket(self.udp_sock)
 
         with self._search_lock:
             self.search_results.clear()
         self.udp_sock = None
         self.broadcaster.disconnect()
 
-        if wait:
-            cur_thread = threading.current_thread()
-            for t in th:
-                if t is not cur_thread:
-                    t.join()
+        # if wait and self.command_thread is not threading.current_thread():
+        #     self.command_thread.join()
 
     def send(self, port, *commands):
         """
-        Process a command and tranport it over the UDP socket.
+        Process a command and transport it over the UDP socket.
         """
         with self.command_cond:
             bytes_to_send = self.broadcaster.send(*commands)
             for host in ca.get_address_list():
-                self.udp_sock.sendto(bytes_to_send, (host, port))
+                if ':' in host:
+                    host, _, specified_port = host.partition(':')
+                    is_register = isinstance(commands[0],
+                                             ca.RepeaterRegisterRequest)
+                    if not self.registered and is_register:
+                        logger.debug('Specific IOC host/port designated in '
+                                     'address list: %s:%s.  Repeater '
+                                     'registration requirement ignored', host,
+                                     specified_port)
+                        with self.command_cond:
+                            # TODO how does this work with multiple addresses
+                            # listed?
+                            response = ca.RepeaterConfirmResponse(
+                                repeater_address='127.0.0.1')
+                            response.sender_address = ('127.0.0.1',
+                                                       ca.EPICS_CA1_PORT)
+                            self.command_bundle_queue.put([response])
+                            self.command_cond.notify_all()
+                        continue
+                    self.udp_sock.sendto(bytes_to_send, (host,
+                                                         int(specified_port)))
+                else:
+                    self.udp_sock.sendto(bytes_to_send, (host, port))
 
     def register(self, *, wait=True, timeout=0.5, attempts=4):
         "Register this client with the CA Repeater."
@@ -189,7 +295,12 @@ class SharedBroadcaster:
     def command_loop(self):
         while True:
             commands = self.command_bundle_queue.get()
-            self.broadcaster.process_commands(commands)
+            try:
+                self.broadcaster.process_commands(commands)
+            except ca.CaprotoError as ex:
+                logger.warning('Broadcaster command error', exc_info=ex)
+                continue
+
             with self.command_cond:
                 for command in commands:
                     if isinstance(command, ca.VersionResponse):
@@ -222,12 +333,14 @@ class SharedBroadcaster:
 
 class Context:
     "Wraps a Broadcaster, and cache of VirtualCircuits."
-    __slots__ = ('broadcaster', 'circuits', 'log_level', '__weakref__')
+    __slots__ = ('broadcaster', 'circuits', 'log_level', 'selector',
+                 '__weakref__')
 
     def __init__(self, broadcaster, *, log_level='ERROR'):
         self.log_level = log_level
         self.broadcaster = broadcaster
         self.circuits = {}  # map (address, priority) to VirtualCircuit
+        self.selector = None
 
     def register(self):
         "Register this client with the CA Repeater."
@@ -244,12 +357,18 @@ class Context:
 
         Make a new one if necessary.
         """
+        if self.selector is None:
+            self.selector = SelectorThread()
+
+        self.selector.start()
+
         circuit = self.circuits.get((address, priority), None)
         if circuit is None or not circuit.connected:
             circuit = VirtualCircuit(ca.VirtualCircuit(our_role=ca.CLIENT,
                                                        address=address,
                                                        priority=priority,
-                                                       ))
+                                                       ),
+                                     selector=self.selector)
             circuit.circuit.log.setLevel(self.log_level)
             self.circuits[(address, priority)] = circuit
         return circuit
@@ -271,10 +390,6 @@ class Context:
                 circuit.send(cachan.version(),
                              cachan.host_name(),
                              cachan.client_name())
-                # NOTE: starting the response command evaluation thread here,
-                # after having sent the VersionRequest, fixes a race condition
-                # with handling of rsrv sending VersionResponse upon connection
-                circuit.command_thread.start()
         cond = circuit.new_command_cond
         with cond:
             done = cond.wait_for(lambda: circuit.connected, timeout)
@@ -291,33 +406,23 @@ class Context:
 
         return chan
 
-    def disconnect(self):
-        th = []
+    def disconnect(self, *, wait=True, timeout=2):
+        try:
+            # disconnect any circuits we have
+            for circ in list(self.circuits.values()):
+                if circ.connected:
+                    circ.disconnect(wait=wait, timeout=timeout)
+        finally:
+            # clear any state about circuits and search results
+            self.circuits.clear()
 
-        # disconnect any circuits we have
-        for circ in list(self.circuits.values()):
-            if circ.connected:
-                st = circ.sock_thread
-                if st is not None:
-                    th.append(st.thread)
-                circ.disconnect()
-
-        # clear any state about circuits and search results
-        self.circuits.clear()
-
-        cur_thread = threading.current_thread()
-        # wait for all of the socket threads to stop
-        for t in th:
-            if t is not cur_thread:
-                t.join()
-
-        # disconnect the underlying state machine
-        self.broadcaster.remove_listener(self)
+            # disconnect the underlying state machine
+            self.broadcaster.remove_listener(self)
 
     def __del__(self):
         try:
-            self.disconnect()
-        except AttributeError:
+            self.disconnect(wait=False)
+        except (KeyError, AttributeError):
             pass
             # clean-up on deletion is best effort...
             # TODO tacaswell
@@ -325,21 +430,18 @@ class Context:
 
 class VirtualCircuit:
     __slots__ = ('circuit', 'channels', 'ioids', 'subscriptionids',
-                 'new_command_cond', 'socket', 'sock_thread',
-                 'command_thread', 'command_queue',
+                 'new_command_cond', 'socket', 'selector',
                  '__weakref__')
 
-    def __init__(self, circuit):
+    def __init__(self, circuit, selector):
         self.circuit = circuit  # a caproto.VirtualCircuit
         self.channels = {}  # map cid to Channel
         self.ioids = {}  # map ioid to Channel
         self.subscriptionids = {}  # map subscriptionid to Channel
-        self.new_command_cond = threading.Condition()  # ConditionType
+        self.new_command_cond = threading.Condition()
         self.socket = None
-        self.sock_thread = None
-        self.command_queue = queue.Queue()
-        self.command_thread = threading.Thread(target=self.command_thread_loop,
-                                               daemon=True)
+
+        self.selector = selector
 
     @property
     def connected(self):
@@ -347,10 +449,11 @@ class VirtualCircuit:
             return self.circuit.states[ca.CLIENT] is ca.CONNECTED
 
     def create_connection(self):
-        if self.sock_thread is not None:
-            raise RuntimeError('trying to reuse a VC')
+        # TODO check removed
+        # if self.sock_thread is not None:
+        #     raise RuntimeError('trying to reuse a VC')
         self.socket = socket.create_connection(self.circuit.address)
-        self.sock_thread = SocketThread(self.socket, self)
+        self.selector.add_socket(self.socket, self)
 
     def send(self, *commands):
         with self.new_command_cond:
@@ -363,7 +466,10 @@ class VirtualCircuit:
             gen.send(None)
 
             while buffers_to_send:
-                sent = self.socket.sendmsg(buffers_to_send)
+                try:
+                    sent = self.socket.sendmsg(buffers_to_send)
+                except BlockingIOError:
+                    continue
                 try:
                     buffers_to_send = gen.send(sent)
                 except StopIteration:
@@ -377,21 +483,36 @@ class VirtualCircuit:
         commands, num_bytes_needed = self.circuit.recv(bytes_recv)
 
         for c in commands:
-            self.command_queue.put(c)
+            self._process_command(c)
+
         return num_bytes_needed
 
-    def command_thread_loop(self):
-        while True:
-            command = self.command_queue.get()
-            self.circuit.process_command(command)
+    def _process_command(self, command):
+            try:
+                self.circuit.process_command(command)
+            except ca.CaprotoError as ex:
+                if hasattr(ex, 'channel'):
+                    channel = ex.channel
+                    logger.warning('Invalid command %s for Channel %s in '
+                                   'state %s', command, channel,
+                                   channel.states,
+                                   exc_info=ex)
+                    # channel exceptions are not fatal
+                    return
+                else:
+                    logger.error('Invalid command %s for VirtualCircuit %s in '
+                                 'state %s', command, self,
+                                 self.circuit.states,
+                                 exc_info=ex)
+                    # circuit exceptions are fatal; exit the loop
+                    self.disconnect()
+                    return
 
             with self.new_command_cond:
                 if command is ca.DISCONNECTED:
-                    print('disconnected!')
                     # if we are here something else has triggered the
-                    # disconnect just kill this loop and let other
-                    # parts of the code worry about cleanup
-                    break
+                    # disconnect.
+                    pass
                 elif isinstance(command, ca.ReadNotifyResponse):
                     chan = self.ioids.pop(command.ioid)
                     chan.process_read_notify(command)
@@ -406,30 +527,25 @@ class VirtualCircuit:
 
                 self.new_command_cond.notify_all()
 
-    def disconnect(self, *, wait=True):
+    def disconnect(self, *, wait=True, timeout=2.0):
         for cid, ch in list(self.channels.items()):
-            ch.disconnect()
+            ch.disconnect(wait=wait, timeout=timeout)
             self.channels.pop(cid)
 
         with self.new_command_cond:
             self.circuit.disconnect()
-        threads = []
-        if self.sock_thread is not None:
-            th = self.sock_thread.thread
-            self.sock_thread.poison_ev.set()
-            threads.append(th)
-        if self.command_thread is not None:
-            threads.append(self.command_thread)
-        if wait:
-            cur_thread = threading.current_thread()
-            for th in threads:
-                if th is not cur_thread:
-                    th.join()
+        sock = self.socket
+        if sock is not None:
+            self.selector.remove_socket(sock)
+            try:
+                sock.shutdown(socket.SHUT_WR)
+                sock.close()
+            except OSError:
+                pass
+            self.socket = None
 
         self.channels.clear()
         self.ioids.clear()
-        self.socket = None
-        self.sock_thread = None
 
     def __del__(self):
         try:
@@ -467,14 +583,22 @@ class Channel:
         needs to do CPU-intensive or I/O-related work, it should execute that
         work in a separate thread of process.
         """
-        self._callback = func
+        if inspect.ismethod(func):
+            self._callback = weakref.WeakMethod(func, self._callback_cleared)
+        else:
+            self._callback = weakref.ref(func, self._callback_cleared)
+
+    def _callback_cleared(self, ref):
+        self._callback = None
 
     def process_subscription(self, event_add_command):
         if self._callback is None:
             return
-        else:
+
+        user_callback = self._callback()
+        if user_callback is not None:
             try:
-                return self._callback(event_add_command)
+                user_callback(event_add_command)
             except Exception as ex:
                 print(ex)
 
@@ -916,7 +1040,7 @@ class PV:
     def get_ctrlvars(self, timeout=5, warn=True):
         "get control values for variable"
         dtype = ca.promote_type(self.type, use_ctrl=True)
-        command = self.chid.read(data_type=dtype)
+        command = self.chid.read(data_type=dtype, timeout=timeout)
         info = self._parse_dbr_metadata(command.metadata)
         info['value'] = command.data
         self._args.update(**info)
@@ -926,7 +1050,7 @@ class PV:
     def get_timevars(self, timeout=5, warn=True):
         "get time values for variable"
         dtype = ca.promote_type(self.type, use_time=True)
-        command = self.chid.read(data_type=dtype)
+        command = self.chid.read(data_type=dtype, timeout=timeout)
         info = self._parse_dbr_metadata(command.metadata)
         info['value'] = command.data
         self._args.update(**info)
@@ -1282,7 +1406,7 @@ class PV:
         "wrapper for property retrieval"
         if self._args['value'] is None:
             self.get()
-        if self._args[arg] is None:
+        if self._args[arg] is None and self.connected:
             if arg in ('status', 'severity', 'timestamp',
                        'posixseconds', 'nanoseconds'):
                 self.get_timevars(timeout=1, warn=False)
@@ -1311,7 +1435,8 @@ class PV:
             self.chid.disconnect()
 
     def __del__(self):
-        self.disconnect()
+        if self.connected:
+            self.chid.disconnect(wait=False)
 
 
 _dflt_context = None
@@ -1382,6 +1507,6 @@ def cainfo(pvname, print_out=True):
         thispv.get()
         thispv.get_ctrlvars()
         if print_out:
-            ca.write(thispv.info)
+            print(thispv.info)
         else:
             return thispv.info

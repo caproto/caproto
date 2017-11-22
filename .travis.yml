@@ -54,11 +54,11 @@ install:
 script:
   - caget Py:ao1 sim:mtr1
   - pip install -r test-requirements.txt
-  - coverage run run_tests.py -v tests/ --benchmark-disable
+  - coverage run run_tests.py -v --benchmark-disable
   - coverage report -m
 
   - export ASV_ENV_NAME=${TRAVIS_PYTHON_VERSION}_${BASE}
-  - py.test -v tests/ --benchmark-only --benchmark-json=pytest_bench.json --benchmark-columns=mean,median,rounds,iterations -k bench
+  - py.test -v --benchmark-only --benchmark-json=pytest_bench.json --benchmark-columns=mean,median,rounds,iterations -k bench
   # deploy asv results here?
   
   - set -e

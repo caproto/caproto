@@ -137,12 +137,8 @@ class Broadcaster:
                 err = get_exception(self.our_role, command)
                 raise err("A broadcasted SearchResponse must be preceded by a "
                           "VersionResponse in the same datagram.")
-            try:
-                self.unanswered_searches.pop(command.cid)
-            except KeyError:
-                err = get_exception(self.our_role, command)
-                raise err("No SearchRequest we have seen has a cid matching "
-                          "this response: {!r}".format(command))
+            self.unanswered_searches.pop(command.cid, None)
+
         history.append(command)
 
     ### CONVENIENCE METHODS ###

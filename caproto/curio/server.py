@@ -360,10 +360,13 @@ class Context:
             matching_subs = subs  # [sub for sub in subs if sub.mask & mask]
             for sub in matching_subs:
                 chan = sub.channel
+                # if the subscription has a non-zero value respect it,
+                # else default to the full length of the data
+                data_count = sub.data_count or len(values)
                 command = chan.subscribe(data=values,
                                          metadata=metadata,
                                          data_type=sub.data_type,
-                                         data_count=sub.data_count,
+                                         data_count=data_count,
                                          subscriptionid=sub.subscriptionid,
                                          status_code=1)
                 await sub.circuit.send(command)

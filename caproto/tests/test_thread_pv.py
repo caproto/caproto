@@ -197,8 +197,10 @@ class PV_Tests(unittest.TestCase):
         write('Simple Test of caget() function\n')
         pvs = (pvnames.double_pv, pvnames.enum_pv, pvnames.str_pv)
         for p in pvs:
-            val = cainfo(p, print_out=False)
-            self.assertIsNot(val, None)
+            for print_out in (True, False):
+                val = cainfo(p, print_out=print_out)
+                if not print_out:
+                    self.assertIsNot(val, None)
 
     def test_get1(self):
         write('Simple Test: test value and char_value on an integer\n')
