@@ -644,7 +644,9 @@ class Channel:
             raise TimeoutError("Server at {} did not respond to attempt "
                                "to create channel named {} within {}-second "
                                "timeout."
-                               "".format(address, cachan.name, timeout))
+                               "".format(self.circuit.address,
+                                         self.channel.name,
+                                         timeout))
 
     def disconnect(self, *, wait=True, timeout=2):
         "Disconnect this Channel."
@@ -664,9 +666,10 @@ class Channel:
                 done = cond.wait_for(is_closed, timeout)
             if not done:
                 raise TimeoutError("Server at {} did not respond to attempt "
-                                   "to close channel named {} within {}-second "
-                                   "timeout."
-                                   "".format(address, self.name, timeout))
+                                   "to close channel named {} within {}-second"
+                                   " timeout."
+                                   "".format(self.circuit.address, self.name,
+                                             timeout))
 
     def read(self, *args, timeout=2, **kwargs):
         """Request a fresh reading, wait for it, return it and stash it.
