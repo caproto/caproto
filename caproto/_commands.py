@@ -238,7 +238,11 @@ def data_payload(data, metadata, data_type, data_count):
         data_payload = data
     elif USE_NUMPY and isinstance(data, np.ndarray):
         # Make big-endian.
-        data_payload = data.astype(data.dtype.newbyteorder('>'))
+        assert data.ndim == 1
+        if data.dtype.byteorder == '>':
+            data_payload = data.data
+        else:
+            data_payload = data.byteswap().data
     elif isinstance(data, collections.Iterable):
         if ntype == ChannelType.STRING:
             data_payload = b''.join(d[:39].ljust(40, b'\0') for d in data)

@@ -1,3 +1,4 @@
+import array
 import pytest
 import time
 import logging
@@ -251,6 +252,37 @@ def test_waveform_put(benchmark, waveform_size, backend, log_level):
                }[backend]
 
     value = list(range(waveform_size))
+    with context(pvname, value=value, log_level=log_level) as bench_fcn:
+        benchmark(bench_fcn)
+
+
+@pytest.mark.parametrize('waveform_size', [1000000])
+@pytest.mark.parametrize('backend', ['threading'])
+@pytest.mark.parametrize('input_type', ['numpy<', 'numpy>', 'array>', 'list'])
+@pytest.mark.parametrize('log_level', ['INFO'])
+def test_waveform_put_input_types(benchmark, waveform_size, backend,
+                                  input_type, log_level):
+    pvname = 'wfioc:wf{}'.format(waveform_size)
+    ca.benchmarking.set_logging_level(logging.DEBUG, logger=logger)
+
+    context = {'pyepics': bench_pyepics_put_speed,
+               'curio': bench_curio_put_speed,
+               'threading': bench_threading_put_speed
+               }[backend]
+
+    value = list(range(waveform_size))
+
+    if input_type == 'numpy<':
+        value = np.array(value, dtype='<i')
+    elif input_type == 'numpy>':
+        value = np.array(value, dtype='>i')
+    elif input_type == 'array>':
+        value = array.array('i', value)
+        # TODO: caproto assumes big-endian... but this isn't good for the user
+        value.byteswap()
+    elif input_type == 'list':
+        ...
+
     with context(pvname, value=value, log_level=log_level) as bench_fcn:
         benchmark(bench_fcn)
 
