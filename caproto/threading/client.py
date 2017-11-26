@@ -278,11 +278,11 @@ class SharedBroadcaster:
         # Wait for the SearchResponse.
         if wait:
             with self.command_cond:
-                 result_found = lambda: name in self.search_results
-                 done = self.command_cond.wait_for(result_found, timeout)
+                result_found = lambda: name in self.search_results
+                done = self.command_cond.wait_for(result_found, timeout)
             if not done:
-                 raise TimeoutError("No search result received for {}"
-                                    "".format(name))
+                raise TimeoutError("No search result received for {}"
+                                   "".format(name))
             address, timestamp = self.search_results[name]
             return address
 
@@ -644,7 +644,9 @@ class Channel:
             raise TimeoutError("Server at {} did not respond to attempt "
                                "to create channel named {} within {}-second "
                                "timeout."
-                               "".format(address, cachan.name, timeout))
+                               "".format(self.circuit.address,
+                                         self.channel.name,
+                                         timeout))
 
     def disconnect(self, *, wait=True, timeout=2):
         "Disconnect this Channel."
@@ -664,9 +666,10 @@ class Channel:
                 done = cond.wait_for(is_closed, timeout)
             if not done:
                 raise TimeoutError("Server at {} did not respond to attempt "
-                                   "to close channel named {} within {}-second "
-                                   "timeout."
-                                   "".format(address, self.name, timeout))
+                                   "to close channel named {} within {}-second"
+                                   " timeout."
+                                   "".format(self.circuit.address, self.name,
+                                             timeout))
 
     def read(self, *args, timeout=2, **kwargs):
         """Request a fresh reading, wait for it, return it and stash it.
@@ -1349,7 +1352,7 @@ class PV:
             val = self._args['value']
             out.append('   value      = %s' % fmt % val)
         else:
-            ext  = {True: '...', False: ''}[self.count > 10]
+            ext = {True: '...', False: ''}[self.count > 10]
             elems = range(min(5, self.count))
             try:
                 aval = [fmt % self._args['value'][i] for i in elems]
@@ -1391,8 +1394,8 @@ class PV:
 
         if len(self.chid.channel.subscriptions) > 0:
             msg = 'PV is internally monitored'
-            out.append('   %s, with %i user-defined callbacks:' % (msg,
-                                                         len(self.callbacks)))
+            out.append('   %s, with %i user-defined callbacks:' %
+                       (msg, len(self.callbacks)))
             if len(self.callbacks) > 0:
                 for nam in sorted(self.callbacks.keys()):
                     cback = self.callbacks[nam][0]
