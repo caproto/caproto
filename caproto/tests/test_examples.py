@@ -6,15 +6,8 @@ import curio.subprocess
 
 import caproto as ca
 
-
-def setup_module(module):
-    from conftest import start_repeater
-    start_repeater()
-
-
-def teardown_module(module):
-    from conftest import stop_repeater
-    stop_repeater()
+from .conftest import default_setup_module as setup_module  # noqa
+from .conftest import default_teardown_module as teardown_module  # noqa
 
 
 def test_synchronous_client():
@@ -262,7 +255,7 @@ def test_curio_server_example():
 def test_curio_server_and_thread_client(curio_server):
     from caproto.threading.client import (SharedBroadcaster,
                                           PVContext)
-    from conftest import threaded_in_curio_wrapper
+    from .conftest import threaded_in_curio_wrapper
     curio_server, caget_pvdb = curio_server
 
     @threaded_in_curio_wrapper

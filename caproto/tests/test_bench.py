@@ -6,16 +6,18 @@ import numpy as np
 import curio
 
 import caproto as ca
+from .conftest import default_setup_module, default_teardown_module
+from . import _asv_shim
 
 
 ioc_handler = None
 logger = logging.getLogger(__name__)
 
 
-def setup_module():
+def setup_module(module):
+    default_setup_module(module)
     global ioc_handler
 
-    import _asv_shim
     logging.basicConfig()
     logger.setLevel('DEBUG')
     _asv_shim.logger.setLevel('DEBUG')
@@ -44,7 +46,8 @@ def setup_module():
     time.sleep(1.0)
 
 
-def teardown_module():
+def teardown_module(module):
+    default_teardown_module(module)
     if ioc_handler is not None:
         ioc_handler.teardown()
 

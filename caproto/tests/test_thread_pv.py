@@ -88,7 +88,6 @@
 # ------------------------------------------------
 
 
-import os
 import sys
 import time
 import unittest
@@ -97,10 +96,9 @@ from contextlib import contextmanager
 from caproto.threading.client import (PV, caput, caget, Context,
                                       SharedBroadcaster, cainfo)
 from caproto.threading import client as thread_client
-import logging
-from multiprocessing import Process
 
-import pvnames
+from . import pvnames
+from .conftest import default_setup_module, default_teardown_module
 
 
 def get_broadcast_addr_list():
@@ -123,8 +121,7 @@ def get_broadcast_addr_list():
 
 
 def setup_module(module):
-    from conftest import start_repeater
-    start_repeater()
+    default_setup_module(module)
 
     shared_broadcaster = SharedBroadcaster()
     PV._default_context = Context(broadcaster=shared_broadcaster,
@@ -134,8 +131,8 @@ def setup_module(module):
 
 
 def teardown_module(module):
-    from conftest import stop_repeater
-    stop_repeater()
+    default_teardown_module(module)
+
     PV._default_context.disconnect()
     PV._default_context = None
 
@@ -316,8 +313,8 @@ class PV_Tests(unittest.TestCase):
         mypv = PV(pvnames.updating_pv1)
         NEWVALS = []
         def onChanges(pvname=None, value=None, char_value=None, **kw):
-            write( 'PV %s %s, %s Changed!\n' % (pvname, repr(value), char_value))
-            NEWVALS.append( repr(value))
+            write('PV %s %s, %s Changed!\n' % (pvname, repr(value), char_value))
+            NEWVALS.append(repr(value))
 
         mypv.add_callback(onChanges)
         write('Added a callback.  Now wait for changes...\n')
@@ -326,7 +323,7 @@ class PV_Tests(unittest.TestCase):
         while time.time() - t0 < 3:
             time.sleep(1.e-4)
         write('   saw %i changes.\n' % len(NEWVALS))
-        self.failUnless(len(NEWVALS) > 3)
+        assert len(NEWVALS) > 3
         mypv.clear_callbacks()
 
 

@@ -60,6 +60,16 @@ def stop_repeater():
     _repeater_process = None
 
 
+def default_setup_module(module):
+    print('-- default module setup {} --'.format(module.__name__))
+    start_repeater()
+
+
+def default_teardown_module(module):
+    print('-- default module teardown {} --'.format(module.__name__))
+    stop_repeater()
+
+
 @pytest.fixture(scope='function')
 def curio_server():
     caget_pvdb = {
@@ -154,7 +164,7 @@ try:
 except ImportError as ex:
     print('{} is missing'.format(ex))
 else:
-    from _asv_shim import get_conftest_globals
+    from ._asv_shim import get_conftest_globals
     globals().update(**get_conftest_globals())
 
 

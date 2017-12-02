@@ -6,7 +6,7 @@ import asyncio
 import curio
 
 import caproto as ca
-from epics_test_utils import run_caget
+from .epics_test_utils import run_caget
 
 
 REPEATER_PORT = 5065
