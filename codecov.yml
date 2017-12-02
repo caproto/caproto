@@ -2,10 +2,6 @@ coverage:
   status:
     project:
       default: false
-      tests:
-        target: 0%
-        paths:
-          - "tests/"
       caproto:
         target: auto
         threshold: 1%
