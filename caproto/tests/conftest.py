@@ -60,6 +60,16 @@ def stop_repeater():
     _repeater_process = None
 
 
+def default_setup_module(module):
+    print('-- default module setup {} --'.format(module.__name__))
+    start_repeater()
+
+
+def default_teardown_module(module):
+    print('-- default module teardown {} --'.format(module.__name__))
+    stop_repeater()
+
+
 @pytest.fixture(scope='function')
 def curio_server():
     caget_pvdb = {
@@ -120,6 +130,12 @@ def curio_server():
     return run_server, caget_pvdb
 
 
+def pytest_make_parametrize_id(config, val, argname):
+    # FIX for python 3.6.3 and/or pytest 3.3.0
+    if isinstance(val, bytes):
+        return repr(val)
+
+
 @pytest.fixture(scope='function')
 def circuit_pair(request):
     host = '127.0.0.1'
@@ -148,7 +164,7 @@ try:
 except ImportError as ex:
     print('{} is missing'.format(ex))
 else:
-    from _asv_shim import get_conftest_globals
+    from ._asv_shim import get_conftest_globals
     globals().update(**get_conftest_globals())
 
 

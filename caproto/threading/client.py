@@ -488,44 +488,42 @@ class VirtualCircuit:
         return num_bytes_needed
 
     def _process_command(self, command):
-            try:
-                self.circuit.process_command(command)
-            except ca.CaprotoError as ex:
-                if hasattr(ex, 'channel'):
-                    channel = ex.channel
-                    logger.warning('Invalid command %s for Channel %s in '
-                                   'state %s', command, channel,
-                                   channel.states,
-                                   exc_info=ex)
-                    # channel exceptions are not fatal
-                    return
-                else:
-                    logger.error('Invalid command %s for VirtualCircuit %s in '
-                                 'state %s', command, self,
-                                 self.circuit.states,
-                                 exc_info=ex)
-                    # circuit exceptions are fatal; exit the loop
-                    self.disconnect()
-                    return
+        try:
+            self.circuit.process_command(command)
+        except ca.CaprotoError as ex:
+            if hasattr(ex, 'channel'):
+                channel = ex.channel
+                logger.warning('Invalid command %s for Channel %s in state %s',
+                               command, channel, channel.states,
+                               exc_info=ex)
+                # channel exceptions are not fatal
+                return
+            else:
+                logger.error('Invalid command %s for VirtualCircuit %s in '
+                             'state %s', command, self, self.circuit.states,
+                             exc_info=ex)
+                # circuit exceptions are fatal; exit the loop
+                self.disconnect()
+                return
 
-            with self.new_command_cond:
-                if command is ca.DISCONNECTED:
-                    # if we are here something else has triggered the
-                    # disconnect.
-                    pass
-                elif isinstance(command, ca.ReadNotifyResponse):
-                    chan = self.ioids.pop(command.ioid)
-                    chan.process_read_notify(command)
-                elif isinstance(command, ca.WriteNotifyResponse):
-                    chan = self.ioids.pop(command.ioid)
-                    chan.process_write_notify(command)
-                elif isinstance(command, ca.EventAddResponse):
-                    chan = self.subscriptionids[command.subscriptionid]
-                    chan.process_subscription(command)
-                elif isinstance(command, ca.EventCancelResponse):
-                    self.subscriptionids.pop(command.subscriptionid)
+        with self.new_command_cond:
+            if command is ca.DISCONNECTED:
+                # if we are here something else has triggered the
+                # disconnect.
+                pass
+            elif isinstance(command, ca.ReadNotifyResponse):
+                chan = self.ioids.pop(command.ioid)
+                chan.process_read_notify(command)
+            elif isinstance(command, ca.WriteNotifyResponse):
+                chan = self.ioids.pop(command.ioid)
+                chan.process_write_notify(command)
+            elif isinstance(command, ca.EventAddResponse):
+                chan = self.subscriptionids[command.subscriptionid]
+                chan.process_subscription(command)
+            elif isinstance(command, ca.EventCancelResponse):
+                self.subscriptionids.pop(command.subscriptionid)
 
-                self.new_command_cond.notify_all()
+            self.new_command_cond.notify_all()
 
     def disconnect(self, *, wait=True, timeout=2.0):
         for cid, ch in list(self.channels.items()):

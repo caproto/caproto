@@ -8,7 +8,7 @@ import curio.subprocess
 import caproto as ca
 
 from caproto import ChannelType
-from epics_test_utils import (run_caget, run_caput)
+from .epics_test_utils import (run_caget, run_caput)
 
 caget_checks = sum(
     ([(pv, dtype),

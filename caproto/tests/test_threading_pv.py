@@ -4,17 +4,12 @@ import caproto.threading.client
 import time
 
 from caproto.threading.client import PVContext
+from contextlib import contextmanager
 import pytest
 
-
-def setup_module(module):
-    from conftest import start_repeater
-    start_repeater()
-
-
-def teardown_module(module):
-    from conftest import stop_repeater
-    stop_repeater()
+from . import pvnames
+from .conftest import default_setup_module as setup_module  # noqa
+from .conftest import default_teardown_module as teardown_module  # noqa
 
 
 @pytest.fixture(scope='function')
@@ -27,6 +22,17 @@ def cntx(request):
     request.addfinalizer(cleanup)
 
     return cntx
+
+
+@contextmanager
+def no_simulator_updates(cntx):
+    '''Context manager which pauses and resumes simulator PV updating'''
+    pause_pv = cntx.get_pv(pvnames.pause_pv)
+    try:
+        pause_pv.put(1, wait=True)
+        yield
+    finally:
+        pause_pv.put(0, wait=True)
 
 
 def test_pv_disconnect_reconnect(cntx):
@@ -64,40 +70,41 @@ def test_put_complete(cntx):
     pv = cntx.get_pv('Py:ao3')
     mutable = []
 
-    # start in a known initial state
-    pv.put(0.0, wait=True)
-    pv.get()
+    with no_simulator_updates(cntx):
+        # start in a known initial state
+        pv.put(0.0, wait=True)
+        pv.get()
 
-    def cb(a):
-        mutable.append(a)
+        def cb(a):
+            mutable.append(a)
 
-    # put and wait
-    old_value = pv.get()
-    result = pv.put(0.1, wait=True)
-    assert result == old_value
+        # put and wait
+        old_value = pv.get()
+        result = pv.put(0.1, wait=True)
+        assert result == old_value
 
-    # put and wait with callback (not interesting use of callback)
-    old_value = pv.get()
-    result = pv.put(0.2, wait=True, callback=cb, callback_data=('T2',))
-    assert result == old_value
-    assert 'T2' in mutable
+        # put and wait with callback (not interesting use of callback)
+        old_value = pv.get()
+        result = pv.put(0.2, wait=True, callback=cb, callback_data=('T2',))
+        assert result == old_value
+        assert 'T2' in mutable
 
-    # put and do not wait
-    ret_val = pv.put(0.3, wait=False)
-    assert ret_val is None
-    result = pv.get()
-    print('last_reading', pv.chid.last_reading)
-    assert result == 0.3
+        # put and do not wait
+        ret_val = pv.put(0.3, wait=False)
+        assert ret_val is None
+        result = pv.get()
+        print('last_reading', pv.chid.last_reading)
+        assert result == 0.3
 
-    # put and do not wait with callback
-    ret_val = pv.put(0.4, wait=False, callback=cb, callback_data=('T4',))
-    assert ret_val is None
-    result = pv.get()
-    assert result == 0.4
-    # sleep time give callback time to process
-    time.sleep(0.1)
-    print('last_reading', pv.chid.last_reading)
-    assert 'T4' in mutable
+        # put and do not wait with callback
+        ret_val = pv.put(0.4, wait=False, callback=cb, callback_data=('T4',))
+        assert ret_val is None
+        result = pv.get()
+        assert result == 0.4
+        # sleep time give callback time to process
+        time.sleep(0.1)
+        print('last_reading', pv.chid.last_reading)
+        assert 'T4' in mutable
 
 
 def test_specified_port(monkeypatch, cntx):

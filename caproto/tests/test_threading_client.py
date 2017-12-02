@@ -7,15 +7,8 @@ from caproto.threading.client import (Context, SharedBroadcaster)
 import caproto as ca
 import pytest
 
-
-def setup_module(module):
-    from conftest import start_repeater
-    start_repeater()
-
-
-def teardown_module(module):
-    from conftest import stop_repeater
-    stop_repeater()
+from .conftest import default_setup_module as setup_module  # noqa
+from .conftest import default_teardown_module as teardown_module  # noqa
 
 
 @pytest.fixture(scope='module')
