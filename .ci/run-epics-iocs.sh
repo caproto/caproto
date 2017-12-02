@@ -24,9 +24,16 @@ echo help > $HOME/motorioc_pipe
 #       "${MOTORSIM_IOC}/bin/${EPICS_HOST_ARCH}/mtrSim ./st.cmd"
 
 # -- check that all IOCs have started --
-until caget Py:ao1 sim:mtr1
+until caget Py:ao1
 do
-  echo "Waiting for IOCs to startup..."
+  echo "Waiting for pyepics test IOC to start..."
   sleep 0.5
 done
+
+until caget sim:mtr1
+do
+  echo "Waiting for motorsim IOC to start..."
+  sleep 0.5
+done
+ 
 echo "All IOCs are running!"
