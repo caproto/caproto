@@ -3,7 +3,7 @@ import datetime
 
 import pytest
 import curio
-import curio.subprocess
+
 
 import caproto as ca
 
