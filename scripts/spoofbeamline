@@ -35,6 +35,12 @@ class ReallyDefaultDict(defaultdict):
         return True
 
     def __missing__(self, key):
+        if (key.endswith('-SP') or key.endswith('-I') or
+                key.endswith('-RB') or key.endswith('-Cmd')):
+            key, *_ = key.rpartition('-')
+            return self[key]
+        if key.endswith('_RBV') or key.endswith(':RBV'):
+            return self[key[:-4]]
         ret = self[key] = self.default_factory(key)
         return ret
 
@@ -43,9 +49,9 @@ def fabricate_channel(key):
         for pattern, val in PLUGIN_TYPE_PVS:
             if pattern.search(key):
                 return ChannelString(value=val)
-
     return ChannelData(value=0)
 
 
 curio.run(ccs.start_server(ReallyDefaultDict(fabricate_channel),
+                           log_level='DEBUG',
                            bind_addr='127.0.0.1'))
