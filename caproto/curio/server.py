@@ -200,6 +200,7 @@ class CurioVirtualCircuit:
                         self.client_hostname, self.client_username,
                         command.data, command.data_type, command.metadata)
                 except Exception as ex:
+                    logger.exception('in hadle write')
                     cid = self.circuit.channels_sid[command.sid].cid
                     response_command = ca.ErrorResponse(
                         command, cid,
