@@ -3,7 +3,7 @@ set -e -x
 
 source $TRAVIS_BUILD_DIR/.ci/epics-config.sh
 
-if [ ! -e "$EPICS_BASE/built" ] 
+if [ ! -e "$EPICS_BASE/built" ]
 then
 
     git clone https://github.com/epics-base/epics-base.git $EPICS_BASE
@@ -21,7 +21,7 @@ EOF
     *) ;;
     esac
 
-    make -C "$EPICS_BASE" -j2
+    make -C "$EPICS_BASE" -j$(expr $(nproc) + 1)
     # get MSI for 3.14
     case "$BASE" in
     3.14*)
