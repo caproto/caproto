@@ -65,12 +65,25 @@ class PVSpec(namedtuple('PVSpec',
         if dtype is None:
             dtype = (type(value[0]) if value is not None
                      else cls.default_dtype)
+
         if get is not None:
             assert inspect.iscoroutinefunction(get), 'required async def get'
-            # TODO check args
+            sig = inspect.signature(get)
+            try:
+                sig.bind('group', 'instance')
+            except Exception as ex:
+                raise RuntimeError('Invalid signature for getter {}: {}'
+                                   ''.format(get, sig))
+
         if put is not None:
             assert inspect.iscoroutinefunction(put), 'required async def put'
-            # TODO check args
+            sig = inspect.signature(put)
+            try:
+                sig.bind('group', 'instance', 'value')
+            except Exception as ex:
+                raise RuntimeError('Invalid signature for putter {}: {}'
+                                   ''.format(put, sig))
+
         return super().__new__(cls, get, put, attr, name, dtype, value,
                                alarm_group)
 
