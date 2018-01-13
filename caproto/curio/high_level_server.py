@@ -14,10 +14,10 @@ class PvpropertyData:
     def __init__(self, *, group, pvspec, **kwargs):
         self.group = group
         self.pvspec = pvspec
-        self.getter = (MethodType(pvspec.get, self)
+        self.getter = (MethodType(pvspec.get, group)
                        if pvspec.get is not None
                        else group.group_read)
-        self.putter = (MethodType(pvspec.put, self)
+        self.putter = (MethodType(pvspec.put, group)
                        if pvspec.put is not None
                        else group.group_write)
         super().__init__(**kwargs)
