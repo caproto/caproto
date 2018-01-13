@@ -135,6 +135,40 @@ class pvproperty:
         return self
 
 
+class SubGroup:
+    'A property-like descriptor for specifying a subgroup in a PVGroup'
+
+    def __init__(self, group_cls=None, prefix=None, macros=None,
+                 attr_separator=None):
+        self.attr_name = None  # to be set later
+        self.group_cls = group_cls
+        self.prefix = prefix
+        self.macros = macros if macros is not None else {}
+        self.attr_separator = (attr_separator if attr_separator is not None
+                               else getattr(group_cls, 'attr_separator', ':'))
+
+    def __get__(self, instance, owner):
+        if instance is None:
+            return self
+        return instance.groups[self.attr_name]
+
+    def __set__(self, instance, value):
+        instance.groups[self.attr_name] = value
+
+    def __delete__(self, instance):
+        del instance.groups[self.attr_name]
+
+    def __set_name__(self, name):
+        self.attr_name = name
+        if self.prefix is None:
+            self.prefix = name + self.attr_separator
+
+    def __call__(self, group_cls):
+        # handles case where SubGroup(**kw)(group_cls) is used
+        self.group_cls = group_cls
+        return self
+
+
 def expand_macros(pv, macros):
     'Expand a PV name with Python {format-style} macros'
     return pv.format(**macros)
@@ -147,13 +181,48 @@ class PVGroupMeta(type):
         # keep class dictionary items in order
         return OrderedDict()
 
+    @staticmethod
+    def find_subgroups(dct):
+        for attr, value in dct.items():
+            if attr.startswith('_'):
+                continue
+
+            if isinstance(value, SubGroup):
+                yield attr, value
+
+    @staticmethod
+    def find_pvproperties(dct):
+        for attr, value in dct.items():
+            if attr.startswith('_'):
+                continue
+
+            if isinstance(value, pvproperty):
+                yield attr, value
+            elif isinstance(value, SubGroup):
+                subgroup_cls = value.group_cls
+                for sub_attr, value in subgroup_cls.__pvs__.items():
+                    yield '.'.join([attr, sub_attr]), value
+
     def __new__(metacls, name, bases, dct):
-        props = [(attr, value)
-                 for attr, value in dct.items()
-                 if isinstance(value, pvproperty)
-                 ]
+        dct['__subgroups__'] = subgroups = OrderedDict()
+        for attr, prop in metacls.find_subgroups(dct):
+            logger.debug('class %s attr %s: %r', name, attr, prop)
+            if prop.attr_name is None:
+                # note: for python < 3.6
+                prop.__set_name__(attr)
+
+            subgroups[attr] = prop
+
+            # TODO a bit messy
+            # propagate subgroups-of-subgroups to the top
+            subgroup_cls = prop.group_cls
+            if hasattr(subgroup_cls, '__subgroups__'):
+                for subattr, subgroup in subgroup_cls.__subgroups__.items():
+                    subgroups['.'.join((attr, subattr))] = subgroup
+
         dct['__pvs__'] = pvs = OrderedDict()
-        for attr, prop in props:
+        for attr, prop in metacls.find_pvproperties(dct):
+            logger.debug('class %s attr %s: %r', name, attr, prop)
             if prop.attr_name is None:
                 # note: for python < 3.6
                 prop.__set_name__(attr)
@@ -193,15 +262,41 @@ class PVGroupBase(metaclass=PVGroupMeta):
 
     def __init__(self, prefix, macros=None):
         self.macros = macros if macros is not None else {}
-        self.prefix = expand_macros(prefix, macros)
+        self.prefix = expand_macros(prefix, self.macros)
         self.alarms = defaultdict(lambda: ChannelAlarm())
-        self.pvdb = OrderedDict(channeldata_from_pvspec(self, pvprop.pvspec)
-                                for pvname, pvprop in self.__pvs__.items())
+        self.pvdb = OrderedDict()
+        self.attr_pvdb = OrderedDict()
+        self.groups = OrderedDict()
+        self._create_pvdb()
 
-        # attribute -> PV instance mapping for quick access by pvproperty
-        self.attr_pvdb = OrderedDict(
-            (attr, channeldata)
-            for attr, channeldata in zip(self.__pvs__, self.pvdb.values()))
+    def _create_pvdb(self):
+        'Create the PV database for all subgroups and pvproperties'
+        for attr, subgroup in self.__subgroups__.items():
+            subgroup_cls = subgroup.group_cls
+
+            prefix = (subgroup.prefix if subgroup.prefix is not None
+                      else subgroup.prefix)
+            prefix = self.prefix + prefix
+
+            macros = dict(self.macros)
+            macros.update(subgroup.macros)
+
+            self.groups[attr] = subgroup_cls(prefix=prefix, macros=macros)
+
+        for attr, pvprop in self.__pvs__.items():
+            if '.' in attr:
+                group_attr, _ = attr.rsplit('.', 1)
+                group = self.groups[group_attr]
+            else:
+                group = self
+
+            pvname, channeldata = channeldata_from_pvspec(group, pvprop.pvspec)
+
+            # full pvname -> ChannelData instance
+            self.pvdb[pvname] = channeldata
+
+            # attribute -> PV instance mapping for quick access by pvproperty
+            self.attr_pvdb[attr] = channeldata
 
     async def group_read(self, instance):
         'Generic read called for channels without `get` defined'
