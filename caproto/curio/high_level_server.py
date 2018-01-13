@@ -10,6 +10,50 @@ from .. import (ChannelDouble, ChannelInteger, ChannelString,
 logger = logging.getLogger(__name__)
 
 
+class PvpropertyData:
+    def __init__(self, *, group, pvspec, **kwargs):
+        self.group = group
+        self.pvspec = pvspec
+        self.getter = (MethodType(pvspec.get, self)
+                       if pvspec.get is not None
+                       else group.group_read)
+        self.putter = (MethodType(pvspec.put, self)
+                       if pvspec.put is not None
+                       else group.group_write)
+        super().__init__(**kwargs)
+
+    async def read(self, data_type):
+        value = await self.getter(self)
+        if value is not None:
+            if self.pvspec.get is None:
+                logger.debug('group read value for %s updated: %r',
+                             self.pvspec, value)
+            else:
+                logger.debug('value for %s updated: %r', self.pvspec, value)
+            # update the internal state
+            await self.write(value)
+        return await self._read(data_type)
+
+    async def verify_value(self, value):
+        if self.pvspec.put is None:
+            logger.debug('group verify value for %s: %r', self.pvspec, value)
+        else:
+            logger.debug('verify value for %s: %r', self.pvspec, value)
+        return await self.putter(self, value)
+
+
+class PvpropertyInteger(PvpropertyData, ChannelInteger):
+    ...
+
+
+class PvpropertyDouble(PvpropertyData, ChannelDouble):
+    ...
+
+
+class PvpropertyString(PvpropertyData, ChannelString):
+    ...
+
+
 class PVSpec(namedtuple('PVSpec',
                         'get put attr name dtype value alarm_group')):
     'PV information specification'
@@ -115,55 +159,17 @@ def channeldata_from_pvspec(group, pvspec):
              )
 
     cls = group.type_map[pvspec.dtype]
-    inst = cls(value=value, alarm=group.alarms[pvspec.alarm_group])
-    inst.pvspec = pvspec
-
-    # and m-m-monkey-patch away!
-
-    if pvspec.get is not None:
-        async def read_wrapper(self, data_type):
-            value = await pvspec_get(self)
-            if value is not None and value != self.value:
-                # update the internal state
-                logger.debug('value for %s updated: %r', self.pvspec, value)
-                await self.write(value)
-            return await self._read(data_type)
-
-        pvspec_get = MethodType(pvspec.get, group)
-    else:
-        async def read_wrapper(self, data_type):
-            value = await group.group_read(self)
-            if value is not None:
-                # update the internal state
-                logger.debug('group read value for %s updated: %r',
-                             self.pvspec, value)
-                await self.write(value)
-            return await self._read(data_type)
-
-    inst.read = MethodType(read_wrapper, inst)
-
-    if pvspec.put is not None:
-        pvspec_put = MethodType(pvspec.put, group)
-
-        async def verify_value(self, value):
-            logger.debug('verify value wrapper')
-            return await pvspec_put(self, value)
-    else:
-        async def verify_value(self, value):
-            logger.debug('verify value wrapper')
-            return await group.group_write(self, value)
-        # TODO read-only option
-
-    inst.verify_value = MethodType(verify_value, inst)
+    inst = cls(group=group, pvspec=pvspec,
+               value=value, alarm=group.alarms[pvspec.alarm_group])
     return (full_pvname, inst)
 
 
 class PVGroupBase(metaclass=PVGroupMeta):
     'Base class for a group of PVs'
     type_map = {
-        str: ChannelString,
-        int: ChannelInteger,
-        float: ChannelDouble,
+        str: PvpropertyString,
+        int: PvpropertyInteger,
+        float: PvpropertyDouble,
     }
 
     default_values = {
