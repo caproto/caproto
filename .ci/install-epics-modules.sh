@@ -24,7 +24,7 @@ source $TRAVIS_BUILD_DIR/.ci/epics-config.sh
 if [ ! -e "$SUPPORT/asyn/built" ]; then
     echo "Build asyn"
     install -d $SUPPORT/asyn
-    curl -L "https://www.aps.anl.gov/epics/download/modules/asyn${ASYN}.tar.gz" | tar -C $SUPPORT/asyn -xvz --strip-components=1
+    curl -L "https://github.com/epics-modules/asyn/archive/R${ASYN}.tar.gz" | tar -C $SUPPORT/asyn -xvz --strip-components=1
     cp $RELEASE_PATH $SUPPORT/asyn/configure/RELEASE
     make -C "$SUPPORT/asyn" -j2
     touch $SUPPORT/asyn/built
@@ -37,7 +37,7 @@ fi
 if [ ! -e "$SUPPORT/busy/built" ]; then
     echo "Build busy"
     install -d $SUPPORT/busy
-    curl -L "https://www3.aps.anl.gov/bcda/synApps/tar/busy_R${BUSY}.tar.gz" | tar -C $SUPPORT/busy -xvz --strip-components=1
+    curl -L "https://github.com/epics-modules/busy/archive/R${BUSY}.tar.gz" | tar -C $SUPPORT/busy -xvz --strip-components=1
     cp $RELEASE_PATH $SUPPORT/busy/configure/RELEASE
     make -C $SUPPORT/busy
     touch $SUPPORT/busy/built
@@ -64,7 +64,7 @@ fi
 if [ ! -e "$SUPPORT/motor/built" ]; then
     echo "Build motor"
     install -d $SUPPORT/motor
-    curl -L "https://www3.aps.anl.gov/bcda/synApps/motor/tar/motorR${MOTOR}.tar.gz" | tar -C $SUPPORT/motor -xvz --strip-components=1
+    curl -L "https://github.com/epics-modules/motor/archive/R${MOTOR}.tar.gz" | tar -C $SUPPORT/motor -xvz --strip-components=1
     cp $RELEASE_PATH $SUPPORT/motor/configure/RELEASE
     if [ "$MOTOR" = "6-9" ]; then
         # not building ipac support
