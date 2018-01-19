@@ -1,0 +1,14 @@
+#!/usr/bin/env python3
+
+import curio
+from collections import defaultdict
+import caproto.curio.server as ccs
+from caproto import ChannelData
+
+class ReallyDefaultDict(defaultdict):
+    def __contains__(self, key):
+        return True
+
+curio.run(ccs.start_server(ReallyDefaultDict(lambda:
+                                             ChannelData(value=0)),
+                           bind_addr='127.0.0.1'))

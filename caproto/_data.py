@@ -199,7 +199,8 @@ class ChannelAlarm:
         return dbr
 
     async def write(self, *, status=None, severity=None,
-                    must_acknowledge_transient=None, severity_to_acknowledge=None,
+                    must_acknowledge_transient=None,
+                    severity_to_acknowledge=None,
                     alarm_string=None, caller=None):
         data = self._data
         flags = 0

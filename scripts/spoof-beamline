@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+
+import curio
+from collections import defaultdict
+import caproto.curio.server as ccs
+from caproto import ChannelData, ChannelString
+import re
+
+PLUGIN_TYPE_PVS = [
+    (re.compile('image\\d:'), 'NDPluginStdArrays'),
+    (re.compile('Stats\\d:'), 'NDPluginStats'),
+    (re.compile('CC\\d:'), 'NDPluginColorConvert'),
+    (re.compile('Proc\\d:'), 'NDPluginProcess'),
+    (re.compile('Over\\d:'), 'NDPluginOverlay'),
+    (re.compile('ROI\\d:'), 'NDPluginROI'),
+    (re.compile('Trans\\d:'), 'NDPluginTransform'),
+    (re.compile('Trans\\d:'), 'NDPluginTransform'),
+    (re.compile('netCDF\\d:'), 'NDFileNetCDF'),
+    (re.compile('TIFF\\d:'), 'NDFileTIFF'),
+    (re.compile('JPEG\\d:'), 'NDFileJPEG'),
+    (re.compile('Nexus\\d:'), 'NDPluginNexus'),
+    (re.compile('HDF\\d:'), 'NDFileHDF5'),
+    (re.compile('Magick\\d:'), 'NDFileMagick'),
+    (re.compile('TIFF\\d:'), 'NDFileTIFF'),
+    (re.compile('TIFF\\d:'), 'NDFileTIFF'),
+    (re.compile('TIFF\\d:'), 'NDFileTIFF'),
+    (re.compile('HDF\\d:'), 'NDFileHDF5'),
+    (re.compile('HDF\\d:'), 'NDFileHDF5'),
+    (re.compile('HDF\\d:'), 'NDFileHDF5'),
+    (re.compile('HDF\\d:'), 'NDFileHDF5')]
+
+
+class ReallyDefaultDict(defaultdict):
+    def __contains__(self, key):
+        return True
+
+    def __missing__(self, key):
+        if (key.endswith('-SP') or key.endswith('-I') or
+                key.endswith('-RB') or key.endswith('-Cmd')):
+            key, *_ = key.rpartition('-')
+            return self[key]
+        if key.endswith('_RBV') or key.endswith(':RBV'):
+            return self[key[:-4]]
+        ret = self[key] = self.default_factory(key)
+        return ret
+
+def fabricate_channel(key):
+    if 'PluginType' in key:
+        for pattern, val in PLUGIN_TYPE_PVS:
+            if pattern.search(key):
+                return ChannelString(value=val)
+    return ChannelData(value=0)
+
+
+curio.run(ccs.start_server(ReallyDefaultDict(fabricate_channel),
+                           log_level='DEBUG',
+                           bind_addr='127.0.0.1'))
