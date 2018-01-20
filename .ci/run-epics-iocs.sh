@@ -13,15 +13,7 @@ sleep 10000 > $HOME/motorioc_pipe &
 cd "${MOTORSIM_IOC}/iocBoot/ioclocalhost" && ${MOTORSIM_IOC}/bin/${EPICS_HOST_ARCH}/mtrSim ./st.cmd < $HOME/motorioc_pipe &
 echo help > $HOME/motorioc_pipe
 
-# if only tmux worked...
-# tmux new-session -d -s IOCs /bin/bash
-# echo "Starting the pyepics test IOC..."
-# tmux new-window -c "${PYEPICS_IOC}/iocBoot/iocTestioc" \
-#       "${PYEPICS_IOC}/bin/${EPICS_HOST_ARCH}/testioc ./st.cmd"
-# 
-# echo "Starting the motorsim IOC..."
-# tmux new-window -c "${MOTORSIM_IOC}/iocBoot/ioclocalhost" \
-#       "${MOTORSIM_IOC}/bin/${EPICS_HOST_ARCH}/mtrSim ./st.cmd"
+# if only tmux worked on travis... (see run-epics-iocs-on-tmux.sh)
 
 # -- check that all IOCs have started --
 until caget Py:ao1
