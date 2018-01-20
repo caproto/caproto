@@ -6,9 +6,9 @@ export RELEASE_PATH=${SUPPORT}/RELEASE
 export EPICS_HOST_ARCH=linux-x86_64
 
 export PYEPICS_IOC="$IOCS/pyepics-test-ioc"
-export PYEPICS_IOC_SOCK="pyepics-test-ioc"
+export PYEPICS_IOC_PIPE="${IOCS}/pyepics_ioc_pipe"
 export MOTORSIM_IOC="$IOCS/motorsim"
-export MOTORSIM_IOC_SOCK="motorsim-ioc"
+export MOTORSIM_IOC_PIPE="${IOCS}/motorsim_ioc_pipe"
 
 install -d $SUPPORT
 install -d $IOCS
