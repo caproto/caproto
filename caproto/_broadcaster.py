@@ -3,7 +3,7 @@ import logging
 import socket
 
 from ._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
-from ._utils import CLIENT, SERVER, CaprotoValueError, LocalProtocolError
+from ._utils import (CLIENT, SERVER, CaprotoValueError, LocalProtocolError)
 from ._state import get_exception
 from ._commands import (RepeaterConfirmResponse, RepeaterRegisterRequest,
                         SearchRequest, SearchResponse, VersionRequest,
@@ -41,7 +41,7 @@ class Broadcaster:
         # one flag to check whether we have yet registered with a repeater.
         self._registered = False
         self._search_id_counter = itertools.count(0)
-        logger_name = "caproto.Broadcaster"
+        logger_name = "broadcaster"
         self.log = logging.getLogger(logger_name)
 
     def send(self, *commands):
@@ -88,8 +88,8 @@ class Broadcaster:
         -------
         commands : list
         """
-        logging.debug("Received datagram from %r with %d bytes.",
-                      address, len(byteslike))
+        self.log.debug("Received datagram from %r with %d bytes.",
+                       address, len(byteslike))
         commands = read_datagram(byteslike, address, self.their_role)
         return commands
 

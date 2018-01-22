@@ -22,10 +22,12 @@
 # This implementation owes something to a StackOverflow-linked gist, which
 # provides a basic asyncio UDP proxy server.
 # https://gist.github.com/vxgmichel/b2cf8536363275e735c231caef35a5df
+import asyncio
 import os
 import socket
-import asyncio
+
 import caproto
+from caproto._utils import conf_logger
 
 
 class RepeaterAlreadyRunning(RuntimeError):
@@ -34,7 +36,8 @@ class RepeaterAlreadyRunning(RuntimeError):
 
 class ProxyDatagramProtocol(asyncio.DatagramProtocol):
 
-    def __init__(self):
+    def __init__(self, *, logger):
+        self.logger = logger
         self.remotes = {}
 
         self.broadcaster = caproto.Broadcaster(our_role=caproto.SERVER)
@@ -65,7 +68,8 @@ class ProxyDatagramProtocol(asyncio.DatagramProtocol):
                         remote.connection_made(remote.transport)
                     return
                 loop = asyncio.get_event_loop()
-                self.remotes[addr] = RemoteDatagramProtocol(self, addr, data)
+                self.remotes[addr] = RemoteDatagramProtocol(self, addr, data,
+                                                            logger=self.logger)
                 coro = loop.create_datagram_endpoint(
                     lambda: self.remotes[addr], remote_addr=addr)
                 asyncio.ensure_future(coro)
@@ -78,10 +82,12 @@ class ProxyDatagramProtocol(asyncio.DatagramProtocol):
 
 class RemoteDatagramProtocol(asyncio.DatagramProtocol):
 
-    def __init__(self, proxy, addr, data):
+    def __init__(self, proxy, addr, data, *, logger):
         self.proxy = proxy
         self.addr = addr
         self.data = data
+        self.logger = logger
+        logger.debug('Received registration request from %s', self.addr[0])
         super().__init__()
 
     def connection_made(self, transport):
@@ -89,17 +95,19 @@ class RemoteDatagramProtocol(asyncio.DatagramProtocol):
         confirmation = caproto.RepeaterConfirmResponse(self.addr[0])
         confirmation_bytes = self.proxy.broadcaster.send(confirmation)
         self.transport.sendto(confirmation_bytes)
+        self.logger.debug('Sent registration confirmation to %s', self.addr[0])
 
     def datagram_received(self, data, sender_addr):
         self.proxy.transport.sendto(data, self.addr)
 
     def connection_lost(self, exc):
+        self.logger.debug('Lost connection to %s', self.addr[0])
         self.proxy.remotes.pop(self.attr)
 
 
-async def start_datagram_proxy(bind, port):
+async def start_datagram_proxy(bind, port, *, logger):
     loop = asyncio.get_event_loop()
-    protocol = ProxyDatagramProtocol()
+    protocol = ProxyDatagramProtocol(logger=logger)
     try:
         return await loop.create_datagram_endpoint(
             lambda: protocol, local_addr=(bind, port))
@@ -110,29 +118,26 @@ async def start_datagram_proxy(bind, port):
             raise
 
 
-def main():
+def run(logger=None):
+    if logger is None:
+        logger = conf_logger(logging.getLogger('repeater'))
+
     loop = asyncio.get_event_loop()
     addr = ('0.0.0.0', os.environ.get('EPICS_CA_REPEATER_PORT', 5065))
-    print("[repeater] Starting datagram proxy on {}...".format(addr))
-    coro = start_datagram_proxy(*addr)
+    logger.info("Starting datagram proxy on {}...".format(addr))
+    coro = start_datagram_proxy(*addr, logger=logger)
 
     try:
         transport, _ = loop.run_until_complete(coro)
     except RepeaterAlreadyRunning as ex:
-        print('[repeater] Another repeater is already running; exiting')
+        logger.info('Another repeater is already running; exiting')
         return
 
-    print("[repeater] Datagram proxy is running...")
+    logger.info("Datagram proxy is running.")
     try:
         loop.run_forever()
     except KeyboardInterrupt:
         pass
-    print("[repeater] Closing transport...")
+    logger.info("Closing transport...")
     transport.close()
     loop.close()
-
-
-if __name__ == '__main__':
-    import logging
-    logging.getLogger('caproto').setLevel('INFO')
-    main()

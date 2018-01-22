@@ -1,5 +1,7 @@
+import logging
 import os
 import socket
+import sys
 
 try:
     import netifaces
@@ -269,3 +271,51 @@ def incremental_buffer_list_slice(*buffers):
         if total_sent == total_size:
             break
         buffers = buffer_list_slice(*buffers, offset=sent)
+
+
+def conf_logger(logger, level='WARNING'):
+    "Simple logging.Logger configuration utility"
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(level)
+    handler.setFormatter(logging.Formatter('[%(name)s] %(message)s'))
+    logger.addHandler(handler)
+    logger.setLevel(level)
+    return logger
+
+
+def spawn_daemon(func, *args, **kwargs):
+    # adapted from https://stackoverflow.com/a/6011298/1221924
+
+    # Do the UNIX double-fork magic to avoid receiving signals from the parent
+    # See Stevens' "Advanced # Programming in the UNIX Environment"
+    # (ISBN 0201563177)
+    try:
+        pid = os.fork()
+        if pid > 0:
+            # parent process, return and keep running
+            return
+    except OSError as e:
+        print("fork #1 failed: %d (%s)" % (e.errno, e.strerror),
+              out=sys.stderr)
+        sys.exit(1)
+
+    os.setsid()
+    sys.stdout = open('/dev/null', 'w')
+    sys.stderr = open('/dev/null', 'w')
+
+    # do second fork
+    try:
+        pid = os.fork()
+        if pid > 0:
+            # exit from second parent
+            sys.exit(0)
+    except OSError as e:
+        print("fork #2 failed: %d (%s)" % (e.errno, e.strerror),
+              out=sys.stderr)
+        sys.exit(1)
+
+    # do stuff
+    func(*args, **kwargs)
+
+    # all done
+    os._exit(os.EX_OK)

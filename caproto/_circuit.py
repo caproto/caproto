@@ -56,7 +56,8 @@ class VirtualCircuit:
         self.address = address
         self.priority = priority
         self.channels = {}  # map cid to Channel
-        self.log = logging.getLogger("[{} circuit]".format(abbrev))
+        logger_name = f"{abbrev} {address[0]}:{address[1]}-{priority}"
+        self.log = logging.getLogger(logger_name)
         self.states = CircuitState(self.channels)
         self._data = bytearray()
         self.channels_sid = {}  # map sid to Channel
