@@ -1,4 +1,5 @@
 from distutils.core import setup
+import glob
 import setuptools
 import versioneer
 
@@ -17,5 +18,5 @@ setup(name='caproto',
                 'caproto.tests',
                 'caproto.threading',
                ],
-      scripts=['scripts/caproto-repeater'],
+      scripts=glob.glob('scripts/*'),
       )
