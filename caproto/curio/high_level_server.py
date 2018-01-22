@@ -115,7 +115,7 @@ class pvproperty:
     def __delete__(self, instance):
         del instance.attr_pvdb[self.attr_name]
 
-    def __set_name__(self, name):
+    def __set_name__(self, owner, name):
         self.attr_name = name
         # update the PV specification with the attribute name
         self.pvspec = self.pvspec.new_names(
@@ -158,7 +158,7 @@ class SubGroup:
     def __delete__(self, instance):
         del instance.groups[self.attr_name]
 
-    def __set_name__(self, name):
+    def __set_name__(self, owner, name):
         self.attr_name = name
         if self.prefix is None:
             self.prefix = name + self.attr_separator
@@ -207,10 +207,6 @@ class PVGroupMeta(type):
         dct['__subgroups__'] = subgroups = OrderedDict()
         for attr, prop in metacls.find_subgroups(dct):
             logger.debug('class %s attr %s: %r', name, attr, prop)
-            if prop.attr_name is None:
-                # note: for python < 3.6
-                prop.__set_name__(attr)
-
             subgroups[attr] = prop
 
             # TODO a bit messy
@@ -223,13 +219,20 @@ class PVGroupMeta(type):
         dct['__pvs__'] = pvs = OrderedDict()
         for attr, prop in metacls.find_pvproperties(dct):
             logger.debug('class %s attr %s: %r', name, attr, prop)
-            if prop.attr_name is None:
-                # note: for python < 3.6
-                prop.__set_name__(attr)
-
             pvs[attr] = prop
 
-        return super().__new__(metacls, name, bases, dct)
+        cls = super().__new__(metacls, name, bases, dct)
+
+        for attr, prop in metacls.find_subgroups(dct):
+            if prop.attr_name is None:
+                # note: for python < 3.6
+                subgroups[attr].__set_name__(attr, cls)
+        for attr, prop in metacls.find_pvproperties(dct):
+            if prop.attr_name is None:
+                # note: for python < 3.6
+                pvs[attr].__set_name__(attr, cls)
+
+        return cls
 
 
 def channeldata_from_pvspec(group, pvspec):
