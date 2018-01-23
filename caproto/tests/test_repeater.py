@@ -13,7 +13,7 @@ REPEATER_PORT = 5065
 
 
 def test_repeater():
-    from caproto.asyncio.repeater import main
+    from caproto.asyncio.repeater import run
     logging.getLogger('caproto').setLevel(logging.DEBUG)
     logging.basicConfig()
 
@@ -21,7 +21,7 @@ def test_repeater():
 
     def run_repeater():
         asyncio.set_event_loop(loop)
-        main()
+        run()
 
     thread_repeater = threading.Thread(target=run_repeater)
     thread_repeater.start()
