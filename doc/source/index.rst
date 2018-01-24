@@ -106,6 +106,7 @@ Contents
    :caption: Channel Access Sans I/O
 
    basics
+   iocs
    api
    Performance Benchmarks <https://nsls-ii.github.io/caproto/bench/#/summarylist>
    references
