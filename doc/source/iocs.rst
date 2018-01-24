@@ -73,6 +73,50 @@ Update Tallies When Each PV is Read
 
     run_example('source/examples/reading_counter.py', 'example4:')
 
+Macros for PV names
+===================
+
+.. literalinclude:: examples/macros.py
+
+.. code-block:: bash
+
+    $ source/examples/macros.py example5: XF11ID detector
+    PVs: ['example5:XF11ID:detector.VAL', 'example5:XF11ID:detector.RBV']
+
+.. ipython:: python
+    :suppress:
+
+    run_example('source/examples/macros.py', 'example5:', 'XF11ID', 'detector')
+
+Observe that the command line arguments fill in the PV names.
+
+"Inline" Style Read and Write Customization
+===========================================
+
+.. literalinclude:: examples/inline_style.py
+
+.. ipython:: python
+    :suppress:
+
+    run_example('source/examples/inline_style.py', 'example6:')
+
+.. code-block:: bash
+
+    $ source/examples/inline_style.py example6:
+    PVs: ['example6:random_int', 'example6:random_str', 'example6:A']
+
+
+.. code-block:: bash
+
+    $ caproto-get example6:random_int
+    example6:random                           87
+    $ caproto-get example6:random_int
+    example6:random                           92
+    $ caproto-get example6:random_str
+    example6:random_str                       b'b'
+    $ caproto-get example6:random_str
+    example6:random_str                       b'a'
+
 .. ipython:: python
     :suppress:
 
