@@ -53,6 +53,7 @@ from ._dbr import (DBR_INT, DBR_TYPES, ChannelType, float_t, short_t, ushort_t,
                    array_type_code, AccessRights)
 
 from . import _dbr as dbr
+from ._status import eca_value_to_status
 from ._utils import (CLIENT, NEED_DATA, REQUEST, RESPONSE, SERVER,
                      CaprotoTypeError, CaprotoValueError,
                      CaprotoNotImplementedError,
@@ -949,7 +950,6 @@ class EventAddResponse(Message):
     payload_size = property(lambda self: self.header.payload_size)
     data_type = property(lambda self: ChannelType(self.header.data_type))
     data_count = property(lambda self: self.header.data_count)
-    status_code = property(lambda self: self.header.parameter1)
     subscriptionid = property(lambda self: self.header.parameter2)
 
     @property
@@ -959,6 +959,10 @@ class EventAddResponse(Message):
     @property
     def metadata(self):
         return extract_metadata(self.buffers[0], self.data_type)
+
+    @property
+    def status_code(self):
+        return eca_value_to_status[self.header.parameter1]
 
     @classmethod
     def from_wire(cls, header, payload_bytes, *, sender_address=None):
@@ -1192,7 +1196,6 @@ class ErrorResponse(Message):
 
     payload_size = property(lambda self: self.header.payload_size)
     cid = property(lambda self: self.header.parameter1)
-    status_code = property(lambda self: self.header.parameter2)
 
     @property
     def error_message(self):
@@ -1203,6 +1206,10 @@ class ErrorResponse(Message):
     def original_request(self):
         req_bytes = bytearray(self.buffers[1][:_MessageHeaderSize])
         return MessageHeader.from_buffer(req_bytes)
+
+    @property
+    def status_code(self):
+        return eca_value_to_status[self.header.parameter2]
 
     @classmethod
     def from_wire(cls, header, payload_bytes, *, sender_address=None):
@@ -1349,9 +1356,12 @@ class ReadNotifyResponse(Message):
     def metadata(self):
         return extract_metadata(self.buffers[0], self.data_type)
 
+    @property
+    def status(self):
+        return eca_value_to_status[self.header.parameter1]
+
     data_type = property(lambda self: ChannelType(self.header.data_type))
     data_count = property(lambda self: self.header.data_count)
-    status = property(lambda self: self.header.parameter1)
     ioid = property(lambda self: self.header.parameter2)
 
 
@@ -1535,8 +1545,11 @@ class WriteNotifyResponse(Message):
 
     data_type = property(lambda self: ChannelType(self.header.data_type))
     data_count = property(lambda self: self.header.data_count)
-    status = property(lambda self: self.header.parameter1)
     ioid = property(lambda self: self.header.parameter2)
+
+    @property
+    def status(self):
+        return eca_value_to_status[self.header.parameter1]
 
 
 class ClientNameRequest(Message):
