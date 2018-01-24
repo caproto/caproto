@@ -5,11 +5,15 @@ import logging
 import os
 import time
 import socket
+import subprocess
 import sys
 
 import caproto as ca
 from caproto._utils import conf_logger, spawn_daemon
 from caproto.asyncio.repeater import run as run_repeater
+
+
+__all__ = ['get', 'put', 'monitor']
 
 
 CA_SERVER_PORT = 5064  # just a default
@@ -36,11 +40,7 @@ def recv(circuit):
     return commands
 
 
-def make_channel(pv_name, logger, timeout=2):
-    # A broadcast socket
-    udp_sock = ca.bcast_socket()
-    udp_sock.settimeout(timeout)
-
+def make_channel(pv_name, logger, udp_sock, timeout=2):
     # Set Broadcaster log level to match our logger.
     b = ca.Broadcaster(our_role=ca.CLIENT)
     b.log.setLevel(logger.level)
@@ -120,25 +120,35 @@ def make_channel(pv_name, logger, timeout=2):
     sockets[chan.circuit] = socket.create_connection(chan.circuit.address,
                                                      timeout)
 
-    # Initialize our new TCP-based CA connection with a VersionRequest.
-    send(chan.circuit, ca.VersionRequest(priority=0, version=13))
-    send(chan.circuit, chan.host_name())
-    send(chan.circuit, chan.client_name())
-    send(chan.circuit, chan.create())
-    t = time.monotonic()
-    while True:
-        try:
-            commands = recv(chan.circuit)
-            if time.monotonic() - t > timeout:
-                raise socket.timeout
-        except socket.timeout:
-            raise TimeoutError("Timeout while awaiting channel creation.")
-        if chan.states[ca.CLIENT] is ca.CONNECTED:
-            break
+    try:
+        # Initialize our new TCP-based CA connection with a VersionRequest.
+        send(chan.circuit, ca.VersionRequest(priority=0, version=13))
+        send(chan.circuit, chan.host_name())
+        send(chan.circuit, chan.client_name())
+        send(chan.circuit, chan.create())
+        t = time.monotonic()
+        while True:
+            try:
+                commands = recv(chan.circuit)
+                if time.monotonic() - t > timeout:
+                    raise socket.timeout
+            except socket.timeout:
+                raise TimeoutError("Timeout while awaiting channel creation.")
+            if chan.states[ca.CLIENT] is ca.CONNECTED:
+                break
 
-    logger.debug('Channel created.')
-    udp_sock.close()
+        logger.debug('Channel created.')
+    except BaseException:
+        sockets[chan.circuit].close()
     return chan
+
+
+def spawn_repeater(logger):
+    subprocess.Popen(['caproto-repeater', '--quiet'],
+                      cwd="/",
+                      stdout=subprocess.PIPE,
+                      stderr=subprocess.STDOUT)
+    logger.debug('Spawned caproto-repeater process.')
 
 
 def read(chan, timeout):
@@ -160,15 +170,10 @@ def read(chan, timeout):
         else:
             continue
         break
-    # Some niceties from printing...
-    if len(response.data) == 1:
-        data, = response.data
-    else:
-        data = response.data
-    return data
+    return response
 
 
-def get():
+def get_cli():
     parser = argparse.ArgumentParser(description='Read the value of a PV.')
     parser.add_argument('pv_name', type=str,
                         help="PV (channel) name")
@@ -179,44 +184,56 @@ def get():
     parser.add_argument('--no-repeater', action='store_true',
                         help="Do not spawn a Channel Access repeater daemon process.")
     args = parser.parse_args()
-    pv_name = args.pv_name
-    if args.verbose:
-        level = 'DEBUG'
-    else:
-        level = 'INFO'
-
-    logger = logging.getLogger('get')
-    logger.setLevel(level)
-    handler.setLevel(level)
-    ca_logger.setLevel(level)
-
     try:
-        if not args.no_repeater:
-            # As per the EPICS spec, a well-behaved client should start a
-            # caproto-repeater that will continue running after it exits.
-            spawn_daemon(run_repeater,
-                        conf_logger(logging.getLogger('repeater'), 'WARNING'))
-            logger.debug('Spawned caproto-repeater daemon process.')
-
-        chan = make_channel(pv_name, logger, args.timeout)
-        data = read(chan, args.timeout)
-        print('{0: <40}  {1}'.format(pv_name, data))
+        response = get(pv_name=args.pv_name,
+                       verbose=args.verbose, timeout=args.timeout,
+                       repeater=not args.no_repeater)
+        # Some niceties from printing...
+        if len(response.data) == 1:
+            data, = response.data
+        else:
+            data = response.data
+        print('{0: <40}  {1}'.format(args.pv_name, data))
     except BaseException as exc:
         if args.verbose:
+            # Show the full traceback.
             raise
         else:
+            # Print a one-line error message.
             print(exc)
+
+
+def get(pv_name, *, verbose=False, timeout=2, repeater=True):
+    logger = logging.getLogger('get')
+    if verbose:
+        level = 'DEBUG'
+    else:
+        level = 'INFO'
+    logger.setLevel(level)
+    handler.setLevel(level)
+    ca_logger.setLevel(level)
+
+    if repeater:
+        # As per the EPICS spec, a well-behaved client should start a
+        # caproto-repeater that will continue running after it exits.
+        spawn_repeater(logger)
+    udp_sock = ca.bcast_socket()
+    try:
+        udp_sock.settimeout(timeout)
+        chan = make_channel(pv_name, logger, udp_sock, timeout)
+    finally:
+        udp_sock.close()
+    try:
+        return read(chan, timeout)
     finally:
         try:
-            chan
-        except NameError:
-            pass
-        else:
             if chan.states[ca.CLIENT] is ca.CONNECTED:
                 send(chan.circuit, chan.disconnect())
+        finally:
+            sockets[chan.circuit].close()
 
 
-def monitor():
+def monitor_cli():
     parser = argparse.ArgumentParser(description='Read the value of a PV.')
     parser.add_argument('pv_name', type=str,
                         help="PV (channel) name")
@@ -227,26 +244,50 @@ def monitor():
     parser.add_argument('--no-repeater', action='store_true',
                         help="Do not spawn a Channel Access repeater daemon process.")
     args = parser.parse_args()
-    pv_name = args.pv_name
-    if args.verbose:
+
+    def callback(response):
+        # Some niceties from printing...
+        if len(response.data) == 1:
+            data, = response.data
+        else:
+            data = response.data
+        print('{0: <40}  {1}'.format(args.pv_name, data))
+
+    try:
+        monitor(pv_name=args.pv_name,
+                callback=callback,
+                verbose=args.verbose, timeout=args.timeout,
+                repeater=not args.no_repeater)
+    except BaseException as exc:
+        if args.verbose:
+            # Show the full traceback.
+            raise
+        else:
+            # Print a one-line error message.
+            print(exc)
+
+
+def monitor(pv_name, callback, *, verbose=False, timeout=2, repeater=True):
+    logger = logging.getLogger('monitor')
+    if verbose:
         level = 'DEBUG'
     else:
         level = 'INFO'
-
-    logger = logging.getLogger('get')
     logger.setLevel(level)
     handler.setLevel(level)
     ca_logger.setLevel(level)
 
+    if repeater:
+        # As per the EPICS spec, a well-behaved client should start a
+        # caproto-repeater that will continue running after it exits.
+        spawn_repeater(logger)
+    udp_sock = ca.bcast_socket()
     try:
-        if not args.no_repeater:
-            # As per the EPICS spec, a well-behaved client should start a
-            # caproto-repeater that will continue running after it exits.
-            spawn_daemon(run_repeater,
-                        conf_logger(logging.getLogger('repeater'), 'WARNING'))
-            logger.debug('Spawned caproto-repeater daemon process.')
-
-        chan = make_channel(pv_name, logger, args.timeout)
+        udp_sock.settimeout(timeout)
+        chan = make_channel(pv_name, logger, udp_sock, timeout)
+    finally:
+        udp_sock.close()
+    try:
         # Remove the timeout during monitoring.
         sockets[chan.circuit].settimeout(None)
         req = chan.subscribe()
@@ -258,32 +299,20 @@ def monitor():
                 commands = recv(chan.circuit)
                 for response in commands:
                     if response.subscriptionid == req.subscriptionid:
-                        # Some niceties from printing...
-                        if len(response.data) == 1:
-                            data, = response.data
-                        else:
-                            data = response.data
-                        print('{0: <40}  {1}'.format(pv_name, data))
+                        callback(response)
         except KeyboardInterrupt:
             pass
-    except BaseException as exc:
-        if args.verbose:
-            raise
-        else:
-            print(exc)
     finally:
         try:
-            chan
-        except NameError:
-            pass
-        else:
             if chan.states[ca.CLIENT] is ca.CONNECTED:
-                # Reinstate the timeout for channel cleanup.
-                sockets[chan.circuit].settimeout(args.timeout)
                 send(chan.circuit, chan.disconnect())
+        finally:
+            # Reinstate the timeout for channel cleanup.
+            sockets[chan.circuit].settimeout(timeout)
+            sockets[chan.circuit].close()
 
 
-def put():
+def put_cli():
     parser = argparse.ArgumentParser(description='Write a value to a PV.')
     parser.add_argument('pv_name', type=str,
                         help="PV (channel) name")
@@ -296,47 +325,71 @@ def put():
     parser.add_argument('--no-repeater', action='store_true',
                         help="Do not spawn a Channel Access repeater daemon process.")
     args = parser.parse_args()
-    pv_name = args.pv_name
-    if args.verbose:
+    try:
+        initial, final = put(pv_name=args.pv_name, data=args.data,
+                             verbose=args.verbose, timeout=args.timeout,
+                             repeater=not args.no_repeater)
+        if len(initial.data) == 1:
+            initial_data, = initial.data
+        else:
+            initial_data = initial.data
+        if len(final.data) == 1:
+            final_data, = final.data
+        else:
+            final_data = final.data
+        print('{0: <40}  {1}'.format(args.pv_name, initial_data))
+        print('{0: <40}  {1}'.format(args.pv_name, final_data))
+    except BaseException as exc:
+        if args.verbose:
+            # Show the full traceback.
+            raise
+        else:
+            # Print a one-line error message.
+            print(exc)
+
+
+def put(pv_name, data, *, verbose=False, timeout=2, repeater=True):
+    raw_data = data
+    logger = logging.getLogger('put')
+    if verbose:
         level = 'DEBUG'
     else:
         level = 'INFO'
-
-    logger = logging.getLogger('put')
     logger.setLevel(level)
     handler.setLevel(level)
     ca_logger.setLevel(level)
 
+    if repeater:
+        # As per the EPICS spec, a well-behaved client should start a
+        # caproto-repeater that will continue running after it exits.
+        spawn_repeater(logger)
     try:
-        if not args.no_repeater:
-            # As per the EPICS spec, a well-behaved client should start a
-            # caproto-repeater that will continue running after it exits.
-            spawn_daemon(run_repeater,
-                        conf_logger(logging.getLogger('repeater'), 'WARNING'))
-            logger.debug('Spawned caproto-repeater daemon process.')
+        data = ast.literal_eval(raw_data)
+    except ValueError:
+        # interpret as string
+        data = raw_data
+    logger.debug('Data argument %s parsed as %r.', raw_data, data)
+    if not isinstance(data, Iterable) or isinstance(data, (str, bytes)):
+        data = [data]
+    if isinstance(data[0], str):
+        data = [val.encode('latin-1') for val in data]
 
-        try:
-            data = ast.literal_eval(args.data)
-        except ValueError:
-            # interpret as string
-            data = args.data
-        logger.debug('Data argument %s parsed as %r.', args.data, data)
-        if not isinstance(data, Iterable) or isinstance(data, (str, bytes)):
-            data = [data]
-        if isinstance(data[0], str):
-            data = [val.encode('latin-1') for val in data]
-
-        chan = make_channel(pv_name, logger, args.timeout)
-
+    udp_sock = ca.bcast_socket()
+    try:
+        udp_sock.settimeout(timeout)
+        chan = make_channel(pv_name, logger, udp_sock, timeout)
+    finally:
+        udp_sock.close()
+    try:
         # Stash initial value
-        initial_data = read(chan, args.timeout)
+        initial_response = read(chan, timeout)
         req = chan.write(data=data)
         send(chan.circuit, req)
         t = time.monotonic()
         while True:
             try:
                 commands = recv(chan.circuit)
-                if time.monotonic() - t > args.timeout:
+                if time.monotonic() - t > timeout:
                     raise socket.timeout
             except socket.timeout:
                 raise TimeoutError("Timeout while awaiting write reply.")
@@ -348,25 +401,17 @@ def put():
             else:
                 continue
             break
-        final_data = read(chan, args.timeout)
-        print('{0: <40}  {1}'.format(pv_name, initial_data))
-        print('{0: <40}  {1}'.format(pv_name, final_data))
-    except BaseException as exc:
-        if args.verbose:
-            raise
-        else:
-            print(exc)
+        final_response = read(chan, timeout)
     finally:
         try:
-            chan
-        except NameError:
-            pass
-        else:
             if chan.states[ca.CLIENT] is ca.CONNECTED:
                 send(chan.circuit, chan.disconnect())
+        finally:
+            sockets[chan.circuit].close()
+    return initial_response, final_response
 
 
-def repeater():
+def repeater_cli():
     parser = argparse.ArgumentParser(
         description="""
 Run a Channel Access Repeater.
@@ -396,6 +441,8 @@ EPICS_CA_REPEATER_PORT. It defaults to the standard 5065. The current value is
         run_repeater(logger=logger)
     except BaseException as exc:
         if args.verbose:
+            # Show the full traceback.
             raise
         else:
+            # Print a one-line error message.
             print(exc)
