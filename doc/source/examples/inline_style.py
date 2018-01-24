@@ -23,6 +23,7 @@ class InlineStyleIOC(PVGroupBase):
         print('writing to A the value', value)
         return value
 
+
 if __name__ == '__main__':
     # usage: inline_style.py <PREFIX>
     import sys

@@ -80,7 +80,7 @@ Macros for PV names
 
 .. code-block:: bash
 
-    $ source/examples/macros.py example5: XF11ID detector
+    $ macros.py example5: XF11ID detector
     PVs: ['example5:XF11ID:detector.VAL', 'example5:XF11ID:detector.RBV']
 
 .. ipython:: python
@@ -102,7 +102,7 @@ Observe that the command line arguments fill in the PV names.
 
 .. code-block:: bash
 
-    $ source/examples/inline_style.py example6:
+    $ inline_style.py example6:
     PVs: ['example6:random_int', 'example6:random_str', 'example6:A']
 
 
