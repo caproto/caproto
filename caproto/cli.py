@@ -9,7 +9,7 @@ import subprocess
 import sys
 
 import caproto as ca
-from caproto._utils import conf_logger, spawn_daemon
+from caproto._utils import spawn_daemon
 from caproto.asyncio.repeater import run as run_repeater
 
 
@@ -438,7 +438,7 @@ EPICS_CA_REPEATER_PORT. It defaults to the standard 5065. The current value is
     handler.setLevel(level)
     ca_logger.setLevel(level)
     try:
-        run_repeater(logger=logger)
+        run_repeater()
     except BaseException as exc:
         if args.verbose:
             # Show the full traceback.

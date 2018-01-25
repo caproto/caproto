@@ -32,8 +32,10 @@ class Broadcaster:
         self.our_role = our_role
         if our_role is CLIENT:
             self.their_role = SERVER
+            abbrev = 'cli'  # just for logger
         else:
             self.their_role = CLIENT
+            abbrev = 'srv'
         self.protocol_version = protocol_version
         self.unanswered_searches = {}  # map search id (cid) to name
         # Unlike VirtualCircuit and Channel, there is very little state to
@@ -41,7 +43,7 @@ class Broadcaster:
         # one flag to check whether we have yet registered with a repeater.
         self._registered = False
         self._search_id_counter = itertools.count(0)
-        logger_name = "broadcaster"
+        logger_name = f"{abbrev}.bcast"
         self.log = logging.getLogger(logger_name)
 
     def send(self, *commands):

@@ -273,16 +273,6 @@ def incremental_buffer_list_slice(*buffers):
         buffers = buffer_list_slice(*buffers, offset=sent)
 
 
-def conf_logger(logger, level='WARNING'):
-    "Simple logging.Logger configuration utility"
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setLevel(level)
-    handler.setFormatter(logging.Formatter('[%(name)s] %(message)s'))
-    logger.addHandler(handler)
-    logger.setLevel(level)
-    return logger
-
-
 def spawn_daemon(func, *args, **kwargs):
     # adapted from https://stackoverflow.com/a/6011298/1221924
 
