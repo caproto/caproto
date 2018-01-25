@@ -1,6 +1,7 @@
 import argparse
 import ast
 from collections import Iterable
+from datetime import datetime
 import logging
 import os
 import time
@@ -9,6 +10,7 @@ import subprocess
 import sys
 
 import caproto as ca
+from caproto._dbr import promote_type
 from caproto._utils import spawn_daemon
 from caproto.asyncio.repeater import run as run_repeater
 
@@ -151,8 +153,8 @@ def spawn_repeater(logger):
     logger.debug('Spawned caproto-repeater process.')
 
 
-def read(chan, timeout):
-    req = chan.read()
+def read(chan, timeout, data_type):
+    req = chan.read(data_type=data_type)
     send(chan.circuit, req)
     t = time.monotonic()
     while True:
@@ -177,15 +179,25 @@ def get_cli():
     parser = argparse.ArgumentParser(description='Read the value of a PV.')
     parser.add_argument('pv_name', type=str,
                         help="PV (channel) name")
+    parser.add_argument('-d', type=str,
+                        help="Request a certain data type.")
     parser.add_argument('--verbose', '-v', action='store_true',
                         help="Show DEBUG log messages.")
-    parser.add_argument('--timeout', type=float, default=2,
-                        help="Timeout in seconds for server responses.")
+    parser.add_argument('--timeout', '-w', type=float, default=2,
+                        help=("Timeout ('wait') in seconds for server "
+                              "responses."))
     parser.add_argument('--no-repeater', action='store_true',
-                        help="Do not spawn a Channel Access repeater daemon process.")
+                        help=("Do not spawn a Channel Access repeater daemon "
+                              "process."))
     args = parser.parse_args()
     try:
+        data_type = int(args.d)
+    except ValueError:
+        # TODO Parse other inputs.
+        ...
+    try:
         response = get(pv_name=args.pv_name,
+                       data_type=data_type,
                        verbose=args.verbose, timeout=args.timeout,
                        repeater=not args.no_repeater)
         # Some niceties from printing...
@@ -203,7 +215,7 @@ def get_cli():
             print(exc)
 
 
-def get(pv_name, *, verbose=False, timeout=2, repeater=True):
+def get(pv_name, *, data_type=None, verbose=False, timeout=2, repeater=True):
     logger = logging.getLogger('get')
     if verbose:
         level = 'DEBUG'
@@ -224,7 +236,7 @@ def get(pv_name, *, verbose=False, timeout=2, repeater=True):
     finally:
         udp_sock.close()
     try:
-        return read(chan, timeout)
+        return read(chan, timeout, data_type=data_type)
     finally:
         try:
             if chan.states[ca.CLIENT] is ca.CONNECTED:
@@ -239,10 +251,12 @@ def monitor_cli():
                         help="PV (channel) name")
     parser.add_argument('--verbose', '-v', action='store_true',
                         help="Show DEBUG log messages.")
-    parser.add_argument('--timeout', type=float, default=2,
-                        help="Timeout in seconds for server responses.")
+    parser.add_argument('--timeout', '-w', type=float, default=2,
+                        help=("Timeout ('wait') in seconds for server "
+                              "responses."))
     parser.add_argument('--no-repeater', action='store_true',
-                        help="Do not spawn a Channel Access repeater daemon process.")
+                        help=("Do not spawn a Channel Access repeater daemon "
+                              "process."))
     args = parser.parse_args()
 
     def callback(response):
@@ -251,7 +265,9 @@ def monitor_cli():
             data, = response.data
         else:
             data = response.data
-        print('{0: <40}  {1}'.format(args.pv_name, data))
+        dt = datetime.fromtimestamp(response.metadata.timestamp)
+        ts = dt.strftime('%Y-%m-%d %H:%M:%S')
+        print('{0: <40}  {1: <25} {2}'.format(args.pv_name, ts, data))
 
     try:
         monitor(pv_name=args.pv_name,
@@ -288,13 +304,18 @@ def monitor(pv_name, callback, *, verbose=False, timeout=2, repeater=True):
     finally:
         udp_sock.close()
     try:
+        logger.debug("Reading to detect data type.")
+        response = read(chan, timeout, data_type=None)
+        time_type = promote_type(response.data_type, use_time=True)
+        logger.debug("Native data_type is %r.", response.data_type)
         # Remove the timeout during monitoring.
         sockets[chan.circuit].settimeout(None)
-        req = chan.subscribe()
+        logger.debug("Subscribing with data_type %r.", time_type)
+        req = chan.subscribe(data_type=time_type)
         send(chan.circuit, req)
 
         try:
-            logger.debug('Monitoring until SIGINT is received....')
+            logger.debug('Subscribed. Continuing until SIGINT is received....')
             while True:
                 commands = recv(chan.circuit)
                 for response in commands:
@@ -320,10 +341,12 @@ def put_cli():
                         help="Value or values to write.")
     parser.add_argument('--verbose', '-v', action='store_true',
                         help="Show DEBUG log messages.")
-    parser.add_argument('--timeout', type=float, default=2,
-                        help="Timeout in seconds for server responses.")
+    parser.add_argument('--timeout', '-w', type=float, default=2,
+                        help=("Timeout ('wait') in seconds for server "
+                              "responses."))
     parser.add_argument('--no-repeater', action='store_true',
-                        help="Do not spawn a Channel Access repeater daemon process.")
+                        help=("Do not spawn a Channel Access repeater daemon "
+                              "process."))
     args = parser.parse_args()
     try:
         initial, final = put(pv_name=args.pv_name, data=args.data,
@@ -382,7 +405,9 @@ def put(pv_name, data, *, verbose=False, timeout=2, repeater=True):
         udp_sock.close()
     try:
         # Stash initial value
+        logger.debug("Taking 'initial' reading before writing.")
         initial_response = read(chan, timeout)
+        logger.debug("Writing.")
         req = chan.write(data=data)
         send(chan.circuit, req)
         t = time.monotonic()
@@ -401,6 +426,7 @@ def put(pv_name, data, *, verbose=False, timeout=2, repeater=True):
             else:
                 continue
             break
+        logger.debug("Taking 'final' reading after writing.")
         final_response = read(chan, timeout)
     finally:
         try:
