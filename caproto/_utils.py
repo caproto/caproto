@@ -92,6 +92,9 @@ class CaprotoTypeError(TypeError, CaprotoError):
 class CaprotoRuntimeError(RuntimeError, CaprotoError):
     ...
 
+class ErrorResponseReceived(CaprotoError):
+    ...
+
 
 def get_environment_variables():
     '''Get a dictionary of known EPICS environment variables'''

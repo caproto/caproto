@@ -12,7 +12,7 @@ import sys
 
 import caproto as ca
 from caproto._dbr import promote_type
-from caproto._utils import spawn_daemon
+from caproto._utils import spawn_daemon, ErrorResponseReceived
 from caproto.asyncio.repeater import run as run_repeater
 
 
@@ -171,6 +171,8 @@ def read(chan, timeout, data_type):
                         command.ioid == req.ioid):
                 response = command
                 break
+            elif isinstance(command, ca.ErrorResponse):
+                raise ErrorResponseReceived(command)
         else:
             continue
         break
@@ -447,6 +449,8 @@ def monitor(*pv_names, callback, verbose=False, timeout=1, priority=0,
                     circuit = sock_to_circuit[selector_key.fileobj]
                     commands = recv(circuit)
                     for response in commands:
+                        if isinstance(response, ca.ErrorResponse):
+                            raise ErrorResponseReceived(command)
                         chan = sub_ids.get(response.subscriptionid)
                         if chan:
                             callback(chan.name, response)
@@ -611,6 +615,8 @@ def put(pv_name, data, *, verbose=False, timeout=1, priority=0, repeater=True):
                             command.ioid == req.ioid):
                     response = command
                     break
+                elif isinstance(command, ca.ErrorResponse):
+                    raise ErrorResponseReceived(command)
             else:
                 continue
             break
