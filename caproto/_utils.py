@@ -1,3 +1,6 @@
+# This module includes all exceptions raised by caproto, sentinel objects used
+# throughout the package (see detailed comment below), various network-related
+# helper functions, and other miscellaneous utilities.
 import logging
 import os
 import socket

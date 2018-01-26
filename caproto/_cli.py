@@ -1,3 +1,17 @@
+# This module contains a synchronous implementation of a Channel Access client
+# as three top-level functions: get, put, and monitor. They are comparatively
+# simple and naive, with no caching or concurrency, and therefore less
+# performant but more robust.
+
+# The module also includes variants intended for use at the command line
+# (get_cli, put_cli, monitor_cli) which layers argparse on top of the get, put
+# and monitor. These can be called directly from the shell using the scripts
+# caproto-get, caproto-put, and caproto-monitor, which are added to the PATH
+# when caproto is installed.
+
+# Additionally, there is repeater_cli and caproto-repeater, which spawns a
+# repeater in a detached subprocess.
+
 import argparse
 import ast
 from collections import Iterable

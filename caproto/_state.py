@@ -1,3 +1,17 @@
+# This module encodes the rules of the Channel Access protocol as nested
+# dictionaries. (See the state machine diagram in the documentation,
+# programmatically generated from these dictionaries.)
+
+# There are two state machines, tracking circuit state and channel state. They
+# are coupled: each time circuit state updates, channel state processes that
+# change.
+
+# For each state machine, the outer dict is keyed on role (CLIENT, SERVER).
+# The next layer is keyed on the current state of the component  (e.g.
+# CONNECTED or DISCONNECTED).
+# Within each state, a dictionary maps each allowed Command to the state it
+# will move the component into when processed.
+
 from ._commands import (AccessRightsResponse, ClearChannelRequest,
                         ClearChannelResponse, ClientNameRequest,
                         CreateChanRequest, CreateChanResponse, EchoRequest,

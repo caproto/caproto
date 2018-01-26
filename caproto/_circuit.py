@@ -1,8 +1,11 @@
 # This module defines classes that encapsulate key abstractions in
 # Channel Access: Channels and VirtualCircuits. Each VirtualCircuit is a
-# companion to a (user-managed) TCP socket, updating its state in response to
-# incoming and outgoing TCP bytestreams. Each Channel belongs to a circuit, and
-# tracks state particular to that Channel.
+# companion to a TCP socket managed by a higher-level client or server
+# implementation, updating its state in response to incoming and outgoing TCP
+# bytestreams. Each Channel belongs to a circuit, and tracks state particular
+# to that Channel. A ClientChannel provides convenience methods for composing
+# Requests; a ServerChannel provides convenience methods for composing
+# Responses.
 import itertools
 import logging
 import getpass
@@ -39,6 +42,7 @@ class VirtualCircuit:
 
     Parameters
     ----------
+    our_role : CLIENT or SERVER
     address : tuple
         ``(host, port)`` as a string and an integer respectively
     priority : integer or None

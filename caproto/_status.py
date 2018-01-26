@@ -1,3 +1,5 @@
+# Represent each CA Status Code as a namedtuple encapulating associated numeric
+# codes and human-readable attributes.
 from enum import IntEnum
 from collections import namedtuple
 

@@ -1,3 +1,6 @@
+# This module contains only the Broadcaster object, encapsulating the state of
+# one Channel Access UDP connection, intended to be used as a companion to a
+# UDP socket provided by a client or server implementation.
 import itertools
 import logging
 import socket
@@ -13,11 +16,12 @@ from ._commands import (RepeaterConfirmResponse, RepeaterRegisterRequest,
 
 class Broadcaster:
     """
-    An object encapulating the state of one CA UDP connection.
+    An object encapsulating the state of one CA UDP connection.
 
-    It is a companion to a UDP socket managed by the user. All data
-    received over the socket should be passed to :meth:`recv`. Any data sent
-    over the socket should first be passed through :meth:`send`.
+    It is a companion to a UDP socket managed by a client or server
+    implementation. All data received over the socket should be passed to
+    :meth:`recv`. Any data sent over the socket should first be passed through
+    :meth:`send`.
 
     Parameters
     ----------
