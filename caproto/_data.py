@@ -276,23 +276,36 @@ class ChannelData:
         self.reported_record_type = reported_record_type
         self._data = dict(value=value,
                           timestamp=timestamp)
-        self._subscriptions = defaultdict(set)  # maps sub_spec to queues
+        # This maps queues to SubscriptionSpecs. (Each queue belongs to a
+        # Context.)
+        self._queues = defaultdict(set)
+
+        # Cache results of data_type conversions. This maps data_type to
+        # (metdata, value). This is cleared each time publish() is called.
+        self._content = {}
 
     value = _read_only_property('value')
     timestamp = _read_only_property('timestamp')
 
     async def subscribe(self, queue, sub_spec):
-        self._subscriptions[sub_spec].add(queue)
+        self._queues[queue].add(sub_spec)
         # Always send current reading immediately upon subscription.
-        metadata, values = await self._read(sub_spec.data_type)
+        data_type = sub_spec.data_type
+        try:
+            metadata, values = self._content[data_type]
+        except KeyError:
+            # Do the expensive data type conversion and cache it in case
+            # a future subscription wants the same data type.
+            metadata, values = await self._read(data_type)
+            self._content[data_type] = metadata, values
         flags = (SubscriptionType.DBE_VALUE |
                  SubscriptionType.DBE_ALARM |
                  SubscriptionType.DBE_LOG |
                  SubscriptionType.DBE_PROPERTY)
-        await queue.put((sub_spec, metadata, values, flags))
+        await queue.put(((sub_spec,), metadata, values))
 
     async def unsubscribe(self, queue, sub_spec):
-        self._subscriptions[sub_spec].remove(queue)
+        self._queues[queue].remove(sub_spec)
 
     async def auth_read(self, hostname, username, data_type):
         '''Get DBR data and native data, converted to a specific type'''
@@ -413,14 +426,35 @@ class ChannelData:
         await self.publish(SubscriptionType.DBE_VALUE)
 
     async def publish(self, flags):
-        # Only read out as many data types as we actually need,
-        # as specified by the sub_specs currently registered.
-        # If, for example, no subscribers have asked for non-native
-        # data_type, we save time by never filling in metadata.
-        for sub_spec, queues in self._subscriptions.items():
-            metadata, values = await self._read(sub_spec.data_type)
-            for queue in queues:
-                await queue.put((sub_spec, metadata, values, flags))
+        # Each SubscriptionSpec specifies a certain data type it is interested
+        # in and a mask. Send one update per queue per data_type if and only if
+        # any subscriptions specs on a queue have a compatible mask.
+
+        # Copying the data into structs with various data types is expensive,
+        # so we only want to do it if it's going to be used, and we only want
+        # to do each conversion once. Clear the cache to start. This cache is
+        # instance state so that self.subscribe can also use it.
+        self._content.clear()
+
+        for queue, sub_specs in self._queues.items():
+            for data_type in set(ss.data_type for ss in sub_specs):
+                # Which (if any) of the sub_specs that want this data_type
+                # have a compatible mask?
+                eligible = tuple(ss for ss in sub_specs if flags & ss.mask
+                                 and ss.data_type == data_type)
+                if not eligible:
+                    continue
+                # There is at least one sub_spec for the queue that will
+                # receive this update.
+                try:
+                    metdata, values = self._content[data_type]
+                except KeyError:
+                    # Do the expensive data type conversion and cache it in
+                    # case another queue or a future subscription wants the
+                    # same data type.
+                    metadata, values = await self._read(data_type)
+                    self._content[data_type] = metadata, values
+                await queue.put((eligible, metadata, values))
 
     def _read_metadata(self, dbr_metadata):
         'Set all metadata fields of a given DBR type instance'

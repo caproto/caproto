@@ -17,7 +17,8 @@ class DisconnectedCircuit(Exception):
 Subscription = namedtuple('Subscription', ('mask', 'circuit', 'channel',
                                            'data_type',
                                            'data_count', 'subscriptionid'))
-SubscriptionSpec = namedtuple('SubscriptionSpec', ('db_entry', 'data_type',))
+SubscriptionSpec = namedtuple('SubscriptionSpec', ('db_entry', 'data_type',
+                                                   'mask'))
 
 
 logger = logging.getLogger(__name__)
@@ -235,7 +236,8 @@ class CurioVirtualCircuit:
                                data_count=command.data_count,
                                subscriptionid=command.subscriptionid)
             sub_spec = SubscriptionSpec(db_entry=db_entry,
-                                        data_type=command.data_type)
+                                        data_type=command.data_type,
+                                        mask=command.mask)
             self.subscriptions[sub_spec].append(sub)
             self.context.subscriptions[sub_spec].append(sub)
             await db_entry.subscribe(self.context.subscription_queue, sub_spec)
@@ -358,24 +360,16 @@ class Context:
 
     async def subscription_queue_loop(self):
         while True:
-            # This queue receives updates that match the db_entry and data type
-            # ("subscription spec") of at least one active subscription. But
-            # before sending it to the relevant clients we have to check their
-            # masks, below. It would be more efficient if the other side of the
-            # queue knew about the masks too and short-circuited the process
-            # before it got to this point.
-            update = await self.subscription_queue.get()
-            print(update)
-            sub_spec, metadata, values, flags = update
-            # Which subs are interested in this db_entry and data type?
-            # (There is always at least one, or it wouldn't have been sent.
-            subs = self.subscriptions[sub_spec]
-            # Of these, which have a compatible mask? (There might be zero.)
-            matching_subs = [sub for sub in subs if sub.mask & flags]
+            # This queue receives updates that match the db_entry, data_type
+            # and mask ("subscription spec") of one or more subscriptions.
+            sub_specs, metadata, values = await self.subscription_queue.get()
+            subs = []
+            for sub_spec in sub_specs:
+                subs.extend(self.subscriptions[sub_spec])
             # Pack the data and metadata into an EventAddResponse and send it.
-            # We have to make a different response for each client because
-            # they may different subscription IDs and requested data_count.
-            for sub in matching_subs:
+            # We have to make a new response for each channel because each may
+            # have a different requested data_count.
+            for sub in subs:
                 chan = sub.channel
                 # if the subscription has a non-zero value respect it,
                 # else default to the full length of the data
