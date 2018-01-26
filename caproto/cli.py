@@ -42,7 +42,7 @@ def recv(circuit):
     return commands
 
 
-def make_channel(pv_name, logger, udp_sock, timeout=2):
+def make_channel(pv_name, logger, udp_sock, priority, timeout):
     # Set Broadcaster log level to match our logger.
     b = ca.Broadcaster(our_role=ca.CLIENT)
     b.log.setLevel(logger.level)
@@ -115,7 +115,7 @@ def make_channel(pv_name, logger, udp_sock, timeout=2):
 
     circuit = ca.VirtualCircuit(our_role=ca.CLIENT,
                                 address=address,
-                                priority=0)
+                                priority=priority)
     # Set circuit log level to match our logger.
     circuit.log.setLevel(logger.level)
     chan = ca.ClientChannel(pv_name, circuit)
@@ -124,7 +124,7 @@ def make_channel(pv_name, logger, udp_sock, timeout=2):
 
     try:
         # Initialize our new TCP-based CA connection with a VersionRequest.
-        send(chan.circuit, ca.VersionRequest(priority=0, version=13))
+        send(chan.circuit, ca.VersionRequest(priority=priority, version=13))
         send(chan.circuit, chan.host_name())
         send(chan.circuit, chan.client_name())
         send(chan.circuit, chan.create())
@@ -142,6 +142,7 @@ def make_channel(pv_name, logger, udp_sock, timeout=2):
         logger.debug('Channel created.')
     except BaseException:
         sockets[chan.circuit].close()
+        raise
     return chan
 
 
@@ -179,26 +180,33 @@ def get_cli():
     parser = argparse.ArgumentParser(description='Read the value of a PV.')
     parser.add_argument('pv_name', type=str,
                         help="PV (channel) name")
-    parser.add_argument('-d', type=str,
+    parser.add_argument('-d', type=str, default=None,
                         help="Request a certain data type.")
-    parser.add_argument('--verbose', '-v', action='store_true',
-                        help="Show DEBUG log messages.")
-    parser.add_argument('--timeout', '-w', type=float, default=2,
-                        help=("Timeout ('wait') in seconds for server "
-                              "responses."))
     parser.add_argument('--no-repeater', action='store_true',
                         help=("Do not spawn a Channel Access repeater daemon "
                               "process."))
+    parser.add_argument('--timeout', '-w', type=float, default=1,
+                        help=("Timeout ('wait') in seconds for server "
+                              "responses."))
+    parser.add_argument('--priority', '-p', type=int, default=0,
+                        help="Channel Access Virtual Circuit priority. "
+                             "Lowest is 0; highest is 99.")
+    parser.add_argument('--verbose', '-v', action='store_true',
+                        help="Show DEBUG log messages.")
     args = parser.parse_args()
-    try:
-        data_type = int(args.d)
-    except ValueError:
-        # TODO Parse other inputs.
-        ...
+    if args.d is None:
+        data_type = args.d
+    else:
+        try:
+            data_type = int(args.d)
+        except ValueError:
+            # TODO map string codes to ints
+            ...
     try:
         response = get(pv_name=args.pv_name,
                        data_type=data_type,
                        verbose=args.verbose, timeout=args.timeout,
+                       priority=args.priority,
                        repeater=not args.no_repeater)
         # Some niceties from printing...
         if len(response.data) == 1:
@@ -215,7 +223,8 @@ def get_cli():
             print(exc)
 
 
-def get(pv_name, *, data_type=None, verbose=False, timeout=2, repeater=True):
+def get(pv_name, *, data_type=None, verbose=False, timeout=2, priority=0,
+        repeater=True):
     logger = logging.getLogger('get')
     if verbose:
         level = 'DEBUG'
@@ -232,7 +241,7 @@ def get(pv_name, *, data_type=None, verbose=False, timeout=2, repeater=True):
     udp_sock = ca.bcast_socket()
     try:
         udp_sock.settimeout(timeout)
-        chan = make_channel(pv_name, logger, udp_sock, timeout)
+        chan = make_channel(pv_name, logger, udp_sock, priority, timeout)
     finally:
         udp_sock.close()
     try:
@@ -249,14 +258,17 @@ def monitor_cli():
     parser = argparse.ArgumentParser(description='Read the value of a PV.')
     parser.add_argument('pv_name', type=str,
                         help="PV (channel) name")
-    parser.add_argument('--verbose', '-v', action='store_true',
-                        help="Show DEBUG log messages.")
-    parser.add_argument('--timeout', '-w', type=float, default=2,
-                        help=("Timeout ('wait') in seconds for server "
-                              "responses."))
     parser.add_argument('--no-repeater', action='store_true',
                         help=("Do not spawn a Channel Access repeater daemon "
                               "process."))
+    parser.add_argument('--priority', '-p', type=int, default=0,
+                        help="Channel Access Virtual Circuit priority. "
+                             "Lowest is 0; highest is 99.")
+    parser.add_argument('--timeout', '-w', type=float, default=1,
+                        help=("Timeout ('wait') in seconds for server "
+                              "responses."))
+    parser.add_argument('--verbose', '-v', action='store_true',
+                        help="Show DEBUG log messages.")
     args = parser.parse_args()
 
     def callback(response):
@@ -273,6 +285,7 @@ def monitor_cli():
         monitor(pv_name=args.pv_name,
                 callback=callback,
                 verbose=args.verbose, timeout=args.timeout,
+                priority=args.priority,
                 repeater=not args.no_repeater)
     except BaseException as exc:
         if args.verbose:
@@ -283,7 +296,8 @@ def monitor_cli():
             print(exc)
 
 
-def monitor(pv_name, callback, *, verbose=False, timeout=2, repeater=True):
+def monitor(pv_name, callback, *, verbose=False, timeout=2, priority=0,
+            repeater=True):
     logger = logging.getLogger('monitor')
     if verbose:
         level = 'DEBUG'
@@ -300,14 +314,12 @@ def monitor(pv_name, callback, *, verbose=False, timeout=2, repeater=True):
     udp_sock = ca.bcast_socket()
     try:
         udp_sock.settimeout(timeout)
-        chan = make_channel(pv_name, logger, udp_sock, timeout)
+        chan = make_channel(pv_name, logger, udp_sock, priority, timeout)
     finally:
         udp_sock.close()
     try:
-        logger.debug("Reading to detect data type.")
-        response = read(chan, timeout, data_type=None)
-        time_type = promote_type(response.data_type, use_time=True)
-        logger.debug("Native data_type is %r.", response.data_type)
+        logger.debug("Detected native data_type %r.", chan.native_data_type)
+        time_type = promote_type(chan.native_data_type, use_time=True)
         # Remove the timeout during monitoring.
         sockets[chan.circuit].settimeout(None)
         logger.debug("Subscribing with data_type %r.", time_type)
@@ -339,18 +351,22 @@ def put_cli():
                         help="PV (channel) name")
     parser.add_argument('data', type=str,
                         help="Value or values to write.")
-    parser.add_argument('--verbose', '-v', action='store_true',
-                        help="Show DEBUG log messages.")
-    parser.add_argument('--timeout', '-w', type=float, default=2,
-                        help=("Timeout ('wait') in seconds for server "
-                              "responses."))
     parser.add_argument('--no-repeater', action='store_true',
                         help=("Do not spawn a Channel Access repeater daemon "
                               "process."))
+    parser.add_argument('--priority', '-p', type=int, default=0,
+                        help="Channel Access Virtual Circuit priority. "
+                             "Lowest is 0; highest is 99.")
+    parser.add_argument('--timeout', '-w', type=float, default=1,
+                        help=("Timeout ('wait') in seconds for server "
+                              "responses."))
+    parser.add_argument('--verbose', '-v', action='store_true',
+                        help="Show DEBUG log messages.")
     args = parser.parse_args()
     try:
         initial, final = put(pv_name=args.pv_name, data=args.data,
                              verbose=args.verbose, timeout=args.timeout,
+                             priority=args.priority,
                              repeater=not args.no_repeater)
         if len(initial.data) == 1:
             initial_data, = initial.data
@@ -371,7 +387,7 @@ def put_cli():
             print(exc)
 
 
-def put(pv_name, data, *, verbose=False, timeout=2, repeater=True):
+def put(pv_name, data, *, verbose=False, timeout=2, priority=0, repeater=True):
     raw_data = data
     logger = logging.getLogger('put')
     if verbose:
@@ -400,13 +416,13 @@ def put(pv_name, data, *, verbose=False, timeout=2, repeater=True):
     udp_sock = ca.bcast_socket()
     try:
         udp_sock.settimeout(timeout)
-        chan = make_channel(pv_name, logger, udp_sock, timeout)
+        chan = make_channel(pv_name, logger, udp_sock, priority, timeout)
     finally:
         udp_sock.close()
     try:
         # Stash initial value
         logger.debug("Taking 'initial' reading before writing.")
-        initial_response = read(chan, timeout)
+        initial_response = read(chan, timeout, None)
         logger.debug("Writing.")
         req = chan.write(data=data)
         send(chan.circuit, req)
@@ -427,7 +443,7 @@ def put(pv_name, data, *, verbose=False, timeout=2, repeater=True):
                 continue
             break
         logger.debug("Taking 'final' reading after writing.")
-        final_response = read(chan, timeout)
+        final_response = read(chan, timeout, None)
     finally:
         try:
             if chan.states[ca.CLIENT] is ca.CONNECTED:
@@ -448,10 +464,10 @@ EPICS_CA_REPEATER_PORT. It defaults to the standard 5065. The current value is
 {}.""".format(os.environ.get('EPICS_CA_REPEATER_PORT', 5065)))
 
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('-v', '--verbose', action='store_true',
-                       help="Show DEBUG log messages.")
     group.add_argument('-q', '--quiet', action='store_true',
                        help="Suppress INFO log messages. (Still show WARNING or higher.)")
+    group.add_argument('-v', '--verbose', action='store_true',
+                       help="Show DEBUG log messages.")
     args = parser.parse_args()
     if args.verbose:
         level = 'DEBUG'
