@@ -182,6 +182,12 @@ def get_cli():
                         help="PV (channel) name")
     parser.add_argument('-d', type=str, default=None,
                         help="Request a certain data type.")
+    parser.add_argument('--format', type=str,
+                        help=("Python format string. Available tokens are "
+                              "{pv_name} and {response}. Additionally, "
+                              "if {response.metadata.timestamp} exists for "
+                              "data type, {timestamp} and usages like "
+                              "{timestamp:%Y-%m-%d %H:%M:%S} are supported."))
     parser.add_argument('--no-repeater', action='store_true',
                         help=("Do not spawn a Channel Access repeater daemon "
                               "process."))
@@ -208,12 +214,16 @@ def get_cli():
                        verbose=args.verbose, timeout=args.timeout,
                        priority=args.priority,
                        repeater=not args.no_repeater)
-        # Some niceties from printing...
-        if len(response.data) == 1:
-            data, = response.data
+        if args.format is None:
+            format_str = '{pv_name: <40}  {response.data}'
         else:
-            data = response.data
-        print('{0: <40}  {1}'.format(args.pv_name, data))
+            format_str = args.format
+        tokens = dict(pv_name=args.pv_name, response=response)
+        if hasattr(response.metadata, 'timestamp'):
+            dt = datetime.fromtimestamp(response.metadata.timestamp)
+            tokens['timestamp'] = dt
+        print(format_str.format(**tokens))
+
     except BaseException as exc:
         if args.verbose:
             # Show the full traceback.
@@ -258,6 +268,12 @@ def monitor_cli():
     parser = argparse.ArgumentParser(description='Read the value of a PV.')
     parser.add_argument('pv_name', type=str,
                         help="PV (channel) name")
+    parser.add_argument('--format', type=str,
+                        help=("Python format string. Available tokens are "
+                              "{pv_name} and {response}. Additionally, "
+                              "if {response.metadata.timestamp} exists for "
+                              "data type, {timestamp} and usages like "
+                              "{timestamp:%Y-%m-%d %H:%M:%S} are supported."))
     parser.add_argument('--no-repeater', action='store_true',
                         help=("Do not spawn a Channel Access repeater daemon "
                               "process."))
@@ -272,15 +288,15 @@ def monitor_cli():
     args = parser.parse_args()
 
     def callback(response):
-        # Some niceties from printing...
-        if len(response.data) == 1:
-            data, = response.data
+        if args.format is None:
+            format_str = ("{pv_name: <40}  {timestamp:%Y-%m-%d %H:%M:%S} "
+                          "{response.data}")
         else:
-            data = response.data
+            format_str = args.format
+        tokens = dict(pv_name=args.pv_name, response=response)
         dt = datetime.fromtimestamp(response.metadata.timestamp)
-        ts = dt.strftime('%Y-%m-%d %H:%M:%S')
-        print('{0: <40}  {1: <25} {2}'.format(args.pv_name, ts, data))
-
+        tokens['timestamp'] = dt
+        print(format_str.format(**tokens))
     try:
         monitor(pv_name=args.pv_name,
                 callback=callback,
@@ -351,6 +367,12 @@ def put_cli():
                         help="PV (channel) name")
     parser.add_argument('data', type=str,
                         help="Value or values to write.")
+    parser.add_argument('--format', type=str,
+                        help=("Python format string. Available tokens are "
+                              "{pv_name} and {response}. Additionally, "
+                              "if {response.metadata.timestamp} exists for "
+                              "data type, {timestamp} and usages like "
+                              "{timestamp:%Y-%m-%d %H:%M:%S} are supported."))
     parser.add_argument('--no-repeater', action='store_true',
                         help=("Do not spawn a Channel Access repeater daemon "
                               "process."))
@@ -368,16 +390,20 @@ def put_cli():
                              verbose=args.verbose, timeout=args.timeout,
                              priority=args.priority,
                              repeater=not args.no_repeater)
-        if len(initial.data) == 1:
-            initial_data, = initial.data
+        if args.format is None:
+            format_str = '{pv_name: <40}  {response.data}'
         else:
-            initial_data = initial.data
-        if len(final.data) == 1:
-            final_data, = final.data
-        else:
-            final_data = final.data
-        print('{0: <40}  {1}'.format(args.pv_name, initial_data))
-        print('{0: <40}  {1}'.format(args.pv_name, final_data))
+            format_str = args.format
+        tokens = dict(pv_name=args.pv_name, response=initial)
+        if hasattr(initial.metadata, 'timestamp'):
+            dt = datetime.fromtimestamp(initial.metadata.timestamp)
+            tokens['timestamp'] = dt
+        print(format_str.format(**tokens))
+        tokens = dict(pv_name=args.pv_name, response=final)
+        if hasattr(final.metadata, 'timestamp'):
+            dt = datetime.fromtimestamp(final.metadata.timestamp)
+            tokens['timestamp'] = dt
+        tokens = dict(pv_name=args.pv_name, response=final)
     except BaseException as exc:
         if args.verbose:
             # Show the full traceback.
