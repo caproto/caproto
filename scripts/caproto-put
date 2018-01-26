@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from caproto.cli import put_cli
+from caproto._cli import put_cli
 
 
 if __name__ == '__main__':

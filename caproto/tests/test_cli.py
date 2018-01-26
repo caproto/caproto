@@ -1,36 +1,38 @@
 import pytest
 import subprocess
-from caproto.cli import get, put, monitor
+from caproto._cli import get, put, monitor
 
 
 # PV_NAME = 'Py:ao1'
 PV_NAME = 'pi'
 
 
-def escape(response):
+def escape(pv_name, response):
     raise KeyboardInterrupt
 
-@pytest.mark.parametrize('func,args',
-                         [(get, ('__does_not_exist',)),
-                          (put, ('__does_not_exist', 5)),
-                          (monitor, ('__does_not_exist', escape))])
-def test_timeout(func, args):
+@pytest.mark.parametrize('func,args,kwargs',
+                         [(get, ('__does_not_exist',), {}),
+                          (put, ('__does_not_exist', 5), {}),
+                          (monitor, ('__does_not_exist',),
+                           {'callback': escape})])
+def test_timeout(func, args, kwargs):
     with pytest.raises(TimeoutError):
-        func(*args)
+        func(*args, **kwargs)
 
 
-@pytest.mark.parametrize('kwargs,',
+@pytest.mark.parametrize('more_kwargs,',
                          [{'verbose': True},
                           {'repeater': False},
                           {'timeout': 3},
                           ]
                         )
-@pytest.mark.parametrize('func,args',
-                         [(get, (PV_NAME,)),
-                          (put, (PV_NAME, 5)),
-                          (monitor, (PV_NAME, escape))
+@pytest.mark.parametrize('func,args,kwargs',
+                         [(get, (PV_NAME,), {}),
+                          (put, (PV_NAME, 5), {}),
+                          (monitor, (PV_NAME,), {'callback': escape})
                           ])
-def test_options(func, args, kwargs):
+def test_options(func, args, kwargs, more_kwargs):
+    kwargs.update(more_kwargs)
     func(*args, **kwargs)
 
 

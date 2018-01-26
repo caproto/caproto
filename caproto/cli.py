@@ -5,6 +5,7 @@ from datetime import datetime
 import logging
 import os
 import time
+import selectors
 import socket
 import subprocess
 import sys
@@ -179,8 +180,8 @@ def read(chan, timeout, data_type):
 def get_cli():
     parser = argparse.ArgumentParser(description='Read the value of a PV.')
     fmt_group = parser.add_mutually_exclusive_group()
-    parser.add_argument('pv_name', type=str,
-                        help="PV (channel) name")
+    parser.add_argument('pv_names', type=str, nargs='+',
+                        help="PV (channel) name(s) separated by spaces")
     parser.add_argument('-d', type=str, default=None,
                         help="Request a certain data type.")
     fmt_group.add_argument('--format', type=str,
@@ -214,25 +215,26 @@ def get_cli():
             # TODO map string codes to ints
             ...
     try:
-        response = get(pv_name=args.pv_name,
-                       data_type=data_type,
-                       verbose=args.verbose, timeout=args.timeout,
-                       priority=args.priority,
-                       repeater=not args.no_repeater)
-        if args.format is None:
-            format_str = '{pv_name: <40}  {response.data}'
-        else:
-            format_str = args.format
-        if args.terse:
-            if len(response.data) == 1:
-                format_str = '{response.data[0]}'
+        for pv_name in args.pv_names:
+            response = get(pv_name=pv_name,
+                        data_type=data_type,
+                        verbose=args.verbose, timeout=args.timeout,
+                        priority=args.priority,
+                        repeater=not args.no_repeater)
+            if args.format is None:
+                format_str = '{pv_name: <40}  {response.data}'
             else:
-                format_str = '{response.data}'
-        tokens = dict(pv_name=args.pv_name, response=response)
-        if hasattr(response.metadata, 'timestamp'):
-            dt = datetime.fromtimestamp(response.metadata.timestamp)
-            tokens['timestamp'] = dt
-        print(format_str.format(**tokens))
+                format_str = args.format
+            if args.terse:
+                if len(response.data) == 1:
+                    format_str = '{response.data[0]}'
+                else:
+                    format_str = '{response.data}'
+            tokens = dict(pv_name=pv_name, response=response)
+            if hasattr(response.metadata, 'timestamp'):
+                dt = datetime.fromtimestamp(response.metadata.timestamp)
+                tokens['timestamp'] = dt
+            print(format_str.format(**tokens))
 
     except BaseException as exc:
         if args.verbose:
@@ -243,8 +245,36 @@ def get_cli():
             print(exc)
 
 
-def get(pv_name, *, data_type=None, verbose=False, timeout=2, priority=0,
+def get(pv_name, *, data_type=None, verbose=False, timeout=1, priority=0,
         repeater=True):
+    """
+    Read a Channel.
+
+    Parameters
+    ----------
+    pv_name : str
+    data_type : int, optional
+        Request specific data type. Default is Channel's native data type.
+    verbose : boolean, optional
+        Verbose logging. Default is False.
+    timeout : float, optional
+        Default is 1 second.
+    priority : 0, optional
+        Virtual Circuit priority. Default is 0, lowest. Highest is 99.
+    repeater : boolean, optional
+        Spawn a Channel Access Repeater process if the port is available.
+        True default, as the Channel Access spec stipulates that well-behaved
+        clients should do this.
+
+    Returns
+    -------
+    response : ReadNotifyResponse
+
+    Examples
+    --------
+    Get the value of a Channel named 'cat'.
+    >>> get('cat').data
+    """
     logger = logging.getLogger('get')
     if verbose:
         level = 'DEBUG'
@@ -277,7 +307,7 @@ def get(pv_name, *, data_type=None, verbose=False, timeout=2, priority=0,
 def monitor_cli():
     parser = argparse.ArgumentParser(description='Read the value of a PV.')
     fmt_group = parser.add_mutually_exclusive_group()
-    parser.add_argument('pv_name', type=str,
+    parser.add_argument('pv_names', type=str, nargs='+',
                         help="PV (channel) name")
     fmt_group.add_argument('--format', type=str,
                            help=("Python format string. Available tokens are "
@@ -302,7 +332,7 @@ def monitor_cli():
                         help="Show DEBUG log messages.")
     args = parser.parse_args()
 
-    def callback(response):
+    def callback(pv_name, response):
         if args.format is None:
             format_str = ("{pv_name: <40}  {timestamp:%Y-%m-%d %H:%M:%S} "
                           "{response.data}")
@@ -313,12 +343,12 @@ def monitor_cli():
                 format_str = '{response.data[0]}'
             else:
                 format_str = '{response.data}'
-        tokens = dict(pv_name=args.pv_name, response=response)
+        tokens = dict(pv_name=pv_name, response=response)
         dt = datetime.fromtimestamp(response.metadata.timestamp)
         tokens['timestamp'] = dt
         print(format_str.format(**tokens))
     try:
-        monitor(pv_name=args.pv_name,
+        monitor(*args.pv_names,
                 callback=callback,
                 verbose=args.verbose, timeout=args.timeout,
                 priority=args.priority,
@@ -332,8 +362,36 @@ def monitor_cli():
             print(exc)
 
 
-def monitor(pv_name, callback, *, verbose=False, timeout=2, priority=0,
+def monitor(*pv_names, callback, verbose=False, timeout=1, priority=0,
             repeater=True):
+    """
+    Monitor one or more Channels indefinitely.
+
+    Use Ctrl+C (SIGINT) to escape.
+
+    Parameters
+    ----------
+    pv_names : str
+    callback : callable, required keyword-only argument
+        Expected signature is ``f(pv_name, ReadNotifyResponse)``.
+    data_type : int, optional
+        Request specific data type. Default is Channel's native data type.
+    verbose : boolean, optional
+        Verbose logging. Default is False.
+    timeout : float, optional
+        Default is 1 second.
+    priority : 0, optional
+        Virtual Circuit priority. Default is 0, lowest. Highest is 99.
+    repeater : boolean, optional
+        Spawn a Channel Access Repeater process if the port is available.
+        True default, as the Channel Access spec stipulates that well-behaved
+        clients should do this.
+
+    Examples
+    --------
+    Get the value of a Channel named 'cat'.
+    >>> get('cat').data
+    """
     logger = logging.getLogger('monitor')
     if verbose:
         level = 'DEBUG'
@@ -350,35 +408,57 @@ def monitor(pv_name, callback, *, verbose=False, timeout=2, priority=0,
     udp_sock = ca.bcast_socket()
     try:
         udp_sock.settimeout(timeout)
-        chan = make_channel(pv_name, logger, udp_sock, priority, timeout)
+        channels = []
+        for pv_name in pv_names:
+            chan = make_channel(pv_name, logger, udp_sock, priority, timeout)
+            channels.append(chan)
     finally:
         udp_sock.close()
     try:
-        logger.debug("Detected native data_type %r.", chan.native_data_type)
-        time_type = promote_type(chan.native_data_type, use_time=True)
-        # Remove the timeout during monitoring.
-        sockets[chan.circuit].settimeout(None)
-        logger.debug("Subscribing with data_type %r.", time_type)
-        req = chan.subscribe(data_type=time_type)
-        send(chan.circuit, req)
-
+        # Subscribe to all the channels.
+        sub_ids = {}
+        for chan in channels:
+            logger.debug("Detected native data_type %r.",
+                         chan.native_data_type)
+            time_type = promote_type(chan.native_data_type, use_time=True)
+            # Adjust the timeout during monitoring.
+            sockets[chan.circuit].settimeout(None)
+            logger.debug("Subscribing with data_type %r.", time_type)
+            req = chan.subscribe(data_type=time_type)
+            send(chan.circuit, req)
+            sub_ids[req.subscriptionid] = chan
+        logger.debug('Subscribed. Building socket selector.')
         try:
-            logger.debug('Subscribed. Continuing until SIGINT is received....')
+            circuits = set(chan.circuit for chan in channels)
+            selector = selectors.DefaultSelector()
+            sock_to_circuit = {}
+            for circuit in circuits:
+                sock = sockets[circuit]
+                sock_to_circuit[sock] = circuit
+                selector.register(sock, selectors.EVENT_READ)
+            logger.debug('Continuing until SIGINT is received....')
             while True:
-                commands = recv(chan.circuit)
-                for response in commands:
-                    if response.subscriptionid == req.subscriptionid:
-                        callback(response)
+                events = selector.select(timeout=0.1)
+                for selector_key, mask in events:
+                    circuit = sock_to_circuit[selector_key.fileobj]
+                    commands = recv(circuit)
+                    for response in commands:
+                        chan = sub_ids.get(response.subscriptionid)
+                        if chan:
+                            callback(chan.name, response)
         except KeyboardInterrupt:
+            logger.debug('Received SIGINT. Closing.') 
             pass
     finally:
         try:
-            if chan.states[ca.CLIENT] is ca.CONNECTED:
-                send(chan.circuit, chan.disconnect())
+            for chan in channels:
+                if chan.states[ca.CLIENT] is ca.CONNECTED:
+                    send(chan.circuit, chan.disconnect())
         finally:
             # Reinstate the timeout for channel cleanup.
-            sockets[chan.circuit].settimeout(timeout)
-            sockets[chan.circuit].close()
+            for chan in channels:
+                sockets[chan.circuit].settimeout(timeout)
+                sockets[chan.circuit].close()
 
 
 def put_cli():
@@ -444,7 +524,37 @@ def put_cli():
             print(exc)
 
 
-def put(pv_name, data, *, verbose=False, timeout=2, priority=0, repeater=True):
+def put(pv_name, data, *, verbose=False, timeout=1, priority=0, repeater=True):
+    """
+    Write to a Channel.
+
+    Parameters
+    ----------
+    pv_name : str
+    data : str, int, or float or a list of these
+        Value to write.
+    data_type : int, optional
+        Request specific data type. Default is Channel's native data type.
+    verbose : boolean, optional
+        Verbose logging. Default is False.
+    timeout : float, optional
+        Default is 1 second.
+    priority : 0, optional
+        Virtual Circuit priority. Default is 0, lowest. Highest is 99.
+    repeater : boolean, optional
+        Spawn a Channel Access Repeater process if the port is available.
+        True default, as the Channel Access spec stipulates that well-behaved
+        clients should do this.
+
+    Returns
+    -------
+    initial, final : tuple of ReadNotifyResponse objects
+
+    Examples
+    --------
+    Write the value 5 to a Channel named 'cat'.
+    >>> initial, final = put('cat', 5)
+    """
     raw_data = data
     logger = logging.getLogger('put')
     if verbose:
@@ -459,11 +569,12 @@ def put(pv_name, data, *, verbose=False, timeout=2, priority=0, repeater=True):
         # As per the EPICS spec, a well-behaved client should start a
         # caproto-repeater that will continue running after it exits.
         spawn_repeater(logger)
-    try:
-        data = ast.literal_eval(raw_data)
-    except ValueError:
-        # interpret as string
-        data = raw_data
+    if isinstance(raw_data, str):
+        try:
+            data = ast.literal_eval(raw_data)
+        except ValueError:
+            # interpret as string
+            data = raw_data
     logger.debug('Data argument %s parsed as %r.', raw_data, data)
     if not isinstance(data, Iterable) or isinstance(data, (str, bytes)):
         data = [data]

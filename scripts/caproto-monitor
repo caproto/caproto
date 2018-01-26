@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from caproto.cli import monitor_cli
+from caproto._cli import monitor_cli
 
 
 if __name__ == '__main__':
