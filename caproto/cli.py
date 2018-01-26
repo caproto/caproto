@@ -178,25 +178,30 @@ def read(chan, timeout, data_type):
 
 def get_cli():
     parser = argparse.ArgumentParser(description='Read the value of a PV.')
+    fmt_group = parser.add_mutually_exclusive_group()
     parser.add_argument('pv_name', type=str,
                         help="PV (channel) name")
     parser.add_argument('-d', type=str, default=None,
                         help="Request a certain data type.")
-    parser.add_argument('--format', type=str,
-                        help=("Python format string. Available tokens are "
-                              "{pv_name} and {response}. Additionally, "
-                              "if {response.metadata.timestamp} exists for "
-                              "data type, {timestamp} and usages like "
-                              "{timestamp:%Y-%m-%d %H:%M:%S} are supported."))
+    fmt_group.add_argument('--format', type=str,
+                           help=("Python format string. Available tokens are "
+                                 "{pv_name} and {response}. Additionally, "
+                                 "if {response.metadata.timestamp} exists for "
+                                 "this data type, {timestamp} and usages like "
+                                 "{timestamp:%Y-%m-%d %H:%M:%S} are "
+                                 "supported."))
     parser.add_argument('--no-repeater', action='store_true',
                         help=("Do not spawn a Channel Access repeater daemon "
                               "process."))
-    parser.add_argument('--timeout', '-w', type=float, default=1,
-                        help=("Timeout ('wait') in seconds for server "
-                              "responses."))
     parser.add_argument('--priority', '-p', type=int, default=0,
                         help="Channel Access Virtual Circuit priority. "
                              "Lowest is 0; highest is 99.")
+    fmt_group.add_argument('--terse', '-t', action='store_true',
+                           help=("Display data only. Unpack scalars: "
+                                 "[3.] -> 3."))
+    parser.add_argument('--timeout', '-w', type=float, default=1,
+                        help=("Timeout ('wait') in seconds for server "
+                              "responses."))
     parser.add_argument('--verbose', '-v', action='store_true',
                         help="Show DEBUG log messages.")
     args = parser.parse_args()
@@ -218,6 +223,11 @@ def get_cli():
             format_str = '{pv_name: <40}  {response.data}'
         else:
             format_str = args.format
+        if args.terse:
+            if len(response.data) == 1:
+                format_str = '{response.data[0]}'
+            else:
+                format_str = '{response.data}'
         tokens = dict(pv_name=args.pv_name, response=response)
         if hasattr(response.metadata, 'timestamp'):
             dt = datetime.fromtimestamp(response.metadata.timestamp)
@@ -266,20 +276,25 @@ def get(pv_name, *, data_type=None, verbose=False, timeout=2, priority=0,
 
 def monitor_cli():
     parser = argparse.ArgumentParser(description='Read the value of a PV.')
+    fmt_group = parser.add_mutually_exclusive_group()
     parser.add_argument('pv_name', type=str,
                         help="PV (channel) name")
-    parser.add_argument('--format', type=str,
-                        help=("Python format string. Available tokens are "
-                              "{pv_name} and {response}. Additionally, "
-                              "if {response.metadata.timestamp} exists for "
-                              "data type, {timestamp} and usages like "
-                              "{timestamp:%Y-%m-%d %H:%M:%S} are supported."))
+    fmt_group.add_argument('--format', type=str,
+                           help=("Python format string. Available tokens are "
+                                 "{pv_name} and {response}. Additionally, "
+                                 "if {response.metadata.timestamp} exists for "
+                                 "this data type, {timestamp} and usages like "
+                                 "{timestamp:%Y-%m-%d %H:%M:%S} are "
+                                 "supported."))
     parser.add_argument('--no-repeater', action='store_true',
                         help=("Do not spawn a Channel Access repeater daemon "
                               "process."))
     parser.add_argument('--priority', '-p', type=int, default=0,
                         help="Channel Access Virtual Circuit priority. "
                              "Lowest is 0; highest is 99.")
+    fmt_group.add_argument('--terse', '-t', action='store_true',
+                           help=("Display data only. Unpack scalars: "
+                                 "[3.] -> 3."))
     parser.add_argument('--timeout', '-w', type=float, default=1,
                         help=("Timeout ('wait') in seconds for server "
                               "responses."))
@@ -293,6 +308,11 @@ def monitor_cli():
                           "{response.data}")
         else:
             format_str = args.format
+        if args.terse:
+            if len(response.data) == 1:
+                format_str = '{response.data[0]}'
+            else:
+                format_str = '{response.data}'
         tokens = dict(pv_name=args.pv_name, response=response)
         dt = datetime.fromtimestamp(response.metadata.timestamp)
         tokens['timestamp'] = dt
@@ -363,22 +383,27 @@ def monitor(pv_name, callback, *, verbose=False, timeout=2, priority=0,
 
 def put_cli():
     parser = argparse.ArgumentParser(description='Write a value to a PV.')
+    fmt_group = parser.add_mutually_exclusive_group()
     parser.add_argument('pv_name', type=str,
                         help="PV (channel) name")
     parser.add_argument('data', type=str,
                         help="Value or values to write.")
-    parser.add_argument('--format', type=str,
-                        help=("Python format string. Available tokens are "
-                              "{pv_name} and {response}. Additionally, "
-                              "if {response.metadata.timestamp} exists for "
-                              "data type, {timestamp} and usages like "
-                              "{timestamp:%Y-%m-%d %H:%M:%S} are supported."))
+    fmt_group.add_argument('--format', type=str,
+                           help=("Python format string. Available tokens are "
+                                 "{pv_name} and {response}. Additionally, "
+                                 "if {response.metadata.timestamp} exists for "
+                                 "this data type, {timestamp} and usages like "
+                                 "{timestamp:%Y-%m-%d %H:%M:%S} are "
+                                 "supported."))
     parser.add_argument('--no-repeater', action='store_true',
                         help=("Do not spawn a Channel Access repeater daemon "
                               "process."))
     parser.add_argument('--priority', '-p', type=int, default=0,
                         help="Channel Access Virtual Circuit priority. "
                              "Lowest is 0; highest is 99.")
+    fmt_group.add_argument('--terse', '-t', action='store_true',
+                           help=("Display data only. Unpack scalars: "
+                                 "[3.] -> 3."))
     parser.add_argument('--timeout', '-w', type=float, default=1,
                         help=("Timeout ('wait') in seconds for server "
                               "responses."))
@@ -394,6 +419,11 @@ def put_cli():
             format_str = '{pv_name: <40}  {response.data}'
         else:
             format_str = args.format
+        if args.terse:
+            if len(initial.data) == 1:
+                format_str = '{response.data[0]}'
+            else:
+                format_str = '{response.data}'
         tokens = dict(pv_name=args.pv_name, response=initial)
         if hasattr(initial.metadata, 'timestamp'):
             dt = datetime.fromtimestamp(initial.metadata.timestamp)
