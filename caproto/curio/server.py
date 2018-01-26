@@ -17,7 +17,8 @@ class DisconnectedCircuit(Exception):
 Subscription = namedtuple('Subscription', ('mask', 'circuit', 'channel',
                                            'data_type',
                                            'data_count', 'subscriptionid'))
-SubscriptionSpec = namedtuple('SubscriptionSpec', ('db_entry', 'data_type',))
+SubscriptionSpec = namedtuple('SubscriptionSpec', ('db_entry', 'data_type',
+                                                   'mask'))
 
 
 logger = logging.getLogger(__name__)
@@ -235,7 +236,8 @@ class CurioVirtualCircuit:
                                data_count=command.data_count,
                                subscriptionid=command.subscriptionid)
             sub_spec = SubscriptionSpec(db_entry=db_entry,
-                                        data_type=command.data_type)
+                                        data_type=command.data_type,
+                                        mask=command.mask)
             self.subscriptions[sub_spec].append(sub)
             self.context.subscriptions[sub_spec].append(sub)
             await db_entry.subscribe(self.context.subscription_queue, sub_spec)
@@ -358,10 +360,16 @@ class Context:
 
     async def subscription_queue_loop(self):
         while True:
-            sub_spec, metadata, values = await self.subscription_queue.get()
-            subs = self.subscriptions[sub_spec]
-            matching_subs = subs  # [sub for sub in subs if sub.mask & mask]
-            for sub in matching_subs:
+            # This queue receives updates that match the db_entry, data_type
+            # and mask ("subscription spec") of one or more subscriptions.
+            sub_specs, metadata, values = await self.subscription_queue.get()
+            subs = []
+            for sub_spec in sub_specs:
+                subs.extend(self.subscriptions[sub_spec])
+            # Pack the data and metadata into an EventAddResponse and send it.
+            # We have to make a new response for each channel because each may
+            # have a different requested data_count.
+            for sub in subs:
                 chan = sub.channel
                 # if the subscription has a non-zero value respect it,
                 # else default to the full length of the data

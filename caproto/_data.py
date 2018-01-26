@@ -23,13 +23,32 @@ def _convert_enum_values(values, to_dtype, string_encoding, enum_strings):
     if isinstance(values, (str, bytes)):
         values = [values]
 
-    if to_dtype == ChannelType.STRING:
-        return [value.encode(string_encoding) for value in values]
-    else:
-        if enum_strings is not None:
-            return [enum_strings.index(value) for value in values]
+    if isinstance(values[0], str):
+        # STRING -> BYTES
+        if to_dtype == ChannelType.STRING:
+            return [value.encode(string_encoding) for value in values]
+        # STRING -> NUMERIC
         else:
-            return [0 for value in values]
+            if enum_strings is not None:
+                return [enum_strings.index(value) for value in values]
+            else:
+                return [0 for value in values]
+    elif isinstance(values[0], bytes):
+        # BYTES -> BYTES
+        if to_dtype == ChannelType.STRING:
+            return values
+        else:
+        # BYTES -> NUMERIC
+            if enum_strings is not None:
+                return [enum_strings.index(value.decode()) for value in values]
+            else:
+                return [0 for value in values]
+    else:
+        # NUMERIC -> STRING
+        if to_dtype == ChannelType.STRING:
+            return [enum_strings[value] for value in values]
+        # NUMERIC -> NUMERIC
+        return values
 
 
 def _convert_char_values(values, to_dtype, string_encoding, enum_strings):
@@ -239,7 +258,7 @@ class ChannelAlarm:
             flags |= SubscriptionType.DBE_ALARM
 
         for channel in self._channels:
-            await channel.publish(flags=flags)
+            await channel.publish(flags)
 
 
 class ChannelData:
@@ -276,19 +295,36 @@ class ChannelData:
         self.reported_record_type = reported_record_type
         self._data = dict(value=value,
                           timestamp=timestamp)
-        self._subscriptions = defaultdict(set)  # maps sub_spec to queues
+        # This maps queues to SubscriptionSpecs. (Each queue belongs to a
+        # Context.)
+        self._queues = defaultdict(set)
+
+        # Cache results of data_type conversions. This maps data_type to
+        # (metdata, value). This is cleared each time publish() is called.
+        self._content = {}
 
     value = _read_only_property('value')
     timestamp = _read_only_property('timestamp')
 
     async def subscribe(self, queue, sub_spec):
-        self._subscriptions[sub_spec].add(queue)
+        self._queues[queue].add(sub_spec)
         # Always send current reading immediately upon subscription.
-        metadata, values = await self._read(sub_spec.data_type)
-        await queue.put((sub_spec, metadata, values))
+        data_type = sub_spec.data_type
+        try:
+            metadata, values = self._content[data_type]
+        except KeyError:
+            # Do the expensive data type conversion and cache it in case
+            # a future subscription wants the same data type.
+            metadata, values = await self._read(data_type)
+            self._content[data_type] = metadata, values
+        flags = (SubscriptionType.DBE_VALUE |
+                 SubscriptionType.DBE_ALARM |
+                 SubscriptionType.DBE_LOG |
+                 SubscriptionType.DBE_PROPERTY)
+        await queue.put(((sub_spec,), metadata, values))
 
     async def unsubscribe(self, queue, sub_spec):
-        self._subscriptions[sub_spec].remove(queue)
+        self._queues[queue].remove(sub_spec)
 
     async def auth_read(self, hostname, username, data_type):
         '''Get DBR data and native data, converted to a specific type'''
@@ -383,7 +419,7 @@ class ChannelData:
             # Convert `metadata` to bytes-like (or pass it through).
             md_payload = parse_metadata(metadata, data_type)
 
-            # Depending on the type of `metdata` above,
+            # Depending on the type of `metadata` above,
             # `md_payload` could be a DBR struct or plain bytes.
             # Load it into a struct (zero-copy) to be sure.
             dbr_metadata = DBR_TYPES[data_type].from_buffer(md_payload)
@@ -393,7 +429,7 @@ class ChannelData:
 
         # Send a new event to subscribers.
         # TODO: mask should be at least DBE_VALUE
-        await self.publish()
+        await self.publish(SubscriptionType.DBE_VALUE)
 
     async def write(self, value, **metadata):
         '''Set data from native Python types'''
@@ -404,19 +440,40 @@ class ChannelData:
                                else value)
         await self.write_metadata(publish=False, **metadata)
         # Send a new event to subscribers.
-        await self.publish()
+        # TO DO This should be DBE_VALUE or DBE_LOG or 0 depending on
+        # deadband and archiver deadband, which we have not defined yet.
+        await self.publish(SubscriptionType.DBE_VALUE)
 
-    async def publish(self, flags=None):
-        # TODO: implement flags
+    async def publish(self, flags):
+        # Each SubscriptionSpec specifies a certain data type it is interested
+        # in and a mask. Send one update per queue per data_type if and only if
+        # any subscriptions specs on a queue have a compatible mask.
 
-        # Only read out as many data types as we actually need,
-        # as specificed by the sub_specs currently registered.
-        # If, for example, no subscribers have asked for non-native
-        # data_type, we save time by never filling in metadata.
-        for sub_spec, queues in self._subscriptions.items():
-            metadata, values = await self._read(sub_spec.data_type)
-            for queue in queues:
-                await queue.put((sub_spec, metadata, values))
+        # Copying the data into structs with various data types is expensive,
+        # so we only want to do it if it's going to be used, and we only want
+        # to do each conversion once. Clear the cache to start. This cache is
+        # instance state so that self.subscribe can also use it.
+        self._content.clear()
+
+        for queue, sub_specs in self._queues.items():
+            for data_type in set(ss.data_type for ss in sub_specs):
+                # Which (if any) of the sub_specs that want this data_type
+                # have a compatible mask?
+                eligible = tuple(ss for ss in sub_specs if flags & ss.mask
+                                 and ss.data_type == data_type)
+                if not eligible:
+                    continue
+                # There is at least one sub_spec for the queue that will
+                # receive this update.
+                try:
+                    metdata, values = self._content[data_type]
+                except KeyError:
+                    # Do the expensive data type conversion and cache it in
+                    # case another queue or a future subscription wants the
+                    # same data type.
+                    metadata, values = await self._read(data_type)
+                    self._content[data_type] = metadata, values
+                await queue.put((eligible, metadata, values))
 
     def _read_metadata(self, dbr_metadata):
         'Set all metadata fields of a given DBR type instance'
@@ -475,7 +532,7 @@ class ChannelData:
             await self.alarm.write(status=status, severity=severity)
 
         if publish:
-            await self.publish()
+            await self.publish(SubscriptionType.DBE_PROPERTY)
 
     @property
     def epics_timestamp(self):

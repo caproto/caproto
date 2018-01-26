@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
-from caproto.asyncio.repeater import main
+from caproto._cli import repeater_cli
+
 
 if __name__ == '__main__':
-    main()
+    repeater_cli()

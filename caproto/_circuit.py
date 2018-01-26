@@ -56,7 +56,8 @@ class VirtualCircuit:
         self.address = address
         self.priority = priority
         self.channels = {}  # map cid to Channel
-        self.log = logging.getLogger("[{} circuit]".format(abbrev))
+        logger_name = f"{abbrev}.{address[0]}:{address[1]}.{priority}"
+        self.log = logging.getLogger(logger_name)
         self.states = CircuitState(self.channels)
         self._data = bytearray()
         self.channels_sid = {}  # map sid to Channel
@@ -602,7 +603,10 @@ class ClientChannel(_BaseChannel):
         to : number
             Default is 0.
         mask :
-            Default is None.
+            Default is None, which resolves to:
+            ``(SubscriptionType.DBE_VALUE | ``
+            `` SubscriptionType.DBE_ALARM | ``
+            `` SubscriptionType.DBE_PROPERTY)``
 
         Returns
         -------

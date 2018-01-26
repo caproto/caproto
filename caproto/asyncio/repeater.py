@@ -22,10 +22,15 @@
 # This implementation owes something to a StackOverflow-linked gist, which
 # provides a basic asyncio UDP proxy server.
 # https://gist.github.com/vxgmichel/b2cf8536363275e735c231caef35a5df
+import asyncio
+import logging
 import os
 import socket
-import asyncio
+
 import caproto
+
+
+logger = logging.getLogger('repeater')
 
 
 class RepeaterAlreadyRunning(RuntimeError):
@@ -82,6 +87,7 @@ class RemoteDatagramProtocol(asyncio.DatagramProtocol):
         self.proxy = proxy
         self.addr = addr
         self.data = data
+        logger.debug('Received registration request from %r', self.addr)
         super().__init__()
 
     def connection_made(self, transport):
@@ -89,11 +95,13 @@ class RemoteDatagramProtocol(asyncio.DatagramProtocol):
         confirmation = caproto.RepeaterConfirmResponse(self.addr[0])
         confirmation_bytes = self.proxy.broadcaster.send(confirmation)
         self.transport.sendto(confirmation_bytes)
+        logger.debug('Sent registration confirmation to %r', self.addr)
 
     def datagram_received(self, data, sender_addr):
         self.proxy.transport.sendto(data, self.addr)
 
     def connection_lost(self, exc):
+        logger.debug('Lost connection to %r', self.addr)
         self.proxy.remotes.pop(self.attr)
 
 
@@ -110,29 +118,23 @@ async def start_datagram_proxy(bind, port):
             raise
 
 
-def main():
+def run():
     loop = asyncio.get_event_loop()
     addr = ('0.0.0.0', os.environ.get('EPICS_CA_REPEATER_PORT', 5065))
-    print("[repeater] Starting datagram proxy on {}...".format(addr))
+    logger.info("Starting datagram proxy on {}...".format(addr))
     coro = start_datagram_proxy(*addr)
 
     try:
         transport, _ = loop.run_until_complete(coro)
     except RepeaterAlreadyRunning as ex:
-        print('[repeater] Another repeater is already running; exiting')
+        logger.info('Another repeater is already running; exiting')
         return
 
-    print("[repeater] Datagram proxy is running...")
+    logger.info("Datagram proxy is running.")
     try:
         loop.run_forever()
     except KeyboardInterrupt:
         pass
-    print("[repeater] Closing transport...")
+    logger.info("Closing transport...")
     transport.close()
     loop.close()
-
-
-if __name__ == '__main__':
-    import logging
-    logging.getLogger('caproto').setLevel('INFO')
-    main()
