@@ -1,0 +1,32 @@
+#!/usr/bin/env python3
+from caproto.curio.high_level_server import pvproperty, PVGroupBase
+import collections
+
+
+class ReadingCounter(PVGroupBase):
+    """
+    Count the number of times that a PV is read.
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.tallies = collections.Counter()
+
+    async def my_read(self, instance):
+        pv_name = instance.pvspec.attr
+        self.tallies.update({pv_name: 1})
+        print('tallies:', self.tallies)
+        return instance.value
+
+    A = pvproperty(get=my_read, value=[0])
+    B = pvproperty(get=my_read, value=[0])
+
+
+if __name__ == '__main__':
+    # usage: reading_counter.py <PREFIX>
+    import sys
+    import curio
+    from caproto.curio.server import start_server
+
+    ioc = ReadingCounter(prefix=sys.argv[1])
+    print('PVs:', list(ioc.pvdb))
+    curio.run(start_server(ioc.pvdb))
