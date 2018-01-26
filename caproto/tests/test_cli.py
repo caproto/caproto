@@ -1,6 +1,7 @@
 import pytest
 import subprocess
-from caproto._cli import get, put, monitor
+from caproto._cli import get, put, monitor, parse_data_type
+from caproto._dbr import ChannelType
 
 
 PV1 = 'Py:ao1'
@@ -68,3 +69,8 @@ def test_cli(command, args):
     p = subprocess.Popen([command] + list(args))
     p.wait()
     assert p.returncode == 0
+
+
+@pytest.mark.parametrize('data_type', ['enum', 'ENUM', '3'])
+def test_parse_data_type(data_type):
+    assert parse_data_type(data_type) is ChannelType(3)

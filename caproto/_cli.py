@@ -11,7 +11,7 @@ import subprocess
 import sys
 
 import caproto as ca
-from caproto._dbr import promote_type
+from caproto._dbr import promote_type, ChannelType
 from caproto._utils import spawn_daemon, ErrorResponseReceived
 from caproto.asyncio.repeater import run as run_repeater
 
@@ -185,7 +185,9 @@ def get_cli():
     parser.add_argument('pv_names', type=str, nargs='+',
                         help="PV (channel) name(s) separated by spaces")
     parser.add_argument('-d', type=str, default=None,
-                        help="Request a certain data type.")
+                        help=("Request a certain data type. Accepts numeric "
+                              "code ('3') or case-insensitive string ('enum')"
+                              "."))
     fmt_group.add_argument('--format', type=str,
                            help=("Python format string. Available tokens are "
                                  "{pv_name} and {response}. Additionally, if "
@@ -208,14 +210,7 @@ def get_cli():
     parser.add_argument('--verbose', '-v', action='store_true',
                         help="Show DEBUG log messages.")
     args = parser.parse_args()
-    if args.d is None:
-        data_type = args.d
-    else:
-        try:
-            data_type = int(args.d)
-        except ValueError:
-            # TODO map string codes to ints
-            ...
+    data_type = parse_data_type(args.d)
     try:
         for pv_name in args.pv_names:
             response = get(pv_name=pv_name,
@@ -666,3 +661,24 @@ EPICS_CA_REPEATER_PORT. It defaults to the standard 5065. The current value is
         else:
             # Print a one-line error message.
             print(exc)
+
+
+def parse_data_type(raw_data_type):
+    """
+    Parse raw_data_type string as ChannelType. None passes through.
+
+    '3', 'ENUM', and 'enum' all parse as <ChannelType.ENUM 3>.
+    """
+    if raw_data_type is None:
+        data_type = None
+    else:
+        assert isinstance(raw_data_type, str)
+        # ChannelType is an IntEnum.
+        # If d is int, use ChannelType(d). If string, getattr(ChannelType, d).
+        try:
+            data_type_int = int(raw_data_type)
+        except ValueError:
+            data_type = getattr(ChannelType, raw_data_type.upper())
+        else:
+            data_type = ChannelType(data_type_int)
+    return data_type
