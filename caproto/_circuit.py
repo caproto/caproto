@@ -603,7 +603,10 @@ class ClientChannel(_BaseChannel):
         to : number
             Default is 0.
         mask :
-            Default is None.
+            Default is None, which resolves to:
+            ``(SubscriptionType.DBE_VALUE | ``
+            `` SubscriptionType.DBE_ALARM | ``
+            `` SubscriptionType.DBE_PROPERTY)``
 
         Returns
         -------

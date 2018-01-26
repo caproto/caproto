@@ -383,7 +383,7 @@ class ChannelData:
             # Convert `metadata` to bytes-like (or pass it through).
             md_payload = parse_metadata(metadata, data_type)
 
-            # Depending on the type of `metdata` above,
+            # Depending on the type of `metadata` above,
             # `md_payload` could be a DBR struct or plain bytes.
             # Load it into a struct (zero-copy) to be sure.
             dbr_metadata = DBR_TYPES[data_type].from_buffer(md_payload)
@@ -407,10 +407,8 @@ class ChannelData:
         await self.publish()
 
     async def publish(self, flags=None):
-        # TODO: implement flags
-
         # Only read out as many data types as we actually need,
-        # as specificed by the sub_specs currently registered.
+        # as specified by the sub_specs currently registered.
         # If, for example, no subscribers have asked for non-native
         # data_type, we save time by never filling in metadata.
         for sub_spec, queues in self._subscriptions.items():

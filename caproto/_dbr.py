@@ -128,12 +128,12 @@ class SubscriptionType(IntEnum):
 
     DBE_VALUE
     Trigger an event when a significant change in the channel's value occurs.
-    (in epics-base, relies on the monitor deadband field under DCT.)
+    (In epics-base, relies on the monitor deadband field under DCT.)
 
     DBE_ARCHIVE (DBE_LOG)
-    Trigger an event when an archive significant change in the channel's valuue
+    Trigger an event when an archive significant change in the channel's value
     occurs.
-    (in epics-base, relies on the archiver monitor deadband field under DCT.)
+    (In epics-base, relies on the archiver monitor deadband field under DCT.)
 
     DBE_ALARM
     Trigger an event when the alarm state changes
