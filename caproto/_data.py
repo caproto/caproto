@@ -23,13 +23,32 @@ def _convert_enum_values(values, to_dtype, string_encoding, enum_strings):
     if isinstance(values, (str, bytes)):
         values = [values]
 
-    if to_dtype == ChannelType.STRING:
-        return [value.encode(string_encoding) for value in values]
-    else:
-        if enum_strings is not None:
-            return [enum_strings.index(value) for value in values]
+    if isinstance(values[0], str):
+        # STRING -> BYTES
+        if to_dtype == ChannelType.STRING:
+            return [value.encode(string_encoding) for value in values]
+        # STRING -> NUMERIC
         else:
-            return [0 for value in values]
+            if enum_strings is not None:
+                return [enum_strings.index(value) for value in values]
+            else:
+                return [0 for value in values]
+    elif isinstance(values[0], bytes):
+        # BYTES -> BYTES
+        if to_dtype == ChannelType.STRING:
+            return values
+        else:
+        # BYTES -> NUMERIC
+            if enum_strings is not None:
+                return [enum_strings.index(value.decode()) for value in values]
+            else:
+                return [0 for value in values]
+    else:
+        # NUMERIC -> STRING
+        if to_dtype == ChannelType.STRING:
+            return [enum_strings[value] for value in values]
+        # NUMERIC -> NUMERIC
+        return values
 
 
 def _convert_char_values(values, to_dtype, string_encoding, enum_strings):
