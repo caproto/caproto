@@ -11,7 +11,7 @@ import subprocess
 import sys
 
 import caproto as ca
-from caproto._dbr import promote_type, ChannelType
+from caproto._dbr import promote_type, ChannelType, native_type
 from caproto._utils import spawn_daemon, ErrorResponseReceived
 from caproto.asyncio.repeater import run as run_repeater
 
@@ -195,6 +195,9 @@ def get_cli():
                                  "and usages like "
                                  "{timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are "
                                  "supported."))
+    parser.add_argument('-n', action='store_true',
+                        help=("Retrieve enums as integers (default is "
+                              "strings)."))
     parser.add_argument('--no-repeater', action='store_true',
                         help=("Do not spawn a Channel Access repeater daemon "
                               "process."))
@@ -214,10 +217,11 @@ def get_cli():
     try:
         for pv_name in args.pv_names:
             response = get(pv_name=pv_name,
-                        data_type=data_type,
-                        verbose=args.verbose, timeout=args.timeout,
-                        priority=args.priority,
-                        repeater=not args.no_repeater)
+                           data_type=data_type,
+                           verbose=args.verbose, timeout=args.timeout,
+                           priority=args.priority,
+                           force_int_enums=args.n,
+                           repeater=not args.no_repeater)
             if args.format is None:
                 format_str = '{pv_name: <40}  {response.data}'
             else:
@@ -243,7 +247,7 @@ def get_cli():
 
 
 def get(pv_name, *, data_type=None, verbose=False, timeout=1, priority=0,
-        repeater=True):
+        force_int_enums=False, repeater=True):
     """
     Read a Channel.
 
@@ -258,6 +262,8 @@ def get(pv_name, *, data_type=None, verbose=False, timeout=1, priority=0,
         Default is 1 second.
     priority : 0, optional
         Virtual Circuit priority. Default is 0, lowest. Highest is 99.
+    force_int_enums : boolean, optional
+        Retrieve enums as integers. (Default is strings.)
     repeater : boolean, optional
         Spawn a Channel Access Repeater process if the port is available.
         True default, as the Channel Access spec stipulates that well-behaved
@@ -292,6 +298,12 @@ def get(pv_name, *, data_type=None, verbose=False, timeout=1, priority=0,
     finally:
         udp_sock.close()
     try:
+        logger.debug("Detected native data_type %r.", chan.native_data_type)
+        ntype = native_type(chan.native_data_type)  # abundance of caution
+        if ((ntype is ChannelType.ENUM) and
+                (data_type is None) and (not force_int_enums)):
+            logger.debug("Changing requested data_type to STRING.")
+            data_type = ChannelType.STRING
         return read(chan, timeout, data_type=data_type)
     finally:
         try:
@@ -313,6 +325,9 @@ def monitor_cli():
                                  "{timedelta} and usages like "
                                  "{timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are "
                                  "supported."))
+    parser.add_argument('-n', action='store_true',
+                        help=("Retrieve enums as integers (default is "
+                              "strings)."))
     parser.add_argument('--no-repeater', action='store_true',
                         help=("Do not spawn a Channel Access repeater daemon "
                               "process."))
@@ -353,6 +368,7 @@ def monitor_cli():
                 callback=callback,
                 verbose=args.verbose, timeout=args.timeout,
                 priority=args.priority,
+                force_int_enums=args.n,
                 repeater=not args.no_repeater)
     except BaseException as exc:
         if args.verbose:
@@ -364,7 +380,7 @@ def monitor_cli():
 
 
 def monitor(*pv_names, callback, verbose=False, timeout=1, priority=0,
-            repeater=True):
+            force_int_enums=False, repeater=True):
     """
     Monitor one or more Channels indefinitely.
 
@@ -383,6 +399,8 @@ def monitor(*pv_names, callback, verbose=False, timeout=1, priority=0,
         Default is 1 second.
     priority : 0, optional
         Virtual Circuit priority. Default is 0, lowest. Highest is 99.
+    force_int_enums : boolean, optional
+        Retrieve enums as integers. (Default is strings.)
     repeater : boolean, optional
         Spawn a Channel Access Repeater process if the port is available.
         True default, as the Channel Access spec stipulates that well-behaved
@@ -421,7 +439,10 @@ def monitor(*pv_names, callback, verbose=False, timeout=1, priority=0,
         for chan in channels:
             logger.debug("Detected native data_type %r.",
                          chan.native_data_type)
-            time_type = promote_type(chan.native_data_type, use_time=True)
+            ntype = native_type(chan.native_data_type)  # abundance of caution
+            if ((ntype is ChannelType.ENUM) and (not force_int_enums)):
+                ntype = ChannelType.STRING
+            time_type = promote_type(ntype, use_time=True)
             # Adjust the timeout during monitoring.
             sockets[chan.circuit].settimeout(None)
             logger.debug("Subscribing with data_type %r.", time_type)
@@ -578,11 +599,11 @@ def put(pv_name, data, *, verbose=False, timeout=1, priority=0, repeater=True):
         except ValueError:
             # interpret as string
             data = raw_data
-    logger.debug('Data argument %s parsed as %r.', raw_data, data)
     if not isinstance(data, Iterable) or isinstance(data, (str, bytes)):
         data = [data]
     if isinstance(data[0], str):
         data = [val.encode('latin-1') for val in data]
+    logger.debug('Data argument %s parsed as %r.', raw_data, data)
 
     udp_sock = ca.bcast_socket()
     try:
@@ -591,11 +612,21 @@ def put(pv_name, data, *, verbose=False, timeout=1, priority=0, repeater=True):
     finally:
         udp_sock.close()
     try:
+        logger.debug("Detected native data_type %r.", chan.native_data_type)
+        ntype = native_type(chan.native_data_type)  # abundance of caution
         # Stash initial value
         logger.debug("Taking 'initial' reading before writing.")
         initial_response = read(chan, timeout, None)
-        logger.debug("Writing.")
-        req = chan.write(data=data)
+
+        # Handle ENUM: If data is INT, carry on. If data is STRING,
+        # write it specifically as STRING data_Type.
+        if (ntype is ChannelType.ENUM) and isinstance(data[0], bytes):
+            logger.debug("Writing to ENUM as data_type STRING.")
+            data_type = ChannelType.STRING
+        else:
+            logger.debug("Writing.")
+            data_type = None
+        req = chan.write(data=data, data_type=data_type)
         send(chan.circuit, req)
         t = time.monotonic()
         while True:

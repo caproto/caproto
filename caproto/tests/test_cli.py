@@ -51,6 +51,7 @@ fmt2 = '{timestamp:%H:%M}'
                           ('caproto-get', (PV1, '-d', '5')),
                           ('caproto-get', (PV1, '--format', fmt1)),
                           ('caproto-get', (PV1, '--format', fmt2)),
+                          ('caproto-get', (PV1, '-n')),
                           ('caproto-get', (PV1, '--no-repeater')),
                           ('caproto-get', (PV1, '-p', '0')),
                           ('caproto-get', (PV1, '-p', '99')),
