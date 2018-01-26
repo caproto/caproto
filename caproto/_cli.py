@@ -11,8 +11,9 @@ import subprocess
 import sys
 
 import caproto as ca
-from caproto._dbr import promote_type, ChannelType, native_type
-from caproto._utils import spawn_daemon, ErrorResponseReceived
+from caproto._dbr import (promote_type, ChannelType, native_type,
+                          SubscriptionType)
+from caproto._utils import spawn_daemon, ErrorResponseReceived, CaprotoError
 from caproto.asyncio.repeater import run as run_repeater
 
 
@@ -329,6 +330,10 @@ def monitor_cli():
                                  "{timedelta} and usages like "
                                  "{timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are "
                                  "supported."))
+    parser.add_argument('-m', type=str, metavar='MASK',
+                        help=("Channel Access mask. Any combination of "
+                              "'v' (value), 'a' (alarm), 'l' (log/archive), "
+                              "'p' (property). Default is 'va'."))
     parser.add_argument('-n', action='store_true',
                         help=("Retrieve enums as integers (default is "
                               "strings)."))
@@ -344,6 +349,16 @@ def monitor_cli():
     parser.add_argument('--verbose', '-v', action='store_true',
                         help="Show DEBUG log messages.")
     args = parser.parse_args()
+
+    mask = 0
+    if 'v' in args.m:
+        mask |= SubscriptionType.DBE_VALUE
+    if 'a' in args.m:
+        mask |= SubscriptionType.DBE_ALARM
+    if 'l' in args.m:
+        mask |= SubscriptionType.DBE_LOG
+    if 'p' in args.m:
+        mask |= SubscriptionType.DBE_PROPERTY
 
     history = []
 
@@ -369,7 +384,7 @@ def monitor_cli():
         print(format_str.format(**tokens))
     try:
         monitor(*args.pv_names,
-                callback=callback,
+                callback=callback, mask=mask,
                 verbose=args.verbose, timeout=args.timeout,
                 priority=args.priority,
                 force_int_enums=args.n,
@@ -383,8 +398,8 @@ def monitor_cli():
             print(exc)
 
 
-def monitor(*pv_names, callback, verbose=False, timeout=1, priority=0,
-            force_int_enums=False, repeater=True):
+def monitor(*pv_names, callback, mask=None, verbose=False, timeout=1,
+            priority=0, force_int_enums=False, repeater=True):
     """
     Monitor one or more Channels indefinitely.
 
@@ -395,6 +410,9 @@ def monitor(*pv_names, callback, verbose=False, timeout=1, priority=0,
     pv_names : str
     callback : callable, required keyword-only argument
         Expected signature is ``f(pv_name, ReadNotifyResponse)``.
+    mask : int, optional
+        Default, None, resolves to
+        ``(SubscriptionType.DBE_VALUE | SubscriptionType.DBE_ALARM)``.
     data_type : int, optional
         Request specific data type. Default is Channel's native data type.
     verbose : boolean, optional
@@ -415,6 +433,8 @@ def monitor(*pv_names, callback, verbose=False, timeout=1, priority=0,
     Get the value of a Channel named 'cat'.
     >>> get('cat').data
     """
+    if mask is None:
+        mask = SubscriptionType.DBE_VALUE | SubscriptionType.DBE_ALARM
     logger = logging.getLogger('monitor')
     if verbose:
         level = 'DEBUG'
@@ -450,7 +470,7 @@ def monitor(*pv_names, callback, verbose=False, timeout=1, priority=0,
             # Adjust the timeout during monitoring.
             sockets[chan.circuit].settimeout(None)
             logger.debug("Subscribing with data_type %r.", time_type)
-            req = chan.subscribe(data_type=time_type)
+            req = chan.subscribe(data_type=time_type, mask=mask)
             send(chan.circuit, req)
             sub_ids[req.subscriptionid] = chan
         logger.debug('Subscribed. Building socket selector.')
@@ -471,6 +491,9 @@ def monitor(*pv_names, callback, verbose=False, timeout=1, priority=0,
                     for response in commands:
                         if isinstance(response, ca.ErrorResponse):
                             raise ErrorResponseReceived(command)
+                        if isinstance(response, ca.DISCONNECTED):
+                            # TODO Re-connect.
+                            raise CaprotoError("Disconnected")
                         chan = sub_ids.get(response.subscriptionid)
                         if chan:
                             callback(chan.name, response)

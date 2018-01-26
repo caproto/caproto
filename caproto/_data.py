@@ -239,7 +239,7 @@ class ChannelAlarm:
             flags |= SubscriptionType.DBE_ALARM
 
         for channel in self._channels:
-            await channel.publish(flags=flags)
+            await channel.publish(flags)
 
 
 class ChannelData:
@@ -285,7 +285,11 @@ class ChannelData:
         self._subscriptions[sub_spec].add(queue)
         # Always send current reading immediately upon subscription.
         metadata, values = await self._read(sub_spec.data_type)
-        await queue.put((sub_spec, metadata, values))
+        flags = (SubscriptionType.DBE_VALUE |
+                 SubscriptionType.DBE_ALARM |
+                 SubscriptionType.DBE_LOG |
+                 SubscriptionType.DBE_PROPERTY)
+        await queue.put((sub_spec, metadata, values, flags))
 
     async def unsubscribe(self, queue, sub_spec):
         self._subscriptions[sub_spec].remove(queue)
@@ -393,7 +397,7 @@ class ChannelData:
 
         # Send a new event to subscribers.
         # TODO: mask should be at least DBE_VALUE
-        await self.publish()
+        await self.publish(SubscriptionType.DBE_VALUE)
 
     async def write(self, value, **metadata):
         '''Set data from native Python types'''
@@ -404,9 +408,11 @@ class ChannelData:
                                else value)
         await self.write_metadata(publish=False, **metadata)
         # Send a new event to subscribers.
-        await self.publish()
+        # TO DO This should be DBE_VALUE or DBE_LOG or 0 depending on
+        # deadband and archiver deadband, which we have not defined yet.
+        await self.publish(SubscriptionType.DBE_VALUE)
 
-    async def publish(self, flags=None):
+    async def publish(self, flags):
         # Only read out as many data types as we actually need,
         # as specified by the sub_specs currently registered.
         # If, for example, no subscribers have asked for non-native
@@ -414,7 +420,7 @@ class ChannelData:
         for sub_spec, queues in self._subscriptions.items():
             metadata, values = await self._read(sub_spec.data_type)
             for queue in queues:
-                await queue.put((sub_spec, metadata, values))
+                await queue.put((sub_spec, metadata, values, flags))
 
     def _read_metadata(self, dbr_metadata):
         'Set all metadata fields of a given DBR type instance'
@@ -473,7 +479,7 @@ class ChannelData:
             await self.alarm.write(status=status, severity=severity)
 
         if publish:
-            await self.publish()
+            await self.publish(SubscriptionType.DBE_PROPERTY)
 
     @property
     def epics_timestamp(self):
