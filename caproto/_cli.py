@@ -1,7 +1,7 @@
 import argparse
 import ast
 from collections import Iterable
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 import os
 import time
@@ -186,9 +186,9 @@ def get_cli():
                         help="Request a certain data type.")
     fmt_group.add_argument('--format', type=str,
                            help=("Python format string. Available tokens are "
-                                 "{pv_name} and {response}. Additionally, "
-                                 "if {response.metadata.timestamp} exists for "
-                                 "this data type, {timestamp} and usages like "
+                                 "{pv_name} and {response}. Additionally, if "
+                                 "this data type includes time, {timestamp} "
+                                 "and usages like "
                                  "{timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are "
                                  "supported."))
     parser.add_argument('--no-repeater', action='store_true',
@@ -311,9 +311,9 @@ def monitor_cli():
                         help="PV (channel) name")
     fmt_group.add_argument('--format', type=str,
                            help=("Python format string. Available tokens are "
-                                 "{pv_name} and {response}. Additionally, "
-                                 "if {response.metadata.timestamp} exists for "
-                                 "this data type, {timestamp} and usages like "
+                                 "{pv_name} and {response}. Additionally, if "
+                                 "this data type includes time, {timestamp}, "
+                                 "{timedelta} and usages like "
                                  "{timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are "
                                  "supported."))
     parser.add_argument('--no-repeater', action='store_true',
@@ -329,6 +329,8 @@ def monitor_cli():
                         help="Show DEBUG log messages.")
     args = parser.parse_args()
 
+    history = []
+
     def callback(pv_name, response):
         if args.format is None:
             format_str = ("{pv_name: <40}  {timestamp:%Y-%m-%d %H:%M:%S} "
@@ -338,6 +340,16 @@ def monitor_cli():
         tokens = dict(pv_name=pv_name, response=response)
         dt = datetime.fromtimestamp(response.metadata.timestamp)
         tokens['timestamp'] = dt
+        if history:
+            # Add a {timedelta} token using the previous timestamp.
+            td = dt - history.pop()
+        else:
+            # Special case for the first reading: show difference between
+            # timestamp and current time -- showing how old the most recent
+            # update is.
+            td = datetime.fromtimestamp(time.time()) - dt
+        history.append(dt)
+        tokens['timedelta'] = td
         print(format_str.format(**tokens))
     try:
         monitor(*args.pv_names,
@@ -463,8 +475,8 @@ def put_cli():
     fmt_group.add_argument('--format', type=str,
                            help=("Python format string. Available tokens are "
                                  "{pv_name} and {response}. Additionally, "
-                                 "if {response.metadata.timestamp} exists for "
-                                 "this data type, {timestamp} and usages like "
+                                 "this data type includes time, {timestamp} "
+                                 "and usages like "
                                  "{timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are "
                                  "supported."))
     parser.add_argument('--no-repeater', action='store_true',
