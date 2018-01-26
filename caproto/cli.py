@@ -188,7 +188,7 @@ def get_cli():
                                  "{pv_name} and {response}. Additionally, "
                                  "if {response.metadata.timestamp} exists for "
                                  "this data type, {timestamp} and usages like "
-                                 "{timestamp:%Y-%m-%d %H:%M:%S} are "
+                                 "{timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are "
                                  "supported."))
     parser.add_argument('--no-repeater', action='store_true',
                         help=("Do not spawn a Channel Access repeater daemon "
@@ -284,7 +284,7 @@ def monitor_cli():
                                  "{pv_name} and {response}. Additionally, "
                                  "if {response.metadata.timestamp} exists for "
                                  "this data type, {timestamp} and usages like "
-                                 "{timestamp:%Y-%m-%d %H:%M:%S} are "
+                                 "{timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are "
                                  "supported."))
     parser.add_argument('--no-repeater', action='store_true',
                         help=("Do not spawn a Channel Access repeater daemon "
@@ -393,7 +393,7 @@ def put_cli():
                                  "{pv_name} and {response}. Additionally, "
                                  "if {response.metadata.timestamp} exists for "
                                  "this data type, {timestamp} and usages like "
-                                 "{timestamp:%Y-%m-%d %H:%M:%S} are "
+                                 "{timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are "
                                  "supported."))
     parser.add_argument('--no-repeater', action='store_true',
                         help=("Do not spawn a Channel Access repeater daemon "
