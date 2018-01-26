@@ -46,6 +46,7 @@ fmt2 = '{timestamp:%H:%M}'
                          [('caproto-get', ('-h',)),
                           ('caproto-put', ('-h',)),
                           ('caproto-monitor', ('-h',)),
+                          ('caproto-get', ('--list-types',)),
                           ('caproto-get', (PV1,)),
                           ('caproto-get', (PV1, PV2)),
                           ('caproto-get', (PV1, '-d', '5')),

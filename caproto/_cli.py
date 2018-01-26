@@ -181,13 +181,14 @@ def read(chan, timeout, data_type):
 
 def get_cli():
     parser = argparse.ArgumentParser(description='Read the value of a PV.')
+    parser.register('action', 'list_types', _ListTypesAction)
     fmt_group = parser.add_mutually_exclusive_group()
     parser.add_argument('pv_names', type=str, nargs='+',
                         help="PV (channel) name(s) separated by spaces")
-    parser.add_argument('-d', type=str, default=None,
+    parser.add_argument('-d', type=str, default=None, metavar="DATA_TYPE",
                         help=("Request a certain data type. Accepts numeric "
                               "code ('3') or case-insensitive string ('enum')"
-                              "."))
+                              ". See --list-types"))
     fmt_group.add_argument('--format', type=str,
                            help=("Python format string. Available tokens are "
                                  "{pv_name} and {response}. Additionally, if "
@@ -195,6 +196,9 @@ def get_cli():
                                  "and usages like "
                                  "{timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are "
                                  "supported."))
+    parser.add_argument('--list-types', action='list_types',
+                         default=argparse.SUPPRESS,
+                         help="List allowed values for -d and exit.")
     parser.add_argument('-n', action='store_true',
                         help=("Retrieve enums as integers (default is "
                               "strings)."))
@@ -713,3 +717,25 @@ def parse_data_type(raw_data_type):
         else:
             data_type = ChannelType(data_type_int)
     return data_type
+
+
+class _ListTypesAction(argparse.Action):
+    # a special action that allows the usage --list-types to override
+    # any 'required args' requirements, the same way that --help does
+
+    def __init__(self,
+                 option_strings,
+                 dest=argparse.SUPPRESS,
+                 default=argparse.SUPPRESS,
+                 help=None):
+        super(_ListTypesAction, self).__init__(
+            option_strings=option_strings,
+            dest=dest,
+            default=default,
+            nargs=0,
+            help=help)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        for elem in ChannelType:
+            print(f'{elem.value: <2} {elem.name}')
+        parser.exit()
