@@ -28,7 +28,7 @@ handler = logging.StreamHandler(sys.stdout)
 handler.setFormatter(logging.Formatter('[%(name)s] %(message)s'))
 ca_logger.addHandler(handler)
 
-# Convenience functions that do both transport caproto validation/ingest.
+# Convenience functions that do both transport and caproto validation/ingest.
 def send(circuit, command):
     buffers_to_send = circuit.send(command)
     sockets[circuit].sendmsg(buffers_to_send)
