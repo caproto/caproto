@@ -322,9 +322,6 @@ def monitor_cli():
     parser.add_argument('--priority', '-p', type=int, default=0,
                         help="Channel Access Virtual Circuit priority. "
                              "Lowest is 0; highest is 99.")
-    fmt_group.add_argument('--terse', '-t', action='store_true',
-                           help=("Display data only. Unpack scalars: "
-                                 "[3.] -> 3."))
     parser.add_argument('--timeout', '-w', type=float, default=1,
                         help=("Timeout ('wait') in seconds for server "
                               "responses."))
@@ -338,11 +335,6 @@ def monitor_cli():
                           "{response.data}")
         else:
             format_str = args.format
-        if args.terse:
-            if len(response.data) == 1:
-                format_str = '{response.data[0]}'
-            else:
-                format_str = '{response.data}'
         tokens = dict(pv_name=pv_name, response=response)
         dt = datetime.fromtimestamp(response.metadata.timestamp)
         tokens['timestamp'] = dt
