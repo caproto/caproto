@@ -434,6 +434,7 @@ def put_cli():
             dt = datetime.fromtimestamp(final.metadata.timestamp)
             tokens['timestamp'] = dt
         tokens = dict(pv_name=args.pv_name, response=final)
+        print(format_str.format(**tokens))
     except BaseException as exc:
         if args.verbose:
             # Show the full traceback.
