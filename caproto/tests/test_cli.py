@@ -3,8 +3,7 @@ import subprocess
 from caproto._cli import get, put, monitor
 
 
-# PV_NAME = 'Py:ao1'
-PV_NAME = 'pi'
+PV_NAME = 'Py:ao1'
 
 
 def escape(pv_name, response):
