@@ -344,7 +344,7 @@ def monitor_cli():
                                  "{timedelta} and usages like "
                                  "{timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are "
                                  "supported."))
-    parser.add_argument('-m', type=str, metavar='MASK',
+    parser.add_argument('-m', type=str, metavar='MASK', default='va',
                         help=("Channel Access mask. Any combination of "
                               "'v' (value), 'a' (alarm), 'l' (log/archive), "
                               "'p' (property). Default is 'va'."))
