@@ -13,9 +13,8 @@ import numpy as np
 from ._dbr import (DBR_TYPES, ChannelType, native_type, native_float_types,
                    native_int_types, native_types, timestamp_to_epics,
                    time_types, MAX_ENUM_STRING_SIZE, DBR_STSACK_STRING,
-                   AccessRights, _numpy_map, epics_timestamp_to_unix,
-                   GraphicControlBase, AlarmStatus, AlarmSeverity,
-                   SubscriptionType)
+                   AccessRights, _numpy_map, GraphicControlBase, AlarmStatus,
+                   AlarmSeverity, SubscriptionType)
 from ._utils import CaprotoError
 from ._commands import parse_metadata
 
@@ -43,7 +42,7 @@ def _convert_enum_values(values, to_dtype, string_encoding, enum_strings):
         if to_dtype == ChannelType.STRING:
             return values
         else:
-        # BYTES -> NUMERIC
+            # BYTES -> NUMERIC
             if enum_strings is not None:
                 return [enum_strings.index(value.decode()) for value in values]
             else:
