@@ -334,7 +334,7 @@ class ChannelData:
     async def auth_read(self, hostname, username, data_type):
         '''Get DBR data and native data, converted to a specific type'''
         access = self.check_access(hostname, username)
-        if access not in (AccessRights.READ, AccessRights.READ_WRITE):
+        if AccessRights.READ not in access:
             raise Forbidden("Client with hostname {} and username {} cannot "
                             "read.".format(hostname, username))
         return (await self.read(data_type))
@@ -379,7 +379,7 @@ class ChannelData:
 
     async def auth_write(self, hostname, username, data, data_type, metadata):
         access = self.check_access(hostname, username)
-        if access not in (AccessRights.WRITE, AccessRights.READ_WRITE):
+        if AccessRights.WRITE not in access:
             raise Forbidden("Client with hostname {} and username {} cannot "
                             "write.".format(hostname, username))
         return (await self.write_from_dbr(data, data_type, metadata))
@@ -562,11 +562,14 @@ class ChannelData:
 
     def check_access(self, hostname, username):
         """
-        This always returns ``AccessRights.READ_WRITE``.
+        This always returns ``AccessRights.READ|AccessRights.WRITE``.
 
-        Subclasses can override to implement access logic
-        using hostname, username and returning one of
-        ``{AccessRights.READ_WRITE, AccessRights.READ, AccessRights.WRITE}``.
+        Subclasses can override to implement access logic using hostname,
+        username and returning one of:
+        (``AccessRights.NO_ACCESS``,
+         ``AccessRights.READ``,
+         ``AccessRights.WRITE``,
+         ``AccessRights.READ|AccessRights.WRITE``).
 
         Parameters
         ----------
@@ -575,9 +578,9 @@ class ChannelData:
 
         Returns
         -------
-        access : :data:`AccessRights.READ_WRITE`
+        access : :data:`AccessRights.READ|AccessRights.WRITE`
         """
-        return AccessRights.READ_WRITE
+        return AccessRights.READ | AccessRights.WRITE
 
 
 class ChannelEnum(ChannelData):

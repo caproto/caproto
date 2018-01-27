@@ -8,7 +8,7 @@
 import array
 import ctypes
 import datetime
-from enum import IntEnum
+from enum import IntEnum, IntFlag
 from ._constants import (EPICS2UNIX_EPOCH, EPICS_EPOCH, MAX_STRING_SIZE,
                          MAX_UNITS_SIZE, MAX_ENUM_STRING_SIZE, MAX_ENUM_STATES)
 
@@ -20,11 +20,10 @@ else:
     USE_NUMPY = True
 
 
-class AccessRights(IntEnum):
+class AccessRights(IntFlag):
     NO_ACCESS = 0
     READ = 1
     WRITE = 2
-    READ_WRITE = 3
 
 
 class AlarmSeverity(IntEnum):
@@ -123,7 +122,7 @@ class ChannelType(IntEnum):
     CLASS_NAME = 38
 
 
-class SubscriptionType(IntEnum):
+class SubscriptionType(IntFlag):
     '''Subscription masks
 
     DBE_VALUE
