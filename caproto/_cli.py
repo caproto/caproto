@@ -15,7 +15,7 @@
 import argparse
 import ast
 from collections import Iterable
-from datetime import datetime, timedelta
+from datetime import datetime
 import logging
 import os
 import time
@@ -27,7 +27,7 @@ import sys
 import caproto as ca
 from caproto._dbr import (promote_type, ChannelType, native_type,
                           SubscriptionType)
-from caproto._utils import spawn_daemon, ErrorResponseReceived, CaprotoError
+from caproto._utils import ErrorResponseReceived, CaprotoError
 from caproto.asyncio.repeater import run as run_repeater
 
 
@@ -504,7 +504,7 @@ def monitor(*pv_names, callback, mask=None, verbose=False, timeout=1,
                     commands = recv(circuit)
                     for response in commands:
                         if isinstance(response, ca.ErrorResponse):
-                            raise ErrorResponseReceived(command)
+                            raise ErrorResponseReceived(response)
                         if isinstance(response, ca.DISCONNECTED):
                             # TODO Re-connect.
                             raise CaprotoError("Disconnected")
@@ -680,7 +680,7 @@ def put(pv_name, data, *, verbose=False, timeout=1, priority=0, repeater=True):
             for command in commands:
                 if (isinstance(command, ca.WriteNotifyResponse) and
                             command.ioid == req.ioid):
-                    response = command
+                    # response = command
                     break
                 elif isinstance(command, ca.ErrorResponse):
                     raise ErrorResponseReceived(command)
