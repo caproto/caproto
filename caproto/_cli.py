@@ -680,7 +680,6 @@ def put(pv_name, data, *, verbose=False, timeout=1, priority=0, repeater=True):
             for command in commands:
                 if (isinstance(command, ca.WriteNotifyResponse) and
                             command.ioid == req.ioid):
-                    # response = command
                     break
                 elif isinstance(command, ca.ErrorResponse):
                     raise ErrorResponseReceived(command)
