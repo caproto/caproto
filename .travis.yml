@@ -32,8 +32,11 @@ cache:
   directories:
     - $HOME/.cache/support
     - $HOME/.cache/iocs
+    - $HOME/.cache/pip
+    - $HOME/.ccache  # https://github.com/travis-ci/travis-ci/issues/5853
 
 before_install:
+  - export PATH=/usr/lib/ccache:$PATH
   - export EPICS_CA_ADDR_LIST=127.255.255.255
   - export EPICS_CA_AUTO_ADDR_LIST=NO
   - export EPICS_CA_MAX_ARRAY_BYTES=10000000
@@ -49,6 +52,7 @@ before_install:
 
 install:
   - pip install .
+  - pip install --upgrade cython
 
 script:
   - caget Py:ao1 sim:mtr1
@@ -59,10 +63,13 @@ script:
   - export ASV_ENV_NAME=${TRAVIS_PYTHON_VERSION}_${BASE}
   - py.test -v --benchmark-only --benchmark-json=pytest_bench.json --benchmark-columns=mean,median,rounds,iterations -k bench
   # deploy asv results here?
-  
+
   - set -e
   # Install deps for building the docs.
-  - pip install -r docs-requirements.txt
+  - pip install --upgrade --global-option='--without-libyaml' pyyaml
+  # directly install second layer deps to work around easy_install bug
+  - pip install cryptography cffi pycparser
+  - pip install --upgrade -r docs-requirements.txt
   # Run a CA Repeater for the docs examples to use.
   - caproto-repeater &
   # Build the docs.
