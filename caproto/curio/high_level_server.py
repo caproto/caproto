@@ -200,11 +200,11 @@ class PVGroupMeta(type):
                 yield attr, value
             elif isinstance(value, SubGroup):
                 subgroup_cls = value.group_cls
-                for sub_attr, value in subgroup_cls.__pvs__.items():
+                for sub_attr, value in subgroup_cls._pvs_.items():
                     yield '.'.join([attr, sub_attr]), value
 
     def __new__(metacls, name, bases, dct):
-        dct['__subgroups__'] = subgroups = OrderedDict()
+        dct['_subgroups_'] = subgroups = OrderedDict()
         for attr, prop in metacls.find_subgroups(dct):
             logger.debug('class %s attr %s: %r', name, attr, prop)
             subgroups[attr] = prop
@@ -212,11 +212,11 @@ class PVGroupMeta(type):
             # TODO a bit messy
             # propagate subgroups-of-subgroups to the top
             subgroup_cls = prop.group_cls
-            if hasattr(subgroup_cls, '__subgroups__'):
-                for subattr, subgroup in subgroup_cls.__subgroups__.items():
+            if hasattr(subgroup_cls, '_subgroups_'):
+                for subattr, subgroup in subgroup_cls._subgroups_.items():
                     subgroups['.'.join((attr, subattr))] = subgroup
 
-        dct['__pvs__'] = pvs = OrderedDict()
+        dct['_pvs_'] = pvs = OrderedDict()
         for attr, prop in metacls.find_pvproperties(dct):
             logger.debug('class %s attr %s: %r', name, attr, prop)
             pvs[attr] = prop
@@ -274,7 +274,7 @@ class PVGroupBase(metaclass=PVGroupMeta):
 
     def _create_pvdb(self):
         'Create the PV database for all subgroups and pvproperties'
-        for attr, subgroup in self.__subgroups__.items():
+        for attr, subgroup in self._subgroups_.items():
             subgroup_cls = subgroup.group_cls
 
             prefix = (subgroup.prefix if subgroup.prefix is not None
@@ -286,7 +286,7 @@ class PVGroupBase(metaclass=PVGroupMeta):
 
             self.groups[attr] = subgroup_cls(prefix=prefix, macros=macros)
 
-        for attr, pvprop in self.__pvs__.items():
+        for attr, pvprop in self._pvs_.items():
             if '.' in attr:
                 group_attr, _ = attr.rsplit('.', 1)
                 group = self.groups[group_attr]
