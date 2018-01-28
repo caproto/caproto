@@ -26,6 +26,17 @@ logger = logging.getLogger(__name__)
 STR_ENC = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
 
 
+class AsyncLibraryLayer:
+    ...
+
+
+class CurioAsyncLayer(AsyncLibraryLayer):
+    name = 'curio'
+    sleep = curio.sleep
+    ThreadsafeQueue = curio.UniversalQueue
+    library = curio
+
+
 def find_next_tcp_port(host='0.0.0.0', starting_port=ca.EPICS_CA2_PORT + 1):
     import socket
 
@@ -412,9 +423,11 @@ class Context:
                 await g.spawn(self.broadcaster_queue_loop)
                 await g.spawn(self.subscription_queue_loop)
                 await g.spawn(self.broadcast_beacon_loop)
+
+                async_lib = CurioAsyncLayer()
                 for method in self.startup_methods:
                     logger.debug('Calling startup method %r', method)
-                    await g.spawn(method, curio)
+                    await g.spawn(method, async_lib)
         except curio.TaskGroupError as ex:
             logger.error('Curio server failed: %s', ex.errors)
             for task in ex:
