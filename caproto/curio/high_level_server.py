@@ -96,6 +96,97 @@ class PVSpec(namedtuple('PVSpec',
                       self.alarm_group)
 
 
+class PVFunction:
+    'A descriptor for making an RPC-like function'
+
+    def __init__(self, func=None, default=None, alarm_group=None,
+                 process_name='Process', return_name='Retval',
+                 status_name='Status'):
+        self.attr_name = None  # to be set later
+        self.default_retval = default
+        self.func = func
+        self.alarm_group = alarm_group
+        self.names = {'process': process_name,
+                      'return': return_name,
+                      'status': status_name
+                      }
+        self.pvspec = []
+
+    def __call__(self, func):
+        # handles case where PVFunction()(func) is used
+        self.func = func
+        self.pvspec = self._update_pvspec()
+        return self
+
+    def pvspec_from_parameter(self, param):
+        dtype = param.annotation
+        default = param.default
+
+        try:
+            default[0]
+        except TypeError:
+            default = [default]
+        except Exception:
+            raise ValueError(f'Invalid default value for parameter {param}')
+        else:
+            # ensure we copy any arrays as default parameters, lest we give
+            # some developers a heart attack
+            default = list(default)
+
+        print('pvspec from param', param)
+        return PVSpec(
+            get=None, put=None, attr=f'{self.attr_name}.{param.name}',
+            # TODO: attr_separator
+            name=f'{self.attr_name}:{param.name}', dtype=dtype, value=default,
+            alarm_group=self.alarm_group,
+        )
+
+    def get_additional_parameters(self):
+        sig = inspect.signature(self.func)
+        return_type = sig.return_annotation
+        assert return_type, 'Return value must have a type annotation'
+
+        return [
+            inspect.Parameter(self.names['process'], kind=0, default=0,
+                              annotation=int),
+            inspect.Parameter(self.names['status'], kind=0, default=b'Init',
+                              annotation=str),
+            inspect.Parameter(self.names['return'], kind=0,
+                              # TODO?
+                              default=PVGroupBase.default_values[return_type],
+                              annotation=return_type),
+        ]
+
+    def _update_pvspec(self):
+        if self.func is None or self.attr_name is None:
+            return []
+
+        if self.alarm_group is None:
+            self.alarm_group = self.func.__name__
+
+        sig = inspect.signature(self.func)
+        parameters = list(sig.parameters.values())[1:]  # skip 'self'
+        parameters.extend(self.get_additional_parameters())
+        return [self.pvspec_from_parameter(param) for param in parameters]
+
+    def __get__(self, instance, owner):
+        # if instance is None:
+        return self.pvspec
+        # return instance.attr_pvdb[self.attr_name]
+        # return {instance.attr_pvdb[param_name]
+        #         for param_name in
+
+    def __set__(self, instance, value):
+        instance.attr_pvdb[self.attr_name] = value
+
+    def __delete__(self, instance):
+        del instance.attr_pvdb[self.attr_name]
+
+    def __set_name__(self, owner, name):
+        self.attr_name = name
+        self.pvspec = self._update_pvspec()
+
+
 class pvproperty:
     'A property-like descriptor for specifying a PV in a group'
 
