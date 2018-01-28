@@ -312,18 +312,7 @@ class PVGroupMeta(type):
             logger.debug('class %s attr %s: %r', name, attr, prop)
             pvs[attr] = prop
 
-        cls = super().__new__(metacls, name, bases, dct)
-
-        for attr, prop in metacls.find_subgroups(dct):
-            if prop.attr_name is None:
-                # note: for python < 3.6
-                subgroups[attr].__set_name__(attr, cls)
-        for attr, prop in metacls.find_pvproperties(dct):
-            if prop.attr_name is None:
-                # note: for python < 3.6
-                pvs[attr].__set_name__(attr, cls)
-
-        return cls
+        return super().__new__(metacls, name, bases, dct)
 
 
 def channeldata_from_pvspec(group, pvspec):
