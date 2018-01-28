@@ -395,6 +395,14 @@ class Context:
             self.beacon_count += 1
             await curio.sleep(beacon_period)
 
+    @property
+    def startup_methods(self):
+        'Notify all ChannelData instances of the server startup'
+        return [instance.server_startup
+                for name, instance in self.pvdb.items()
+                if hasattr(instance, 'server_startup')
+                and instance.server_startup is not None]
+
     async def run(self):
         try:
             async with curio.TaskGroup() as g:
@@ -404,6 +412,9 @@ class Context:
                 await g.spawn(self.broadcaster_queue_loop)
                 await g.spawn(self.subscription_queue_loop)
                 await g.spawn(self.broadcast_beacon_loop)
+                for method in self.startup_methods:
+                    logger.debug('Calling startup method %r', method)
+                    await g.spawn(method, curio)
         except curio.TaskGroupError as ex:
             logger.error('Curio server failed: %s', ex.errors)
             for task in ex:

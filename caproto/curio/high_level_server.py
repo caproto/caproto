@@ -20,6 +20,12 @@ class PvpropertyData:
         self.putter = (MethodType(pvspec.put, group)
                        if pvspec.put is not None
                        else group.group_write)
+        if pvspec.startup is not None:
+            # enable the startup hook for this instance only:
+            self.server_startup = self._server_startup
+            # bind the startup method to the group (used in server_startup)
+            self.startup = MethodType(pvspec.startup, group)
+
         super().__init__(**kwargs)
 
     async def read(self, data_type):
@@ -41,6 +47,9 @@ class PvpropertyData:
             logger.debug('verify value for %s: %r', self.pvspec, value)
         return await self.putter(self, value)
 
+    async def _server_startup(self, async_lib):
+        return await self.startup(self, async_lib)
+
 
 class PvpropertyInteger(PvpropertyData, ChannelInteger):
     ...
@@ -55,13 +64,13 @@ class PvpropertyString(PvpropertyData, ChannelString):
 
 
 class PVSpec(namedtuple('PVSpec',
-                        'get put attr name dtype value alarm_group')):
+                        'get put startup attr name dtype value alarm_group')):
     'PV information specification'
     __slots__ = ()
     default_dtype = int
 
-    def __new__(cls, get=None, put=None, attr=None, name=None, dtype=None,
-                value=None, alarm_group=None):
+    def __new__(cls, get=None, put=None, startup=None, attr=None, name=None,
+                dtype=None, value=None, alarm_group=None):
         if dtype is None:
             dtype = (type(value[0]) if value is not None
                      else cls.default_dtype)
@@ -84,16 +93,25 @@ class PVSpec(namedtuple('PVSpec',
                 raise RuntimeError('Invalid signature for putter {}: {}'
                                    ''.format(put, sig))
 
-        return super().__new__(cls, get, put, attr, name, dtype, value,
-                               alarm_group)
+        if startup is not None:
+            assert inspect.iscoroutinefunction(startup), 'required async def startup'
+            sig = inspect.signature(startup)
+            try:
+                sig.bind('group', 'instance', 'async_library')
+            except Exception as ex:
+                raise RuntimeError('Invalid signature for startup {}: {}'
+                                   ''.format(startup, sig))
+
+        return super().__new__(cls, get, put, startup, attr, name, dtype,
+                               value, alarm_group)
 
     def new_names(self, attr=None, name=None):
         if attr is None:
             attr = self.attr
         if name is None:
             name = self.name
-        return PVSpec(self.get, self.put, attr, name, self.dtype, self.value,
-                      self.alarm_group)
+        return PVSpec(self.get, self.put, self.startup, attr, name, self.dtype,
+                      self.value, self.alarm_group)
 
 
 class pvproperty:
@@ -127,6 +145,12 @@ class pvproperty:
     def putter(self, put):
         # update PVSpec with putter
         self.pvspec = PVSpec(self.pvspec.get, put, *self.pvspec[2:])
+        return self
+
+    def startup(self, startup):
+        # update PVSpec with startup function
+        self.pvspec = PVSpec(self.pvspec.get, self.pvspec.put, startup,
+                             *self.pvspec[3:])
         return self
 
     def __call__(self, get, put=None):
