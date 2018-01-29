@@ -10,6 +10,7 @@ import caproto as ca
 import caproto.asyncio
 import caproto.asyncio.repeater
 import caproto.benchmarking  # noqa
+from caproto._cli import get
 import caproto.curio  # noqa
 import caproto.curio.client  # noqa
 import caproto.curio.server  # noqa
@@ -30,6 +31,34 @@ _repeater_process = None
 
 REPEATER_PORT = 5065
 SERVER_HOST = '0.0.0.0'
+
+
+@pytest.fixture(scope='function')
+def ioc(request):
+    # TODO Randomly generate a prefix and return it.
+    # TODO Use a special server specifically for tests.
+    READINESS_CHECK = 'pi'
+    p = subprocess.Popen(
+        [sys.executable, '-m',
+         'caproto.examples.curio_server_simple'],
+        env=os.environ)
+    t = time.monotonic()
+    for attempt in range(30):
+        time.sleep(0.1)
+        try:
+            get(READINESS_CHECK)
+        except TimeoutError:
+            continue
+        else:
+            break
+    else:
+        raise TimeoutError("ioc fixture failed to start in 3 seconds.")
+
+    def stop_ioc():
+        p.terminate()
+        p.wait()
+
+    request.addfinalizer(stop_ioc)
 
 
 def start_repeater():
