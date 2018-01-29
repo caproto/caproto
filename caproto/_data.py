@@ -300,9 +300,11 @@ class ChannelData:
         self.reported_record_type = reported_record_type
         self._data = dict(value=value,
                           timestamp=timestamp)
-        # This maps queues to SubscriptionSpecs. (Each queue belongs to a
-        # Context.)
-        self._queues = defaultdict(set)
+        # This is a dict keyed on queues that will receive subscription
+        # updates.  (Each queue belongs to a Context.) Each value is itself a
+        # dict, mapping data_types to the set of SubscriptionSpecs that request
+        # that data_type.
+        self._queues = defaultdict(lambda: defaultdict(set))
 
         # Cache results of data_type conversions. This maps data_type to
         # (metdata, value). This is cleared each time publish() is called.
@@ -312,7 +314,7 @@ class ChannelData:
     timestamp = _read_only_property('timestamp')
 
     async def subscribe(self, queue, sub_spec):
-        self._queues[queue].add(sub_spec)
+        self._queues[queue][sub_spec.data_type].add(sub_spec)
         # Always send current reading immediately upon subscription.
         data_type = sub_spec.data_type
         try:
@@ -329,7 +331,7 @@ class ChannelData:
         await queue.put(((sub_spec,), metadata, values))
 
     async def unsubscribe(self, queue, sub_spec):
-        self._queues[queue].remove(sub_spec)
+        self._queues[queue][sub_spec.data_type].remove(sub_spec)
 
     async def auth_read(self, hostname, username, data_type):
         '''Get DBR data and native data, converted to a specific type'''
@@ -460,16 +462,15 @@ class ChannelData:
         # instance state so that self.subscribe can also use it.
         self._content.clear()
 
-        for queue, sub_specs in self._queues.items():
-            for data_type in set(ss.data_type for ss in sub_specs):
-                # Which (if any) of the sub_specs that want this data_type
-                # have a compatible mask?
-                eligible = tuple(ss for ss in sub_specs if flags & ss.mask
-                                 and ss.data_type == data_type)
+        for queue, data_types in self._queues.items():
+            # queue belongs to a Context that is expecting to receive
+            # updates of the form (sub_specs, metadata, values).
+            # data_types is a dict grouping the sub_specs for this queue by
+            # their data_type.
+            for data_type, sub_specs in data_types.items():
+                eligible = tuple(ss for ss in sub_specs if ss.mask & flags)
                 if not eligible:
                     continue
-                # There is at least one sub_spec for the queue that will
-                # receive this update.
                 try:
                     metdata, values = self._content[data_type]
                 except KeyError:
