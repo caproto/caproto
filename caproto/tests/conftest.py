@@ -40,7 +40,7 @@ def ioc(request):
     READINESS_CHECK = 'pi'
     p = subprocess.Popen(
         [sys.executable, '-m',
-         'caproto.examples.curio_server_simple'],
+         'caproto.examples.type_varieties'],
         env=os.environ)
     t = time.monotonic()
     for attempt in range(30):

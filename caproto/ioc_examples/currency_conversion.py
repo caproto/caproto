@@ -33,12 +33,16 @@ class CurrencyConversionIOC(PVGroupBase):
         return float(m.groups()[0])
 
 
-def main(prefix, macros):
+if __name__ == '__main__'
+    # usage: currency_conversion.py [PREFIX]
+    try:
+        prefix = sys.argv[1]
+    except IndexError:
+        prefix='currency:'
+
     set_logging_level(logging.DEBUG)
     asks.init('curio')
-    ioc = CurrencyConversionIOC(prefix=prefix, macros=macros)
+    ioc = CurrencyConversionIOC(prefix=prefix)
     curio.run(start_server, ioc.pvdb)
 
 
-if __name__ == '__main__':
-    main(prefix='currency:', macros={})

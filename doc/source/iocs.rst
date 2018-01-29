@@ -16,16 +16,16 @@ Simple IOC
         processes.append(p)  # Clean this up at the end.
         time.sleep(1)  # Give it time to start up.
 
-.. literalinclude:: examples/simple_ioc.py
+.. literalinclude:: ../../ioc_examples/simple.py
 
 .. ipython:: python
     :suppress:
 
-    run_example('source/examples/simple_ioc.py', 'example1:')
+    run_example('../../examples/simple.py', 'example1:')
 
 .. code-block:: bash
 
-    $ simple_ioc.py example1:
+    $ simple.py example1:
     PVs: ['example1:A', 'example1:B']
 
 Now there are simple read/writable PVs named 'example1:A' and 'example1:B'.
@@ -46,7 +46,7 @@ To run a second instance of the same IOC with a different prefix:
 Write to a File When a PV is Written To
 =======================================
 
-.. literalinclude:: examples/custom_write.py
+.. literalinclude:: ../../ioc_examples/custom_write.py
 
 .. code-block:: bash
 
@@ -56,7 +56,7 @@ Write to a File When a PV is Written To
 .. ipython:: python
     :suppress:
 
-    run_example('source/examples/custom_write.py', 'example3:')
+    run_example('../../ioc_examples/custom_write.py', 'example3:')
 
 Update Tallies When Each PV is Read
 ===================================
@@ -71,12 +71,12 @@ Update Tallies When Each PV is Read
 .. ipython:: python
     :suppress:
 
-    run_example('source/examples/reading_counter.py', 'example4:')
+    run_example('../../ioc_examples/reading_counter.py', 'example4:')
 
 Macros for PV names
 ===================
 
-.. literalinclude:: examples/macros.py
+.. literalinclude:: ../../ioc_examples/macros.py
 
 .. code-block:: bash
 
@@ -86,19 +86,19 @@ Macros for PV names
 .. ipython:: python
     :suppress:
 
-    run_example('source/examples/macros.py', 'example5:', 'XF11ID', 'detector')
+    run_example('../../ioc_examples/macros.py', 'example5:', 'XF11ID', 'detector')
 
 Observe that the command line arguments fill in the PV names.
 
 "Inline" Style Read and Write Customization
 ===========================================
 
-.. literalinclude:: examples/inline_style.py
+.. literalinclude:: ../../ioc_examples/inline_style.py
 
 .. ipython:: python
     :suppress:
 
-    run_example('source/examples/inline_style.py', 'example6:')
+    run_example('../../ioc_examples/inline_style.py', 'example6:')
 
 .. code-block:: bash
 

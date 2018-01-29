@@ -21,11 +21,16 @@ class CustomWrite(PVGroupBase):
 
 
 if __name__ == '__main__':
-    # usage: custom_write.py <PREFIX>
+    # usage: custom_write.py [PREFIX]
     import sys
     import curio
     from caproto.curio.server import start_server
 
-    ioc = CustomWrite(prefix=sys.argv[1])
+    try:
+        prefix = sys.argv[1]
+    except IndexError:
+        prefix='custom_write:'
+
+    ioc = CustomWrite(prefix=prefix)
     print('PVs:', list(ioc.pvdb))
     curio.run(start_server(ioc.pvdb))

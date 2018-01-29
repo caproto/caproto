@@ -9,13 +9,18 @@ class SimpleIOC(PVGroupBase):
 
 
 if __name__ == '__main__':
-    # usage: simple_ioc.py <PREFIX>
+    # usage: simple_ioc.py [PREFIX]
     import sys
     import curio
     from caproto.curio.server import start_server
 
+    try:
+        prefix = sys.argv[1]
+    except IndexError:
+        prefix='simple:'
+
     # Instantiate the IOC, assigning a prefix for the PV names.
-    ioc = SimpleIOC(prefix=sys.argv[1])
+    ioc = SimpleIOC(prefix=prefix)
     print('PVs:', list(ioc.pvdb))
     
     # Run IOC using curio.
