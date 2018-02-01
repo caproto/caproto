@@ -395,7 +395,7 @@ def monitor_cli():
             td = datetime.fromtimestamp(time.time()) - dt
         history.append(dt)
         tokens['timedelta'] = td
-        print(format_str.format(**tokens))
+        print(format_str.format(**tokens), flush=True)
     try:
         monitor(*args.pv_names,
                 callback=callback, mask=mask,
