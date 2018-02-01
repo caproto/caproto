@@ -5,8 +5,10 @@ python:
 
 env:
   matrix:
-    - BASE=R3.14.12.6 BUSY=1-6-1 SEQ=2.2.5 ASYN=4-31 CALC=R3-6-1 MOTOR=6-9
-    - BASE=R3.15.5 BUSY=1-6-1 SEQ=2.2.5 ASYN=4-31 CALC=R3-6-1 MOTOR=6-9
+    - BASE=R3.14.12.6 BUSY=1-6-1 SEQ=2.2.5 ASYN=4-31 CALC=R3-6-1 MOTOR=6-9 \
+      PACKAGED_DEPS=0.2/epics-ci-0.2_R3.14.12.6_busy1-6-1_seq2.2.5_asyn4-31_calc3-6-1_motor6-9.tar.bz2
+    - BASE=R3.15.5 BUSY=1-6-1 SEQ=2.2.5 ASYN=4-31 CALC=R3-6-1 MOTOR=6-9 \
+      PACKAGED_DEPS=0.2/epics-ci-0.2_R3.15.5_busy1-6-1_seq2.2.5_asyn4-31_calc3-6-1_motor6-9.tar.bz2
     # - BASE=R3.16.1 BUSY=1-6-1 SEQ=2.2.5 ASYN=4-31 CALC=4aab3c4 MOTOR=6-9
   global:
     - secure: "Hnz9c6x13kaAc7IqH4/wJWNel2rzEC8/x0KhFoGLVLHjmiH1LMmpGh/P5CPADlmKS80WFz4vhJ0YtSjtHCPI+9Y2aBGn8z732WM86OyGHITviCMTxtyVZfRFCkOAVlU0qpIyWu4p0rEfxrXCztSKE4bBO/wWnFhGGw9CJROnFhJwoJlbI9i28zscyeGsdqHNUfXHkyUAN3c3LKoYZgnJco5HiHLwXVvsy3DMkvOizLgslf6lrHwnQOT1F49ShgPcGGWpkuRARXkGII7lB0LOn2TBoTzmhgjoC3OmC4nZGJfzitwH9+nHc+iJ3mTlshsXb366B/D5TNVIL/4rzYV8zw49DogQIWYtECK4/z7fOzG61yCU33b3aeXU2OI4k5eZ2qN3gp3KQ4+PWyCMTHsBVgs6o49K1HWtFuuFLuhUPT4FVs2Pzz6yTka9NUukPO1LoTeQAUvGxRbc/15CjIWXtqqzEGmlPi8AFEo2kw33EtTawMU9w8nzAfdk5DX28Qcuzh9XA9nVUD0j7Rum7nGY1f5+icXh0FsOuP1uHt82bXIYvw3rey3RkWcqVcniJXlkq0bAZM/ZSXWX5VHyQ2e7C4kxCdnzVqjgtlGT2ARSlD6o8FKKRKTAKD7kQ9ajTjZHRhO+xbvP+X4K9GlbGvPyU9bnDFa14fXBJS4dTMd8GgQ="
@@ -21,7 +23,7 @@ addons:
   apt:
     packages:
       - graphviz  # for building docs
-      - libreadline6-dev  # epics build deps
+      - libreadline6-dev  # epics deps
       - libncurses5-dev
       - perl
       - re2c
@@ -43,6 +45,10 @@ before_install:
   - ip addr
   - git fetch --unshallow
   - source .ci/epics-config.sh
+
+  - export FULL_PACKAGE_URL="https://github.com/klauer/epics-on-travis/releases/download/${PACKAGED_DEPS}"
+  - curl -L ${FULL_PACKAGE_URL} | tar -C $HOME/.cache -xvj --strip-components=3
+
   - bash .ci/install-epics-base.sh
   - bash .ci/install-epics-modules.sh
   - bash .ci/install-epics-iocs.sh
