@@ -32,22 +32,19 @@ addons:
 
 cache:
   directories:
-    - $HOME/.cache/support
-    - $HOME/.cache/iocs
     - $HOME/.cache/pip
     - $HOME/.ccache  # https://github.com/travis-ci/travis-ci/issues/5853
 
 before_install:
   - export PATH=/usr/lib/ccache:$PATH
+
   - git fetch --unshallow
-  - source .ci/epics-config.sh
-
-  - export FULL_PACKAGE_URL="https://github.com/klauer/epics-on-travis/releases/download/${PACKAGED_DEPS}"
-  - curl -L ${FULL_PACKAGE_URL} | tar -C $HOME/.cache -xvj --strip-components=3
-
-  - bash .ci/run-epics-iocs.sh
+  - export CI_SCRIPTS=${TRAVIS_BUILD_DIR}/.ci/ci-scripts
+  - source ${CI_SCRIPTS}/epics-config.sh
+  - bash .ci/install-from-release.sh "https://github.com/klauer/epics-on-travis/releases/download/${PACKAGED_DEPS}"
+  - bash ${CI_SCRIPTS}/run-epics-iocs.sh
   - pip install pyepics numpy
-  - bash .ci/run-pyepics-simulator.sh
+  - bash ${CI_SCRIPTS}/run-pyepics-simulator.sh
 
 install:
   - pip install .
