@@ -39,19 +39,12 @@ cache:
 
 before_install:
   - export PATH=/usr/lib/ccache:$PATH
-  - export EPICS_CA_ADDR_LIST=127.255.255.255
-  - export EPICS_CA_AUTO_ADDR_LIST=NO
-  - export EPICS_CA_MAX_ARRAY_BYTES=10000000
-  - ip addr
   - git fetch --unshallow
   - source .ci/epics-config.sh
 
   - export FULL_PACKAGE_URL="https://github.com/klauer/epics-on-travis/releases/download/${PACKAGED_DEPS}"
   - curl -L ${FULL_PACKAGE_URL} | tar -C $HOME/.cache -xvj --strip-components=3
 
-  - bash .ci/install-epics-base.sh
-  - bash .ci/install-epics-modules.sh
-  - bash .ci/install-epics-iocs.sh
   - bash .ci/run-epics-iocs.sh
   - pip install pyepics numpy
   - bash .ci/run-pyepics-simulator.sh

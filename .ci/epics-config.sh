@@ -1,3 +1,7 @@
+export EPICS_CA_ADDR_LIST=127.255.255.255
+export EPICS_CA_AUTO_ADDR_LIST=NO
+export EPICS_CA_MAX_ARRAY_BYTES=10000000
+
 export EPICS_ROOT=$HOME/.cache/epics/${BASE}
 export SUPPORT=${EPICS_ROOT}/support
 export IOCS=${EPICS_ROOT}/iocs
