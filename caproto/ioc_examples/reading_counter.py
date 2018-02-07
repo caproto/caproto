@@ -27,6 +27,12 @@ if __name__ == '__main__':
     import curio
     from caproto.curio.server import start_server
 
-    ioc = ReadingCounter(prefix=sys.argv[1])
+    try:
+        prefix = sys.argv[1]
+    except IndexError:
+        prefix = 'reading_counter:'
+
+
+    ioc = ReadingCounter(prefix=prefix)
     print('PVs:', list(ioc.pvdb))
     curio.run(start_server(ioc.pvdb))

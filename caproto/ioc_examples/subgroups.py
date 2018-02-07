@@ -77,7 +77,19 @@ class MyPVGroup(PVGroupBase):
                 return random.randint(1, 100)
 
 
-def main(prefix, macros):
+
+
+if __name__ == '__main__':
+    # usage: subgroups.py [PREFIX] [MACRO]
+    try:
+        prefix = sys.argv[1]
+    except IndexError:
+        prefix='subgroups:'
+    try:
+        macro = sys.argv[2]
+    except IndexError:
+        macro = 'expanded'
+
     import curio
     from pprint import pprint
 
@@ -95,12 +107,3 @@ def main(prefix, macros):
     pprint(ioc.pvdb)
 
     curio.run(start_server, ioc.pvdb)
-
-
-if __name__ == '__main__':
-    # usage: subgroups.py [PREFIX]
-    try:
-        prefix = sys.argv[1]
-    except IndexError:
-        prefix='simple:'
-    main(prefix=preifx, macros=dict(macro='expanded'))
