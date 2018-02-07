@@ -84,4 +84,14 @@ def main(prefix, macros):
 
 
 if __name__ == '__main__':
-    main(prefix='prefix:', macros=dict(macro='expanded'))
+    # usage: all_in_one.py [PREFIX] [MACRO]
+    try:
+        prefix = sys.argv[1]
+    except IndexError:
+        prefix='all_in_one:'
+    try:
+        macro = sys.argv[2]
+    except IndexError:
+        macro = 'expanded'
+
+    main(prefix=prefix, macros=dict(macro=macro))

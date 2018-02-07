@@ -98,4 +98,9 @@ def main(prefix, macros):
 
 
 if __name__ == '__main__':
-    main(prefix='prefix:', macros=dict(macro='expanded'))
+    # usage: subgroups.py [PREFIX]
+    try:
+        prefix = sys.argv[1]
+    except IndexError:
+        prefix='simple:'
+    main(prefix=preifx, macros=dict(macro='expanded'))

@@ -9,7 +9,7 @@ class SimpleIOC(PVGroupBase):
 
 
 if __name__ == '__main__':
-    # usage: simple_ioc.py [PREFIX]
+    # usage: simple.py [PREFIX]
     import sys
     import curio
     from caproto.curio.server import start_server
