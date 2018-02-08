@@ -170,13 +170,41 @@ class SubGroup:
 
 
 class pvfunction(SubGroup):
-    'A descriptor for making an RPC-like function'
+    default_names = dict(process='Process',
+                         retval='Retval',
+                         status='Status',
+                         )
 
-    def __init__(self, func=None, default=None, alarm_group=None,
-                 process_name='Process', return_name='Retval',
-                 status_name='Status',
-                 prefix=None, macros=None,
-                 attr_separator=None):
+    def __init__(self, func=None, default=None, names=None, alarm_group=None,
+                 prefix=None, macros=None, attr_separator=None):
+
+        '''
+        A descriptor for making an RPC-like function
+
+        Note: Requires Python type hinting for all arguments to the function
+        and its return value. These are used to generate the PVs.
+
+        Parameters
+        ----------
+        func : async callable, optional
+            The function to wrap
+        default : any, optional
+            Default value for the return value
+        names : dict, optional
+            Valid keys include {'process', 'retval', 'status'} and also any
+            function argument names. This will map attributes of the
+            dynamically-generated PVGroup that this pvfunction represents to
+            EPICS PV names.
+        alarm_group : str, optional
+            The alarm group name this group should be associated with
+        prefix : str, optional
+            The prefix for all PVs
+        macros : dict, optional
+            Macro dictionary for PVs
+        attr_separator : str, optional
+            String separator between {prefix} and {attribute} for generated PV
+            names.
+        '''
 
         super().__init__(group_cls=None,
                          prefix=prefix, macros=macros,
@@ -184,10 +212,10 @@ class pvfunction(SubGroup):
         self.default_retval = default
         self.func = func
         self.alarm_group = alarm_group
-        self.names = {'process': process_name,
-                      'retval': return_name,
-                      'status': status_name
-                      }
+        if names is None:
+            names = self.default_names
+        self.names = {k: names.get(k, self.default_names[k])
+                      for k in self.default_names}
         self.pvspec = []
 
     def __call__(self, func):
@@ -212,7 +240,11 @@ class pvfunction(SubGroup):
             default = list(default)
 
         return PVSpec(
-            get=None, put=None, attr=param.name, name=param.name, dtype=dtype,
+            get=None, put=None, attr=param.name,
+            # the name defaults to the parameter name, but can be remapped with
+            # the 'names' dictionary
+            name=self.names.get(param.name, param.name),
+            dtype=dtype,
             value=default, alarm_group=self.alarm_group,
         )
 
