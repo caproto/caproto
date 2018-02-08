@@ -169,7 +169,7 @@ class SubGroup:
         return self
 
 
-class PVFunction(SubGroup):
+class pvfunction(SubGroup):
     'A descriptor for making an RPC-like function'
 
     def __init__(self, func=None, default=None, alarm_group=None,
@@ -191,7 +191,7 @@ class PVFunction(SubGroup):
         self.pvspec = []
 
     def __call__(self, func):
-        # handles case where PVFunction()(func) is used
+        # handles case where pvfunction()(func) is used
         self.func = func
         self._regenerate()
         return self

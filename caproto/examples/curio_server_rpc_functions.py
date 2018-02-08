@@ -4,7 +4,7 @@ import random
 from caproto.benchmarking import set_logging_level
 from caproto.curio.server import start_server
 from caproto.curio.high_level_server import (pvproperty, PVGroupBase,
-                                             PVFunction)
+                                             pvfunction)
 
 
 logger = logging.getLogger(__name__)
@@ -18,7 +18,7 @@ class MyPVGroup(PVGroupBase):
         logger.debug('read random')
         return random.randint(1, 100)
 
-    @PVFunction(default=[0])
+    @pvfunction(default=[0])
     async def get_random(self,
                          low: int=100,
                          high: int=1000) -> int:
