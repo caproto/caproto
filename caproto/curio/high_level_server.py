@@ -169,6 +169,159 @@ class SubGroup:
         return self
 
 
+class pvfunction(SubGroup):
+    default_names = dict(process='Process',
+                         retval='Retval',
+                         status='Status',
+                         )
+
+    def __init__(self, func=None, default=None, names=None, alarm_group=None,
+                 prefix=None, macros=None, attr_separator=None):
+
+        '''
+        A descriptor for making an RPC-like function
+
+        Note: Requires Python type hinting for all arguments to the function
+        and its return value. These are used to generate the PVs.
+
+        Parameters
+        ----------
+        func : async callable, optional
+            The function to wrap
+        default : any, optional
+            Default value for the return value
+        names : dict, optional
+            Valid keys include {'process', 'retval', 'status'} and also any
+            function argument names. This will map attributes of the
+            dynamically-generated PVGroup that this pvfunction represents to
+            EPICS PV names.
+        alarm_group : str, optional
+            The alarm group name this group should be associated with
+        prefix : str, optional
+            The prefix for all PVs
+        macros : dict, optional
+            Macro dictionary for PVs
+        attr_separator : str, optional
+            String separator between {prefix} and {attribute} for generated PV
+            names.
+        '''
+
+        super().__init__(group_cls=None,
+                         prefix=prefix, macros=macros,
+                         attr_separator=attr_separator)
+        self.default_retval = default
+        self.func = func
+        self.alarm_group = alarm_group
+        if names is None:
+            names = self.default_names
+        self.names = {k: names.get(k, self.default_names[k])
+                      for k in self.default_names}
+        self.pvspec = []
+
+    def __call__(self, func):
+        # handles case where pvfunction()(func) is used
+        self.func = func
+        self._regenerate()
+        return self
+
+    def pvspec_from_parameter(self, param):
+        dtype = param.annotation
+        default = param.default
+
+        try:
+            default[0]
+        except TypeError:
+            default = [default]
+        except Exception:
+            raise ValueError(f'Invalid default value for parameter {param}')
+        else:
+            # ensure we copy any arrays as default parameters, lest we give
+            # some developers a heart attack
+            default = list(default)
+
+        return PVSpec(
+            get=None, put=None, attr=param.name,
+            # the name defaults to the parameter name, but can be remapped with
+            # the 'names' dictionary
+            name=self.names.get(param.name, param.name),
+            dtype=dtype,
+            value=default, alarm_group=self.alarm_group,
+        )
+
+    def get_additional_parameters(self):
+        sig = inspect.signature(self.func)
+        return_type = sig.return_annotation
+        assert return_type, 'Return value must have a type annotation'
+
+        return [
+            inspect.Parameter(self.names['status'], kind=0, default='Init',
+                              annotation=str),
+            inspect.Parameter(self.names['retval'], kind=0,
+                              # TODO?
+                              default=PVGroupBase.default_values[return_type],
+                              annotation=return_type),
+        ]
+
+    def _class_from_pvspec(self, pvspec):
+        def get_pvproperty(pvspec):
+            prop = pvproperty()
+            prop.pvspec = pvspec
+            return prop
+
+        dct = {
+            pvspec.attr: get_pvproperty(pvspec)
+            for pvspec in self.pvspec
+        }
+
+        # handle process specially
+        process_pvspec = self.pvspec_from_parameter(
+            inspect.Parameter(self.names['process'], kind=0, default=0,
+                              annotation=int)
+        )
+
+        dct[process_pvspec.attr] = process_prop = pvproperty()
+
+        async def do_process(group, instance, value):
+            try:
+                sig = inspect.signature(self.func)
+                kwargs = {sig.name: getattr(group, sig.name).value
+                          for sig in list(sig.parameters.values())[1:]
+                          }
+                value = await self.func(group, **kwargs)
+                await group.Retval.write(value)
+                await group.Status.write(f'Success')
+            except Exception as ex:
+                await group.Status.write(f'{ex.__class__.__name__}: {ex}')
+                raise
+
+        process_prop.pvspec = PVSpec(None, do_process, process_pvspec[2:])
+
+        return type(self.attr_name, (PVGroupBase, ), dct)
+
+    def _regenerate(self):
+        if self.func is None or self.attr_name is None:
+            return []
+
+        if self.alarm_group is None:
+            self.alarm_group = self.func.__name__
+
+        sig = inspect.signature(self.func)
+        parameters = list(sig.parameters.values())[1:]  # skip 'self'
+        parameters.extend(self.get_additional_parameters())
+        self.pvspec = [self.pvspec_from_parameter(param)
+                       for param in parameters]
+
+        # how about an auto-generated meta-class subclass in your subgroup
+        # descriptor? (cc @tacaswell)
+        self.group_cls = self._class_from_pvspec(self.pvspec)
+
+    def __set_name__(self, owner, name):
+        self.attr_name = name
+        if self.prefix is None:
+            self.prefix = name + self.attr_separator
+        self._regenerate()
+
+
 def expand_macros(pv, macros):
     'Expand a PV name with Python {format-style} macros'
     return pv.format(**macros)
@@ -199,7 +352,12 @@ class PVGroupMeta(type):
             if isinstance(value, pvproperty):
                 yield attr, value
             elif isinstance(value, SubGroup):
+                if value.attr_name is None:
+                    # this happens in the case of PVFunctions...
+                    value.__set_name__(None, attr)
                 subgroup_cls = value.group_cls
+                if subgroup_cls is None:
+                    raise RuntimeError('Internal error; subgroup class unset?')
                 for sub_attr, value in subgroup_cls._pvs_.items():
                     yield '.'.join([attr, sub_attr]), value
 
@@ -221,18 +379,7 @@ class PVGroupMeta(type):
             logger.debug('class %s attr %s: %r', name, attr, prop)
             pvs[attr] = prop
 
-        cls = super().__new__(metacls, name, bases, dct)
-
-        for attr, prop in metacls.find_subgroups(dct):
-            if prop.attr_name is None:
-                # note: for python < 3.6
-                subgroups[attr].__set_name__(attr, cls)
-        for attr, prop in metacls.find_pvproperties(dct):
-            if prop.attr_name is None:
-                # note: for python < 3.6
-                pvs[attr].__set_name__(attr, cls)
-
-        return cls
+        return super().__new__(metacls, name, bases, dct)
 
 
 def channeldata_from_pvspec(group, pvspec):
@@ -269,6 +416,7 @@ class PVGroupBase(metaclass=PVGroupMeta):
         self.alarms = defaultdict(lambda: ChannelAlarm())
         self.pvdb = OrderedDict()
         self.attr_pvdb = OrderedDict()
+        self.attr_to_pvname = OrderedDict()
         self.groups = OrderedDict()
         self._create_pvdb()
 
@@ -278,7 +426,7 @@ class PVGroupBase(metaclass=PVGroupMeta):
             subgroup_cls = subgroup.group_cls
 
             prefix = (subgroup.prefix if subgroup.prefix is not None
-                      else subgroup.prefix)
+                      else subgroup.attr_name)
             prefix = self.prefix + prefix
 
             macros = dict(self.macros)
@@ -288,18 +436,23 @@ class PVGroupBase(metaclass=PVGroupMeta):
 
         for attr, pvprop in self._pvs_.items():
             if '.' in attr:
-                group_attr, _ = attr.rsplit('.', 1)
+                group_attr, sub_attr = attr.rsplit('.', 1)
                 group = self.groups[group_attr]
+                channeldata = group.attr_pvdb[sub_attr]
+                pvname = group.attr_to_pvname[sub_attr]
             else:
                 group = self
-
-            pvname, channeldata = channeldata_from_pvspec(group, pvprop.pvspec)
+                pvname, channeldata = channeldata_from_pvspec(group, pvprop.pvspec)
 
             # full pvname -> ChannelData instance
             self.pvdb[pvname] = channeldata
 
             # attribute -> PV instance mapping for quick access by pvproperty
             self.attr_pvdb[attr] = channeldata
+
+            # and a convenient map of attr -> pvname
+            self.attr_to_pvname[attr] = pvname
+            # TODO maybe this could all be simplified?
 
     async def group_read(self, instance):
         'Generic read called for channels without `get` defined'
