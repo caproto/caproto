@@ -5,35 +5,23 @@ jobs:
   build:
     working_directory: ~/caproto
     docker:
-      - image: klauer/caproto-docker:0.1.1
+      - image: klauer/caproto-docker:0.2.2
         environment:
           EPICS_CA_AUTO_ADDR_LIST: "NO"
           EPICS_CA_MAX_ARRAY_BYTES: "10000000"
+          CI_ROOT: /epics/ci
+          CI_SCRIPTS: /epics/ci/ci-scripts
     steps:
       - checkout
-      - run: 
-          name: environment configuration
-          command: |
-            DOCKER_IP=$(ip addr show eth0 |grep 'inet ' | sed -e 's/.*inet \([^\/]*\).*/\1/')
-            EPICS_CA_ADDR_LIST=$(echo $DOCKER_IP | sed -e 's/^\([0-9]\+\)\.\([0-9]\+\)\..*$/\1.\2.255.255/' )
-            echo 'export PATH=$HOME/.linuxbrew/bin:$PATH' >> $BASH_ENV
-            echo "export DOCKER_IP=$DOCKER_IP" >> $BASH_ENV
-            echo "export EPICS_CA_ADDR_LIST=$EPICS_CA_ADDR_LIST" >> $BASH_ENV
-            echo 'source epics_env.sh' >> $BASH_ENV
-            echo '[[ -f caproto-venv/bin/activate ]] && echo "(caproto-venv)" && source caproto-venv/bin/activate' >> $BASH_ENV
-
       - run:
-          name: Run motorsim IOC in background
-          background: true
+          name: Initialize submodules
           command: |
-            cd /epics/iocs/motorsim/iocBoot/ioclocalhost
-            ../../bin/linux-x86_64/mtrSim ./st.cmd
-
-      - run:
-          name: Run pyepics test IOC in background
-          command: pyepics_testioc-run.sh
-          background: true
-
+            # TODO: need to create a machine user. for now, just init our
+            # submodule separately
+            # see: https://circleci.com/docs/1.0/github-security-ssh-keys/
+            cd $HOME/caproto
+            rm -rf .ci
+            git clone https://github.com/NSLS-II/epics-on-travis .ci
       - run:
           name: Setup virtual environment
           # after this step, all steps run in the virtual environment using $BASH_ENV
@@ -44,12 +32,27 @@ jobs:
             python setup.py install
       
       - run:
-          name: Run pyepics simulator in background
+          name: environment configuration (broadcast address, bashrc)
           command: |
-            cd
-            wget https://raw.githubusercontent.com/pyepics/testioc/master/simulator.py
-            python simulator.py
-          background: true
+            source caproto-venv/bin/activate
+            export DOCKER_IP=$(ip addr show eth0 |grep 'inet ' | sed -e 's/.*inet \([^ ]*\).*/\1/')
+            EPICS_CA_ADDR_LIST=$(python -c "import ipaddress; print(ipaddress.IPv4Network('$DOCKER_IP', strict=False).broadcast_address)")
+
+            # overwrite the address list from the CI scripts with one determined from the docker IP:
+            echo "export EPICS_CA_ADDR_LIST=$EPICS_CA_ADDR_LIST" >> $CI_SCRIPTS/epics-config.sh
+            # and load epics-config.sh every time bash_env is sourced
+            echo 'pushd $HOME/caproto' >> $BASH_ENV
+            echo 'if [ -d .ci/ci-scripts ]; then source setup_local_dev_env.sh; fi' >> $BASH_ENV
+            echo 'popd' >> $BASH_ENV
+            # (Really should be using epics-config.sh:)
+            # echo 'source $CI_SCRIPTS/epics-config.sh' >> $BASH_ENV
+            echo '[[ -f caproto-venv/bin/activate ]] && echo "(caproto-venv)" && source caproto-venv/bin/activate' >> $BASH_ENV
+
+      - run:
+          name: Run IOCs and pyepics simulator in background
+          background: false
+          command: |
+            bash $HOME/caproto/.circleci/start-tmux.sh
 
       - run:
           name: Check IOC status using caget and caproto repeater
@@ -57,20 +60,33 @@ jobs:
             rm `which caRepeater` || /bin/true
             caproto-repeater &
             REPEATER_PID=$!
+            sleep 0.2
+
             env
-            caget XF:31IDA-OP{Tbl-Ax:X1}Mtr
+            # Double-check that they're running, although the CI scripts do that above
             caget Py:ao1
+            caget sim:mtr1
             kill $REPEATER_PID
+            sleep 2
 
       - run:
-          name: Run tests
+          name: Run main tests
+          no_output_timeout: 2m
+          command: |
+            coverage run run_tests.py -v --benchmark-disable --ignore=caproto/tests/test_bench.py
+            coverage combine
+
+      - run:
+          name: Quickly run benchmark tests
           no_output_timeout: 1m
           command: |
-            coverage run run_tests.py -v tests/
+            export ASV_ENV_NAME=${TRAVIS_PYTHON_VERSION}_${BASE}
+            coverage run `which py.test` -v --benchmark-only --benchmark-json=pytest_bench.json --benchmark-columns=mean,median,rounds,iterations -k bench
 
       - run:
           name: Report coverage
           command: |
+            coverage combine -a
             coverage report -m
 
       - store_artifacts:
