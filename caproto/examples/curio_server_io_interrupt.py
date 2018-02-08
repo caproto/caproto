@@ -4,6 +4,7 @@ import sys
 import os
 import logging
 import threading
+import atexit
 
 import curio
 import asks  # for http requests through curio
@@ -33,24 +34,28 @@ def start_io_interrupt_monitor(new_value_callback):
     oldflags = fcntl.fcntl(fd, fcntl.F_GETFL)
 
     print('Started monitoring the keyboard outside of the async library')
-    try:
-        termios.tcsetattr(fd, termios.TCSANOW, newattr)
-        fcntl.fcntl(fd, fcntl.F_SETFL, oldflags | os.O_NONBLOCK)
-        while True:
-            try:
-                char = sys.stdin.read(1)
-            except IOError:
-                ...
-            else:
-                if char:
-                    print(f'New keypress: {char!r}')
-                    new_value_callback(char)
 
-    finally:
+    # When the process exits, be sure to reset the terminal settings
+    @atexit.register
+    def reset_terminal():
+        print('Resetting the terminal settings')
         termios.tcsetattr(fd, termios.TCSAFLUSH, oldterm)
         fcntl.fcntl(fd, fcntl.F_SETFL, oldflags)
+        print('Done')
 
-    return char
+    termios.tcsetattr(fd, termios.TCSANOW, newattr)
+    fcntl.fcntl(fd, fcntl.F_SETFL, oldflags | os.O_NONBLOCK)
+
+    # Loop forever, sending back keypresses to the callback
+    while True:
+        try:
+            char = sys.stdin.read(1)
+        except IOError:
+            ...
+        else:
+            if char:
+                print(f'New keypress: {char!r}')
+                new_value_callback(char)
 
 
 class IOInterruptIOC(PVGroupBase):
