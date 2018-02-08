@@ -14,11 +14,17 @@ from caproto.curio.high_level_server import pvproperty, PVGroupBase
 
 
 def start_io_interrupt_monitor(new_value_callback):
-    'Thanks stackoverflow and Python 2 FAQ'
-    # In actuality, we'd be getting some sort of callback from a 3rd party
-    # library, and not polling in a non-async background thread...
-    # if you have a better example idea, let me know!
+    '''
+    This function monitors the terminal it was run in for keystrokes.
+    On each keystroke, it calls new_value_callback with the given keystroke.
 
+    This is used to simulate the concept of an I/O Interrupt-style signal from
+    the EPICS world. Those signals depend on hardware to tell EPICS when new
+    values are available to be read by way of interrupts - whereas we use
+    callbacks here.
+    '''
+
+    # Thanks stackoverflow and Python 2 FAQ!
     fd = sys.stdin.fileno()
 
     oldterm = termios.tcgetattr(fd)
@@ -50,20 +56,27 @@ def start_io_interrupt_monitor(new_value_callback):
 class IOInterruptIOC(PVGroupBase):
     keypress = pvproperty(value=[''])
 
+    # NOTE the decorator used here:
     @keypress.startup
     async def keypress(self, instance, async_lib):
-        'Periodically update the value'
-        print('Starting currency conversion')
+        # This method will be called when the server starts up.
+        print('* keypress method called at server startup')
         queue = async_lib.ThreadsafeQueue()
 
+        # Start a separate thread that monitors keyboard input, telling it to
+        # put new values into our async-friendly queue
         thread = threading.Thread(target=start_io_interrupt_monitor,
                                   daemon=True,
                                   kwargs=dict(new_value_callback=queue.put))
         thread.start()
 
+        # Loop and grab items from the queue one at a time
         while True:
             value = await queue.get()
             print(f'Saw new value on async side: {value!r}')
+
+            # Propagate the keypress to the EPICS PV, triggering any monitors
+            # along the way
             await self.keypress.write(str(value))
 
 
