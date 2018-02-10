@@ -148,7 +148,7 @@ class SelectorThread:
 
 
 class SharedBroadcaster:
-    def __init__(self, *, log_level='ERROR'):
+    def __init__(self, *, log_level='ERROR', timeout=0.5, attempts=5):
         self.log_level = log_level
         self.udp_sock = None
         self._search_lock = threading.RLock()
@@ -167,6 +167,24 @@ class SharedBroadcaster:
         self.command_thread = threading.Thread(target=self.command_loop,
                                                daemon=True)
         self.command_thread.start()
+
+        # Register with the CA repeater.
+        if self.udp_sock is None:
+            self.__create_sock()
+
+        with self.command_cond:
+            command = self.broadcaster.register('127.0.0.1')
+            self.send(ca.EPICS_CA2_PORT, command)
+
+        for attempts in range(attempts):
+            with self.command_cond:
+                done = self.command_cond.wait_for(
+                    lambda: self.broadcaster.registered, timeout)
+                self.send(ca.EPICS_CA2_PORT, command)
+            if done:
+                break
+        else:
+            raise TimeoutError('Failed to register with the broadcaster')
 
     def __create_sock(self):
         # UDP socket broadcasting to CA servers
@@ -215,7 +233,7 @@ class SharedBroadcaster:
                     host, _, specified_port = host.partition(':')
                     is_register = isinstance(commands[0],
                                              ca.RepeaterRegisterRequest)
-                    if not self.registered and is_register:
+                    if not self.broadcaster.registered and is_register:
                         logger.debug('Specific IOC host/port designated in '
                                      'address list: %s:%s.  Repeater '
                                      'registration requirement ignored', host,
@@ -234,29 +252,6 @@ class SharedBroadcaster:
                                                          int(specified_port)))
                 else:
                     self.udp_sock.sendto(bytes_to_send, (host, port))
-
-    def register(self, *, wait=True, timeout=0.5, attempts=4):
-        "Register this client with the CA Repeater."
-        if self.registered:
-            return
-
-        if self.udp_sock is None:
-            self.__create_sock()
-
-        with self.command_cond:
-            command = self.broadcaster.register('127.0.0.1')
-            self.send(ca.EPICS_CA2_PORT, command)
-
-        if wait:
-            for attempts in range(attempts):
-                with self.command_cond:
-                    done = self.command_cond.wait_for(lambda: self.registered,
-                                                      timeout)
-                    self.send(ca.EPICS_CA2_PORT, command)
-                if done:
-                    break
-            else:
-                raise TimeoutError('Failed to register with the broadcaster')
 
     def search(self, name, *, wait=True, timeout=2):
         "Generate, process, and the transport a search request."
@@ -322,10 +317,6 @@ class SharedBroadcaster:
                                 pass
                     self.command_cond.notify_all()
 
-    @property
-    def registered(self):
-        return self.broadcaster.registered
-
     def __del__(self):
         try:
             self.disconnect()
@@ -343,11 +334,7 @@ class Context:
         self.broadcaster = broadcaster
         self.circuits = {}  # map (address, priority) to VirtualCircuit
         self.selector = None
-
-    def register(self):
-        "Register this client with the CA Repeater."
         self.broadcaster.add_listener(self)
-        self.broadcaster.register()
 
     def search(self, name):
         "Generate, process, and the transport a search request."
