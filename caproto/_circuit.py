@@ -95,6 +95,12 @@ class VirtualCircuit:
                                       "have a key.")
         return self.address, self.priority  # a unique identifier
 
+    def __eq__(self, other):
+        return hash(self) == hash(other)
+
+    def __hash__(self):
+        return hash((self.address, self.priority, self.our_role))
+
     def send(self, *commands):
         """
         Convert one or more high-level Commands into buffers of bytes that may

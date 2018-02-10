@@ -351,3 +351,11 @@ def test_dead_circuit(circuit_pair):
     assert srv_channel2.states[ca.CLIENT] is ca.CLOSED
     assert cli_channel2.states[ca.SERVER] is ca.CLOSED
     assert srv_channel2.states[ca.SERVER] is ca.CLOSED
+
+
+def test_circuit_equality():
+    a = ca.VirtualCircuit(ca.CLIENT, ('asdf', 1234), 1)
+    b = ca.VirtualCircuit(ca.CLIENT, ('asdf', 1234), 1)
+    c = ca.VirtualCircuit(ca.CLIENT, ('asdf', 1234), 2)
+    assert a == b != c
+
