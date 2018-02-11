@@ -19,6 +19,7 @@ from collections import Iterable, defaultdict
 
 import caproto as ca
 from .._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
+from .._utils import partition_all
 
 
 class ThreadingClientException(Exception):
@@ -32,6 +33,7 @@ class DisconnectedError(ThreadingClientException):
 AUTOMONITOR_MAXLENGTH = 65536
 STALE_SEARCH_EXPIRATION = 10.0
 TIMEOUT = 2
+BATCH_SIZE = 300
 STR_ENC = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
 
 
@@ -308,11 +310,13 @@ class SharedBroadcaster:
                 search_ids.append(search_id)
                 unanswered_searches[search_id] = (name, results_queue)
         logger.debug("Searching for '%r' PVs...." % len(needs_search))
-        self.send(
-            ca.EPICS_CA1_PORT,
-            ca.VersionRequest(0, 13),
-            *(ca.SearchRequest(name, search_id, 13)
-            for name, search_id in zip(needs_search, search_ids)))
+        # Send up to BATCH_SIZE SearchRequests per UDP datagram.
+        for batch in partition_all(BATCH_SIZE, zip(needs_search, search_ids)):
+            self.send(
+                ca.EPICS_CA1_PORT,
+                ca.VersionRequest(0, 13),
+                *(ca.SearchRequest(name, search_id, 13)
+                for name, search_id in batch))
         return search_ids
 
     def received(self, bytes_recv, address):
