@@ -662,6 +662,8 @@ class PV:
 
     @property
     def connected(self):
+        if self.circuit_manager is None:
+            return False
         with self.circuit_manager.new_command_cond:
             return self.channel.states[ca.CLIENT] is ca.CONNECTED
 
