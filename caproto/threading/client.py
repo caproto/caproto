@@ -155,6 +155,7 @@ class SharedBroadcaster:
         self.udp_sock = None
         self._search_lock = threading.RLock()
 
+        self._id_counter = itertools.count(0)
         self.search_results = {}  # map name to (time, address)
         self.unanswered_searches = {}  # map search id (cid) to (name, queue)
 
@@ -187,6 +188,22 @@ class SharedBroadcaster:
                 break
         else:
             raise TimeoutError('Failed to register with the broadcaster')
+
+    def new_id(self):
+        # Return the next sequential unused id. Wrap back to 0 on overflow.
+        # We need an id that is not currently used by _any_ Context that
+        # searches using this Broadcaster. (In theory we could keep search IDs
+        # separate from Channel IDs, but the CA spec says that they "SHOULD" be
+        # the same ID.)
+        while True:
+            i = next(self._id_counter)
+            for listener in self.listeners:  # 'listener' i.e. Context
+                if i in listener.pvs:
+                    continue
+            if i == MAX_ID:
+                self._id_counter = itertools.count(0)
+                continue
+            return i
 
     def __create_sock(self):
         # UDP socket broadcasting to CA servers
@@ -257,7 +274,7 @@ class SharedBroadcaster:
 
     def search(self, results_queue, names, *, timeout=2):
         "Generate, process, and the transport a search request."
-        new_search_id = self.broadcaster.new_search_id
+        new_id = self.new_id
         search_results = self.search_results
         unanswered_searches = self.unanswered_searches
         stale_search_expiration = STALE_SEARCH_EXPIRATION
@@ -287,7 +304,7 @@ class SharedBroadcaster:
             # used to match SearchResponses with SearchRequests.
             search_ids = []
             for name in needs_search:
-                search_id = new_search_id()
+                search_id = new_id()
                 search_ids.append(search_id)
                 unanswered_searches[search_id] = (name, results_queue)
         logger.debug("Searching for '%r' PVs...." % len(needs_search))
@@ -429,11 +446,6 @@ class Context:
                 pv.circuit_manager = vc_manager
 
                 # Make ca.ClientClient.
-                # TODO The spec says that we SHOULD use the same cid here as we
-                # used for the search, but this introduces coupling between
-                # Contexts unless the SharedBroadcaster maintains a separate
-                # set of search results and unanswered searches per context.
-                cid = circuit.new_channel_id()
                 chan = ca.ClientChannel(pv.name, circuit, cid=cid)
                 vc_manager.channels[cid] = chan
                 # Tell the PV which ClientChannel it has.
