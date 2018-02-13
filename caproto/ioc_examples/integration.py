@@ -4,6 +4,9 @@ import time
 import logging
 import random
 
+import ophyd
+from ophyd import Component as Cpt, EpicsSignal
+
 from caproto.benchmarking import set_logging_level
 from caproto.curio.server import start_server
 from caproto.curio.high_level_server import (pvproperty, PVGroupBase,
@@ -43,12 +46,46 @@ class Group(PVGroupBase):
 
 
 # Step 2a: supporting methods to make simple ophyd Devices
+def pvfunction_to_device_function(name, pvf, *, indent='    '):
+    def format_arg(pvspec):
+        value = pvspec.value
+        if isinstance(value, (list, tuple)) and len(value) == 1:
+            value = value[0]
+        value = f'={value}' if value else ''
+        return f"{pvspec.attr}: {pvspec.dtype.__name__}{value}"
+
+    skip_attrs = ('Status', 'Retval')
+    args = ', '.join(format_arg(spec) for spec in pvf.pvspec
+                     if spec.attr not in skip_attrs)
+    yield f"{indent}def call(self, {args}):"
+    if pvf.__doc__:
+        yield f"{indent*2}'{pvf.__doc__}'"
+    for pvspec in pvf.pvspec:
+        if pvspec.attr not in skip_attrs:
+            yield (f"{indent*2}self.{pvspec.attr}.put({pvspec.attr}, "
+                   "wait=True)")
+
+    yield f"{indent*2}self.process.put(1, wait=True)"
+    yield f"{indent*2}status = self.status.get(use_monitor=False)"
+    yield f"{indent*2}retval = self.retval.get(use_monitor=False)"
+    yield f"{indent*2}if status != 'Success':"
+    yield f"{indent*3}raise RuntimeError(f'RPC function failed: {{status}}')"
+    yield f"{indent*2}return retval"
+
 
 def group_to_device(group):
     'Make an ophyd device from a high-level server PVGroup'
     # TODO subgroups are weak and need rethinking (generic comment deux)
+
     for name, subgroup in group._subgroups_.items():
         yield from group_to_device(subgroup.group_cls)
+
+        if isinstance(subgroup, pvfunction):
+            yield f''
+            yield from pvfunction_to_device_function(name, subgroup)
+
+        yield f''
+        yield f''
 
     if isinstance(group, PVGroupBase):
         group = group.__class__
@@ -57,7 +94,8 @@ def group_to_device(group):
 
     for name, subgroup in group._subgroups_.items():
         doc = f', doc={subgroup.__doc__!r}' if subgroup.__doc__ else ''
-        yield f"    {name.lower()} = Cpt({name}Device, '{subgroup.prefix}'{doc})"
+        yield (f"    {name.lower()} = Cpt({name}Device, "
+               f"'{subgroup.prefix}'{doc})")
 
     if not group._pvs_:
         yield f'    ...'
@@ -69,39 +107,38 @@ def group_to_device(group):
 
         pvspec = prop.pvspec
         doc = f', doc={pvspec.doc!r}' if pvspec.doc else ''
-        yield f"    {name.lower()} = Cpt(EpicsSignal, '{pvspec.name}'{doc})"
+        string = f', string=True' if pvspec.dtype == str else ''
+        yield (f"    {name.lower()} = Cpt(EpicsSignal, '{pvspec.name}'"
+               f"{string}{doc})")
         # TODO will break when full/macro-ified PVs is specified
 
-    lower_name = group.__name__.lower()
-
-    yield ''
-    yield ''
-
-    yield f"# {lower_name} = {group.__name__}Device(my_prefix)"
-    yield ''
+    # lower_name = group.__name__.lower()
+    # yield f"# {lower_name} = {group.__name__}Device(my_prefix)"
 
 
 # Step 2b: copy/pasting the auto-generated output (OK, slightly modified for
 #                                                  PEP8 readability)
 
-import ophyd
-from ophyd import Component as Cpt, EpicsSignal
-
 # Auto-generated Device from here on:
 # -----------------------------------
-
-
 class get_randomDevice(ophyd.Device):
     low = Cpt(EpicsSignal, 'low', doc="Parameter <class 'int'> low")
     high = Cpt(EpicsSignal, 'high', doc="Parameter <class 'int'> high")
-    status = Cpt(EpicsSignal, 'Status', doc="Parameter <class 'str'> Status")
-    retval = Cpt(EpicsSignal, 'Retval',
-                 doc="Parameter <class 'int'> Retval")
-    process = Cpt(EpicsSignal, 'Process',
-                  doc="Parameter <class 'int'> Process")
+    status = Cpt(EpicsSignal, 'Status', string=True, doc="Parameter <class 'str'> Status")
+    retval = Cpt(EpicsSignal, 'Retval', doc="Parameter <class 'int'> Retval")
+    process = Cpt(EpicsSignal, 'Process', doc="Parameter <class 'int'> Process")
 
+    def call(self, low: int=100, high: int=1000):
+        'A configurable random number'
+        self.low.put(low, wait=True)
+        self.high.put(high, wait=True)
+        self.process.put(1, wait=True)
+        status = self.status.get(use_monitor=False)
+        retval = self.retval.get(use_monitor=False)
+        if status != 'Success':
+            raise RuntimeError(f'RPC function failed: {status}')
+        return retval
 
-# get_random = get_randomDevice(my_prefix)
 
 class GroupDevice(ophyd.Device):
     get_random = Cpt(get_randomDevice, 'get_random:',
@@ -112,15 +149,11 @@ class GroupDevice(ophyd.Device):
     random2 = Cpt(EpicsSignal, 'random2',
                   doc='A nice random integer between 1000 and 2000')
 
-
-# group = GroupDevice(my_prefix)
-
 # -------end autogenerated Devices---
 
 
 if __name__ == '__main__':
     import curio
-    from pprint import pprint
 
     try:
         prefix = sys.argv[1]
@@ -160,6 +193,13 @@ if __name__ == '__main__':
 
         print('Current values are:')
         print(get_value)
-        time.sleep(2)
+        time.sleep(4)
 
-        print('Press Ctrl-C to exit')
+        # Step 4 make a GUI in a line or two
+        import pydm
+        from typhon import DeviceDisplay
+        app = pydm.PyDMApplication()
+        typhon_display = DeviceDisplay(dev)
+        typhon_display.method_panel.add_method(dev.get_random.call)
+        typhon_display.show()
+        app.exec_()
