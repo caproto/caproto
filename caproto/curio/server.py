@@ -32,7 +32,6 @@ class AsyncLibraryLayer:
 
 class CurioAsyncLayer(AsyncLibraryLayer):
     name = 'curio'
-    sleep = curio.sleep
     ThreadsafeQueue = curio.UniversalQueue
     library = curio
 

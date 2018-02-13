@@ -7,7 +7,6 @@ import threading
 import atexit
 
 import curio
-import asks  # for http requests through curio
 
 from caproto.benchmarking import set_logging_level
 from caproto.curio.server import start_server
@@ -87,7 +86,6 @@ class IOInterruptIOC(PVGroupBase):
 
 def main(prefix, macros):
     set_logging_level(logging.DEBUG)
-    asks.init('curio')
     ioc = IOInterruptIOC(prefix=prefix, macros=macros)
     curio.run(start_server, ioc.pvdb)
 
