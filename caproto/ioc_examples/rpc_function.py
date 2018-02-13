@@ -16,6 +16,7 @@ class MyPVGroup(PVGroupBase):
     # PV #1: {prefix}random - defaults to dtype of int
     @pvproperty
     async def fixed_random(self, instance):
+        'Random integer between 1 and 100'
         logger.debug('read random')
         return random.randint(1, 100)
 
@@ -23,6 +24,7 @@ class MyPVGroup(PVGroupBase):
     async def get_random(self,
                          low: int=100,
                          high: int=1000) -> int:
+        'A configurable random number'
         low, high = low[0], high[0]
         return random.randint(low, high)
 
