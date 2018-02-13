@@ -303,7 +303,7 @@ class pvfunction(SubGroup):
         assert return_type, 'Return value must have a type annotation'
 
         return [
-            inspect.Parameter(self.names['status'], kind=0, default='Init',
+            inspect.Parameter(self.names['status'], kind=0, default=['Init'],
                               annotation=str),
             inspect.Parameter(self.names['retval'], kind=0,
                               # TODO?
