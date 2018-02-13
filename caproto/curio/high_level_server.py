@@ -340,6 +340,12 @@ class pvfunction(SubGroup):
         self.group_cls = self._class_from_pvspec(self.pvspec)
 
     def __set_name__(self, owner, name):
+        if self.attr_name is not None and self.attr_name != name:
+            # TODO: IPython ends up calling this multiple times when
+            # introspecting a PVGroup. This should be investigated as I'm
+            # likely doing something dumb...
+            raise AttributeError('Stop it, IPython')
+
         self.attr_name = name
         if self.prefix is None:
             self.prefix = name + self.attr_separator
