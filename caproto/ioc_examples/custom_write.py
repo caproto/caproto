@@ -14,6 +14,7 @@ class CustomWrite(PVGroupBase):
         pv_name = instance.pvspec.attr  # 'A' or 'B', for this IOC
         with open(self.DIRECTORY / pv_name, 'w') as f:
             f.write(str(value))
+        print(f'Wrote {value} to {self.DIRECTORY / pv_name}')
         return value
 
     A = pvproperty(put=my_write, value=[0])
@@ -29,7 +30,7 @@ if __name__ == '__main__':
     try:
         prefix = sys.argv[1]
     except IndexError:
-        prefix='custom_write:'
+        prefix = 'custom_write:'
 
     ioc = CustomWrite(prefix=prefix)
     print('PVs:', list(ioc.pvdb))

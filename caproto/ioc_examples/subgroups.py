@@ -1,3 +1,4 @@
+import sys
 import random
 import logging
 
@@ -77,22 +78,17 @@ class MyPVGroup(PVGroupBase):
                 return random.randint(1, 100)
 
 
-
-
 if __name__ == '__main__':
     # usage: subgroups.py [PREFIX] [MACRO]
     try:
         prefix = sys.argv[1]
     except IndexError:
-        prefix='subgroups:'
-    try:
-        macro = sys.argv[2]
-    except IndexError:
-        macro = 'expanded'
+        prefix = 'subgroups:'
 
     import curio
     from pprint import pprint
 
+    macros = {}
     logger.info('Starting up: prefix=%r macros=%r', prefix, macros)
     ioc = MyPVGroup(prefix=prefix, macros=macros)
 
