@@ -2,7 +2,6 @@ import os
 import pytest
 import signal
 import subprocess
-import time
 from caproto._cli import get, put, monitor, parse_data_type
 from caproto._dbr import ChannelType
 
@@ -10,8 +9,10 @@ INT_PV = 'pi'
 STR_PV = 'str'
 ENUM_PV = 'enum'
 
+
 def escape(pv_name, response):
     raise KeyboardInterrupt
+
 
 @pytest.mark.parametrize('func,args,kwargs',
                          [(get, ('__does_not_exist',), {}),
@@ -28,7 +29,7 @@ def test_timeout(func, args, kwargs):
                           {'repeater': False},
                           {'timeout': 3},
                           ]
-                        )
+                         )
 @pytest.mark.parametrize('func,args,kwargs',
                          [(get, (INT_PV,), {}),
                           (put, (INT_PV, 5), {}),
