@@ -25,6 +25,10 @@ def start_io_interrupt_monitor(new_value_callback):
     '''
 
     # Thanks stackoverflow and Python 2 FAQ!
+    if not sys.__stdin__.isatty():
+        print('[IO Interrupt] stdin is not a TTY, exiting')
+        return
+
     fd = sys.stdin.fileno()
 
     oldterm = termios.tcgetattr(fd)
@@ -84,11 +88,14 @@ class IOInterruptIOC(PVGroupBase):
             await self.keypress.write(str(value))
 
 
-def main(prefix, macros):
-    set_logging_level(logging.DEBUG)
-    ioc = IOInterruptIOC(prefix=prefix, macros=macros)
-    curio.run(start_server, ioc.pvdb)
-
-
 if __name__ == '__main__':
-    main(prefix='io:', macros={})
+    # usage: io_interrupt.py [PREFIX]
+    try:
+        prefix = sys.argv[1]
+    except IndexError:
+        prefix = 'io:'
+
+    print(f'IO interrupt prefix is {prefix}')
+    set_logging_level(logging.DEBUG)
+    ioc = IOInterruptIOC(prefix=prefix, macros={})
+    curio.run(start_server, ioc.pvdb)

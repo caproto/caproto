@@ -64,13 +64,13 @@ class PvpropertyString(PvpropertyData, ChannelString):
 
 
 class PVSpec(namedtuple('PVSpec',
-                        'get put startup attr name dtype value alarm_group')):
+                        'get put startup attr name dtype value alarm_group doc')):
     'PV information specification'
     __slots__ = ()
     default_dtype = int
 
     def __new__(cls, get=None, put=None, startup=None, attr=None, name=None,
-                dtype=None, value=None, alarm_group=None):
+                dtype=None, value=None, alarm_group=None, doc=None):
         if dtype is None:
             dtype = (type(value[0]) if value is not None
                      else cls.default_dtype)
@@ -103,7 +103,7 @@ class PVSpec(namedtuple('PVSpec',
                                    ''.format(startup, sig))
 
         return super().__new__(cls, get, put, startup, attr, name, dtype,
-                               value, alarm_group)
+                               value, alarm_group, doc)
 
     def new_names(self, attr=None, name=None):
         if attr is None:
@@ -111,16 +111,23 @@ class PVSpec(namedtuple('PVSpec',
         if name is None:
             name = self.name
         return PVSpec(self.get, self.put, self.startup, attr, name, self.dtype,
-                      self.value, self.alarm_group)
+                      self.value, self.alarm_group, self.doc)
 
 
 class pvproperty:
     'A property-like descriptor for specifying a PV in a group'
 
-    def __init__(self, get=None, put=None, **spec_kw):
+    def __init__(self, get=None, put=None, startup=None, *, doc=None,
+                 **spec_kw):
         self.attr_name = None  # to be set later
         self.spec_kw = spec_kw
-        self.pvspec = PVSpec(get=get, put=put, **spec_kw)
+
+        if doc is None and get is not None:
+            doc = get.__doc__
+
+        self.pvspec = PVSpec(get=get, put=put, startup=startup, doc=doc,
+                             **spec_kw)
+        self.__doc__ = doc
 
     def __get__(self, instance, owner):
         if instance is None:
@@ -155,6 +162,12 @@ class pvproperty:
 
     def __call__(self, get, put=None, startup=None):
         # handles case where pvproperty(**spec_kw)(getter, putter, startup) is used
+        if get.__doc__:
+            if self.__doc__ is None:
+                self.__doc__ = get.__doc__
+            if 'doc' not in self.spec_kw:
+                self.spec_kw['doc'] = get.__doc__
+
         self.pvspec = PVSpec(get, put, startup, **self.spec_kw)
         return self
 
@@ -162,14 +175,18 @@ class pvproperty:
 class SubGroup:
     'A property-like descriptor for specifying a subgroup in a PVGroup'
 
-    def __init__(self, group_cls=None, prefix=None, macros=None,
-                 attr_separator=None):
+    def __init__(self, group_cls=None, *, prefix=None, macros=None,
+                 attr_separator=None, doc=None):
         self.attr_name = None  # to be set later
         self.group_cls = group_cls
         self.prefix = prefix
         self.macros = macros if macros is not None else {}
         self.attr_separator = (attr_separator if attr_separator is not None
                                else getattr(group_cls, 'attr_separator', ':'))
+        if doc is None and group_cls is not None:
+            doc = group_cls.__doc__
+
+        self.__doc__ = doc
 
     def __get__(self, instance, owner):
         if instance is None:
@@ -190,6 +207,9 @@ class SubGroup:
     def __call__(self, group_cls):
         # handles case where SubGroup(**kw)(group_cls) is used
         self.group_cls = group_cls
+        if self.__doc__ is None:
+            self.__doc__ = group_cls.__doc__
+
         return self
 
 
@@ -200,7 +220,7 @@ class pvfunction(SubGroup):
                          )
 
     def __init__(self, func=None, default=None, names=None, alarm_group=None,
-                 prefix=None, macros=None, attr_separator=None):
+                 prefix=None, macros=None, attr_separator=None, doc=None):
 
         '''
         A descriptor for making an RPC-like function
@@ -228,11 +248,14 @@ class pvfunction(SubGroup):
         attr_separator : str, optional
             String separator between {prefix} and {attribute} for generated PV
             names.
+        doc : str, optional
+            Docstring
         '''
 
         super().__init__(group_cls=None,
                          prefix=prefix, macros=macros,
-                         attr_separator=attr_separator)
+                         attr_separator=attr_separator,
+                         doc=doc)
         self.default_retval = default
         self.func = func
         self.alarm_group = alarm_group
@@ -241,6 +264,7 @@ class pvfunction(SubGroup):
         self.names = {k: names.get(k, self.default_names[k])
                       for k in self.default_names}
         self.pvspec = []
+        self.__doc__ = doc
 
     def __call__(self, func):
         # handles case where pvfunction()(func) is used
@@ -248,7 +272,7 @@ class pvfunction(SubGroup):
         self._regenerate()
         return self
 
-    def pvspec_from_parameter(self, param):
+    def pvspec_from_parameter(self, param, doc=None):
         dtype = param.annotation
         default = param.default
 
@@ -270,6 +294,7 @@ class pvfunction(SubGroup):
             name=self.names.get(param.name, param.name),
             dtype=dtype,
             value=default, alarm_group=self.alarm_group,
+            doc=doc if doc is not None else f'Parameter {dtype} {param.name}'
         )
 
     def get_additional_parameters(self):
@@ -278,7 +303,7 @@ class pvfunction(SubGroup):
         assert return_type, 'Return value must have a type annotation'
 
         return [
-            inspect.Parameter(self.names['status'], kind=0, default='Init',
+            inspect.Parameter(self.names['status'], kind=0, default=['Init'],
                               annotation=str),
             inspect.Parameter(self.names['retval'], kind=0,
                               # TODO?
@@ -328,6 +353,9 @@ class pvfunction(SubGroup):
 
         if self.alarm_group is None:
             self.alarm_group = self.func.__name__
+
+        if self.__doc__ is None:
+            self.__doc__ = self.func.__doc__
 
         sig = inspect.signature(self.func)
         parameters = list(sig.parameters.values())[1:]  # skip 'self'
@@ -423,6 +451,7 @@ def channeldata_from_pvspec(group, pvspec):
     cls = group.type_map[pvspec.dtype]
     inst = cls(group=group, pvspec=pvspec,
                value=value, alarm=group.alarms[pvspec.alarm_group])
+    inst.__doc__ = pvspec.doc
     return (full_pvname, inst)
 
 

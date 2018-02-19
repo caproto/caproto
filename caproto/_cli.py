@@ -512,7 +512,7 @@ def monitor(*pv_names, callback, mask=None, verbose=False, timeout=1,
                         if chan:
                             callback(chan.name, response)
         except KeyboardInterrupt:
-            logger.debug('Received SIGINT. Closing.') 
+            logger.debug('Received SIGINT. Closing.')
             pass
     finally:
         try:
