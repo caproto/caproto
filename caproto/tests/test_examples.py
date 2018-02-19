@@ -301,7 +301,7 @@ def test_curio_server_and_thread_client(curio_server):
     'module_name, args, pvdb_class_name, class_kwargs',
     [('caproto.ioc_examples.simple', [], 'SimpleIOC', {}),
      ('caproto.ioc_examples.macros', [], 'MacroifiedNames',
-      dict(macros={'beamline': 'beamline', 'thing': 'thing'})),
+      dict(macros={'beamline': 'my_beamline', 'thing': 'thing'})),
      ]
 )
 def test_ioc_examples(request, module_name, args, pvdb_class_name,
