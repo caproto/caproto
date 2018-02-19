@@ -1,3 +1,4 @@
+import sys
 import logging
 import random
 
@@ -26,10 +27,16 @@ class MyPVGroup(PVGroupBase):
         return random.randint(low, high)
 
 
-def main(prefix, macros):
-    global ioc
+if __name__ == '__main__':
     import curio
     from pprint import pprint
+
+    try:
+        prefix = sys.argv[1]
+    except IndexError:
+        prefix = 'rpc:'
+
+    macros = {}
 
     set_logging_level(logging.DEBUG)
     logger.setLevel(logging.DEBUG)
@@ -49,7 +56,3 @@ def main(prefix, macros):
     pprint(ioc.pvdb)
 
     curio.run(start_server, ioc.pvdb)
-
-
-if __name__ == '__main__':
-    main(prefix='prefix:', macros=dict(macro='expanded'))

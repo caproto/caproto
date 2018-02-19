@@ -15,6 +15,7 @@ class ReadingCounter(PVGroupBase):
         pv_name = instance.pvspec.attr
         self.tallies.update({pv_name: 1})
         print('tallies:', self.tallies)
+        await instance.write(self.tallies[pv_name])
         return instance.value
 
     A = pvproperty(get=my_read, value=[0])
@@ -27,6 +28,11 @@ if __name__ == '__main__':
     import curio
     from caproto.curio.server import start_server
 
-    ioc = ReadingCounter(prefix=sys.argv[1])
+    try:
+        prefix = sys.argv[1]
+    except IndexError:
+        prefix = 'reading_counter:'
+
+    ioc = ReadingCounter(prefix=prefix)
     print('PVs:', list(ioc.pvdb))
     curio.run(start_server(ioc.pvdb))

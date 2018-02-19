@@ -60,9 +60,20 @@ class MyPVGroup(PVGroupBase):
         return random.randint(1, 100)
 
 
-def main(prefix, macros):
+if __name__ == '__main__':
+    # usage: all_in_one.py [PREFIX] [MACRO]
     import curio
     from pprint import pprint
+    import sys
+
+    try:
+        prefix = sys.argv[1]
+    except IndexError:
+        prefix = 'all_in_one:'
+    try:
+        macros = {'macro': sys.argv[2]}
+    except IndexError:
+        macros = {'macro': 'expanded'}
 
     set_logging_level(logging.DEBUG)
     logger.setLevel(logging.DEBUG)
@@ -81,7 +92,3 @@ def main(prefix, macros):
     pprint(ioc.pvdb)
 
     curio.run(start_server, ioc.pvdb)
-
-
-if __name__ == '__main__':
-    main(prefix='prefix:', macros=dict(macro='expanded'))

@@ -1,8 +1,6 @@
+import sys
 import re
 import logging
-
-import curio
-import asks  # for http requests through curio
 
 import urllib.request
 import urllib.parse
@@ -50,15 +48,20 @@ class CurrencyPollingIOC(PVGroupBase):
             await instance.write(value=[converted_amount])
 
             # Let the async library wait for the next iteration
-            await async_lib.sleep(self.update_rate.value[0])
-
-
-def main(prefix, macros):
-    set_logging_level(logging.DEBUG)
-    asks.init('curio')
-    ioc = CurrencyPollingIOC(prefix=prefix, macros=macros)
-    curio.run(start_server, ioc.pvdb)
+            await async_lib.library.sleep(self.update_rate.value[0])
 
 
 if __name__ == '__main__':
-    main(prefix='currency:', macros={})
+    # usage: currency_conversion_polling.py [PREFIX]
+    import curio
+    import asks  # for http requests through curio
+
+    try:
+        prefix = sys.argv[1]
+    except IndexError:
+        prefix = 'currency_polling:'
+
+    set_logging_level(logging.DEBUG)
+    asks.init('curio')
+    ioc = CurrencyPollingIOC(prefix=prefix, macros={})
+    curio.run(start_server, ioc.pvdb)

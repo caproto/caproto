@@ -1,7 +1,6 @@
 import re
 import logging
 
-import curio
 import asks  # for http requests through curio
 
 import urllib.request
@@ -33,12 +32,16 @@ class CurrencyConversionIOC(PVGroupBase):
         return float(m.groups()[0])
 
 
-def main(prefix, macros):
-    set_logging_level(logging.DEBUG)
-    asks.init('curio')
-    ioc = CurrencyConversionIOC(prefix=prefix, macros=macros)
-    curio.run(start_server, ioc.pvdb)
-
-
 if __name__ == '__main__':
-    main(prefix='currency:', macros={})
+    # usage: currency_conversion.py [PREFIX]
+    import curio
+    import sys
+
+    try:
+        prefix = sys.argv[1]
+    except IndexError:
+        prefix='currency_conversion:'
+    asks.init('curio')
+    ioc = CurrencyConversionIOC(prefix=prefix)
+    print('PVs:', list(ioc.pvdb))
+    curio.run(start_server, ioc.pvdb)

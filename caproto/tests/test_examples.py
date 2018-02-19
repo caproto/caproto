@@ -83,8 +83,7 @@ def test_thread_pv(threading_broadcaster):
 
 def test_curio_server_example():
     import caproto.curio.client as client
-    from caproto.examples.curio_server_simple import (pvdb,
-                                                      main as server_main)
+    from caproto.examples.type_varieties import (pvdb, main as server_main)
     kernel = curio.Kernel()
     commands = []
 

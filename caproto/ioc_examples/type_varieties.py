@@ -67,6 +67,7 @@ async def main(pvdb, port=None):
 
 
 if __name__ == '__main__':
+    # TODO Use new IOC code.
     logging.basicConfig()
     logger.setLevel('DEBUG')
     curio.run(main(pvdb))

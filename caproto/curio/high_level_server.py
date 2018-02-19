@@ -153,9 +153,9 @@ class pvproperty:
                              *self.pvspec[3:])
         return self
 
-    def __call__(self, get, put=None):
-        # handles case where pvproperty(**spec_kw)(getter, putter) is used
-        self.pvspec = PVSpec(get, put, **self.spec_kw)
+    def __call__(self, get, put=None, startup=None):
+        # handles case where pvproperty(**spec_kw)(getter, putter, startup) is used
+        self.pvspec = PVSpec(get, put, startup, **self.spec_kw)
         return self
 
 
@@ -318,7 +318,7 @@ class pvfunction(SubGroup):
                 await group.Status.write(f'{ex.__class__.__name__}: {ex}')
                 raise
 
-        process_prop.pvspec = PVSpec(None, do_process, process_pvspec[2:])
+        process_prop.pvspec = PVSpec(None, do_process, *process_pvspec[2:])
 
         return type(self.attr_name, (PVGroupBase, ), dct)
 
@@ -340,6 +340,12 @@ class pvfunction(SubGroup):
         self.group_cls = self._class_from_pvspec(self.pvspec)
 
     def __set_name__(self, owner, name):
+        if self.attr_name is not None and self.attr_name != name:
+            # TODO: IPython ends up calling this multiple times when
+            # introspecting a PVGroup. This should be investigated as I'm
+            # likely doing something dumb...
+            raise AttributeError('Stop it, IPython')
+
         self.attr_name = name
         if self.prefix is None:
             self.prefix = name + self.attr_separator
@@ -466,7 +472,8 @@ class PVGroupBase(metaclass=PVGroupMeta):
                 pvname = group.attr_to_pvname[sub_attr]
             else:
                 group = self
-                pvname, channeldata = channeldata_from_pvspec(group, pvprop.pvspec)
+                pvname, channeldata = channeldata_from_pvspec(group,
+                                                              pvprop.pvspec)
 
             # full pvname -> ChannelData instance
             self.pvdb[pvname] = channeldata

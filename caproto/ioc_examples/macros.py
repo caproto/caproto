@@ -4,7 +4,7 @@ from caproto.curio.high_level_server import pvproperty, PVGroupBase
 
 class MacroifiedNames(PVGroupBase):
     """
-    
+
     """
     placeholder1 = pvproperty(value=[0], name='{beamline}:{thing}.VAL')
     placeholder2 = pvproperty(value=[0], name='{beamline}:{thing}.RBV')
@@ -16,7 +16,22 @@ if __name__ == '__main__':
     import curio
     from caproto.curio.server import start_server
 
-    macros = {'beamline': sys.argv[2], 'thing': sys.argv[3]}
-    ioc = MacroifiedNames(prefix=sys.argv[1], macros=macros)
+    try:
+        prefix = sys.argv[1]
+    except IndexError:
+        prefix = 'prefix:'
+
+    try:
+        beamline = sys.argv[2]
+    except IndexError:
+        beamline = 'my_beamline'
+
+    try:
+        thing = sys.argv[3]
+    except IndexError:
+        thing = 'thing'
+
+    macros = {'beamline': beamline, 'thing': thing}
+    ioc = MacroifiedNames(prefix=prefix, macros=macros)
     print('PVs:', list(ioc.pvdb))
     curio.run(start_server(ioc.pvdb))

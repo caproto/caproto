@@ -30,8 +30,13 @@ if __name__ == '__main__':
     import curio
     from caproto.curio.server import start_server
 
+    try:
+        prefix = sys.argv[1]
+    except IndexError:
+        prefix='inline_style:'
+
     # Instantiate the IOC, assigning a prefix for the PV names.
-    ioc = InlineStyleIOC(prefix=sys.argv[1])
+    ioc = InlineStyleIOC(prefix=prefix)
     print('PVs:', list(ioc.pvdb))
     
     # Run IOC using curio.
