@@ -312,7 +312,7 @@ def test_curio_server_and_thread_client(curio_server):
      ('caproto.ioc_examples.rpc_function', [], 'MyPVGroup', {}),
      ('caproto.ioc_examples.simple', [], 'SimpleIOC', {}),
      ('caproto.ioc_examples.subgroups', [], 'MyPVGroup', {}),
-     ('caproto.ioc_examples.integration', [], 'Group', {}),
+     # ('caproto.ioc_examples.integration', [], 'Group', {}),
      ]
 )
 def test_ioc_examples(request, module_name, args, pvdb_class_name,
