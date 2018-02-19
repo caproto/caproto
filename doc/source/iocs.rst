@@ -7,21 +7,22 @@ Simple IOC
 
 .. ipython:: python
     :suppress:
-
+    
+    import sys
     import subprocess
     import time
     processes = []
-    def run_example(*args):
-        p = subprocess.Popen(args)
+    def run_example(module_name, *args):
+        p = subprocess.Popen([sys.interpreter, '-m', module_name] + args)
         processes.append(p)  # Clean this up at the end.
         time.sleep(1)  # Give it time to start up.
 
-.. literalinclude:: ../../ioc_examples/simple.py
+.. literalinclude:: ../../caproto/ioc_examples/simple.py
 
 .. ipython:: python
     :suppress:
 
-    run_example('../../examples/simple.py', 'example1:')
+    run_example('caproto.ioc_examples.simple', 'example1:')
 
 .. code-block:: bash
 
@@ -46,7 +47,7 @@ To run a second instance of the same IOC with a different prefix:
 Write to a File When a PV is Written To
 =======================================
 
-.. literalinclude:: ../../ioc_examples/custom_write.py
+.. literalinclude:: ../../caproto/ioc_examples/custom_write.py
 
 .. code-block:: bash
 
@@ -56,12 +57,12 @@ Write to a File When a PV is Written To
 .. ipython:: python
     :suppress:
 
-    run_example('../../ioc_examples/custom_write.py', 'example3:')
+    run_example('caproto.ioc_examples.custom_write', 'example3:')
 
 Update Tallies When Each PV is Read
 ===================================
 
-.. literalinclude:: examples/reading_counter.py
+.. literalinclude:: ../../caproto/ioc_examples/reading_counter.py
 
 .. code-block:: bash
 
@@ -71,12 +72,12 @@ Update Tallies When Each PV is Read
 .. ipython:: python
     :suppress:
 
-    run_example('../../ioc_examples/reading_counter.py', 'example4:')
+    run_example('caproto.ioc_examples.reading_counter', 'example4:')
 
 Macros for PV names
 ===================
 
-.. literalinclude:: ../../ioc_examples/macros.py
+.. literalinclude:: ../../caproto/ioc_examples/macros.py
 
 .. code-block:: bash
 
@@ -86,19 +87,19 @@ Macros for PV names
 .. ipython:: python
     :suppress:
 
-    run_example('../../ioc_examples/macros.py', 'example5:', 'XF11ID', 'detector')
+    run_example('caproto.ioc_examples.macros', 'example5:', 'XF11ID', 'detector')
 
 Observe that the command line arguments fill in the PV names.
 
 "Inline" Style Read and Write Customization
 ===========================================
 
-.. literalinclude:: ../../ioc_examples/inline_style.py
+.. literalinclude:: ../../caproto/ioc_examples/inline_style.py
 
 .. ipython:: python
     :suppress:
 
-    run_example('../../ioc_examples/inline_style.py', 'example6:')
+    run_example('caproto.ioc_examples.inline_style', 'example6:')
 
 .. code-block:: bash
 
