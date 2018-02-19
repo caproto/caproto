@@ -24,7 +24,6 @@
 # https://gist.github.com/vxgmichel/b2cf8536363275e735c231caef35a5df
 import asyncio
 import logging
-import os
 import socket
 
 import caproto
@@ -118,10 +117,40 @@ async def start_datagram_proxy(bind, port):
             raise
 
 
-def run():
+def check_for_running_repeater(addr):
+    '''If a repeater is already running, this raises RepeaterAlreadyRunning
+
+    Parameters
+    ----------
+    addr : (ip, port)
+    '''
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.bind(addr)
+    except OSError as ex:
+        if 'Address already in use' in str(ex):
+            raise RepeaterAlreadyRunning(str(ex))
+        else:
+            raise
+
+
+def run(host='0.0.0.0'):
     loop = asyncio.get_event_loop()
-    addr = ('0.0.0.0', os.environ.get('EPICS_CA_REPEATER_PORT', 5065))
-    logger.info("Starting datagram proxy on {}...".format(addr))
+    port = caproto.get_environment_variables()['EPICS_CA_REPEATER_PORT']
+    addr = (host, port)
+    logger.debug('Checking for another repeater')
+
+    # NOTE: This check is performed separately because
+    # loop.create_datagram_endpoint is not consistent on different platforms
+    # with tregard to addresses already in use. On Darwin, OSError is raised,
+    # whereas on Linux it is not.
+    try:
+        check_for_running_repeater(addr)
+    except RepeaterAlreadyRunning:
+        logger.error('Another repeater is already running; exiting')
+        return
+
+    logger.info(f'Starting datagram proxy on {addr}...')
     coro = start_datagram_proxy(*addr)
 
     try:
