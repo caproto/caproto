@@ -54,6 +54,7 @@ script:
   - caget Py:ao1 sim:mtr1
   - pip install -r test-requirements.txt
   - coverage run run_tests.py -v --benchmark-disable
+  - coverage combine
   - coverage report -m
 
   - export ASV_ENV_NAME=${TRAVIS_PYTHON_VERSION}_${BASE}

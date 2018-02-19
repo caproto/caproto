@@ -1,5 +1,8 @@
 [run]
 source = caproto
+concurrency=
+    thread
+    multiprocessing
 
 [report]
 omit =

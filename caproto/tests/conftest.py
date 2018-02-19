@@ -2,6 +2,7 @@ import curio
 import functools
 import os
 import pytest
+import signal
 import subprocess
 import sys
 import time
@@ -48,13 +49,17 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
         args = []
 
     print(f'Running {module_name}')
-    p = subprocess.Popen([sys.executable, '-m', module_name] + args,
+    os.environ['COVERAGE_PROCESS_START'] = '.coveragerc'
+
+    # p = subprocess.Popen([sys.executable, '-m', module_name] + args,
+    p = subprocess.Popen([sys.executable, '-m', 'caproto.tests.example_runner',
+                          module_name] + args,
                          stdout=stdout, stderr=stderr, stdin=stdin,
                          env=os.environ)
 
     def stop_ioc():
-        print(f'Terminating the example IOC')
-        p.terminate()
+        print(f'Sending Ctrl-C to the example IOC')
+        p.send_signal(signal.SIGINT)
         p.wait()
 
     request.addfinalizer(stop_ioc)
@@ -76,7 +81,7 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
 def ioc(request):
     # TODO Randomly generate a prefix and return it.
     # TODO Use a special server specifically for tests.
-    return run_example_ioc('caproto.examples.type_varieties',
+    return run_example_ioc('caproto.ioc_examples.type_varieties',
                            request=request, pv_to_check='pi')
 
 

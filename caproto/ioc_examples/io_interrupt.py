@@ -95,6 +95,7 @@ if __name__ == '__main__':
     except IndexError:
         prefix = 'io:'
 
+    print(f'IO interrupt prefix is {prefix}')
     set_logging_level(logging.DEBUG)
     ioc = IOInterruptIOC(prefix=prefix, macros={})
     curio.run(start_server, ioc.pvdb)
