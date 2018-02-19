@@ -35,7 +35,7 @@ SERVER_HOST = '0.0.0.0'
 
 
 def run_example_ioc(module_name, *, request, pv_to_check, args=None,
-                    stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr):
+                    stdin=None, stdout=None, stderr=None):
     '''Run an example IOC by module name as a subprocess
 
     Parameters

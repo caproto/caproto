@@ -338,7 +338,7 @@ def test_ioc_examples(request, module_name, args, pvdb_class_name,
     print(f'PV to check: {pv_to_check}')
 
     stdin = (subprocess.DEVNULL if 'io_interrupt' in module_name
-             else sys.stdin)
+             else None)
 
     print('stdin=', stdin)
     run_example_ioc(module_name, request=request,
