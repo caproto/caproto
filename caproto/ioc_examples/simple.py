@@ -17,11 +17,11 @@ if __name__ == '__main__':
     try:
         prefix = sys.argv[1]
     except IndexError:
-        prefix='simple:'
+        prefix = 'simple:'
 
     # Instantiate the IOC, assigning a prefix for the PV names.
     ioc = SimpleIOC(prefix=prefix)
     print('PVs:', list(ioc.pvdb))
-    
+
     # Run IOC using curio.
     curio.run(start_server(ioc.pvdb))

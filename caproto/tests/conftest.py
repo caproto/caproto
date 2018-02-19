@@ -33,21 +33,31 @@ REPEATER_PORT = 5065
 SERVER_HOST = '0.0.0.0'
 
 
-@pytest.fixture(scope='function')
-def ioc(request):
-    # TODO Randomly generate a prefix and return it.
-    # TODO Use a special server specifically for tests.
-    READINESS_CHECK = 'pi'
-    p = subprocess.Popen(
-        [sys.executable, '-m',
-         'caproto.ioc_examples.type_varieties'],
-        env=os.environ)
-    t = time.monotonic()
+def run_example_ioc(module_name, *, request, pv_to_check, args=None):
+    '''Run an example IOC by module name as a subprocess
+
+    Parameters
+    ----------
+    module_name : str
+    request : pytest request
+    pv_to_check : str
+    args : list, optional
+    '''
+    if args is None:
+        args = []
+
+    print(f'Running {module_name}')
+    p = subprocess.Popen([sys.executable, '-m', module_name] + args,
+                         env=os.environ)
+
+    print(f'Checking PV {pv_to_check}')
     for attempt in range(30):
         time.sleep(0.1)
         try:
-            get(READINESS_CHECK)
+            get(pv_to_check, verbose=True)
         except TimeoutError:
+            if (attempt % 10) == 0:
+                print('Still trying...')
             continue
         else:
             break
@@ -59,6 +69,14 @@ def ioc(request):
         p.wait()
 
     request.addfinalizer(stop_ioc)
+
+
+@pytest.fixture(scope='function')
+def ioc(request):
+    # TODO Randomly generate a prefix and return it.
+    # TODO Use a special server specifically for tests.
+    return run_example_ioc('caproto.examples.type_varieties',
+                           request=request, pv_to_check='pi')
 
 
 def start_repeater():
@@ -142,7 +160,7 @@ def curio_server():
         'str': ca.ChannelString(value='hello',
                                 alarm=str_alarm_status,
                                 reported_record_type='caproto'),
-        }
+    }
 
     async def run_server():
         port = find_next_tcp_port(host=SERVER_HOST)

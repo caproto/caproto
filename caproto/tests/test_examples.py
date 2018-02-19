@@ -2,7 +2,6 @@ import time
 
 import pytest
 import curio
-import curio.subprocess
 
 import caproto as ca
 
@@ -296,3 +295,56 @@ def test_curio_server_and_thread_client(curio_server):
 
     with curio.Kernel() as kernel:
         kernel.run(task)
+
+
+@pytest.mark.parametrize(
+    'module_name, args, pvdb_class_name, class_kwargs',
+    [('caproto.ioc_examples.simple', [], 'SimpleIOC', {}),
+     ('caproto.ioc_examples.macros', [], 'MacroifiedNames',
+      dict(macros={'beamline': 'beamline', 'thing': 'thing'})),
+     ]
+)
+def test_ioc_examples(request, module_name, args, pvdb_class_name,
+                      class_kwargs):
+    from .conftest import run_example_ioc
+    from caproto._cli import get, put
+    import uuid
+
+    module = __import__(module_name,
+                        fromlist=(module_name.rsplit('.', 1)[-1], ))
+
+    prefix = str(uuid.uuid4())[:8] + ':'
+
+    pvdb_class = getattr(module, pvdb_class_name)
+
+    print(f'Prefix: {prefix} PVDB class: {pvdb_class}')
+    pvdb = pvdb_class(prefix=prefix, **class_kwargs).pvdb
+    pvs = list(pvdb.keys())
+    pv_to_check = pvs[0]
+
+    print(f'PVs:', pvs)
+    print(f'PV to check: {pv_to_check}')
+
+    run_example_ioc(module_name, request=request,
+                    args=[prefix] + args,
+                    pv_to_check=pv_to_check)
+
+    print(f'{module_name} IOC now running')
+
+    put_values = [
+        (ca.ChannelNumeric, [1]),
+        (ca.ChannelString, ['abcd']),
+    ]
+
+    for pv, channeldata in pvdb.items():
+        for put_class, put_value in put_values:
+            if isinstance(channeldata, put_class):
+                print(f'Writing {put_value} to {pv}')
+                put(pv, put_value, verbose=True)
+                break
+        else:
+            raise Exception('Failed to set default value for channeldata:'
+                            f'{channeldata.__class__}')
+
+        value = get(pv, verbose=True)
+        print(f'Read {pv} = {value}')
