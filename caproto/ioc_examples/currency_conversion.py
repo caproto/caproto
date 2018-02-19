@@ -40,7 +40,9 @@ if __name__ == '__main__':
     try:
         prefix = sys.argv[1]
     except IndexError:
-        prefix='currency_conversion:'
+        prefix = 'currency_conversion:'
+
+    set_logging_level(logging.DEBUG)
     asks.init('curio')
     ioc = CurrencyConversionIOC(prefix=prefix)
     print('PVs:', list(ioc.pvdb))

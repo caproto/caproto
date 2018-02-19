@@ -349,7 +349,7 @@ def test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs):
 
     put_values = [
         (ca.ChannelNumeric, [1]),
-        (ca.ChannelString, ['abcd']),
+        (ca.ChannelString, ['USD']),
     ]
 
     for pv, channeldata in pvdb.items():
