@@ -1,3 +1,4 @@
+import sys
 import time
 
 import pytest
@@ -299,9 +300,19 @@ def test_curio_server_and_thread_client(curio_server):
 
 @pytest.mark.parametrize(
     'module_name, args, pvdb_class_name, class_kwargs',
-    [('caproto.ioc_examples.simple', [], 'SimpleIOC', {}),
+    [('caproto.ioc_examples.currency_conversion_polling', [],
+      'CurrencyPollingIOC', {}),
+     ('caproto.ioc_examples.currency_conversion', [], 'CurrencyConversionIOC',
+      {}),
+     ('caproto.ioc_examples.inline_style', [], 'InlineStyleIOC', {}),
+     ('caproto.ioc_examples.io_interrupt', [], 'IOInterruptIOC', {}),
      ('caproto.ioc_examples.macros', [], 'MacroifiedNames',
       dict(macros={'beamline': 'my_beamline', 'thing': 'thing'})),
+     ('caproto.ioc_examples.reading_counter', [], 'ReadingCounter', {}),
+     ('caproto.ioc_examples.rpc_function', [], 'MyPVGroup', {}),
+     ('caproto.ioc_examples.simple', [], 'SimpleIOC', {}),
+     ('caproto.ioc_examples.subgroups', [], 'MyPVGroup', {}),
+     ('caproto.ioc_examples.integration', [], 'Group', {}),
      ]
 )
 def test_ioc_examples(request, module_name, args, pvdb_class_name,
@@ -309,6 +320,7 @@ def test_ioc_examples(request, module_name, args, pvdb_class_name,
     from .conftest import run_example_ioc
     from caproto._cli import get, put
     import uuid
+    import subprocess
 
     module = __import__(module_name,
                         fromlist=(module_name.rsplit('.', 1)[-1], ))
@@ -325,9 +337,14 @@ def test_ioc_examples(request, module_name, args, pvdb_class_name,
     print(f'PVs:', pvs)
     print(f'PV to check: {pv_to_check}')
 
+    stdin = (subprocess.DEVNULL if 'io_interrupt' in module_name
+             else sys.stdin)
+
+    print('stdin=', stdin)
     run_example_ioc(module_name, request=request,
                     args=[prefix] + args,
-                    pv_to_check=pv_to_check)
+                    pv_to_check=pv_to_check,
+                    stdin=stdin)
 
     print(f'{module_name} IOC now running')
 

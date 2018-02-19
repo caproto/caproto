@@ -7,3 +7,4 @@ pytest
 numpy
 pytest_benchmark
 asv
+asks
