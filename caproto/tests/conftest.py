@@ -33,7 +33,8 @@ REPEATER_PORT = 5065
 SERVER_HOST = '0.0.0.0'
 
 
-def run_example_ioc(module_name, *, request, pv_to_check, args=None):
+def run_example_ioc(module_name, *, request, pv_to_check, args=None,
+                    stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr):
     '''Run an example IOC by module name as a subprocess
 
     Parameters
@@ -48,28 +49,27 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None):
 
     print(f'Running {module_name}')
     p = subprocess.Popen([sys.executable, '-m', module_name] + args,
-                         stdout=sys.stdout, stderr=sys.stderr,
+                         stdout=stdout, stderr=stderr, stdin=stdin,
                          env=os.environ)
 
-    print(f'Checking PV {pv_to_check}')
-    for attempt in range(30):
-        time.sleep(0.1)
-        try:
-            get(pv_to_check, verbose=True)
-        except TimeoutError:
-            if (attempt % 10) == 0:
-                print('Still trying...')
-            continue
-        else:
-            break
-    else:
-        raise TimeoutError("ioc fixture failed to start in 3 seconds.")
-
     def stop_ioc():
+        print(f'Terminating the example IOC')
         p.terminate()
         p.wait()
 
     request.addfinalizer(stop_ioc)
+
+    print(f'Checking PV {pv_to_check}')
+    for attempt in range(5):
+        try:
+            get(pv_to_check, timeout=1.0, verbose=True)
+        except TimeoutError:
+            print('Still trying...')
+            continue
+        else:
+            break
+    else:
+        raise TimeoutError("ioc fixture failed to start in 5 seconds.")
 
 
 @pytest.fixture(scope='function')
