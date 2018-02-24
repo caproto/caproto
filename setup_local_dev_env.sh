@@ -8,10 +8,14 @@ export TRAVIS_BUILD_DIR=${PWD}
 # If the CI scripts are available, use the potentially updated version
 if [ -d "${TRAVIS_BUILD_DIR}/.ci/ci-scripts" ]; then
     pushd ${TRAVIS_BUILD_DIR}/.ci
+    echo "Calling sub-module dev env script"
     source setup_local_dev_env.sh
     popd
     # Reset the build directory for this repository
     export TRAVIS_BUILD_DIR=${PWD}
+
+    export |grep EPIC
+    echo "BASE=${BASE} V4=${V4}"
 else
     export EPICS_HOST_ARCH=linux-x86_64
     export EPICS_CA_ADDR_LIST=127.255.255.255
