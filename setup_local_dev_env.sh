@@ -13,9 +13,6 @@ if [ -d "${TRAVIS_BUILD_DIR}/.ci/ci-scripts" ]; then
     popd
     # Reset the build directory for this repository
     export TRAVIS_BUILD_DIR=${PWD}
-
-    export |grep EPIC
-    echo "BASE=${BASE} V4=${V4}"
 else
     export EPICS_HOST_ARCH=linux-x86_64
     export EPICS_CA_ADDR_LIST=127.255.255.255
@@ -31,3 +28,6 @@ else
 
     source ${TRAVIS_BUILD_DIR}/.ci/epics-config.sh
 fi
+
+export |grep EPIC
+echo "BASE=${BASE} PVA=${PVA}"
