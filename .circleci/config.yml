@@ -29,6 +29,8 @@ jobs:
             python -m venv caproto-venv
             . caproto-venv/bin/activate
             pip install -r test-requirements.txt
+            # add pytest-timeout for test failure debugging purposes
+            pip install pytest-timeout
             python setup.py install
       
       - run:
@@ -74,15 +76,15 @@ jobs:
           name: Run main tests
           no_output_timeout: 2m
           command: |
-            coverage run run_tests.py -v --benchmark-disable --ignore=caproto/tests/test_bench.py
+            coverage run run_tests.py -v --benchmark-disable --ignore=caproto/tests/test_bench.py --timeout=60
             coverage combine
 
       - run:
           name: Quickly run benchmark tests
-          no_output_timeout: 1m
+          no_output_timeout: 2m
           command: |
             export ASV_ENV_NAME=${TRAVIS_PYTHON_VERSION}_${BASE}
-            coverage run `which py.test` -v --benchmark-only --benchmark-json=pytest_bench.json --benchmark-columns=mean,median,rounds,iterations -k bench
+            coverage run `which py.test` -v --benchmark-only --benchmark-json=pytest_bench.json --benchmark-columns=mean,median,rounds,iterations -k bench --timeout=60
 
       - run:
           name: Report coverage
