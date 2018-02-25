@@ -305,7 +305,9 @@ class SharedBroadcaster:
                 for command in commands:
                     if isinstance(command, ca.VersionResponse):
                         # Check that the server version is one we can talk to.
-                        assert command.version > 11
+                        if command.version <= 11:
+                            logger.warning('Version response <= 11: %r',
+                                           command)
                     if isinstance(command, ca.SearchResponse):
                         with self._search_lock:
                             name = self.unanswered_searches.get(command.cid,

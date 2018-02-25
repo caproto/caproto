@@ -8,6 +8,7 @@ export TRAVIS_BUILD_DIR=${PWD}
 # If the CI scripts are available, use the potentially updated version
 if [ -d "${TRAVIS_BUILD_DIR}/.ci/ci-scripts" ]; then
     pushd ${TRAVIS_BUILD_DIR}/.ci
+    echo "Calling sub-module dev env script"
     source setup_local_dev_env.sh
     popd
     # Reset the build directory for this repository
@@ -27,3 +28,6 @@ else
 
     source ${TRAVIS_BUILD_DIR}/.ci/epics-config.sh
 fi
+
+export |grep EPIC
+echo "BASE=${BASE} PVA=${PVA}"

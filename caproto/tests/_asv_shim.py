@@ -1,5 +1,4 @@
 import os
-import sys
 import json
 import pytest
 import logging
@@ -229,11 +228,15 @@ def find_asv_root(path, *, asv_conf_filename='asv.conf.json',
 def pytest_benchmark_update_json(config, benchmarks, output_json):
     yield
 
-    results = pytest_bench_to_asv(output_json)
-    asv_path = find_asv_root('.')
+    try:
+        results = pytest_bench_to_asv(output_json)
+        asv_path = find_asv_root('.')
 
-    logger.info('Saving asv-style JSON to %s', asv_path)
-    save_asv_results(asv_path, **results)
+        logger.info('Saving asv-style JSON to %s', asv_path)
+        save_asv_results(asv_path, **results)
+    except Exception as ex:
+        logger.exception('Failed to update pytest benchmark json; '
+                         'asv results not saved')
 
 
 def get_all_params_from_marked_test(node_or_func):
