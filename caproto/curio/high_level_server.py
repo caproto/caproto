@@ -642,6 +642,14 @@ class PVGroup(metaclass=PVGroupMeta):
                 pvname, channeldata = channeldata_from_pvspec(group,
                                                               pvprop.pvspec)
 
+            if pvname in self.pvdb:
+                first_seen = self.pvdb[pvname]
+                if hasattr(first_seen, 'pvspec'):
+                    first_seen = first_seen.pvspec.attr
+                raise RuntimeError(f'{pvname} defined multiple times: '
+                                   f'now in attr: {attr} '
+                                   f'originally: {first_seen}')
+
             # full pvname -> ChannelData instance
             self.pvdb[pvname] = channeldata
 
