@@ -1,3 +1,4 @@
+import copy
 import logging
 import inspect
 from collections import (namedtuple, OrderedDict, defaultdict)
@@ -149,6 +150,11 @@ class pvproperty:
             if self.pvspec.name is not None
             else self.attr_name)
 
+    def getter(self, get):
+        # update PVSpec with getter
+        self.pvspec = PVSpec(get, *self.pvspec[1:])
+        return self
+
     def putter(self, put):
         # update PVSpec with putter
         self.pvspec = PVSpec(self.pvspec.get, put, *self.pvspec[2:])
@@ -170,6 +176,43 @@ class pvproperty:
 
         self.pvspec = PVSpec(get, put, startup, **self.spec_kw)
         return self
+
+    @classmethod
+    def from_pvspec(cls, pvspec):
+        prop = cls()
+        prop.pvspec = pvspec
+        return prop
+
+
+class NestedPvproperty(pvproperty):
+    '''Nested pvproperty which allows decorator usage in parent class
+
+    Without using this for the SubGroups, using @subgroup.prop.getter causes
+    the parent class to see multiple pvproperties - one defined on the subgroup,
+    and one returned from pvproperty.getter. This class fixes that by returning
+    the expected class - the parent (i.e., the subgroup)
+
+    Bonus points if you understood all of that.
+        ... scratch that, bonus points to me, I think.
+    '''
+
+    def getter(self, get):
+        super().getter(get)
+        return self.parent
+
+    def putter(self, put):
+        super().putter(put)
+        return self.parent
+
+    def startup(self, startup):
+        super().startup(startup)
+        return self.parent
+
+    @classmethod
+    def from_pvspec(cls, pvspec, parent):
+        prop = super().from_pvspec(pvspec)
+        prop.parent = parent
+        return prop
 
 
 class SubGroup:
@@ -212,6 +255,111 @@ class SubGroup:
 
         return self
 
+
+class FixedSubgroup(SubGroup):
+    # support copy.copy by keeping this here
+    _class_dict = None
+
+    def __init__(self, group_dict=None, *, prefix=None, macros=None,
+                 attr_separator=None, doc=None, base=None):
+        # TODO i think these implementations can be merged
+        self.attr_name = None  # to be set later
+        self._class_dict = None
+        self._decorated_items = None
+        self.group_cls = None
+        self.prefix = prefix
+        self.macros = macros if macros is not None else {}
+        self.attr_separator = attr_separator
+        self.base = (PVGroupBase, ) if base is None else base
+        self.__doc__ = doc
+
+        # set the group dictionary last:
+        self.group_dict = group_dict
+
+    @staticmethod
+    def _pvspec_from_info(attr, info):
+        if isinstance(info, dict):
+            if 'attr' not in info:
+                info['attr'] = attr
+            return PVSpec(**info)
+        elif isinstance(info, PVSpec):
+            return info
+        elif isinstance(info, pvproperty):
+            return info.pvspec
+        else:
+            raise TypeError(f'Unknown type for pvspec: {info!r}')
+
+    def _generate_class_dict(self):
+        pvspecs = [self._pvspec_from_info(attr, pvspec)
+                   for attr, pvspec in self._group_dict.items()]
+
+        return {pvspec.attr: NestedPvproperty.from_pvspec(pvspec, self)
+                for pvspec in pvspecs
+                }
+
+    @property
+    def group_dict(self):
+        return self._group_dict
+
+    @group_dict.setter
+    def group_dict(self, group_dict):
+        if group_dict is None:
+            return
+
+        self._group_dict = group_dict
+        self._class_dict = self._generate_class_dict()
+
+        bad_items = set(group_dict).intersection(set(dir(self)))
+        if bad_items:
+            raise ValueError(f'Cannot use these attribute names: {bad_items}')
+
+    def __call__(self, *, prefix=None, macros=None, doc=None):
+        # handles case where a single definition is used multiple times
+        copied = copy.copy(self)
+
+        # TODO verify the following works (or even makes sense)
+        if prefix is not None:
+            copied.prefix = prefix
+
+        if macros is not None:
+            copied.macros = macros
+
+        if doc is not None:
+            copied.__doc__ = doc
+
+        return copied
+
+    def __set_name__(self, owner, name):
+        self.attr_name = name
+        self.group_cls = type(self.attr_name, self.base, self._class_dict)
+
+        if self.__doc__ is None:
+            self.__doc__ = self.group_cls.__doc__
+
+        attr_separator = getattr(self.group_cls, 'attr_separator', ':')
+        if attr_separator is not None and self.attr_separator is None:
+            self.attr_separator = attr_separator
+
+        if self.prefix is None:
+            self.prefix = name + self.attr_separator
+
+    def __getattr__(self, attr):
+        if self._class_dict is not None and attr in self._class_dict:
+            return self._class_dict[attr]
+        return super().__getattribute__(attr)
+
+
+def get_pv_pair_wrapper(setpoint_suffix='', readback_suffix='_RBV'):
+    'Generates a Subgroup class for a pair of PVs (setpoint and readback)'
+    def wrapped(dtype=int, doc=None, **kwargs):
+        return FixedSubgroup(
+            {'setpoint': dict(dtype=dtype, name=setpoint_suffix, doc=doc),
+             'readback': dict(dtype=dtype, name=readback_suffix, doc=doc),
+             },
+            attr_separator='',
+            doc=doc,
+        )
+    return wrapped
 
 class pvfunction(SubGroup):
     default_names = dict(process='Process',
@@ -312,13 +460,8 @@ class pvfunction(SubGroup):
         ]
 
     def _class_from_pvspec(self, pvspec):
-        def get_pvproperty(pvspec):
-            prop = pvproperty()
-            prop.pvspec = pvspec
-            return prop
-
         dct = {
-            pvspec.attr: get_pvproperty(pvspec)
+            pvspec.attr: pvproperty.from_pvspec(pvspec)
             for pvspec in self.pvspec
         }
 
@@ -344,7 +487,6 @@ class pvfunction(SubGroup):
                 raise
 
         process_prop.pvspec = PVSpec(None, do_process, *process_pvspec[2:])
-
         return type(self.attr_name, (PVGroupBase, ), dct)
 
     def _regenerate(self):
@@ -368,12 +510,6 @@ class pvfunction(SubGroup):
         self.group_cls = self._class_from_pvspec(self.pvspec)
 
     def __set_name__(self, owner, name):
-        if self.attr_name is not None and self.attr_name != name:
-            # TODO: IPython ends up calling this multiple times when
-            # introspecting a PVGroup. This should be investigated as I'm
-            # likely doing something dumb...
-            raise AttributeError('Stop it, IPython')
-
         self.attr_name = name
         if self.prefix is None:
             self.prefix = name + self.attr_separator
@@ -410,9 +546,6 @@ class PVGroupMeta(type):
             if isinstance(value, pvproperty):
                 yield attr, value
             elif isinstance(value, SubGroup):
-                if value.attr_name is None:
-                    # this happens in the case of PVFunctions...
-                    value.__set_name__(None, attr)
                 subgroup_cls = value.group_cls
                 if subgroup_cls is None:
                     raise RuntimeError('Internal error; subgroup class unset?')
@@ -421,8 +554,12 @@ class PVGroupMeta(type):
 
     def __new__(metacls, name, bases, dct):
         dct['_subgroups_'] = subgroups = OrderedDict()
+        dct['_pvs_'] = pvs = OrderedDict()
+
+        cls = super().__new__(metacls, name, bases, dct)
+
         for attr, prop in metacls.find_subgroups(dct):
-            logger.debug('class %s attr %s: %r', name, attr, prop)
+            logger.debug('class %s subgroup attr %s: %r', name, attr, prop)
             subgroups[attr] = prop
 
             # TODO a bit messy
@@ -432,13 +569,11 @@ class PVGroupMeta(type):
                 for subattr, subgroup in subgroup_cls._subgroups_.items():
                     subgroups['.'.join((attr, subattr))] = subgroup
 
-        dct['_pvs_'] = pvs = OrderedDict()
         for attr, prop in metacls.find_pvproperties(dct):
-            logger.debug('class %s attr %s: %r', name, attr, prop)
+            logger.debug('class %s pvproperty attr %s: %r', name, attr, prop.pvspec)
             pvs[attr] = prop
 
-        return super().__new__(metacls, name, bases, dct)
-
+        return cls
 
 def channeldata_from_pvspec(group, pvspec):
     'Create a ChannelData instance based on a PVSpec'
@@ -457,6 +592,8 @@ def channeldata_from_pvspec(group, pvspec):
 
 class PVGroupBase(metaclass=PVGroupMeta):
     'Base class for a group of PVs'
+    # TODO: rename to PVGroup
+
     type_map = {
         str: PvpropertyString,
         int: PvpropertyInteger,
@@ -469,7 +606,8 @@ class PVGroupBase(metaclass=PVGroupMeta):
         float: 0.0,
     }
 
-    def __init__(self, prefix, macros=None):
+    def __init__(self, prefix, *, macros=None, parent=None):
+        self.parent = parent
         self.macros = macros if macros is not None else {}
         self.prefix = expand_macros(prefix, self.macros)
         self.alarms = defaultdict(lambda: ChannelAlarm())
@@ -491,7 +629,8 @@ class PVGroupBase(metaclass=PVGroupMeta):
             macros = dict(self.macros)
             macros.update(subgroup.macros)
 
-            self.groups[attr] = subgroup_cls(prefix=prefix, macros=macros)
+            self.groups[attr] = subgroup_cls(prefix=prefix, macros=macros,
+                                             parent=self)
 
         for attr, pvprop in self._pvs_.items():
             if '.' in attr:
