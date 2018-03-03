@@ -4,14 +4,14 @@ import random
 
 from caproto.benchmarking import set_logging_level
 from caproto.curio.server import start_server
-from caproto.curio.high_level_server import (pvproperty, PVGroupBase,
+from caproto.curio.high_level_server import (pvproperty, PVGroup,
                                              pvfunction)
 
 
 logger = logging.getLogger(__name__)
 
 
-class MyPVGroup(PVGroupBase):
+class MyPVGroup(PVGroup):
     'Example group of PVs, where the prefix is defined on instantiation'
     # PV #1: {prefix}random - defaults to dtype of int
     @pvproperty

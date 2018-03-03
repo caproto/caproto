@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-from caproto.curio.high_level_server import pvproperty, PVGroupBase
+from caproto.curio.high_level_server import pvproperty, PVGroup
 import collections
 
 
-class ReadingCounter(PVGroupBase):
+class ReadingCounter(PVGroup):
     """
     Count the number of times that a PV is read.
     """

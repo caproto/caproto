@@ -4,7 +4,7 @@ import logging
 
 from caproto.benchmarking import set_logging_level
 from caproto.curio.server import start_server
-from caproto.curio.high_level_server import (pvproperty, PVGroupBase,
+from caproto.curio.high_level_server import (pvproperty, PVGroup,
                                              SubGroup)
 
 
@@ -16,7 +16,7 @@ if __name__ == '__main__':
     logging.basicConfig()
 
 
-class RecordLike(PVGroupBase):
+class RecordLike(PVGroup):
     'Example group, mirroring a V3 record'
 
     # stop : from being added to the prefix
@@ -30,7 +30,7 @@ class RecordLike(PVGroupBase):
     description = pvproperty(name='.DESC', value=['Description'])
 
 
-class MySubGroup(PVGroupBase):
+class MySubGroup(PVGroup):
     'Example group of PVs, where the prefix is defined on instantiation'
     # PV: {prefix}random - defaults to dtype of int
     @pvproperty
@@ -39,7 +39,7 @@ class MySubGroup(PVGroupBase):
         return random.randint(1, 100)
 
 
-class MyPVGroup(PVGroupBase):
+class MyPVGroup(PVGroup):
     'Example group of PVs, a mix of pvproperties and subgroups'
 
     # PV: {prefix}random
@@ -60,7 +60,7 @@ class MyPVGroup(PVGroupBase):
 
     # PV: {prefix}group3_prefix:random
     @SubGroup(prefix='group3_prefix:')
-    class group3(PVGroupBase):
+    class group3(PVGroup):
         @pvproperty
         async def random(self, instance):
             logger.debug('read random from %s', type(self).__name__)
@@ -69,9 +69,9 @@ class MyPVGroup(PVGroupBase):
     # PV: {prefix}group4:subgroup4:random
     # (TODO BUG) {prefix}subgroup4:random
     @SubGroup
-    class group4(PVGroupBase):
+    class group4(PVGroup):
         @SubGroup
-        class subgroup4(PVGroupBase):
+        class subgroup4(PVGroup):
             @pvproperty
             async def random(self, instance):
                 logger.debug('read random from %s', type(self).__name__)

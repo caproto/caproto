@@ -270,7 +270,7 @@ class FixedSubgroup(SubGroup):
         self.prefix = prefix
         self.macros = macros if macros is not None else {}
         self.attr_separator = attr_separator
-        self.base = (PVGroupBase, ) if base is None else base
+        self.base = (PVGroup, ) if base is None else base
         self.__doc__ = doc
 
         # set the group dictionary last:
@@ -455,7 +455,7 @@ class pvfunction(SubGroup):
                               annotation=str),
             inspect.Parameter(self.names['retval'], kind=0,
                               # TODO?
-                              default=PVGroupBase.default_values[return_type],
+                              default=PVGroup.default_values[return_type],
                               annotation=return_type),
         ]
 
@@ -487,7 +487,7 @@ class pvfunction(SubGroup):
                 raise
 
         process_prop.pvspec = PVSpec(None, do_process, *process_pvspec[2:])
-        return type(self.attr_name, (PVGroupBase, ), dct)
+        return type(self.attr_name, (PVGroup, ), dct)
 
     def _regenerate(self):
         if self.func is None or self.attr_name is None:
@@ -590,9 +590,8 @@ def channeldata_from_pvspec(group, pvspec):
     return (full_pvname, inst)
 
 
-class PVGroupBase(metaclass=PVGroupMeta):
+class PVGroup(metaclass=PVGroupMeta):
     'Base class for a group of PVs'
-    # TODO: rename to PVGroup
 
     type_map = {
         str: PvpropertyString,

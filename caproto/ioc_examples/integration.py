@@ -9,7 +9,7 @@ from ophyd import Component as Cpt, EpicsSignal
 
 from caproto.benchmarking import set_logging_level
 from caproto.curio.server import start_server
-from caproto.curio.high_level_server import (pvproperty, PVGroupBase,
+from caproto.curio.high_level_server import (pvproperty, PVGroup,
                                              pvfunction)
 
 
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 # Step 1: a caproto high-level server
 
-class Group(PVGroupBase):
+class Group(PVGroup):
     'Example group of PVs, where the prefix is defined on instantiation'
     async def _exit(self, instance, value):
         logger.info('Server shutting down')
@@ -87,7 +87,7 @@ def group_to_device(group):
         yield f''
         yield f''
 
-    if isinstance(group, PVGroupBase):
+    if isinstance(group, PVGroup):
         group = group.__class__
 
     yield f"class {group.__name__}Device(ophyd.Device):"

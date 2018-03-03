@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-from caproto.curio.high_level_server import pvproperty, PVGroupBase
+from caproto.curio.high_level_server import pvproperty, PVGroup
 import pathlib
 
 
-class CustomWrite(PVGroupBase):
+class CustomWrite(PVGroup):
     """
     When a PV is written to, write the new value into a file as a string.
     """

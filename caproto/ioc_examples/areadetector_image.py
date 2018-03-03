@@ -7,7 +7,7 @@ import ophyd
 
 from caproto.curio.server import start_server
 from caproto.curio import high_level_server
-from caproto.curio.high_level_server import (logger, PVGroupBase)
+from caproto.curio.high_level_server import (logger, PVGroup)
 
 
 def ophyd_component_to_caproto(attr, component, *, defined_classes, depth=0, dev=None):
@@ -77,7 +77,7 @@ def ophyd_device_to_caproto_ioc(dev, *, depth=0, defined_classes=None):
 
     indent = '    ' * depth
 
-    yield f"{indent}class {cls.__name__}IOC(caproto.PVGroupBase):"
+    yield f"{indent}class {cls.__name__}IOC(caproto.PVGroup):"
 
     for attr, component in cls._sig_attrs.items():
         yield from ophyd_component_to_caproto(attr, component, depth=depth,
@@ -96,7 +96,7 @@ logging.basicConfig()
 pvproperty_with_rbv = high_level_server.get_pv_pair_wrapper(setpoint_suffix='',
                                                             readback_suffix='_RBV')
 
-class Group(PVGroupBase):
+class Group(PVGroup):
     pair = pvproperty_with_rbv(dtype=int, doc='pair1')
     pair2 = pvproperty_with_rbv(dtype=int, doc='pair2')
 
