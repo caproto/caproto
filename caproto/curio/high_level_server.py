@@ -563,6 +563,7 @@ class PVGroupMeta(type):
 
         return cls
 
+
 def channeldata_from_pvspec(group, pvspec):
     'Create a ChannelData instance based on a PVSpec'
     full_pvname = expand_macros(group.prefix + pvspec.name, group.macros)
@@ -607,6 +608,10 @@ class PVGroup(metaclass=PVGroupMeta):
     def _create_pvdb(self):
         'Create the PV database for all subgroups and pvproperties'
         for attr, subgroup in self._subgroups_.items():
+            if attr in self.groups:
+                # already created as part of a sub-subgroup
+                continue
+
             subgroup_cls = subgroup.group_cls
 
             prefix = (subgroup.prefix if subgroup.prefix is not None
@@ -616,8 +621,14 @@ class PVGroup(metaclass=PVGroupMeta):
             macros = dict(self.macros)
             macros.update(subgroup.macros)
 
-            self.groups[attr] = subgroup_cls(prefix=prefix, macros=macros,
-                                             parent=self)
+            # instantiate the subgroup
+            inst = subgroup_cls(prefix=prefix, macros=macros, parent=self)
+            self.groups[attr] = inst
+
+            # find all sub-subgroups, giving direct access to them
+            for sub_attr, sub_subgroup in inst.groups.items():
+                full_attr = '.'.join((attr, sub_attr))
+                self.groups[full_attr] = sub_subgroup
 
         for attr, pvprop in self._pvs_.items():
             if '.' in attr:
