@@ -168,7 +168,7 @@ class CurioVirtualCircuit:
         '''Process a command from a client, and return the server response'''
         def get_db_entry():
             chan = self.circuit.channels_sid[command.sid]
-            db_entry = self.context.pvdb[chan.name.decode(STR_ENC)]
+            db_entry = self.context[chan.name.decode(STR_ENC)]
             return chan, db_entry
 
         if command is ca.DISCONNECTED:
@@ -176,7 +176,7 @@ class CurioVirtualCircuit:
         elif isinstance(command, ca.VersionRequest):
             return [ca.VersionResponse(13)]
         elif isinstance(command, ca.CreateChanRequest):
-            db_entry = self.context.pvdb[command.name.decode(STR_ENC)]
+            db_entry = self.context[command.name.decode(STR_ENC)]
             access = db_entry.check_access(self.client_hostname,
                                            self.client_username)
 
@@ -312,6 +312,57 @@ class Context:
                 commands = self.broadcaster.recv(bytes_received, address)
                 await self.command_bundle_queue.put((address, commands))
 
+    def __getitem__(self, pvname):
+        try:
+            return self.pvdb[pvname]
+        except KeyError:
+            if '.' not in pvname:
+                raise
+
+        record, field = pvname.split('.', 1)
+        if '.' in field:
+            field, filter = field.split('.', 1)
+        elif field.startswith('{'):
+            field, filter = '', field
+        else:
+            filter = None
+
+        # if field == 'VAL':
+        #    field = ''
+
+        inst = None
+        if field and filter:
+            # Remove the filter and try 'record.field'
+            record_field = f'{record}.{field}'
+
+            try:
+                inst = self.pvdb[record_field]
+            except KeyError:
+                ...
+
+        if inst is None:
+            # Finally, access 'record', see if it has 'field', and supports the
+            # filter (if specified)
+            try:
+                inst = self.pvdb[record]
+            except KeyError:
+                raise KeyError(f'Neither record nor field exists: '
+                               f'{record}.{field}')
+
+            # TODO consider field cache to support this faster
+            try:
+                inst = inst.get_field(field)
+            except (AttributeError, KeyError):
+                raise KeyError(f'Neither record nor field exists: '
+                               f'{record}.{field}')
+
+        if not filter:
+            return inst
+
+        # filter check
+        # TODO: filter API? wrap somehow?
+        return inst.filtered(filter)
+
     async def _broadcaster_evaluate(self, addr, commands):
         responses = []
         for command in commands:
@@ -319,10 +370,11 @@ class Context:
                 responses.append(ca.VersionResponse(13))
             if isinstance(command, ca.SearchRequest):
                 pv_name = command.name.decode(STR_ENC)
-                self.find_pv(pv_name)
-                if '.' in pv_name:
-                    pv_name.split('.', 1)
-                known_pv = pv_name in self.pvdb
+                try:
+                    known_pv = self[pv_name] is not None
+                except KeyError:
+                    known_pv = False
+
                 if (not known_pv) and command.reply == ca.NO_REPLY:
                     responses.clear()
                     break  # Do not send any repsonse to this datagram.

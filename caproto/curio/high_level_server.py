@@ -51,6 +51,13 @@ class PvpropertyData:
     async def _server_startup(self, async_lib):
         return await self.startup(self, async_lib)
 
+    def get_field(self, field):
+        if not field or field == 'VAL':
+            return self
+
+    def filtered(self, filter):
+        ...
+
 
 class PvpropertyInteger(PvpropertyData, ChannelInteger):
     ...
