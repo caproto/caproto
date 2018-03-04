@@ -234,10 +234,18 @@ class SubGroup:
         self.base = (PVGroup, ) if base is None else base
         self.__doc__ = doc
 
+    @property
+    def group(self):
+        return (self.group_dict, self.group_cls)
+
+    @group.setter
+    def group(self, group):
         if isinstance(group, dict):
             # set the group dictionary last:
             self.group_dict = group
         elif group is not None:
+            assert inspect.isclass(group), 'Group should be dict or SubGroup'
+            assert issubclass(group, SubGroup)
             self.group_cls = group
 
     def __get__(self, instance, owner):
@@ -303,12 +311,10 @@ class SubGroup:
         if doc is not None:
             copied.__doc__ = doc
 
-        if isinstance(group, dict):
-            copied.group_dict = group
-        elif group is not None:
-            copied.group_cls = group
+        if group is not None:
+            copied.group = group
 
-        if copied.attr_separator is None:
+        if copied.group_cls is not None and copied.attr_separator is None:
             copied.attr_separator = getattr(copied.group_cls,
                                             'attr_separator', ':')
 
@@ -331,6 +337,7 @@ class SubGroup:
             self.prefix = name + self.attr_separator
 
     def __getattr__(self, attr):
+        'Allow access to class_dict getter/putter/startup through decorators'
         if self._class_dict is not None and attr in self._class_dict:
             return self._class_dict[attr]
         return super().__getattribute__(attr)
@@ -388,10 +395,8 @@ class pvfunction(SubGroup):
             Docstring
         '''
 
-        super().__init__(group_cls=None,
-                         prefix=prefix, macros=macros,
-                         attr_separator=attr_separator,
-                         doc=doc)
+        super().__init__(group=None, prefix=prefix, macros=macros,
+                         attr_separator=attr_separator, doc=doc)
         self.default_retval = default
         self.func = func
         self.alarm_group = alarm_group
@@ -402,11 +407,14 @@ class pvfunction(SubGroup):
         self.pvspec = []
         self.__doc__ = doc
 
-    def __call__(self, func):
+    def __call__(self, func=None, *, prefix=None, macros=None, doc=None):
         # handles case where pvfunction()(func) is used
-        self.func = func
-        self._regenerate()
-        return self
+        copied = super().__call__(prefix=prefix, macros=macros, doc=doc)
+
+        if func is not None:
+            copied.func = func
+            copied.group = copied._generate_class_dict()
+        return copied
 
     def pvspec_from_parameter(self, param, doc=None):
         dtype = param.annotation
@@ -447,7 +455,7 @@ class pvfunction(SubGroup):
                               annotation=return_type),
         ]
 
-    def _class_from_pvspec(self, pvspec):
+    def _class_dict_from_pvspec(self, pvspec):
         dct = {
             pvspec.attr: pvproperty.from_pvspec(pvspec)
             for pvspec in self.pvspec
@@ -475,11 +483,11 @@ class pvfunction(SubGroup):
                 raise
 
         process_prop.pvspec = PVSpec(None, do_process, *process_pvspec[2:])
-        return type(self.attr_name, (PVGroup, ), dct)
+        return dct
 
-    def _regenerate(self):
-        if self.func is None or self.attr_name is None:
-            return []
+    def _generate_class_dict(self):
+        if self.func is None:
+            return {}
 
         if self.alarm_group is None:
             self.alarm_group = self.func.__name__
@@ -492,16 +500,11 @@ class pvfunction(SubGroup):
         parameters.extend(self.get_additional_parameters())
         self.pvspec = [self.pvspec_from_parameter(param)
                        for param in parameters]
-
-        # how about an auto-generated meta-class subclass in your subgroup
-        # descriptor? (cc @tacaswell)
-        self.group_cls = self._class_from_pvspec(self.pvspec)
+        return self._class_dict_from_pvspec(self.pvspec)
 
     def __set_name__(self, owner, name):
-        self.attr_name = name
-        if self.prefix is None:
-            self.prefix = name + self.attr_separator
-        self._regenerate()
+        self.group_dict = self._generate_class_dict()
+        super().__set_name__(owner, name)
 
 
 def expand_macros(pv, macros):
