@@ -13,8 +13,10 @@ from caproto.curio.high_level_server import (logger, PVGroup, pvproperty,
 
 
 def underscore_to_camel_case(s):
-    split = s.split('_')
-    return ''.join(map(str.capitalize, split))
+    'Convert abc_def_ghi -> AbcDefGhi'
+    def capitalize_first(substring):
+        return substring[:1].upper() + substring[1:]
+    return ''.join(map(capitalize_first, s.split('_')))
 
 
 def ophyd_component_to_caproto(attr, component, *, depth=0, dev=None):
@@ -25,7 +27,9 @@ def ophyd_component_to_caproto(attr, component, *, depth=0, dev=None):
         cpt_dict = ophyd_device_to_caproto_ioc(component, depth=depth)
         cpt_name, = cpt_dict.keys()
         cpt_dict[''] = [
-            '', f"{indent}{attr} = caproto.SubGroup({cpt_name}, prefix='')"
+            '',
+            f"{indent}{attr} = SubGroup({cpt_name}, prefix='')",
+            '',
         ]
         return cpt_dict
 
@@ -39,7 +43,11 @@ def ophyd_component_to_caproto(attr, component, *, depth=0, dev=None):
 
         cpt_dict = ophyd_device_to_caproto_ioc(to_describe, depth=depth)
         cpt_name, = cpt_dict.keys()
-        cpt_dict[''] = [f"{indent}{attr} = TODO_{cpt_name}()"]
+        cpt_dict[''] = [
+            '',
+            f"{indent}{attr} = caproto.SubGroup({cpt_name}, prefix='')",
+            ''
+        ]
         return cpt_dict
 
     kwargs = dict(name=repr(component.suffix))
@@ -73,8 +81,12 @@ def ophyd_component_to_caproto(attr, component, *, depth=0, dev=None):
 
     if issubclass(component.cls, ophyd.EpicsSignalWithRBV):
         line = f"{indent}{attr} = pvproperty_with_rbv({kw_str})"
-    else:
+    elif issubclass(component.cls, ophyd.EpicsSignalRO):
         line = f"{indent}{attr} = pvproperty({kw_str})"
+    elif issubclass(component.cls, ophyd.EpicsSignal):
+        line = f"{indent}{attr} = pvproperty({kw_str})"
+    else:
+        line = f"{indent}# {attr} = pvproperty({kw_str})"
 
     # single line, no new subclass defined
     return {'': [line]}
@@ -120,7 +132,12 @@ def ophyd_device_to_caproto_ioc(dev, *, depth=0):
     return {dev_name: dev_lines}
 
 
-dev_dict = ophyd_device_to_caproto_ioc(ophyd.ImagePlugin)
+class Detector(ophyd.SimDetector):
+    image1 = ophyd.Component(ophyd.ImagePlugin, 'image1:')
+
+
+# dev_dict = ophyd_device_to_caproto_ioc(ophyd.ImagePlugin)
+dev_dict = ophyd_device_to_caproto_ioc(Detector)
 for dev, lines in dev_dict.items():
     print(f'# -- {dev} --')
     for line in lines:
@@ -212,6 +229,6 @@ print('full pvdb')
 from pprint import pprint
 pprint(ioc.pvdb)
 b = ImagepluginGroup('prefix:')
-pprint(b.pvdb)
+# pprint(b.pvdb)
 # import sys; sys.exit(0)
 # curio.run(start_server, ioc.pvdb)
