@@ -312,41 +312,44 @@ class Context:
                 commands = self.broadcaster.recv(bytes_received, address)
                 await self.command_bundle_queue.put((address, commands))
 
-    async def broadcaster_queue_loop(self):
+    async def _broadcaster_evaluate(self, addr, commands):
         responses = []
+        for command in commands:
+            if isinstance(command, ca.VersionRequest):
+                responses.append(ca.VersionResponse(13))
+            if isinstance(command, ca.SearchRequest):
+                pv_name = command.name.decode(STR_ENC)
+                self.find_pv(pv_name)
+                if '.' in pv_name:
+                    pv_name.split('.', 1)
+                known_pv = pv_name in self.pvdb
+                if (not known_pv) and command.reply == ca.NO_REPLY:
+                    responses.clear()
+                    break  # Do not send any repsonse to this datagram.
 
+                # responding with an IP of `None` tells client to get IP
+                # address from packet
+                responses.append(
+                    ca.SearchResponse(self.port, None, command.cid, 13)
+                )
+        if responses:
+            bytes_to_send = self.broadcaster.send(*responses)
+            await self.udp_sock.sendto(bytes_to_send, addr)
+
+    async def broadcaster_queue_loop(self):
         while True:
             try:
                 addr, commands = await self.command_bundle_queue.get()
                 self.broadcaster.process_commands(commands)
+                if addr in self.ignore_addresses:
+                    continue
+                await self._broadcaster_evaluate(addr, commands)
             except curio.TaskCancelled:
                 break
             except Exception as ex:
                 logger.error('Broadcaster command queue evaluation failed',
                              exc_info=ex)
                 continue
-
-            if addr in self.ignore_addresses:
-                continue
-
-            responses.clear()
-            for command in commands:
-                if isinstance(command, ca.VersionRequest):
-                    responses.append(ca.VersionResponse(13))
-                if isinstance(command, ca.SearchRequest):
-                    pv_name = command.name.decode(STR_ENC)
-                    known_pv = pv_name in self.pvdb
-                    if (not known_pv) and command.reply == ca.NO_REPLY:
-                        responses.clear()
-                        break  # Do not send any repsonse to this datagram.
-
-                    # responding with an IP of `None` tells client to get IP
-                    # address from packet
-                    responses.append(ca.SearchResponse(self.port, None,
-                                                       command.cid, 13))
-            if responses:
-                bytes_to_send = self.broadcaster.send(*responses)
-                await self.udp_sock.sendto(bytes_to_send, addr)
 
     async def tcp_handler(self, client, addr):
         '''Handler for each new TCP client to the server'''
