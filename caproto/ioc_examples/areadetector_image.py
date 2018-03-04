@@ -11,7 +11,6 @@ from caproto.curio.high_level_server import (logger, PVGroup, pvproperty,
                                              SubGroup, get_pv_pair_wrapper)
 
 
-
 def underscore_to_camel_case(s):
     'Convert abc_def_ghi -> AbcDefGhi'
     def capitalize_first(substring):
@@ -55,7 +54,7 @@ def ophyd_component_to_caproto(attr, component, *, depth=0, dev=None):
     if isinstance(component, ophyd.FormattedComponent):
         # TODO Component vs FormattedComponent
         kwargs['name'] = "''"
-    else: # if hasattr(component, 'suffix'):
+    else:  # if hasattr(component, 'suffix'):
         kwargs['name'] = repr(component.suffix)
 
     if sig and sig.connected:
@@ -104,8 +103,8 @@ def ophyd_device_to_caproto_ioc(dev, *, depth=0):
         cls, dev = dev, None
     else:
         if inspect.isclass(dev):
-            # we can introspect Device directly, but we cannot connect to PVs and
-            # tell about their data type
+            # we can introspect Device directly, but we cannot connect to PVs
+            # and tell about their data type
             cls, dev = dev, None
         else:
             # if connected, we can reach out to PVs and determine data types
@@ -147,6 +146,7 @@ for dev, lines in dev_dict.items():
 pvproperty_with_rbv = get_pv_pair_wrapper(setpoint_suffix='',
                                           readback_suffix='_RBV')
 
+
 class ImagepluginGroup(PVGroup):
     configuration_names = pvproperty(name=None, dtype=int)
     array_counter = pvproperty_with_rbv(name='ArrayCounter', dtype=int)
@@ -164,6 +164,7 @@ class ImagepluginGroup(PVGroup):
     # width = pvproperty(name='ArraySize0_RBV', dtype=int)
     # height = pvproperty(name='ArraySize1_RBV', dtype=int)
     # depth = pvproperty(name='ArraySize2_RBV', dtype=int)
+
     class ArraySizeGroup(PVGroup):
         height = pvproperty(name='ArraySize1_RBV', dtype=int)
         width = pvproperty(name='ArraySize0_RBV', dtype=int)
@@ -171,12 +172,14 @@ class ImagepluginGroup(PVGroup):
 
     array_size = SubGroup(ArraySizeGroup, prefix='')
     bayer_pattern = pvproperty(name='BayerPattern_RBV', dtype=int)
-    blocking_callbacks = pvproperty_with_rbv(name='BlockingCallbacks', dtype=str)
+    blocking_callbacks = pvproperty_with_rbv(name='BlockingCallbacks',
+                                             dtype=str)
     color_mode = pvproperty(name='ColorMode_RBV', dtype=int)
     data_type = pvproperty(name='DataType_RBV', dtype=str)
     # dim0_sa = pvproperty(name='Dim0SA', dtype=int)
     # dim1_sa = pvproperty(name='Dim1SA', dtype=int)
     # dim2_sa = pvproperty(name='Dim2SA', dtype=int)
+
     class DimSaGroup(PVGroup):
         dim0 = pvproperty(name='Dim0SA', dtype=int)
         dim1 = pvproperty(name='Dim1SA', dtype=int)
@@ -205,6 +208,7 @@ class ImagepluginGroup(PVGroup):
 logger.setLevel(logging.DEBUG)
 logging.basicConfig()
 
+
 class Group(PVGroup):
     pair = pvproperty_with_rbv(dtype=int, doc='pair1')
     pair2 = pvproperty_with_rbv(dtype=int, doc='pair2')
@@ -231,4 +235,4 @@ pprint(ioc.pvdb)
 b = ImagepluginGroup('prefix:')
 # pprint(b.pvdb)
 # import sys; sys.exit(0)
-# curio.run(start_server, ioc.pvdb)
+curio.run(start_server, ioc.pvdb)

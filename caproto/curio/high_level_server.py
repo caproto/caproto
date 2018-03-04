@@ -65,7 +65,8 @@ class PvpropertyString(PvpropertyData, ChannelString):
 
 
 class PVSpec(namedtuple('PVSpec',
-                        'get put startup attr name dtype value alarm_group doc')):
+                        'get put startup attr name dtype value '
+                        'alarm_group doc')):
     'PV information specification'
     __slots__ = ()
     default_dtype = int
@@ -188,9 +189,9 @@ class NestedPvproperty(pvproperty):
     '''Nested pvproperty which allows decorator usage in parent class
 
     Without using this for the SubGroups, using @subgroup.prop.getter causes
-    the parent class to see multiple pvproperties - one defined on the subgroup,
-    and one returned from pvproperty.getter. This class fixes that by returning
-    the expected class - the parent (i.e., the subgroup)
+    the parent class to see multiple pvproperties - one defined on the
+    subgroup, and one returned from pvproperty.getter. This class fixes that by
+    returning the expected class - the parent (i.e., the subgroup)
 
     Bonus points if you understood all of that.
         ... scratch that, bonus points to me, I think.
@@ -218,18 +219,26 @@ class NestedPvproperty(pvproperty):
 class SubGroup:
     'A property-like descriptor for specifying a subgroup in a PVGroup'
 
-    def __init__(self, group_cls=None, *, prefix=None, macros=None,
-                 attr_separator=None, doc=None):
+    # support copy.copy by keeping this here
+    _class_dict = None
+
+    def __init__(self, group=None, *, prefix=None, macros=None,
+                 attr_separator=None, doc=None, base=None):
         self.attr_name = None  # to be set later
-        self.group_cls = group_cls
+        self._class_dict = None
+        self._decorated_items = None
+        self.group_cls = None
         self.prefix = prefix
         self.macros = macros if macros is not None else {}
-        self.attr_separator = (attr_separator if attr_separator is not None
-                               else getattr(group_cls, 'attr_separator', ':'))
-        if doc is None and group_cls is not None:
-            doc = group_cls.__doc__
-
+        self.attr_separator = attr_separator
+        self.base = (PVGroup, ) if base is None else base
         self.__doc__ = doc
+
+        if isinstance(group, dict):
+            # set the group dictionary last:
+            self.group_dict = group
+        elif group is not None:
+            self.group_cls = group
 
     def __get__(self, instance, owner):
         if instance is None:
@@ -241,40 +250,6 @@ class SubGroup:
 
     def __delete__(self, instance):
         del instance.groups[self.attr_name]
-
-    def __set_name__(self, owner, name):
-        self.attr_name = name
-        if self.prefix is None:
-            self.prefix = name + self.attr_separator
-
-    def __call__(self, group_cls):
-        # handles case where SubGroup(**kw)(group_cls) is used
-        self.group_cls = group_cls
-        if self.__doc__ is None:
-            self.__doc__ = group_cls.__doc__
-
-        return self
-
-
-class FixedSubgroup(SubGroup):
-    # support copy.copy by keeping this here
-    _class_dict = None
-
-    def __init__(self, group_dict=None, *, prefix=None, macros=None,
-                 attr_separator=None, doc=None, base=None):
-        # TODO i think these implementations can be merged
-        self.attr_name = None  # to be set later
-        self._class_dict = None
-        self._decorated_items = None
-        self.group_cls = None
-        self.prefix = prefix
-        self.macros = macros if macros is not None else {}
-        self.attr_separator = attr_separator
-        self.base = (PVGroup, ) if base is None else base
-        self.__doc__ = doc
-
-        # set the group dictionary last:
-        self.group_dict = group_dict
 
     @staticmethod
     def _pvspec_from_info(attr, info):
@@ -313,8 +288,9 @@ class FixedSubgroup(SubGroup):
         if bad_items:
             raise ValueError(f'Cannot use these attribute names: {bad_items}')
 
-    def __call__(self, *, prefix=None, macros=None, doc=None):
+    def __call__(self, group=None, *, prefix=None, macros=None, doc=None):
         # handles case where a single definition is used multiple times
+        # as in SubGroup(**kw)(group_cls_or_dict) is used
         copied = copy.copy(self)
 
         # TODO verify the following works (or even makes sense)
@@ -327,14 +303,25 @@ class FixedSubgroup(SubGroup):
         if doc is not None:
             copied.__doc__ = doc
 
+        if isinstance(group, dict):
+            copied.group_dict = group
+        elif group is not None:
+            copied.group_cls = group
+
+        if copied.attr_separator is None:
+            copied.attr_separator = getattr(copied.group_cls,
+                                            'attr_separator', ':')
+
         return copied
 
     def __set_name__(self, owner, name):
         self.attr_name = name
-        self.group_cls = type(self.attr_name, self.base, self._class_dict)
+        if self.group_cls is None:
+            # generate the group class, in the case of a dict-based subgroup
+            self.group_cls = type(self.attr_name, self.base, self._class_dict)
 
-        if self.__doc__ is None:
-            self.__doc__ = self.group_cls.__doc__
+            if self.__doc__ is None:
+                self.__doc__ = self.group_cls.__doc__
 
         attr_separator = getattr(self.group_cls, 'attr_separator', ':')
         if attr_separator is not None and self.attr_separator is None:
@@ -352,7 +339,7 @@ class FixedSubgroup(SubGroup):
 def get_pv_pair_wrapper(setpoint_suffix='', readback_suffix='_RBV'):
     'Generates a Subgroup class for a pair of PVs (setpoint and readback)'
     def wrapped(dtype=int, doc=None, **kwargs):
-        return FixedSubgroup(
+        return SubGroup(
             {'setpoint': dict(dtype=dtype, name=setpoint_suffix, doc=doc),
              'readback': dict(dtype=dtype, name=readback_suffix, doc=doc),
              },
@@ -360,6 +347,7 @@ def get_pv_pair_wrapper(setpoint_suffix='', readback_suffix='_RBV'):
             doc=doc,
         )
     return wrapped
+
 
 class pvfunction(SubGroup):
     default_names = dict(process='Process',
