@@ -11,7 +11,7 @@ from caproto.benchmarking import set_logging_level
 from caproto.curio.server import start_server
 from caproto.curio.high_level_server import (pvproperty, PVGroup,
                                              pvfunction)
-
+from caproto.curio.conversion import group_to_device
 
 logger = logging.getLogger(__name__)
 
@@ -45,76 +45,8 @@ class Group(PVGroup):
         return random.randint(low, high)
 
 
-# Step 2a: supporting methods to make simple ophyd Devices
-def pvfunction_to_device_function(name, pvf, *, indent='    '):
-    def format_arg(pvspec):
-        value = pvspec.value
-        if isinstance(value, (list, tuple)) and len(value) == 1:
-            value = value[0]
-        value = f'={value}' if value else ''
-        return f"{pvspec.attr}: {pvspec.dtype.__name__}{value}"
-
-    skip_attrs = ('Status', 'Retval')
-    args = ', '.join(format_arg(spec) for spec in pvf.pvspec
-                     if spec.attr not in skip_attrs)
-    yield f"{indent}def call(self, {args}):"
-    if pvf.__doc__:
-        yield f"{indent*2}'{pvf.__doc__}'"
-    for pvspec in pvf.pvspec:
-        if pvspec.attr not in skip_attrs:
-            yield (f"{indent*2}self.{pvspec.attr}.put({pvspec.attr}, "
-                   "wait=True)")
-
-    yield f"{indent*2}self.process.put(1, wait=True)"
-    yield f"{indent*2}status = self.status.get(use_monitor=False)"
-    yield f"{indent*2}retval = self.retval.get(use_monitor=False)"
-    yield f"{indent*2}if status != 'Success':"
-    yield f"{indent*3}raise RuntimeError(f'RPC function failed: {{status}}')"
-    yield f"{indent*2}return retval"
-
-
-def group_to_device(group):
-    'Make an ophyd device from a high-level server PVGroup'
-    # TODO subgroups are weak and need rethinking (generic comment deux)
-
-    for name, subgroup in group._subgroups_.items():
-        yield from group_to_device(subgroup.group_cls)
-
-        if isinstance(subgroup, pvfunction):
-            yield f''
-            yield from pvfunction_to_device_function(name, subgroup)
-
-        yield f''
-        yield f''
-
-    if isinstance(group, PVGroup):
-        group = group.__class__
-
-    yield f"class {group.__name__}Device(ophyd.Device):"
-
-    for name, subgroup in group._subgroups_.items():
-        doc = f', doc={subgroup.__doc__!r}' if subgroup.__doc__ else ''
-        yield (f"    {name.lower()} = Cpt({name}Device, "
-               f"'{subgroup.prefix}'{doc})")
-
-    if not group._pvs_:
-        yield f'    ...'
-
-    for name, prop in group._pvs_.items():
-        if '.' in name:
-            # Skipping, part of subgroup handled above
-            continue
-
-        pvspec = prop.pvspec
-        doc = f', doc={pvspec.doc!r}' if pvspec.doc else ''
-        string = f', string=True' if pvspec.dtype == str else ''
-        yield (f"    {name.lower()} = Cpt(EpicsSignal, '{pvspec.name}'"
-               f"{string}{doc})")
-        # TODO will break when full/macro-ified PVs is specified
-
-    # lower_name = group.__name__.lower()
-    # yield f"# {lower_name} = {group.__name__}Device(my_prefix)"
-
+# Step 2a: write supporting methods to make simple ophyd Devices (moved to
+#          caproto.curio.conversion module)
 
 # Step 2b: copy/pasting the auto-generated output (OK, slightly modified for
 #                                                  PEP8 readability)
@@ -124,9 +56,11 @@ def group_to_device(group):
 class get_randomDevice(ophyd.Device):
     low = Cpt(EpicsSignal, 'low', doc="Parameter <class 'int'> low")
     high = Cpt(EpicsSignal, 'high', doc="Parameter <class 'int'> high")
-    status = Cpt(EpicsSignal, 'Status', string=True, doc="Parameter <class 'str'> Status")
+    status = Cpt(EpicsSignal, 'Status', string=True,
+                 doc="Parameter <class 'str'> Status")
     retval = Cpt(EpicsSignal, 'Retval', doc="Parameter <class 'int'> Retval")
-    process = Cpt(EpicsSignal, 'Process', doc="Parameter <class 'int'> Process")
+    process = Cpt(EpicsSignal, 'Process',
+                  doc="Parameter <class 'int'> Process")
 
     def call(self, low: int=100, high: int=1000):
         'A configurable random number'
