@@ -1,6 +1,16 @@
 import inspect
 import ophyd
+
 from .high_level_server import pvfunction, PVGroup
+from .._data import (ChannelDouble, ChannelEnum, ChannelChar,
+                     ChannelInteger, ChannelString)
+from .menus import menus
+
+try:
+    # optionally format Python code more nicely
+    import yapf
+except ImportError:
+    yapf = None
 
 
 def underscore_to_camel_case(s):
@@ -192,3 +202,122 @@ def group_to_device(group):
 
     # lower_name = group.__name__.lower()
     # yield f"# {lower_name} = {group.__name__}Device(my_prefix)"
+
+
+def record_to_field_info(record_type):
+    import recordwhat
+
+    base = recordwhat.RecordBase
+
+    if record_type == 'base':
+        cls = recordwhat.RecordBase
+    else:
+        cls = recordwhat.get_record_class(record_type)
+
+    base_metadata = dict(base.field_metadata())
+    field_dict = dict(cls.field_metadata())
+
+    type_info = {
+        'DBF_DEVICE': ChannelString,  # DTYP
+        'DBF_DOUBLE': ChannelDouble,
+        'DBF_FWDLINK': ChannelString,
+        'DBF_INLINK': ChannelString,
+        'DBF_LONG': ChannelInteger,
+        'DBF_MENU': ChannelEnum,
+        'DBF_OUTLINK': ChannelString,
+        'DBF_SHORT': ChannelInteger,
+        'DBF_STRING': ChannelString,  # TODO: char -> max_length?
+        'DBF_UCHAR': ChannelChar,
+    }
+
+    for name, field_info in field_dict.items():
+        if cls is not base and name in base_metadata:
+            if base_metadata[name] == field_info:
+                # Skip base attrs
+                continue
+
+        type_ = field_info.type
+        size = field_info.size
+        prompt = field_info.prompt
+
+        # alarm = parent.alarm
+        kwargs = {}
+
+        if type_ == 'DBF_STRING' and size > 0:
+            type_ = 'DBF_UCHAR'
+            kwargs['max_length'] = size
+
+        if type_ == 'DBF_MENU':
+            enum_class = menus[field_info.menu]
+            # note: ordered key assumption here (py3.6+)
+            kwargs['enum_strings'] = tuple(bytes(b, 'latin-1') for b in
+                                           enum_class._strings.values())
+
+        if prompt:
+            kwargs['doc'] = repr(prompt)
+
+        # if special==SPC_NOMOD, then it's read-only
+        type_class = type_info[type_]
+
+        yield name, type_class, kwargs, field_info
+
+
+def _format(line, *, indent=0):
+    prefix = ' ' * indent
+    if yapf is None:
+        yield prefix + line
+    else:
+        from yapf.yapflib.yapf_api import FormatCode
+        from yapf.yapflib.style import _style
+
+        # TODO study awkward yapf api more closely
+        _style['COLUMN_LIMIT'] = 79 - indent
+        for formatted_line in FormatCode(line)[0].split('\n'):
+            yield prefix + formatted_line.rstrip()
+
+
+def record_to_field_dict_code(record_type, *, skip_fields=None):
+    'Record name -> yields code to create {field: ChannelData(), ...}'
+    if skip_fields is None:
+        skip_fields = ['VAL']
+    yield f"def create_{record_type}_dict(alarm_group, **kw):"
+    yield f"    kw['reported_record_type'] = '{record_type}'"
+    yield f"    kw['alarm_group'] = alarm_group"
+    yield '    return {'
+    for name, cls, kwargs, finfo in record_to_field_info(record_type):
+        kwarg_string = ', '.join(
+            list(f'{k}={v}' for k, v in kwargs.items()) + ['**kw'])
+        yield f"        '{finfo.field}': {cls.__name__}({kwarg_string}),"
+    yield '    }'
+
+
+def record_to_high_level_group_code(record_type, *, skip_fields=None):
+    'Record name -> yields code to create a PVGroup for all fields'
+    if skip_fields is None:
+        skip_fields = ['VAL']
+
+    if record_type == 'base':
+        name = 'RecordFieldGroup'
+        base_class = 'PVGroup'
+    else:
+        name = f'{record_type.capitalize()}Fields'
+        base_class = 'RecordFieldGroup'
+
+    yield f"class {name}({base_class}):"
+    if record_type != 'base':
+        yield f"    _record_type = '{record_type}'"
+
+    # yield f"    attr_separator = '.'"  # only for subgroups
+    # yield f"    kw['reported_record_type'] = '{record_type}'"  # TODO?
+    for name, cls, kwargs, finfo in record_to_field_info(record_type):
+        kwarg_string = ', '.join(f'{k}={v}' for k, v in kwargs.items())
+        yield from _format(f"{name} = pvproperty(name='{finfo.field}', "
+                           f"dtype=ChannelType.{cls.data_type.name}, "
+                           f"{kwarg_string})", indent=4)
+
+
+if __name__ == '__main__':
+    for line in record_to_high_level_group_code('base'):
+        print(line)
+    for line in record_to_high_level_group_code('ai'):
+        print(line)

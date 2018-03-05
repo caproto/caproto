@@ -5,14 +5,13 @@ from collections import (namedtuple, OrderedDict, defaultdict)
 from types import MethodType
 
 from .. import (ChannelDouble, ChannelInteger, ChannelString,
-                ChannelAlarm)
-
+                ChannelEnum, ChannelType, ChannelChar, ChannelAlarm)
 
 logger = logging.getLogger(__name__)
 
 
 class PvpropertyData:
-    def __init__(self, *, group, pvspec, **kwargs):
+    def __init__(self, *, group, pvspec, doc=None, mock_record=None, **kwargs):
         self.group = group
         self.pvspec = pvspec
         self.getter = (MethodType(pvspec.get, group)
@@ -26,6 +25,18 @@ class PvpropertyData:
             self.server_startup = self._server_startup
             # bind the startup method to the group (used in server_startup)
             self.startup = MethodType(pvspec.startup, group)
+
+        if doc is not None:
+            self.__doc__ = doc
+
+        if mock_record is not None:
+            from .records import records
+            field_class = records[mock_record]
+            self.field_inst = field_class(prefix='', parent=self)
+            self.fields = self.field_inst.pvdb
+        else:
+            self.field_inst = None
+            self.fields = {}
 
         super().__init__(**kwargs)
 
@@ -54,9 +65,14 @@ class PvpropertyData:
     def get_field(self, field):
         if not field or field == 'VAL':
             return self
+        return self.fields[field]
 
     def filtered(self, filter):
         ...
+
+
+class PvpropertyChar(PvpropertyData, ChannelChar):
+    ...
 
 
 class PvpropertyInteger(PvpropertyData, ChannelInteger):
@@ -71,15 +87,20 @@ class PvpropertyString(PvpropertyData, ChannelString):
     ...
 
 
+class PvpropertyEnum(PvpropertyData, ChannelEnum):
+    ...
+
+
 class PVSpec(namedtuple('PVSpec',
                         'get put startup attr name dtype value '
-                        'alarm_group doc')):
+                        'alarm_group doc cls_kwargs')):
     'PV information specification'
     __slots__ = ()
     default_dtype = int
 
     def __new__(cls, get=None, put=None, startup=None, attr=None, name=None,
-                dtype=None, value=None, alarm_group=None, doc=None):
+                dtype=None, value=None, alarm_group=None, doc=None,
+                cls_kwargs=None):
         if dtype is None:
             dtype = (type(value[0]) if value is not None
                      else cls.default_dtype)
@@ -112,7 +133,7 @@ class PVSpec(namedtuple('PVSpec',
                                    ''.format(startup, sig))
 
         return super().__new__(cls, get, put, startup, attr, name, dtype,
-                               value, alarm_group, doc)
+                               value, alarm_group, doc, cls_kwargs)
 
     def new_names(self, attr=None, name=None):
         if attr is None:
@@ -120,22 +141,23 @@ class PVSpec(namedtuple('PVSpec',
         if name is None:
             name = self.name
         return PVSpec(self.get, self.put, self.startup, attr, name, self.dtype,
-                      self.value, self.alarm_group, self.doc)
+                      self.value, self.alarm_group, self.doc, self.cls_kwargs)
 
 
 class pvproperty:
     'A property-like descriptor for specifying a PV in a group'
 
-    def __init__(self, get=None, put=None, startup=None, *, doc=None,
-                 **spec_kw):
+    def __init__(self, get=None, put=None, startup=None, *, name=None,
+                 dtype=None, value=None, alarm_group=None, doc=None,
+                 **cls_kwargs):
         self.attr_name = None  # to be set later
-        self.spec_kw = spec_kw
 
         if doc is None and get is not None:
             doc = get.__doc__
 
-        self.pvspec = PVSpec(get=get, put=put, startup=startup, doc=doc,
-                             **spec_kw)
+        self.pvspec = PVSpec(get=get, put=put, startup=startup, name=name,
+                             dtype=dtype, value=value, alarm_group=alarm_group,
+                             doc=doc, cls_kwargs=cls_kwargs)
         self.__doc__ = doc
 
     def __get__(self, instance, owner):
@@ -175,14 +197,23 @@ class pvproperty:
         return self
 
     def __call__(self, get, put=None, startup=None):
-        # handles case where pvproperty(**spec_kw)(getter, putter, startup) is used
+        # handles case where pvproperty(**spec_kw)(getter, putter, startup) is
+        # used
+        pvspec = self.pvspec
+        spec_kw = dict(name=pvspec.name,
+                       dtype=pvspec.dtype,
+                       value=pvspec.value,
+                       alarm_group=pvspec.alarm_group,
+                       doc=pvspec.doc,
+                       cls_kwargs=pvspec.cls_kwargs)
+
         if get.__doc__:
             if self.__doc__ is None:
                 self.__doc__ = get.__doc__
             if 'doc' not in self.spec_kw:
-                self.spec_kw['doc'] = get.__doc__
+                spec_kw['doc'] = get.__doc__
 
-        self.pvspec = PVSpec(get, put, startup, **self.spec_kw)
+        self.pvspec = PVSpec(get, put, startup, **spec_kw)
         return self
 
     @classmethod
@@ -237,7 +268,8 @@ class SubGroup:
         self.group_cls = None
         self.prefix = prefix
         self.macros = macros if macros is not None else {}
-        self.attr_separator = attr_separator
+        if not hasattr(self, 'attr_separator') or attr_separator is not None:
+            self.attr_separator = attr_separator
         self.base = (PVGroup, ) if base is None else base
         self.__doc__ = doc
 
@@ -568,8 +600,26 @@ class PVGroupMeta(type):
                     subgroups['.'.join((attr, subattr))] = subgroup
 
         for attr, prop in metacls.find_pvproperties(dct):
-            logger.debug('class %s pvproperty attr %s: %r', name, attr, prop.pvspec)
+            pvspec = prop.pvspec
+            logger.debug('class %s pvproperty attr %s: %r', name, attr, pvspec)
             pvs[attr] = prop
+
+            if pvspec.cls_kwargs:
+                # Ensure all passed class kwargs are valid for the specific
+                # class, so it doesn't bite us on instantiation
+                prop_cls = cls.type_map[pvspec.dtype]
+
+                if not hasattr(prop_cls, '_valid_init_kw'):
+                    # TODO this should be generated elsewhere
+                    prop_cls._valid_init_kw = {
+                        key
+                        for cls in inspect.getmro(PvpropertyChar)
+                        for key in inspect.signature(cls).parameters.keys()
+                    }
+
+                bad_kw = set(pvspec.cls_kwargs) - prop_cls._valid_init_kw
+                if bad_kw:
+                    raise ValueError(f'Bad kw for class {prop_cls}: {bad_kw}')
 
         return cls
 
@@ -584,7 +634,8 @@ def channeldata_from_pvspec(group, pvspec):
 
     cls = group.type_map[pvspec.dtype]
     inst = cls(group=group, pvspec=pvspec,
-               value=value, alarm=group.alarms[pvspec.alarm_group])
+               value=value, alarm=group.alarms[pvspec.alarm_group],
+               **pvspec.cls_kwargs)
     inst.__doc__ = pvspec.doc
     return (full_pvname, inst)
 
@@ -596,12 +647,24 @@ class PVGroup(metaclass=PVGroupMeta):
         str: PvpropertyString,
         int: PvpropertyInteger,
         float: PvpropertyDouble,
+
+        ChannelType.STRING: PvpropertyString,
+        ChannelType.LONG: PvpropertyInteger,
+        ChannelType.DOUBLE: PvpropertyDouble,
+        ChannelType.ENUM: PvpropertyEnum,
+        ChannelType.CHAR: PvpropertyChar,
     }
 
     default_values = {
         str: '-',
         int: 0,
         float: 0.0,
+
+        ChannelType.STRING: '',
+        ChannelType.LONG: 0,
+        ChannelType.DOUBLE: 0.0,
+        ChannelType.ENUM: 0,
+        ChannelType.CHAR: '',
     }
 
     def __init__(self, prefix, *, macros=None, parent=None):
