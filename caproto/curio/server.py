@@ -331,10 +331,9 @@ class Context:
         #    field = ''
 
         inst = None
+        record_field = f'{record}.{field}'
         if field and filter:
             # Remove the filter and try 'record.field'
-            record_field = f'{record}.{field}'
-
             try:
                 inst = self.pvdb[record_field]
             except KeyError:
@@ -349,12 +348,14 @@ class Context:
                 raise KeyError(f'Neither record nor field exists: '
                                f'{record}.{field}')
 
-            # TODO consider field cache to support this faster
             try:
                 inst = inst.get_field(field)
             except (AttributeError, KeyError):
                 raise KeyError(f'Neither record nor field exists: '
                                f'{record}.{field}')
+
+            # Cache record.FIELD for later usage
+            self.pvdb[record_field] = inst
 
         if not filter:
             return inst

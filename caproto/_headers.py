@@ -429,7 +429,7 @@ def EventAddRequestHeader(data_type, data_count, sid, subscriptionid):
 
     subscriptionid : integer
 
-				Subscription ID identifying this subscription. 
+				Subscription ID identifying this subscription.
 				See Subscription ID
 					(3.2.3.).
 
@@ -1142,7 +1142,7 @@ def ClientNameRequestHeader(payload_size):
     """
     Construct a ``MessageHeader`` for a ClientNameRequest command.
 
-    Sends local username to virtual circuit peer. 
+    Sends local username to virtual circuit peer.
     This name identifies the user and affects access rights.
 
 

@@ -5,7 +5,8 @@ from collections import (namedtuple, OrderedDict, defaultdict)
 from types import MethodType
 
 from .. import (ChannelDouble, ChannelInteger, ChannelString,
-                ChannelEnum, ChannelType, ChannelChar, ChannelAlarm)
+                ChannelEnum, ChannelType, ChannelChar, ChannelAlarm,
+                AccessRights)
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,7 @@ class PvpropertyData:
         return self.fields[field]
 
     def filtered(self, filter):
-        ...
+        return self
 
 
 class PvpropertyChar(PvpropertyData, ChannelChar):
@@ -91,16 +92,68 @@ class PvpropertyEnum(PvpropertyData, ChannelEnum):
     ...
 
 
+class PvpropertyReadOnlyData(PvpropertyData):
+    def check_access(self, host, user):
+        return AccessRights.READ
+
+
+class PvpropertyCharRO(PvpropertyReadOnlyData, ChannelChar):
+    ...
+
+
+class PvpropertyIntegerRO(PvpropertyReadOnlyData, ChannelInteger):
+    ...
+
+
+class PvpropertyDoubleRO(PvpropertyReadOnlyData, ChannelDouble):
+    ...
+
+
+class PvpropertyStringRO(PvpropertyReadOnlyData, ChannelString):
+    ...
+
+
+class PvpropertyEnumRO(PvpropertyReadOnlyData, ChannelEnum):
+    ...
+
+
 class PVSpec(namedtuple('PVSpec',
                         'get put startup attr name dtype value '
-                        'alarm_group doc cls_kwargs')):
-    'PV information specification'
+                        'alarm_group read_only doc cls_kwargs')):
+    '''PV information specification
+
+    Parameters
+    ----------
+    get : async callable, optional
+        Called when PV is read through channel access
+    put : async callable, optional
+        Called when PV is written to through channel access
+    startup : async callable, optional
+        Called at start of server; a hook for initialization and background
+        processing
+    attr : str, optional
+        The attribute name
+    name : str, optional
+        The PV name
+    dtype : ChannelType or builtin type, optional
+        The data type
+    value : any, optional
+        The initial value
+    alarm_group : str, optional
+        The alarm group the PV should be attached to
+    read_only : bool, optional
+        Read-only PV over channel access
+    doc : str, optional
+        Docstring associated with PV
+    cls_kwargs : dict, optional
+        Keyword arguments for the ChannelData-based class
+    '''
     __slots__ = ()
     default_dtype = int
 
     def __new__(cls, get=None, put=None, startup=None, attr=None, name=None,
-                dtype=None, value=None, alarm_group=None, doc=None,
-                cls_kwargs=None):
+                dtype=None, value=None, alarm_group=None, read_only=None,
+                doc=None, cls_kwargs=None):
         if dtype is None:
             dtype = (type(value[0]) if value is not None
                      else cls.default_dtype)
@@ -116,6 +169,7 @@ class PVSpec(namedtuple('PVSpec',
 
         if put is not None:
             assert inspect.iscoroutinefunction(put), 'required async def put'
+            assert not read_only, 'Read-only signal cannot have putter'
             sig = inspect.signature(put)
             try:
                 sig.bind('group', 'instance', 'value')
@@ -124,7 +178,8 @@ class PVSpec(namedtuple('PVSpec',
                                    ''.format(put, sig))
 
         if startup is not None:
-            assert inspect.iscoroutinefunction(startup), 'required async def startup'
+            assert inspect.iscoroutinefunction(startup), \
+                'required async def startup'
             sig = inspect.signature(startup)
             try:
                 sig.bind('group', 'instance', 'async_library')
@@ -132,16 +187,20 @@ class PVSpec(namedtuple('PVSpec',
                 raise RuntimeError('Invalid signature for startup {}: {}'
                                    ''.format(startup, sig))
 
-        return super().__new__(cls, get, put, startup, attr, name, dtype,
-                               value, alarm_group, doc, cls_kwargs)
+        return super().__new__(cls, get=get, put=put, startup=startup,
+                               attr=attr, name=name, dtype=dtype, value=value,
+                               alarm_group=alarm_group, read_only=read_only,
+                               doc=doc, cls_kwargs=cls_kwargs)
 
     def new_names(self, attr=None, name=None):
         if attr is None:
             attr = self.attr
         if name is None:
             name = self.name
-        return PVSpec(self.get, self.put, self.startup, attr, name, self.dtype,
-                      self.value, self.alarm_group, self.doc, self.cls_kwargs)
+        return PVSpec(get=self.get, put=self.put, startup=self.startup,
+                      attr=attr, name=name, dtype=self.dtype, value=self.value,
+                      alarm_group=self.alarm_group, read_only=self.read_only,
+                      doc=self.doc, cls_kwargs=self.cls_kwargs)
 
 
 class pvproperty:
@@ -386,8 +445,10 @@ def get_pv_pair_wrapper(setpoint_suffix='', readback_suffix='_RBV'):
     'Generates a Subgroup class for a pair of PVs (setpoint and readback)'
     def wrapped(dtype=int, doc=None, **kwargs):
         return SubGroup(
-            {'setpoint': dict(dtype=dtype, name=setpoint_suffix, doc=doc),
-             'readback': dict(dtype=dtype, name=readback_suffix, doc=doc),
+            {'setpoint': dict(dtype=dtype, name=setpoint_suffix, doc=doc,
+                              **kwargs),
+             'readback': dict(dtype=dtype, name=readback_suffix, doc=doc,
+                              **kwargs),
              },
             attr_separator='',
             doc=doc,
@@ -470,6 +531,7 @@ class pvfunction(SubGroup):
             # some developers a heart attack
             default = list(default)
 
+        print(param.name)
         return PVSpec(
             get=None, put=None, attr=param.name,
             # the name defaults to the parameter name, but can be remapped with
@@ -477,6 +539,7 @@ class pvfunction(SubGroup):
             name=self.names.get(param.name, param.name),
             dtype=dtype,
             value=default, alarm_group=self.alarm_group,
+            read_only=param.name in ['retval', 'status'],
             doc=doc if doc is not None else f'Parameter {dtype} {param.name}'
         )
 
@@ -486,9 +549,9 @@ class pvfunction(SubGroup):
         assert return_type, 'Return value must have a type annotation'
 
         return [
-            inspect.Parameter(self.names['status'], kind=0, default=['Init'],
+            inspect.Parameter('status', kind=0, default=['Init'],
                               annotation=str),
-            inspect.Parameter(self.names['retval'], kind=0,
+            inspect.Parameter('retval', kind=0,
                               # TODO?
                               default=PVGroup.default_values[return_type],
                               annotation=return_type),
@@ -515,10 +578,10 @@ class pvfunction(SubGroup):
                           for sig in list(sig.parameters.values())[1:]
                           }
                 value = await self.func(group, **kwargs)
-                await group.Retval.write(value)
-                await group.Status.write(f'Success')
+                await group.retval.write(value)
+                await group.status.write(f'Success')
             except Exception as ex:
-                await group.Status.write(f'{ex.__class__.__name__}: {ex}')
+                await group.status.write(f'{ex.__class__.__name__}: {ex}')
                 raise
 
         process_prop.pvspec = PVSpec(None, do_process, *process_pvspec[2:])
@@ -607,8 +670,8 @@ class PVGroupMeta(type):
             if pvspec.cls_kwargs:
                 # Ensure all passed class kwargs are valid for the specific
                 # class, so it doesn't bite us on instantiation
-                prop_cls = cls.type_map[pvspec.dtype]
 
+                prop_cls = data_class_from_pvspec(group=cls, pvspec=pvspec)
                 if not hasattr(prop_cls, '_valid_init_kw'):
                     # TODO this should be generated elsewhere
                     prop_cls._valid_init_kw = {
@@ -624,6 +687,13 @@ class PVGroupMeta(type):
         return cls
 
 
+def data_class_from_pvspec(group, pvspec):
+    'Return the data class for a given PVSpec in a group'
+    if pvspec.read_only:
+        return group.type_map_read_only[pvspec.dtype]
+    return group.type_map[pvspec.dtype]
+
+
 def channeldata_from_pvspec(group, pvspec):
     'Create a ChannelData instance based on a PVSpec'
     full_pvname = expand_macros(group.prefix + pvspec.name, group.macros)
@@ -632,10 +702,10 @@ def channeldata_from_pvspec(group, pvspec):
              else group.default_values[pvspec.dtype]
              )
 
-    cls = group.type_map[pvspec.dtype]
-    inst = cls(group=group, pvspec=pvspec,
-               value=value, alarm=group.alarms[pvspec.alarm_group],
-               **pvspec.cls_kwargs)
+    cls = data_class_from_pvspec(group, pvspec)
+    kw = pvspec.cls_kwargs if pvspec.cls_kwargs is not None else {}
+    inst = cls(group=group, pvspec=pvspec, value=value,
+               alarm=group.alarms[pvspec.alarm_group], **kw)
     inst.__doc__ = pvspec.doc
     return (full_pvname, inst)
 
@@ -653,6 +723,12 @@ class PVGroup(metaclass=PVGroupMeta):
         ChannelType.DOUBLE: PvpropertyDouble,
         ChannelType.ENUM: PvpropertyEnum,
         ChannelType.CHAR: PvpropertyChar,
+    }
+
+    # Auto-generate the read-only class specification:
+    type_map_read_only = {
+        dtype: globals()[f'{cls.__name__}RO']
+        for dtype, cls in type_map.items()
     }
 
     default_values = {

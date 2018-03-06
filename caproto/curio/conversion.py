@@ -142,7 +142,7 @@ def pvfunction_to_device_function(name, pvf, *, indent='    '):
         value = f'={value}' if value else ''
         return f"{pvspec.attr}: {pvspec.dtype.__name__}{value}"
 
-    skip_attrs = ('Status', 'Retval')
+    skip_attrs = ('status', 'retval')
     args = ', '.join(format_arg(spec) for spec in pvf.pvspec
                      if spec.attr not in skip_attrs)
     yield f"{indent}def call(self, {args}):"
@@ -182,8 +182,8 @@ def group_to_device(group):
 
     for name, subgroup in group._subgroups_.items():
         doc = f', doc={subgroup.__doc__!r}' if subgroup.__doc__ else ''
-        yield (f"    {name.lower()} = Cpt({name}Device, "
-               f"'{subgroup.prefix}'{doc})")
+        yield from _format(f"{name.lower()} = Cpt({name}Device, "
+                           f"'{subgroup.prefix}'{doc})", indent=4)
 
     if not group._pvs_:
         yield f'    ...'
@@ -196,8 +196,9 @@ def group_to_device(group):
         pvspec = prop.pvspec
         doc = f', doc={pvspec.doc!r}' if pvspec.doc else ''
         string = f', string=True' if pvspec.dtype == str else ''
-        yield (f"    {name.lower()} = Cpt(EpicsSignal, '{pvspec.name}'"
-               f"{string}{doc})")
+        cls = 'EpicsSignalRO' if pvspec.read_only else 'EpicsSignal'
+        yield from _format(f"{name.lower()} = Cpt({cls}, '{pvspec.name}'"
+                           f"{string}{doc})", indent=4)
         # TODO will break when full/macro-ified PVs is specified
 
     # lower_name = group.__name__.lower()
@@ -226,7 +227,7 @@ def record_to_field_info(record_type):
         'DBF_MENU': ChannelEnum,
         'DBF_OUTLINK': ChannelString,
         'DBF_SHORT': ChannelInteger,
-        'DBF_STRING': ChannelString,  # TODO: char -> max_length?
+        'DBF_STRING': ChannelString,
         'DBF_UCHAR': ChannelChar,
     }
 
@@ -263,6 +264,10 @@ def record_to_field_info(record_type):
 
 
 def _format(line, *, indent=0):
+    '''Format Python code lines, with a specific indent
+
+    NOTE: Uses yapf if available
+    '''
     prefix = ' ' * indent
     if yapf is None:
         yield prefix + line
@@ -273,7 +278,8 @@ def _format(line, *, indent=0):
         # TODO study awkward yapf api more closely
         _style['COLUMN_LIMIT'] = 79 - indent
         for formatted_line in FormatCode(line)[0].split('\n'):
-            yield prefix + formatted_line.rstrip()
+            if formatted_line:
+                yield prefix + formatted_line.rstrip()
 
 
 def record_to_field_dict_code(record_type, *, skip_fields=None):
