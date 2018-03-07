@@ -17,7 +17,15 @@ class Detector(ophyd.SimDetector):
 
 
 # dev_dict = ophyd_device_to_caproto_ioc(ophyd.ImagePlugin)
-dev_dict = ophyd_device_to_caproto_ioc(Detector)
+my_detector = Detector('13SIM1:', name='detector')
+try:
+    my_detector.wait_for_connection(1.0)
+except TimeoutError:
+    print('Connection timed out')
+else:
+    print('Connected to detector')
+
+dev_dict = ophyd_device_to_caproto_ioc(my_detector)
 for dev, lines in dev_dict.items():
     print(f'# -- {dev} --')
     for line in lines:

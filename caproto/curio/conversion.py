@@ -1,4 +1,5 @@
 import inspect
+import numpy as np
 import ophyd
 
 from .high_level_server import pvfunction, PVGroup
@@ -60,12 +61,19 @@ def ophyd_component_to_caproto(attr, component, *, depth=0, dev=None):
         kwargs['name'] = repr(component.suffix)
 
     if sig and sig.connected:
-        value = component.get()
-        try:
-            value = value[0]
-        except TypeError:
-            ...
-        kwargs['dtype'] = str(type(value))
+        value = sig.get()
+
+        if isinstance(value, np.ndarray):
+            # hack, as value can be a zero-length array
+            # FUTURE_TODO: support numpy types directly in pvproperty type map
+            value = np.zeros(1, dtype=value.dtype).tolist()[0]
+        else:
+            try:
+                value = value[0]
+            except (IndexError, TypeError):
+                ...
+
+        kwargs['dtype'] = type(value).__name__
     else:
         cpt_kwargs = getattr(component, 'kwargs', {})
         is_string = cpt_kwargs.get('string', False)
@@ -77,14 +85,15 @@ def ophyd_component_to_caproto(attr, component, *, depth=0, dev=None):
     # if component.__doc__:
     #     kwargs['doc'] = repr(component.__doc__)
 
+    if issubclass(component.cls, ophyd.EpicsSignalRO):
+        kwargs['read_only'] = True
+
     kw_str = ', '.join(f'{key}={value}'
                        for key, value in kwargs.items())
 
     if issubclass(component.cls, ophyd.EpicsSignalWithRBV):
         line = f"{indent}{attr} = pvproperty_with_rbv({kw_str})"
-    elif issubclass(component.cls, ophyd.EpicsSignalRO):
-        line = f"{indent}{attr} = pvproperty({kw_str})"
-    elif issubclass(component.cls, ophyd.EpicsSignal):
+    elif issubclass(component.cls, (ophyd.EpicsSignalRO, ophyd.EpicsSignal)):
         line = f"{indent}{attr} = pvproperty({kw_str})"
     else:
         line = f"{indent}# {attr} = pvproperty({kw_str})"
