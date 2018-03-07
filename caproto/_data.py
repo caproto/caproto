@@ -674,3 +674,8 @@ class ChannelString(ChannelData):
         super().__init__(alarm=alarm, value=value, timestamp=timestamp,
                          string_encoding=string_encoding,
                          reported_record_type=reported_record_type)
+
+    async def write(self, value, **metadata):
+        if isinstance(value, (str, bytes)):
+            value = [value]
+        return await super().write(value, **metadata)
