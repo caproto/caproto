@@ -204,10 +204,36 @@ class PVSpec(namedtuple('PVSpec',
 
 
 class pvproperty:
-    'A property-like descriptor for specifying a PV in a group'
+    '''A property-like descriptor for specifying a PV in a group
+
+    Parameters
+    ----------
+    get : async callable, optional
+        Called when PV is read through channel access
+    put : async callable, optional
+        Called when PV is written to through channel access
+    startup : async callable, optional
+        Called at start of server; a hook for initialization and background
+        processing
+    name : str, optional
+        The PV name (defaults to the attribute name of the pvproperty)
+    dtype : ChannelType or builtin type, optional
+        The data type
+    value : any, optional
+        The initial value
+    alarm_group : str, optional
+        The alarm group the PV should be attached to
+    read_only : bool, optional
+        Read-only PV over channel access
+    doc : str, optional
+        Docstring associated with the property
+    **cls_kwargs :
+        Keyword arguments for the ChannelData-based class
+    '''
 
     def __init__(self, get=None, put=None, startup=None, *, name=None,
                  dtype=None, value=None, alarm_group=None, doc=None,
+                 read_only=None,
                  **cls_kwargs):
         self.attr_name = None  # to be set later
 
@@ -216,7 +242,7 @@ class pvproperty:
 
         self.pvspec = PVSpec(get=get, put=put, startup=startup, name=name,
                              dtype=dtype, value=value, alarm_group=alarm_group,
-                             doc=doc, cls_kwargs=cls_kwargs)
+                             read_only=read_only, doc=doc, cls_kwargs=cls_kwargs)
         self.__doc__ = doc
 
     def __get__(self, instance, owner):
@@ -695,7 +721,7 @@ class PVGroupMeta(type):
                     # TODO this should be generated elsewhere
                     prop_cls._valid_init_kw = {
                         key
-                        for cls in inspect.getmro(PvpropertyChar)
+                        for cls in inspect.getmro(prop_cls)
                         for key in inspect.signature(cls).parameters.keys()
                     }
 
