@@ -26,7 +26,9 @@ def ophyd_component_to_caproto(attr, component, *, depth=0, dev=None):
     sig = getattr(dev, attr) if dev is not None else None
 
     if isinstance(component, ophyd.DynamicDeviceComponent):
-        cpt_dict = ophyd_device_to_caproto_ioc(component, depth=depth)
+        to_describe = sig if sig is not None else component
+
+        cpt_dict = ophyd_device_to_caproto_ioc(to_describe, depth=depth)
         cpt_name, = cpt_dict.keys()
         cpt_dict[''] = [
             '',
@@ -47,7 +49,7 @@ def ophyd_component_to_caproto(attr, component, *, depth=0, dev=None):
         cpt_name, = cpt_dict.keys()
         cpt_dict[''] = [
             '',
-            f"{indent}{attr} = caproto.SubGroup({cpt_name}, prefix='')",
+            f"{indent}{attr} = SubGroup({cpt_name}, prefix='')",
             ''
         ]
         return cpt_dict
@@ -92,25 +94,26 @@ def ophyd_component_to_caproto(attr, component, *, depth=0, dev=None):
                        for key, value in kwargs.items())
 
     if issubclass(component.cls, ophyd.EpicsSignalWithRBV):
-        line = f"{indent}{attr} = pvproperty_with_rbv({kw_str})"
+        line = f"{attr} = pvproperty_with_rbv({kw_str})"
     elif issubclass(component.cls, (ophyd.EpicsSignalRO, ophyd.EpicsSignal)):
-        line = f"{indent}{attr} = pvproperty({kw_str})"
+        line = f"{attr} = pvproperty({kw_str})"
     else:
-        line = f"{indent}# {attr} = pvproperty({kw_str})"
+        line = f"# {attr} = pvproperty({kw_str})"
 
     # single line, no new subclass defined
-    return {'': [line]}
+    return {'': list(_format(line, indent=4 * depth))}
 
 
 def ophyd_device_to_caproto_ioc(dev, *, depth=0):
     if isinstance(dev, ophyd.DynamicDeviceComponent):
         # DynamicDeviceComponent: attr: (sig_cls, prefix, kwargs)
+        # NOTE: cannot inspect types without an instance of the dynamic Device
+        # class
         attr_components = {
             attr: ophyd.Component(sig_cls, prefix, **kwargs)
             for attr, (sig_cls, prefix, kwargs) in dev.defn.items()
         }
         dev_name = f'{dev.attr}_group'
-        # TODO can't inspect
         cls, dev = dev, None
     else:
         if inspect.isclass(dev):
