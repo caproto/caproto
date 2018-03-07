@@ -777,7 +777,7 @@ class PVGroup(metaclass=PVGroupMeta):
     }
 
     default_values = {
-        str: '-',
+        str: '',
         int: 0,
         float: 0.0,
 
