@@ -49,8 +49,9 @@ def ophyd_component_to_caproto(attr, component, *, depth=0, dev=None):
         cpt_name, = cpt_dict.keys()
         cpt_dict[''] = [
             '',
-            f"{indent}{attr} = SubGroup({cpt_name}, prefix='')",
-            ''
+            (f"{indent}{attr} = SubGroup({cpt_name}, "
+             f"prefix='{component.suffix}')"),
+            '',
         ]
         return cpt_dict
 
@@ -129,7 +130,8 @@ def ophyd_device_to_caproto_ioc(dev, *, depth=0):
     dev_name = underscore_to_camel_case(dev_name)
     indent = '    ' * depth
 
-    dev_lines = [f"{indent}class {dev_name}(PVGroup):"]
+    dev_lines = ['',
+                 f"{indent}class {dev_name}(PVGroup):"]
 
     for attr, component in attr_components.items():
         cpt_lines = ophyd_component_to_caproto(attr, component,

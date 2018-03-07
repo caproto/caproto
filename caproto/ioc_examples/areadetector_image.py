@@ -1,5 +1,5 @@
 import logging
-
+import sys
 import curio
 
 import ophyd
@@ -16,112 +16,292 @@ class Detector(ophyd.SimDetector):
     image1 = ophyd.Component(ophyd.ImagePlugin, 'image1:')
 
 
-# dev_dict = ophyd_device_to_caproto_ioc(ophyd.ImagePlugin)
-my_detector = Detector('13SIM1:', name='detector')
-try:
-    my_detector.wait_for_connection(1.0)
-except TimeoutError:
-    print('Connection timed out')
-else:
-    print('Connected to detector')
-
-dev_dict = ophyd_device_to_caproto_ioc(my_detector)
-for dev, lines in dev_dict.items():
-    print(f'# -- {dev} --')
-    for line in lines:
-        print(line)
-
-# -- ImagepluginGroup --
 pvproperty_with_rbv = get_pv_pair_wrapper(setpoint_suffix='',
                                           readback_suffix='_RBV')
 
+# -- DetectorGroup --
 
-class ImagepluginGroup(PVGroup):
-    configuration_names = pvproperty(name=None, dtype=int)
-    array_counter = pvproperty_with_rbv(name='ArrayCounter', dtype=int)
-    array_rate = pvproperty(name='ArrayRate_RBV', dtype=int)
-    asyn_io = pvproperty(name='AsynIO', dtype=int)
-    nd_attributes_file = pvproperty(name='NDAttributesFile', dtype=str)
-    pool_alloc_buffers = pvproperty(name='PoolAllocBuffers', dtype=int)
-    pool_free_buffers = pvproperty(name='PoolFreeBuffers', dtype=int)
-    pool_max_buffers = pvproperty(name='PoolMaxBuffers', dtype=int)
-    pool_max_mem = pvproperty(name='PoolMaxMem', dtype=int)
-    pool_used_buffers = pvproperty(name='PoolUsedBuffers', dtype=int)
-    pool_used_mem = pvproperty(name='PoolUsedMem', dtype=int)
-    port_name = pvproperty(name='PortName_RBV', dtype=str)
-    asyn_pipeline_config = pvproperty(name=None, dtype=int)
-    # width = pvproperty(name='ArraySize0_RBV', dtype=int)
-    # height = pvproperty(name='ArraySize1_RBV', dtype=int)
-    # depth = pvproperty(name='ArraySize2_RBV', dtype=int)
 
-    class ArraySizeGroup(PVGroup):
-        height = pvproperty(name='ArraySize1_RBV', dtype=int)
-        width = pvproperty(name='ArraySize0_RBV', dtype=int)
-        depth = pvproperty(name='ArraySize2_RBV', dtype=int)
+class DetectorGroup(PVGroup):
+    # configuration_names = pvproperty(name=None, dtype=str)
 
-    array_size = SubGroup(ArraySizeGroup, prefix='')
-    bayer_pattern = pvproperty(name='BayerPattern_RBV', dtype=int)
-    blocking_callbacks = pvproperty_with_rbv(name='BlockingCallbacks',
-                                             dtype=str)
-    color_mode = pvproperty(name='ColorMode_RBV', dtype=int)
-    data_type = pvproperty(name='DataType_RBV', dtype=str)
-    # dim0_sa = pvproperty(name='Dim0SA', dtype=int)
-    # dim1_sa = pvproperty(name='Dim1SA', dtype=int)
-    # dim2_sa = pvproperty(name='Dim2SA', dtype=int)
+    class SimDetectorCamGroup(PVGroup):
+        # configuration_names = pvproperty(name=None, dtype=str)
+        array_counter = pvproperty_with_rbv(name='ArrayCounter', dtype=int)
+        array_rate = pvproperty(
+            name='ArrayRate_RBV', dtype=float, read_only=True)
+        asyn_io = pvproperty(name='AsynIO', dtype=int)
+        nd_attributes_file = pvproperty(name='NDAttributesFile', dtype=str)
+        pool_alloc_buffers = pvproperty(
+            name='PoolAllocBuffers', dtype=int, read_only=True)
+        pool_free_buffers = pvproperty(
+            name='PoolFreeBuffers', dtype=int, read_only=True)
+        pool_max_buffers = pvproperty(
+            name='PoolMaxBuffers', dtype=int, read_only=True)
+        pool_max_mem = pvproperty(
+            name='PoolMaxMem', dtype=float, read_only=True)
+        pool_used_buffers = pvproperty(
+            name='PoolUsedBuffers', dtype=float, read_only=True)
+        pool_used_mem = pvproperty(
+            name='PoolUsedMem', dtype=float, read_only=True)
+        port_name = pvproperty(name='PortName_RBV', dtype=str, read_only=True)
+        acquire = pvproperty_with_rbv(name='Acquire', dtype=int)
+        acquire_period = pvproperty_with_rbv(name='AcquirePeriod', dtype=float)
+        acquire_time = pvproperty_with_rbv(name='AcquireTime', dtype=float)
+        array_callbacks = pvproperty_with_rbv(name='ArrayCallbacks', dtype=int)
 
-    class DimSaGroup(PVGroup):
-        dim0 = pvproperty(name='Dim0SA', dtype=int)
-        dim1 = pvproperty(name='Dim1SA', dtype=int)
-        dim2 = pvproperty(name='Dim2SA', dtype=int)
+        class SimDetectorCamArraySizeGroup(PVGroup):
+            array_size_x = pvproperty(
+                name='ArraySizeX_RBV', dtype=int, read_only=True)
+            array_size_y = pvproperty(
+                name='ArraySizeY_RBV', dtype=int, read_only=True)
+            array_size_z = pvproperty(
+                name='ArraySizeZ_RBV', dtype=int, read_only=True)
 
-    dim_sa = SubGroup(DimSaGroup, prefix='')
-    dimensions = pvproperty(name='Dimensions_RBV', dtype=int)
-    dropped_arrays = pvproperty_with_rbv(name='DroppedArrays', dtype=int)
-    enable = pvproperty_with_rbv(name='EnableCallbacks', dtype=str)
-    min_callback_time = pvproperty_with_rbv(name='MinCallbackTime', dtype=int)
-    nd_array_address = pvproperty_with_rbv(name='NDArrayAddress', dtype=int)
-    nd_array_port = pvproperty_with_rbv(name='NDArrayPort', dtype=int)
-    ndimensions = pvproperty(name='NDimensions_RBV', dtype=int)
-    plugin_type = pvproperty(name='PluginType_RBV', dtype=int)
-    queue_free = pvproperty(name='QueueFree', dtype=int)
-    queue_free_low = pvproperty(name='QueueFreeLow', dtype=int)
-    queue_size = pvproperty(name='QueueSize', dtype=int)
-    queue_use = pvproperty(name='QueueUse', dtype=int)
-    queue_use_high = pvproperty(name='QueueUseHIGH', dtype=int)
-    queue_use_hihi = pvproperty(name='QueueUseHIHI', dtype=int)
-    time_stamp = pvproperty(name='TimeStamp_RBV', dtype=int)
-    unique_id = pvproperty(name='UniqueId_RBV', dtype=int)
-    array_data = pvproperty(name='ArrayData', dtype=int)
+        array_size = SubGroup(SimDetectorCamArraySizeGroup, prefix='')
+
+        array_size_bytes = pvproperty(
+            name='ArraySize_RBV', dtype=int, read_only=True)
+        bin_x = pvproperty_with_rbv(name='BinX', dtype=int)
+        bin_y = pvproperty_with_rbv(name='BinY', dtype=int)
+        color_mode = pvproperty_with_rbv(name='ColorMode', dtype=int)
+        data_type = pvproperty_with_rbv(name='DataType', dtype=int)
+        detector_state = pvproperty(
+            name='DetectorState_RBV', dtype=int, read_only=True)
+        frame_type = pvproperty_with_rbv(name='FrameType', dtype=int)
+        gain = pvproperty_with_rbv(name='Gain', dtype=float)
+        image_mode = pvproperty_with_rbv(name='ImageMode', dtype=int)
+        manufacturer = pvproperty(
+            name='Manufacturer_RBV', dtype=str, read_only=True)
+
+        class SimDetectorCamMaxSizeGroup(PVGroup):
+            max_size_x = pvproperty(
+                name='MaxSizeX_RBV', dtype=int, read_only=True)
+            max_size_y = pvproperty(
+                name='MaxSizeY_RBV', dtype=int, read_only=True)
+
+        max_size = SubGroup(SimDetectorCamMaxSizeGroup, prefix='')
+
+        min_x = pvproperty_with_rbv(name='MinX', dtype=int)
+        min_y = pvproperty_with_rbv(name='MinY', dtype=int)
+        model = pvproperty(name='Model_RBV', dtype=str, read_only=True)
+        num_exposures = pvproperty_with_rbv(name='NumExposures', dtype=int)
+        num_exposures_counter = pvproperty(
+            name='NumExposuresCounter_RBV', dtype=int, read_only=True)
+        num_images = pvproperty_with_rbv(name='NumImages', dtype=int)
+        num_images_counter = pvproperty(
+            name='NumImagesCounter_RBV', dtype=int, read_only=True)
+        read_status = pvproperty(name='ReadStatus', dtype=int)
+
+        class SimDetectorCamReverseGroup(PVGroup):
+            reverse_x = pvproperty_with_rbv(name='ReverseX', dtype=int)
+            reverse_y = pvproperty_with_rbv(name='ReverseY', dtype=int)
+
+        reverse = SubGroup(SimDetectorCamReverseGroup, prefix='')
+
+        shutter_close_delay = pvproperty_with_rbv(
+            name='ShutterCloseDelay', dtype=float)
+        shutter_close_epics = pvproperty(name='ShutterCloseEPICS', dtype=float)
+        shutter_control = pvproperty_with_rbv(name='ShutterControl', dtype=int)
+        shutter_control_epics = pvproperty(
+            name='ShutterControlEPICS', dtype=int)
+        shutter_fanout = pvproperty(name='ShutterFanout', dtype=int)
+        shutter_mode = pvproperty_with_rbv(name='ShutterMode', dtype=int)
+        shutter_open_delay = pvproperty_with_rbv(
+            name='ShutterOpenDelay', dtype=float)
+        shutter_open_epics = pvproperty(name='ShutterOpenEPICS', dtype=float)
+        shutter_status_epics = pvproperty(
+            name='ShutterStatusEPICS_RBV', dtype=int, read_only=True)
+        shutter_status = pvproperty(
+            name='ShutterStatus_RBV', dtype=int, read_only=True)
+
+        class SimDetectorCamSizeGroup(PVGroup):
+            size_x = pvproperty_with_rbv(name='SizeX', dtype=int)
+            size_y = pvproperty_with_rbv(name='SizeY', dtype=int)
+
+        size = SubGroup(SimDetectorCamSizeGroup, prefix='')
+
+        status_message = pvproperty(
+            name='StatusMessage_RBV', dtype=str, read_only=True)
+        string_from_server = pvproperty(
+            name='StringFromServer_RBV', dtype=str, read_only=True)
+        string_to_server = pvproperty(
+            name='StringToServer_RBV', dtype=str, read_only=True)
+        temperature = pvproperty_with_rbv(name='Temperature', dtype=float)
+        temperature_actual = pvproperty(name='TemperatureActual', dtype=float)
+        time_remaining = pvproperty(
+            name='TimeRemaining_RBV', dtype=float, read_only=True)
+        trigger_mode = pvproperty_with_rbv(name='TriggerMode', dtype=int)
+
+        class SimDetectorCamGainRgbGroup(PVGroup):
+            gain_red = pvproperty_with_rbv(name='GainRed', dtype=float)
+            gain_green = pvproperty_with_rbv(name='GainGreen', dtype=float)
+            gain_blue = pvproperty_with_rbv(name='GainBlue', dtype=float)
+
+        gain_rgb = SubGroup(SimDetectorCamGainRgbGroup, prefix='')
+
+
+        class SimDetectorCamGainXyGroup(PVGroup):
+            gain_x = pvproperty_with_rbv(name='GainX', dtype=float)
+            gain_y = pvproperty_with_rbv(name='GainY', dtype=float)
+
+        gain_xy = SubGroup(SimDetectorCamGainXyGroup, prefix='')
+
+        noise = pvproperty_with_rbv(name='Noise', dtype=int)
+
+        class SimDetectorCamPeakNumGroup(PVGroup):
+            peak_num_x = pvproperty_with_rbv(name='PeakNumX', dtype=int)
+            peak_num_y = pvproperty_with_rbv(name='PeakNumY', dtype=int)
+
+        peak_num = SubGroup(SimDetectorCamPeakNumGroup, prefix='')
+
+
+        class SimDetectorCamPeakStartGroup(PVGroup):
+            peak_start_x = pvproperty_with_rbv(name='PeakStartX', dtype=int)
+            peak_start_y = pvproperty_with_rbv(name='PeakStartY', dtype=int)
+
+        peak_start = SubGroup(SimDetectorCamPeakStartGroup, prefix='')
+
+
+        class SimDetectorCamPeakStepGroup(PVGroup):
+            peak_step_x = pvproperty_with_rbv(name='PeakStepX', dtype=int)
+            peak_step_y = pvproperty_with_rbv(name='PeakStepY', dtype=int)
+
+        peak_step = SubGroup(SimDetectorCamPeakStepGroup, prefix='')
+
+        peak_variation = pvproperty_with_rbv(name='PeakVariation', dtype=int)
+
+        class SimDetectorCamPeakWidthGroup(PVGroup):
+            peak_width_x = pvproperty_with_rbv(name='PeakWidthX', dtype=int)
+            peak_width_y = pvproperty_with_rbv(name='PeakWidthY', dtype=int)
+
+        peak_width = SubGroup(SimDetectorCamPeakWidthGroup, prefix='')
+
+        reset = pvproperty_with_rbv(name='Reset', dtype=int)
+        sim_mode = pvproperty_with_rbv(name='SimMode', dtype=int)
+
+    cam = SubGroup(SimDetectorCamGroup, prefix='cam1:')
+
+
+    class ImagePluginGroup(PVGroup):
+        # configuration_names = pvproperty(name=None, dtype=str)
+        array_counter = pvproperty_with_rbv(name='ArrayCounter', dtype=int)
+        array_rate = pvproperty(
+            name='ArrayRate_RBV', dtype=float, read_only=True)
+        asyn_io = pvproperty(name='AsynIO', dtype=int)
+        nd_attributes_file = pvproperty(name='NDAttributesFile', dtype=str)
+        pool_alloc_buffers = pvproperty(
+            name='PoolAllocBuffers', dtype=int, read_only=True)
+        pool_free_buffers = pvproperty(
+            name='PoolFreeBuffers', dtype=int, read_only=True)
+        pool_max_buffers = pvproperty(
+            name='PoolMaxBuffers', dtype=int, read_only=True)
+        pool_max_mem = pvproperty(
+            name='PoolMaxMem', dtype=float, read_only=True)
+        pool_used_buffers = pvproperty(
+            name='PoolUsedBuffers', dtype=float, read_only=True)
+        pool_used_mem = pvproperty(
+            name='PoolUsedMem', dtype=float, read_only=True)
+        port_name = pvproperty(name='PortName_RBV', dtype=str, read_only=True)
+        # asyn_pipeline_config = pvproperty(name=None, dtype=str)
+        # width = pvproperty(name='ArraySize0_RBV', dtype=int, read_only=True)
+        # height = pvproperty(name='ArraySize1_RBV', dtype=int, read_only=True)
+        # depth = pvproperty(name='ArraySize2_RBV', dtype=int, read_only=True)
+
+        class ImagePluginArraySizeGroup(PVGroup):
+            height = pvproperty(
+                name='ArraySize1_RBV', dtype=int, read_only=True)
+            width = pvproperty(
+                name='ArraySize0_RBV', dtype=int, read_only=True)
+            depth = pvproperty(
+                name='ArraySize2_RBV', dtype=int, read_only=True)
+
+        array_size = SubGroup(ImagePluginArraySizeGroup, prefix='')
+
+        bayer_pattern = pvproperty(
+            name='BayerPattern_RBV', dtype=int, read_only=True)
+        blocking_callbacks = pvproperty_with_rbv(
+            name='BlockingCallbacks', dtype=str)
+        color_mode = pvproperty(
+            name='ColorMode_RBV', dtype=int, read_only=True)
+        data_type = pvproperty(name='DataType_RBV', dtype=str, read_only=True)
+        # dim0_sa = pvproperty(name='Dim0SA', dtype=int)
+        # dim1_sa = pvproperty(name='Dim1SA', dtype=int)
+        # dim2_sa = pvproperty(name='Dim2SA', dtype=int)
+
+        class ImagePluginDimSaGroup(PVGroup):
+            dim0 = pvproperty(name='Dim0SA', dtype=int)
+            dim1 = pvproperty(name='Dim1SA', dtype=int)
+            dim2 = pvproperty(name='Dim2SA', dtype=int)
+
+        dim_sa = SubGroup(ImagePluginDimSaGroup, prefix='')
+
+        dimensions = pvproperty(
+            name='Dimensions_RBV', dtype=int, read_only=True)
+        dropped_arrays = pvproperty_with_rbv(name='DroppedArrays', dtype=int)
+        enable = pvproperty_with_rbv(name='EnableCallbacks', dtype=str)
+        min_callback_time = pvproperty_with_rbv(
+            name='MinCallbackTime', dtype=float)
+        nd_array_address = pvproperty_with_rbv(
+            name='NDArrayAddress', dtype=int)
+        nd_array_port = pvproperty_with_rbv(name='NDArrayPort', dtype=str)
+        ndimensions = pvproperty(
+            name='NDimensions_RBV', dtype=int, read_only=True)
+        plugin_type = pvproperty(
+            name='PluginType_RBV', dtype=str, read_only=True)
+        queue_free = pvproperty(name='QueueFree', dtype=int)
+        queue_free_low = pvproperty(name='QueueFreeLow', dtype=float)
+        queue_size = pvproperty(name='QueueSize', dtype=int)
+        queue_use = pvproperty(name='QueueUse', dtype=float)
+        queue_use_high = pvproperty(name='QueueUseHIGH', dtype=float)
+        queue_use_hihi = pvproperty(name='QueueUseHIHI', dtype=float)
+        time_stamp = pvproperty(
+            name='TimeStamp_RBV', dtype=float, read_only=True)
+        unique_id = pvproperty(name='UniqueId_RBV', dtype=int, read_only=True)
+        array_data = pvproperty(name='ArrayData', dtype=int)
+
+    image1 = SubGroup(ImagePluginGroup, prefix='image1:')
 
 
 logger.setLevel(logging.DEBUG)
 logging.basicConfig()
 
 
-class Group(PVGroup):
-    pair = pvproperty_with_rbv(dtype=int, doc='pair1')
-    pair2 = pvproperty_with_rbv(dtype=int, doc='pair2')
 
-    @pair.setpoint.putter
-    async def pair(self, instance, value):
-        # accept the value immediately
-        # TODO: self is actually the subgroup.
-        await self.readback.write(value)
-        # TODO: update RBV at accept time, or at finished process time?
+if __name__ == '__main__':
+    # dev_dict = ophyd_device_to_caproto_ioc(ophyd.ImagePlugin)
+    # Use the simDetector IOC to automatically create code for our detector,
+    # with the help of ophyd and `ophyd_device_to_caproto_ioc`:
+    my_detector = Detector('13SIM1:', name='detector')
+    try:
+        my_detector.wait_for_connection(1.0)
+    except TimeoutError:
+        print('Connection timed out')
+    else:
+        print('Connected to detector')
 
-    @pair.readback.getter
-    async def pair(self, instance):
-        # unnecessary implementation, just for example
-        return self.readback.value
+    dev_dict = ophyd_device_to_caproto_ioc(my_detector)
+    print('# -- autogenerated code --')
+    for dev, lines in dev_dict.items():
+        print(f'# -- {dev} --')
 
+        for line in lines:
+            print(line)
 
-print('outside of scope')
+        print(f'# -- end {dev} --')
+    print('# -- end autogenerated code --')
 
-ioc = Group('prefix:')
-print('full pvdb')
-from pprint import pprint
-pprint(ioc.pvdb)
-b = ImagepluginGroup('prefix:')
-# pprint(b.pvdb)
-# import sys; sys.exit(0)
-curio.run(start_server, ioc.pvdb)
+    from pprint import pprint
+    detector_ioc = DetectorGroup('prefix:')
+
+    print('The whole Detector pvdb:')
+    pprint(detector_ioc.pvdb)
+
+    async def basic_setup():
+        # Let's do some initialization here, so we can claim the generated code
+        # is untouched.
+        await detector_ioc.image1.plugin_type.write('NDPluginStdArrays')
+        # detector_ioc.image1.plugin_type = 'NDPluginStdArrays'
+    # import sys; sys.exit(0)
+    curio.run(basic_setup)
+    curio.run(start_server, detector_ioc.pvdb)
