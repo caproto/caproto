@@ -314,7 +314,14 @@ class NestedPvproperty(pvproperty):
 
 
 class SubGroup:
-    'A property-like descriptor for specifying a subgroup in a PVGroup'
+    '''A property-like descriptor for specifying a subgroup in a PVGroup
+
+    Several methods of generating a SubGroup are possible. For the `group`
+    parameter, one can
+    1. Pass in a group_dict of {attr: pvspec_or_dict}
+    2. Pass in an existing PVGroup class
+    3. Use @SubGroup as a decorator on a subsequently-defined PVGroup class
+    '''
 
     # support copy.copy by keeping this here
     _class_dict = None
@@ -322,7 +329,9 @@ class SubGroup:
     def __init__(self, group=None, *, prefix=None, macros=None,
                  attr_separator=None, doc=None, base=None):
         self.attr_name = None  # to be set later
-        self._class_dict = None
+
+        # group_dict is passed in -> generate class_dict -> generate group_cls
+        self._group_dict = None
         self._decorated_items = None
         self.group_cls = None
         self.prefix = prefix
@@ -331,9 +340,12 @@ class SubGroup:
             self.attr_separator = attr_separator
         self.base = (PVGroup, ) if base is None else base
         self.__doc__ = doc
+        # Set last with setter
+        self.group = group
 
     @property
     def group(self):
+        'Property handling either group dict or group class'
         return (self.group_dict, self.group_cls)
 
     @group.setter
@@ -343,8 +355,11 @@ class SubGroup:
             self.group_dict = group
         elif group is not None:
             assert inspect.isclass(group), 'Group should be dict or SubGroup'
-            assert issubclass(group, SubGroup)
+            assert issubclass(group, PVGroup)
             self.group_cls = group
+        else:
+            self.group_dict = None
+            self.group_cls = None
 
     def __get__(self, instance, owner):
         if instance is None:
@@ -359,6 +374,7 @@ class SubGroup:
 
     @staticmethod
     def _pvspec_from_info(attr, info):
+        'Create a PVSpec from an info {dict, PVSpec, pvproperty}'
         if isinstance(info, dict):
             if 'attr' not in info:
                 info['attr'] = attr
@@ -371,6 +387,7 @@ class SubGroup:
             raise TypeError(f'Unknown type for pvspec: {info!r}')
 
     def _generate_class_dict(self):
+        'Create the class dictionary from all PVSpecs'
         pvspecs = [self._pvspec_from_info(attr, pvspec)
                    for attr, pvspec in self._group_dict.items()]
 
@@ -380,6 +397,7 @@ class SubGroup:
 
     @property
     def group_dict(self):
+        'The group attribute dictionary'
         return self._group_dict
 
     @group_dict.setter
@@ -387,6 +405,7 @@ class SubGroup:
         if group_dict is None:
             return
 
+        # Upon setting the group dictionary, generate the class
         self._group_dict = group_dict
         self._class_dict = self._generate_class_dict()
 
@@ -443,7 +462,7 @@ class SubGroup:
 
 def get_pv_pair_wrapper(setpoint_suffix='', readback_suffix='_RBV'):
     'Generates a Subgroup class for a pair of PVs (setpoint and readback)'
-    def wrapped(dtype=int, doc=None, **kwargs):
+    def wrapped(*, name=None, dtype=int, doc=None, **kwargs):
         return SubGroup(
             {'setpoint': dict(dtype=dtype, name=setpoint_suffix, doc=doc,
                               **kwargs),
@@ -452,6 +471,7 @@ def get_pv_pair_wrapper(setpoint_suffix='', readback_suffix='_RBV'):
              },
             attr_separator='',
             doc=doc,
+            prefix=name,
         )
     return wrapped
 
@@ -531,7 +551,6 @@ class pvfunction(SubGroup):
             # some developers a heart attack
             default = list(default)
 
-        print(param.name)
         return PVSpec(
             get=None, put=None, attr=param.name,
             # the name defaults to the parameter name, but can be remapped with
