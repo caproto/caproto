@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import logging
 
 from caproto.benchmarking import set_logging_level

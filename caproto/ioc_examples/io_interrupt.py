@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import termios
 import fcntl
 import sys
