@@ -103,7 +103,11 @@ class CurioVirtualCircuit:
         """
         Receive bytes over TCP and cache them in this circuit's buffer.
         """
-        bytes_received = await self.client.recv(4096)
+        try:
+            bytes_received = await self.client.recv(4096)
+        except ConnectionResetError:
+            bytes_received = []
+
         commands, _ = self.circuit.recv(bytes_received)
         for c in commands:
             await self.command_queue.put(c)
@@ -466,8 +470,8 @@ class Context:
         'Notify all ChannelData instances of the server startup'
         return [instance.server_startup
                 for name, instance in self.pvdb.items()
-                if hasattr(instance, 'server_startup')
-                and instance.server_startup is not None]
+                if hasattr(instance, 'server_startup') and
+                instance.server_startup is not None]
 
     async def run(self):
         try:
