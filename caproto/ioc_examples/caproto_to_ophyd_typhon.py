@@ -117,8 +117,8 @@ if __name__ == '__main__':
         logger.info('Starting up: prefix=%r', prefix)
 
         curio.run(start_server, ioc.pvdb)
-    else:
-        # Step 3b: And the ophyd client in the child process :)
+
+    else:  # Step 3b: And the ophyd client in the child process :)
         dev = GroupDevice(prefix=prefix, name='dev')
         print(dev, dev.read_attrs)
         dev.wait_for_connection()
@@ -129,10 +129,14 @@ if __name__ == '__main__':
         time.sleep(4)
 
         # Step 4 make a GUI in a line or two
-        import pydm
-        from typhon import DeviceDisplay
-        app = pydm.PyDMApplication()
-        typhon_display = DeviceDisplay(dev)
-        typhon_display.method_panel.add_method(dev.get_random.call)
-        typhon_display.show()
-        app.exec_()
+        try:
+            import pydm
+            from typhon import DeviceDisplay
+        except ImportError as ex:
+            print(f'pydm/typhon unavailable: {ex}')
+        else:
+            app = pydm.PyDMApplication()
+            typhon_display = DeviceDisplay(dev)
+            typhon_display.method_panel.add_method(dev.get_random.call)
+            typhon_display.show()
+            app.exec_()
