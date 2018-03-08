@@ -318,6 +318,7 @@ def test_curio_server_and_thread_client(curio_server):
 def test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs):
     from .conftest import run_example_ioc
     from caproto._cli import get, put
+    from caproto.curio import high_level_server
     import uuid
     import subprocess
 
@@ -348,6 +349,7 @@ def test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs):
     print(f'{module_name} IOC now running')
 
     put_values = [
+        (high_level_server.PvpropertyReadOnlyData, None),
         (ca.ChannelNumeric, [1]),
         (ca.ChannelString, ['USD']),
     ]
@@ -355,6 +357,10 @@ def test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs):
     for pv, channeldata in pvdb.items():
         for put_class, put_value in put_values:
             if isinstance(channeldata, put_class):
+                if put_value is None:
+                    print(f'Skipping write to {pv}')
+                    break
+
                 print(f'Writing {put_value} to {pv}')
                 put(pv, put_value, verbose=True)
                 break
