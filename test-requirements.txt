@@ -8,3 +8,4 @@ numpy
 pytest_benchmark
 asv
 asks
+ophyd
