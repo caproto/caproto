@@ -644,6 +644,10 @@ class ChannelNumeric(ChannelData):
     upper_ctrl_limit = _read_only_property('upper_ctrl_limit')
     lower_ctrl_limit = _read_only_property('lower_ctrl_limit')
 
+    async def write(self, value, **metadata):
+        # TODO: check against limits here and raise
+        return await super().write(value, **metadata)
+
 
 class ChannelInteger(ChannelNumeric):
     data_type = ChannelType.LONG

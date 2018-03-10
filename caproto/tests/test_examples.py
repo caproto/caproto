@@ -397,3 +397,44 @@ def test_typhon_example(request, prefix):
     caproto_to_typhon.pydm = None
 
     caproto_to_typhon.run_typhon(prefix=prefix)
+
+
+def test_mocking_records(request, prefix):
+    from .conftest import run_example_ioc
+    run_example_ioc('caproto.ioc_examples.mocking_records', request=request,
+                    args=[prefix], pv_to_check=f'{prefix}A')
+
+    from caproto._cli import get, put
+
+    # check that the alarm fields are linked
+    b = f'{prefix}B'
+    b_val = f'{prefix}B.VAL'
+    b_stat = f'{prefix}B.STAT'
+    b_severity = f'{prefix}B.SEVR'
+    put(b_val, 0)
+    assert get(b_val).data == [0]
+    assert get(b_stat).data == [b'NO_ALARM']
+    assert get(b_severity).data == [b'NO_ALARM']
+
+    try:
+        # write a special value that causes it to fail
+        put(b_val, 1)
+    except ca.ErrorResponseReceived:
+        ...
+    else:
+        raise RuntimeError('Should have failed')
+
+    # status should be WRITE, MAJOR
+    assert get(b_val).data == [0]
+    assert get(b_stat).data == [b'WRITE']
+    assert get(b_severity).data == [b'MAJOR']
+
+    # now a field that's linked back to the precision metadata:
+    b_precision = f'{prefix}B.PREC'
+    assert get(b_precision).data == [3]
+    assert put(b_precision, 4)
+    assert get(b_precision).data == [4]
+
+    # does writing to .PREC update the ChannelData metadata?
+    data = get(b, data_type=ca.ChannelType.CTRL_DOUBLE)
+    assert data.metadata.precision == 4
