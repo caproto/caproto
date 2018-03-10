@@ -44,13 +44,15 @@ def _convert_enum_values(values, to_dtype, string_encoding, enum_strings):
         else:
             # BYTES -> NUMERIC
             if enum_strings is not None:
-                return [enum_strings.index(value.decode()) for value in values]
+                return [enum_strings.index(value.decode(string_encoding))
+                        for value in values]
             else:
                 return [0 for value in values]
     else:
         # NUMERIC -> STRING
         if to_dtype == ChannelType.STRING:
-            return [enum_strings[value] for value in values]
+            return [enum_strings[value].encode(string_encoding)
+                    for value in values]
         # NUMERIC -> NUMERIC
         return values
 
@@ -597,9 +599,8 @@ class ChannelEnum(ChannelData):
         super().__init__(**kwargs)
 
         if enum_strings is None:
-            enum_strings = []
-        self._data['enum_strings'] = tuple(s.encode(self.string_encoding)
-                                           for s in enum_strings)
+            enum_strings = tuple()
+        self._data['enum_strings'] = tuple(enum_strings)
 
     enum_strings = _read_only_property('enum_strings')
 
