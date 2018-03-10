@@ -12,7 +12,9 @@ logger = logging.getLogger(__name__)
 
 
 class PvpropertyData:
-    def __init__(self, *, group, pvspec, doc=None, mock_record=None, **kwargs):
+    def __init__(self, *, pvname, group, pvspec, doc=None, mock_record=None,
+                 **kwargs):
+        self.pvname = pvname  # the full, expanded PV name
         self.group = group
         self.pvspec = pvspec
         self.getter = (MethodType(pvspec.get, group)
@@ -242,7 +244,8 @@ class pvproperty:
 
         self.pvspec = PVSpec(get=get, put=put, startup=startup, name=name,
                              dtype=dtype, value=value, alarm_group=alarm_group,
-                             read_only=read_only, doc=doc, cls_kwargs=cls_kwargs)
+                             read_only=read_only, doc=doc,
+                             cls_kwargs=cls_kwargs)
         self.__doc__ = doc
 
     def __get__(self, instance, owner):
@@ -696,6 +699,13 @@ class PVGroupMeta(type):
 
         cls = super().__new__(metacls, name, bases, dct)
 
+        # Propagate any subgroups/PVs from base classes
+        for base in bases:
+            if hasattr(base, '_subgroups_'):
+                dct['_subgroups_'].update(**base._subgroups_)
+            if hasattr(base, '_pvs_'):
+                dct['_pvs_'].update(**base._pvs_)
+
         for attr, prop in metacls.find_subgroups(dct):
             logger.debug('class %s subgroup attr %s: %r', name, attr, prop)
             subgroups[attr] = prop
@@ -750,7 +760,8 @@ def channeldata_from_pvspec(group, pvspec):
     cls = data_class_from_pvspec(group, pvspec)
     kw = pvspec.cls_kwargs if pvspec.cls_kwargs is not None else {}
     inst = cls(group=group, pvspec=pvspec, value=value,
-               alarm=group.alarms[pvspec.alarm_group], **kw)
+               alarm=group.alarms[pvspec.alarm_group], pvname=full_pvname,
+               **kw)
     inst.__doc__ = pvspec.doc
     return (full_pvname, inst)
 
