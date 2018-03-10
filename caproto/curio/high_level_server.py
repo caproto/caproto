@@ -493,7 +493,7 @@ def get_pv_pair_wrapper(setpoint_suffix='', readback_suffix='_RBV'):
             {'setpoint': dict(dtype=dtype, name=setpoint_suffix, doc=doc,
                               **kwargs),
              'readback': dict(dtype=dtype, name=readback_suffix, doc=doc,
-                              **kwargs),
+                              read_only=True, **kwargs),
              },
             attr_separator='',
             doc=doc,
