@@ -18,22 +18,24 @@ class Group(PVGroup):
     # Creates {prefix}pair2 and {prefix}pair2_RBV
     pair2 = pvproperty_with_rbv(dtype=float, doc='This is pair2')
 
+    # TODO: @danielballan to rename the above appropriately
+
     # We can then directly decorate our functions with the putters from the
     # setpoint:
     @pair.setpoint.putter
-    async def pair(self, instance, value):
+    async def pair(obj, instance, value):
         # accept the value immediately
-        # TODO: self is actually the subgroup.
-        await self.readback.write(value)
-        # TODO: update RBV at accept time, or at finished process time?
+        await obj.readback.write(value)
+        # NOTE: you can access the Group instance through obj.parent
+        print(obj.parent)
 
     # And the readback getter:
     @pair.readback.getter
-    async def pair(self, instance):
+    async def pair(obj, instance):
         # NOTE: this is effectively a no-operation method
         # that is, with or without this method definition, self.readback.value
         # will be returned automatically
-        return self.readback.value
+        return obj.readback.value
 
 
 if __name__ == '__main__':
