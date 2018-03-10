@@ -263,15 +263,17 @@ def record_to_field_info(record_type):
             kwargs['max_length'] = size
 
         if type_ == 'DBF_MENU':
-            enum_class = menus[field_info.menu]
             # note: ordered key assumption here (py3.6+)
-            kwargs['enum_strings'] = tuple(bytes(b, 'latin-1') for b in
-                                           enum_class._strings.values())
+            kwargs['enum_strings'] = (f'menus.{field_info.menu}'
+                                      '.get_string_tuple()')
+            assert field_info.menu in menus, f'Unknown menu: {field_info.menu}'
 
         if prompt:
             kwargs['doc'] = repr(prompt)
 
-        # if special==SPC_NOMOD, then it's read-only
+        if field_info.special == 'SPC_NOMOD':
+            kwargs['read_only'] = True
+
         type_class = type_info[type_]
 
         yield name, type_class, kwargs, field_info
