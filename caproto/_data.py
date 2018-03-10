@@ -412,8 +412,15 @@ class ChannelData:
                                enum_strings=getattr(self, 'enum_strings',
                                                     None))
 
-        modified_value = await self.verify_value(value)
-        # TODO: on exception raised, set alarm
+        try:
+            modified_value = await self.verify_value(value)
+        except Exception as ex:
+            # TODO: should allow exception to optionally pass alarm
+            # status/severity through exception instance
+            await self.alarm.write(status=AlarmStatus.WRITE,
+                                   severity=AlarmSeverity.MAJOR_ALARM,
+                                   )
+            raise
 
         self._data['value'] = (modified_value
                                if modified_value is not None
