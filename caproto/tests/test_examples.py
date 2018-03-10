@@ -1,4 +1,3 @@
-import sys
 import time
 
 import pytest
@@ -312,21 +311,19 @@ def test_curio_server_and_thread_client(curio_server):
      ('caproto.ioc_examples.rpc_function', 'MyPVGroup', {}),
      ('caproto.ioc_examples.simple', 'SimpleIOC', {}),
      ('caproto.ioc_examples.subgroups', 'MyPVGroup', {}),
-     # ('caproto.ioc_examples.caproto_to_ophyd_typhon', 'Group', {}),
+     ('caproto.ioc_examples.caproto_to_ophyd', 'Group', {}),
      ('caproto.ioc_examples.areadetector_image', 'DetectorGroup', {}),
      ]
 )
-def test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs):
+def test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
+                      prefix):
     from .conftest import run_example_ioc
     from caproto._cli import get, put
     from caproto.curio import high_level_server
-    import uuid
     import subprocess
 
     module = __import__(module_name,
                         fromlist=(module_name.rsplit('.', 1)[-1], ))
-
-    prefix = str(uuid.uuid4())[:8] + ':'
 
     pvdb_class = getattr(module, pvdb_class_name)
 
@@ -355,19 +352,30 @@ def test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs):
         (ca.ChannelString, ['USD']),
     ]
 
-    for pv, channeldata in pvdb.items():
+    skip_pvs = [('ophyd', ':exit')]
+
+    def find_put_value(pv):
+        'Determine value to write to pv'
+        for skip_ioc, skip_suffix in skip_pvs:
+            if skip_ioc in module_name:
+                if pv.endswith(skip_suffix):
+                    return None
+
         for put_class, put_value in put_values:
             if isinstance(channeldata, put_class):
-                if put_value is None:
-                    print(f'Skipping write to {pv}')
-                    break
-
-                print(f'Writing {put_value} to {pv}')
-                put(pv, put_value, verbose=True)
-                break
+                return put_value
         else:
             raise Exception('Failed to set default value for channeldata:'
                             f'{channeldata.__class__}')
+
+    for pv, channeldata in pvdb.items():
+        value = find_put_value(pv)
+        if value is None:
+            print(f'Skipping write to {pv}')
+            continue
+
+        print(f'Writing {value} to {pv}')
+        put(pv, value, verbose=True)
 
         value = get(pv, verbose=True)
         print(f'Read {pv} = {value}')
@@ -378,3 +386,14 @@ def test_areadetector_generate():
 
     # smoke-test the generation code
     areadetector_image.generate_detector_code()
+
+
+def test_typhon_example(request, prefix):
+    from .conftest import run_example_ioc
+    run_example_ioc('caproto.ioc_examples.caproto_to_ophyd', request=request,
+                    args=[prefix], pv_to_check=f'{prefix}random1')
+
+    from caproto.ioc_examples import caproto_to_typhon
+    caproto_to_typhon.pydm = None
+
+    caproto_to_typhon.run_typhon(prefix=prefix)
