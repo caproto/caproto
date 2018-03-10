@@ -68,3 +68,75 @@ def test_incremental_send(buffers, offset, expected):
             assert i == (len(full_bytes) - 1), 'StopIteration unexpected'
             break
         assert full_bytes[i + 1:] == b''.join(bytes(b) for b in buffers)
+
+
+records_to_check = [
+    ['x.NAME', ('x.NAME', 'x', 'NAME', None)],
+    ['x.', ('x', 'x', None, None)],
+    ['x', ('x', 'x', None, None)],
+
+    ['x.NAME$',
+     ('x.NAME', 'x', 'NAME',
+      ca.RecordModifier(ca.RecordModifiers.long_string, None),
+      )],
+    ['x.VAL{"ts":true}',
+     ('x.VAL', 'x', 'VAL',
+      ca.RecordModifier(ca.RecordModifiers.filtered, '{"ts":true}')
+      )],
+    ['x.{}',
+     ('x', 'x', None,
+      ca.RecordModifier(ca.RecordModifiers.filtered, '{}'),
+      )],
+    ['x.VAL{}',
+     ('x.VAL', 'x', 'VAL',
+      ca.RecordModifier(ca.RecordModifiers.filtered, '{}'),
+      )],
+    ['x.NAME${}',
+     ('x.NAME', 'x', 'NAME',
+      ca.RecordModifier(ca.RecordModifiers.filtered |
+                        ca.RecordModifiers.long_string, '{}'),
+      )],
+]
+
+
+@pytest.mark.parametrize('pvname, expected_tuple', records_to_check)
+def test_parse_record(pvname, expected_tuple):
+    parsed = ca.parse_record_field(pvname)
+    print('parsed:  ', tuple(parsed))
+    print('expected:', expected_tuple)
+    assert tuple(parsed) == expected_tuple
+
+    if parsed.modifiers:
+        modifiers, filter_text = parsed.modifiers
+        if filter_text:
+            # smoke test these
+            ca.evaluate_channel_filter(filter_text)
+
+
+bad_filters = [
+    ["x.{not-json}",
+     ('x', 'x', None,
+      ca.RecordModifier(ca.RecordModifiers.filtered, '{not-json}'),
+      )],
+    ['x.{"none":null}',
+     ('x', 'x', None,
+      ca.RecordModifier(ca.RecordModifiers.filtered, '{"none":null}'),
+      )],
+]
+
+
+@pytest.mark.parametrize('pvname, expected_tuple', bad_filters)
+def test_parse_record_bad_filters(pvname, expected_tuple):
+    parsed = ca.parse_record_field(pvname)
+    print('parsed:  ', tuple(parsed))
+    print('expected:', expected_tuple)
+    assert tuple(parsed) == expected_tuple
+
+    modifiers, filter_text = parsed.modifiers
+    try:
+        filter_ = ca.evaluate_channel_filter(filter_text)
+    except ValueError:
+        # expected failure
+        ...
+    else:
+        raise ValueError(f'Expected failure, instead returned {filter_}')

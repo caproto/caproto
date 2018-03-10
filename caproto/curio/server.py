@@ -323,54 +323,43 @@ class Context:
     def __getitem__(self, pvname):
         try:
             return self.pvdb[pvname]
-        except KeyError:
-            if '.' not in pvname:
+        except KeyError as ex:
+            try:
+                (rec_field, rec, field, mods) = ca.parse_record_field(pvname)
+            except ValueError:
+                raise ex
+
+            if not field and not mods:
+                # No field or modifiers, so there's nothing left to check
                 raise
 
-        record, field = pvname.split('.', 1)
-        if '.' in field:
-            field, filter = field.split('.', 1)
-        elif field.startswith('{'):
-            field, filter = '', field
-        else:
-            filter = None
-
-        # if field == 'VAL':
-        #    field = ''
-
-        inst = None
-        record_field = f'{record}.{field}'
-        if field and filter:
-            # Remove the filter and try 'record.field'
+        # Without the modifiers, try 'record[.field]'
+        try:
+            inst = self.pvdb[rec_field]
+        except KeyError:
+            # Finally, access 'record', see if it has 'field'
             try:
-                inst = self.pvdb[record_field]
-            except KeyError:
-                ...
-
-        if inst is None:
-            # Finally, access 'record', see if it has 'field', and supports the
-            # filter (if specified)
-            try:
-                inst = self.pvdb[record]
+                inst = self.pvdb[rec]
             except KeyError:
                 raise KeyError(f'Neither record nor field exists: '
-                               f'{record}.{field}')
+                               f'{rec_field}')
 
             try:
                 inst = inst.get_field(field)
             except (AttributeError, KeyError):
                 raise KeyError(f'Neither record nor field exists: '
-                               f'{record}.{field}')
+                               f'{rec_field}')
 
             # Cache record.FIELD for later usage
-            self.pvdb[record_field] = inst
+            self.pvdb[rec_field] = inst
 
-        if not filter:
+        # Finally, handle the modifiers
+        if not mods:
             return inst
 
         # filter check
         # TODO: filter API? wrap somehow?
-        return inst.filtered(filter)
+        return inst.filtered(mods)
 
     async def _broadcaster_evaluate(self, addr, commands):
         responses = []
