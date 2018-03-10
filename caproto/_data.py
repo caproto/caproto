@@ -598,7 +598,8 @@ class ChannelEnum(ChannelData):
 
         if enum_strings is None:
             enum_strings = []
-        self._data['enum_strings'] = enum_strings
+        self._data['enum_strings'] = tuple(s.encode(self.string_encoding)
+                                           for s in enum_strings)
 
     enum_strings = _read_only_property('enum_strings')
 
