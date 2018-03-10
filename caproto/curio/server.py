@@ -316,6 +316,10 @@ class Context:
                 commands = self.broadcaster.recv(bytes_received, address)
                 await self.command_bundle_queue.put((address, commands))
 
+    def __iter__(self):
+        # Implemented to support __getitem__ below
+        return iter(self.pvdb)
+
     def __getitem__(self, pvname):
         try:
             return self.pvdb[pvname]
