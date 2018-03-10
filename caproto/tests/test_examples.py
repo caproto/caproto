@@ -313,6 +313,9 @@ def test_curio_server_and_thread_client(curio_server):
      ('caproto.ioc_examples.subgroups', 'MyPVGroup', {}),
      ('caproto.ioc_examples.caproto_to_ophyd', 'Group', {}),
      ('caproto.ioc_examples.areadetector_image', 'DetectorGroup', {}),
+     ('caproto.ioc_examples.setpoint_rbv_pair', 'Group', {}),
+     ('caproto.ioc_examples.all_in_one', 'MyPVGroup',
+      dict(macros={'macro': 'expanded'})),
      ]
 )
 def test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
