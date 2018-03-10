@@ -32,6 +32,8 @@ class PvpropertyData:
         if doc is not None:
             self.__doc__ = doc
 
+        super().__init__(**kwargs)
+
         if mock_record is not None:
             from .records import records
             field_class = records[mock_record]
@@ -40,8 +42,6 @@ class PvpropertyData:
         else:
             self.field_inst = None
             self.fields = {}
-
-        super().__init__(**kwargs)
 
     async def read(self, data_type):
         value = await self.getter(self)
