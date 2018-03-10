@@ -371,3 +371,10 @@ def test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs):
 
         value = get(pv, verbose=True)
         print(f'Read {pv} = {value}')
+
+
+def test_areadetector_generate():
+    from caproto.ioc_examples import areadetector_image
+
+    # smoke-test the generation code
+    areadetector_image.generate_detector_code()

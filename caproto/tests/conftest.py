@@ -69,7 +69,7 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
         try:
             get(pv_to_check, timeout=1.0, verbose=True)
         except TimeoutError:
-            print('Still trying...')
+            print(f'Still trying to connect to {pv_to_check}')
             continue
         else:
             break
