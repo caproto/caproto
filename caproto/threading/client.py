@@ -668,6 +668,19 @@ class PV:
         self._write_notify_callback = None  # func to call on WriteNotifyResponse
         self._pc_callbacks = {}
 
+    def __repr__(self):
+        if self.circuit_manager is None:
+            state = "(searching....)"
+        else:
+            state = (f"address={self.circuit_manager.circuit.address}, "
+                     f"circuit_state="
+                     f"{self.circuit_manager.circuit.states[ca.CLIENT]}")
+            if self.connected:
+                state += f", channel_state={self.channel.states[ca.CLIENT]}"
+            else:
+                state += " (creating...)"
+        return f"<PV name={repr(self.name)} priority={self.priority} {state}>"
+
     @property
     def connected(self):
         if self.circuit_manager is None:
