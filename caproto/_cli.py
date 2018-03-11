@@ -28,7 +28,7 @@ import caproto as ca
 from caproto._dbr import (promote_type, ChannelType, native_type,
                           SubscriptionType)
 from caproto._utils import ErrorResponseReceived, CaprotoError
-from caproto.asyncio.repeater import run as run_repeater
+from caproto.sync.repeater import run as run_repeater
 
 
 __all__ = ['get', 'put', 'monitor']
