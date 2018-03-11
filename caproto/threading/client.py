@@ -650,23 +650,20 @@ class VirtualCircuitManager:
 
 class PV:
     """Wraps a VirtualCircuit and a caproto.ClientChannel."""
-    __slots__ = ('name', 'priority', 'circuit_manager', 'channel',
-                 'last_reading', 'monitoring_tasks',
-                 '_callback', '_read_notify_callback',
+    __slots__ = ('name', 'priority', 'context', 'circuit_manager', 'channel',
+                 'last_reading', '_read_notify_callback',
                  'command_bundle_queue', '_write_notify_callback',
                  '_pc_callbacks', '__weakref__')
-    def __init__(self, name, priority):
+    def __init__(self, name, priority, context):
         """
         These must be instantiated by a Context, never directly.
         """
         self.name = name
         self.priority = priority
+        self.context = context
         self.circuit_manager = None
         self.channel = None
-
         self.last_reading = None
-        self.monitoring_tasks = {}  # maps subscriptionid to curio.Task
-        self._callback = None  # user func to call when subscriptions are run
         self._read_notify_callback = None  # func to call on ReadNotifyResponse
         self._write_notify_callback = None  # func to call on WriteNotifyResponse
         self._pc_callbacks = {}
