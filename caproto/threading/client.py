@@ -476,7 +476,8 @@ class Context:
         Make a new one if necessary.
         """
         vc_manager = self.circuit_managers.get((address, priority), None)
-        if vc_manager is None or not vc_manager.connected:
+        if (vc_manager is None or
+                vc_manager.circuit.states[ca.CLIENT] is ca.DISCONNECTED):
             circuit = ca.VirtualCircuit(
                 our_role=ca.CLIENT,
                 address=address,
@@ -484,22 +485,6 @@ class Context:
             vc_manager = VirtualCircuitManager(circuit, self.selector)
             vc_manager.circuit.log.setLevel(self.log_level)
             self.circuit_managers[(address, priority)] = vc_manager
-
-            with vc_manager.new_command_cond:
-                if vc_manager.circuit.states[ca.SERVER] is ca.IDLE:
-                    vc_manager.create_connection()
-                    vc_manager.send(ca.VersionRequest(priority, 13),
-                                    ca.HostNameRequest('foo'),
-                                    ca.ClientNameRequest('bar'))
-            cond = vc_manager.new_command_cond
-            with cond:
-                timeout = TIMEOUT  # TODO do not hard-code
-                done = cond.wait_for(lambda: vc_manager.connected, timeout)
-                if not done:
-                    raise TimeoutError("Circuit with server at {} did not "
-                                       "connected within {}-second timeout."
-                                       "".format(address, timeout))
-
         return vc_manager
 
     def disconnect(self, *, wait=True, timeout=2):
@@ -536,20 +521,31 @@ class VirtualCircuitManager:
         self.subscriptions = {}  # map subscriptionid to Subscription
         self.new_command_cond = threading.Condition()
         self.socket = None
-
         self.selector = selector
+
+        # Connect.
+        cond = self.new_command_cond
+        with cond:
+            if self.connected:
+                return
+            if self.circuit.states[ca.SERVER] is ca.IDLE:
+                self.socket = socket.create_connection(self.circuit.address)
+                self.selector.add_socket(self.socket, self)
+                self.send(ca.VersionRequest(self.circuit.priority, 13),
+                          ca.HostNameRequest('foo'),
+                          ca.ClientNameRequest('bar'))
+            else:
+                raise RuntimeError("Cannot connect. States are {} "
+                                   "".format(self.circuit.states))
+            if not cond.wait_for(lambda: self.connected, TIMEOUT):
+                raise TimeoutError("Circuit with server at {} did not "
+                                    "connected within {}-second timeout."
+                                    "".format(self.circuit.address, TIMEOUT))
 
     @property
     def connected(self):
         with self.new_command_cond:
             return self.circuit.states[ca.CLIENT] is ca.CONNECTED
-
-    def create_connection(self):
-        # TODO check removed
-        # if self.sock_thread is not None:
-        #     raise RuntimeError('trying to reuse a VC')
-        self.socket = socket.create_connection(self.circuit.address)
-        self.selector.add_socket(self.socket, self)
 
     def send(self, *commands):
         with self.new_command_cond:
