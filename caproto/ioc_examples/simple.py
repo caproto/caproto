@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-from caproto.curio.high_level_server import pvproperty, PVGroupBase
+from caproto.curio.high_level_server import pvproperty, PVGroup
 
 
-class SimpleIOC(PVGroupBase):
+class SimpleIOC(PVGroup):
     "An IOC with two simple read/writable PVs"
     A = pvproperty(value=[1])
     B = pvproperty(value=[2])

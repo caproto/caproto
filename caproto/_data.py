@@ -44,13 +44,15 @@ def _convert_enum_values(values, to_dtype, string_encoding, enum_strings):
         else:
             # BYTES -> NUMERIC
             if enum_strings is not None:
-                return [enum_strings.index(value.decode()) for value in values]
+                return [enum_strings.index(value.decode(string_encoding))
+                        for value in values]
             else:
                 return [0 for value in values]
     else:
         # NUMERIC -> STRING
         if to_dtype == ChannelType.STRING:
-            return [enum_strings[value] for value in values]
+            return [enum_strings[value].encode(string_encoding)
+                    for value in values]
         # NUMERIC -> NUMERIC
         return values
 
@@ -412,8 +414,15 @@ class ChannelData:
                                enum_strings=getattr(self, 'enum_strings',
                                                     None))
 
-        modified_value = await self.verify_value(value)
-        # TODO: on exception raised, set alarm
+        try:
+            modified_value = await self.verify_value(value)
+        except Exception as ex:
+            # TODO: should allow exception to optionally pass alarm
+            # status/severity through exception instance
+            await self.alarm.write(status=AlarmStatus.WRITE,
+                                   severity=AlarmSeverity.MAJOR_ALARM,
+                                   )
+            raise
 
         self._data['value'] = (modified_value
                                if modified_value is not None
@@ -590,8 +599,8 @@ class ChannelEnum(ChannelData):
         super().__init__(**kwargs)
 
         if enum_strings is None:
-            enum_strings = []
-        self._data['enum_strings'] = enum_strings
+            enum_strings = tuple()
+        self._data['enum_strings'] = tuple(enum_strings)
 
     enum_strings = _read_only_property('enum_strings')
 
@@ -636,6 +645,10 @@ class ChannelNumeric(ChannelData):
     upper_ctrl_limit = _read_only_property('upper_ctrl_limit')
     lower_ctrl_limit = _read_only_property('lower_ctrl_limit')
 
+    async def write(self, value, **metadata):
+        # TODO: check against limits here and raise
+        return await super().write(value, **metadata)
+
 
 class ChannelInteger(ChannelNumeric):
     data_type = ChannelType.LONG
@@ -674,3 +687,8 @@ class ChannelString(ChannelData):
         super().__init__(alarm=alarm, value=value, timestamp=timestamp,
                          string_encoding=string_encoding,
                          reported_record_type=reported_record_type)
+
+    async def write(self, value, **metadata):
+        if isinstance(value, (str, bytes)):
+            value = [value]
+        return await super().write(value, **metadata)

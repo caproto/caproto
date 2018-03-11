@@ -1,15 +1,18 @@
 # This module includes all exceptions raised by caproto, sentinel objects used
 # throughout the package (see detailed comment below), various network-related
 # helper functions, and other miscellaneous utilities.
-import logging
 import os
 import socket
 import sys
+import enum
+import json
+from collections import namedtuple
 
 try:
     import netifaces
 except ImportError:
     netifaces = None
+
 
 # This module defines sentinels used in the state machine and elsewhere, such
 # as NEED_DATA, CLIENT, SERVER, AWAITING_SEARCH_RESPONSE, etc.
@@ -29,6 +32,7 @@ except ImportError:
 class _SentinelBase(type):
     def __repr__(self):
         return self.__name__
+
 
 def make_sentinel(name):
     cls = _SentinelBase(name, (_SentinelBase,), {})
@@ -94,6 +98,7 @@ class CaprotoTypeError(TypeError, CaprotoError):
 
 class CaprotoRuntimeError(RuntimeError, CaprotoError):
     ...
+
 
 class ErrorResponseReceived(CaprotoError):
     ...
@@ -315,3 +320,79 @@ def spawn_daemon(func, *args, **kwargs):
 
     # all done
     os._exit(os.EX_OK)
+
+
+RecordAndField = namedtuple('RecordAndField',
+                            ['record_dot_field', 'record',
+                             'field', 'modifiers'])
+
+
+class RecordModifiers(enum.Flag):
+    long_string = enum.auto()
+    filtered = enum.auto()
+    filter_timestamp = enum.auto()
+    filter_deadband = enum.auto()
+    filter_array = enum.auto()
+    filter_synchronize = enum.auto()
+
+
+RecordModifier = namedtuple('RecordModifier',
+                            ['modifiers', 'filter_'])
+
+
+def parse_record_field(pvname):
+    '''Parse a record[.FIELD][{FILTER}]
+
+    Returns
+    -------
+    RecordAndField(record_dot_field, record, field, modifiers)
+    '''
+    if '.' not in pvname:
+        return RecordAndField(pvname, pvname, None, None)
+
+    record, field = pvname.split('.', 1)
+    if field.startswith('{'):
+        field, filter_ = None, field
+        modifiers = RecordModifiers.filtered
+    elif not field:
+        # valid case of "{record}."
+        return RecordAndField(record, record, None, None)
+    else:
+        if '{' in field:
+            field, filter_ = field.split('{', 1)
+            filter_ = '{' + filter_
+            modifiers = RecordModifiers.filtered
+        else:
+            filter_ = None
+            modifiers = None
+
+        if field.endswith('$'):
+            if modifiers is not None:
+                modifiers |= RecordModifiers.long_string
+            else:
+                modifiers = RecordModifiers.long_string
+            field = field.rstrip('$')
+
+    # NOTE: VAL is equated to 'record' at a higher level than this.
+    if field:
+        record_field = f'{record}.{field}'
+    else:
+        record_field = record
+
+    if modifiers:
+        modifiers = RecordModifier(modifiers, filter_=filter_)
+    return RecordAndField(record_field, record, field, modifiers)
+
+
+def evaluate_channel_filter(filter_text):
+    'Evaluate JSON-based channel filter into easy Python type'
+
+    filter_ = json.loads(filter_text)
+
+    valid_filters = {'ts', 'arr', 'sync', 'dbnd'}
+    filter_keys = set(filter_.keys())
+    invalid_keys = filter_keys - valid_filters
+    if invalid_keys:
+        raise ValueError(f'Unsupported filters: {invalid_keys}')
+    # TODO: parse/validate filters into python types?
+    return filter_

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-from caproto.curio.high_level_server import pvproperty, PVGroupBase
+from caproto.curio.high_level_server import pvproperty, PVGroup
 import random
 
 
-class InlineStyleIOC(PVGroupBase):
+class InlineStyleIOC(PVGroup):
     "An IOC with a read-only PV and a read-write PV with inline customization"
     @pvproperty  # default dtype is int
     async def random_int(self, instance):
@@ -38,6 +38,6 @@ if __name__ == '__main__':
     # Instantiate the IOC, assigning a prefix for the PV names.
     ioc = InlineStyleIOC(prefix=prefix)
     print('PVs:', list(ioc.pvdb))
-    
+
     # Run IOC using curio.
     curio.run(start_server(ioc.pvdb))

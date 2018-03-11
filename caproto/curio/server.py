@@ -103,7 +103,11 @@ class CurioVirtualCircuit:
         """
         Receive bytes over TCP and cache them in this circuit's buffer.
         """
-        bytes_received = await self.client.recv(4096)
+        try:
+            bytes_received = await self.client.recv(4096)
+        except ConnectionResetError:
+            bytes_received = []
+
         commands, _ = self.circuit.recv(bytes_received)
         for c in commands:
             await self.command_queue.put(c)
@@ -168,7 +172,7 @@ class CurioVirtualCircuit:
         '''Process a command from a client, and return the server response'''
         def get_db_entry():
             chan = self.circuit.channels_sid[command.sid]
-            db_entry = self.context.pvdb[chan.name.decode(STR_ENC)]
+            db_entry = self.context[chan.name.decode(STR_ENC)]
             return chan, db_entry
 
         if command is ca.DISCONNECTED:
@@ -176,7 +180,7 @@ class CurioVirtualCircuit:
         elif isinstance(command, ca.VersionRequest):
             return [ca.VersionResponse(13)]
         elif isinstance(command, ca.CreateChanRequest):
-            db_entry = self.context.pvdb[command.name.decode(STR_ENC)]
+            db_entry = self.context[command.name.decode(STR_ENC)]
             access = db_entry.check_access(self.client_hostname,
                                            self.client_username)
 
@@ -312,41 +316,90 @@ class Context:
                 commands = self.broadcaster.recv(bytes_received, address)
                 await self.command_bundle_queue.put((address, commands))
 
-    async def broadcaster_queue_loop(self):
-        responses = []
+    def __iter__(self):
+        # Implemented to support __getitem__ below
+        return iter(self.pvdb)
 
+    def __getitem__(self, pvname):
+        try:
+            return self.pvdb[pvname]
+        except KeyError as ex:
+            try:
+                (rec_field, rec, field, mods) = ca.parse_record_field(pvname)
+            except ValueError:
+                raise ex
+
+            if not field and not mods:
+                # No field or modifiers, so there's nothing left to check
+                raise
+
+        # Without the modifiers, try 'record[.field]'
+        try:
+            inst = self.pvdb[rec_field]
+        except KeyError:
+            # Finally, access 'record', see if it has 'field'
+            try:
+                inst = self.pvdb[rec]
+            except KeyError:
+                raise KeyError(f'Neither record nor field exists: '
+                               f'{rec_field}')
+
+            try:
+                inst = inst.get_field(field)
+            except (AttributeError, KeyError):
+                raise KeyError(f'Neither record nor field exists: '
+                               f'{rec_field}')
+
+            # Cache record.FIELD for later usage
+            self.pvdb[rec_field] = inst
+
+        # Finally, handle the modifiers
+        if not mods:
+            return inst
+
+        # filter check
+        # TODO: filter API? wrap somehow?
+        return inst.filtered(mods)
+
+    async def _broadcaster_evaluate(self, addr, commands):
+        responses = []
+        for command in commands:
+            if isinstance(command, ca.VersionRequest):
+                responses.append(ca.VersionResponse(13))
+            if isinstance(command, ca.SearchRequest):
+                pv_name = command.name.decode(STR_ENC)
+                try:
+                    known_pv = self[pv_name] is not None
+                except KeyError:
+                    known_pv = False
+
+                if (not known_pv) and command.reply == ca.NO_REPLY:
+                    responses.clear()
+                    break  # Do not send any repsonse to this datagram.
+
+                # responding with an IP of `None` tells client to get IP
+                # address from packet
+                responses.append(
+                    ca.SearchResponse(self.port, None, command.cid, 13)
+                )
+        if responses:
+            bytes_to_send = self.broadcaster.send(*responses)
+            await self.udp_sock.sendto(bytes_to_send, addr)
+
+    async def broadcaster_queue_loop(self):
         while True:
             try:
                 addr, commands = await self.command_bundle_queue.get()
                 self.broadcaster.process_commands(commands)
+                if addr in self.ignore_addresses:
+                    continue
+                await self._broadcaster_evaluate(addr, commands)
             except curio.TaskCancelled:
                 break
             except Exception as ex:
                 logger.error('Broadcaster command queue evaluation failed',
                              exc_info=ex)
                 continue
-
-            if addr in self.ignore_addresses:
-                continue
-
-            responses.clear()
-            for command in commands:
-                if isinstance(command, ca.VersionRequest):
-                    responses.append(ca.VersionResponse(13))
-                if isinstance(command, ca.SearchRequest):
-                    pv_name = command.name.decode(STR_ENC)
-                    known_pv = pv_name in self.pvdb
-                    if (not known_pv) and command.reply == ca.NO_REPLY:
-                        responses.clear()
-                        break  # Do not send any repsonse to this datagram.
-
-                    # responding with an IP of `None` tells client to get IP
-                    # address from packet
-                    responses.append(ca.SearchResponse(self.port, None,
-                                                       command.cid, 13))
-            if responses:
-                bytes_to_send = self.broadcaster.send(*responses)
-                await self.udp_sock.sendto(bytes_to_send, addr)
 
     async def tcp_handler(self, client, addr):
         '''Handler for each new TCP client to the server'''
@@ -410,8 +463,8 @@ class Context:
         'Notify all ChannelData instances of the server startup'
         return [instance.server_startup
                 for name, instance in self.pvdb.items()
-                if hasattr(instance, 'server_startup')
-                and instance.server_startup is not None]
+                if hasattr(instance, 'server_startup') and
+                instance.server_startup is not None]
 
     async def run(self):
         try:

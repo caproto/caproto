@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import sys
 import re
 import logging
@@ -6,7 +7,7 @@ import urllib.request
 import urllib.parse
 from caproto.benchmarking import set_logging_level
 from caproto.curio.server import start_server
-from caproto.curio.high_level_server import pvproperty, PVGroupBase
+from caproto.curio.high_level_server import pvproperty, PVGroup
 
 
 async def convert_currency(amount, from_currency, to_currency):
@@ -24,7 +25,7 @@ async def convert_currency(amount, from_currency, to_currency):
     return converted
 
 
-class CurrencyPollingIOC(PVGroupBase):
+class CurrencyPollingIOC(PVGroup):
     from_currency = pvproperty(value=['BTC'])
     to_currency = pvproperty(value=['USD'])
     amount = pvproperty(value=[1])

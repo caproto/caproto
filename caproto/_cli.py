@@ -44,6 +44,7 @@ handler = logging.StreamHandler(sys.stdout)
 handler.setFormatter(logging.Formatter('[%(name)s] %(message)s'))
 ca_logger.addHandler(handler)
 
+
 # Convenience functions that do both transport and caproto validation/ingest.
 def send(circuit, command):
     buffers_to_send = circuit.send(command)
@@ -163,10 +164,8 @@ def make_channel(pv_name, logger, udp_sock, priority, timeout):
 
 
 def spawn_repeater(logger):
-    subprocess.Popen(['caproto-repeater', '--quiet'],
-                      cwd="/",
-                      stdout=subprocess.PIPE,
-                      stderr=subprocess.STDOUT)
+    subprocess.Popen(['caproto-repeater', '--quiet'], cwd="/",
+                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     logger.debug('Spawned caproto-repeater process.')
 
 
@@ -183,11 +182,14 @@ def read(chan, timeout, data_type):
             raise TimeoutError("Timeout while awaiting reading.")
         for command in commands:
             if (isinstance(command, ca.ReadNotifyResponse) and
-                        command.ioid == req.ioid):
+                    command.ioid == req.ioid):
                 response = command
                 break
             elif isinstance(command, ca.ErrorResponse):
                 raise ErrorResponseReceived(command)
+            elif command is ca.DISCONNECTED:
+                raise CaprotoError('Disconnected while waiting for '
+                                   'read response')
         else:
             continue
         break
@@ -212,8 +214,8 @@ def get_cli():
                                  "{timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are "
                                  "supported."))
     parser.add_argument('--list-types', action='list_types',
-                         default=argparse.SUPPRESS,
-                         help="List allowed values for -d and exit.")
+                        default=argparse.SUPPRESS,
+                        help="List allowed values for -d and exit.")
     parser.add_argument('-n', action='store_true',
                         help=("Retrieve enums as integers (default is "
                               "strings)."))
@@ -679,10 +681,13 @@ def put(pv_name, data, *, verbose=False, timeout=1, priority=0, repeater=True):
                 raise TimeoutError("Timeout while awaiting write reply.")
             for command in commands:
                 if (isinstance(command, ca.WriteNotifyResponse) and
-                            command.ioid == req.ioid):
+                        command.ioid == req.ioid):
                     break
                 elif isinstance(command, ca.ErrorResponse):
                     raise ErrorResponseReceived(command)
+                elif command is ca.DISCONNECTED:
+                    raise CaprotoError('Disconnected while waiting for '
+                                       'write response')
             else:
                 continue
             break
@@ -709,7 +714,8 @@ EPICS_CA_REPEATER_PORT. It defaults to the standard 5065. The current value is
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-q', '--quiet', action='store_true',
-                       help="Suppress INFO log messages. (Still show WARNING or higher.)")
+                       help=("Suppress INFO log messages. "
+                             "(Still show WARNING or higher.)"))
     group.add_argument('-v', '--verbose', action='store_true',
                        help="Show DEBUG log messages.")
     args = parser.parse_args()

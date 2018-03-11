@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-from caproto.curio.high_level_server import pvproperty, PVGroupBase
+from caproto.curio.high_level_server import pvproperty, PVGroup
 
 
-class MacroifiedNames(PVGroupBase):
+class MacroifiedNames(PVGroup):
     """
 
     """

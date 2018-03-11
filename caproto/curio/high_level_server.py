@@ -1,17 +1,20 @@
+import copy
 import logging
 import inspect
 from collections import (namedtuple, OrderedDict, defaultdict)
 from types import MethodType
 
 from .. import (ChannelDouble, ChannelInteger, ChannelString,
-                ChannelAlarm)
-
+                ChannelEnum, ChannelType, ChannelChar, ChannelAlarm,
+                AccessRights)
 
 logger = logging.getLogger(__name__)
 
 
 class PvpropertyData:
-    def __init__(self, *, group, pvspec, **kwargs):
+    def __init__(self, *, pvname, group, pvspec, doc=None, mock_record=None,
+                 **kwargs):
+        self.pvname = pvname  # the full, expanded PV name
         self.group = group
         self.pvspec = pvspec
         self.getter = (MethodType(pvspec.get, group)
@@ -26,7 +29,19 @@ class PvpropertyData:
             # bind the startup method to the group (used in server_startup)
             self.startup = MethodType(pvspec.startup, group)
 
+        if doc is not None:
+            self.__doc__ = doc
+
         super().__init__(**kwargs)
+
+        if mock_record is not None:
+            from .records import records
+            field_class = records[mock_record]
+            self.field_inst = field_class(prefix='', parent=self)
+            self.fields = self.field_inst.pvdb
+        else:
+            self.field_inst = None
+            self.fields = {}
 
     async def read(self, data_type):
         value = await self.getter(self)
@@ -50,6 +65,18 @@ class PvpropertyData:
     async def _server_startup(self, async_lib):
         return await self.startup(self, async_lib)
 
+    def get_field(self, field):
+        if not field or field == 'VAL':
+            return self
+        return self.fields[field]
+
+    def filtered(self, filter):
+        return self
+
+
+class PvpropertyChar(PvpropertyData, ChannelChar):
+    ...
+
 
 class PvpropertyInteger(PvpropertyData, ChannelInteger):
     ...
@@ -63,14 +90,72 @@ class PvpropertyString(PvpropertyData, ChannelString):
     ...
 
 
+class PvpropertyEnum(PvpropertyData, ChannelEnum):
+    ...
+
+
+class PvpropertyReadOnlyData(PvpropertyData):
+    def check_access(self, host, user):
+        return AccessRights.READ
+
+
+class PvpropertyCharRO(PvpropertyReadOnlyData, ChannelChar):
+    ...
+
+
+class PvpropertyIntegerRO(PvpropertyReadOnlyData, ChannelInteger):
+    ...
+
+
+class PvpropertyDoubleRO(PvpropertyReadOnlyData, ChannelDouble):
+    ...
+
+
+class PvpropertyStringRO(PvpropertyReadOnlyData, ChannelString):
+    ...
+
+
+class PvpropertyEnumRO(PvpropertyReadOnlyData, ChannelEnum):
+    ...
+
+
 class PVSpec(namedtuple('PVSpec',
-                        'get put startup attr name dtype value alarm_group doc')):
-    'PV information specification'
+                        'get put startup attr name dtype value '
+                        'alarm_group read_only doc cls_kwargs')):
+    '''PV information specification
+
+    Parameters
+    ----------
+    get : async callable, optional
+        Called when PV is read through channel access
+    put : async callable, optional
+        Called when PV is written to through channel access
+    startup : async callable, optional
+        Called at start of server; a hook for initialization and background
+        processing
+    attr : str, optional
+        The attribute name
+    name : str, optional
+        The PV name
+    dtype : ChannelType or builtin type, optional
+        The data type
+    value : any, optional
+        The initial value
+    alarm_group : str, optional
+        The alarm group the PV should be attached to
+    read_only : bool, optional
+        Read-only PV over channel access
+    doc : str, optional
+        Docstring associated with PV
+    cls_kwargs : dict, optional
+        Keyword arguments for the ChannelData-based class
+    '''
     __slots__ = ()
     default_dtype = int
 
     def __new__(cls, get=None, put=None, startup=None, attr=None, name=None,
-                dtype=None, value=None, alarm_group=None, doc=None):
+                dtype=None, value=None, alarm_group=None, read_only=None,
+                doc=None, cls_kwargs=None):
         if dtype is None:
             dtype = (type(value[0]) if value is not None
                      else cls.default_dtype)
@@ -86,6 +171,7 @@ class PVSpec(namedtuple('PVSpec',
 
         if put is not None:
             assert inspect.iscoroutinefunction(put), 'required async def put'
+            assert not read_only, 'Read-only signal cannot have putter'
             sig = inspect.signature(put)
             try:
                 sig.bind('group', 'instance', 'value')
@@ -94,7 +180,8 @@ class PVSpec(namedtuple('PVSpec',
                                    ''.format(put, sig))
 
         if startup is not None:
-            assert inspect.iscoroutinefunction(startup), 'required async def startup'
+            assert inspect.iscoroutinefunction(startup), \
+                'required async def startup'
             sig = inspect.signature(startup)
             try:
                 sig.bind('group', 'instance', 'async_library')
@@ -102,31 +189,63 @@ class PVSpec(namedtuple('PVSpec',
                 raise RuntimeError('Invalid signature for startup {}: {}'
                                    ''.format(startup, sig))
 
-        return super().__new__(cls, get, put, startup, attr, name, dtype,
-                               value, alarm_group, doc)
+        return super().__new__(cls, get=get, put=put, startup=startup,
+                               attr=attr, name=name, dtype=dtype, value=value,
+                               alarm_group=alarm_group, read_only=read_only,
+                               doc=doc, cls_kwargs=cls_kwargs)
 
     def new_names(self, attr=None, name=None):
         if attr is None:
             attr = self.attr
         if name is None:
             name = self.name
-        return PVSpec(self.get, self.put, self.startup, attr, name, self.dtype,
-                      self.value, self.alarm_group, self.doc)
+        return PVSpec(get=self.get, put=self.put, startup=self.startup,
+                      attr=attr, name=name, dtype=self.dtype, value=self.value,
+                      alarm_group=self.alarm_group, read_only=self.read_only,
+                      doc=self.doc, cls_kwargs=self.cls_kwargs)
 
 
 class pvproperty:
-    'A property-like descriptor for specifying a PV in a group'
+    '''A property-like descriptor for specifying a PV in a group
 
-    def __init__(self, get=None, put=None, startup=None, *, doc=None,
-                 **spec_kw):
+    Parameters
+    ----------
+    get : async callable, optional
+        Called when PV is read through channel access
+    put : async callable, optional
+        Called when PV is written to through channel access
+    startup : async callable, optional
+        Called at start of server; a hook for initialization and background
+        processing
+    name : str, optional
+        The PV name (defaults to the attribute name of the pvproperty)
+    dtype : ChannelType or builtin type, optional
+        The data type
+    value : any, optional
+        The initial value
+    alarm_group : str, optional
+        The alarm group the PV should be attached to
+    read_only : bool, optional
+        Read-only PV over channel access
+    doc : str, optional
+        Docstring associated with the property
+    **cls_kwargs :
+        Keyword arguments for the ChannelData-based class
+    '''
+
+    def __init__(self, get=None, put=None, startup=None, *, name=None,
+                 dtype=None, value=None, alarm_group=None, doc=None,
+                 read_only=None,
+                 **cls_kwargs):
         self.attr_name = None  # to be set later
-        self.spec_kw = spec_kw
 
         if doc is None and get is not None:
             doc = get.__doc__
 
-        self.pvspec = PVSpec(get=get, put=put, startup=startup, doc=doc,
-                             **spec_kw)
+        self.pvspec = PVSpec(get=get, put=put, startup=startup, name=name,
+                             dtype=dtype, value=value, alarm_group=alarm_group,
+                             read_only=read_only, doc=doc,
+                             cls_kwargs=cls_kwargs)
         self.__doc__ = doc
 
     def __get__(self, instance, owner):
@@ -149,6 +268,11 @@ class pvproperty:
             if self.pvspec.name is not None
             else self.attr_name)
 
+    def getter(self, get):
+        # update PVSpec with getter
+        self.pvspec = PVSpec(get, *self.pvspec[1:])
+        return self
+
     def putter(self, put):
         # update PVSpec with putter
         self.pvspec = PVSpec(self.pvspec.get, put, *self.pvspec[2:])
@@ -161,32 +285,110 @@ class pvproperty:
         return self
 
     def __call__(self, get, put=None, startup=None):
-        # handles case where pvproperty(**spec_kw)(getter, putter, startup) is used
+        # handles case where pvproperty(**spec_kw)(getter, putter, startup) is
+        # used
+        pvspec = self.pvspec
+        spec_kw = dict(name=pvspec.name,
+                       dtype=pvspec.dtype,
+                       value=pvspec.value,
+                       alarm_group=pvspec.alarm_group,
+                       doc=pvspec.doc,
+                       cls_kwargs=pvspec.cls_kwargs)
+
         if get.__doc__:
             if self.__doc__ is None:
                 self.__doc__ = get.__doc__
             if 'doc' not in self.spec_kw:
-                self.spec_kw['doc'] = get.__doc__
+                spec_kw['doc'] = get.__doc__
 
-        self.pvspec = PVSpec(get, put, startup, **self.spec_kw)
+        self.pvspec = PVSpec(get, put, startup, **spec_kw)
         return self
+
+    @classmethod
+    def from_pvspec(cls, pvspec):
+        prop = cls()
+        prop.pvspec = pvspec
+        return prop
+
+
+class NestedPvproperty(pvproperty):
+    '''Nested pvproperty which allows decorator usage in parent class
+
+    Without using this for the SubGroups, using @subgroup.prop.getter causes
+    the parent class to see multiple pvproperties - one defined on the
+    subgroup, and one returned from pvproperty.getter. This class fixes that by
+    returning the expected class - the parent (i.e., the subgroup)
+
+    Bonus points if you understood all of that.
+        ... scratch that, bonus points to me, I think.
+    '''
+
+    def getter(self, get):
+        super().getter(get)
+        return self.parent
+
+    def putter(self, put):
+        super().putter(put)
+        return self.parent
+
+    def startup(self, startup):
+        super().startup(startup)
+        return self.parent
+
+    @classmethod
+    def from_pvspec(cls, pvspec, parent):
+        prop = super().from_pvspec(pvspec)
+        prop.parent = parent
+        return prop
 
 
 class SubGroup:
-    'A property-like descriptor for specifying a subgroup in a PVGroup'
+    '''A property-like descriptor for specifying a subgroup in a PVGroup
 
-    def __init__(self, group_cls=None, *, prefix=None, macros=None,
-                 attr_separator=None, doc=None):
+    Several methods of generating a SubGroup are possible. For the `group`
+    parameter, one can
+    1. Pass in a group_dict of {attr: pvspec_or_dict}
+    2. Pass in an existing PVGroup class
+    3. Use @SubGroup as a decorator on a subsequently-defined PVGroup class
+    '''
+
+    # support copy.copy by keeping this here
+    _class_dict = None
+
+    def __init__(self, group=None, *, prefix=None, macros=None,
+                 attr_separator=None, doc=None, base=None):
         self.attr_name = None  # to be set later
-        self.group_cls = group_cls
+
+        # group_dict is passed in -> generate class_dict -> generate group_cls
+        self._group_dict = None
+        self._decorated_items = None
+        self.group_cls = None
         self.prefix = prefix
         self.macros = macros if macros is not None else {}
-        self.attr_separator = (attr_separator if attr_separator is not None
-                               else getattr(group_cls, 'attr_separator', ':'))
-        if doc is None and group_cls is not None:
-            doc = group_cls.__doc__
-
+        if not hasattr(self, 'attr_separator') or attr_separator is not None:
+            self.attr_separator = attr_separator
+        self.base = (PVGroup, ) if base is None else base
         self.__doc__ = doc
+        # Set last with setter
+        self.group = group
+
+    @property
+    def group(self):
+        'Property handling either group dict or group class'
+        return (self.group_dict, self.group_cls)
+
+    @group.setter
+    def group(self, group):
+        if isinstance(group, dict):
+            # set the group dictionary last:
+            self.group_dict = group
+        elif group is not None:
+            assert inspect.isclass(group), 'Group should be dict or SubGroup'
+            assert issubclass(group, PVGroup)
+            self.group_cls = group
+        else:
+            self.group_dict = None
+            self.group_cls = None
 
     def __get__(self, instance, owner):
         if instance is None:
@@ -199,18 +401,108 @@ class SubGroup:
     def __delete__(self, instance):
         del instance.groups[self.attr_name]
 
+    @staticmethod
+    def _pvspec_from_info(attr, info):
+        'Create a PVSpec from an info {dict, PVSpec, pvproperty}'
+        if isinstance(info, dict):
+            if 'attr' not in info:
+                info['attr'] = attr
+            return PVSpec(**info)
+        elif isinstance(info, PVSpec):
+            return info
+        elif isinstance(info, pvproperty):
+            return info.pvspec
+        else:
+            raise TypeError(f'Unknown type for pvspec: {info!r}')
+
+    def _generate_class_dict(self):
+        'Create the class dictionary from all PVSpecs'
+        pvspecs = [self._pvspec_from_info(attr, pvspec)
+                   for attr, pvspec in self._group_dict.items()]
+
+        return {pvspec.attr: NestedPvproperty.from_pvspec(pvspec, self)
+                for pvspec in pvspecs
+                }
+
+    @property
+    def group_dict(self):
+        'The group attribute dictionary'
+        return self._group_dict
+
+    @group_dict.setter
+    def group_dict(self, group_dict):
+        if group_dict is None:
+            return
+
+        # Upon setting the group dictionary, generate the class
+        self._group_dict = group_dict
+        self._class_dict = self._generate_class_dict()
+
+        bad_items = set(group_dict).intersection(set(dir(self)))
+        if bad_items:
+            raise ValueError(f'Cannot use these attribute names: {bad_items}')
+
+    def __call__(self, group=None, *, prefix=None, macros=None, doc=None):
+        # handles case where a single definition is used multiple times
+        # as in SubGroup(**kw)(group_cls_or_dict) is used
+        copied = copy.copy(self)
+
+        # TODO verify the following works (or even makes sense)
+        if prefix is not None:
+            copied.prefix = prefix
+
+        if macros is not None:
+            copied.macros = macros
+
+        if doc is not None:
+            copied.__doc__ = doc
+
+        if group is not None:
+            copied.group = group
+
+        if copied.group_cls is not None and copied.attr_separator is None:
+            copied.attr_separator = getattr(copied.group_cls,
+                                            'attr_separator', ':')
+
+        return copied
+
     def __set_name__(self, owner, name):
         self.attr_name = name
+        if self.group_cls is None:
+            # generate the group class, in the case of a dict-based subgroup
+            self.group_cls = type(self.attr_name, self.base, self._class_dict)
+
+            if self.__doc__ is None:
+                self.__doc__ = self.group_cls.__doc__
+
+        attr_separator = getattr(self.group_cls, 'attr_separator', ':')
+        if attr_separator is not None and self.attr_separator is None:
+            self.attr_separator = attr_separator
+
         if self.prefix is None:
             self.prefix = name + self.attr_separator
 
-    def __call__(self, group_cls):
-        # handles case where SubGroup(**kw)(group_cls) is used
-        self.group_cls = group_cls
-        if self.__doc__ is None:
-            self.__doc__ = group_cls.__doc__
+    def __getattr__(self, attr):
+        'Allow access to class_dict getter/putter/startup through decorators'
+        if self._class_dict is not None and attr in self._class_dict:
+            return self._class_dict[attr]
+        return super().__getattribute__(attr)
 
-        return self
+
+def get_pv_pair_wrapper(setpoint_suffix='', readback_suffix='_RBV'):
+    'Generates a Subgroup class for a pair of PVs (setpoint and readback)'
+    def wrapped(*, name=None, dtype=int, doc=None, **kwargs):
+        return SubGroup(
+            {'setpoint': dict(dtype=dtype, name=setpoint_suffix, doc=doc,
+                              **kwargs),
+             'readback': dict(dtype=dtype, name=readback_suffix, doc=doc,
+                              read_only=True, **kwargs),
+             },
+            attr_separator='',
+            doc=doc,
+            prefix=name,
+        )
+    return wrapped
 
 
 class pvfunction(SubGroup):
@@ -252,10 +544,8 @@ class pvfunction(SubGroup):
             Docstring
         '''
 
-        super().__init__(group_cls=None,
-                         prefix=prefix, macros=macros,
-                         attr_separator=attr_separator,
-                         doc=doc)
+        super().__init__(group=None, prefix=prefix, macros=macros,
+                         attr_separator=attr_separator, doc=doc)
         self.default_retval = default
         self.func = func
         self.alarm_group = alarm_group
@@ -266,11 +556,14 @@ class pvfunction(SubGroup):
         self.pvspec = []
         self.__doc__ = doc
 
-    def __call__(self, func):
+    def __call__(self, func=None, *, prefix=None, macros=None, doc=None):
         # handles case where pvfunction()(func) is used
-        self.func = func
-        self._regenerate()
-        return self
+        copied = super().__call__(prefix=prefix, macros=macros, doc=doc)
+
+        if func is not None:
+            copied.func = func
+            copied.group = copied._generate_class_dict()
+        return copied
 
     def pvspec_from_parameter(self, param, doc=None):
         dtype = param.annotation
@@ -294,6 +587,7 @@ class pvfunction(SubGroup):
             name=self.names.get(param.name, param.name),
             dtype=dtype,
             value=default, alarm_group=self.alarm_group,
+            read_only=param.name in ['retval', 'status'],
             doc=doc if doc is not None else f'Parameter {dtype} {param.name}'
         )
 
@@ -303,22 +597,17 @@ class pvfunction(SubGroup):
         assert return_type, 'Return value must have a type annotation'
 
         return [
-            inspect.Parameter(self.names['status'], kind=0, default=['Init'],
+            inspect.Parameter('status', kind=0, default=['Init'],
                               annotation=str),
-            inspect.Parameter(self.names['retval'], kind=0,
+            inspect.Parameter('retval', kind=0,
                               # TODO?
-                              default=PVGroupBase.default_values[return_type],
+                              default=PVGroup.default_values[return_type],
                               annotation=return_type),
         ]
 
-    def _class_from_pvspec(self, pvspec):
-        def get_pvproperty(pvspec):
-            prop = pvproperty()
-            prop.pvspec = pvspec
-            return prop
-
+    def _class_dict_from_pvspec(self, pvspec):
         dct = {
-            pvspec.attr: get_pvproperty(pvspec)
+            pvspec.attr: pvproperty.from_pvspec(pvspec)
             for pvspec in self.pvspec
         }
 
@@ -337,19 +626,18 @@ class pvfunction(SubGroup):
                           for sig in list(sig.parameters.values())[1:]
                           }
                 value = await self.func(group, **kwargs)
-                await group.Retval.write(value)
-                await group.Status.write(f'Success')
+                await group.retval.write(value)
+                await group.status.write(f'Success')
             except Exception as ex:
-                await group.Status.write(f'{ex.__class__.__name__}: {ex}')
+                await group.status.write(f'{ex.__class__.__name__}: {ex}')
                 raise
 
         process_prop.pvspec = PVSpec(None, do_process, *process_pvspec[2:])
+        return dct
 
-        return type(self.attr_name, (PVGroupBase, ), dct)
-
-    def _regenerate(self):
-        if self.func is None or self.attr_name is None:
-            return []
+    def _generate_class_dict(self):
+        if self.func is None:
+            return {}
 
         if self.alarm_group is None:
             self.alarm_group = self.func.__name__
@@ -362,22 +650,11 @@ class pvfunction(SubGroup):
         parameters.extend(self.get_additional_parameters())
         self.pvspec = [self.pvspec_from_parameter(param)
                        for param in parameters]
-
-        # how about an auto-generated meta-class subclass in your subgroup
-        # descriptor? (cc @tacaswell)
-        self.group_cls = self._class_from_pvspec(self.pvspec)
+        return self._class_dict_from_pvspec(self.pvspec)
 
     def __set_name__(self, owner, name):
-        if self.attr_name is not None and self.attr_name != name:
-            # TODO: IPython ends up calling this multiple times when
-            # introspecting a PVGroup. This should be investigated as I'm
-            # likely doing something dumb...
-            raise AttributeError('Stop it, IPython')
-
-        self.attr_name = name
-        if self.prefix is None:
-            self.prefix = name + self.attr_separator
-        self._regenerate()
+        self.group_dict = self._generate_class_dict()
+        super().__set_name__(owner, name)
 
 
 def expand_macros(pv, macros):
@@ -410,9 +687,6 @@ class PVGroupMeta(type):
             if isinstance(value, pvproperty):
                 yield attr, value
             elif isinstance(value, SubGroup):
-                if value.attr_name is None:
-                    # this happens in the case of PVFunctions...
-                    value.__set_name__(None, attr)
                 subgroup_cls = value.group_cls
                 if subgroup_cls is None:
                     raise RuntimeError('Internal error; subgroup class unset?')
@@ -421,8 +695,19 @@ class PVGroupMeta(type):
 
     def __new__(metacls, name, bases, dct):
         dct['_subgroups_'] = subgroups = OrderedDict()
+        dct['_pvs_'] = pvs = OrderedDict()
+
+        cls = super().__new__(metacls, name, bases, dct)
+
+        # Propagate any subgroups/PVs from base classes
+        for base in bases:
+            if hasattr(base, '_subgroups_'):
+                dct['_subgroups_'].update(**base._subgroups_)
+            if hasattr(base, '_pvs_'):
+                dct['_pvs_'].update(**base._pvs_)
+
         for attr, prop in metacls.find_subgroups(dct):
-            logger.debug('class %s attr %s: %r', name, attr, prop)
+            logger.debug('class %s subgroup attr %s: %r', name, attr, prop)
             subgroups[attr] = prop
 
             # TODO a bit messy
@@ -432,12 +717,36 @@ class PVGroupMeta(type):
                 for subattr, subgroup in subgroup_cls._subgroups_.items():
                     subgroups['.'.join((attr, subattr))] = subgroup
 
-        dct['_pvs_'] = pvs = OrderedDict()
         for attr, prop in metacls.find_pvproperties(dct):
-            logger.debug('class %s attr %s: %r', name, attr, prop)
+            pvspec = prop.pvspec
+            logger.debug('class %s pvproperty attr %s: %r', name, attr, pvspec)
             pvs[attr] = prop
 
-        return super().__new__(metacls, name, bases, dct)
+            if pvspec.cls_kwargs:
+                # Ensure all passed class kwargs are valid for the specific
+                # class, so it doesn't bite us on instantiation
+
+                prop_cls = data_class_from_pvspec(group=cls, pvspec=pvspec)
+                if not hasattr(prop_cls, '_valid_init_kw'):
+                    # TODO this should be generated elsewhere
+                    prop_cls._valid_init_kw = {
+                        key
+                        for cls in inspect.getmro(prop_cls)
+                        for key in inspect.signature(cls).parameters.keys()
+                    }
+
+                bad_kw = set(pvspec.cls_kwargs) - prop_cls._valid_init_kw
+                if bad_kw:
+                    raise ValueError(f'Bad kw for class {prop_cls}: {bad_kw}')
+
+        return cls
+
+
+def data_class_from_pvspec(group, pvspec):
+    'Return the data class for a given PVSpec in a group'
+    if pvspec.read_only:
+        return group.type_map_read_only[pvspec.dtype]
+    return group.type_map[pvspec.dtype]
 
 
 def channeldata_from_pvspec(group, pvspec):
@@ -448,28 +757,50 @@ def channeldata_from_pvspec(group, pvspec):
              else group.default_values[pvspec.dtype]
              )
 
-    cls = group.type_map[pvspec.dtype]
-    inst = cls(group=group, pvspec=pvspec,
-               value=value, alarm=group.alarms[pvspec.alarm_group])
+    cls = data_class_from_pvspec(group, pvspec)
+    kw = pvspec.cls_kwargs if pvspec.cls_kwargs is not None else {}
+    inst = cls(group=group, pvspec=pvspec, value=value,
+               alarm=group.alarms[pvspec.alarm_group], pvname=full_pvname,
+               **kw)
     inst.__doc__ = pvspec.doc
     return (full_pvname, inst)
 
 
-class PVGroupBase(metaclass=PVGroupMeta):
+class PVGroup(metaclass=PVGroupMeta):
     'Base class for a group of PVs'
+
     type_map = {
         str: PvpropertyString,
         int: PvpropertyInteger,
         float: PvpropertyDouble,
+
+        ChannelType.STRING: PvpropertyString,
+        ChannelType.LONG: PvpropertyInteger,
+        ChannelType.DOUBLE: PvpropertyDouble,
+        ChannelType.ENUM: PvpropertyEnum,
+        ChannelType.CHAR: PvpropertyChar,
+    }
+
+    # Auto-generate the read-only class specification:
+    type_map_read_only = {
+        dtype: globals()[f'{cls.__name__}RO']
+        for dtype, cls in type_map.items()
     }
 
     default_values = {
-        str: '-',
+        str: '',
         int: 0,
         float: 0.0,
+
+        ChannelType.STRING: '',
+        ChannelType.LONG: 0,
+        ChannelType.DOUBLE: 0.0,
+        ChannelType.ENUM: 0,
+        ChannelType.CHAR: '',
     }
 
-    def __init__(self, prefix, macros=None):
+    def __init__(self, prefix, *, macros=None, parent=None):
+        self.parent = parent
         self.macros = macros if macros is not None else {}
         self.prefix = expand_macros(prefix, self.macros)
         self.alarms = defaultdict(lambda: ChannelAlarm())
@@ -482,6 +813,10 @@ class PVGroupBase(metaclass=PVGroupMeta):
     def _create_pvdb(self):
         'Create the PV database for all subgroups and pvproperties'
         for attr, subgroup in self._subgroups_.items():
+            if attr in self.groups:
+                # already created as part of a sub-subgroup
+                continue
+
             subgroup_cls = subgroup.group_cls
 
             prefix = (subgroup.prefix if subgroup.prefix is not None
@@ -491,7 +826,14 @@ class PVGroupBase(metaclass=PVGroupMeta):
             macros = dict(self.macros)
             macros.update(subgroup.macros)
 
-            self.groups[attr] = subgroup_cls(prefix=prefix, macros=macros)
+            # instantiate the subgroup
+            inst = subgroup_cls(prefix=prefix, macros=macros, parent=self)
+            self.groups[attr] = inst
+
+            # find all sub-subgroups, giving direct access to them
+            for sub_attr, sub_subgroup in inst.groups.items():
+                full_attr = '.'.join((attr, sub_attr))
+                self.groups[full_attr] = sub_subgroup
 
         for attr, pvprop in self._pvs_.items():
             if '.' in attr:
@@ -503,6 +845,14 @@ class PVGroupBase(metaclass=PVGroupMeta):
                 group = self
                 pvname, channeldata = channeldata_from_pvspec(group,
                                                               pvprop.pvspec)
+
+            if pvname in self.pvdb:
+                first_seen = self.pvdb[pvname]
+                if hasattr(first_seen, 'pvspec'):
+                    first_seen = first_seen.pvspec.attr
+                raise RuntimeError(f'{pvname} defined multiple times: '
+                                   f'now in attr: {attr} '
+                                   f'originally: {first_seen}')
 
             # full pvname -> ChannelData instance
             self.pvdb[pvname] = channeldata

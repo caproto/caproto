@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import termios
 import fcntl
 import sys
@@ -10,7 +11,7 @@ import curio
 
 from caproto.benchmarking import set_logging_level
 from caproto.curio.server import start_server
-from caproto.curio.high_level_server import pvproperty, PVGroupBase
+from caproto.curio.high_level_server import pvproperty, PVGroup
 
 
 def start_io_interrupt_monitor(new_value_callback):
@@ -61,7 +62,7 @@ def start_io_interrupt_monitor(new_value_callback):
                 new_value_callback(char)
 
 
-class IOInterruptIOC(PVGroupBase):
+class IOInterruptIOC(PVGroup):
     keypress = pvproperty(value=[''])
 
     # NOTE the decorator used here:

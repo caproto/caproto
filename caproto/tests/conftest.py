@@ -6,6 +6,7 @@ import signal
 import subprocess
 import sys
 import time
+import uuid
 
 import caproto as ca
 import caproto.asyncio
@@ -69,12 +70,17 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
         try:
             get(pv_to_check, timeout=1.0, verbose=True)
         except TimeoutError:
-            print('Still trying...')
+            print(f'Still trying to connect to {pv_to_check}')
             continue
         else:
             break
     else:
         raise TimeoutError("ioc fixture failed to start in 5 seconds.")
+
+@pytest.fixture(scope='function')
+def prefix():
+    'Random PV prefix for a server'
+    return str(uuid.uuid4())[:8] + ':'
 
 
 @pytest.fixture(scope='function')
@@ -249,3 +255,5 @@ def threaded_in_curio_wrapper(fcn):
 
     wrapped.wait = wait
     return wrapped
+
+
