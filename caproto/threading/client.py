@@ -514,7 +514,7 @@ class Context:
 
 
 class VirtualCircuitManager:
-    __slots__ = ('circuit', 'channels', 'ioids', 'subscriptionids',
+    __slots__ = ('circuit', 'channels', 'ioids', 'subscriptions',
                  'new_command_cond', 'socket', 'selector',
                  '__weakref__')
 
@@ -522,7 +522,7 @@ class VirtualCircuitManager:
         self.circuit = circuit  # a caproto.VirtualCircuit
         self.channels = {}  # map cid to Channel
         self.ioids = {}  # map ioid to Channel
-        self.subscriptionids = {}  # map subscriptionid to Channel
+        self.subscriptions = {}  # map subscriptionid to Subscription
         self.new_command_cond = threading.Condition()
         self.socket = None
 
@@ -603,10 +603,10 @@ class VirtualCircuitManager:
                 chan = self.ioids.pop(command.ioid)
                 chan.process_write_notify(command)
             elif isinstance(command, ca.EventAddResponse):
-                chan = self.subscriptionids[command.subscriptionid]
-                chan.process_subscription(command)
+                sub = self.subscriptions[command.subscriptionid]
+                sub.process(command)
             elif isinstance(command, ca.EventCancelResponse):
-                self.subscriptionids.pop(command.subscriptionid)
+                self.subscriptions.pop(command.subscriptionid)
 
             self.new_command_cond.notify_all()
 
@@ -666,33 +666,6 @@ class PV:
             return False
         with self.circuit_manager.new_command_cond:
             return self.channel.states[ca.CLIENT] is ca.CONNECTED
-
-    def register_user_callback(self, func):
-        """
-        Func to be called when a subscription receives a new EventAdd command.
-
-        This function will be called by a Task in the main thread. If ``func``
-        needs to do CPU-intensive or I/O-related work, it should execute that
-        work in a separate thread of process.
-        """
-        if inspect.ismethod(func):
-            self._callback = weakref.WeakMethod(func, self._callback_cleared)
-        else:
-            self._callback = weakref.ref(func, self._callback_cleared)
-
-    def _callback_cleared(self, ref):
-        self._callback = None
-
-    def process_subscription(self, event_add_command):
-        if self._callback is None:
-            return
-
-        user_callback = self._callback()
-        if user_callback is not None:
-            try:
-                user_callback(event_add_command)
-            except Exception as ex:
-                print(ex)
 
     def process_read_notify(self, read_notify_command):
         self.last_reading = read_notify_command
@@ -818,12 +791,33 @@ class PV:
         "Start a new subscription and spawn an async task to receive readings."
         command = self.channel.subscribe(*args, **kwargs)
         # Stash the subscriptionid to match the response to the request.
-        self.circuit_manager.subscriptionids[command.subscriptionid] = self
+        sub = Subscription(self, command)
+        self.circuit_manager.subscriptions[command.subscriptionid] = sub
         self.circuit_manager.send(command)
         # TODO verify it worked before returning?
-        return command.subscriptionid
+        return sub
 
     def unsubscribe(self, subscriptionid, *args, **kwargs):
         "Cancel a subscription and await confirmation from the server."
         self.circuit_manager.send(self.channel.unsubscribe(subscriptionid))
         # TODO verify it worked before returning?
+
+
+class Subscription:
+    def __init__(self, pv, command):
+        self.pv = pv
+        self.command = command
+        self.callbacks = weakref.WeakSet()
+
+    def add_callback(self, func):
+        self.callbacks.add(func)
+
+    def process(self, command):
+        for callback in self.callbacks:
+            try:
+                callback(command)
+            except Exception as ex:
+                print(ex)
+
+    def unsubscribe(self):
+        self.pv.unsubscribe(self.command.subscriptionid)
