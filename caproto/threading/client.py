@@ -1,3 +1,4 @@
+import collections
 import copy
 import functools
 import itertools
@@ -446,18 +447,26 @@ class Context:
             vc_manager = self.get_circuit_manager(address, priority)
             circuit = vc_manager.circuit
 
+            # Assign each PV a VirtualCircuitManager for managing a socket and
+            # tracking circuit state, as well as a ClientChannel for tracking
+            # channel state.
+            channels = collections.deque()
             for cid in cids:
-                # Tell the PV which VirtualCircuitManager it has.
                 pv = self.pvs[cid]
                 pv.circuit_manager = vc_manager
-
-                # Make ca.ClientClient.
                 chan = ca.ClientChannel(pv.name, circuit, cid=cid)
                 vc_manager.channels[cid] = chan
-                # Tell the PV which ClientChannel it has.
                 pv.channel = chan
-                # Send the messages that ask the server to create a channel.
-                vc_manager.send(chan.create())
+                channels.append(chan)
+
+            # Notify PVs that they now have a circuit_manager. This will
+            # un-block a wait() in the PV.wait_for_search() method.
+            cond = self.search_condition
+            with cond:
+                cond.notify_all()
+
+            # Initiate channel creation with the server.
+            vc_manager.send(*(chan.create() for chan in channels))
 
     def get_circuit_manager(self, address, priority):
         """
