@@ -389,6 +389,7 @@ class Context:
     def __init__(self, broadcaster, *, log_level='ERROR'):
         self.log_level = log_level
         self.broadcaster = broadcaster
+        self.search_condition = threading.Condition()
         self.circuit_managers = {}  # keyed on (address, priority)
         self.pvs = weakref.WeakValueDictionary()
         self.pvs_by_name_and_priority = weakref.WeakValueDictionary()
@@ -415,7 +416,7 @@ class Context:
                 # Maybe the user has asked for a PV that we already made.
                 pv = self.pvs_by_name_and_priority[key]
             except KeyError:
-                pv = PV(name, priority)
+                pv = PV(name, priority, self)
                 self.pvs_by_name_and_priority[key] = pv
                 search_pvs.append(pv)
                 search_names.append(name)
@@ -694,6 +695,19 @@ class PV:
             except Exception as ex:
                 print(ex)
 
+    def wait_for_search(self, *, timeout=2):
+        cond = self.context.search_condition
+        with cond:
+            if self.circuit_manager is not None:
+                return
+            done = cond.wait_for(lambda: self.circuit_manager is not None,
+                                 timeout)
+        if not done:
+            raise TimeoutError("No servers responded to a search for a "
+                               "channel named {!r} within {}-second "
+                               "timeout."
+                               "".format(self.name, timeout))
+
     def wait_for_connection(self, *, timeout=2):
         """Wait for this Channel to be connected, ready to use.
 
@@ -701,17 +715,19 @@ class PV:
         initialize the connection in the fist place. This method waits for it
         to complete.
         """
-        if self.connected:
-            return
+        if self.circuit_manager is None:
+            self.wait_for_search()
         cond = self.circuit_manager.new_command_cond
         with cond:
+            if self.connected:
+                return
             done = cond.wait_for(lambda: self.connected, timeout)
         if not done:
             raise TimeoutError("Server at {} did not respond to attempt "
-                               "to create channel named {} within {}-second "
+                               "to create channel named {!r} within {}-second "
                                "timeout."
                                "".format(self.circuit_manager.address,
-                                         self.channel.name,
+                                         self.name,
                                          timeout))
 
     def disconnect(self, *, wait=True, timeout=2):
