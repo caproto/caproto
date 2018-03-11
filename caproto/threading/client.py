@@ -33,7 +33,7 @@ class DisconnectedError(ThreadingClientException):
 AUTOMONITOR_MAXLENGTH = 65536
 STALE_SEARCH_EXPIRATION = 10.0
 TIMEOUT = 2
-BATCH_SIZE = 300
+SEARCH_BATCH_SIZE = 300
 STR_ENC = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
 
 
@@ -310,8 +310,9 @@ class SharedBroadcaster:
                 search_ids.append(search_id)
                 unanswered_searches[search_id] = (name, results_queue)
         logger.debug("Searching for '%r' PVs...." % len(needs_search))
-        # Send up to BATCH_SIZE SearchRequests per UDP datagram.
-        for batch in partition_all(BATCH_SIZE, zip(needs_search, search_ids)):
+        # Send up to SEARCH_BATCH_SIZE SearchRequests per UDP datagram.
+        for batch in partition_all(SEARCH_BATCH_SIZE,
+                                   zip(needs_search, search_ids)):
             self.send(
                 ca.EPICS_CA1_PORT,
                 ca.VersionRequest(0, 13),
