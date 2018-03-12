@@ -100,9 +100,6 @@ class SelectorThread:
                 obj.received(b'', None)
             self._unregister_sockets.append(sock)
 
-        if not self.socket_to_id:
-            self.stop()
-
     def _object_removed(self, obj_id):
         with self._socket_map_lock:
             if obj_id in self.id_to_socket:
@@ -503,6 +500,7 @@ class Context:
     def __del__(self):
         try:
             self.disconnect(wait=False)
+            self.selector.stop()
         except (KeyError, AttributeError):
             pass
             # clean-up on deletion is best effort...
