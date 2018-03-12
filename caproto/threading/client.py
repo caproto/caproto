@@ -292,7 +292,7 @@ class SharedBroadcaster:
                 try:
                     # Raise KeyError if the result is missing or stale.
                     address, timestamp = search_results[name]
-                    if timestamp - now > stale_search_expiration:
+                    if now - timestamp > stale_search_expiration:
                         # Clean up expired result.
                         search_results.pop(name, None)
                         raise KeyError
