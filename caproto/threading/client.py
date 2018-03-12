@@ -688,7 +688,7 @@ class VirtualCircuitManager:
 class PV:
     """Wraps a VirtualCircuit and a caproto.ClientChannel."""
     __slots__ = ('name', 'priority', 'context', 'circuit_manager', 'channel',
-                 'last_reading', '_read_notify_callback',
+                 'last_reading', '_read_notify_callback', 'subscriptions',
                  'command_bundle_queue', '_write_notify_callback',
                  '_user_disconnected', '_pc_callbacks', '__weakref__')
     def __init__(self, name, priority, context):
@@ -701,6 +701,7 @@ class PV:
         self.circuit_manager = None
         self.channel = None
         self.last_reading = None
+        self.subscriptions = []
         self._read_notify_callback = None  # func to call on ReadNotifyResponse
         self._write_notify_callback = None  # func to call on WriteNotifyResponse
         self._pc_callbacks = {}
@@ -775,7 +776,7 @@ class PV:
         to complete.
         """
         if self.circuit_manager is None:
-            self.wait_for_search()
+            self.wait_for_search(timeout=timeout)
         cond = self.circuit_manager.new_command_cond
         with cond:
             if self.connected:
@@ -814,7 +815,7 @@ class PV:
                                              self.name,
                                              timeout))
 
-    def reconnect(self, *, wait=True, timeout=2):
+    def reconnect(self, *, timeout=2):
         if self.connected:
             # Try disconnecting first, but reconnect even if that fails.
             try:
@@ -823,8 +824,19 @@ class PV:
                 pass
         self._user_disconnected = False
         self.context.reconnect(((self.name, self.priority),))
-        if wait:
-            self.wait_for_connection(timeout=timeout)
+        self.wait_for_connection(timeout=timeout)
+        self.resubscribe()
+
+    def resubscribe(self):
+        self.wait_for_connection(timeout=None)
+        for sub in self.subscriptions:
+            command = self.channel.subscribe(*sub.sub_args, **sub.sub_kwargs)
+            # Update Subscription object with new id.
+            subscriptionid = command.subscriptionid
+            sub.subscriptionid = subscriptionid
+            # Let the circuit_manager match future responses to this request.
+            self.circuit_manager.subscriptions[subscriptionid] = sub
+            self.circuit_manager.send(command)
 
     def read(self, *args, timeout=2, **kwargs):
         """Request a fresh reading, wait for it, return it and stash it.
@@ -879,9 +891,12 @@ class PV:
     def subscribe(self, *args, **kwargs):
         "Start a new subscription and spawn an async task to receive readings."
         command = self.channel.subscribe(*args, **kwargs)
-        # Stash the subscriptionid to match the response to the request.
-        sub = Subscription(self, command)
-        self.circuit_manager.subscriptions[command.subscriptionid] = sub
+        subscriptionid = command.subscriptionid
+        sub = Subscription(self, subscriptionid, args, kwargs)
+        # Let the circuit_manager match future responses to this request.
+        self.circuit_manager.subscriptions[subscriptionid] = sub
+        # Stash this in case we need to re-connect later.
+        self.subscriptions.append(sub)
         self.circuit_manager.send(command)
         # TODO verify it worked before returning?
         return sub
@@ -889,17 +904,23 @@ class PV:
     def unsubscribe(self, subscriptionid, *args, **kwargs):
         "Cancel a subscription and await confirmation from the server."
         self.circuit_manager.send(self.channel.unsubscribe(subscriptionid))
+        sub, = [sub for sub in self.subscriptions
+                if sub.subscriptionid == subscriptionid]
+        self.subscriptions.remove(sub)
         # TODO verify it worked before returning?
 
 
 class Subscription:
-    def __init__(self, pv, command):
+    def __init__(self, pv, subscriptionid, sub_args, sub_kwargs):
+        self.callbacks = []
+        self.subscriptionid = subscriptionid
         self.pv = pv
-        self.command = command
-        self.callbacks = weakref.WeakSet()
+        # These will be used by the PV to re-subscribe if we need to reconnect.
+        self.sub_args = sub_args
+        self.sub_kwargs = sub_kwargs
 
     def add_callback(self, func):
-        self.callbacks.add(func)
+        self.callbacks.append(func)
 
     def process(self, command):
         for callback in self.callbacks:
@@ -909,4 +930,4 @@ class Subscription:
                 print(ex)
 
     def unsubscribe(self):
-        self.pv.unsubscribe(self.command.subscriptionid)
+        self.pv.unsubscribe(self.subscriptionid)
