@@ -737,10 +737,10 @@ class PV:
 
     @property
     def connected(self):
-        if self.circuit_manager is None:
+        channel = self.channel
+        if channel is None:
             return False
-        with self.circuit_manager.new_command_cond:
-            return self.channel.states[ca.CLIENT] is ca.CONNECTED
+        return channel.states[ca.CLIENT] is ca.CONNECTED
 
     def process_read_notify(self, read_notify_command):
         self.last_reading = read_notify_command
