@@ -512,7 +512,7 @@ class VirtualCircuitManager:
                  'disconnected', 'new_command_cond', 'socket', 'selector',
                  '__weakref__')
 
-    def __init__(self, context, circuit, selector):
+    def __init__(self, context, circuit, selector, timeout=TIMEOUT):
         self.context = context
         self.circuit = circuit  # a caproto.VirtualCircuit
         self.channels = {}  # map cid to Channel
@@ -537,10 +537,10 @@ class VirtualCircuitManager:
             else:
                 raise RuntimeError("Cannot connect. States are {} "
                                    "".format(self.circuit.states))
-            if not cond.wait_for(lambda: self.connected, TIMEOUT):
+            if not cond.wait_for(lambda: self.connected, timeout):
                 raise TimeoutError("Circuit with server at {} did not "
-                                    "connected within {}-second timeout."
-                                    "".format(self.circuit.address, TIMEOUT))
+                                   "connected within {}-second timeout."
+                                   "".format(self.circuit.address, timeout))
 
     @property
     def connected(self):
