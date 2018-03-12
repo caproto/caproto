@@ -644,10 +644,6 @@ class VirtualCircuitManager:
                 sock.close()
             except OSError:
                 pass
-            self.socket = None
-
-        self.channels.clear()
-        self.ioids.clear()
 
     def __del__(self):
         try:
