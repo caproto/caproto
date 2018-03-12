@@ -372,7 +372,7 @@ class SharedBroadcaster:
                                 # STALE_SEARCH_EXPIRATION.)
                                 search_results[name] = (address, now)
                     # Send the search results to the Contexts that asked for
-                    # them. This is probably more general that is has to be but
+                    # them. This is probably more general than is has to be but
                     # I'm playing it safe for now.
                     for queue, cids in queues.items():
                         queue.put((address, cids))
