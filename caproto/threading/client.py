@@ -395,7 +395,8 @@ class Context:
         self.selector = None
         self.broadcaster.add_listener(self)
         self._search_results_queue = queue.Queue()
-        threading.Thread(target=self._process_search_results_loop).start()
+        threading.Thread(target=self._process_search_results_loop,
+                         daemon=True).start()
         self.selector = SelectorThread()
         self.selector.start()
 
