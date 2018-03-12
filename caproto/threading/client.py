@@ -391,6 +391,7 @@ class Context:
         self.log_level = log_level
         self.broadcaster = broadcaster
         self.search_condition = threading.Condition()
+        self.pv_record_consistency = threading.Condition()
         self.circuit_managers = {}  # keyed on (address, priority)
         self.pvs = weakref.WeakValueDictionary()
         self.pvs_by_name_and_priority = weakref.WeakValueDictionary()
@@ -476,13 +477,12 @@ class Context:
         Make a new one if necessary.
         """
         vc_manager = self.circuit_managers.get((address, priority), None)
-        if (vc_manager is None or
-                vc_manager.circuit.states[ca.CLIENT] is ca.DISCONNECTED):
+        if vc_manager is None:
             circuit = ca.VirtualCircuit(
                 our_role=ca.CLIENT,
                 address=address,
                 priority=priority)
-            vc_manager = VirtualCircuitManager(circuit, self.selector)
+            vc_manager = VirtualCircuitManager(self, circuit, self.selector)
             vc_manager.circuit.log.setLevel(self.log_level)
             self.circuit_managers[(address, priority)] = vc_manager
         return vc_manager
@@ -510,11 +510,12 @@ class Context:
 
 
 class VirtualCircuitManager:
-    __slots__ = ('circuit', 'channels', 'ioids', 'subscriptions',
-                 'new_command_cond', 'socket', 'selector',
+    __slots__ = ('context', 'circuit', 'channels', 'ioids', 'subscriptions',
+                 'disconnected', 'new_command_cond', 'socket', 'selector',
                  '__weakref__')
 
-    def __init__(self, circuit, selector):
+    def __init__(self, context, circuit, selector):
+        self.context = context
         self.circuit = circuit  # a caproto.VirtualCircuit
         self.channels = {}  # map cid to Channel
         self.ioids = {}  # map ioid to Channel
@@ -522,6 +523,7 @@ class VirtualCircuitManager:
         self.new_command_cond = threading.Condition()
         self.socket = None
         self.selector = selector
+        self.disconnected = False
 
         # Connect.
         cond = self.new_command_cond
@@ -600,9 +602,7 @@ class VirtualCircuitManager:
 
         with self.new_command_cond:
             if command is ca.DISCONNECTED:
-                # if we are here something else has triggered the
-                # disconnect.
-                pass
+                self.disconnect()
             elif isinstance(command, ca.ReadNotifyResponse):
                 chan = self.ioids.pop(command.ioid)
                 chan.process_read_notify(command)
@@ -618,12 +618,24 @@ class VirtualCircuitManager:
             self.new_command_cond.notify_all()
 
     def disconnect(self, *, wait=True, timeout=2.0):
-        for cid, ch in list(self.channels.items()):
-            ch.disconnect(wait=wait, timeout=timeout)
-            self.channels.pop(cid)
-
         with self.new_command_cond:
-            self.circuit.disconnect()
+            # Ensure that this method is idempotent.
+            if self.disconnected:
+                return
+            self.disconnected = True
+            # Update circuit state. This will be reflected on all PVs, which
+            # continue to hold a reference to this disconnected circuit.
+            circuit = self.circuit.disconnect()
+            # Remove VirtualCircuitManager from Context.
+            # This will cause all future calls to Context.get_circuit_manager()
+            # to create a fresh VirtualCiruit and VirtualCircuitManager.
+            key = (self.circuit.address, self.circuit.priority)
+            self.context.circuit_managers.pop(key, None)
+
+        # Kick off attempt to reconnect all PVs via fresh circuit(s).
+        self.context.reconnect(collections.deque(self.channels))
+
+        # Clean up the socket.
         sock = self.socket
         if sock is not None:
             self.selector.remove_socket(sock)
@@ -792,7 +804,7 @@ class PV:
             raise TimeoutError("Server at {} did not respond to attempt "
                                "to read channel named {} within {}-second "
                                "timeout."
-                               "".format(self.circuit_manager.address,
+                               "".format(self.circuit_manager.circuit.address,
                                          self.name, timeout))
         return self.last_reading
 
