@@ -262,6 +262,8 @@ class CurioVirtualCircuit:
             return [chan.unsubscribe(command.subscriptionid)]
         elif isinstance(command, ca.ClearChannelRequest):
             chan, db_entry = get_db_entry()
+            await self._cull_subscriptions(db_entry,
+                lambda sub: sub.channel == command.sid)
             return [chan.disconnect()]
         elif isinstance(command, ca.EchoRequest):
             return [ca.EchoResponse()]
