@@ -816,6 +816,12 @@ class PV:
 
     def reconnect(self, *, wait=True, timeout=2):
         self._user_disconnected = False
+        if self.connected:
+            # Try disconnecting first, but reconnect even if that fails.
+            try:
+                self.disconnect()
+            except Exception:
+                pass
         self.context.reconnect(((self.name, self.priority),))
         if wait:
             self.wait_for_connection(timeout=timeout)
