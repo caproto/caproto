@@ -35,6 +35,7 @@ AUTOMONITOR_MAXLENGTH = 65536
 STALE_SEARCH_EXPIRATION = 10.0
 TIMEOUT = 2
 SEARCH_BATCH_SIZE = 300
+RETRY_SEARCHES_PERIOD = 1
 STR_ENC = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
 
 
@@ -170,6 +171,8 @@ class SharedBroadcaster:
         self.command_thread = threading.Thread(target=self.command_loop,
                                                daemon=True)
         self.command_thread.start()
+        threading.Thread(target=self._retry_unanswered_searches,
+                         daemon=True).start()
 
         # Register with the CA repeater.
         if self.udp_sock is None:
@@ -374,6 +377,18 @@ class SharedBroadcaster:
                     for queue, cids in queues.items():
                         queue.put((address, cids))
                     self.command_cond.notify_all()
+
+    def _retry_unanswered_searches(self):
+        while True:
+            t = time.monotonic()
+            for batch in partition_all(SEARCH_BATCH_SIZE,
+                                       self.unanswered_searches.items()):
+                self.send(
+                    ca.EPICS_CA1_PORT,
+                    ca.VersionRequest(0, 13),
+                    *(ca.SearchRequest(name, search_id, 13)
+                    for search_id, (name, _) in batch))
+            time.sleep(max(0, RETRY_SEARCHES_PERIOD - (time.monotonic() - t)))
 
     def __del__(self):
         try:
