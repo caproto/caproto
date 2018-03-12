@@ -34,7 +34,7 @@ class DisconnectedError(ThreadingClientException):
 AUTOMONITOR_MAXLENGTH = 65536
 STALE_SEARCH_EXPIRATION = 10.0
 TIMEOUT = 2
-SEARCH_BATCH_SIZE = 300
+SEARCH_MAX_DATAGRAM_BYTES = (0xffff - 16)
 RETRY_SEARCHES_PERIOD = 1
 STR_ENC = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
 
@@ -303,23 +303,39 @@ class SharedBroadcaster:
 
             # TODO Resolve ones that do not need search as resolved.
 
-            # Generate search_ids and stash them on Context state so they can be
-            # used to match SearchResponses with SearchRequests.
+            # Generate search_ids and stash them on Context state so they can
+            # be used to match SearchResponses with SearchRequests.
             search_ids = []
             for name in needs_search:
                 search_id = new_id()
                 search_ids.append(search_id)
                 unanswered_searches[search_id] = (name, results_queue)
         logger.debug("Searching for '%r' PVs...." % len(needs_search))
-        # Send up to SEARCH_BATCH_SIZE SearchRequests per UDP datagram.
-        for batch in partition_all(SEARCH_BATCH_SIZE,
-                                   zip(needs_search, search_ids)):
+        self._send_batched_searches(needs_search, search_ids)
+        return search_ids
+
+    def _send_batched_searches(self, names, search_ids):
+        # Send up to SEARCH_MAX_DATAGRAM_BYTES per UDP datagram.
+        batch = collections.deque()
+        size = 0
+        for name, search_id in zip(names, search_ids):
+            command = ca.SearchRequest(name, search_id, 13)
+            _len = len(command)
+            if size + _len > SEARCH_MAX_DATAGRAM_BYTES:
+                self.send(
+                    ca.EPICS_CA1_PORT,
+                    ca.VersionRequest(0, 13),
+                    *batch)
+                batch.clear()
+                size = 0
+            batch.append(command)
+            size += _len
+        # Send the remainder.
+        if batch:
             self.send(
                 ca.EPICS_CA1_PORT,
                 ca.VersionRequest(0, 13),
-                *(ca.SearchRequest(name, search_id, 13)
-                for name, search_id in batch))
-        return search_ids
+                *batch)
 
     def received(self, bytes_recv, address):
         "Receive and process and next command broadcasted over UDP."
@@ -381,13 +397,12 @@ class SharedBroadcaster:
     def _retry_unanswered_searches(self):
         while True:
             t = time.monotonic()
-            for batch in partition_all(SEARCH_BATCH_SIZE,
-                                       self.unanswered_searches.items()):
-                self.send(
-                    ca.EPICS_CA1_PORT,
-                    ca.VersionRequest(0, 13),
-                    *(ca.SearchRequest(name, search_id, 13)
-                    for search_id, (name, _) in batch))
+            names = collections.deque()
+            search_ids = collections.deque()
+            for search_id, (name, _) in self.unanswered_searches.items():
+                search_ids.append(search_id)
+                names.append(name)
+            self._send_batched_searches(names, search_ids)
             time.sleep(max(0, RETRY_SEARCHES_PERIOD - (time.monotonic() - t)))
 
     def __del__(self):
