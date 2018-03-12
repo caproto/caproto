@@ -458,6 +458,8 @@ class Context:
                 pv.channel = None
                 search_pvs.append(pv)
                 search_names.append(pv.name)
+                # If there is a cached search result for this name, expire it.
+                self.broadcaster.search_results.pop(pv.name, None)
 
             cids = self.broadcaster.search(self._search_results_queue,
                                            search_names)
