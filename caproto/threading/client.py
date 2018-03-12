@@ -582,8 +582,7 @@ class VirtualCircuitManager:
 
     @property
     def connected(self):
-        with self.new_command_cond:
-            return self.circuit.states[ca.CLIENT] is ca.CONNECTED
+        return self.circuit.states[ca.CLIENT] is ca.CONNECTED
 
     def send(self, *commands):
         with self.new_command_cond:
