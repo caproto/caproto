@@ -388,7 +388,7 @@ class Context:
         self.log_level = log_level
         self.broadcaster = broadcaster
         self.search_condition = threading.Condition()
-        self.pv_record_consistency = threading.Condition()
+        self.pv_state_lock = threading.RLock()
         self.circuit_managers = {}  # keyed on (address, priority)
         self.pvs = weakref.WeakValueDictionary()
         self.pvs_by_name_and_priority = weakref.WeakValueDictionary()
@@ -424,38 +424,58 @@ class Context:
         # Ask the Broadcaster to search for every PV for which we do not
         # already have an instance. It might already have a cached search
         # result, but that is the concern of broadcaster.search.
-        cids = self.broadcaster.search(self._search_results_queue,
-                                       search_names)
-        for cid, pv in zip(cids, search_pvs):
-            self.pvs[cid] = pv
+        with self.pv_state_lock:
+            cids = self.broadcaster.search(self._search_results_queue,
+                                           search_names)
+            for cid, pv in zip(cids, search_pvs):
+                self.pvs[cid] = pv
         return all_pvs
+
+    def reconnect(self, cids):
+        search_pvs = []
+        search_names = []
+        # We will reuse the same PV object but use a new cid.
+        with self.pv_state_lock:
+            for cid in cids:
+                pv = self.pvs.pop(cid)
+                pv.circuit_manager = None
+                pv.channel = None
+                search_pvs.append(pv)
+                search_names.append(pv.name)
+
+            cids = self.broadcaster.search(self._search_results_queue,
+                                           search_names)
+            for cid, pv in zip(cids, search_pvs):
+                self.pvs[cid] = pv
 
     def _process_search_results_loop(self):
         # Receive (address, (cid1, cid2, cid3, ...)). The sending side of this
         # queue is held by SharedBroadcaster.command_loop.
         while True:
             address, cids = self._search_results_queue.get()
-            # TODO Grouping by priority would be safer, but as implemented
-            # currently it is safe to assume they all have the same priority
-            # because get_pvs only takes one priority for the whole batch.
-            priority = self.pvs[cids[0]].priority
+            with self.pv_state_lock:
+                # TODO Grouping by priority would be safer, but as implemented
+                # currently it is safe to assume they all have the same
+                # priority because get_pvs only takes one priority for the
+                # whole batch.
+                priority = self.pvs[cids[0]].priority
 
-            # Get (make if necessary) a VirtualCircuitManager. This is where
-            # TCP socket creation happens.
-            vc_manager = self.get_circuit_manager(address, priority)
-            circuit = vc_manager.circuit
+                # Get (make if necessary) a VirtualCircuitManager. This is
+                # where TCP socket creation happens.
+                vc_manager = self.get_circuit_manager(address, priority)
+                circuit = vc_manager.circuit
 
-            # Assign each PV a VirtualCircuitManager for managing a socket and
-            # tracking circuit state, as well as a ClientChannel for tracking
-            # channel state.
-            channels = collections.deque()
-            for cid in cids:
-                pv = self.pvs[cid]
-                pv.circuit_manager = vc_manager
-                chan = ca.ClientChannel(pv.name, circuit, cid=cid)
-                vc_manager.channels[cid] = chan
-                pv.channel = chan
-                channels.append(chan)
+                # Assign each PV a VirtualCircuitManager for managing a socket
+                # and tracking circuit state, as well as a ClientChannel for
+                # tracking channel state.
+                channels = collections.deque()
+                for cid in cids:
+                    pv = self.pvs[cid]
+                    pv.circuit_manager = vc_manager
+                    chan = ca.ClientChannel(pv.name, circuit, cid=cid)
+                    vc_manager.channels[cid] = chan
+                    pv.channel = chan
+                    channels.append(chan)
 
             # Notify PVs that they now have a circuit_manager. This will
             # un-block a wait() in the PV.wait_for_search() method.
