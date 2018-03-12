@@ -257,30 +257,36 @@ class CurioVirtualCircuit:
             await db_entry.subscribe(self.context.subscription_queue, sub_spec)
         elif isinstance(command, ca.EventCancelRequest):
             chan, db_entry = get_db_entry()
-            # Search self.subscriptions for a Subscription with a matching id.
-            for _sub_spec, _subs in self.subscriptions.items():
-                for _sub in _subs:
-                    if _sub.subscriptionid == command.subscriptionid:
-                        sub_spec = _sub_spec
-                        sub = _sub
-
-            unsub_response = chan.unsubscribe(command.subscriptionid)
-
-            if sub:
-                self.subscriptions[sub_spec].remove(sub)
-                self.context.subscriptions[sub_spec].remove(sub)
-                # Does anything else on the Context still care about sub_spec?
-                # If not unsubscribe the Context's queue from the db_entry.
-                if not self.context.subscriptions[sub_spec]:
-                    queue = self.context.subscription_queue
-                    await sub_spec.db_entry.unsubscribe(queue, sub_spec)
-                return [unsub_response]
+            await self._cull_subscriptions(db_entry,
+                lambda sub: sub.subscriptionid == command.subscriptionid)
+            return [chan.unsubscribe(command.subscriptionid)]
         elif isinstance(command, ca.ClearChannelRequest):
             chan, db_entry = get_db_entry()
             return [chan.disconnect()]
         elif isinstance(command, ca.EchoRequest):
             return [ca.EchoResponse()]
 
+    async def _cull_subscriptions(self, db_entry, func):
+        # Iterate through each Subscription, passing each one to func(sub).
+        # Collect a list of (SubscriptionSpec, Subscription) for which
+        # func(sub) is True.
+        #
+        # Remove any matching Subscriptions, and then remove any empty
+        # SubsciprtionSpecs. Return the list of matching pairs.
+        to_remove = []
+        for sub_spec, subs in self.subscriptions.items():
+            for sub in subs:
+                if func(sub):
+                    to_remove.append((sub_spec, sub))
+        for sub_spec, sub in to_remove:
+            self.subscriptions[sub_spec].remove(sub)
+            self.context.subscriptions[sub_spec].remove(sub)
+            # Does anything else on the Context still care about sub_spec?
+            # If not unsubscribe the Context's queue from the db_entry.
+            if not self.context.subscriptions[sub_spec]:
+                queue = self.context.subscription_queue
+                await sub_spec.db_entry.unsubscribe(queue, sub_spec)
+        return tuple(to_remove)
 
 class Context:
     def __init__(self, host, port, pvdb, *, log_level='ERROR'):
