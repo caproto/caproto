@@ -1,6 +1,7 @@
 # This module includes all exceptions raised by caproto, sentinel objects used
 # throughout the package (see detailed comment below), various network-related
 # helper functions, and other miscellaneous utilities.
+import collections
 import itertools
 import logging
 import os
@@ -432,3 +433,17 @@ def partition_all(n, seq):
         yield prev[:prev.index(no_pad)]
     else:
         yield prev
+
+def batch_requests(request_iter, max_length):
+    size = 0
+    batch = collections.deque()
+    for command in request_iter:
+        _len = len(command)
+        if size + _len > max_length:
+            yield batch
+            batch.clear()
+            size = 0
+        batch.append(command)
+        size += _len
+    if batch:
+        yield batch

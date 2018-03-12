@@ -20,7 +20,7 @@ from collections import Iterable, defaultdict
 
 import caproto as ca
 from .._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
-from .._utils import partition_all
+from .._utils import batch_requests
 
 
 class ThreadingClientException(Exception):
@@ -311,31 +311,11 @@ class SharedBroadcaster:
                 search_ids.append(search_id)
                 unanswered_searches[search_id] = (name, results_queue)
         logger.debug("Searching for '%r' PVs...." % len(needs_search))
-        self._send_batched_searches(needs_search, search_ids)
+        requests = (ca.SearchRequest(name, search_id, 13)
+                    for name, search_id in zip(needs_search, search_ids))
+        for batch in batch_requests(requests, SEARCH_MAX_DATAGRAM_BYTES):
+            self.send(ca.EPICS_CA1_PORT, ca.VersionRequest(0, 13), *batch)
         return search_ids
-
-    def _send_batched_searches(self, names, search_ids):
-        # Send up to SEARCH_MAX_DATAGRAM_BYTES per UDP datagram.
-        batch = collections.deque()
-        size = 0
-        for name, search_id in zip(names, search_ids):
-            command = ca.SearchRequest(name, search_id, 13)
-            _len = len(command)
-            if size + _len > SEARCH_MAX_DATAGRAM_BYTES:
-                self.send(
-                    ca.EPICS_CA1_PORT,
-                    ca.VersionRequest(0, 13),
-                    *batch)
-                batch.clear()
-                size = 0
-            batch.append(command)
-            size += _len
-        # Send the remainder.
-        if batch:
-            self.send(
-                ca.EPICS_CA1_PORT,
-                ca.VersionRequest(0, 13),
-                *batch)
 
     def received(self, bytes_recv, address):
         "Receive and process and next command broadcasted over UDP."
@@ -397,12 +377,11 @@ class SharedBroadcaster:
     def _retry_unanswered_searches(self):
         while True:
             t = time.monotonic()
-            names = collections.deque()
-            search_ids = collections.deque()
-            for search_id, (name, _) in self.unanswered_searches.items():
-                search_ids.append(search_id)
-                names.append(name)
-            self._send_batched_searches(names, search_ids)
+            requests = (ca.SearchRequest(name, search_id, 13)
+                        for search_id, (name, _) in
+                        self.unanswered_searches.items())
+            for batch in batch_requests(requests, SEARCH_MAX_DATAGRAM_BYTES):
+                self.send(ca.EPICS_CA1_PORT, ca.VersionRequest(0, 13), *batch)
             time.sleep(max(0, RETRY_SEARCHES_PERIOD - (time.monotonic() - t)))
 
     def __del__(self):
