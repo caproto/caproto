@@ -441,13 +441,15 @@ class Context:
                 self.pvs[cid] = pv
         return all_pvs
 
-    def reconnect(self, cids):
+    def reconnect(self, keys):
         search_pvs = []
         search_names = []
         # We will reuse the same PV object but use a new cid.
         with self.pv_state_lock:
-            for cid in cids:
-                pv = self.pvs.pop(cid)
+            for key in keys:
+                pv = self.pvs_by_name_and_priority[key]
+                if pv.channel is not None:
+                    self.pvs.pop(pv.channel.cid, None)
                 pv.circuit_manager = None
                 pv.channel = None
                 search_pvs.append(pv)
@@ -662,7 +664,9 @@ class VirtualCircuitManager:
             self.context.circuit_managers.pop(key, None)
 
         # Kick off attempt to reconnect all PVs via fresh circuit(s).
-        self.context.reconnect(collections.deque(self.channels))
+        self.context.reconnect((chan.name, chan.circuit.priority)
+                                for chan in self.channels.values())
+
 
         # Clean up the socket.
         sock = self.socket
@@ -686,7 +690,7 @@ class PV:
     __slots__ = ('name', 'priority', 'context', 'circuit_manager', 'channel',
                  'last_reading', '_read_notify_callback',
                  'command_bundle_queue', '_write_notify_callback',
-                 '_pc_callbacks', '__weakref__')
+                 '_user_disconnected', '_pc_callbacks', '__weakref__')
     def __init__(self, name, priority, context):
         """
         These must be instantiated by a Context, never directly.
@@ -700,9 +704,12 @@ class PV:
         self._read_notify_callback = None  # func to call on ReadNotifyResponse
         self._write_notify_callback = None  # func to call on WriteNotifyResponse
         self._pc_callbacks = {}
+        self._user_disconnected = False
 
     def __repr__(self):
-        if self.circuit_manager is None:
+        if self._user_disconnected:
+            state = "(disconnected by user)"
+        elif self.circuit_manager is None:
             state = "(searching....)"
         else:
             state = (f"address={self.circuit_manager.circuit.address}, "
@@ -784,6 +791,7 @@ class PV:
 
     def disconnect(self, *, wait=True, timeout=2):
         "Disconnect this Channel."
+        self._user_disconnected = True
         with self.circuit_manager.new_command_cond:
             if self.connected:
                 try:
@@ -805,6 +813,12 @@ class PV:
                                    "".format(self.circuit_manager.address,
                                              self.name,
                                              timeout))
+
+    def reconnect(self, *, wait=True, timeout=2):
+        self._user_disconnected = False
+        self.context.reconnect(((self.name, self.priority),))
+        if wait:
+            self.wait_for_connection(timeout=timeout)
 
     def read(self, *args, timeout=2, **kwargs):
         """Request a fresh reading, wait for it, return it and stash it.
