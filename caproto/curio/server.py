@@ -451,7 +451,10 @@ class Context:
                                          data_count=data_count,
                                          subscriptionid=sub.subscriptionid,
                                          status_code=1)
-                await sub.circuit.send(command)
+                # Check that the Channel did not close at some point after
+                # this update started its flight.
+                if chan.states[ca.SERVER] is ca.CONNECTED:
+                    await sub.circuit.send(command)
 
     async def broadcast_beacon_loop(self):
         beacon_period = self.environ['EPICS_CAS_BEACON_PERIOD']
