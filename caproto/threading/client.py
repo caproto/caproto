@@ -35,7 +35,9 @@ AUTOMONITOR_MAXLENGTH = 65536
 STALE_SEARCH_EXPIRATION = 10.0
 TIMEOUT = 2
 SEARCH_MAX_DATAGRAM_BYTES = (0xffff - 16)
+EVENT_ADD_BATCH_MAX_BYTES = 2**16
 RETRY_SEARCHES_PERIOD = 1
+RESTART_SUBS_PERIOD = 0.1
 STR_ENC = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
 
 
@@ -398,12 +400,15 @@ class Context:
         self.broadcaster = broadcaster
         self.search_condition = threading.Condition()
         self.pv_state_lock = threading.RLock()
+        self.resuscitated_pvs = []
         self.circuit_managers = {}  # keyed on (address, priority)
         self.pvs = weakref.WeakValueDictionary()
         self.pvs_by_name_and_priority = weakref.WeakValueDictionary()
         self.broadcaster.add_listener(self)
         self._search_results_queue = queue.Queue()
         threading.Thread(target=self._process_search_results_loop,
+                         daemon=True).start()
+        threading.Thread(target=self._restart_subscriptions,
                          daemon=True).start()
         self.selector = SelectorThread()
         self.selector.start()
@@ -460,6 +465,9 @@ class Context:
                                            search_names)
             for cid, pv in zip(cids, search_pvs):
                 self.pvs[cid] = pv
+            with self.pv_state_lock:
+                self.resuscitated_pvs.extend([pv for pv in search_pvs
+                                            if pv.subscriptions])
 
     def _process_search_results_loop(self):
         # Receive (address, (cid1, cid2, cid3, ...)). The sending side of this
@@ -516,6 +524,28 @@ class Context:
             vc_manager.circuit.log.setLevel(self.log_level)
             self.circuit_managers[(address, priority)] = vc_manager
         return vc_manager
+
+    def _restart_subscriptions(self):
+        while True:
+            t = time.monotonic()
+            ready = defaultdict(list)
+            with self.pv_state_lock:
+                pvs = list(self.resuscitated_pvs)
+                self.resuscitated_pvs.clear()
+                for pv in pvs:
+                    if pv.connected:
+                        ready[pv.circuit_manager].append(pv)
+                    else:
+                        self.resuscitated_pvs.append(pv)
+            for vc_manager, pvs in ready.items():
+                def requests():
+                    for pv in pvs:
+                        yield from pv._resubscribe()
+
+                for batch in batch_requests(requests(),
+                                            EVENT_ADD_BATCH_MAX_BYTES):
+                    vc_manager.send(*batch)
+            time.sleep(max(0, RESTART_SUBS_PERIOD - (time.monotonic() - t)))
 
     def disconnect(self, *, wait=True, timeout=2):
         try:
@@ -824,10 +854,9 @@ class PV:
         self._user_disconnected = False
         self.context.reconnect(((self.name, self.priority),))
         self.wait_for_connection(timeout=timeout)
-        self.resubscribe()
+        self.circuit_manager.send(*self._resubscribe())
 
-    def resubscribe(self):
-        self.wait_for_connection(timeout=None)
+    def _resubscribe(self):
         for sub in self.subscriptions:
             command = self.channel.subscribe(*sub.sub_args, **sub.sub_kwargs)
             # Update Subscription object with new id.
@@ -835,7 +864,7 @@ class PV:
             sub.subscriptionid = subscriptionid
             # Let the circuit_manager match future responses to this request.
             self.circuit_manager.subscriptions[subscriptionid] = sub
-            self.circuit_manager.send(command)
+            yield command
 
     def read(self, *args, timeout=2, **kwargs):
         """Request a fresh reading, wait for it, return it and stash it.
