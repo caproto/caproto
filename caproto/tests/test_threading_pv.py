@@ -3,7 +3,7 @@ import caproto._utils
 import caproto.threading.client
 import time
 
-from caproto.threading.client import PVContext
+from caproto.threading.pyepics_compat import PVContext
 from contextlib import contextmanager
 import pytest
 

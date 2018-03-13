@@ -1,8 +1,17 @@
 import functools
+import itertools
+import time
+import copy
+
+from collections import Iterable
+
 import caproto as ca
-from .client import Context, SharedBroadcaster
+from .client import (Context, SharedBroadcaster, AUTOMONITOR_MAXLENGTH,
+                     STR_ENC)
+from caproto import AccessRights, promote_type, ChannelType
 
 
+__all__ = ['PV', 'get_pv', 'caget', 'caput']
 
 
 def ensure_connection(func):
@@ -10,6 +19,11 @@ def ensure_connection(func):
     @functools.wraps(func)
     def inner(self, *args, **kwargs):
         self.wait_for_connection(timeout=kwargs.get('timeout', None))
+
+        if not self._args['type']:
+            # TODO: hack
+            self._connection_callback()
+
         return func(self, *args, **kwargs)
     return inner
 
@@ -34,9 +48,9 @@ class PV:
       >>> p.type           # EPICS data type: 'string','double','enum','long',..
 """
 
-    _fmtsca = "<PV '%(pvname)s', count=%(count)i, type=%(typefull)s, access=%(access)s>"
-    _fmtarr = "<PV '%(pvname)s', count=%(count)i/%(nelm)i, type=%(typefull)s, access=%(access)s>"
-    _fields = ('pvname',  'value',  'char_value',  'status',  'ftype',  'chid',
+    _fmtsca = "<PV '{pvname}', count={count}, type={typefull!r}, access={access}>"
+    _fmtarr = "<PV '{pvname}', count={count}/{nelm}, type={typefull!r}, access={access}>"
+    _fields = ('pvname', 'value', 'char_value', 'status', 'ftype', 'chid',
                'host', 'count', 'access', 'write_access', 'read_access',
                'severity', 'timestamp', 'posixseconds', 'nanoseconds',
                'precision', 'units', 'enum_strs',
@@ -49,10 +63,6 @@ class PV:
                  verbose=False, auto_monitor=False, count=None,
                  connection_callback=None,
                  connection_timeout=None, *, context=None):
-        # TODO
-        # - connection_callback
-        # - connection_timeout
-        self.chid = None
 
         if context is None:
             context = self._default_context
@@ -66,7 +76,7 @@ class PV:
         self.ftype = None
         self.connection_timeout = connection_timeout
         self.dflt_count = count
-        self._subid = None
+        self._auto_monitor_sub = None
 
         if self.connection_timeout is None:
             self.connection_timeout = 1
@@ -75,9 +85,9 @@ class PV:
         self._args['pvname'] = self.pvname
         self._args['count'] = count
         self._args['nelm'] = -1
-        self._args['type'] = 'unknown'
-        self._args['typefull'] = 'unknown'
-        self._args['access'] = 'unknown'
+        self._args['type'] = None
+        self._args['typefull'] = None
+        self._args['access'] = None
         self.connection_callbacks = []
 
         if connection_callback is not None:
@@ -94,7 +104,7 @@ class PV:
         elif hasattr(callback, '__call__'):
             self.callbacks[0] = (callback, {})
 
-        self._caproto_pv, = _default_context.get_pvs(self.pvname)
+        self._caproto_pv, = self._context.get_pvs(self.pvname)
 
     @property
     def connected(self):
@@ -105,7 +115,7 @@ class PV:
         # be an arias for reconnect?
         ...
 
-    def wait_for_connection(self, timeout=None, *, form=None, count=None):
+    def wait_for_connection(self, timeout=None):
         """wait for a connection that started with connect() to finish
         Returns
         -------
@@ -118,31 +128,41 @@ class PV:
         if self.connected:
             return
 
-        self.chid = self._context.create_channel(self.pvname)
+        self._caproto_pv.wait_for_connection(timeout=timeout)
+        self._connection_callback()
 
-        self._args['type'] = ca.ChannelType(self.chid.channel.native_data_type)
-        self._args['typefull'] = ca.promote_type(self.type,
-                                                 use_time=(form == 'time'),
-                                                 use_ctrl=(form != 'time'))
-        self._args['nelm'] = self.chid.channel.native_data_count
-        self._args['count'] = self.chid.channel.native_data_count
+    def _connection_callback(self):
+        # TODO: still need a hook for having connected in the background
+        if not self.connected or self._args['type'] is not None:
+            # TODO type can change if reconnected
+            return
 
-        # yeah... enum.Flag would be nice here
-        self._args['write_access'] = (self.chid.channel.access_rights & 2) == 2
-        self._args['read_access'] = (self.chid.channel.access_rights & 1) == 1
+        caproto_pv = self._caproto_pv
+        ch = self._caproto_pv.channel
+        form = self.form
+        count = self.dflt_count
+
+        self._args['type'] = ch.native_data_type
+        self._args['typefull'] = promote_type(self.type,
+                                              use_time=(form == 'time'),
+                                              use_ctrl=(form != 'time'))
+        self._args['nelm'] = ch.native_data_count
+        self._args['count'] = ch.native_data_count
+
+        self._args['write_access'] = AccessRights.WRITE in ch.access_rights
+        self._args['read_access'] = AccessRights.READ in ch.access_rights
 
         access_strs = ('no access', 'read-only', 'write-only', 'read/write')
-        self._args['access'] = access_strs[self.chid.channel.access_rights]
-
-        self.chid.register_user_callback(self.__on_changes)
+        self._args['access'] = access_strs[ch.access_rights]
 
         if self.auto_monitor is None:
             mcount = count if count is not None else self._args['count']
             self.auto_monitor = mcount < AUTOMONITOR_MAXLENGTH
 
         if self.auto_monitor:
-            self._subid = self.chid.subscribe(data_type=self.typefull,
-                                              data_count=count)
+            self._auto_monitor_sub = caproto_pv.subscribe(
+                data_type=self.typefull, data_count=count)
+            self._auto_monitor_sub.add_callback(self.__on_changes)
 
         self._cb_count = iter(itertools.count())
 
@@ -162,8 +182,8 @@ class PV:
 
     def reconnect(self):
         "try to reconnect PV"
-        self.disconnect()
-        return self.wait_for_connection()
+        self._caproto_pv.reconnect()
+        return True
 
     @ensure_connection
     def get(self, *, count=None, as_string=False, as_numpy=True,
@@ -191,18 +211,18 @@ class PV:
         val : Object
             The value, the type is dependent on the underlying PV
         """
-        # TODO
-        # - timeout
-        # - with_ctrlvars
-
         if count is None:
             count = self.dflt_count
+
+        if with_ctrlvars:
+            dt = promote_type(self.type, use_ctrl=True)
+
         dt = self.typefull
         if not as_string and self.typefull in ca.char_types:
-            re_map = {ca.ChannelType.CHAR: ca.ChannelType.INT,
-                      ca.ChannelType.CTRL_CHAR: ca.ChannelType.CTRL_INT,
-                      ca.ChannelType.TIME_CHAR: ca.ChannelType.TIME_INT,
-                      ca.ChannelType.STS_CHAR: ca.ChannelType.STS_INT}
+            re_map = {ChannelType.CHAR: ChannelType.INT,
+                      ChannelType.CTRL_CHAR: ChannelType.CTRL_INT,
+                      ChannelType.TIME_CHAR: ChannelType.TIME_INT,
+                      ChannelType.STS_CHAR: ChannelType.STS_INT}
             dt = re_map[self.typefull]
             # TODO if you want char arrays not as_string
             # force no-monitor rather than
@@ -210,7 +230,7 @@ class PV:
 
         # trigger going out to got data from network
         if ((not use_monitor) or
-            (self._subid is None) or
+            (self._auto_monitor_sub is None) or
             (self._args['value'] is None) or
             (count is not None and
              count > len(self._args['value']))):
@@ -223,10 +243,12 @@ class PV:
         if (as_string and (self.typefull in ca.char_types) or
                 self.typefull in ca.string_types):
             return info['char_value']
-        elif as_string and self.typefull in ca.enum_types:
+
+        value = info['value']
+        if as_string and self.typefull in ca.enum_types:
             enum_strs = self.enum_strs
             ret = []
-            for r in info['value']:
+            for r in value:
                 try:
                     ret.append(enum_strs[r])
                 except IndexError:
@@ -236,7 +258,10 @@ class PV:
             return ret
 
         elif not as_numpy:
-            return list(info['value'])
+            return value.tolist()
+
+        if (count == 1 or info['count'] == 1) and len(value) == 1:
+            return value[0]
         return info['value']
 
     def __ingest_read_response_command(self, command):
@@ -286,16 +311,17 @@ class PV:
 
         def run_callback(cmd):
             callback(*callback_data)
-        cb = run_callback if callback is not None else None
-        ret = self.value
-        self.chid.write(value, wait=wait, cb=cb, timeout=timeout)
-        return ret if wait else None
+
+        self._caproto_pv.write(
+            value, wait=wait,
+            cb=run_callback if callback is not None else None,
+            timeout=timeout)
 
     @ensure_connection
     def get_ctrlvars(self, timeout=5, warn=True):
         "get control values for variable"
         dtype = ca.promote_type(self.type, use_ctrl=True)
-        command = self.chid.read(data_type=dtype, timeout=timeout)
+        command = self._caproto_pv.read(data_type=dtype, timeout=timeout)
         info = self._parse_dbr_metadata(command.metadata)
         info['value'] = command.data
         self._args.update(**info)
@@ -305,7 +331,7 @@ class PV:
     def get_timevars(self, timeout=5, warn=True):
         "get time values for variable"
         dtype = ca.promote_type(self.type, use_time=True)
-        command = self.chid.read(data_type=dtype, timeout=timeout)
+        command = self._caproto_pv.read(data_type=dtype, timeout=timeout)
         info = self._parse_dbr_metadata(command.metadata)
         info['value'] = command.data
         self._args.update(**info)
@@ -401,9 +427,10 @@ class PV:
         add_callback.  This index is needed to remove a callback."""
         if not callable(callback):
             raise ValueError()
-        if self._subid is None:
-            self._subid = self.chid.subscribe(data_type=self.typefull,
-                                              data_count=self.dflt_count)
+        if self._auto_monitor_sub is None:
+            self._auto_monitor_sub = self._caproto_pv.subscribe(
+                data_type=self.typefull, data_count=self.dflt_count)
+            self._auto_monitor_sub.add_callback(self.__on_changes)
         if index is not None:
             raise ValueError("why do this")
         index = next(self._cb_count)
@@ -458,7 +485,7 @@ class PV:
     @property
     def host(self):
         "pv host"
-        return self.chid.channel.host_name().name.decode(STR_ENC)
+        return self._caproto_pv.circuit_manager.circuit.host
 
     @property
     def count(self):
@@ -476,7 +503,7 @@ class PV:
         .NELM field).  See also 'count' property"""
         if self._getarg('count') == 1:
             return 1
-        return self.chid.channel.native_data_count
+        return self._caproto_pv.channel.native_data_count
 
     @property
     def read_access(self):
@@ -593,16 +620,16 @@ class PV:
         nt_type = ca.native_type(xtype)
         fmt = '%i'
 
-        if nt_type in (ca.ChannelType.FLOAT, ca.ChannelType.DOUBLE):
+        if nt_type in (ChannelType.FLOAT, ChannelType.DOUBLE):
             fmt = '%g'
-        elif nt_type in (ca.ChannelType.CHAR, ca.ChannelType.STRING):
+        elif nt_type in (ChannelType.CHAR, ChannelType.STRING):
             fmt = '%s'
 
         # self._set_charval(self._args['value'], call_ca=False)
-        out.append("== %s  (%s) ==" % (self.pvname, ca.DBR_TYPES[xtype].__name__))
+        out.append(f"== {self.pvname}  ({ca.DBR_TYPES[xtype].__name__}) ==")
         if self.count == 1:
             val = self._args['value']
-            out.append('   value      = %s' % fmt % val)
+            out.append(f'   value      = {fmt}' % val)
         else:
             ext = {True: '...', False: ''}[self.count > 10]
             elems = range(min(5, self.count))
@@ -644,7 +671,7 @@ class PV:
             for index, nam in enumerate(self.enum_strs):
                 out.append("       %i = %s " % (index, nam))
 
-        if len(self.chid.channel.subscriptions) > 0:
+        if self._auto_monitor_sub is not None:
             msg = 'PV is internally monitored'
             out.append('   %s, with %i user-defined callbacks:' %
                        (msg, len(self.callbacks)))
@@ -673,10 +700,10 @@ class PV:
         "string representation"
 
         if self.connected:
-            if self.count == 1:
-                return self._fmtsca % self._args
+            if self._args['count'] == 1:  # self.count == 1:
+                return self._fmtsca.format(**self._args)
             else:
-                return self._fmtarr % self._args
+                return self._fmtarr.format(**self._args)
         else:
             return "<PV '%s': not connected>" % self.pvname
 
@@ -687,22 +714,24 @@ class PV:
     def disconnect(self):
         "disconnect PV"
         if self.connected:
-            self.chid.disconnect()
+            self._caproto_pv.disconnect()
 
     def __del__(self):
         if self.connected:
-            self.chid.disconnect(wait=False)
+            self._caproto_pv.disconnect(wait=False)
 
 
-_dflt_context = None
+
+class PVContext(Context):
+    def get_pv(self, pvname, **kwargs):
+        # TODO: hack to get tests starting, to be removed
+        return get_pv(pvname, context=self, **kwargs)
 
 
-def get_pv(pvname, *args, **kwargs):
-    global _dflt_context
-    if _dflt_context is None:
-        _dflt_context = PVContext()
-
-    return _dflt_context.get_pv(pvname)
+def get_pv(pvname, *args, context=None, **kwargs):
+    if context is None:
+        context = PV._default_context
+    return PV(pvname, *args, context=context, **kwargs)
 
 
 def caput(pvname, value, wait=False, timeout=60):

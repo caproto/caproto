@@ -25,7 +25,6 @@ def shared_broadcaster(request):
 @pytest.fixture(scope='function')
 def cntx(request, shared_broadcaster):
     cntx = Context(broadcaster=shared_broadcaster, log_level='DEBUG')
-    cntx.register()
 
     def cleanup():
         cntx.disconnect()
@@ -38,33 +37,30 @@ def test_context_disconnect(cntx):
     str_pv = 'Py:ao1.DESC'
 
     def bootstrap():
-        cntx.search(str_pv)
-        chan = cntx.create_channel(str_pv)
-        assert chan.connected
-        assert chan.circuit.connected
-        return chan
+        pv, = cntx.get_pvs(str_pv)
+        pv.wait_for_connection()
+        assert pv.connected
+        assert pv.circuit_manager.connected
+        return pv
 
-    def is_happy(chan, cntx):
-        chan.read()
-        assert chan.connected
-        assert chan.circuit.connected
-        assert cntx.broadcaster.registered
-        assert cntx.circuits
+    def is_happy(pv, cntx):
+        pv.read()
+        assert pv.connected
+        assert pv.circuit_manager.connected
+        # assert cntx.circuits
 
-    chan = bootstrap()
-    is_happy(chan, cntx)
+    pv = bootstrap()
+    is_happy(pv, cntx)
 
     cntx.disconnect()
 
     sys.stdout.flush()
 
-    assert not chan.connected
-    assert not chan.circuit.connected
-    assert not cntx.circuits
+    assert not pv.connected
+    assert not pv.circuit_manager
 
     with pytest.raises(ca.LocalProtocolError):
-        chan.read()
+        pv.read()
 
-    cntx.register()
     chan = bootstrap()
     is_happy(chan, cntx)

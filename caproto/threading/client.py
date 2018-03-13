@@ -1,6 +1,4 @@
 import collections
-import copy
-import functools
 import itertools
 import logging
 import os
@@ -14,12 +12,11 @@ import array
 import fcntl
 import errno
 import termios
-import inspect
 
-from collections import Iterable, defaultdict
+from collections import defaultdict
 
 import caproto as ca
-from .._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
+from .._constants import MAX_ID
 from .._utils import batch_requests
 
 
@@ -184,6 +181,8 @@ class SharedBroadcaster:
             command = self.broadcaster.register('127.0.0.1')
             self.send(ca.EPICS_CA2_PORT, command)
 
+        # TODO: relax registration requirement caproto-wide
+
         for attempts in range(attempts):
             with self.command_cond:
                 done = self.command_cond.wait_for(
@@ -312,7 +311,7 @@ class SharedBroadcaster:
                 search_id = new_id()
                 search_ids.append(search_id)
                 unanswered_searches[search_id] = (name, results_queue)
-        logger.debug("Searching for '%r' PVs...." % len(needs_search))
+        logger.debug("Searching for %r PVs...." % len(needs_search))
         requests = (ca.SearchRequest(name, search_id, 13)
                     for name, search_id in zip(needs_search, search_ids))
         for batch in batch_requests(requests, SEARCH_MAX_DATAGRAM_BYTES):
@@ -717,9 +716,10 @@ class VirtualCircuitManager:
 class PV:
     """Wraps a VirtualCircuit and a caproto.ClientChannel."""
     __slots__ = ('name', 'priority', 'context', 'circuit_manager', 'channel',
-                 'last_reading', '_read_notify_callback', 'subscriptions',
-                 'command_bundle_queue', '_write_notify_callback',
-                 '_user_disconnected', '_pc_callbacks', '__weakref__')
+                 'last_reading', 'last_writing', '_read_notify_callback',
+                 'subscriptions', 'command_bundle_queue',
+                 '_write_notify_callback', '_user_disconnected',
+                 '_pc_callbacks', '__weakref__')
     def __init__(self, name, priority, context):
         """
         These must be instantiated by a Context, never directly.
@@ -730,6 +730,7 @@ class PV:
         self.circuit_manager = None
         self.channel = None
         self.last_reading = None
+        self.last_writing = None
         self.subscriptions = []
         self._read_notify_callback = None  # func to call on ReadNotifyResponse
         self._write_notify_callback = None  # func to call on WriteNotifyResponse
@@ -770,6 +771,8 @@ class PV:
                 print(ex)
 
     def process_write_notify(self, write_notify_command):
+        self.last_writing = write_notify_command
+
         pc_cb = self._pc_callbacks.pop(write_notify_command.ioid, None)
         if pc_cb is not None:
             try:
@@ -804,6 +807,7 @@ class PV:
         initialize the connection in the fist place. This method waits for it
         to complete.
         """
+        # TODO: old docstring
         if self.circuit_manager is None:
             self.wait_for_search(timeout=timeout)
         cond = self.circuit_manager.new_command_cond
@@ -879,7 +883,7 @@ class PV:
         # Stash the ioid to match the response to the request.
         ioid = command.ioid
         self.circuit_manager.ioids[ioid] = self
-        # do not need lock here, happens in send
+        # TODO: circuit_manager can be removed from underneath us here
         self.circuit_manager.send(command)
         has_reading = lambda: ioid not in self.circuit_manager.ioids
         cond = self.circuit_manager.new_command_cond
@@ -904,6 +908,9 @@ class PV:
             self._pc_callbacks[ioid] = cb
         # do not need to lock this, locking happens in circuit command
         self.circuit_manager.send(command)
+        if not wait:
+            return
+
         has_reading = lambda: ioid not in self.circuit_manager.ioids
         cond = self.circuit_manager.new_command_cond
         with cond:
@@ -914,7 +921,7 @@ class PV:
                                "timeout."
                                "".format(self.circuit_manager.address,
                                          self.name, timeout))
-        return self.last_reading
+        return self.last_writing
 
     def subscribe(self, *args, **kwargs):
         "Start a new subscription and spawn an async task to receive readings."
