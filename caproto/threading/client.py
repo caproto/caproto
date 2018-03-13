@@ -401,7 +401,6 @@ class Context:
         self.circuit_managers = {}  # keyed on (address, priority)
         self.pvs = weakref.WeakValueDictionary()
         self.pvs_by_name_and_priority = weakref.WeakValueDictionary()
-        self.selector = None
         self.broadcaster.add_listener(self)
         self._search_results_queue = queue.Queue()
         threading.Thread(target=self._process_search_results_loop,
