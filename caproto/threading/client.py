@@ -234,16 +234,17 @@ class SharedBroadcaster:
             self.disconnect()
 
     def disconnect(self, *, wait=True, timeout=2):
-        if self.udp_sock is not None:
-            self.selector.remove_socket(self.udp_sock)
+        with self.command_cond:
+            if self.udp_sock is not None:
+                self.selector.remove_socket(self.udp_sock)
 
-        with self._search_lock:
             self.search_results.clear()
-        self.udp_sock = None
-        self.broadcaster.disconnect()
+            self.udp_sock = None
+            self.broadcaster.disconnect()
 
-        # if wait and self.command_thread is not threading.current_thread():
-        #     self.command_thread.join()
+            # if (wait and
+            #         self.command_thread is not threading.current_thread()):
+            #     self.command_thread.join()
 
     def send(self, port, *commands):
         """
@@ -466,7 +467,7 @@ class Context:
                 self.pvs[cid] = pv
             with self.pv_state_lock:
                 self.resuscitated_pvs.extend([pv for pv in search_pvs
-                                            if pv.subscriptions])
+                                              if pv.subscriptions])
 
     def _process_search_results_loop(self):
         # Receive (address, (cid1, cid2, cid3, ...)). The sending side of this
@@ -694,7 +695,7 @@ class VirtualCircuitManager:
                 pv.connection_state_changed('disconnected')
             # Update circuit state. This will be reflected on all PVs, which
             # continue to hold a reference to this disconnected circuit.
-            circuit = self.circuit.disconnect()
+            self.circuit.disconnect()
             # Remove VirtualCircuitManager from Context.
             # This will cause all future calls to Context.get_circuit_manager()
             # to create a fresh VirtualCiruit and VirtualCircuitManager.
@@ -731,6 +732,7 @@ class PV:
                  '_write_notify_callback', '_user_disconnected',
                  'connection_state_callback',
                  '_pc_callbacks', '__weakref__')
+
     def __init__(self, name, priority, context, connection_state_callback):
         """
         These must be instantiated by a Context, never directly.
@@ -744,8 +746,8 @@ class PV:
         self.last_reading = None
         self.last_writing = None
         self.subscriptions = []
-        self._read_notify_callback = None  # func to call on ReadNotifyResponse
-        self._write_notify_callback = None  # func to call on WriteNotifyResponse
+        self._read_notify_callback = None  # called on ReadNotifyResponse
+        self._write_notify_callback = None  # called on WriteNotifyResponse
         self._pc_callbacks = {}
         self._user_disconnected = False
 
@@ -835,7 +837,7 @@ class PV:
             raise TimeoutError("Server at {} did not respond to attempt "
                                "to create channel named {!r} within {}-second "
                                "timeout."
-                               "".format(self.circuit_manager.address,
+                               "".format(self.circuit_manager.circuit.address,
                                          self.name,
                                          timeout))
 
@@ -853,17 +855,18 @@ class PV:
             else:
                 return
         if wait:
-            is_closed = lambda: self.channel.states[ca.CLIENT] is ca.CLOSED
+            def is_closed():
+                return self.channel.states[ca.CLIENT] is ca.CLOSED
+
             cond = self.circuit_manager.new_command_cond
             with cond:
                 done = cond.wait_for(is_closed, timeout)
             if not done:
-                raise TimeoutError("Server at {} did not respond to attempt "
-                                   "to close channel named {} within {}-second"
-                                   " timeout."
-                                   "".format(self.circuit_manager.address,
-                                             self.name,
-                                             timeout))
+                raise TimeoutError(
+                    f"Server at {self.circuit_manager.circuit.address} did "
+                    f"not respond to attempt to close channel named "
+                    f"{self.name} within {timeout}-second timeout."
+                )
 
     def reconnect(self, *, timeout=2):
         if self.connected:
@@ -905,16 +908,19 @@ class PV:
         self.circuit_manager.ioids[ioid] = self
         # TODO: circuit_manager can be removed from underneath us here
         self.circuit_manager.send(command)
-        has_reading = lambda: ioid not in self.circuit_manager.ioids
+
+        def has_reading():
+            return ioid not in self.circuit_manager.ioids
+
         cond = self.circuit_manager.new_command_cond
         with cond:
             done = cond.wait_for(has_reading, timeout)
         if not done:
-            raise TimeoutError("Server at {} did not respond to attempt "
-                               "to read channel named {} within {}-second "
-                               "timeout."
-                               "".format(self.circuit_manager.circuit.address,
-                                         self.name, timeout))
+            raise TimeoutError(
+                f"Server at {self.circuit_manager.circuit.address} did "
+                f"not respond to attempt to read channel named "
+                f"{self.name} within {timeout}-second timeout."
+            )
         return self.last_reading
 
     def write(self, *args, wait=True, cb=None, timeout=2, **kwargs):
@@ -934,16 +940,18 @@ class PV:
         if not wait:
             return
 
-        has_reading = lambda: ioid not in self.circuit_manager.ioids
+        def has_reading():
+            return ioid not in self.circuit_manager.ioids
+
         cond = self.circuit_manager.new_command_cond
         with cond:
             done = cond.wait_for(has_reading, timeout)
         if not done:
-            raise TimeoutError("Server at {} did not respond to attempt "
-                               "to write to channel named {} within {}-second "
-                               "timeout."
-                               "".format(self.circuit_manager.address,
-                                         self.name, timeout))
+            raise TimeoutError(
+                f"Server at {self.circuit_manager.circuit.address} did "
+                f"not respond to attempt to write to channel named "
+                f"{self.name} within {timeout}-second timeout."
+            )
         return self.last_writing
 
     def subscribe(self, *args, **kwargs):
