@@ -53,16 +53,18 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
         print(f'Running {module_name}')
     os.environ['COVERAGE_PROCESS_START'] = '.coveragerc'
 
-    # p = subprocess.Popen([sys.executable, '-m', module_name] + args,
     p = subprocess.Popen([sys.executable, '-m', 'caproto.tests.example_runner',
-                          module_name] + args,
+                          module_name] + list(args),
                          stdout=stdout, stderr=stderr, stdin=stdin,
                          env=os.environ)
 
     def stop_ioc():
-        print(f'Sending Ctrl-C to the example IOC')
-        p.send_signal(signal.SIGINT)
-        p.wait()
+        if p.poll() is None:
+            print('Sending Ctrl-C to the example IOC')
+            p.send_signal(signal.SIGINT)
+            p.wait()
+        else:
+            print('Example IOC has already exited')
 
     if request is not None:
         request.addfinalizer(stop_ioc)

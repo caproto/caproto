@@ -703,9 +703,8 @@ class VirtualCircuitManager:
             self.context.circuit_managers.pop(key, None)
 
         # Kick off attempt to reconnect all PVs via fresh circuit(s).
-        self.context.reconnect((chan.name, chan.circuit.priority)
-                                for chan in self.channels.values())
-
+        # self.context.reconnect((chan.name, chan.circuit.priority)
+        #                         for chan in self.channels.values())
 
         # Clean up the socket.
         sock = self.socket
@@ -834,12 +833,11 @@ class PV:
                 return
             done = cond.wait_for(lambda: self.connected, timeout)
         if not done:
-            raise TimeoutError("Server at {} did not respond to attempt "
-                               "to create channel named {!r} within {}-second "
-                               "timeout."
-                               "".format(self.circuit_manager.circuit.address,
-                                         self.name,
-                                         timeout))
+                raise TimeoutError(
+                    f"Server at {self.circuit_manager.circuit.address} did "
+                    f"not respond to attempt to create channel named "
+                    f"{self.name!r} within {timeout}-second timeout."
+                )
 
     def disconnect(self, *, wait=True, timeout=2):
         "Disconnect this Channel."
@@ -865,7 +863,7 @@ class PV:
                 raise TimeoutError(
                     f"Server at {self.circuit_manager.circuit.address} did "
                     f"not respond to attempt to close channel named "
-                    f"{self.name} within {timeout}-second timeout."
+                    f"{self.name!r} within {timeout}-second timeout."
                 )
 
     def reconnect(self, *, timeout=2):
@@ -919,7 +917,7 @@ class PV:
             raise TimeoutError(
                 f"Server at {self.circuit_manager.circuit.address} did "
                 f"not respond to attempt to read channel named "
-                f"{self.name} within {timeout}-second timeout."
+                f"{self.name!r} within {timeout}-second timeout."
             )
         return self.last_reading
 
@@ -950,7 +948,7 @@ class PV:
             raise TimeoutError(
                 f"Server at {self.circuit_manager.circuit.address} did "
                 f"not respond to attempt to write to channel named "
-                f"{self.name} within {timeout}-second timeout."
+                f"{self.name!r} within {timeout}-second timeout."
             )
         return self.last_writing
 
