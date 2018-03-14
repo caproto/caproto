@@ -81,6 +81,7 @@ def _run_repeater(server_sock, bind_addr):
     broadcaster = caproto.Broadcaster(our_role=caproto.SERVER)
 
     while True:
+        # NOTE: this magic numer is MAX_UDP_RECV in epics-base
         msg, addr = server_sock.recvfrom(0xffff - 16)
         client_host, client_port = addr
 
@@ -159,10 +160,6 @@ def run(host='0.0.0.0'):
     addr = (host, port)
     logger.debug('Checking for another repeater')
 
-    # NOTE: This check is performed separately because
-    # loop.create_datagram_endpoint is not consistent on different platforms
-    # with tregard to addresses already in use. On Darwin, OSError is raised,
-    # whereas on Linux it is not.
     try:
         sock = check_for_running_repeater(addr)
     except RepeaterAlreadyRunning:
