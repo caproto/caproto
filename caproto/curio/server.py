@@ -137,11 +137,27 @@ class CurioVirtualCircuit:
                 elif hasattr(command, 'cid'):
                     cid = command.cid
                     sid = self.circuit.channels[cid].sid
-                    logger.error("Client broke the protocol in a recoverable "
-                                 "way. Disconnecting channel cid=%d sid=%d "
-                                 "but keeping the circuit alive.", cid, sid,
-                                 exc_info=ex)
-                    await self.send(ca.ServerDisconnResponse(cid=cid))
+
+                else:
+                    cid, sid = None, None
+
+                if cid is not None:
+                    try:
+                        await self.send(ca.ServerDisconnResponse(cid=cid))
+                    except Exception:
+                        logger.error(
+                            "Client broke the protocol in a recoverable "
+                            "way, but channel disconnection of cid=%d sid=%d "
+                            "failed.", cid, sid,
+                            exc_info=ex)
+                        break
+                    else:
+                        logger.error(
+                            "Client broke the protocol in a recoverable "
+                            "way. Disconnected channel cid=%d sid=%d "
+                            "but keeping the circuit alive.", cid, sid,
+                            exc_info=ex)
+
                     async with self.new_command_condition:
                         await self.new_command_condition.notify_all()
                     continue
