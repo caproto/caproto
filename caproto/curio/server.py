@@ -130,6 +130,26 @@ class CurioVirtualCircuit:
                 self.circuit.process_command(command)
             except curio.TaskCancelled:
                 break
+            except ca.RemoteProtocolError as ex:
+                if hasattr(command, 'sid'):
+                    sid = command.sid
+                    cid = self.circuit.channels_sid[sid].cid
+                elif hasattr(command, 'cid'):
+                    cid = command.cid
+                    sid = self.circuit.channels[cid].sid
+                    logger.error("Client broke the protocol in a recoverable "
+                                 "way. Disconnecting channel cid=%d sid=%d "
+                                 "but keeping the circuit alive.", cid, sid,
+                                 exc_info=ex)
+                    await self.send(ca.ServerDisconnResponse(cid=cid))
+                    async with self.new_command_condition:
+                        await self.new_command_condition.notify_all()
+                    continue
+                else:
+                    logger.error("Client broke the protocol in an "
+                                 "unrecoverable way.", exc_info=ex)
+                    # TODO: Kill the circuit.
+                    break
             except Exception as ex:
                 logger.error('Circuit command queue evaluation failed',
                              exc_info=ex)
