@@ -774,6 +774,9 @@ class PV:
         self._user_disconnected = False
 
     def connection_state_changed(self, state):
+        if state == 'disconnected':
+            self.channel = None
+
         if self.connection_state_callback is not None:
             self.connection_state_callback(self, state)
 
@@ -866,18 +869,20 @@ class PV:
         "Disconnect this Channel."
         self._user_disconnected = True
         with self.circuit_manager.new_command_cond:
-            if self.connected:
-                try:
-                    self.circuit_manager.send(self.channel.disconnect())
-                except OSError:
-                    # the socket is dead-dead, return
-                    return
-                self.connection_state_changed('disconnected')
-            else:
+            if not self.connected:
                 return
+
+            try:
+                self.circuit_manager.send(self.channel.disconnect())
+            except OSError:
+                # the socket is dead-dead, return
+                return
+            self.connection_state_changed('disconnected')
         if wait:
             def is_closed():
-                return self.channel.states[ca.CLIENT] is ca.CLOSED
+                # return channel.states[ca.CLIENT] is ca.CLOSED
+                # TODO
+                return self.channel is None
 
             cond = self.circuit_manager.new_command_cond
             with cond:

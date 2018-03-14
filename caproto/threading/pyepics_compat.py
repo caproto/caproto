@@ -20,9 +20,9 @@ def ensure_connection(func):
     def inner(self, *args, **kwargs):
         self.wait_for_connection(timeout=kwargs.get('timeout', None))
 
-        if not self._args['type']:
-            # TODO: hack
-            self._connection_callback()
+        # if not self._args['type']:
+        #     # TODO: hack
+        #     self._connection_callback()
 
         return func(self, *args, **kwargs)
     return inner
@@ -48,8 +48,10 @@ class PV:
       >>> p.type           # EPICS data type: 'string','double','enum','long',..
 """
 
-    _fmtsca = "<PV '{pvname}', count={count}, type={typefull!r}, access={access}>"
-    _fmtarr = "<PV '{pvname}', count={count}/{nelm}, type={typefull!r}, access={access}>"
+    _fmtsca = ("<PV '{pvname}', count={count}, type={typefull!r}, "
+               "access={access}>")
+    _fmtarr = ("<PV '{pvname}', count={count}/{nelm}, type={typefull!r}, "
+               "access={access}>")
     _fields = ('pvname', 'value', 'char_value', 'status', 'ftype', 'chid',
                'host', 'count', 'access', 'write_access', 'read_access',
                'severity', 'timestamp', 'posixseconds', 'nanoseconds',
@@ -104,7 +106,8 @@ class PV:
         elif hasattr(callback, '__call__'):
             self.callbacks[0] = (callback, {})
 
-        self._caproto_pv, = self._context.get_pvs(self.pvname)
+        self._caproto_pv, = self._context.get_pvs(
+            self.pvname, connection_state_callback=self._connection_callback)
 
     @property
     def connected(self):
@@ -128,11 +131,15 @@ class PV:
         if self.connected:
             return
 
-        self._caproto_pv.wait_for_connection(timeout=timeout)
-        self._connection_callback()
+        if self._caproto_pv._user_disconnected:
+            self._caproto_pv.reconnect(timeout=timeout)
+        else:
+            self._caproto_pv.wait_for_connection(timeout=timeout)
 
-    def _connection_callback(self):
+    def _connection_callback(self, caproto_pv, state):
+        'Connection callback hook from threading.PV.connection_state_changed'
         # TODO: still need a hook for having connected in the background
+        print('connection callback', caproto_pv, state)
         if not self.connected or self._args['type'] is not None:
             # TODO type can change if reconnected
             return
@@ -655,17 +662,18 @@ class PV:
                             if tstamp is None:
                                 tstamp = time.time()
                             tstamp, frac = divmod(tstamp, 1)
-                            return "%s.%5.5i" % (time.strftime("%Y-%m-%d %H:%M:%S",
-                                                               time.localtime(tstamp)),
-                                                 round(1.e5*frac))
+                            return "%s.%5.5i" % (
+                                time.strftime("%Y-%m-%d %H:%M:%S",
+                                              time.localtime(tstamp)),
+                                round(1.e5 * frac))
 
                         att = "%.3f (%s)" % (att, fmt_time(att))
                     elif nam == 'char_value':
                         att = "'%s'" % att
                     if len(nam) < 12:
-                        out.append('   %.11s= %s' % (nam+' '*12, str(att)))
+                        out.append('   %.11s= %s' % (nam + ' ' * 12, str(att)))
                     else:
-                        out.append('   %.20s= %s' % (nam+' '*20, str(att)))
+                        out.append('   %.20s= %s' % (nam + ' ' * 20, str(att)))
         if xtype == 'enum':  # list enum strings
             out.append('   enum strings: ')
             for index, nam in enumerate(self.enum_strs):
@@ -719,7 +727,6 @@ class PV:
     def __del__(self):
         if self.connected:
             self._caproto_pv.disconnect(wait=False)
-
 
 
 class PVContext(Context):
