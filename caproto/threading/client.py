@@ -895,6 +895,9 @@ class PV:
         """
         # need this lock because the socket thread could be trying to
         # update this channel due to an incoming message
+        if not self.connected:
+            raise DisconnectedError()
+
         with self.circuit_manager.new_command_cond:
             command = self.channel.read(*args, **kwargs)
         # Stash the ioid to match the response to the request.
@@ -916,6 +919,9 @@ class PV:
 
     def write(self, *args, wait=True, cb=None, timeout=2, **kwargs):
         "Write a new value and await confirmation from the server."
+        if not self.connected:
+            raise DisconnectedError()
+
         with self.circuit_manager.new_command_cond:
             command = self.channel.write(*args, **kwargs)
         # Stash the ioid to match the response to the request.
@@ -942,6 +948,9 @@ class PV:
 
     def subscribe(self, *args, **kwargs):
         "Start a new subscription and spawn an async task to receive readings."
+        if not self.connected:
+            raise DisconnectedError()
+
         command = self.channel.subscribe(*args, **kwargs)
         subscriptionid = command.subscriptionid
         sub = Subscription(self, subscriptionid, args, kwargs)
