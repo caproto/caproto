@@ -334,6 +334,7 @@ class SharedBroadcaster:
         # Save doing a 'self' lookup in the inner loop.
         search_results = self.search_results
         unanswered_searches = self.unanswered_searches
+        queues = defaultdict(list)
 
         while True:
             commands = self.command_bundle_queue.get()
@@ -344,7 +345,7 @@ class SharedBroadcaster:
                 continue
 
             with self.command_cond:
-                queues = defaultdict(list)
+                queues.clear()
                 now = time.monotonic()
                 for command in commands:
                     if isinstance(command, ca.VersionResponse):
@@ -352,7 +353,7 @@ class SharedBroadcaster:
                         if command.version <= 11:
                             logger.warning('Version response <= 11: %r',
                                            command)
-                    if isinstance(command, ca.SearchResponse):
+                    elif isinstance(command, ca.SearchResponse):
                         cid = command.cid
                         with self._search_lock:
                             try:
@@ -369,12 +370,12 @@ class SharedBroadcaster:
                                 # (Entries expire after
                                 # STALE_SEARCH_EXPIRATION.)
                                 search_results[name] = (address, now)
-                    # Send the search results to the Contexts that asked for
-                    # them. This is probably more general than is has to be but
-                    # I'm playing it safe for now.
-                    for queue, cids in queues.items():
-                        queue.put((address, cids))
-                    self.command_cond.notify_all()
+                # Send the search results to the Contexts that asked for
+                # them. This is probably more general than is has to be but
+                # I'm playing it safe for now.
+                for queue, cids in queues.items():
+                    queue.put((address, cids))
+                self.command_cond.notify_all()
 
     def _retry_unanswered_searches(self):
         while True:
