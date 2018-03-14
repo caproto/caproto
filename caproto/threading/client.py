@@ -412,7 +412,7 @@ class Context:
         self.selector = SelectorThread()
         self.selector.start()
 
-    def get_pvs(self, *names, priority=0):
+    def get_pvs(self, *names, priority=0, connection_state_callback=None):
         """
         Return a list of PV objects.
 
@@ -428,7 +428,7 @@ class Context:
                 # Maybe the user has asked for a PV that we already made.
                 pv = self.pvs_by_name_and_priority[key]
             except KeyError:
-                pv = PV(name, priority, self)
+                pv = PV(name, priority, self, connection_state_callback)
                 self.pvs_by_name_and_priority[key] = pv
                 search_pvs.append(pv)
                 search_names.append(name)
@@ -494,6 +494,7 @@ class Context:
                     pv.circuit_manager = vc_manager
                     chan = ca.ClientChannel(pv.name, circuit, cid=cid)
                     vc_manager.channels[cid] = chan
+                    vc_manager.pvs[cid] = pv
                     pv.channel = chan
                     channels.append(chan)
 
@@ -572,12 +573,13 @@ class Context:
 class VirtualCircuitManager:
     __slots__ = ('context', 'circuit', 'channels', 'ioids', 'subscriptions',
                  'disconnected', 'new_command_cond', 'socket', 'selector',
-                 '__weakref__')
+                 'pvs', '__weakref__')
 
     def __init__(self, context, circuit, selector, timeout=TIMEOUT):
         self.context = context
         self.circuit = circuit  # a caproto.VirtualCircuit
         self.channels = {}  # map cid to Channel
+        self.pvs = weakref.WeakValueDictionary()  # map cid to PV
         self.ioids = {}  # map ioid to Channel
         self.subscriptions = {}  # map subscriptionid to Subscription
         self.new_command_cond = threading.Condition()
@@ -673,7 +675,13 @@ class VirtualCircuitManager:
                 sub.process(command)
             elif isinstance(command, ca.EventCancelResponse):
                 self.subscriptions.pop(command.subscriptionid)
-
+            elif isinstance(command, ca.CreateChanResponse):
+                pv = self.pvs[command.cid]
+                pv.connection_state_changed('connected')
+            elif isinstance(command, (ca.ServerDisconnResponse,
+                                      ca.ClearChannelResponse)):
+                pv = self.pvs[command.cid]
+                pv.connection_state_changed('disconnected')
             self.new_command_cond.notify_all()
 
     def disconnect(self, *, wait=True, timeout=2.0):
@@ -682,6 +690,8 @@ class VirtualCircuitManager:
             if self.disconnected:
                 return
             self.disconnected = True
+            for pv in self.pvs.values():
+                pv.connection_state_changed('disconnected')
             # Update circuit state. This will be reflected on all PVs, which
             # continue to hold a reference to this disconnected circuit.
             circuit = self.circuit.disconnect()
@@ -719,14 +729,16 @@ class PV:
                  'last_reading', 'last_writing', '_read_notify_callback',
                  'subscriptions', 'command_bundle_queue',
                  '_write_notify_callback', '_user_disconnected',
+                 'connection_state_callback',
                  '_pc_callbacks', '__weakref__')
-    def __init__(self, name, priority, context):
+    def __init__(self, name, priority, context, connection_state_callback):
         """
         These must be instantiated by a Context, never directly.
         """
         self.name = name
         self.priority = priority
         self.context = context
+        self.connection_state_callback = connection_state_callback
         self.circuit_manager = None
         self.channel = None
         self.last_reading = None
@@ -736,6 +748,10 @@ class PV:
         self._write_notify_callback = None  # func to call on WriteNotifyResponse
         self._pc_callbacks = {}
         self._user_disconnected = False
+
+    def connection_state_changed(self, state):
+        if self.connection_state_callback is not None:
+            self.connection_state_callback(self, state)
 
     def __repr__(self):
         if self._user_disconnected:
@@ -833,6 +849,7 @@ class PV:
                 except OSError:
                     # the socket is dead-dead, return
                     return
+                self.connection_state_changed('disconnected')
             else:
                 return
         if wait:
@@ -953,6 +970,7 @@ class Subscription:
         # These will be used by the PV to re-subscribe if we need to reconnect.
         self.sub_args = sub_args
         self.sub_kwargs = sub_kwargs
+        self._unsubscribed = False
 
     def add_callback(self, func):
         self.callbacks.append(func)
@@ -966,3 +984,7 @@ class Subscription:
 
     def unsubscribe(self):
         self.pv.unsubscribe(self.subscriptionid)
+
+    def __del__(self):
+        if not self._unsubscribed:
+            self.unsubscirbe()
