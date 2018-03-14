@@ -665,7 +665,7 @@ class VirtualCircuitManager:
 
         with self.new_command_cond:
             if command is ca.DISCONNECTED:
-                self.disconnect()
+                self._disconnected()
             elif isinstance(command, ca.ReadNotifyResponse):
                 chan = self.ioids.pop(command.ioid)
                 chan.process_read_notify(command)
@@ -686,7 +686,7 @@ class VirtualCircuitManager:
                 pv.connection_state_changed('disconnected')
             self.new_command_cond.notify_all()
 
-    def disconnect(self, *, wait=True, timeout=2.0):
+    def _disconnected(self):
         with self.new_command_cond:
             # Ensure that this method is idempotent.
             if self.disconnected:
@@ -704,8 +704,9 @@ class VirtualCircuitManager:
             self.context.circuit_managers.pop(key, None)
 
         # Kick off attempt to reconnect all PVs via fresh circuit(s).
-        # self.context.reconnect((chan.name, chan.circuit.priority)
-        #                         for chan in self.channels.values())
+
+        self.context.reconnect((chan.name, chan.circuit.priority)
+                               for chan in self.channels.values())
 
         # Clean up the socket.
         sock = self.socket
@@ -716,6 +717,27 @@ class VirtualCircuitManager:
                 sock.close()
             except OSError:
                 pass
+
+    def disconnect(self, *, wait=True, timeout=2.0):
+        if self.disconnected:
+            return
+
+        sock = self.socket
+        sock.close()
+
+        if wait:
+            cond = self.new_command_cond
+            with cond:
+                if self.connected:
+                    return
+                done = cond.wait_for(lambda: self.disconnected, timeout)
+
+            if not done:
+                # TODO: this may actually happen due to a long backlog of
+                # incoming data, but may not be critical to wait for...
+                raise TimeoutError(f"Server did not respond to disconnection "
+                                   f"attempt within {timeout}-second timeout."
+                                   )
 
     def __del__(self):
         try:
@@ -1003,4 +1025,4 @@ class Subscription:
 
     def __del__(self):
         if not self._unsubscribed:
-            self.unsubscirbe()
+            self.unsubscribe()

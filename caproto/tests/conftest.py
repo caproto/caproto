@@ -86,6 +86,7 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
 
     return p
 
+
 @pytest.fixture(scope='function')
 def prefix():
     'Random PV prefix for a server'

@@ -1,4 +1,5 @@
 import sys
+import time
 
 from caproto.threading.client import (Context, SharedBroadcaster)
 import caproto as ca
@@ -104,9 +105,6 @@ def test_server_crash(context, prefix, request):
         )
 
         [pv.wait_for_connection() for pv in pvs]
-        break
-
-    return
 
     for i, prefix in enumerate(prefixes):
         ioc = iocs[prefix]
@@ -116,7 +114,9 @@ def test_server_crash(context, prefix, request):
             # kill the first IOC
             process.terminate()
             process.wait()
+            time.sleep(0.5)
             for pv in pvs:
+                # assert not pv.circuit_manager.connected
                 assert not pv.connected
         else:
             for pv in pvs:
@@ -124,9 +124,11 @@ def test_server_crash(context, prefix, request):
 
     prefix = prefixes[0]
     # restart the first IOC
+    ioc = iocs[prefix]
     proc = conftest.run_example_ioc('caproto.ioc_examples.simple',
                                     args=(prefix, ), request=request,
-                                    pv_to_check=pvs[0])
+                                    pv_to_check=ioc['pv_names'][0]
+                                    )
 
-    for pv in iocs[prefix]['pvs']:
+    for pv in ioc['pvs']:
         pv.wait_for_connection()
