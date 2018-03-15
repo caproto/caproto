@@ -117,19 +117,21 @@ def _run_repeater(server_sock, bind_addr):
                 remove_clients = list(check_clients(clients, skip=client_port))
                 _update_all(clients, servers,
                             remove_clients=remove_clients)
+                # Do not broadcast registration requests to other clients
+                break
+        else:
+            to_remove = []
+            for other_port, other_host in clients.items():
+                if other_port != client_port:
+                    try:
+                        server_sock.sendto(bytes_to_broadcast, (other_host,
+                                                                other_port))
+                    except Exception as ex:
+                        to_remove.append((other_host, other_port))
 
-        to_remove = []
-        for other_port, other_host in clients.items():
-            if other_port != client_port:
-                try:
-                    server_sock.sendto(bytes_to_broadcast, (other_host,
-                                                            other_port))
-                except Exception as ex:
-                    to_remove.append((other_host, other_port))
-
-        if to_remove:
-            _update_all(clients, servers,
-                        remove_clients=to_remove)
+            if to_remove:
+                _update_all(clients, servers,
+                            remove_clients=to_remove)
 
 
 def check_for_running_repeater(addr):
