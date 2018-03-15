@@ -46,6 +46,7 @@ class Broadcaster:
         # track for the Broadcaster. We don't need a full state machine, just
         # one flag to check whether we have yet registered with a repeater.
         self._registered = False
+        self._attempted_registration = False
         self._search_id_counter = itertools.count(0)
         logger_name = f"{abbrev}.bcast"
         self.log = logging.getLogger(logger_name)
@@ -123,12 +124,12 @@ class Broadcaster:
         """
         # All commands go through here.
         if isinstance(command, RepeaterRegisterRequest):
-            pass
+            self._attempted_registration = True
         elif isinstance(command, RepeaterConfirmResponse):
             self._registered = True
         elif (role is CLIENT and
               self.our_role is CLIENT and
-              not self._registered):
+              not self._attempted_registration):
             raise LocalProtocolError("Client must send a "
                                      "RegisterRepeaterRequest before any "
                                      "other commands")
@@ -202,7 +203,12 @@ class Broadcaster:
 
     def disconnect(self):
         self._registered = False
+        self._attempted_registration = False
 
     @property
     def registered(self):
         return self._registered
+
+    @property
+    def attempted_registration(self):
+        return self._attempted_registration
