@@ -49,7 +49,10 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
     if args is None:
         args = []
 
-    print(f'Running {module_name}')
+    if module_name == '--script':
+        print(f'Running script {args}')
+    else:
+        print(f'Running {module_name}')
     os.environ['COVERAGE_PROCESS_START'] = '.coveragerc'
 
     # p = subprocess.Popen([sys.executable, '-m', module_name] + args,
@@ -63,7 +66,11 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
         p.send_signal(signal.SIGINT)
         p.wait()
 
-    request.addfinalizer(stop_ioc)
+    if request is not None:
+        request.addfinalizer(stop_ioc)
+
+    if not pv_to_check:
+        return p
 
     print(f'Checking PV {pv_to_check}')
     for attempt in range(5):
@@ -76,6 +83,8 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
             break
     else:
         raise TimeoutError("ioc fixture failed to start in 5 seconds.")
+
+    return p
 
 @pytest.fixture(scope='function')
 def prefix():
@@ -97,13 +106,11 @@ def start_repeater():
         return
 
     print('Spawning repeater process')
-    full_repeater_path = os.path.abspath(ca.asyncio.repeater.__file__)
-    _repeater_process = subprocess.Popen([sys.executable, full_repeater_path],
-                                         env=os.environ)
-    print('Started')
-
-    print('Waiting for the repeater to start up...')
-    time.sleep(2)
+    _repeater_process = run_example_ioc('--script',
+                                        args=['caproto-repeater', '--verbose'],
+                                        request=None,
+                                        pv_to_check=None)
+    time.sleep(1.0)
 
 
 def stop_repeater():
@@ -111,12 +118,12 @@ def stop_repeater():
     if _repeater_process is None:
         return
 
-    print('Killing repeater process')
-    _repeater_process.terminate()
-    print('Waiting')
+    print('[Repeater] Sending Ctrl-C to the repeater')
+    _repeater_process.send_signal(signal.SIGINT)
     _repeater_process.wait()
-    print('OK')
     _repeater_process = None
+    print('[Repeater] Repeater exited')
+
 
 
 def default_setup_module(module):

@@ -1,4 +1,5 @@
 import os
+import sys
 import pytest
 import signal
 import subprocess
@@ -73,7 +74,8 @@ fmt2 = '{timestamp:%%H:%%M}'
                           ('caproto-put', (INT_PV, '5', '-v')),
                           ])
 def test_cli(command, args, ioc):
-    p = subprocess.Popen([command] + list(args),
+    p = subprocess.Popen([sys.executable, '-m', 'caproto.tests.example_runner',
+                          '--script', command] + list(args),
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     p.wait()
     print(p.communicate())
@@ -96,7 +98,8 @@ def test_cli(command, args, ioc):
                           (INT_PV, '-w', '2'),
                           ])
 def test_monitor(args, ioc):
-    p = subprocess.Popen(['caproto-monitor'] + list(args),
+    p = subprocess.Popen([sys.executable, '-m', 'caproto.tests.example_runner',
+                          '--script', 'caproto-monitor'] + list(args),
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     # Wait for the first line of output.
     line = p.stdout.readline()

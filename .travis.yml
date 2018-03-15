@@ -60,6 +60,11 @@ install:
 
 script:
   - caget Py:ao1 sim:mtr1
+
+  # Kill caRepeater if it's running - we want to test caproto-repeater later.
+  - pgrep -a caRepeater && killall caRepeater
+  - rm -f `which caRepeater`
+
   - pip install -r test-requirements.txt
   - coverage run run_tests.py -v --benchmark-disable
   - coverage combine
