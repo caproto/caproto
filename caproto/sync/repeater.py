@@ -83,16 +83,13 @@ def _run_repeater(server_sock, bind_addr):
     while True:
         # NOTE: this magic numer is MAX_UDP_RECV in epics-base
         msg, addr = server_sock.recvfrom(0xffff - 16)
-        client_host, client_port = addr
+        host, port = addr
 
-        if client_port in clients and clients[client_port] != client_host:
+        if port in clients and clients[port] != host:
             # broadcast only from one interface
             continue
-        elif client_port not in clients:
-            clients[client_port] = client_host
-            logger.debug('New client %s', addr)
-            # confirmation = caproto.RepeaterConfirmResponse(bind_host)
-            # confirmation_bytes = broadcaster.send(confirmation)
+        elif (port in servers and servers[port]['host'] != host):
+            continue
 
         try:
             commands = broadcaster.recv(msg, addr)
@@ -101,28 +98,42 @@ def _run_repeater(server_sock, bind_addr):
             logger.exception('Failed to process incoming packet')
             continue
 
-        bytes_to_broadcast = b''.join(bytes(cmd) for cmd in commands)
+        if not commands:
+            # NOTE: additional valid way of registration is an empty
+            # message, according to broadcaster source
+            if port not in clients:
+                clients[port] = host
+                logger.debug('New client %s (zero-length registration)', addr)
+            continue
+
 
         for command in commands:
             # logger.debug('[%s] Received %r', addr, command)
             if isinstance(command, caproto.RsrvIsUpResponse):
-                servers[command.server_port] = dict(up_at=time.time())
+                servers[command.server_port] = dict(up_at=time.time(),
+                                                    host=host)
+                if command.header.parameter2 == 0:
+                    updated_ip = caproto.ipv4_to_int32(host)
+                    command.header.parameter2 = updated_ip
             elif isinstance(command, caproto.RepeaterRegisterRequest):
+                if port not in clients:
+                    clients[port] = host
+                    logger.debug('New client %s', addr)
+
                 confirmation_bytes = broadcaster.send(
-                    caproto.RepeaterConfirmResponse(client_host))
+                    caproto.RepeaterConfirmResponse(host))
 
-                server_sock.sendto(confirmation_bytes, (client_host,
-                                                        client_port))
+                server_sock.sendto(confirmation_bytes, (host, port))
 
-                remove_clients = list(check_clients(clients, skip=client_port))
-                _update_all(clients, servers,
-                            remove_clients=remove_clients)
+                remove_clients = list(check_clients(clients, skip=port))
+                _update_all(clients, servers, remove_clients=remove_clients)
                 # Do not broadcast registration requests to other clients
                 break
         else:
+            bytes_to_broadcast = b''.join(bytes(cmd) for cmd in commands)
             to_remove = []
             for other_port, other_host in clients.items():
-                if other_port != client_port:
+                if other_port != port:
                     try:
                         server_sock.sendto(bytes_to_broadcast, (other_host,
                                                                 other_port))
@@ -130,8 +141,7 @@ def _run_repeater(server_sock, bind_addr):
                         to_remove.append((other_host, other_port))
 
             if to_remove:
-                _update_all(clients, servers,
-                            remove_clients=to_remove)
+                _update_all(clients, servers, remove_clients=to_remove)
 
 
 def check_for_running_repeater(addr):
