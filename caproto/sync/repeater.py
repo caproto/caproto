@@ -24,6 +24,7 @@ import socket
 import time
 
 import caproto
+from caproto._constants import MAX_UDP_RECV
 
 
 logger = logging.getLogger('repeater')
@@ -81,8 +82,7 @@ def _run_repeater(server_sock, bind_addr):
     broadcaster = caproto.Broadcaster(our_role=caproto.SERVER)
 
     while True:
-        # NOTE: this magic numer is MAX_UDP_RECV in epics-base
-        msg, addr = server_sock.recvfrom(0xffff - 16)
+        msg, addr = server_sock.recvfrom(MAX_UDP_RECV)
         host, port = addr
 
         if port in clients and clients[port] != host:
@@ -108,7 +108,6 @@ def _run_repeater(server_sock, bind_addr):
 
 
         for command in commands:
-            # logger.debug('[%s] Received %r', addr, command)
             if isinstance(command, caproto.RsrvIsUpResponse):
                 servers[command.server_port] = dict(up_at=time.time(),
                                                     host=host)
