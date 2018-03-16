@@ -81,6 +81,7 @@ def _run_repeater(server_sock, bind_addr):
     clients = {}
     broadcaster = caproto.Broadcaster(our_role=caproto.SERVER)
 
+    logger.info("Repeater is listening on %s:%d", bind_host, bind_port)
     while True:
         msg, addr = server_sock.recvfrom(MAX_UDP_RECV)
         host, port = addr
