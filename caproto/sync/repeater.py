@@ -24,7 +24,7 @@ import socket
 import time
 
 import caproto
-from caproto._constants import MAX_UDP_RECV
+from caproto._constants import MAX_UDP_RECV, SERVER_MIA_PRESUMED_DEAD
 
 
 logger = logging.getLogger('repeater')
@@ -55,7 +55,7 @@ def check_clients(clients, skip=None):
 
 
 def _update_all(clients, servers, *, remove_clients=None,
-                checkin_threshold=60):
+                checkin_threshold=SERVER_MIA_PRESUMED_DEAD):
     'Update client and server dicts (remove clients, check heartbeat)'
     nclients_init, nservers_init = len(clients), len(servers)
     if remove_clients:
