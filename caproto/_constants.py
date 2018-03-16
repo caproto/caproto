@@ -16,5 +16,13 @@ MAX_ENUM_STATES = 16
 MAX_RECORD_LENGTH = 59  # from 3.14 on
 MAX_UDP_RECV = 0xffff - 16
 
+# Servers send beacons at some maximum interval. ("Maximum delay between
+# beacons will be limited by server specified parameter, but is commonly 15
+# seconds.") Servers can be presumed dead and dropped by circuits and repeaters
+# after some interval ("usually 30 seconds"). Reference:
+# https://epics.anl.gov/docs/CAproto.html#secVCUnresponsive
+SERVER_MIA_PRESUMED_DEAD = 60  # seconds
+
+
 DO_REPLY = 10
 NO_REPLY = 5
