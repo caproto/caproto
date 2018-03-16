@@ -150,7 +150,18 @@ class SelectorThread:
 
 
 class SharedBroadcaster:
-    def __init__(self, *, log_level='ERROR', timeout=0.5, attempts=5):
+    def __init__(self, *, log_level='ERROR', registration_retry_time=10.0):
+        '''
+        A broadcaster client which can be shared among multiple clients
+
+        Parameters
+        ----------
+        log_level : str, optional
+            The log level to use
+        registration_retry_time : float, optional
+            The time, in seconds, between attempts made to register with the
+            repeater
+        '''
         self.log_level = log_level
         self.udp_sock = None
         self._search_lock = threading.RLock()
@@ -177,21 +188,25 @@ class SharedBroadcaster:
         if self.udp_sock is None:
             self.__create_sock()
 
+        self._registration_retry_time = registration_retry_time
+        self._registration_last_sent = 0
+        self._attempt_registration()
+
+    def _attempt_registration(self):
+        'Try registering with the repeater'
+        if self.broadcaster.registered:
+            return
+        elif self._registration_retry_time is None:
+            return
+
+        since_last_attempt = time.time() - self._registration_last_sent
+        if since_last_attempt < self._registration_retry_time:
+            return
+
+        self._registration_last_sent = time.time()
+        command = self.broadcaster.register()
         with self.command_cond:
-            command = self.broadcaster.register('127.0.0.1')
             self.send(ca.EPICS_CA2_PORT, command)
-
-        # TODO: relax registration requirement caproto-wide
-
-        for attempts in range(attempts):
-            with self.command_cond:
-                done = self.command_cond.wait_for(
-                    lambda: self.broadcaster.registered, timeout)
-                self.send(ca.EPICS_CA2_PORT, command)
-            if done:
-                break
-        else:
-            raise TimeoutError('Failed to register with the broadcaster')
 
     def new_id(self):
         # Return the next sequential unused id. Wrap back to 0 on overflow.
@@ -255,23 +270,6 @@ class SharedBroadcaster:
             for host in ca.get_address_list():
                 if ':' in host:
                     host, _, specified_port = host.partition(':')
-                    is_register = isinstance(commands[0],
-                                             ca.RepeaterRegisterRequest)
-                    if not self.broadcaster.registered and is_register:
-                        logger.debug('Specific IOC host/port designated in '
-                                     'address list: %s:%s.  Repeater '
-                                     'registration requirement ignored', host,
-                                     specified_port)
-                        with self.command_cond:
-                            # TODO how does this work with multiple addresses
-                            # listed?
-                            response = ca.RepeaterConfirmResponse(
-                                repeater_address='127.0.0.1')
-                            response.sender_address = ('127.0.0.1',
-                                                       ca.EPICS_CA1_PORT)
-                            self.command_bundle_queue.put([response])
-                            self.command_cond.notify_all()
-                        continue
                     self.udp_sock.sendto(bytes_to_send, (host,
                                                          int(specified_port)))
                 else:
@@ -279,6 +277,9 @@ class SharedBroadcaster:
 
     def search(self, results_queue, names, *, timeout=2):
         "Generate, process, and the transport a search request."
+        if not self.broadcaster.registered:
+            self._attempt_registration()
+
         new_id = self.new_id
         search_results = self.search_results
         unanswered_searches = self.unanswered_searches
