@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from caproto._cli import repeater_cli
+from caproto.sync.client import repeater_cli
 
 
 if __name__ == '__main__':

@@ -3,7 +3,7 @@ import sys
 import pytest
 import signal
 import subprocess
-from caproto._cli import get, put, monitor, parse_data_type
+from caproto.sync.client import get, put, monitor, parse_data_type
 from caproto._dbr import ChannelType
 
 INT_PV = 'pi'
