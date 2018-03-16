@@ -25,6 +25,7 @@
 import asyncio
 import logging
 import socket
+import time
 
 import caproto
 
@@ -43,6 +44,7 @@ class ProxyDatagramProtocol(asyncio.DatagramProtocol):
 
         self.broadcaster = caproto.Broadcaster(our_role=caproto.SERVER)
         super().__init__()
+        self._last_check = time.time()
 
     def connection_made(self, transport):
         self.transport = transport
@@ -62,22 +64,41 @@ class ProxyDatagramProtocol(asyncio.DatagramProtocol):
         for command in commands:
             if isinstance(command, caproto.RepeaterRegisterRequest):
                 if addr in self.remotes:
-                    # hack: re-sending registration can be necessary for caproto
-                    # clients
+                    # hack: re-sending registration can be necessary for
+                    # caproto clients
                     remote = self.remotes[addr]
                     if hasattr(remote, 'transport'):
                         remote.connection_made(remote.transport)
                     return
                 loop = asyncio.get_event_loop()
+                self._check_clients()
                 self.remotes[addr] = RemoteDatagramProtocol(self, addr, data)
                 coro = loop.create_datagram_endpoint(
                     lambda: self.remotes[addr], remote_addr=addr)
+                # as in the epics-base repeater, check for dead clients when a
+                # new one connects
                 asyncio.ensure_future(coro)
+
+        if addr in self.remotes:
+            if hasattr(self.remotes[addr], 'transport'):
+                self.remotes[addr].transport.sendto(data)
+            return
+
+    def _check_clients(self):
+        if (time.time() - self._last_check) < 5:
+            # Don't check for stale clients too often
+            return
+        self._last_check = time.time()
+
+        no_op = bytes(caproto.VersionRequest(priority=0, version=0).header)
+        for addr, remote in list(self.remotes.items()):
+            transport = getattr(remote, 'transport', None)
+            if not transport:
+                logger.debug('Removing client %r', self.addr)
+                del self.remotes[addr]
             else:
-                if addr in self.remotes:
-                    if hasattr(self.remotes[addr], 'transport'):
-                        self.remotes[addr].transport.sendto(data)
-                    return
+                remote.transport.sendto(no_op)
+        logger.debug('Active clients: %d', len(self.remotes))
 
 
 class RemoteDatagramProtocol(asyncio.DatagramProtocol):
@@ -100,8 +121,14 @@ class RemoteDatagramProtocol(asyncio.DatagramProtocol):
         self.proxy.transport.sendto(data, self.addr)
 
     def connection_lost(self, exc):
+        super().connection_lost(exc)
         logger.debug('Lost connection to %r', self.addr)
-        self.proxy.remotes.pop(self.attr)
+        self.proxy.remotes.pop(self.addr)
+
+    def error_received(self, exc):
+        super().error_received(exc)
+        logger.debug('Lost connection to %r (%s)', self.addr, exc)
+        self.proxy.remotes.pop(self.addr)
 
 
 async def start_datagram_proxy(bind, port):
