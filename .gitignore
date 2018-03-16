@@ -6,4 +6,5 @@ __pycache__/
 doc/build
 .cache/
 .coverage
+.coverage.*
 .asv/

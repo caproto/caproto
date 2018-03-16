@@ -10,7 +10,7 @@ import uuid
 
 import caproto as ca
 import caproto.benchmarking  # noqa
-from caproto._cli import get
+from caproto.sync.client import get
 import caproto.curio  # noqa
 import caproto.curio.client  # noqa
 import caproto.curio.server  # noqa

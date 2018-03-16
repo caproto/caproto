@@ -296,7 +296,7 @@ def test_curio_server_and_thread_client(curio_server):
 def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
                        prefix):
     from .conftest import run_example_ioc
-    from caproto._cli import get, put
+    from caproto.sync.client import get, put
     from caproto.curio import high_level_server
     import subprocess
 
@@ -422,7 +422,7 @@ def test_mocking_records(request, prefix):
     run_example_ioc('caproto.ioc_examples.mocking_records', request=request,
                     args=[prefix], pv_to_check=f'{prefix}A')
 
-    from caproto._cli import get, put
+    from caproto.sync.client import get, put
 
     # check that the alarm fields are linked
     b = f'{prefix}B'
