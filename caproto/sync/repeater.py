@@ -111,8 +111,17 @@ def _run_repeater(server_sock, bind_addr):
         to_forward = []
         for command in commands:
             if isinstance(command, caproto.RsrvIsUpResponse):
+                # Update our records of the last time each server checked in
+                # (i.e. issued a heartbeat).
                 servers[command.server_port] = dict(up_at=time.time(),
                                                     host=host)
+                # The sender of this command may leave the IP field empty (0),
+                # leaving it up to the repeater to fill in the address so that
+                # the ultimate recipient knows the correct origin. By leaving
+                # that up to the repeater, the sender avoids providing the
+                # wrong return address (i.e. picking the wrong interface). It
+                # is safer to let the repeater determine the return address
+                # by inspection.
                 if command.header.parameter2 == 0:
                     updated_ip = caproto.ipv4_to_int32(host)
                     command.header.parameter2 = updated_ip
