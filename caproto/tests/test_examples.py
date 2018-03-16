@@ -9,11 +9,6 @@ from .conftest import default_setup_module as setup_module  # noqa
 from .conftest import default_teardown_module as teardown_module  # noqa
 
 
-def test_synchronous_client():
-    from caproto.sync.simple_client import main
-    main(skip_monitor_section=True)
-
-
 def test_curio_client_example():
     from caproto.examples.curio_client_simple import main
     with curio.Kernel() as kernel:
