@@ -404,8 +404,8 @@ class Context:
         self.pv_state_lock = threading.RLock()
         self.resuscitated_pvs = []
         self.circuit_managers = {}  # keyed on (address, priority)
-        self.pvs = weakref.WeakValueDictionary()
-        self.pvs_by_name_and_priority = weakref.WeakValueDictionary()
+        self.pvs = {}
+        self.pvs_by_name_and_priority = {}
         self.broadcaster.add_listener(self)
         self._search_results_queue = queue.Queue()
         threading.Thread(target=self._process_search_results_loop,
@@ -582,7 +582,7 @@ class VirtualCircuitManager:
         self.context = context
         self.circuit = circuit  # a caproto.VirtualCircuit
         self.channels = {}  # map cid to Channel
-        self.pvs = weakref.WeakValueDictionary()  # map cid to PV
+        self.pvs = {}  # map cid to PV
         self.ioids = {}  # map ioid to Channel
         self.subscriptions = {}  # map subscriptionid to Subscription
         self.new_command_cond = threading.Condition()

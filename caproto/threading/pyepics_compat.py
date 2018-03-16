@@ -735,10 +735,13 @@ class PVContext(Context):
         return get_pv(pvname, context=self, **kwargs)
 
 
-def get_pv(pvname, *args, context=None, **kwargs):
+def get_pv(pvname, *args, context=None, connect=True, **kwargs):
     if context is None:
         context = PV._default_context
-    return PV(pvname, *args, context=context, **kwargs)
+    pv = PV(pvname, *args, context=context, **kwargs)
+    # if connect:
+    #     pv.wait_for_connection()
+    return pv
 
 
 def caput(pvname, value, wait=False, timeout=60):
