@@ -9,8 +9,6 @@ import time
 import uuid
 
 import caproto as ca
-import caproto.asyncio
-import caproto.asyncio.repeater
 import caproto.benchmarking  # noqa
 from caproto._cli import get
 import caproto.curio  # noqa
@@ -262,5 +260,3 @@ def threaded_in_curio_wrapper(fcn):
 
     wrapped.wait = wait
     return wrapped
-
-
