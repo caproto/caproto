@@ -3,7 +3,6 @@
 # UDP socket provided by a client or server implementation.
 import itertools
 import logging
-import socket
 
 from ._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
 from ._utils import (CLIENT, SERVER, CaprotoValueError, LocalProtocolError)
@@ -182,22 +181,23 @@ class Broadcaster:
                     SearchRequest(name, cid, self.protocol_version))
         return commands
 
-    def register(self, ip=None):
+    def register(self, ip='0.0.0.0'):
         """
         Generate a valid :class:`RepeaterRegisterRequest`.
 
         Parameters
         ----------
         ip : string, optional
-            Our IP address. Defaults is output of ``socket.gethostbyname``.
+            Our IP address. Defaults is '0.0.0.0', which ends up being
+            converted by the repeater to the IP from which it receives the
+            packet.
 
         Returns
         -------
         RepeaterRegisterRequest
         """
         if ip is None:
-            hostname = socket.gethostname()
-            ip = socket.gethostbyname(hostname)
+            ip = '0.0.0.0'
         command = RepeaterRegisterRequest(ip)
         return command
 
