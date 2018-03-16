@@ -292,29 +292,9 @@ def test_curio_server_and_thread_client(curio_server):
         kernel.run(task)
 
 
-@pytest.mark.parametrize(
-    'module_name, pvdb_class_name, class_kwargs',
-    [('caproto.ioc_examples.currency_conversion_polling', 'CurrencyPollingIOC',
-      {}),
-     ('caproto.ioc_examples.currency_conversion', 'CurrencyConversionIOC', {}),
-     ('caproto.ioc_examples.custom_write', 'CustomWrite', {}),
-     ('caproto.ioc_examples.inline_style', 'InlineStyleIOC', {}),
-     ('caproto.ioc_examples.io_interrupt', 'IOInterruptIOC', {}),
-     ('caproto.ioc_examples.macros', 'MacroifiedNames',
-      dict(macros={'beamline': 'my_beamline', 'thing': 'thing'})),
-     ('caproto.ioc_examples.reading_counter', 'ReadingCounter', {}),
-     ('caproto.ioc_examples.rpc_function', 'MyPVGroup', {}),
-     ('caproto.ioc_examples.simple', 'SimpleIOC', {}),
-     ('caproto.ioc_examples.subgroups', 'MyPVGroup', {}),
-     ('caproto.ioc_examples.caproto_to_ophyd', 'Group', {}),
-     ('caproto.ioc_examples.areadetector_image', 'DetectorGroup', {}),
-     ('caproto.ioc_examples.setpoint_rbv_pair', 'Group', {}),
-     ('caproto.ioc_examples.all_in_one', 'MyPVGroup',
-      dict(macros={'macro': 'expanded'})),
-     ]
-)
-def test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
-                      prefix):
+# See test_ioc_example and test_flaky_ioc_examples, below.
+def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
+                       prefix):
     from .conftest import run_example_ioc
     from caproto._cli import get, put
     from caproto.curio import high_level_server
@@ -378,6 +358,47 @@ def test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
         value = get(pv, verbose=True)
         print(f'Read {pv} = {value}')
 
+
+@pytest.mark.parametrize(
+    'module_name, pvdb_class_name, class_kwargs',
+     [('caproto.ioc_examples.currency_conversion', 'CurrencyConversionIOC', {}),
+     ('caproto.ioc_examples.custom_write', 'CustomWrite', {}),
+     ('caproto.ioc_examples.inline_style', 'InlineStyleIOC', {}),
+     ('caproto.ioc_examples.io_interrupt', 'IOInterruptIOC', {}),
+     ('caproto.ioc_examples.macros', 'MacroifiedNames',
+      dict(macros={'beamline': 'my_beamline', 'thing': 'thing'})),
+     ('caproto.ioc_examples.reading_counter', 'ReadingCounter', {}),
+     ('caproto.ioc_examples.rpc_function', 'MyPVGroup', {}),
+     ('caproto.ioc_examples.simple', 'SimpleIOC', {}),
+     ('caproto.ioc_examples.subgroups', 'MyPVGroup', {}),
+     ('caproto.ioc_examples.caproto_to_ophyd', 'Group', {}),
+     ('caproto.ioc_examples.areadetector_image', 'DetectorGroup', {}),
+     ('caproto.ioc_examples.setpoint_rbv_pair', 'Group', {}),
+     ('caproto.ioc_examples.all_in_one', 'MyPVGroup',
+      dict(macros={'macro': 'expanded'})),
+     ]
+)
+def test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
+                      prefix):
+    return _test_ioc_examples(request, module_name, pvdb_class_name,
+                              class_kwargs, prefix)
+
+
+# Use pytest-rerunfailures plugin to try these a couple times due to flaky
+# Google API calls. Ultimately, xfail.
+@pytest.mark.xfail()
+@pytest.mark.flaky(reruns=5, reruns_delay=2)
+@pytest.mark.parametrize(
+    'module_name, pvdb_class_name, class_kwargs',
+    [('caproto.ioc_examples.currency_conversion_polling', 'CurrencyPollingIOC',
+      {}),
+     ('caproto.ioc_examples.currency_conversion', 'CurrencyConversionIOC', {}),
+     ]
+)
+def test_flaky_ioc_examples(request, module_name, pvdb_class_name,
+                            class_kwargs, prefix):
+    return _test_ioc_examples(request, module_name, pvdb_class_name,
+                              class_kwargs, prefix)
 
 def test_areadetector_generate():
     from caproto.ioc_examples import areadetector_image
