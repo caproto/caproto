@@ -108,6 +108,7 @@ def _run_repeater(server_sock, bind_addr):
             continue
 
 
+        to_forward = []
         for command in commands:
             if isinstance(command, caproto.RsrvIsUpResponse):
                 servers[command.server_port] = dict(up_at=time.time(),
@@ -115,6 +116,7 @@ def _run_repeater(server_sock, bind_addr):
                 if command.header.parameter2 == 0:
                     updated_ip = caproto.ipv4_to_int32(host)
                     command.header.parameter2 = updated_ip
+                to_forward.append(command)
             elif isinstance(command, caproto.RepeaterRegisterRequest):
                 if port not in clients:
                     clients[port] = host
@@ -127,21 +129,22 @@ def _run_repeater(server_sock, bind_addr):
 
                 remove_clients = list(check_clients(clients, skip=port))
                 _update_all(clients, servers, remove_clients=remove_clients)
-                # Do not broadcast registration requests to other clients
-                break
-        else:
-            bytes_to_broadcast = b''.join(bytes(cmd) for cmd in commands)
-            to_remove = []
-            for other_port, other_host in clients.items():
-                if other_port != port:
-                    try:
-                        server_sock.sendto(bytes_to_broadcast, (other_host,
-                                                                other_port))
-                    except Exception as ex:
-                        to_remove.append((other_host, other_port))
+                # Do not broadcast registration requests to other clients.
+                # Omit it from `to_forward`.
+            else:
+                to_forward.append(command)
+        bytes_to_broadcast = b''.join(bytes(cmd) for cmd in to_forward)
+        to_remove = []
+        for other_port, other_host in clients.items():
+            if other_port != port:
+                try:
+                    server_sock.sendto(bytes_to_broadcast, (other_host,
+                                                            other_port))
+                except Exception as ex:
+                    to_remove.append((other_host, other_port))
 
-            if to_remove:
-                _update_all(clients, servers, remove_clients=to_remove)
+        if to_remove:
+            _update_all(clients, servers, remove_clients=to_remove)
 
 
 def check_for_running_repeater(addr):
