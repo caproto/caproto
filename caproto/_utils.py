@@ -301,7 +301,11 @@ def send_all(buffers_to_send, send_func):
         Expected to return number of bytes sent or raise SendAllRetry otherwise
     '''
 
+    if not buffers_to_send:
+        return
+
     gen = incremental_buffer_list_slice(*buffers_to_send)
+
     # prime the generator
     gen.send(None)
 
@@ -329,6 +333,9 @@ async def async_send_all(buffers_to_send, async_send_func):
         Async function to call with list of buffers to send
         Expected to return number of bytes sent or raise SendAllRetry otherwise
     '''
+
+    if not buffers_to_send:
+        return
 
     gen = incremental_buffer_list_slice(*buffers_to_send)
     # prime the generator
