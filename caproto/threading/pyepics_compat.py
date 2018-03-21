@@ -2,6 +2,7 @@ import functools
 import itertools
 import time
 import copy
+import threading
 
 from collections import Iterable
 
@@ -138,8 +139,6 @@ class PV:
 
     def _connection_callback(self, caproto_pv, state):
         'Connection callback hook from threading.PV.connection_state_changed'
-        # TODO: still need a hook for having connected in the background
-        print('connection callback', caproto_pv, state)
         if not self.connected or self._args['type'] is not None:
             # TODO type can change if reconnected
             return
@@ -264,6 +263,9 @@ class PV:
                 ret, = ret
             return ret
 
+        elif count is None and len(info['value']) == 1:
+            return info['value'][0]
+
         elif not as_numpy:
             return value.tolist()
 
@@ -310,7 +312,13 @@ class PV:
                     raise ValueError('{} is not in Enum ({}'.format(
                         value, self.enum_strs))
 
-        if isinstance(value, str) or not isinstance(value, Iterable):
+        if isinstance(value, str):
+            if self.typefull in ca.char_types:
+                # have to add a null-terminator char
+                value = value.encode(STR_ENC) + b'\0'
+            else:
+                value = (value, )
+        elif not isinstance(value, Iterable):
             value = (value, )
 
         if isinstance(value[0], str):
@@ -699,9 +707,9 @@ class PV:
         if self._args[arg] is None and self.connected:
             if arg in ('status', 'severity', 'timestamp',
                        'posixseconds', 'nanoseconds'):
-                self.get_timevars(timeout=1, warn=False)
+                self.get_timevars(warn=False)
             else:
-                self.get_ctrlvars(timeout=1, warn=False)
+                self.get_ctrlvars(warn=False)
         return self._args.get(arg, None)
 
     def __repr__(self):

@@ -893,11 +893,9 @@ class PV:
             except OSError:
                 # the socket is dead-dead, return
                 return
-            self.connection_state_changed('disconnected')
+
         if wait:
             def is_closed():
-                # return channel.states[ca.CLIENT] is ca.CLOSED
-                # TODO
                 return self.channel is None
 
             cond = self.circuit_manager.new_command_cond

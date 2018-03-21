@@ -199,6 +199,11 @@ class Broadcaster:
         if ip is None:
             ip = '0.0.0.0'
         command = RepeaterRegisterRequest(ip)
+
+        # NOTE: consider this enough for a registration attempt.
+        # TODO this is required for moving forward with the threading client,
+        # and may be implemented better in the future
+        self._attempted_registration = True
         return command
 
     def disconnect(self):

@@ -62,7 +62,6 @@ def test_cntx_disconnect_reconnect(cntx):
     pv = cntx.get_pv(str_pv)
     pv.get()
     assert pv.connected
-    assert cntx.broadcaster.registered
 
     cntx.disconnect()
     assert not pv.connected
@@ -185,6 +184,9 @@ def test_user_disconnection(context):
     # simulate connection loss (at the circuit-level, of course)
     pv.circuit_manager.disconnect()
     pv.wait_for_connection()
+
+    assert pv.connected
+    assert pv.circuit_manager.connected
 
     sub = pv.subscribe()
     sub.add_callback(print)
