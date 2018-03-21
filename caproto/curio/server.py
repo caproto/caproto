@@ -97,7 +97,9 @@ class CurioVirtualCircuit:
         """
         if self.connected:
             buffers_to_send = self.circuit.send(*commands)
-            await self.client.sendmsg(buffers_to_send)
+
+            # send bytes over the wire using some caproto utilities
+            await ca.async_send_all(buffers_to_send, self.client.sendmsg)
 
     async def recv(self):
         """

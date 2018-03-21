@@ -2,8 +2,6 @@
 # throughout the package (see detailed comment below), various network-related
 # helper functions, and other miscellaneous utilities.
 import collections
-import itertools
-import logging
 import os
 import socket
 import sys
@@ -287,6 +285,68 @@ def incremental_buffer_list_slice(*buffers):
         buffers = buffer_list_slice(*buffers, offset=sent)
 
 
+class SendAllRetry(Exception):
+    ...
+
+
+def send_all(buffers_to_send, send_func):
+    '''Incrementally slice a list of buffers, and send it using `send_func`
+
+    Parameters
+    ----------
+    buffers_to_send : (buffer1, buffer2, ...)
+        Buffers are expected to be memoryviews or similar
+    send_func : callable
+        Function to call with list of buffers to send
+        Expected to return number of bytes sent or raise SendAllRetry otherwise
+    '''
+
+    gen = incremental_buffer_list_slice(*buffers_to_send)
+    # prime the generator
+    gen.send(None)
+
+    while buffers_to_send:
+        try:
+            sent = send_func(buffers_to_send)
+        except SendAllRetry:
+            continue
+
+        try:
+            buffers_to_send = gen.send(sent)
+        except StopIteration:
+            # finished sending
+            break
+
+
+async def async_send_all(buffers_to_send, async_send_func):
+    '''Incrementally slice a list of buffers, and send it using `send_func`
+
+    Parameters
+    ----------
+    buffers_to_send : (buffer1, buffer2, ...)
+        Buffers are expected to be memoryviews or similar
+    async_send_func : callable
+        Async function to call with list of buffers to send
+        Expected to return number of bytes sent or raise SendAllRetry otherwise
+    '''
+
+    gen = incremental_buffer_list_slice(*buffers_to_send)
+    # prime the generator
+    gen.send(None)
+
+    while buffers_to_send:
+        try:
+            sent = await async_send_func(buffers_to_send)
+        except SendAllRetry:
+            continue
+
+        try:
+            buffers_to_send = gen.send(sent)
+        except StopIteration:
+            # finished sending
+            break
+
+
 def spawn_daemon(func, *args, **kwargs):
     # adapted from https://stackoverflow.com/a/6011298/1221924
 
@@ -401,40 +461,16 @@ def evaluate_channel_filter(filter_text):
     return filter_
 
 
-no_pad = '__no__pad__'
-
-
-def partition_all(n, seq):
-    """ Partition all elements of sequence into tuples of length at most n
-
-    The final tuple may be shorter to accommodate extra elements.
-
-    >>> list(partition_all(2, [1, 2, 3, 4]))
-    [(1, 2), (3, 4)]
-
-    >>> list(partition_all(2, [1, 2, 3, 4, 5]))
-    [(1, 2), (3, 4), (5,)]
-
-    See Also:
-        partition
-
-    Vendored from toolz.itertoolz
-    """
-    args = [iter(seq)] * n
-    it = itertools.zip_longest(*args, fillvalue=no_pad)
-    try:
-        prev = next(it)
-    except StopIteration:
-        return
-    for item in it:
-        yield prev
-        prev = item
-    if prev[-1] is no_pad:
-        yield prev[:prev.index(no_pad)]
-    else:
-        yield prev
-
 def batch_requests(request_iter, max_length):
+    '''Batch a set of items with length, thresholded on sum of item length
+
+    Yields
+    ------
+    batch : collections.deque
+        Batch of items from request_iter, where:
+            sum(len(b) for b in batch) < max_length
+        NOTE: instance of deque is reused, cleared at each iteration
+    '''
     size = 0
     batch = collections.deque()
     for command in request_iter:

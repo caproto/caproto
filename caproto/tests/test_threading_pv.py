@@ -4,9 +4,8 @@ import caproto.threading.client
 import sys
 import time
 
-from caproto.threading.client import SharedBroadcaster
+from caproto.threading.client import Context, SharedBroadcaster
 from caproto.threading.pyepics_compat import PVContext
-from caproto.threading.client import (Context, SharedBroadcaster)
 import caproto as ca
 from contextlib import contextmanager
 import pytest
@@ -15,8 +14,6 @@ from . import pvnames
 from .conftest import default_setup_module as setup_module  # noqa
 from .conftest import default_teardown_module as teardown_module  # noqa
 from . import conftest
-
-
 
 
 @pytest.fixture(scope='function')
@@ -86,7 +83,6 @@ def test_put_complete(cntx):
             mutable.append(a)
 
         # put and wait
-        old_value = pv.get()
         pv.put(0.1, wait=True)
         result = pv.get()
         assert result == 0.1
@@ -185,11 +181,10 @@ def test_context_disconnect(context):
 def test_user_disconnection(context):
     pv, = context.get_pvs(pvnames.double_pv)
     pv.wait_for_connection()
-    cm1 = pv.circuit_manager
-    pv.circuit_manager.disconnect()  # simulate connection loss
+
+    # simulate connection loss (at the circuit-level, of course)
+    pv.circuit_manager.disconnect()
     pv.wait_for_connection()
-    cm2 = pv.circuit_manager
-    assert cm1 is not cm2
 
     sub = pv.subscribe()
     sub.add_callback(print)
