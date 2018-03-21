@@ -153,6 +153,13 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
             ClearChannelResponse: CLOSED,
             ServerDisconnResponse: CLOSED,
             ErrorResponse: MUST_CLOSE,
+
+            # All other received commands are acceptable:
+            AccessRightsResponse: MUST_CLOSE,
+            ReadNotifyResponse: MUST_CLOSE,
+            WriteNotifyResponse: MUST_CLOSE,
+            EventAddResponse: MUST_CLOSE,
+            EventCancelResponse: MUST_CLOSE,
         },
         CLOSED: {
             # a terminal state
@@ -200,6 +207,16 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
             ClearChannelResponse: CLOSED,
             ServerDisconnResponse: CLOSED,
             ErrorResponse: MUST_CLOSE,
+
+            # These are allowed because they may already be in flight when
+            # the client requests to close. The important thing is that there
+            # is a restriction on any additional client _requests_ in this
+            # state.
+            AccessRightsResponse: MUST_CLOSE,
+            ReadNotifyResponse: MUST_CLOSE,
+            WriteNotifyResponse: MUST_CLOSE,
+            EventAddResponse: MUST_CLOSE,
+            EventCancelResponse: MUST_CLOSE,
         },
         CLOSED: {
             # a terminal state
