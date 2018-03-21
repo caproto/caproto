@@ -190,7 +190,12 @@ class SharedBroadcaster:
 
         self._registration_retry_time = registration_retry_time
         self._registration_last_sent = 0
-        self._attempt_registration()
+
+        try:
+            # Always attempt registration on initialization, but allow failures
+            self._attempt_registration()
+        except Exception as ex:
+            logger.exception('Broadcaster registration failed on init')
 
     def _attempt_registration(self):
         'Try registering with the repeater'
@@ -205,6 +210,7 @@ class SharedBroadcaster:
 
         self._registration_last_sent = time.time()
         command = self.broadcaster.register()
+
         with self.command_cond:
             self.send(ca.EPICS_CA2_PORT, command)
 
