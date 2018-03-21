@@ -139,14 +139,18 @@ class SelectorThread:
                 bytes_available = avail_buf[0]
 
                 try:
-                    bytes_recv, address = sock.recvfrom(max((4096,
-                                                             bytes_available)))
+                    bytes_recv, address = sock.recvfrom(
+                        max((4096, bytes_available)))
                 except OSError as ex:
                     if ex.errno == errno.EAGAIN:
                         continue
+                    # register as a disconnection
                     bytes_recv, address = b'', None
 
-                obj.received(bytes_recv, address)
+                if not bytes_recv:
+                    self.remove_socket(sock)
+                else:
+                    obj.received(bytes_recv, address)
 
 
 class SharedBroadcaster:
@@ -727,16 +731,20 @@ class VirtualCircuitManager:
                 pass
 
     def disconnect(self, *, wait=True, timeout=2.0):
-        if self.disconnected:
+        if self.disconnected or self.socket is None:
             return
 
-        sock = self.socket
-        sock.close()
+        sock, self.socket = self.socket, None
+        try:
+            sock.shutdown(socket.SHUT_WR)
+        except OSError as ex:
+            pass
 
+        # self.selector.remove_socket(sock)
         if wait:
             cond = self.new_command_cond
             with cond:
-                if self.connected:
+                if self.disconnected:
                     return
                 done = cond.wait_for(lambda: self.disconnected, timeout)
 
