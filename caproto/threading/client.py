@@ -185,28 +185,34 @@ class SharedBroadcaster:
                          daemon=True).start()
 
         # Register with the CA repeater.
-        if self.udp_sock is None:
-            self.__create_sock()
-
         self._registration_retry_time = registration_retry_time
         self._registration_last_sent = 0
 
         try:
             # Always attempt registration on initialization, but allow failures
-            self._attempt_registration()
+            self._register()
         except Exception as ex:
             logger.exception('Broadcaster registration failed on init')
 
-    def _attempt_registration(self):
-        'Try registering with the repeater'
-        if self.broadcaster.registered:
-            return
-        elif self._registration_retry_time is None:
-            return
+    def _should_attempt_registration(self):
+        'Whether or not a registration attempt should be tried'
+        if self.udp_sock is None:
+            return True
+
+        if (self.broadcaster.registered or
+                self._registration_retry_time is None):
+            return False
 
         since_last_attempt = time.time() - self._registration_last_sent
         if since_last_attempt < self._registration_retry_time:
-            return
+            return False
+
+        return True
+
+    def _register(self):
+        'Send a registration request to the repeater'
+        if self.udp_sock is None:
+            self._create_sock()
 
         self._registration_last_sent = time.time()
         command = self.broadcaster.register()
@@ -230,7 +236,7 @@ class SharedBroadcaster:
                 continue
             return i
 
-    def __create_sock(self):
+    def _create_sock(self):
         # UDP socket broadcasting to CA servers
         if self.udp_sock is not None:
             self.selector.remove_socket(self.udp_sock)
@@ -262,6 +268,7 @@ class SharedBroadcaster:
             self.search_results.clear()
             self.udp_sock = None
             self.broadcaster.disconnect()
+            self._registration_last_sent = 0
 
             # if (wait and
             #         self.command_thread is not threading.current_thread()):
@@ -283,8 +290,8 @@ class SharedBroadcaster:
 
     def search(self, results_queue, names, *, timeout=2):
         "Generate, process, and the transport a search request."
-        if not self.broadcaster.registered:
-            self._attempt_registration()
+        if self._should_attempt_registration():
+            self._register()
 
         new_id = self.new_id
         search_results = self.search_results
