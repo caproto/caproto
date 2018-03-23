@@ -1042,7 +1042,14 @@ class PV:
                     raise ValueError('{} is not in Enum ({}'.format(
                         value, self.enum_strs))
 
-        if isinstance(value, str) or not isinstance(value, Iterable):
+        if isinstance(value, str):
+            if self.typefull in ca.char_types:
+                # have to zero pad!
+                value = tuple(value.encode(STR_ENC)) + (0,)
+            else:
+                value = (value, )
+
+        if not isinstance(value, Iterable):
             value = (value, )
 
         if isinstance(value[0], str):
