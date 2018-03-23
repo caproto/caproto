@@ -142,9 +142,14 @@ class SelectorThread:
                 except OSError as ex:
                     if ex.errno == errno.EAGAIN:
                         continue
-                    bytes_recv, address = b'', None
-
-                obj.received(bytes_recv, address)
+                    else:
+                        self.remove_socket(sock)
+                else:
+                    if not bytes_recv:
+                        self.remove_socket(sock)
+                        print("got nothing back from socket!")
+                        continue
+                    obj.received(bytes_recv, address)
 
 
 class SharedBroadcaster:
