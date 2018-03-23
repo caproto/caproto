@@ -953,6 +953,9 @@ class PV:
 
         if count is None:
             count = self.dflt_count
+
+        if timeout is None:
+            timeout = 5
         dt = self.typefull
         if not as_string and self.typefull in ca.char_types:
             re_map = {ca.ChannelType.CHAR: ca.ChannelType.INT,
@@ -971,7 +974,8 @@ class PV:
             (count is not None and
              count > len(self._args['value']))):
             command = self.chid.read(data_type=dt,
-                                     data_count=count)
+                                     data_count=count,
+                                     timeout=timeout)
             self.__ingest_read_response_command(command)
 
         info = self._args
