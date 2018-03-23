@@ -691,10 +691,11 @@ class Channel:
         self.circuit.ioids[ioid] = self
         # do not need lock here, happens in send
         self.circuit.send(command)
-        has_reading = lambda: ioid not in self.circuit.ioids
+
         cond = self.circuit.new_command_cond
         with cond:
-            done = cond.wait_for(has_reading, timeout)
+            done = cond.wait_for(lambda: ioid not in self.circuit.ioids,
+                                 timeout)
         if not done:
             raise TimeoutError("Server at {} did not respond to attempt "
                                "to read channel named {} within {}-second "
@@ -717,10 +718,10 @@ class Channel:
         if not wait:
             return self.last_reading
 
-        has_reading = lambda: ioid not in self.circuit.ioids
         cond = self.circuit.new_command_cond
         with cond:
-            done = cond.wait_for(has_reading, timeout)
+            done = cond.wait_for(lambda: ioid not in self.circuit.ioids,
+                                 timeout)
         if not done:
             raise TimeoutError("Server at {} did not respond to attempt "
                                "to write to channel named {} within {}-second "
