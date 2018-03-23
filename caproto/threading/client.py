@@ -714,6 +714,9 @@ class Channel:
             self._pc_callbacks[ioid] = cb
         # do not need to lock this, locking happens in circuit command
         self.circuit.send(command)
+        if not wait:
+            return self.last_reading
+
         has_reading = lambda: ioid not in self.circuit.ioids
         cond = self.circuit.new_command_cond
         with cond:
