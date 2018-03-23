@@ -995,8 +995,12 @@ class PV:
                 ret, = ret
             return ret
 
+        elif count is None and len(info['value']) == 1:
+            return info['value'][0]
+
         elif not as_numpy:
             return list(info['value'])
+
         return info['value']
 
     def __ingest_read_response_command(self, command):
