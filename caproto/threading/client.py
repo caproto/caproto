@@ -644,7 +644,7 @@ class Channel:
             raise TimeoutError("Server at {} did not respond to attempt "
                                "to create channel named {} within {}-second "
                                "timeout."
-                               "".format(self.circuit.address,
+                               "".format(self.circuit.circuit.address,
                                          self.channel.name,
                                          timeout))
 
@@ -668,8 +668,8 @@ class Channel:
                 raise TimeoutError("Server at {} did not respond to attempt "
                                    "to close channel named {} within {}-second"
                                    " timeout."
-                                   "".format(self.circuit.address, self.name,
-                                             timeout))
+                                   "".format(self.circuit.circuit.address,
+                                             self.channel.name, timeout))
 
     def read(self, *args, timeout=2, **kwargs):
         """Request a fresh reading, wait for it, return it and stash it.
@@ -694,8 +694,8 @@ class Channel:
             raise TimeoutError("Server at {} did not respond to attempt "
                                "to read channel named {} within {}-second "
                                "timeout."
-                               "".format(self.circuit.address,
-                                         self.name, timeout))
+                               "".format(self.circuit.circuit.address,
+                                         self.channel.name, timeout))
         return self.last_reading
 
     def write(self, *args, wait=True, cb=None, timeout=2, **kwargs):
@@ -717,8 +717,8 @@ class Channel:
             raise TimeoutError("Server at {} did not respond to attempt "
                                "to write to channel named {} within {}-second "
                                "timeout."
-                               "".format(self.circuit.address,
-                                         self.name, timeout))
+                               "".format(self.circuit.circuit.address,
+                                         self.channel.name, timeout))
         return self.last_reading
 
     def subscribe(self, *args, **kwargs):
