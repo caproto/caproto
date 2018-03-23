@@ -1435,9 +1435,9 @@ class PV:
         if self._args[arg] is None and self.connected:
             if arg in ('status', 'severity', 'timestamp',
                        'posixseconds', 'nanoseconds'):
-                self.get_timevars(timeout=1, warn=False)
+                self.get_timevars(warn=False)
             else:
-                self.get_ctrlvars(timeout=1, warn=False)
+                self.get_ctrlvars(warn=False)
         return self._args.get(arg, None)
 
     def __repr__(self):
