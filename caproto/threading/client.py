@@ -209,7 +209,7 @@ class SharedBroadcaster:
                 self._registration_retry_time is None):
             return False
 
-        since_last_attempt = time.time() - self._registration_last_sent
+        since_last_attempt = time.monotonic() - self._registration_last_sent
         if since_last_attempt < self._registration_retry_time:
             return False
 
@@ -220,7 +220,7 @@ class SharedBroadcaster:
         if self.udp_sock is None:
             self._create_sock()
 
-        self._registration_last_sent = time.time()
+        self._registration_last_sent = time.monotonic()
         command = self.broadcaster.register()
 
         with self.command_cond:
@@ -286,30 +286,42 @@ class SharedBroadcaster:
                 else:
                     self.udp_sock.sendto(bytes_to_send, (host, port))
 
+    def get_cached_search_result(self, name, *,
+                                 threshold=STALE_SEARCH_EXPIRATION):
+        'Returns address if found, raises KeyError if missing or stale.'
+        address, timestamp = self.search_results[name]
+        if time.monotonic() - timestamp > threshold:
+            # TODO this is very inefficient
+            for context in self.listeners:
+                for addr, cm in context.circuit_managers.items():
+                    if cm.connected and name in cm.all_created_pvnames:
+                        # A valid connection exists in one of our clients, so
+                        # ignore the stale result status
+                        self.search_results[name] = (address, time.monotonic())
+                        return address
+
+            # Clean up expired result.
+            self.search_results.pop(name, None)
+            raise KeyError(f'{name!r}: stale search result')
+
+        return address
+
     def search(self, results_queue, names, *, timeout=2):
         "Generate, process, and the transport a search request."
         if self._should_attempt_registration():
             self._register()
 
         new_id = self.new_id
-        search_results = self.search_results
         unanswered_searches = self.unanswered_searches
-        stale_search_expiration = STALE_SEARCH_EXPIRATION
 
         with self._search_lock:
             # We have have already searched for these names recently.
             # Filter `pv_names` down to a subset, `needs_search`.
-            now = time.monotonic()
             needs_search = []
             use_cached_search = defaultdict([].copy)
             for name in names:
                 try:
-                    # Raise KeyError if the result is missing or stale.
-                    address, timestamp = search_results[name]
-                    if now - timestamp > stale_search_expiration:
-                        # Clean up expired result.
-                        search_results.pop(name, None)
-                        raise KeyError
+                    address = self.get_cached_search_result(name)
                 except KeyError:
                     needs_search.append(name)
                 else:
@@ -443,15 +455,21 @@ class Context:
             except KeyError:
                 pv = PV(name, self, connection_state_callback)
                 self.pvs[name] = pv
+            else:
+                # Re-using a PV instance. Add a new connection state callback,
+                # if necessary:
+                if connection_state_callback:
+                    pv.connection_state_callback.add_callback(
+                        connection_state_callback)
 
             if not pv.connected:
                 search_pvs[name] = pv
 
             all_pvs.append(pv)
 
-        # TODO: BUG: major problem with this callback mechanism - if connection
-        # callback is quick, downstream listeners may never receive
-        # notification
+        # TODO: potential bug?
+        # if callback is quick, is there a chance downstream listeners may
+        # never receive notification?
 
         # Ask the Broadcaster to search for every PV for which we do not
         # already have an instance. It might already have a cached search
@@ -587,7 +605,7 @@ class Context:
 class VirtualCircuitManager:
     __slots__ = ('context', 'circuit', 'channels', 'ioids', 'subscriptions',
                  'disconnected', 'new_command_cond', 'socket', 'selector',
-                 'pvs', '__weakref__')
+                 'pvs', 'all_created_pvnames', '__weakref__')
 
     def __init__(self, context, circuit, selector, timeout=TIMEOUT):
         self.context = context
@@ -600,6 +618,10 @@ class VirtualCircuitManager:
         self.socket = None
         self.selector = selector
         self.disconnected = False
+
+        # keep track of all PV names that are successfully connected to within
+        # this circuit. This is to be cleared upon disconnection:
+        self.all_created_pvnames = []
 
         # Connect.
         cond = self.new_command_cond
@@ -685,11 +707,14 @@ class VirtualCircuitManager:
                 self.subscriptions.pop(command.subscriptionid)
             elif isinstance(command, ca.CreateChanResponse):
                 pv = self.pvs[command.cid]
-                pv.connection_state_changed('connected')
+                chan = self.channels[command.cid]
+                pv.connection_state_changed('connected', chan)
+                self.all_created_pvnames.append(pv.name)
             elif isinstance(command, (ca.ServerDisconnResponse,
                                       ca.ClearChannelResponse)):
                 pv = self.pvs[command.cid]
-                pv.connection_state_changed('disconnected')
+                pv.connection_state_changed('disconnected', None)
+                # NOTE: pv remains valid until server goes down
             self.new_command_cond.notify_all()
 
     def _disconnected(self):
@@ -698,8 +723,9 @@ class VirtualCircuitManager:
             if self.disconnected:
                 return
             self.disconnected = True
+            self.all_created_pvnames.clear()
             for pv in self.pvs.values():
-                pv.connection_state_changed('disconnected')
+                pv.connection_state_changed('disconnected', None)
             # Update circuit state. This will be reflected on all PVs, which
             # continue to hold a reference to this disconnected circuit.
             self.circuit.disconnect()
@@ -770,7 +796,12 @@ class PV:
         self.name = name
         self.priority = context.priority
         self.context = context
-        self.connection_state_callback = connection_state_callback
+        self.connection_state_callback = CallbackHandler(self)
+
+        if connection_state_callback is not None:
+            self.connection_state_callback.add_callback(
+                connection_state_callback)
+
         self.circuit_manager = None
         self.channel = None
         self.last_reading = None
@@ -781,12 +812,16 @@ class PV:
         self._pc_callbacks = {}
         self._user_disconnected = False
 
-    def connection_state_changed(self, state):
+    def connection_state_changed(self, state, channel):
+        logger.debug('%s Connection state changed %s %s', self.name, state,
+                     channel)
         if state == 'disconnected':
-            self.channel = None
+            logger.debug('%s channel reset', self.name)
 
-        if self.connection_state_callback is not None:
-            self.connection_state_callback(self, state)
+        # PV is responsible for updating its channel attribute.
+        self.channel = channel
+
+        self.connection_state_callback.process(self, state)
 
     def __repr__(self):
         if self._user_disconnected:
@@ -1011,25 +1046,32 @@ class PV:
         # TODO verify it worked before returning?
 
 
-class Subscription:
-    def __init__(self, pv, subscriptionid, sub_args, sub_kwargs):
+class CallbackHandler:
+    def __init__(self, pv):
         self.callbacks = []
-        self.subscriptionid = subscriptionid
         self.pv = pv
+
+    def add_callback(self, func):
+        if func not in self.callbacks:
+            self.callbacks.append(func)
+
+    def process(self, *args, **kwargs):
+        for callback in self.callbacks:
+            try:
+                callback(*args, **kwargs)
+            except Exception as ex:
+                print(ex)
+
+
+class Subscription(CallbackHandler):
+    def __init__(self, pv, subscriptionid, sub_args, sub_kwargs):
+        super().__init__(pv)
+
+        self.subscriptionid = subscriptionid
         # These will be used by the PV to re-subscribe if we need to reconnect.
         self.sub_args = sub_args
         self.sub_kwargs = sub_kwargs
         self._unsubscribed = False
-
-    def add_callback(self, func):
-        self.callbacks.append(func)
-
-    def process(self, command):
-        for callback in self.callbacks:
-            try:
-                callback(command)
-            except Exception as ex:
-                print(ex)
 
     def unsubscribe(self):
         self.pv.unsubscribe(self.subscriptionid)

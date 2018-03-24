@@ -2,6 +2,7 @@ import functools
 import itertools
 import time
 import copy
+import logging
 import threading
 
 from collections import Iterable
@@ -13,6 +14,9 @@ from caproto import AccessRights, promote_type, ChannelType
 
 
 __all__ = ['PV', 'get_pv', 'caget', 'caput']
+
+
+logger = logging.getLogger(__name__)
 
 
 def ensure_connection(func):
@@ -46,7 +50,7 @@ class PV:
       >>> p.value          # pv value (can be set or get)
       >>> p.char_value     # string representation of pv value
       >>> p.count          # number of elements in array pvs
-      >>> p.type           # EPICS data type: 'string','double','enum','long',..
+      >>> p.type           # EPICS data type:'string','double','enum','long',..
 """
 
     _fmtsca = ("<PV '{pvname}', count={count}, type={typefull!r}, "
@@ -77,9 +81,12 @@ class PV:
         self.verbose = verbose
         self.auto_monitor = auto_monitor
         self.ftype = None
+        self._connect_event = threading.Event()
+        self._state_lock = threading.RLock()
         self.connection_timeout = connection_timeout
-        self.dflt_count = count
+        self.default_count = count
         self._auto_monitor_sub = None
+        self._connected = False
 
         if self.connection_timeout is None:
             self.connection_timeout = 1
@@ -92,6 +99,7 @@ class PV:
         self._args['typefull'] = None
         self._args['access'] = None
         self.connection_callbacks = []
+        self._cb_count = iter(itertools.count())
 
         if connection_callback is not None:
             self.connection_callbacks = [connection_callback]
@@ -108,45 +116,71 @@ class PV:
             self.callbacks[0] = (callback, {})
 
         self._caproto_pv, = self._context.get_pvs(
-            self.pvname, connection_state_callback=self._connection_callback)
+            self.pvname,
+            connection_state_callback=self._connection_state_changed)
+
+        if self._caproto_pv.connected and not self._connected:
+            # connection state callback was already called
+            logger.debug('%s already connected', self.pvname)
+            self._connection_established()
 
     @property
     def connected(self):
-        return self._caproto_pv.connected
+        'Connection state'
+        return self._connected
 
     def force_connect(self, pvname=None, chid=None, conn=True, **kws):
         # not quite sure what this is for in pyepics, probably should
         # be an arias for reconnect?
         ...
 
-    def wait_for_connection(self, timeout=None):
+    def wait_for_connection(self, timeout=5.0):
         """wait for a connection that started with connect() to finish
         Returns
         -------
         connected : bool
             If the PV is connected when this method returns
         """
-        # TODO
-        # - check if there is a form or count on the object we should respect
-        # - do something with the timeout value
+        logger.debug(f'{self} wait for connection...')
         if self.connected:
             return
 
-        if self._caproto_pv._user_disconnected:
-            self._caproto_pv.reconnect(timeout=timeout)
-        else:
-            self._caproto_pv.wait_for_connection(timeout=timeout)
+        with self._state_lock:
+            self._connect_event.clear()
 
-    def _connection_callback(self, caproto_pv, state):
-        'Connection callback hook from threading.PV.connection_state_changed'
-        if not self.connected or self._args['type'] is not None:
-            # TODO type can change if reconnected
-            return
+            if self._caproto_pv._user_disconnected:
+                self._caproto_pv.reconnect(timeout=timeout)
+            else:
+                self._caproto_pv.wait_for_connection(timeout=timeout)
 
+        # TODO shorten timeouts
+        ok = self._connect_event.wait(timeout=timeout)
+        ok = ok and self.connected
+
+        if not ok:
+            logger.error(f'{self} failed to connect within '
+                         f'{timeout} seconds (caproto={self._caproto_pv})')
+            raise TimeoutError(f'{self.pvname} failed to connect within '
+                               f'{timeout} seconds (caproto={self._caproto_pv})')
+
+    def _connection_closed(self):
+        'Callback when connection is closed'
+        ...
+        logger.debug('%r disconnected', self)
+        self._connected = False
+
+    def _connection_established(self):
+        'Callback when connection is initially established'
+        logger.debug('%r connected', self)
         caproto_pv = self._caproto_pv
         ch = self._caproto_pv.channel
         form = self.form
-        count = self.dflt_count
+        count = self.default_count
+
+        if ch is None:
+            logger.error('Connection dropped in connection callback')
+            logger.error('Connected = %r', self._connected)
+            return
 
         self._args['type'] = ch.native_data_type
         self._args['typefull'] = promote_type(self.type,
@@ -170,11 +204,26 @@ class PV:
                 data_type=self.typefull, data_count=count)
             self._auto_monitor_sub.add_callback(self.__on_changes)
 
-        self._cb_count = iter(itertools.count())
+        self._connected = True
+
+    def _connection_state_changed(self, caproto_pv, state):
+        'Connection callback hook from threading.PV.connection_state_changed'
+        connected = (state == 'connected')
+        try:
+            if connected:
+                self._connection_established()
+            else:
+                ...
+                # TODO type can change if reconnected
+                # if not self.connected or self._args['type'] is not None:
+                #     return
+                self._connection_closed()
+        finally:
+            self._connect_event.set()
 
         # todo move to async connect logic
         for cb in self.connection_callbacks:
-            cb(pvname=self.pvname, conn=True, pv=self)
+            cb(pvname=self.pvname, conn=connected, pv=self)
 
     def connect(self, timeout=None):
         """check that a PV is connected, forcing a connection if needed
@@ -218,7 +267,7 @@ class PV:
             The value, the type is dependent on the underlying PV
         """
         if count is None:
-            count = self.dflt_count
+            count = self.default_count
 
         if with_ctrlvars:
             dt = promote_type(self.type, use_ctrl=True)
@@ -296,12 +345,6 @@ class PV:
         complete, and optionally specifying a callback function to be run
         when the processing is complete.
         """
-        # TODO
-        # - wait
-        # - timeout
-        # - put complete (use_complete, callback, callback_data)
-        # API
-        # consider returning futures instead of storing state on the PV object
         if callback_data is None:
             callback_data = ()
         if self._args['typefull'] in ca.enum_types:
@@ -444,7 +487,7 @@ class PV:
             raise ValueError()
         if self._auto_monitor_sub is None:
             self._auto_monitor_sub = self._caproto_pv.subscribe(
-                data_type=self.typefull, data_count=self.dflt_count)
+                data_type=self.typefull, data_count=self.default_count)
             self._auto_monitor_sub.add_callback(self.__on_changes)
         if index is not None:
             raise ValueError("why do this")
@@ -743,12 +786,12 @@ class PVContext(Context):
         return get_pv(pvname, context=self, **kwargs)
 
 
-def get_pv(pvname, *args, context=None, connect=True, **kwargs):
+def get_pv(pvname, *args, context=None, connect=True, timeout=3.0, **kwargs):
     if context is None:
         context = PV._default_context
     pv = PV(pvname, *args, context=context, **kwargs)
-    # if connect:
-    #     pv.wait_for_connection()
+    if connect:
+        pv.wait_for_connection(timeout=timeout)
     return pv
 
 
@@ -789,7 +832,6 @@ def caget(pvname, as_string=False, count=None, as_numpy=True,
                          use_monitor=use_monitor,
                          as_string=as_string,
                          as_numpy=as_numpy)
-
         return val
 
 
@@ -809,6 +851,6 @@ def cainfo(pvname, print_out=True):
         thispv.get()
         thispv.get_ctrlvars()
         if print_out:
-            print(thispv.info)
+            print(pvname, thispv.info)
         else:
             return thispv.info

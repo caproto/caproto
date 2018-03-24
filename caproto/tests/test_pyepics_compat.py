@@ -103,6 +103,10 @@ from .conftest import default_setup_module, default_teardown_module
 def setup_module(module):
     default_setup_module(module)
 
+    from caproto.benchmarking.util import set_logging_level
+
+    set_logging_level('DEBUG')
+
     shared_broadcaster = SharedBroadcaster()
     PV._default_context = PVContext(broadcaster=shared_broadcaster,
                                     log_level='DEBUG')
@@ -128,7 +132,7 @@ def onConnect(pvname=None, conn=None, chid=None,  **kws):
     CONN_DAT[pvname] = conn
 
 def onChanges(pvname=None, value=None, **kws):
-    write( '/// New Value: %s  value=%s, kw=%s\n' %( pvname, str(value), repr(kws)))
+    write('/// New Value: %s  value=%s, kw=%s\n' %( pvname, str(value), repr(kws)))
     global CHANGE_DAT
     CHANGE_DAT[pvname] = value
 
@@ -379,7 +383,7 @@ class PV_Tests(unittest.TestCase):
 
         wf = PV(pvnames.char_arr_pv, count=32)
         def onChanges(pvname=None, value=None, char_value=None, **kw):
-            write( 'PV %s %s, %s Changed!\n' % (pvname, repr(value), char_value))
+            write('PV %s %s, %s Changed!\n' % (pvname, repr(value), char_value))
             values.append( value)
 
         wf.add_callback(onChanges)
@@ -458,9 +462,14 @@ class PV_Tests(unittest.TestCase):
     def test_DoubleVal(self):
         pvn = pvnames.double_pv
         pv = PV(pvn)
-        pv.get()
+        print('pv', pv)
+        value = pv.get()
+        print('pv get', value)
+        assert pv.connected
+
+        write('%s get value %s' % (pvn, value))
         cdict  = pv.get_ctrlvars()
-        write( 'Testing CTRL Values for a Double (%s)\n'   % (pvn))
+        write('Testing CTRL Values for a Double (%s)\n'   % (pvn))
         self.failUnless('severity' in cdict)
         self.failUnless(len(pv.host) > 1)
         self.assertEqual(pv.count,1)
