@@ -51,8 +51,8 @@ class SelectorThread:
         self.id_to_socket = {}
         self.socket_to_id = {}
 
-        self._register_sockets = []
-        self._unregister_sockets = []
+        self._register_sockets = set()
+        self._unregister_sockets = set()
         self._object_id = 0
 
     @property
@@ -86,26 +86,30 @@ class SelectorThread:
             weakref.finalize(target_obj,
                              lambda obj_id=self._object_id:
                              self._object_removed(obj_id))
-            self._register_sockets.append(socket)
+            self._register_sockets.add(socket)
 
     def remove_socket(self, sock):
         with self._socket_map_lock:
             if sock not in self.socket_to_id:
                 return
-
             obj_id = self.socket_to_id.pop(sock)
             del self.id_to_socket[obj_id]
             obj = self.objects.pop(obj_id, None)
             if obj is not None:
                 obj.received(b'', None)
-            self._unregister_sockets.append(sock)
+
+            if sock in self._register_sockets:
+                # removed before it was even added...
+                self._register_sockets.remove(sock)
+            else:
+                self._unregister_sockets.add(sock)
 
     def _object_removed(self, obj_id):
         with self._socket_map_lock:
             if obj_id in self.id_to_socket:
                 sock = self.id_to_socket.pop(obj_id)
                 del self.socket_to_id[sock]
-                self._unregister_sockets.append(sock)
+                self._unregister_sockets.add(sock)
 
     def __call__(self):
         '''Selector poll loop'''
