@@ -153,7 +153,7 @@ class PV:
             else:
                 self._caproto_pv.wait_for_connection(timeout=timeout)
 
-        # TODO shorten timeouts
+        # TODO shorten timeouts based on the above
         ok = self._connect_event.wait(timeout=timeout)
         ok = ok and self.connected
 
@@ -312,14 +312,15 @@ class PV:
                 ret, = ret
             return ret
 
-        elif count is None and len(info['value']) == 1:
-            return info['value'][0]
+        elif info['count'] == 1 and len(value) == 1:
+            if count is None:
+                return value[0]
+            else:
+                return value
 
         elif not as_numpy:
             return value.tolist()
 
-        if (count == 1 or info['count'] == 1) and len(value) == 1:
-            return value[0]
         return info['value']
 
     def __ingest_read_response_command(self, command):
@@ -776,8 +777,13 @@ class PV:
             self._caproto_pv.disconnect()
 
     def __del__(self):
-        if self.connected:
-            self._caproto_pv.disconnect(wait=False)
+        pv = self._caproto_pv
+        if pv is not None:
+            pv.connection_state_callback.remove_callback(
+                self._connection_state_changed
+            )
+
+            pv.disconnect(wait=False)
 
 
 class PVContext(Context):

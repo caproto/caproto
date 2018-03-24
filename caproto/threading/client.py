@@ -404,10 +404,15 @@ class SharedBroadcaster:
 
     def _retry_unanswered_searches(self):
         while True:
+            if self._should_attempt_registration():
+                self._register()
+
             t = time.monotonic()
+            items = list(self.unanswered_searches.items())
             requests = (ca.SearchRequest(name, search_id, 13)
                         for search_id, (name, _) in
-                        self.unanswered_searches.items())
+                        items)
+
             for batch in batch_requests(requests, SEARCH_MAX_DATAGRAM_BYTES):
                 self.send(ca.EPICS_CA1_PORT, ca.VersionRequest(0, 13), *batch)
             time.sleep(max(0, RETRY_SEARCHES_PERIOD - (time.monotonic() - t)))
@@ -813,8 +818,9 @@ class PV:
         self._user_disconnected = False
 
     def connection_state_changed(self, state, channel):
-        logger.debug('%s Connection state changed %s %s', self.name, state,
-                     channel)
+        logger.debug('%s Connection state changed %s %s %s %d', self.name, state,
+                     channel, hex(id(self)),
+                     len(self.connection_state_callback.callbacks))
         if state == 'disconnected':
             logger.debug('%s channel reset', self.name)
 
@@ -911,6 +917,10 @@ class PV:
     def disconnect(self, *, wait=True, timeout=2):
         "Disconnect this Channel."
         self._user_disconnected = True
+
+        # TODO
+        self.connection_state_callback.callbacks.clear()
+
         with self.circuit_manager.new_command_cond:
             if not self.connected:
                 return
@@ -1050,6 +1060,12 @@ class CallbackHandler:
     def __init__(self, pv):
         self.callbacks = []
         self.pv = pv
+
+    def remove_callback(self, func):
+        try:
+            self.callbacks.remove(func)
+        except ValueError:
+            ...
 
     def add_callback(self, func):
         if func not in self.callbacks:

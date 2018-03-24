@@ -129,8 +129,8 @@ double_arrays   = ['Py:double128', 'Py:double2k', 'Py:double64k']
 ####
 # provide a single motor prefix (to which '.VAL' and '.RBV' etc will be added)
 
-motor1 = 'XF:31IDA-OP{Tbl-Ax:X1}Mtr'
-motor2 = 'XF:31IDA-OP{Tbl-Ax:X2}Mtr'
+motor1 = 'sim:mtr1'  # 'XF:31IDA-OP{Tbl-Ax:X1}Mtr'
+motor2 = 'sim:mtr2'  # 'XF:31IDA-OP{Tbl-Ax:X2}Mtr'
 
 ####
 #  Here, provide a PV that changes at least once very 10 seconds
