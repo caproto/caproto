@@ -464,6 +464,7 @@ class Context:
                 # Re-using a PV instance. Add a new connection state callback,
                 # if necessary:
                 if connection_state_callback:
+                    logger.debug('Re-using PV instance for %r', name)
                     pv.connection_state_callback.add_callback(
                         connection_state_callback)
 
@@ -791,8 +792,7 @@ class PV:
                  'last_reading', 'last_writing', '_read_notify_callback',
                  'subscriptions', 'command_bundle_queue',
                  '_write_notify_callback', '_user_disconnected',
-                 'connection_state_callback',
-                 '_pc_callbacks', '__weakref__')
+                 'connection_state_callback', '_pc_callbacks', '__weakref__')
 
     def __init__(self, name, context, connection_state_callback):
         """
@@ -1055,28 +1055,48 @@ class PV:
         self.subscriptions.remove(sub)
         # TODO verify it worked before returning?
 
+    # def __hash__(self):
+    #     return id((self.context, self.circuit_manager, self.name))
+
 
 class CallbackHandler:
     def __init__(self, pv):
-        self.callbacks = []
+        # NOTE: not a WeakValueDictionary or WeakSet as PV is unhashable...
+        self.callbacks = {}
         self.pv = pv
-
-    def remove_callback(self, func):
-        try:
-            self.callbacks.remove(func)
-        except ValueError:
-            ...
+        self._callback_id = 0
 
     def add_callback(self, func):
-        if func not in self.callbacks:
-            self.callbacks.append(func)
+        # TODO thread safety, not just weakmethods
+        cb_id = self._callback_id
+        self._callback_id += 1
+
+        def removed(_):
+             self.remove_callback(cb_id)
+
+        ref = weakref.WeakMethod(func, removed)
+
+        self.callbacks[cb_id] = ref
+
+    def remove_callback(self, cb_id):
+        self.callbacks.pop(cb_id, None)
 
     def process(self, *args, **kwargs):
-        for callback in self.callbacks:
+        to_remove = []
+        for cb_id, ref in self.callbacks.items():
+            try:
+                callback = ref()
+            except TypeError:
+                to_remove.append(cb_id)
+                continue
+
             try:
                 callback(*args, **kwargs)
             except Exception as ex:
                 print(ex)
+
+        for remove_id in to_remove:
+            self._callbacks.pop(remove_id, None)
 
 
 class Subscription(CallbackHandler):

@@ -23,12 +23,7 @@ def ensure_connection(func):
     # TODO get timeout default from func signature
     @functools.wraps(func)
     def inner(self, *args, **kwargs):
-        self.wait_for_connection(timeout=kwargs.get('timeout', None))
-
-        # if not self._args['type']:
-        #     # TODO: hack
-        #     self._connection_callback()
-
+        self.wait_for_connection(timeout=kwargs.get('timeout', 5.0))
         return func(self, *args, **kwargs)
     return inner
 
@@ -777,8 +772,13 @@ class PV:
             self._caproto_pv.disconnect()
 
     def __del__(self):
-        pv = self._caproto_pv
-        if pv is not None:
+        try:
+            pv = self._caproto_pv
+            if pv is None:
+                raise AttributeError()
+        except AttributeError:
+            ...
+        else:
             pv.connection_state_callback.remove_callback(
                 self._connection_state_changed
             )
