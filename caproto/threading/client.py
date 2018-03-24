@@ -142,15 +142,17 @@ class SelectorThread:
                     bytes_recv, address = sock.recvfrom(
                         max((4096, bytes_available)))
                 except OSError as ex:
-                    if ex.errno == errno.EAGAIN:
-                        continue
-                    # register as a disconnection
-                    bytes_recv, address = b'', None
+                    if ex.errno != errno.EAGAIN:
+                        # register as a disconnection
+                        self.remove_socket(sock)
+                    continue
 
-                if not bytes_recv:
-                    self.remove_socket(sock)
-                else:
+                if bytes_recv:
                     obj.received(bytes_recv, address)
+                else:
+                    # zero bytes received on a ready-to-read socket means it
+                    # was disconnected
+                    self.remove_socket(sock)
 
 
 class SharedBroadcaster:
