@@ -115,6 +115,9 @@ def setup_module(module):
 def teardown_module(module):
     default_teardown_module(module)
 
+    broadcaster = PV._default_context.broadcaster
+    broadcaster.disconnect()
+
     PV._default_context.disconnect()
     PV._default_context = None
 
@@ -212,11 +215,11 @@ class PV_Tests(unittest.TestCase):
 
     def test_putcomplete(self):
         write('Put with wait and put_complete (using real motor!) \n')
-        vals = (1.35, 1.50, 1.44, 1.445, 1.45, 1.453, 1.446, 1.447, 1.450, 1.450, 1.490, 1.5, 1.500)
+        vals = (1.35, 1.50, 1.44, 1.445, 1.45, 1.453, 1.446, 1.447, 1.450,
+                1.450, 1.490, 1.5, 1.500)
         p = PV(pvnames.motor1)
-        # this works with a real motor, fail if it doesn't connect quickly
-        if not p.wait_for_connection(timeout=0.2):
-            self.skipTest('Unable to connect to real motor record')
+        if not p.wait_for_connection():
+            raise TimeoutError('simulated motor connection failed?')
 
         see_complete = []
         for v in vals:
@@ -228,6 +231,7 @@ class PV_Tests(unittest.TestCase):
                 count = count + 1
                 if p.put_complete:
                     see_complete.append(True)
+                    print('See completion')
                     break
                 # print( 'made it to value= %.3f, elapsed time= %.4f sec (count=%i)' % (v, time.time()-t0, count))
         self.failUnless(len(see_complete) > (len(vals) - 5))
@@ -235,9 +239,8 @@ class PV_Tests(unittest.TestCase):
     def test_putwait(self):
         write('Put with wait (using real motor!) \n')
         pv = PV(pvnames.motor1)
-        # this works with a real motor, fail if it doesn't connect quickly
-        if not pv.wait_for_connection(timeout=0.2):
-            self.skipTest('Unable to connect to real motor record')
+        if not pv.wait_for_connection():
+            raise TimeoutError('simulated motor connection failed?')
 
         val = pv.get()
 
@@ -399,8 +402,6 @@ class PV_Tests(unittest.TestCase):
         self.assertEquals(len(values[0]),32)
 
         wf.clear_callbacks()
-
-
 
     def test_emptyish_char_waveform_no_monitor(self):
         '''a test of a char waveform of length 1 (NORD=1): value "\0"

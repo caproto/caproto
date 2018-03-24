@@ -58,7 +58,8 @@ class PV:
                'precision', 'units', 'enum_strs',
                'upper_disp_limit', 'lower_disp_limit', 'upper_alarm_limit',
                'lower_alarm_limit', 'lower_warning_limit',
-               'upper_warning_limit', 'upper_ctrl_limit', 'lower_ctrl_limit')
+               'upper_warning_limit', 'upper_ctrl_limit', 'lower_ctrl_limit',
+               'put_complete')
     _default_context = Context(SharedBroadcaster())
 
     def __init__(self, pvname, callback=None, form='time',
@@ -138,7 +139,7 @@ class PV:
         """
         logger.debug(f'{self} wait for connection...')
         if self.connected:
-            return
+            return True
 
         with self._state_lock:
             self._connect_event.clear()
@@ -153,10 +154,10 @@ class PV:
         ok = ok and self.connected
 
         if not ok:
-            logger.error(f'{self} failed to connect within '
-                         f'{timeout} seconds (caproto={self._caproto_pv})')
             raise TimeoutError(f'{self.pvname} failed to connect within '
                                f'{timeout} seconds (caproto={self._caproto_pv})')
+
+        return True
 
     def _connection_closed(self):
         'Callback when connection is closed'
@@ -194,7 +195,8 @@ class PV:
             mcount = count if count is not None else self._args['count']
             self.auto_monitor = mcount < AUTOMONITOR_MAXLENGTH
 
-        if self.auto_monitor:
+        if ((self.auto_monitor or self.callbacks) and
+                not self._auto_monitor_sub):
             self._auto_monitor_sub = caproto_pv.subscribe(
                 data_type=self.typefull, data_count=count)
             self._auto_monitor_sub.add_callback(self.__on_changes)
@@ -364,12 +366,15 @@ class PV:
             value = tuple(v.encode(STR_ENC) for v in value)
 
         def run_callback(cmd):
-            callback(*callback_data)
+            self._args['put_complete'] = True
+            if callback is not None:
+                callback(*callback_data)
 
-        self._caproto_pv.write(
-            value, wait=wait,
-            cb=run_callback if callback is not None else None,
-            timeout=timeout)
+        if use_complete:
+            self._args['put_complete'] = False
+
+        self._caproto_pv.write(value, wait=wait, cb=run_callback,
+                               timeout=timeout)
 
     @ensure_connection
     def get_ctrlvars(self, timeout=5, warn=True):
@@ -481,10 +486,6 @@ class PV:
         add_callback.  This index is needed to remove a callback."""
         if not callable(callback):
             raise ValueError()
-        if self._auto_monitor_sub is None:
-            self._auto_monitor_sub = self._caproto_pv.subscribe(
-                data_type=self.typefull, data_count=self.default_count)
-            self._auto_monitor_sub.add_callback(self.__on_changes)
         if index is not None:
             raise ValueError("why do this")
         index = next(self._cb_count)
@@ -658,7 +659,8 @@ class PV:
     @property
     def put_complete(self):
         "returns True if a put-with-wait has completed"
-        True
+        return self._args['put_complete']
+
 
     def _getinfo(self):
         "get information paragraph"
@@ -779,10 +781,6 @@ class PV:
         except AttributeError:
             ...
         else:
-            pv.connection_state_callback.remove_callback(
-                self._connection_state_changed
-            )
-
             pv.disconnect(wait=False)
 
 
