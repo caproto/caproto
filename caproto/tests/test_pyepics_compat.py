@@ -100,25 +100,6 @@ from . import pvnames
 from .conftest import default_setup_module, default_teardown_module
 
 
-def get_broadcast_addr_list():
-    import netifaces
-
-    interfaces = [netifaces.ifaddresses(interface)
-                  for interface in netifaces.interfaces()
-                  ]
-    bcast = [af_inet_info['broadcast']
-             if 'broadcast' in af_inet_info
-             else af_inet_info['peer']
-
-             for interface in interfaces
-             if netifaces.AF_INET in interface
-             for af_inet_info in interface[netifaces.AF_INET]
-             ]
-
-    print('Broadcast address list:', bcast)
-    return ' '.join(bcast)
-
-
 def setup_module(module):
     default_setup_module(module)
 
