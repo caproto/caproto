@@ -175,6 +175,7 @@ class SharedBroadcaster:
         self.log_level = log_level
         self.udp_sock = None
         self._search_lock = threading.RLock()
+        self._retry_thread = None
 
         self._id_counter = itertools.count(0)
         self.search_results = {}  # map name to (time, address)
@@ -191,8 +192,6 @@ class SharedBroadcaster:
         self.command_thread = threading.Thread(target=self.command_loop,
                                                daemon=True)
         self.command_thread.start()
-        threading.Thread(target=self._retry_unanswered_searches,
-                         daemon=True).start()
 
         # Register with the CA repeater.
         self._registration_retry_time = registration_retry_time
@@ -247,6 +246,11 @@ class SharedBroadcaster:
         self.selector.add_socket(self.udp_sock, self)
 
     def add_listener(self, listener):
+        if self._retry_thread is None:
+            self._retry_thread = threading.Thread(
+                target=self._retry_unanswered_searches, daemon=True)
+            self._retry_thread.start()
+
         self.listeners.add(listener)
         weakref.finalize(listener, self._listener_removed)
 
@@ -271,6 +275,7 @@ class SharedBroadcaster:
             self.udp_sock = None
             self.broadcaster.disconnect()
             self._registration_last_sent = 0
+            self._retry_thread = None
 
             # if (wait and
             #         self.command_thread is not threading.current_thread()):
@@ -407,7 +412,8 @@ class SharedBroadcaster:
                 self.command_cond.notify_all()
 
     def _retry_unanswered_searches(self):
-        while True:
+        logger.debug('Search-retry thread started.')
+        while True:  # self.listeners:
             if self._should_attempt_registration():
                 self._register()
 
@@ -419,7 +425,10 @@ class SharedBroadcaster:
 
             for batch in batch_requests(requests, SEARCH_MAX_DATAGRAM_BYTES):
                 self.send(ca.EPICS_CA1_PORT, ca.VersionRequest(0, 13), *batch)
+
             time.sleep(max(0, RETRY_SEARCHES_PERIOD - (time.monotonic() - t)))
+
+        logger.debug('Search-retry thread exiting.')
 
     def __del__(self):
         try:
@@ -592,15 +601,24 @@ class Context:
     def disconnect(self, *, wait=True, timeout=2):
         try:
             # disconnect any circuits we have
-            for circ in list(self.circuit_managers.values()):
-                if circ.connected:
-                    circ.disconnect(wait=wait, timeout=timeout)
+            circuits = list(self.circuit_managers.values())
+            total_circuits = len(circuits)
+            for idx, circuit in enumerate(circuits):
+                logger.debug('Disconnecting circuit %d/%d: %s',
+                             idx + 1, total_circuits, circuit)
+                if circuit.connected:
+                    circuit.disconnect(wait=wait, timeout=timeout)
+                logger.debug('... Circuit %d disconnected.', idx)
         finally:
             # clear any state about circuits and search results
+            logger.debug('Clearing circuit managers')
             self.circuit_managers.clear()
 
             # disconnect the underlying state machine
+            logger.debug('Removing Context from the broadcaster')
             self.broadcaster.remove_listener(self)
+
+            logger.debug('Disconnection complete')
 
     def __del__(self):
         try:
@@ -822,12 +840,8 @@ class PV:
         self._user_disconnected = False
 
     def connection_state_changed(self, state, channel):
-        logger.debug('%s Connection state changed %s %s %s %d', self.name, state,
-                     channel, hex(id(self)),
-                     len(self.connection_state_callback.callbacks))
-        if state == 'disconnected':
-            logger.debug('%s channel reset', self.name)
-
+        logger.debug('%s Connection state changed %s %s', self.name, state,
+                     channel)
         # PV is responsible for updating its channel attribute.
         self.channel = channel
 
@@ -920,10 +934,13 @@ class PV:
 
     def disconnect(self, *, wait=True, timeout=2):
         "Disconnect this Channel."
+        if not self.circuit_manager:
+            return
+
         self._user_disconnected = True
 
         # TODO
-        self.connection_state_callback.callbacks.clear()
+        # self.connection_state_callback.callbacks.clear()
 
         with self.circuit_manager.new_command_cond:
             if not self.connected:
@@ -1071,7 +1088,7 @@ class CallbackHandler:
         self._callback_id = 0
 
     def add_callback(self, func):
-        # TODO thread safety, not just weakmethods
+        # TODO thread safety; not just weakmethods
         cb_id = self._callback_id
         self._callback_id += 1
 
