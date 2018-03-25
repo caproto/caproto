@@ -86,6 +86,10 @@ class VirtualCircuit:
         '''Port number'''
         return self.address[1]
 
+    def __repr__(self):
+        return (f"<VirtualCircuit host={self.host} port={self.port} "
+                f"our_role={self.our_role}> logger_name={self.log.name}>")
+
     @property
     def key(self):
         if self.priority is None:

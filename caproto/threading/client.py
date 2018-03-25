@@ -603,12 +603,16 @@ class Context:
             # disconnect any circuits we have
             circuits = list(self.circuit_managers.values())
             total_circuits = len(circuits)
-            for idx, circuit in enumerate(circuits):
-                logger.debug('Disconnecting circuit %d/%d: %s',
-                             idx + 1, total_circuits, circuit)
+            for idx, circuit in enumerate(circuits, 1):
                 if circuit.connected:
+                    logger.debug('Disconnecting circuit %d/%d: %s',
+                                 idx, total_circuits, circuit)
                     circuit.disconnect(wait=wait, timeout=timeout)
-                logger.debug('... Circuit %d disconnected.', idx)
+                    logger.debug('... Circuit %d disconnect complete.', idx)
+                else:
+                    logger.debug('Circuit %d/%d was already disconnected: %s',
+                                 idx, total_circuits, circuit)
+            logger.debug('All circuits disconnected')
         finally:
             # clear any state about circuits and search results
             logger.debug('Clearing circuit managers')
@@ -669,6 +673,11 @@ class VirtualCircuitManager:
                 raise TimeoutError("Circuit with server at {} did not "
                                    "connected within {}-second timeout."
                                    "".format(self.circuit.address, timeout))
+
+    def __repr__(self):
+        return (f"<VirtualCircuitManager circuit={self.circuit} "
+                f"pvs={len(self.pvs)} ioids={len(self.ioids)} "
+                f"subscriptions={len(self.subscriptions)}>")
 
     @property
     def connected(self):
@@ -780,6 +789,8 @@ class VirtualCircuitManager:
         if self.disconnected or self.socket is None:
             return
 
+        logger.debug('Disconnecting circuit manager %r', self)
+
         sock, self.socket = self.socket, None
         try:
             sock.shutdown(socket.SHUT_WR)
@@ -860,7 +871,7 @@ class PV:
                 state += f", channel_state={self.channel.states[ca.CLIENT]}"
             else:
                 state += " (creating...)"
-        return f"<PV name={repr(self.name)} priority={self.priority} {state}>"
+        return f"<PV name={self.name!r} priority={self.priority} {state}>"
 
     @property
     def connected(self):
@@ -1093,7 +1104,7 @@ class CallbackHandler:
         self._callback_id += 1
 
         def removed(_):
-             self.remove_callback(cb_id)
+            self.remove_callback(cb_id)
 
         ref = weakref.WeakMethod(func, removed)
 
