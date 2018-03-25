@@ -1148,6 +1148,7 @@ class CallbackHandler:
                 return func
 
         self.callbacks[cb_id] = ref
+        return cb_id
 
     def remove_callback(self, cb_id):
         self.callbacks.pop(cb_id, None)
@@ -1179,9 +1180,40 @@ class Subscription(CallbackHandler):
         self.sub_args = sub_args
         self.sub_kwargs = sub_kwargs
         self._unsubscribed = False
+        self._callback_lock = threading.RLock()
+        self._process_backlog = []
 
     def unsubscribe(self):
+        if self._unsubscribed:
+            return
+
+        self._unsubscribed = True
         self.pv.unsubscribe(self.subscriptionid)
+
+    def process(self, *args, **kwargs):
+        # TODO here i think we can decouple PV update rates and callback
+        # handling rates, if desirable, to not bog down performance.
+        # As implemented below, updates are blocking further messages from
+        # the CA servers from processing. (-> ThreadPool, etc.)
+
+        with self._callback_lock:
+            if not self.callbacks:
+                # Record everything that happened prior to getting a subscription
+                self._process_backlog.append((args, kwargs))
+            else:
+                super().process(*args, **kwargs)
+
+    def add_callback(self, func):
+        cb_id = super().add_callback(func)
+
+        with self._callback_lock:
+            if self._process_backlog:
+                # yeah... locking will be an issue here again
+                items, self._process_backlog = self._process_backlog, []
+                for args, kwargs in items:
+                    self.process(*args, **kwargs)
+
+        return cb_id
 
     def __del__(self):
         if not self._unsubscribed:
