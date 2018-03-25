@@ -78,13 +78,12 @@ def bench_pyepics_get_speed(pvname, *, initial_value=None, log_level='DEBUG'):
 
 def _setup_pyepics_compat(log_level):
     from caproto.threading.pyepics_compat import (PV, SharedBroadcaster,
-                                                  PVContext as ThreadingContext,
+                                                  Context,
                                                   logger as thread_logger)
 
     thread_logger.setLevel(log_level)
     shared_broadcaster = SharedBroadcaster()
-    context = ThreadingContext(broadcaster=shared_broadcaster,
-                               log_level=log_level)
+    context = Context(broadcaster=shared_broadcaster, log_level=log_level)
     return shared_broadcaster, context, PV
 
 

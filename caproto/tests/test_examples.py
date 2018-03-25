@@ -32,8 +32,8 @@ def test_thread_client_example(threading_broadcaster):
     main()
 
 
-def test_thread_pv(threading_broadcaster):
-    from caproto.threading.client import Context, PV
+def test_pyepics_pv(threading_broadcaster):
+    from caproto.threading.pyepics_compat import PV, Context, SharedBroadcaster
 
     pv1 = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
     # pv2 = "XF:31IDA-OP{Tbl-Ax:X2}Mtr.VAL"
@@ -46,9 +46,8 @@ def test_thread_pv(threading_broadcaster):
         print('-- user callback', value)
         called.append(True)
 
-    ctx = Context(threading_broadcaster, log_level='DEBUG')
-    ctx.register()
-
+    shared_broadcaster = SharedBroadcaster(log_level='DEBUG')
+    ctx = Context(broadcaster=shared_broadcaster, log_level='DEBUG')
     time_pv = PV(pv1, context=ctx, form='time')
     ctrl_pv = PV(pv1, context=ctx, form='ctrl')
 

@@ -783,12 +783,6 @@ class PV:
             pv.disconnect(wait=False)
 
 
-class PVContext(Context):
-    def get_pv(self, pvname, **kwargs):
-        # TODO: hack to get tests starting, to be removed
-        return get_pv(pvname, context=self, **kwargs)
-
-
 def get_pv(pvname, *args, context=None, connect=True, timeout=3.0, **kwargs):
     if context is None:
         context = PV._default_context

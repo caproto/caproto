@@ -93,8 +93,8 @@ import time
 import unittest
 import numpy
 from contextlib import contextmanager
-from caproto.threading.pyepics_compat import (PV, caput, caget, PVContext, cainfo)
-from caproto.threading.client import SharedBroadcaster
+from caproto.threading.pyepics_compat import (PV, caput, caget, cainfo)
+from caproto.threading.client import Context, SharedBroadcaster
 
 from . import pvnames
 from .conftest import default_setup_module, default_teardown_module
@@ -108,8 +108,8 @@ def setup_module(module):
     set_logging_level('DEBUG')
 
     shared_broadcaster = SharedBroadcaster()
-    PV._default_context = PVContext(broadcaster=shared_broadcaster,
-                                    log_level='DEBUG')
+    PV._default_context = Context(broadcaster=shared_broadcaster,
+                                  log_level='DEBUG')
 
 
 def teardown_module(module):
