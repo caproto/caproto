@@ -348,7 +348,8 @@ def bench_curio_many_connections(pv_names, *, initial_value=None,
 
 @pytest.mark.parametrize('connection_count', [5])
 @pytest.mark.parametrize('pv_format', ['connections:{}'])
-@pytest.mark.parametrize('backend', ['curio', 'pyepics', 'threading'])
+@pytest.mark.parametrize('backend', ['curio', 'pyepics'])
+# TODO: threading benchmark
 @pytest.mark.parametrize('log_level', ['INFO'])
 def test_many_connections(benchmark, backend, connection_count, pv_format,
                           log_level):
@@ -356,7 +357,7 @@ def test_many_connections(benchmark, backend, connection_count, pv_format,
 
     context = {'pyepics': bench_pyepics_many_connections,
                'curio': bench_curio_many_connections,
-               # 'threading': bench_threading_many_connections,
+               'threading': bench_threading_many_connections,
                }[backend]
 
     pv_names = [pv_format.format(i) for i in range(connection_count)]

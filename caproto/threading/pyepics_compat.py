@@ -161,7 +161,6 @@ class PV:
 
     def _connection_closed(self):
         'Callback when connection is closed'
-        ...
         logger.debug('%r disconnected', self)
         self._connected = False
 

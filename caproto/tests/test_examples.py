@@ -247,32 +247,35 @@ def test_curio_server_example():
 
 def test_curio_server_and_thread_client(curio_server):
     from caproto.threading.client import (SharedBroadcaster,
-                                          PVContext)
+                                          Context)
     from .conftest import threaded_in_curio_wrapper
     curio_server, caget_pvdb = curio_server
 
     @threaded_in_curio_wrapper
     def client_test():
         shared_broadcaster = SharedBroadcaster()
-        cntx = PVContext(broadcaster=shared_broadcaster, log_level='DEBUG')
+        cntx = Context(broadcaster=shared_broadcaster, log_level='DEBUG')
 
-        pv = cntx.get_pv('int')
-        assert pv.get() == caget_pvdb['int'].value
-        print('get', pv.get())
+        pv, = cntx.get_pvs('int')
+        pv.wait_for_connection()
+
+        assert pv.read().data[0] == caget_pvdb['int'].value
+        print('get', pv.read())
 
         monitor_values = []
 
-        def callback(value=None, **kwargs):
-            print('monitor', value)
-            monitor_values.append(value[0])
+        def callback(command, **kwargs):
+            assert isinstance(command, ca.EventAddResponse)
+            monitor_values.append(command.data[0])
 
-        pv.add_callback(callback)
-        pv.put(1, wait=True)
-        pv.put(2, wait=True)
-        pv.put(3, wait=True)
+        sub = pv.subscribe()
+        sub.add_callback(callback)
+        pv.write((1, ), wait=True)
+        pv.write((2, ), wait=True)
+        pv.write((3, ), wait=True)
 
         for i in range(3):
-            if pv.get() == 3:
+            if pv.read().data[0] == 3:
                 break
             else:
                 time.sleep(0.1)
