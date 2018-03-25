@@ -72,7 +72,7 @@ script:
   - coverage report -m
 
   - export ASV_ENV_NAME=${TRAVIS_PYTHON_VERSION}_${BASE}
-  - coverage run -v --benchmark-only --benchmark-json=pytest_bench.json --benchmark-columns=mean,median,rounds,iterations -k bench
+  - coverage run run_tests.py -v --benchmark-only --benchmark-json=pytest_bench.json --benchmark-columns=mean,median,rounds,iterations -k bench
   - coverage combine
 
   - set -e
