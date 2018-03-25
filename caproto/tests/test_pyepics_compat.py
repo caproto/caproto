@@ -87,16 +87,17 @@
 #
 # ------------------------------------------------
 
-
 import sys
 import time
 import unittest
 import numpy
+import pytest
 from contextlib import contextmanager
 from caproto.threading.pyepics_compat import (PV, caput, caget, cainfo)
 from caproto.threading.client import Context, SharedBroadcaster
 
 from . import pvnames
+from .conftest import environment_epics_version
 from .conftest import default_setup_module, default_teardown_module
 
 
@@ -150,6 +151,8 @@ def no_simulator_updates():
         caput(pvnames.pause_pv, 0)
 
 
+@pytest.mark.skipif(environment_epics_version() in [(3, 16), (7, 0)],
+                    reason='pyepics simulator segfaults on 3.16/7.0 (TODO)')
 class PV_Tests(unittest.TestCase):
     def testA_CreatePV(self):
         write('Simple Test: create pv\n')

@@ -263,3 +263,12 @@ def threaded_in_curio_wrapper(fcn):
 
     wrapped.wait = wait
     return wrapped
+
+
+def environment_epics_version():
+    'Return the reported environment being tested on'
+    if 'EPICS_BASE' in os.environ and 'BASE' in os.environ:
+        base = os.environ['BASE']
+        if base.startswith('R'):
+            major, minor = base[1:].split('.')[:2]
+            return int(major), int(minor)
