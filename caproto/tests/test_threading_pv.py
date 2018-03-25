@@ -1,105 +1,121 @@
+# TODO: all of this needs to be tested with the pyepics PVs as well
+#   ... on top of the normal ugly suite of pyepics tests
+
 import caproto
 import caproto._utils
 import caproto.threading.client
 import sys
 import time
 
-from caproto.threading.client import Context, SharedBroadcaster
-from caproto.threading.pyepics_compat import PVContext
+from caproto.threading.client import (Context, SharedBroadcaster, PV, logger)
 import caproto as ca
 from contextlib import contextmanager
 import pytest
 
 from . import pvnames
-from .conftest import default_setup_module as setup_module  # noqa
+from .conftest import default_setup_module # noqa
 from .conftest import default_teardown_module as teardown_module  # noqa
 from . import conftest
 
 
-@pytest.fixture(scope='function')
-def cntx(request):
-    shared_broadcaster = SharedBroadcaster()
-    cntx = PVContext(shared_broadcaster, log_level='DEBUG')
-
-    def cleanup():
-        cntx.disconnect()
-
-    request.addfinalizer(cleanup)
-
-    return cntx
+def setup_module(module):
+    default_setup_module(module)
+    logger.setLevel('DEBUG')
 
 
 @contextmanager
-def no_simulator_updates(cntx):
+def no_simulator_updates(context):
     '''Context manager which pauses and resumes simulator PV updating'''
-    pause_pv = cntx.get_pv(pvnames.pause_pv)
+    pause_pv, = context.get_pvs(pvnames.pause_pv)
+    pause_pv.wait_for_connection()
     try:
-        pause_pv.put(1, wait=True)
+        pause_pv.write((1, ), wait=True)
         yield
     finally:
-        pause_pv.put(0, wait=True)
+        pause_pv.write((0, ), wait=True)
 
 
-def test_pv_disconnect_reconnect(cntx):
+def test_pv_disconnect_reconnect(context):
     str_pv = 'Py:ao1.DESC'
-    pv = cntx.get_pv(str_pv)
-    print(pv.get())
+    pv, = context.get_pvs(str_pv)
+    pv.wait_for_connection()
     assert pv.connected
+    print(pv.read())
+
     pv.disconnect()
     assert not pv.connected
-    pv.get()
+
+    pv.reconnect()
     assert pv.connected
+    pv.read()
     pv.disconnect()
+    assert not pv.connected
 
 
-def test_cntx_disconnect_reconnect(cntx):
+def test_context_disconnect_reconnect(context):
     str_pv = 'Py:ao1.DESC'
-    pv = cntx.get_pv(str_pv)
-    pv.get()
-    cntx.disconnect()
-    assert not pv.connected
-
-    pv = cntx.get_pv(str_pv)
-    pv.get()
+    pv, = context.get_pvs(str_pv)
+    pv.wait_for_connection()
     assert pv.connected
 
-    cntx.disconnect()
+    pv.read()
+    context.disconnect()
     assert not pv.connected
-    pv.get()
+
+    pv, = context.get_pvs(str_pv)
+    pv.wait_for_connection()
+    assert pv.connected
+
+    pv.read()
+
+    context.disconnect()
+    assert not pv.connected
+
+    context.reconnect((pv.name, ))
+
+    pv.wait_for_connection()
+    assert pv.connected
+
+    pv.read()
     pv.disconnect()
 
+    assert not pv.connected
 
-def test_put_complete(cntx):
-    pv = cntx.get_pv('Py:ao3')
+
+def test_put_complete(context):
+    pv, = context.get_pvs('Py:ao3')
+    pv.wait_for_connection()
+    assert pv.connected
     mutable = []
 
-    with no_simulator_updates(cntx):
+    with no_simulator_updates(context):
         # start in a known initial state
-        pv.put(0.0, wait=True)
-        pv.get()
+        pv.write((0.0, ), wait=True)
+        pv.read()
 
         def cb(a):
             mutable.append(a)
 
         # put and wait
-        pv.put(0.1, wait=True)
-        result = pv.get()
-        assert result == 0.1
+        pv.write((0.1, ), wait=True)
+        result = pv.read()
+        assert result.data[0] == 0.1
 
         # put and do not wait with callback
-        pv.put(0.4, wait=False, callback=cb, callback_data=('T4',))
-        result = pv.get()
-        assert result == 0.4
+        pv.write((0.4, ), wait=False, cb=cb)
+        result = pv.read()
+        assert result.data[0] == 0.4
         # sleep time give callback time to process
         time.sleep(0.1)
-        print('last_reading', pv._caproto_pv.last_reading)
-        assert 'T4' in mutable
+        print('last_reading', pv.last_reading)
+        assert len(mutable) == 1
 
 
-def test_specified_port(monkeypatch, cntx):
-    pv = cntx.get_pv('Py:ao3')
+def test_specified_port(monkeypatch, context):
+    pv, = context.get_pvs('Py:ao3')
     pv.wait_for_connection()
-    circuit = pv._caproto_pv.circuit_manager.circuit
+
+    circuit = pv.circuit_manager.circuit
     address_list = list(caproto.get_address_list())
     address_list.append('{}:{}'.format(circuit.host, circuit.port))
 
@@ -114,18 +130,20 @@ def test_specified_port(monkeypatch, cntx):
     print()
     print('- address list is now:', address_list)
     shared_broadcaster = SharedBroadcaster()
-    new_cntx = PVContext(shared_broadcaster, log_level='DEBUG')
-    pv1 = new_cntx.get_pv('Py:ao1')
-    pv1.get()
+    new_context = Context(shared_broadcaster, log_level='DEBUG')
+    pv1, = new_context.get_pvs('Py:ao1')
+    pv1.wait_for_connection()
     assert pv1.connected
-    new_cntx.disconnect()
+    pv1.read()
+    new_context.disconnect()
 
 
-@pytest.fixture(scope='module')
+@pytest.fixture(scope='function')
 def shared_broadcaster(request):
-    broadcaster = SharedBroadcaster()
+    broadcaster = SharedBroadcaster(log_level='DEBUG')
 
     def cleanup():
+        print('*** Broadcaster disconnecting!')
         broadcaster.disconnect()
 
     request.addfinalizer(cleanup)
@@ -134,14 +152,14 @@ def shared_broadcaster(request):
 
 @pytest.fixture(scope='function')
 def context(request, shared_broadcaster):
-    cntx = Context(broadcaster=shared_broadcaster, log_level='DEBUG')
+    context = Context(broadcaster=shared_broadcaster, log_level='DEBUG')
 
     def cleanup():
-        print('Cleaning up the context')
-        cntx.disconnect()
+        print('*** Cleaning up the context!')
+        context.disconnect()
 
     request.addfinalizer(cleanup)
-    return cntx
+    return context
 
 
 def test_context_disconnect(context):
@@ -168,7 +186,6 @@ def test_context_disconnect(context):
     sys.stdout.flush()
 
     assert not pv.connected
-    assert not pv.circuit_manager
 
     with pytest.raises(ca.threading.client.DisconnectedError):
         pv.read()
@@ -183,10 +200,16 @@ def test_user_disconnection(context):
 
     # simulate connection loss (at the circuit-level, of course)
     pv.circuit_manager.disconnect()
-    pv.wait_for_connection()
+
+    # TODO: hmm... this is not good
+    pv.reconnect()
+    # as users, we should just be able to call:
+    # pv.wait_for_connection()
 
     assert pv.connected
     assert pv.circuit_manager.connected
+
+    pv.reconnect()
 
     sub = pv.subscribe()
     sub.add_callback(print)
@@ -204,8 +227,9 @@ def test_server_crash(context, prefix, request):
 
     iocs = {}
     for prefix in prefixes:
+        print(f'\n\n* Starting up IOC with prefix: {prefix}')
         pv_names = list(simple.SimpleIOC(prefix=prefix).pvdb.keys())
-        print(pv_names)
+        print('PV names:', pv_names)
         pvs = context.get_pvs(*pv_names)
         proc = conftest.run_example_ioc('caproto.ioc_examples.simple',
                                         args=(prefix, ), request=request,
@@ -216,7 +240,14 @@ def test_server_crash(context, prefix, request):
             pvs=pvs,
         )
 
-        [pv.wait_for_connection() for pv in pvs]
+        print('\n\nConnecting PVs:', pvs)
+        assert proc.returncode is None, 'IOC exited unexpectedly'
+        [pv.wait_for_connection(timeout=5.0) for pv in pvs]
+        print(f'\n\n* {prefix} IOC started up, PVs connected')
+
+    print('********************')
+    print('* Killing the first IOC')
+    print('********************')
 
     for i, prefix in enumerate(prefixes):
         ioc = iocs[prefix]
@@ -226,21 +257,29 @@ def test_server_crash(context, prefix, request):
             # kill the first IOC
             process.terminate()
             process.wait()
-            time.sleep(0.5)
+            time.sleep(2.0)
             for pv in pvs:
-                # assert not pv.circuit_manager.connected
+                print(pv.circuit_manager)
+                assert not pv.circuit_manager
                 assert not pv.connected
         else:
             for pv in pvs:
                 assert pv.connected
 
     prefix = prefixes[0]
-    # restart the first IOC
+
+    print('********************')
+    print('* Restarting the IOC')
+    print('********************')
+
     ioc = iocs[prefix]
     proc = conftest.run_example_ioc('caproto.ioc_examples.simple',
                                     args=(prefix, ), request=request,
                                     pv_to_check=ioc['pv_names'][0]
                                     )
+    time.sleep(0.5)
 
     for pv in ioc['pvs']:
-        pv.wait_for_connection()
+        pv.reconnect()
+        # TODO: should just be pv.wait_for_connection()
+        assert pv.connected
