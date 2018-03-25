@@ -265,10 +265,11 @@ class SharedBroadcaster:
         self.selector.add_socket(self.udp_sock, self)
 
     def add_listener(self, listener):
-        if self._retry_thread is None:
-            self._retry_thread = threading.Thread(
-                target=self._retry_unanswered_searches, daemon=True)
-            self._retry_thread.start()
+        with self._search_lock:
+            if self._retry_thread is None:
+                self._retry_thread = threading.Thread(
+                    target=self._retry_unanswered_searches, daemon=True)
+                self._retry_thread.start()
 
         self.listeners.add(listener)
         weakref.finalize(listener, self._listener_removed)
@@ -365,6 +366,9 @@ class SharedBroadcaster:
                 search_id = new_id()
                 search_ids.append(search_id)
                 unanswered_searches[search_id] = (name, results_queue)
+
+        if not needs_search:
+            return
 
         logger.debug('Searching for %r PVs....', len(needs_search))
         requests = (ca.SearchRequest(name, search_id, 13)
