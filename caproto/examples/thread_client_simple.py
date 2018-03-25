@@ -3,50 +3,58 @@ import logging
 from caproto.threading.client import (SharedBroadcaster, Context, logger)
 
 
-def main(pv1="XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL",
-         pv2="XF:31IDA-OP{Tbl-Ax:X2}Mtr.VAL"):
+def main(pvname1='sim:mtr1', pvname2='sim:mtr2',
+         log_level='DEBUG'):
     '''Simple example which connects to two motorsim PVs (by default).
 
     It tests reading, writing, and subscriptions.
     '''
 
     shared_broadcaster = SharedBroadcaster()
-    pv1 = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
-    pv2 = "XF:31IDA-OP{Tbl-Ax:X2}Mtr.VAL"
+    ctx = Context(broadcaster=shared_broadcaster, log_level=log_level)
 
     # Some user function to call when subscriptions receive data.
     called = []
 
     def user_callback(command):
         print("Subscription has received data: {}".format(command))
-        called.append(True)
+        called.append(command)
 
-    ctx = Context(broadcaster=shared_broadcaster, log_level='DEBUG')
-    ctx.register()
-    ctx.search(pv1)
-    ctx.search(pv2)
-    # Send out connection requests without waiting for responses...
-    chan1 = ctx.create_channel(pv1)
-    chan2 = ctx.create_channel(pv2)
-    # Set up a function to call when subscriptions are received.
-    chan1.register_user_callback(user_callback)
 
-    reading = chan1.read()
-    print('reading:', reading)
-    chan1.subscribe()
-    chan2.read()
-    chan1.unsubscribe(0)
-    chan1.write((5,))
-    reading = chan1.read()
-    assert reading.data == 5
-    print('reading:', reading)
-    chan1.write((6,))
-    reading = chan1.read()
-    assert reading.data == 6
-    print('reading:', reading)
-    chan2.disconnect()
-    chan1.disconnect()
+    pv1, pv2 = ctx.get_pvs(pvname1, pvname2)
+    pv1.wait_for_connection()
+    pv2.wait_for_connection()
+
+    # Read and subscribe to pv1
+    reading = pv1.read()
+    print(f'{pv1} read back: {reading}')
+    sub = pv1.subscribe()
+    sub.add_callback(user_callback)
+    print(f'{pv2} read back: {pv2.read()}')
+
+    # Test writing a couple values:
+    value1, value2 = reading.data + 1, reading.data
+
+    pv1.write((value1, ), timeout=5)
+    reading = pv1.read()
+    assert reading.data == value1
+    print(f'wrote {value1} and read back: {reading}')
+
+    pv1.write((value2, ), timeout=5)
+    reading = pv1.read()
+    assert reading.data == value2
+    print(f'wrote {value2} and read back: {reading}')
+
+    # Clean up the subscription
+    sub.unsubscribe()
+
+    pv2.disconnect()
+    pv1.disconnect()
     assert called
+
+    print('The subscription callback saw the following data:')
+    for command in called:
+        print(f'    * {command.data}')
 
 
 if __name__ == '__main__':
