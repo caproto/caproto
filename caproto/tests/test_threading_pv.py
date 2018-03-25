@@ -165,7 +165,7 @@ def context(request, shared_broadcaster):
 
 
 def test_context_disconnect(context):
-    str_pv = f'{pvnames.double_pv}.DESC'
+    str_pv = 'sim:mtr1.DESC'
 
     def bootstrap():
         pv, = context.get_pvs(str_pv)
@@ -197,7 +197,7 @@ def test_context_disconnect(context):
 
 
 def test_user_disconnection(context):
-    pv, = context.get_pvs(pvnames.double_pv)
+    pv, = context.get_pvs('sim:mtr1.RBV')
     pv.wait_for_connection()
 
     # simulate connection loss (at the circuit-level, of course)
