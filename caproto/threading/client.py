@@ -12,6 +12,7 @@ import array
 import fcntl
 import errno
 import termios
+import inspect
 
 from collections import defaultdict
 
@@ -71,22 +72,23 @@ class SelectorThread:
         self.thread = threading.Thread(target=self, daemon=True)
         self.thread.start()
 
-    def add_socket(self, socket, target_obj):
+    def add_socket(self, sock, target_obj):
         with self._socket_map_lock:
-            if socket in self.socket_to_id:
+            if sock in self.socket_to_id:
                 raise ValueError('Socket already added')
 
-            socket.setblocking(False)
+            sock.setblocking(False)
 
-            # assumption: only one socket per object
+            # assumption: only one sock per object
             self._object_id += 1
             self.objects[self._object_id] = target_obj
-            self.id_to_socket[self._object_id] = socket
-            self.socket_to_id[socket] = self._object_id
+            self.id_to_socket[self._object_id] = sock
+            self.socket_to_id[sock] = self._object_id
             weakref.finalize(target_obj,
                              lambda obj_id=self._object_id:
                              self._object_removed(obj_id))
-            self._register_sockets.add(socket)
+            self._register_sockets.add(sock)
+            # logger.debug('Socket %s was added (obj %s)', sock, target_obj)
 
     def remove_socket(self, sock):
         with self._socket_map_lock:
@@ -100,14 +102,20 @@ class SelectorThread:
 
             if sock in self._register_sockets:
                 # removed before it was even added...
+                # logger.debug('Socket %s was removed before it was added '
+                #              '(obj = %s)', sock, obj)
                 self._register_sockets.remove(sock)
             else:
+                # logger.debug('Socket %s was removed '
+                #              '(obj = %s)', sock, obj)
                 self._unregister_sockets.add(sock)
 
     def _object_removed(self, obj_id):
         with self._socket_map_lock:
             if obj_id in self.id_to_socket:
                 sock = self.id_to_socket.pop(obj_id)
+                # logger.debug('Object ID %s was destroyed: removing %s', obj_id,
+                #              sock)
                 del self.socket_to_id[sock]
                 self._unregister_sockets.add(sock)
 
@@ -126,7 +134,8 @@ class SelectorThread:
 
             events = self.selector.select(timeout=0.1)
             with self._socket_map_lock:
-                if self._unregister_sockets or self._register_sockets:
+                if self._unregister_sockets:
+                    # some sockets may be affected here; try again
                     continue
 
                 ready_ids = [self.socket_to_id[key.fileobj]
@@ -135,8 +144,10 @@ class SelectorThread:
                               for obj_id in ready_ids]
 
             for obj, sock in ready_objs:
-                # TODO: consider thread pool for recv and command_loop
+                if sock in self._unregister_sockets:
+                    continue
 
+                # TODO: consider thread pool for recv and command_loop
                 if fcntl.ioctl(sock, termios.FIONREAD, avail_buf) < 0:
                     continue
 
@@ -148,15 +159,21 @@ class SelectorThread:
                 except OSError as ex:
                     if ex.errno != errno.EAGAIN:
                         # register as a disconnection
+                        # logger.error('Removing %s due to %s (%s)', obj, ex,
+                        #              ex.errno)
                         self.remove_socket(sock)
                     continue
 
-                if bytes_recv:
-                    obj.received(bytes_recv, address)
-                else:
-                    # zero bytes received on a ready-to-read socket means it
-                    # was disconnected
+                # Let objects handle disconnection by returning a failure here
+                if not obj.received(bytes_recv, address):
+                    # logger.debug('Removing %s = %s due to receive failure',
+                    #              sock, obj)
                     self.remove_socket(sock)
+
+                    # TODO: consider adding specific DISCONNECTED instead of b''
+                    # sent to disconnected sockets
+
+        logger.debug('Selector loop exited')
 
 
 class SharedBroadcaster:
@@ -240,7 +257,9 @@ class SharedBroadcaster:
     def _create_sock(self):
         # UDP socket broadcasting to CA servers
         if self.udp_sock is not None:
-            self.selector.remove_socket(self.udp_sock)
+            udp_sock, self.udp_sock = self.udp_sock, None
+            self.selector.remove_socket(udp_sock)
+
         self.selector.start()
         self.udp_sock = ca.bcast_socket()
         self.selector.add_socket(self.udp_sock, self)
@@ -355,9 +374,13 @@ class SharedBroadcaster:
 
     def received(self, bytes_recv, address):
         "Receive and process and next command broadcasted over UDP."
-        commands = self.broadcaster.recv(bytes_recv, address)
-        self.command_bundle_queue.put(commands)
-        return 0
+        if bytes_recv:
+            commands = self.broadcaster.recv(bytes_recv, address)
+            if commands:
+                self.command_bundle_queue.put(commands)
+
+        # Never disconnect the socket
+        return True
 
     def command_loop(self):
         # Receive commands in 'bundles' (corresponding to the contents of one
@@ -372,6 +395,7 @@ class SharedBroadcaster:
 
         while True:
             commands = self.command_bundle_queue.get()
+
             try:
                 self.broadcaster.process_commands(commands)
             except ca.CaprotoError as ex:
@@ -409,6 +433,7 @@ class SharedBroadcaster:
                 # I'm playing it safe for now.
                 for queue, names in queues.items():
                     queue.put((address, names))
+
                 self.command_cond.notify_all()
 
     def _retry_unanswered_searches(self):
@@ -636,8 +661,8 @@ class Context:
 
 class VirtualCircuitManager:
     __slots__ = ('context', 'circuit', 'channels', 'ioids', 'subscriptions',
-                 '_user_disconnected', 'new_command_cond', 'socket', 'selector',
-                 'pvs', 'all_created_pvnames', '__weakref__')
+                 '_user_disconnected', 'new_command_cond', 'socket',
+                 'selector', 'pvs', 'all_created_pvnames', '__weakref__')
 
     def __init__(self, context, circuit, selector, timeout=TIMEOUT):
         self.context = context
@@ -664,7 +689,7 @@ class VirtualCircuitManager:
                 self.socket = socket.create_connection(self.circuit.address)
                 self.selector.add_socket(self.socket, self)
                 self.send(ca.VersionRequest(self.circuit.priority, 13),
-                          ca.HostNameRequest('foo'),
+                          ca.HostNameRequest('foo'),  # TODO: hehe
                           ca.ClientNameRequest('bar'))
             else:
                 raise RuntimeError("Cannot connect. States are {} "
@@ -707,7 +732,7 @@ class VirtualCircuitManager:
         for c in commands:
             self._process_command(c)
 
-        return num_bytes_needed
+        return len(bytes_recv) > 0
 
     def _process_command(self, command):
         try:
@@ -773,7 +798,8 @@ class VirtualCircuitManager:
             # If the user didn't request disconnection, kick off attempt to
             # reconnect all PVs via fresh circuit(s).
             logger.debug('VCM: Attempting reconnection')
-            self.context.reconnect([chan.name for chan in self.channels.values()])
+            self.context.reconnect([chan.name
+                                    for chan in self.channels.values()])
 
         # Clean up the socket if it has not yet been cleared:
         sock = self.socket
@@ -1103,14 +1129,19 @@ class CallbackHandler:
         self._callback_id = 0
 
     def add_callback(self, func):
-        # TODO thread safety; not just weakmethods
+        # TODO thread safety
         cb_id = self._callback_id
         self._callback_id += 1
 
         def removed(_):
             self.remove_callback(cb_id)
 
-        ref = weakref.WeakMethod(func, removed)
+        if inspect.ismethod(func):
+            ref = weakref.WeakMethod(func, removed)
+        else:
+            # TODO: strong reference to non-instance methods?
+            def ref():
+                return func
 
         self.callbacks[cb_id] = ref
 
