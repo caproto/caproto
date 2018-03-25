@@ -636,7 +636,7 @@ class Context:
 
 class VirtualCircuitManager:
     __slots__ = ('context', 'circuit', 'channels', 'ioids', 'subscriptions',
-                 'disconnected', 'new_command_cond', 'socket', 'selector',
+                 '_user_disconnected', 'new_command_cond', 'socket', 'selector',
                  'pvs', 'all_created_pvnames', '__weakref__')
 
     def __init__(self, context, circuit, selector, timeout=TIMEOUT):
@@ -649,7 +649,7 @@ class VirtualCircuitManager:
         self.new_command_cond = threading.Condition()
         self.socket = None
         self.selector = selector
-        self.disconnected = False
+        self._user_disconnected = False
 
         # keep track of all PV names that are successfully connected to within
         # this circuit. This is to be cleared upon disconnection:
@@ -756,10 +756,8 @@ class VirtualCircuitManager:
 
     def _disconnected(self):
         with self.new_command_cond:
+            logger.debug('Entered VCM._disconnected')
             # Ensure that this method is idempotent.
-            if self.disconnected:
-                return
-            self.disconnected = True
             self.all_created_pvnames.clear()
             for pv in self.pvs.values():
                 pv.connection_state_changed('disconnected', None)
@@ -771,11 +769,13 @@ class VirtualCircuitManager:
             # to create a fresh VirtualCiruit and VirtualCircuitManager.
             self.context.circuit_managers.pop(self.circuit.address, None)
 
-        # Kick off attempt to reconnect all PVs via fresh circuit(s).
+        if not self._user_disconnected:
+            # If the user didn't request disconnection, kick off attempt to
+            # reconnect all PVs via fresh circuit(s).
+            logger.debug('VCM: Attempting reconnection')
+            self.context.reconnect([chan.name for chan in self.channels.values()])
 
-        self.context.reconnect([chan.name for chan in self.channels.values()])
-
-        # Clean up the socket.
+        # Clean up the socket if it has not yet been cleared:
         sock = self.socket
         if sock is not None:
             self.selector.remove_socket(sock)
@@ -786,10 +786,9 @@ class VirtualCircuitManager:
                 pass
 
     def disconnect(self, *, wait=True, timeout=2.0):
-        if self.disconnected or self.socket is None:
+        self._user_disconnected = True
+        if self.socket is None:
             return
-
-        logger.debug('Disconnecting circuit manager %r', self)
 
         sock, self.socket = self.socket, None
         try:
@@ -800,10 +799,13 @@ class VirtualCircuitManager:
         # self.selector.remove_socket(sock)
         if wait:
             cond = self.new_command_cond
+            states = self.circuit.states
+
+            def is_disconnected():
+                return states[ca.CLIENT] is ca.DISCONNECTED
+
             with cond:
-                if self.disconnected:
-                    return
-                done = cond.wait_for(lambda: self.disconnected, timeout)
+                done = cond.wait_for(is_disconnected, timeout)
 
             if not done:
                 # TODO: this may actually happen due to a long backlog of
@@ -811,6 +813,8 @@ class VirtualCircuitManager:
                 raise TimeoutError(f"Server did not respond to disconnection "
                                    f"attempt within {timeout}-second timeout."
                                    )
+
+            logger.debug('Circuit manager disconnected')
 
     def __del__(self):
         try:
