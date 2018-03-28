@@ -28,6 +28,101 @@ def ensure_connection(func):
     return inner
 
 
+def _parse_dbr_metadata(dbr_data):
+    'DBR data -> pyepics metadata dict'
+    ret = {}
+
+    arg_map = {'status': 'status',
+               'severity': 'severity',
+               'precision': 'precision',
+               'units': 'units',
+               'upper_disp_limit': 'upper_disp_limit',
+               'lower_disp_limit': 'lower_disp_limit',
+               'upper_alarm_limit': 'upper_alarm_limit',
+               'upper_warning_limit': 'upper_warning_limit',
+               'lower_warning_limit': 'lower_warning_limit',
+               'lower_alarm_limit': 'lower_alarm_limit',
+               'upper_ctrl_limit': 'upper_ctrl_limit',
+               'lower_ctrl_limit': 'lower_ctrl_limit',
+               'strs': 'enum_strs',
+               # 'secondsSinceEpoch': 'posixseconds',
+               # 'nanoSeconds': 'nanoseconds',
+               }
+
+    for attr, arg in arg_map.items():
+        if hasattr(dbr_data, attr):
+            ret[arg] = getattr(dbr_data, attr)
+
+    if ret.get('enum_strs', None):
+        ret['enum_strs'] = tuple(k.value.decode(STR_ENC) for
+                                 k in ret['enum_strs'] if k.value)
+
+    if hasattr(dbr_data, 'nanoSeconds'):
+        ret['posixseconds'] = dbr_data.secondsSinceEpoch
+        ret['nanoseconds'] = dbr_data.nanoSeconds
+        timestamp = ca.epics_timestamp_to_unix(dbr_data.secondsSinceEpoch,
+                                               dbr_data.nanoSeconds)
+        ret['timestamp'] = timestamp
+
+    if 'units' in ret:
+        ret['units'] = ret['units'].decode(STR_ENC)
+
+    return ret
+
+
+def _read_response_to_pyepics(full_type, command):
+    'Parse a ReadResponse command into a pyepics-friendly dict'
+    info = _parse_dbr_metadata(command.metadata)
+
+    value = command.data
+    info['value'] = value
+
+    if full_type in ca.char_types:
+        value = value.tobytes().partition(b'\x00')[0].decode(STR_ENC)
+        info['char_value'] = value
+    elif full_type in ca.string_types:
+        value = [v.decode(STR_ENC).strip() for v in value]
+        if len(value) == 1:
+            value = value[0]
+        info['char_value'] = value
+    else:
+        info['char_value'] = None
+
+    return info
+
+
+def _pyepics_get_value(value, string_value, full_type, native_count, *,
+                       requested_count, enum_strings, as_string, as_numpy):
+    'Handle all the fun pyepics get() kwargs'
+    if (as_string and (full_type in ca.char_types) or
+            full_type in ca.string_types):
+        return string_value
+    if as_string and full_type in ca.enum_types:
+        if enum_strings is None:
+            raise ValueError('Enum strings unset')
+        ret = []
+        for r in value:
+            try:
+                ret.append(enum_strings[r])
+            except IndexError:
+                ret.append('')
+        if len(ret) == 1:
+            ret, = ret
+        return ret
+
+    elif native_count == 1 and len(value) == 1:
+        if requested_count is None:
+            return value[0]
+        else:
+            return value
+
+    elif not as_numpy:
+        return value.tolist()
+
+    return value
+
+
+
 class PV:
     """Epics Process Variable
 
@@ -287,53 +382,21 @@ class PV:
              count > len(self._args['value']))):
             command = self._caproto_pv.read(data_type=dt,
                                             data_count=count)
-            self.__ingest_read_response_command(command)
+            info = _read_response_to_pyepics(self.typefull, command)
+            self._args.update(**info)
 
         info = self._args
 
-        if (as_string and (self.typefull in ca.char_types) or
-                self.typefull in ca.string_types):
-            return info['char_value']
-
-        value = info['value']
         if as_string and self.typefull in ca.enum_types:
             enum_strs = self.enum_strs
-            ret = []
-            for r in value:
-                try:
-                    ret.append(enum_strs[r])
-                except IndexError:
-                    ret.append('')
-            if len(ret) == 1:
-                ret, = ret
-            return ret
+        else:
+            enum_strs = None
 
-        elif info['count'] == 1 and len(value) == 1:
-            if count is None:
-                return value[0]
-            else:
-                return value
-
-        elif not as_numpy:
-            return value.tolist()
-
-        return info['value']
-
-    def __ingest_read_response_command(self, command):
-        info = self._parse_dbr_metadata(command.metadata)
-        info['value'] = command.data
-
-        ret = info['value']
-        if self.typefull in ca.char_types:
-            ret = ret.tobytes().partition(b'\x00')[0].decode(STR_ENC)
-            info['char_value'] = ret
-        elif self.typefull in ca.string_types:
-            ret = [v.decode(STR_ENC).strip() for v in ret]
-            if len(ret) == 1:
-                ret = ret[0]
-            info['char_value'] = ret
-
-        self._args.update(**info)
+        return _pyepics_get_value(
+            value=info['value'], string_value=info['char_value'],
+            full_type=self.typefull, native_count=info['count'],
+            requested_count=count, enum_strings=enum_strs,
+            as_string=as_string, as_numpy=as_numpy)
 
     @ensure_connection
     def put(self, value, *, wait=False, timeout=30.0,
@@ -369,9 +432,7 @@ class PV:
             if callback is not None:
                 callback(*callback_data)
 
-        if use_complete:
-            self._args['put_complete'] = False
-
+        self._args['put_complete'] = False
         self._caproto_pv.write(value, wait=wait, cb=run_callback,
                                timeout=timeout)
 
@@ -380,7 +441,7 @@ class PV:
         "get control values for variable"
         dtype = ca.promote_type(self.type, use_ctrl=True)
         command = self._caproto_pv.read(data_type=dtype, timeout=timeout)
-        info = self._parse_dbr_metadata(command.metadata)
+        info = _parse_dbr_metadata(command.metadata)
         info['value'] = command.data
         self._args.update(**info)
         return info
@@ -390,56 +451,17 @@ class PV:
         "get time values for variable"
         dtype = ca.promote_type(self.type, use_time=True)
         command = self._caproto_pv.read(data_type=dtype, timeout=timeout)
-        info = self._parse_dbr_metadata(command.metadata)
+        info = _parse_dbr_metadata(command.metadata)
         info['value'] = command.data
         self._args.update(**info)
-
-    def _parse_dbr_metadata(self, dbr_data):
-        ret = {}
-
-        arg_map = {'status': 'status',
-                   'severity': 'severity',
-                   'precision': 'precision',
-                   'units': 'units',
-                   'upper_disp_limit': 'upper_disp_limit',
-                   'lower_disp_limit': 'lower_disp_limit',
-                   'upper_alarm_limit': 'upper_alarm_limit',
-                   'upper_warning_limit': 'upper_warning_limit',
-                   'lower_warning_limit': 'lower_warning_limit',
-                   'lower_alarm_limit': 'lower_alarm_limit',
-                   'upper_ctrl_limit': 'upper_ctrl_limit',
-                   'lower_ctrl_limit': 'lower_ctrl_limit',
-                   'strs': 'enum_strs',
-                   # 'secondsSinceEpoch': 'posixseconds',
-                   # 'nanoSeconds': 'nanoseconds',
-                   }
-
-        for attr, arg in arg_map.items():
-            if hasattr(dbr_data, attr):
-                ret[arg] = getattr(dbr_data, attr)
-
-        if ret.get('enum_strs', None):
-            ret['enum_strs'] = tuple(k.value.decode(STR_ENC) for
-                                     k in ret['enum_strs'] if k.value)
-
-        if hasattr(dbr_data, 'nanoSeconds'):
-            ret['posixseconds'] = dbr_data.secondsSinceEpoch
-            ret['nanoseconds'] = dbr_data.nanoSeconds
-            timestamp = ca.epics_timestamp_to_unix(dbr_data.secondsSinceEpoch,
-                                                   dbr_data.nanoSeconds)
-            ret['timestamp'] = timestamp
-
-        if 'units' in ret:
-            ret['units'] = ret['units'].decode(STR_ENC)
-
-        return ret
 
     def __on_changes(self, command):
         """internal callback function: do not overwrite!!
         To have user-defined code run when the PV value changes,
         use add_callback()
         """
-        self.__ingest_read_response_command(command)
+        info = _read_response_to_pyepics(self.typefull, command)
+        self._args.update(**info)
         self.run_callbacks()
 
     def run_callbacks(self):
@@ -660,7 +682,6 @@ class PV:
         "returns True if a put-with-wait has completed"
         return self._args['put_complete']
 
-
     def _getinfo(self):
         "get information paragraph"
         self.get_ctrlvars()
@@ -851,3 +872,96 @@ def cainfo(pvname, print_out=True):
             print(pvname, thispv.info)
         else:
             return thispv.info
+
+
+def caget_many(pvlist, as_string=False, count=None, as_numpy=True, timeout=5.0,
+               context=None):
+    """get values for a list of PVs
+
+    This does not maintain PV objects, and works as fast
+    as possible to fetch many values.
+    """
+    chids, out = [], []
+
+    if context is None:
+        context = Context(PV._default_context.broadcaster)
+
+    pvs = context.get_pvs(*pvlist)
+
+    for pv in pvs:
+        pv.last_reading = None
+
+    pending_pvs = list(pvs)
+    while pending_pvs:
+        for pv in list(pending_pvs):
+            if pv.connected:
+                pv.read()
+                pending_pvs.remove(pv)
+        time.sleep(0.01)
+
+    get_kw = dict(as_string=as_string,
+                  as_numpy=as_numpy,
+                  requested_count=count,
+                  enum_strings=None,  # TODO?
+                  )
+
+    def final_get(pv):
+        full_type = pv.channel.native_data_type
+        info = _read_response_to_pyepics(full_type=full_type,
+                                         command=pv.last_reading)
+        return _pyepics_get_value(value=info['value'],
+                                  string_value=info['char_value'],
+                                  full_type=pv.channel.native_data_type,
+                                  native_count=pv.channel.native_data_count,
+                                  **get_kw)
+    return [final_get(pv) for pv in pvs]
+
+
+def caput_many(pvlist, values, wait=False, connection_timeout=None, put_timeout=60):
+    """put values to a list of PVs, as fast as possible
+
+    This does not maintain the PV objects it makes.
+
+    If wait is 'each', *each* put operation will block until
+    it is complete or until the put_timeout duration expires.
+
+    If wait is 'all', this method will block until *all*
+    put operations are complete, or until the put_timeout
+    duration expires.
+
+    Note that the behavior of 'wait' only applies to the
+    put timeout, not the connection timeout.
+
+    Returns a list of integers for each PV, 1 if the put
+    was successful, or a negative number if the timeout
+    was exceeded.
+    """
+    if len(pvlist) != len(values):
+        raise ValueError("List of PV names must be equal to list of values.")
+
+    out = []
+    pvs = [PV(name, auto_monitor=False, connection_timeout=connection_timeout)
+           for name in pvlist]
+
+    wait_all = (wait == 'all')
+    wait_each = (wait == 'each')
+    for p, v in zip(pvs, values):
+        try:
+            p.wait_for_connection(connection_timeout)
+            p.put(v, wait=wait_each, timeout=put_timeout,
+                  use_complete=wait_all)
+        except TimeoutError:
+            out.append(-1)
+        else:
+            out.append(1)
+
+    if not wait_all:
+        return [o if o == 1 else -1 for o in out]
+
+    start_time = time.time()
+    while not all([(p.connected and p.put_complete) for p in pvs]):
+        elapsed_time = time.time() - start_time
+        if elapsed_time > put_timeout:
+            break
+    return [1 if (p.connected and p.put_complete) else -1
+            for p in pvs]
