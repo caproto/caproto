@@ -165,7 +165,7 @@ class SelectorThread:
                     continue
 
                 # Let objects handle disconnection by returning a failure here
-                if not obj.received(bytes_recv, address):
+                if obj.received(bytes_recv, address) is ca.DISCONNECTED:
                     # logger.debug('Removing %s = %s due to receive failure',
                     #              sock, obj)
                     self.remove_socket(sock)
@@ -383,8 +383,7 @@ class SharedBroadcaster:
             if commands:
                 self.command_bundle_queue.put(commands)
 
-        # Never disconnect the socket
-        return True
+        return 0
 
     def command_loop(self):
         # Receive commands in 'bundles' (corresponding to the contents of one
@@ -736,7 +735,10 @@ class VirtualCircuitManager:
         for c in commands:
             self._process_command(c)
 
-        return len(bytes_recv) > 0
+        if not bytes_recv:
+            # Tell the selector to remove our socket
+            return ca.DISCONNECTED
+        return num_bytes_needed
 
     def _process_command(self, command):
         try:
