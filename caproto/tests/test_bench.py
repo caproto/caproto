@@ -76,11 +76,9 @@ def bench_pyepics_get_speed(pvname, *, initial_value=None, log_level='DEBUG'):
         pv.disconnect()
 
 
-def _setup_pyepics_compat(log_level):
-    from caproto.threading.pyepics_compat import (PV, SharedBroadcaster,
-                                                  Context,
-                                                  logger as thread_logger)
-
+def _setup_threading_client(log_level):
+    from caproto.threading.client import (PV, SharedBroadcaster, Context,
+                                          logger as thread_logger)
     thread_logger.setLevel(log_level)
     shared_broadcaster = SharedBroadcaster()
     context = Context(broadcaster=shared_broadcaster, log_level=log_level)
@@ -90,16 +88,18 @@ def _setup_pyepics_compat(log_level):
 @contextlib.contextmanager
 def bench_threading_get_speed(pvname, *, initial_value=None,
                               log_level='ERROR'):
-    shared_broadcaster, context, PV = _setup_pyepics_compat(log_level)
+    shared_broadcaster, context, PV = _setup_threading_client(log_level)
 
     def threading():
-        value = pv.get()
+        value = pv.read().data
         if initial_value is not None:
             assert len(value) == len(initial_value)
 
-    pv = PV(pvname, auto_monitor=False, context=context)
+    pv, = context.get_pvs(pvname)
+    pv.wait_for_connection()
+
     if initial_value is not None:
-        pv.put(initial_value, wait=True)
+        pv.write(initial_value, wait=True)
     yield threading
     context.disconnect()
 
@@ -180,16 +180,17 @@ def bench_pyepics_put_speed(pvname, *, value, log_level='DEBUG'):
 
 @contextlib.contextmanager
 def bench_threading_put_speed(pvname, *, value, log_level='ERROR'):
-    shared_broadcaster, context, PV = _setup_pyepics_compat(log_level)
+    shared_broadcaster, context, PV = _setup_threading_client(log_level)
 
     def threading():
-        pv.put(value, wait=True)
+        pv.write(value, wait=True)
 
-    pv = PV(pvname, auto_monitor=False, context=context)
+    pv, = context.get_pvs(pvname)
+    pv.wait_for_connection()
 
     yield threading
 
-    np.testing.assert_array_almost_equal(pv.get(), value)
+    np.testing.assert_array_almost_equal(pv.read().data, value)
 
     context.disconnect()
     logger.debug('Done')
@@ -282,15 +283,13 @@ def bench_pyepics_many_connections(pv_names, *, initial_value=None,
 @contextlib.contextmanager
 def bench_threading_many_connections(pv_names, *, initial_value=None,
                                      log_level='DEBUG'):
-    shared_broadcaster, context, PV = _setup_pyepics_compat(log_level)
+    shared_broadcaster, context, PV = _setup_threading_client(log_level)
     pvs = []
 
     def threading():
         nonlocal pvs
 
-        pvs = [PV(pvname, auto_monitor=False, context=context)
-               for pvname in pv_names]
-
+        pvs = context.get_pvs(*pv_names)
         while not all(pv.connected for pv in pvs):
             time.sleep(0.01)
 
@@ -345,14 +344,18 @@ def bench_curio_many_connections(pv_names, *, initial_value=None,
     logger.debug('Done')
 
 
-@pytest.mark.parametrize('connection_count', [5])
+@pytest.mark.parametrize('connection_count', [5, 100, 500])
 @pytest.mark.parametrize('pv_format', ['connections:{}'])
-@pytest.mark.parametrize('backend', ['curio', 'pyepics'])
-# TODO: threading benchmark
+@pytest.mark.parametrize('backend', ['curio', 'pyepics', 'threading'])
 @pytest.mark.parametrize('log_level', ['INFO'])
-def test_many_connections(benchmark, backend, connection_count, pv_format,
-                          log_level):
+def test_many_connections_same_ioc(benchmark, backend, connection_count,
+                                   pv_format, log_level):
     ca.benchmarking.set_logging_level(logging.DEBUG, logger=logger)
+
+    if backend == 'curio' and connection_count > 100:
+        # curio still has some speed issues...
+        time.sleep(1)
+        return
 
     context = {'pyepics': bench_pyepics_many_connections,
                'curio': bench_curio_many_connections,
