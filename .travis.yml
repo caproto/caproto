@@ -31,11 +31,6 @@ addons:
   apt:
     packages:
       - graphviz  # for building docs
-      - libreadline6-dev  # epics deps
-      - libncurses5-dev
-      - perl
-      - re2c
-      - tmux
       - procserv
 
 cache:
