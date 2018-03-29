@@ -18,10 +18,10 @@ from collections import defaultdict
 
 import caproto as ca
 from .._constants import MAX_ID
-from .._utils import batch_requests
+from .._utils import batch_requests, CaprotoError
 
 
-class ThreadingClientException(Exception):
+class ThreadingClientException(CaprotoError):
     ...
 
 

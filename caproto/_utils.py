@@ -285,7 +285,7 @@ def incremental_buffer_list_slice(*buffers):
         buffers = buffer_list_slice(*buffers, offset=sent)
 
 
-class SendAllRetry(Exception):
+class SendAllRetry(CaprotoError):
     ...
 
 
