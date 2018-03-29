@@ -36,7 +36,7 @@ addons:
       - perl
       - re2c
       - tmux
-      - strace
+      - procserv
 
 cache:
   directories:
@@ -50,17 +50,16 @@ before_install:
   - export CI_SCRIPTS=${TRAVIS_BUILD_DIR}/.ci/ci-scripts
   - source ${CI_SCRIPTS}/epics-config.sh
   - bash .ci/install-from-release.sh "https://github.com/klauer/epics-on-travis/releases/download/${PACKAGED_DEPS}"
-  - bash ${CI_SCRIPTS}/run-epics-iocs.sh
+  - bash ${CI_SCRIPTS}/run-epics-iocs-on-procserv.sh
   - pip install pyepics numpy
-  - sleep 5.0
-  - bash ${CI_SCRIPTS}/run-pyepics-simulator.sh
+  - bash ${CI_SCRIPTS}/run-pyepics-simulator.sh procserv
 
 install:
   - pip install .
   - pip install --quiet --upgrade cython
 
 script:
-  - caget Py:ao1 sim:mtr1
+  - caget Py:ao1 sim:mtr1 13SIM1:image1:PluginType_RBV
 
   # Kill caRepeater if it's running - we want to test caproto-repeater later.
   - pgrep -a caRepeater && killall caRepeater
