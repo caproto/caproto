@@ -347,7 +347,7 @@ class SharedBroadcaster:
             # We have have already searched for these names recently.
             # Filter `pv_names` down to a subset, `needs_search`.
             needs_search = []
-            use_cached_search = defaultdict([].copy)
+            use_cached_search = defaultdict(list)
             for name in names:
                 try:
                     address = self.get_cached_search_result(name)
@@ -356,8 +356,8 @@ class SharedBroadcaster:
                 else:
                     use_cached_search[address].append(name)
 
-            for addr, pvs in use_cached_search.items():
-                results_queue.put((address, pvs))
+            for addr, names in use_cached_search.items():
+                results_queue.put((address, names))
 
             # Generate search_ids and stash them on Context state so they can
             # be used to match SearchResponses with SearchRequests.
@@ -466,17 +466,17 @@ class SharedBroadcaster:
 
 
 class Context:
-    "Wraps Broadcaster + cache of VirtualCircuits of a single priority"
-    def __init__(self, broadcaster, *, priority=0, log_level='DEBUG'):
+    "Wraps Broadcaster and a cache of VirtualCircuits"
+    def __init__(self, broadcaster, *, log_level='DEBUG'):
         self.log_level = log_level
         self.broadcaster = broadcaster
         self.search_condition = threading.Condition()
         self.pv_state_lock = threading.RLock()
         self.resuscitated_pvs = []
         self.circuit_managers = {}  # keyed on address
-        self.pvs = {}
-        self.cids = {}  # cid -> pv
-        self.priority = priority
+        self.pvs = {}  # (name, priority) -> pv
+        # name -> set of pvs  --- with varied priority
+        self.pvs_by_name = defaultdict(weakref.WeakSet)
         self.broadcaster.add_listener(self)
         self._search_results_queue = queue.Queue()
         threading.Thread(target=self._process_search_results_loop,
@@ -486,33 +486,32 @@ class Context:
         self.selector = SelectorThread()
         self.selector.start()
 
-    def get_pvs(self, *names, connection_state_callback=None):
+    def get_pvs(self, *names, priority=0, connection_state_callback=None):
         """
         Return a list of PV objects.
 
         These objects may not be connected at first. Channel creation occurs on
         a background thread.
         """
-        all_pvs = []
-        search_pvs = {}
+        pvs = []  # list of all PV objects to return
+        names_to_search = []  # subset of names that we need to search for
         for name in names:
             try:
-                pv = self.pvs[name]
+                pv = self.pvs[(name, priority)]
             except KeyError:
-                pv = PV(name, self, connection_state_callback)
-                self.pvs[name] = pv
+                pv = PV(name, priority, self, connection_state_callback)
+                self.pvs[(name, priority)] = pv
+                self.pvs_by_name[name].add(pv)
+                names_to_search.append(name)
             else:
                 # Re-using a PV instance. Add a new connection state callback,
                 # if necessary:
+                logger.debug('Reusing PV instance for %r', name)
                 if connection_state_callback:
-                    logger.debug('Re-using PV instance for %r', name)
                     pv.connection_state_callback.add_callback(
                         connection_state_callback)
 
-            if not pv.connected:
-                search_pvs[name] = pv
-
-            all_pvs.append(pv)
+            pvs.append(pv)
 
         # TODO: potential bug?
         # if callback is quick, is there a chance downstream listeners may
@@ -522,62 +521,62 @@ class Context:
         # already have an instance. It might already have a cached search
         # result, but that is the concern of broadcaster.search.
         with self.pv_state_lock:
-            search_pvnames = list(search_pvs.keys())
-            self.broadcaster.search(self._search_results_queue, search_pvnames)
-            self.pvs.update(**search_pvs)
-        return all_pvs
+            self.broadcaster.search(self._search_results_queue,
+                                    names_to_search)
+        return pvs
 
-    def reconnect(self, names):
-        search_pvs = {}
+    def reconnect(self, keys):
         # We will reuse the same PV object but use a new cid.
+        names = []
+        pvs = []
         with self.pv_state_lock:
-            for name in names:
-                pv = self.pvs[name]
-                # if pv.channel is not None:
-                #     self.pvs.pop(name, None)
+            for key in keys:
+                pv = self.pvs[key]
                 pv.circuit_manager = None
                 pv.channel = None
-                search_pvs[name] = pv
+                pvs.append(pv)
+                name, _ = key
+                names.append(name)
                 # If there is a cached search result for this name, expire it.
                 self.broadcaster.search_results.pop(name, None)
 
-            search_pvnames = list(search_pvs.keys())
-            self.broadcaster.search(self._search_results_queue, search_pvnames)
+            self.broadcaster.search(self._search_results_queue, names)
             with self.pv_state_lock:
-                self.pvs.update(**search_pvs)
                 self.resuscitated_pvs.extend(
-                    [pv for name, pv in search_pvs.items()
-                     if pv.subscriptions]
-                )
+                    [pv for pv in pvs if pv.subscriptions])
 
     def _process_search_results_loop(self):
-        # Receive (address, (cid1, cid2, cid3, ...)). The sending side of this
+        # Receive (address, (name1, name2, ...)). The sending side of this
         # queue is held by SharedBroadcaster.command_loop.
         while True:
             address, names = self._search_results_queue.get()
             with self.pv_state_lock:
-                # Get (make if necessary) a VirtualCircuitManager. This is
-                # where TCP socket creation happens.
-                vc_manager = self.get_circuit_manager(address)
-                circuit = vc_manager.circuit
-
                 # Assign each PV a VirtualCircuitManager for managing a socket
                 # and tracking circuit state, as well as a ClientChannel for
                 # tracking channel state.
                 channels = collections.deque()
                 for name in names:
-                    pv = self.pvs[name]
-                    pv.circuit_manager = vc_manager
+                    pvs = self.pvs_by_name[name]
+                    for pv in pvs:
+                        if pv.circuit_manager is not None:
+                            # This one is already set up. Skip it.
+                            continue
 
-                    # TODO: NOTE: we are not following the suggestion to use
-                    # the same cid as in the search. This simplifies things
-                    # between the broadcaster and Context.
-                    cid = self.broadcaster.new_id()
-                    chan = ca.ClientChannel(name, circuit, cid=cid)
-                    vc_manager.channels[cid] = chan
-                    vc_manager.pvs[cid] = pv
-                    pv.channel = chan
-                    channels.append(chan)
+                        # Get (make if necessary) a VirtualCircuitManager. This
+                        # is where TCP socket creation happens.
+                        cm = self.get_circuit_manager(address, pv.priority)
+                        circuit = cm.circuit
+
+                        pv.circuit_manager = cm
+                        # TODO: NOTE: we are not following the suggestion to
+                        # use the same cid as in the search. This simplifies
+                        # things between the broadcaster and Context.
+                        cid = cm.circuit.new_channel_id()
+                        chan = ca.ClientChannel(name, circuit, cid=cid)
+                        cm.channels[cid] = chan
+                        cm.pvs[cid] = pv
+                        pv.channel = chan
+                        channels.append(chan)
 
             # Notify PVs that they now have a circuit_manager. This will
             # un-block a wait() in the PV.wait_for_search() method.
@@ -586,23 +585,23 @@ class Context:
                 cond.notify_all()
 
             # Initiate channel creation with the server.
-            vc_manager.send(*(chan.create() for chan in channels))
+            cm.send(*(chan.create() for chan in channels))
 
-    def get_circuit_manager(self, address):
+    def get_circuit_manager(self, address, priority):
         """
-        Return a VirtualCircuitManager for this address. (It manages a
-        caproto.VirtualCircuit and a TCP socket.)
+        Return a VirtualCircuitManager for this address, priority. (It manages
+        a caproto.VirtualCircuit and a TCP socket.)
 
         Make a new one if necessary.
         """
-        vc_manager = self.circuit_managers.get(address, None)
-        if vc_manager is None:
+        cm = self.circuit_managers.get((address, priority), None)
+        if cm is None:
             circuit = ca.VirtualCircuit(our_role=ca.CLIENT, address=address,
-                                        priority=self.priority)
-            vc_manager = VirtualCircuitManager(self, circuit, self.selector)
-            vc_manager.circuit.log.setLevel(self.log_level)
-            self.circuit_managers[address] = vc_manager
-        return vc_manager
+                                        priority=priority)
+            cm = VirtualCircuitManager(self, circuit, self.selector)
+            cm.circuit.log.setLevel(self.log_level)
+            self.circuit_managers[(address, priority)] = cm
+        return cm
 
     def _restart_subscriptions(self):
         while True:
@@ -616,14 +615,14 @@ class Context:
                         ready[pv.circuit_manager].append(pv)
                     else:
                         self.resuscitated_pvs.append(pv)
-            for vc_manager, pvs in ready.items():
+            for cm, pvs in ready.items():
                 def requests():
                     for pv in pvs:
                         yield from pv._resubscribe()
 
                 for batch in batch_requests(requests(),
                                             EVENT_ADD_BATCH_MAX_BYTES):
-                    vc_manager.send(*batch)
+                    cm.send(*batch)
             time.sleep(max(0, RESTART_SUBS_PERIOD - (time.monotonic() - t)))
 
     def disconnect(self, *, wait=True, timeout=2):
@@ -804,8 +803,8 @@ class VirtualCircuitManager:
             # If the user didn't request disconnection, kick off attempt to
             # reconnect all PVs via fresh circuit(s).
             logger.debug('VCM: Attempting reconnection')
-            self.context.reconnect([chan.name
-                                    for chan in self.channels.values()])
+            self.context.reconnect(((chan.name, chan.circuit.priority)
+                                    for chan in self.channels.values()))
 
         # Clean up the socket if it has not yet been cleared:
         sock = self.socket
@@ -863,12 +862,12 @@ class PV:
                  '_write_notify_callback', '_user_disconnected',
                  'connection_state_callback', '_pc_callbacks', '__weakref__')
 
-    def __init__(self, name, context, connection_state_callback):
+    def __init__(self, name, priority, context, connection_state_callback):
         """
         These must be instantiated by a Context, never directly.
         """
         self.name = name
-        self.priority = context.priority
+        self.priority = priority
         self.context = context
         self.connection_state_callback = CallbackHandler(self)
 
@@ -1021,7 +1020,7 @@ class PV:
             except Exception:
                 pass
         self._user_disconnected = False
-        self.context.reconnect((self.name, ))
+        self.context.reconnect(((self.name, self.priority),))
         self.wait_for_connection(timeout=timeout)
         self.circuit_manager.send(*self._resubscribe())
 

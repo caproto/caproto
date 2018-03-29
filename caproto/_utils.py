@@ -223,7 +223,8 @@ def ensure_bytes(s):
         # be sure to include a null terminator
         return s.encode() + b'\0'
     else:
-        raise CaprotoTypeError("expected str or bytes")
+        raise CaprotoTypeError(f"expected str or bytes, got {s!r} of type "
+                               f"{type(s)}")
 
 
 def bcast_socket(socket_module=socket):
