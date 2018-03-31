@@ -92,7 +92,7 @@ def make_channel(pv_name, logger, udp_sock, priority, timeout):
     else:
         logger.debug('Repeater registration confirmed.')
 
-    logger.debug("Searching for '%s'...." % pv_name)
+    logger.debug("Searching for '%s'....", pv_name)
     bytes_to_send = b.send(ca.VersionRequest(0, 13),
                            ca.SearchRequest(pv_name, 0, 13))
     for host in ca.get_address_list():

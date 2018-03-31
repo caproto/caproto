@@ -6,6 +6,7 @@ import signal
 import subprocess
 import sys
 import time
+from types import SimpleNamespace
 import uuid
 
 import caproto as ca
@@ -69,23 +70,42 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
     if request is not None:
         request.addfinalizer(stop_ioc)
 
-    if not pv_to_check:
-        return p
+    if pv_to_check:
+        poll_readiness(pv_to_check)
 
+    return p
+
+
+def poll_readiness(pv_to_check, attempts=50):
     print(f'Checking PV {pv_to_check}')
-    for attempt in range(5):
+    for attempt in range(attempts):
         try:
-            get(pv_to_check, timeout=1.0, verbose=True)
+            get(pv_to_check, timeout=0.1)
         except TimeoutError:
-            print(f'Still trying to connect to {pv_to_check}')
             continue
         else:
             break
     else:
-        raise TimeoutError("ioc fixture failed to start in 5 seconds.")
+        raise TimeoutError(f"ioc fixture failed to start in "
+                           f"{attempts * 10} seconds.")
 
-    return p
 
+def run_softioc(request, prefix):
+    db = {
+        ('{}:wfioc:wf{}'.format(prefix, sz), 'waveform'): dict(FTVL='LONG', NELM=sz)
+        for sz in (4000, 8000, 50000, 1000000)
+    }
+    db_text = ca.benchmarking.make_database(db)
+    ioc_handler = ca.benchmarking.IocHandler()
+    ioc_handler.setup_ioc(db_text=db_text, max_array_bytes='10000000')
+    # TODO Use caget to check this.
+    # give time for the server to startup
+    time.sleep(1.0)
+
+    request.addfinalizer(ioc_handler.teardown)
+
+    (pv_to_check, _), *_ = db
+    poll_readiness(pv_to_check)
 
 @pytest.fixture(scope='function')
 def prefix():
@@ -93,13 +113,24 @@ def prefix():
     return str(uuid.uuid4())[:8] + ':'
 
 
-@pytest.fixture(scope='function')
+@pytest.fixture(params=['caproto', 'epics-base'], scope='function')
 def ioc(request):
-    # TODO Randomly generate a prefix and return it.
-    # TODO Use a special server specifically for tests.
-    return run_example_ioc('caproto.ioc_examples.type_varieties',
-                           request=request, pv_to_check='pi')
-
+    prefix = str(uuid.uuid4())[:8] + ':'
+    if request.param == 'caproto':
+        process = run_example_ioc('caproto.ioc_examples.type_varieties',
+                                  request=request, pv_to_check='pi',
+                                  args=(prefix,))
+        ret = SimpleNamespace(process=process,
+                              pvs=SimpleNamespace(int='pi',
+                                                  str='str',
+                                                  enum='enum'))
+    elif request.param == 'epics-base':
+        process = run_softioc(request, prefix)
+        ret = SimpleNamespace(process=None,  # TODO
+                              pvs=SimpleNamespace(int='sim:mtr1',
+                                                  # TODO
+                                                  ))
+    return ret
 
 def start_repeater():
     global _repeater_process
