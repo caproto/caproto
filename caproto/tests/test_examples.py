@@ -35,8 +35,7 @@ def test_thread_client_example(threading_broadcaster):
 def test_pyepics_pv(threading_broadcaster):
     from caproto.threading.pyepics_compat import PV, Context, SharedBroadcaster
 
-    pv1 = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
-    # pv2 = "XF:31IDA-OP{Tbl-Ax:X2}Mtr.VAL"
+    pv1 = "sim:mtr1"
 
     # Some user function to call when subscriptions receive data.
     called = []
@@ -74,11 +73,14 @@ def test_pyepics_pv(threading_broadcaster):
             getattr(ctrl_pv, k)
 
 
-def test_curio_server_example():
+def test_curio_server_example(prefix):
     import caproto.curio.client as client
     from caproto.ioc_examples.type_varieties import (pvdb, main as server_main)
     kernel = curio.Kernel()
     commands = []
+
+    pvdb = {prefix + key: value
+            for key, value in pvdb.items()}
 
     async def run_client():
         # Some user function to call when subscriptions receive data.
@@ -87,12 +89,13 @@ def test_curio_server_example():
             print("Subscription has received data: {}".format(command))
             commands.append(command)
 
+        pi_pv = prefix + 'pi'
         broadcaster = client.SharedBroadcaster(log_level='DEBUG')
         await broadcaster.register()
         ctx = client.Context(broadcaster, log_level='DEBUG')
-        await ctx.search('pi')
+        await ctx.search(pi_pv)
         print('done searching')
-        chan1 = await ctx.create_channel('pi')
+        chan1 = await ctx.create_channel(pi_pv)
         chan1.register_user_callback(user_callback)
         # ...and then wait for all the responses.
         await chan1.wait_for_connection()
@@ -140,7 +143,7 @@ def test_curio_server_example():
         print('reading:', reading)
 
         status, severity = ca.AlarmStatus.SCAN, ca.AlarmSeverity.MAJOR_ALARM
-        server_alarm = pvdb['pi'].alarm
+        server_alarm = pvdb[pi_pv].alarm
 
         await server_alarm.write(status=status, severity=severity)
 
@@ -198,11 +201,11 @@ def test_curio_server_example():
         # await chan1.circuit.socket.close()
 
         commands.clear()
-        await ctx.search('str')
-        await ctx.search('str2')
+        await ctx.search(prefix + 'str')
+        await ctx.search(prefix + 'str2')
         print('done searching')
-        chan2 = await ctx.create_channel('str')
-        chan3 = await ctx.create_channel('str2')
+        chan2 = await ctx.create_channel(prefix + 'str')
+        chan3 = await ctx.create_channel(prefix + 'str2')
         chan2.register_user_callback(user_callback)
         chan3.register_user_callback(user_callback)
         await chan2.wait_for_connection()
@@ -214,7 +217,8 @@ def test_curio_server_example():
         await chan3.write(b'good')
 
         print('setting alarm status...')
-        await pvdb['str'].alarm.write(severity=ca.AlarmSeverity.MAJOR_ALARM)
+        await pvdb[prefix + 'str'].alarm.write(
+            severity=ca.AlarmSeverity.MAJOR_ALARM)
 
         await curio.sleep(0.5)
 
@@ -244,7 +248,7 @@ def test_curio_server_example():
     print('done')
 
 
-def test_curio_server_and_thread_client(curio_server):
+def test_curio_server_and_thread_client(curio_server, prefix):
     from caproto.threading.client import (SharedBroadcaster,
                                           Context)
     from .conftest import threaded_in_curio_wrapper
@@ -255,10 +259,10 @@ def test_curio_server_and_thread_client(curio_server):
         shared_broadcaster = SharedBroadcaster()
         cntx = Context(broadcaster=shared_broadcaster, log_level='DEBUG')
 
-        pv, = cntx.get_pvs('int')
+        pv, = cntx.get_pvs(prefix + 'int')
         pv.wait_for_connection()
 
-        assert pv.read().data[0] == caget_pvdb['int'].value
+        assert pv.read().data[0] == caget_pvdb[prefix + 'int'].value
         print('get', pv.read())
 
         monitor_values = []

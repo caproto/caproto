@@ -65,7 +65,8 @@ def softioc(*, db_text='', access_rules_text='', additional_args=None,
 
     logger.debug('soft ioc environment is:')
     for key, val in sorted(proc_env.items()):
-        logger.debug('%s = %r', key, val)
+        if not key.startswith('_'):
+            logger.debug('%s = %r', key, val)
 
     # if 'EPICS_' not in proc_env:
 
