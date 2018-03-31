@@ -289,13 +289,19 @@ class PV:
             mcount = count if count is not None else self._args['count']
             self.auto_monitor = mcount < AUTOMONITOR_MAXLENGTH
 
+        self._check_auto_monitor_sub()
+        self._connected = True
+
+    def _check_auto_monitor_sub(self, count=None):
+        'Ensure auto-monitor subscription is running'
         if ((self.auto_monitor or self.callbacks) and
                 not self._auto_monitor_sub):
-            self._auto_monitor_sub = caproto_pv.subscribe(
+            if count is None:
+                count = self.default_count
+
+            self._auto_monitor_sub = self._caproto_pv.subscribe(
                 data_type=self.typefull, data_count=count)
             self._auto_monitor_sub.add_callback(self.__on_changes)
-
-        self._connected = True
 
     def _connection_state_changed(self, caproto_pv, state):
         'Connection callback hook from threading.PV.connection_state_changed'
@@ -511,6 +517,9 @@ class PV:
             raise ValueError("why do this")
         index = next(self._cb_count)
         self.callbacks[index] = (callback, kw)
+
+        if self.connected:
+            self._check_auto_monitor_sub()
 
         if with_ctrlvars and self.connected:
             self.get_ctrlvars()
