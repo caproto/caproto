@@ -536,9 +536,12 @@ class Context:
         except curio.TaskCancelled:
             logger.info('Server task cancelled')
             await g.cancel_remaining()
+            logger.info('Cancelled remaining task group tasks.')
             for circuit in list(self.circuits):
-                logger.debug('Cancelling tasks from circuit %s', circuit)
+                logger.debug('Cancelling tasks from circuit %s...', circuit)
                 await circuit.pending_tasks.cancel_remaining()
+                logger.debug('OK')
+            logger.info('Done. Server exiting.')
 
 
 async def start_server(pvdb, log_level='DEBUG', *, bind_addr='0.0.0.0'):

@@ -87,7 +87,7 @@ def poll_readiness(pv_to_check, attempts=50):
             break
     else:
         raise TimeoutError(f"ioc fixture failed to start in "
-                           f"{attempts * 10} seconds.")
+                           f"{attempts / 10} seconds (pv: {pv_to_check})")
 
 
 def run_softioc(request, db):
@@ -115,36 +115,35 @@ def ioc(request):
     prefix_ = prefix()
     if request.param == 'caproto':
         name = 'Caproto type varieties example'
-        pvs = SimpleNamespace(int=prefix_ + 'pi',
-                              str=prefix_ + 'str',
-                              enum=prefix_ + 'enum')
+        pvs = dict(int=prefix_ + 'int',
+                   float=prefix_ + 'pi',
+                   str=prefix_ + 'str',
+                   enum=prefix_ + 'enum',
+                   )
         process = run_example_ioc('caproto.ioc_examples.type_varieties',
                                   request=request,
-                                  pv_to_check=pvs.int,
+                                  pv_to_check=pvs['float'],
                                   args=(prefix_,))
     elif request.param == 'epics-base':
         name = 'Waveform and standard record IOC'
         db = {
-            ('{}waveform{}'.format(prefix_, sz), 'waveform'):
-                dict(FTVL='LONG', NELM=sz)
-            for sz in (16, 4000)
+            ('{}waveform'.format(prefix_), 'waveform'):
+                dict(FTVL='LONG', NELM=4000),
+            ('{}float'.format(prefix_), 'ai'): dict(VAL=1),
+            ('{}enum'.format(prefix_), 'bi'):
+                dict(VAL=1, ZNAM="zero", ONAM="one"),
+            ('{}str'.format(prefix_), 'stringout'): dict(VAL='test'),
+            ('{}int'.format(prefix_), 'longout'): dict(VAL=1),
         }
 
-        db.update(
-            {('{}ai'.format(prefix_), 'ai'): dict(VAL=1),
-             ('{}ao'.format(prefix_), 'ao'): dict(VAL=2),
-             ('{}bi'.format(prefix_), 'bi'): dict(VAL=1),
-             ('{}bo'.format(prefix_), 'bo'): dict(VAL=1),
-             }
-        )
         handler = run_softioc(request, db)
         process = handler.processes[-1]
-        pvs = SimpleNamespace(**{pv[len(prefix_):]: pv
-                                 for pv, rtype in db
-                                 }
-                              )
+        pvs = {pv[len(prefix_):]: pv
+               for pv, rtype in db
+               }
     ret = SimpleNamespace(process=process,
                           type=request.param,
+                          prefix=prefix_,
                           name=name,
                           pvs=pvs)
     return ret
