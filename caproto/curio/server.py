@@ -457,11 +457,15 @@ class Context:
 
         await circuit.run()
 
-        while True:
-            try:
-                await circuit.recv()
-            except DisconnectedCircuit:
-                break
+        try:
+            while True:
+                try:
+                    await circuit.recv()
+                except DisconnectedCircuit:
+                    break
+        except KeyboardInterrupt:
+            logger.debug('TCP handler received KeyboardInterrupt')
+            raise
 
     async def circuit_disconnected(self, circuit):
         '''Notification from circuit that its connection has closed'''
@@ -541,7 +545,7 @@ class Context:
                 logger.debug('Cancelling tasks from circuit %s...', circuit)
                 await circuit.pending_tasks.cancel_remaining()
                 logger.debug('OK')
-            logger.info('Done. Server exiting.')
+            logger.info('Server exiting.')
 
 
 async def start_server(pvdb, log_level='DEBUG', *, bind_addr='0.0.0.0'):
