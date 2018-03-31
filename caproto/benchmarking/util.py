@@ -160,6 +160,10 @@ class IocHandler:
                           env_vars, db_text)
         return cm
 
+    @property
+    def processes(self):
+        return list(self._softioc_processes)
+
     def teardown(self):
         for i, cm in enumerate(self._cms[:]):
             self.logger.debug('Tearing down soft IOC context manager #%d', i)

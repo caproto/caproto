@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import logging
+import sys
 
 import curio
 from caproto.curio.server import (Context, logger, find_next_tcp_port)
@@ -59,11 +60,15 @@ pvdb = {'pi': ca.ChannelDouble(value=3.14,
         }
 
 
-async def main(pvdb, port=None):
+async def main(pvdb, prefix=None, port=None):
+    if prefix is not None:
+        pvdb = {prefix + key: value
+                for key, value in pvdb.items()}
     if port is None:
         port = find_next_tcp_port()
     ctx = Context('0.0.0.0', find_next_tcp_port(), pvdb, log_level='DEBUG')
     logger.info('Server starting up on %s:%d', ctx.host, ctx.port)
+    logger.info("Available PVs: %s", ' '.join(pvdb))
     return await ctx.run()
 
 
@@ -71,4 +76,5 @@ if __name__ == '__main__':
     # TODO Use new IOC code.
     logging.basicConfig()
     logger.setLevel('DEBUG')
-    curio.run(main(pvdb))
+    prefix = sys.argv[1] if len(sys.argv) > 1 else None
+    curio.run(main(pvdb, prefix=prefix))

@@ -90,22 +90,17 @@ def poll_readiness(pv_to_check, attempts=50):
                            f"{attempts * 10} seconds.")
 
 
-def run_softioc(request, prefix):
-    db = {
-        ('{}:wfioc:wf{}'.format(prefix, sz), 'waveform'): dict(FTVL='LONG', NELM=sz)
-        for sz in (4000, 8000, 50000, 1000000)
-    }
+def run_softioc(request, db):
     db_text = ca.benchmarking.make_database(db)
     ioc_handler = ca.benchmarking.IocHandler()
     ioc_handler.setup_ioc(db_text=db_text, max_array_bytes='10000000')
-    # TODO Use caget to check this.
-    # give time for the server to startup
-    time.sleep(1.0)
 
     request.addfinalizer(ioc_handler.teardown)
 
     (pv_to_check, _), *_ = db
     poll_readiness(pv_to_check)
+    return ioc_handler
+
 
 @pytest.fixture(scope='function')
 def prefix():
@@ -115,22 +110,45 @@ def prefix():
 
 @pytest.fixture(params=['caproto', 'epics-base'], scope='function')
 def ioc(request):
-    prefix = str(uuid.uuid4())[:8] + ':'
+    'A fixture that runs more than one IOC: caproto, epics'
+    # Get a new prefix for each IOC type:
+    prefix_ = prefix()
     if request.param == 'caproto':
+        name = 'Caproto type varieties example'
+        pvs = SimpleNamespace(int=prefix_ + 'pi',
+                              str=prefix_ + 'str',
+                              enum=prefix_ + 'enum')
         process = run_example_ioc('caproto.ioc_examples.type_varieties',
-                                  request=request, pv_to_check='pi',
-                                  args=(prefix,))
-        ret = SimpleNamespace(process=process,
-                              pvs=SimpleNamespace(int='pi',
-                                                  str='str',
-                                                  enum='enum'))
+                                  request=request,
+                                  pv_to_check=pvs.int,
+                                  args=(prefix_,))
     elif request.param == 'epics-base':
-        process = run_softioc(request, prefix)
-        ret = SimpleNamespace(process=None,  # TODO
-                              pvs=SimpleNamespace(int='sim:mtr1',
-                                                  # TODO
-                                                  ))
+        name = 'Waveform and standard record IOC'
+        db = {
+            ('{}waveform{}'.format(prefix_, sz), 'waveform'):
+                dict(FTVL='LONG', NELM=sz)
+            for sz in (16, 4000)
+        }
+
+        db.update(
+            {('{}ai'.format(prefix_), 'ai'): dict(VAL=1),
+             ('{}ao'.format(prefix_), 'ao'): dict(VAL=2),
+             ('{}bi'.format(prefix_), 'bi'): dict(VAL=1),
+             ('{}bo'.format(prefix_), 'bo'): dict(VAL=1),
+             }
+        )
+        handler = run_softioc(request, db)
+        process = handler.processes[-1]
+        pvs = SimpleNamespace(**{pv[len(prefix_):]: pv
+                                 for pv, rtype in db
+                                 }
+                              )
+    ret = SimpleNamespace(process=process,
+                          type=request.param,
+                          name=name,
+                          pvs=pvs)
     return ret
+
 
 def start_repeater():
     global _repeater_process
