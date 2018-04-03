@@ -186,7 +186,7 @@ def default_teardown_module(module):
 
 
 @pytest.fixture(scope='function')
-def curio_server():
+def curio_server(prefix):
     caget_pvdb = {
         'pi': ca.ChannelDouble(value=3.14,
                                lower_disp_limit=3.13,
@@ -230,10 +230,14 @@ def curio_server():
                                 reported_record_type='caproto'),
     }
 
-    async def run_server():
+    # tack on a unique prefix
+    caget_pvdb = {prefix + key: value
+                  for key, value in caget_pvdb.items()}
+
+    async def _server(pvdb):
         port = find_next_tcp_port(host=SERVER_HOST)
         print('Server will be on', (SERVER_HOST, port))
-        ctx = server.Context(SERVER_HOST, port, caget_pvdb, log_level='DEBUG')
+        ctx = server.Context(SERVER_HOST, port, pvdb, log_level='DEBUG')
         try:
             await ctx.run()
         except Exception as ex:
@@ -242,7 +246,19 @@ def curio_server():
         finally:
             print('Server exiting')
 
-    return run_server, caget_pvdb
+    async def run_server(client, *, pvdb=caget_pvdb, run_in_thread=False):
+        server_task = await curio.spawn(_server, pvdb)
+
+        try:
+            if run_in_thread:
+                await curio.run_in_thread(client)
+                await client.wait()
+            else:
+                await client()
+        finally:
+            await server_task.cancel()
+
+    return run_server, prefix, caget_pvdb
 
 
 def pytest_make_parametrize_id(config, val, argname):

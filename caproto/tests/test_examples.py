@@ -75,8 +75,9 @@ def test_pyepics_pv(threading_broadcaster):
 
 def test_curio_server_example(prefix):
     import caproto.curio.client as client
-    from caproto.ioc_examples.type_varieties import (pvdb, main as server_main)
-    kernel = curio.Kernel()
+    from caproto.ioc_examples.type_varieties import (
+        pvdb, main as server_main)
+
     commands = []
 
     pvdb = {prefix + key: value
@@ -243,26 +244,28 @@ def test_curio_server_example(prefix):
             print('server is canceled', server_task.cancelled)  # prints True
             print(kernel._tasks)
 
-    with kernel:
+    with curio.Kernel() as kernel:
         kernel.run(task)
+
     print('done')
 
 
-def test_curio_server_and_thread_client(curio_server, prefix):
+def test_curio_server_and_thread_client(curio_server):
     from caproto.threading.client import (SharedBroadcaster,
                                           Context)
     from .conftest import threaded_in_curio_wrapper
-    curio_server, caget_pvdb = curio_server
+    server_runner, prefix, pvdb = curio_server
+    pvname = prefix + 'int'
 
     @threaded_in_curio_wrapper
     def client_test():
         shared_broadcaster = SharedBroadcaster()
         cntx = Context(broadcaster=shared_broadcaster, log_level='DEBUG')
 
-        pv, = cntx.get_pvs(prefix + 'int')
+        pv, = cntx.get_pvs(pvname)
         pv.wait_for_connection()
 
-        assert pv.read().data[0] == caget_pvdb[prefix + 'int'].value
+        assert pv.read().data[0] == pvdb[pvname].value
         print('get', pv.read())
 
         monitor_values = []
@@ -285,17 +288,8 @@ def test_curio_server_and_thread_client(curio_server, prefix):
 
         assert len(monitor_values) == 4
 
-    async def task():
-        server_task = await curio.spawn(curio_server)
-
-        try:
-            await curio.run_in_thread(client_test)
-            await client_test.wait()
-        finally:
-            await server_task.cancel()
-
     with curio.Kernel() as kernel:
-        kernel.run(task)
+        kernel.run(server_runner(client=client_test, run_in_thread=True))
 
 
 # See test_ioc_example and test_flaky_ioc_examples, below.
@@ -404,6 +398,7 @@ def test_flaky_ioc_examples(request, module_name, pvdb_class_name,
                             class_kwargs, prefix):
     return _test_ioc_examples(request, module_name, pvdb_class_name,
                               class_kwargs, prefix)
+
 
 def test_areadetector_generate():
     from caproto.ioc_examples import areadetector_image
