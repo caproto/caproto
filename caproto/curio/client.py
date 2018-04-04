@@ -327,7 +327,7 @@ class SharedBroadcaster:
         # Wait for the SearchResponse.
         while search_command.cid in self.unanswered_searches:
             await self.send(ca.EPICS_CA1_PORT, ver_command, search_command)
-            await curio.timeout_after(1, self.wait_on_new_command)
+            await curio.ignore_after(1, self.wait_on_new_command)
         return name
 
     async def wait_on_new_command(self):
