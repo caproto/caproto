@@ -323,11 +323,10 @@ class SharedBroadcaster:
         ver_command, search_command = self.broadcaster.search(name)
         # Stash the search ID for recognizes the SearchResponse later.
         self.unanswered_searches[search_command.cid] = name
-        await self.send(ca.EPICS_CA1_PORT, ver_command, search_command)
         # Wait for the SearchResponse.
         while search_command.cid in self.unanswered_searches:
-            await self.wait_on_new_command()
-
+            await self.send(ca.EPICS_CA1_PORT, ver_command, search_command)
+            await curio.timeout_after(1, self.wait_on_new_command)
         return name
 
     async def wait_on_new_command(self):

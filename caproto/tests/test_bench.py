@@ -352,11 +352,6 @@ def test_many_connections_same_ioc(benchmark, backend, connection_count,
                                    pv_format, log_level):
     ca.benchmarking.set_logging_level(logging.DEBUG, logger=logger)
 
-    if backend == 'curio' and connection_count > 100:
-        # curio still has some speed issues...
-        time.sleep(1)
-        return
-
     context = {'pyepics': bench_pyepics_many_connections,
                'curio': bench_curio_many_connections,
                'threading': bench_threading_many_connections,
