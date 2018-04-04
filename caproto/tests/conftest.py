@@ -63,7 +63,9 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
         if p.poll() is None:
             print('Sending Ctrl-C to the example IOC')
             p.send_signal(signal.SIGINT)
+            print('Waiting on process...')
             p.wait()
+            print('IOC has exited')
         else:
             print('Example IOC has already exited')
 

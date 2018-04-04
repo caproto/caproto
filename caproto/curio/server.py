@@ -463,9 +463,9 @@ class Context:
                     await circuit.recv()
                 except DisconnectedCircuit:
                     break
-        except KeyboardInterrupt:
+        except KeyboardInterrupt as ex:
             logger.debug('TCP handler received KeyboardInterrupt')
-            raise
+            raise curio.KernelExit() from ex
 
     async def circuit_disconnected(self, circuit):
         '''Notification from circuit that its connection has closed'''
@@ -537,15 +537,9 @@ class Context:
             logger.error('Curio server failed: %s', ex.errors)
             for task in ex:
                 logger.error('Task %s failed: %s', task, task.exception)
-        except curio.TaskCancelled:
-            logger.info('Server task cancelled')
-            await g.cancel_remaining()
-            logger.info('Cancelled remaining task group tasks.')
-            for circuit in list(self.circuits):
-                logger.debug('Cancelling tasks from circuit %s...', circuit)
-                await circuit.pending_tasks.cancel_remaining()
-                logger.debug('OK')
-            logger.info('Server exiting.')
+        except curio.TaskCancelled as ex:
+            logger.info('Server task cancelled; exiting')
+            raise curio.KernelExit() from ex
 
 
 async def start_server(pvdb, log_level='DEBUG', *, bind_addr='0.0.0.0'):

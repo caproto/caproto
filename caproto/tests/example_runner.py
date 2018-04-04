@@ -6,8 +6,8 @@ import runpy
 
 if __name__ == '__main__':
     cov = coverage.process_startup()
-
-    cov._warn_no_data = True
+    if cov is not None:
+        cov._warn_no_data = True
     print({env: val
            for env, val in os.environ.items()
            if 'COVERAGE' in env})
