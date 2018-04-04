@@ -14,6 +14,10 @@ class DisconnectedCircuit(Exception):
     ...
 
 
+class ServerExit(curio.KernelExit):
+    ...
+
+
 Subscription = namedtuple('Subscription', ('mask', 'circuit', 'channel',
                                            'data_type',
                                            'data_count', 'subscriptionid'))
@@ -465,7 +469,7 @@ class Context:
                     break
         except KeyboardInterrupt as ex:
             logger.debug('TCP handler received KeyboardInterrupt')
-            raise curio.KernelExit() from ex
+            raise ServerExit() from ex
 
     async def circuit_disconnected(self, circuit):
         '''Notification from circuit that its connection has closed'''
@@ -539,7 +543,7 @@ class Context:
                 logger.error('Task %s failed: %s', task, task.exception)
         except curio.TaskCancelled as ex:
             logger.info('Server task cancelled; exiting')
-            raise curio.KernelExit() from ex
+            raise ServerExit() from ex
 
 
 async def start_server(pvdb, log_level='DEBUG', *, bind_addr='0.0.0.0'):

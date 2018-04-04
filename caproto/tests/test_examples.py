@@ -77,6 +77,7 @@ def test_curio_server_example(prefix):
     import caproto.curio.client as client
     from caproto.ioc_examples.type_varieties import (
         pvdb, main as server_main)
+    from caproto.curio.server import ServerExit
 
     commands = []
 
@@ -234,15 +235,23 @@ def test_curio_server_example(prefix):
         assert len(commands) == 2 + 2 + 2
 
     async def task():
+        async def server_wrapper():
+            try:
+                await server_main(pvdb)
+            except ServerExit:
+                print('Server exited normally')
+
         try:
-            server_task = await curio.spawn(server_main(pvdb))
+            server_task = await curio.spawn(server_wrapper)
             await curio.sleep(1)  # Give server some time to start up.
             await run_client()
             print('client is done')
         finally:
-            await server_task.cancel()
-            print('server is canceled', server_task.cancelled)  # prints True
-            print(kernel._tasks)
+            try:
+                await server_task.cancel()
+                await server_task.join()
+            except curio.KernelExit:
+                print('Server exited normally')
 
     with curio.Kernel() as kernel:
         kernel.run(task)

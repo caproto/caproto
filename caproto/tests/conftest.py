@@ -243,14 +243,14 @@ def curio_server(prefix):
         ctx = server.Context(SERVER_HOST, port, pvdb, log_level='DEBUG')
         try:
             await ctx.run()
+        except server.ServerExit:
+            print('Server exiting normally')
         except Exception as ex:
             print('Server failed', ex)
             raise
-        finally:
-            print('Server exiting')
 
     async def run_server(client, *, pvdb=caget_pvdb, run_in_thread=False):
-        server_task = await curio.spawn(_server, pvdb)
+        server_task = await curio.spawn(_server, pvdb, daemon=True)
 
         try:
             if run_in_thread:
@@ -258,6 +258,8 @@ def curio_server(prefix):
                 await client.wait()
             else:
                 await client()
+        except server.ServerExit:
+            ...
         finally:
             await server_task.cancel()
 
