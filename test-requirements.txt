@@ -6,6 +6,7 @@ pyepics
 pytest
 numpy
 pytest_benchmark
+pytest-timeout
 pytest-rerunfailures
 asv
 asks
