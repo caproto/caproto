@@ -41,8 +41,8 @@ class VirtualCircuit:
             self.socket = await socket.create_connection(self.circuit.address)
         # Kick off background loops that read from the socket
         # and process the commands read from it.
-        await curio.spawn(self._receive_loop(), daemon=True)
-        await curio.spawn(self._command_queue_loop(), daemon=True)
+        await curio.spawn(self._receive_loop, daemon=True)
+        await curio.spawn(self._command_queue_loop, daemon=True)
         # Send commands that initialize the Circuit.
         await self.send(ca.VersionRequest(version=13,
                                           priority=self.circuit.priority))
@@ -263,7 +263,7 @@ class SharedBroadcaster:
 
     async def register(self):
         "Register this client with the CA Repeater."
-        await curio.spawn(self._broadcaster_queue_loop(), daemon=True)
+        await curio.spawn(self._broadcaster_queue_loop, daemon=True)
 
         while not self.registered:
             async with self.broadcaster_command_condition:
@@ -283,7 +283,7 @@ class SharedBroadcaster:
                 await self.command_bundle_queue.put(commands)
 
     async def _broadcaster_queue_loop(self):
-        await curio.spawn(self._broadcaster_recv_loop(), daemon=True)
+        await curio.spawn(self._broadcaster_recv_loop, daemon=True)
         command = self.broadcaster.register('127.0.0.1')
         await self.send(ca.EPICS_CA2_PORT, command)
 
@@ -359,7 +359,7 @@ class Context:
         circuit = VirtualCircuit(ca_circuit)
         circuit.circuit.log.setLevel(self.log_level)
         self.circuits.append(circuit)
-        await curio.spawn(circuit.connect())
+        await curio.spawn(circuit.connect, daemon=True)
         return circuit
 
     async def search(self, name):
