@@ -29,6 +29,10 @@ class DisconnectedError(ThreadingClientException):
     ...
 
 
+class ContextDisconnectedError(ThreadingClientException):
+    ...
+
+
 AUTOMONITOR_MAXLENGTH = 65536
 STALE_SEARCH_EXPIRATION = 10.0
 TIMEOUT = 2
@@ -485,6 +489,7 @@ class Context:
                          daemon=True).start()
         self.selector = SelectorThread()
         self.selector.start()
+        self._user_disconnected = False
 
     def get_pvs(self, *names, priority=0, connection_state_callback=None):
         """
@@ -493,6 +498,8 @@ class Context:
         These objects may not be connected at first. Channel creation occurs on
         a background thread.
         """
+        if self._user_disconnected:
+            raise ContextDisconnectedError("This Context is no longer usable.")
         pvs = []  # list of all PV objects to return
         names_to_search = []  # subset of names that we need to search for
         for name in names:
@@ -626,6 +633,7 @@ class Context:
             time.sleep(max(0, RESTART_SUBS_PERIOD - (time.monotonic() - t)))
 
     def disconnect(self, *, wait=True, timeout=2):
+        self._user_disconnected = True
         try:
             # disconnect any circuits we have
             circuits = list(self.circuit_managers.values())
