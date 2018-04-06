@@ -7,37 +7,15 @@ import caproto.threading.client
 import sys
 import time
 
-from caproto.threading.client import (Context, SharedBroadcaster, PV, logger)
+from caproto.threading.client import (Context, SharedBroadcaster, PV, logger,
+                                      ContextDisconnectedError)
 import caproto as ca
 from contextlib import contextmanager
 import pytest
 
-from . import pvnames
-from .conftest import default_setup_module # noqa
-from .conftest import default_teardown_module as teardown_module  # noqa
-from . import conftest
 
-
-def setup_module(module):
-    default_setup_module(module)
-    logger.setLevel('DEBUG')
-
-
-@contextmanager
-def no_simulator_updates(context):
-    '''Context manager which pauses and resumes simulator PV updating'''
-    pause_pv, = context.get_pvs(pvnames.pause_pv)
-    pause_pv.wait_for_connection()
-    try:
-        pause_pv.write((1, ), wait=True)
-        yield
-    finally:
-        pause_pv.write((0, ), wait=True)
-
-
-def test_pv_disconnect_reconnect(context):
-    str_pv = 'sim:mtr1.DESC'
-    pv, = context.get_pvs(str_pv)
+def test_pv_disconnect_reconnect(context, ioc):
+    pv, = context.get_pvs(ioc.pvs['str'])
     pv.wait_for_connection()
     assert pv.connected
     print(pv.read())
@@ -52,9 +30,8 @@ def test_pv_disconnect_reconnect(context):
     assert not pv.connected
 
 
-def test_context_disconnect_reconnect(context):
-    str_pv = 'sim:mtr1.DESC'
-    pv, = context.get_pvs(str_pv)
+def test_context_disconnect_is_terminal(context, ioc):
+    pv, = context.get_pvs(ioc.pvs['str'])
     pv.wait_for_connection()
     assert pv.connected
 
@@ -62,59 +39,37 @@ def test_context_disconnect_reconnect(context):
     context.disconnect()
     assert not pv.connected
 
-    pv, = context.get_pvs(str_pv)
-    pv.wait_for_connection()
-    assert pv.connected
-
-    pv.read()
-
-    context.disconnect()
-    assert not pv.connected
-
-    context.reconnect((pv.name, ))
-
-    pv.wait_for_connection()
-    assert pv.connected
-
-    pv.read()
-    pv.disconnect()
-
-    assert not pv.connected
+    with pytest.raises(ContextDisconnectedError):
+        pv, = context.get_pvs(ioc.pvs['str'])
 
 
-@pytest.mark.skipif(conftest.environment_epics_version() in [(3, 16), (7, 0)],
-                    reason='pyepics simulator segfaults on 3.16/7.0 (TODO)')
-def test_put_complete(context):
-    pv, = context.get_pvs('Py:ao3')
+def test_put_complete(context, ioc):
+    pv, = context.get_pvs(ioc.pvs['float'])
     pv.wait_for_connection()
     assert pv.connected
     mutable = []
 
-    with no_simulator_updates(context):
-        # start in a known initial state
-        pv.write((0.0, ), wait=True)
-        pv.read()
+    # start in a known initial state
+    pv.write((0.0, ), wait=True)
+    pv.read()
 
-        def cb(a):
-            mutable.append(a)
+    responses = []
+    def cb(response):
+        responses.append(response)
 
-        # put and wait
-        pv.write((0.1, ), wait=True)
-        result = pv.read()
-        assert result.data[0] == 0.1
+    # put and wait
+    pv.write((0.1, ), wait=True)
+    result = pv.read()
+    assert result.data[0] == 0.1
 
-        # put and do not wait with callback
-        pv.write((0.4, ), wait=False, cb=cb)
-        result = pv.read()
-        assert result.data[0] == 0.4
-        # sleep time give callback time to process
+    # put and do not wait with callback
+    pv.write((0.4, ), wait=False, cb=cb)
+    while not responses:
         time.sleep(0.1)
-        print('last_reading', pv.last_reading)
-        assert len(mutable) == 1
+    pv.read().data == 0.4
 
-
-def test_specified_port(monkeypatch, context):
-    pv, = context.get_pvs('sim:mtr1')
+def test_specified_port(monkeypatch, context, ioc):
+    pv, = context.get_pvs(ioc.pvs['float'])
     pv.wait_for_connection()
 
     circuit = pv.circuit_manager.circuit
@@ -133,7 +88,7 @@ def test_specified_port(monkeypatch, context):
     print('- address list is now:', address_list)
     shared_broadcaster = SharedBroadcaster()
     new_context = Context(shared_broadcaster, log_level='DEBUG')
-    pv1, = new_context.get_pvs('sim:mtr1')
+    pv1, = new_context.get_pvs(ioc.pvs['float'])
     pv1.wait_for_connection()
     assert pv1.connected
     pv1.read()
@@ -164,11 +119,10 @@ def context(request, shared_broadcaster):
     return context
 
 
-def test_context_disconnect(context):
-    str_pv = 'sim:mtr1.DESC'
+def test_context_disconnect(context, ioc):
 
     def bootstrap():
-        pv, = context.get_pvs(str_pv)
+        pv, = context.get_pvs(ioc.pvs['str'])
         pv.wait_for_connection()
         assert pv.connected
         assert pv.circuit_manager.connected
@@ -196,8 +150,8 @@ def test_context_disconnect(context):
     is_happy(chan, context)
 
 
-def test_user_disconnection(context):
-    pv, = context.get_pvs('sim:mtr1.RBV')
+def test_user_disconnection(context, ioc):
+    pv, = context.get_pvs(ioc.pvs['str'])
     pv.wait_for_connection()
 
     # simulate connection loss (at the circuit-level, of course)
