@@ -79,18 +79,18 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
     return p
 
 
-def poll_readiness(pv_to_check, attempts=50):
+def poll_readiness(pv_to_check, attempts=5):
     print(f'Checking PV {pv_to_check}')
     for attempt in range(attempts):
         try:
-            get(pv_to_check, timeout=0.1)
+            get(pv_to_check, timeout=1)
         except TimeoutError:
             continue
         else:
             break
     else:
         raise TimeoutError(f"ioc fixture failed to start in "
-                           f"{attempts / 10} seconds (pv: {pv_to_check})")
+                           f"{attempts} seconds (pv: {pv_to_check})")
 
 
 def run_softioc(request, db):
