@@ -1450,7 +1450,7 @@ def get_pv(pvname, *args, **kwargs):
     if _dflt_context is None:
         _dflt_context = PVContext()
 
-    return _dflt_context.get_pv(pvname)
+    return _dflt_context.get_pv(pvname, *args, **kwargs)
 
 
 def caput(pvname, value, wait=False, timeout=60):
