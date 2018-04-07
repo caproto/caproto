@@ -58,6 +58,7 @@ def temporary_pyepics_access(pvname, **kwargs):
     pv = epics.PV(pvname, **kwargs)
     assert pv.wait_for_connection(), 'unable to connect to {}'.format(pv)
     yield pv
+    epics.ca.initial_context = None
     epics.ca.clear_cache()
 
 
@@ -269,6 +270,7 @@ def bench_pyepics_many_connections(pv_names, *, initial_value=None,
         while not all(pv.connected for pv in pvs):
             time.sleep(0.01)
 
+    epics.ca.initial_context = None
     epics.ca.clear_cache()
 
     try:
@@ -277,6 +279,7 @@ def bench_pyepics_many_connections(pv_names, *, initial_value=None,
         for pv in pvs:
             pv.disconnect()
 
+        epics.ca.initial_context = None
         epics.ca.clear_cache()
 
 
