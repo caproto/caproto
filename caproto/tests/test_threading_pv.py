@@ -119,37 +119,6 @@ def context(request, shared_broadcaster):
     return context
 
 
-def test_context_disconnect(context, ioc):
-
-    def bootstrap():
-        pv, = context.get_pvs(ioc.pvs['str'])
-        pv.wait_for_connection()
-        assert pv.connected
-        assert pv.circuit_manager.connected
-        return pv
-
-    def is_happy(pv, context):
-        pv.read()
-        assert pv.connected
-        assert pv.circuit_manager.connected
-        # assert context.circuits
-
-    pv = bootstrap()
-    is_happy(pv, context)
-
-    context.disconnect()
-
-    sys.stdout.flush()
-
-    assert not pv.connected
-
-    with pytest.raises(ca.threading.client.DisconnectedError):
-        pv.read()
-
-    chan = bootstrap()
-    is_happy(chan, context)
-
-
 def test_user_disconnection(context, ioc):
     pv, = context.get_pvs(ioc.pvs['str'])
     pv.wait_for_connection()
