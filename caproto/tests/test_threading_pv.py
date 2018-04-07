@@ -177,6 +177,7 @@ def test_user_disconnection(context, ioc):
 
 def test_server_crash(context, prefix, request):
     from caproto.ioc_examples import simple
+    from . import conftest
 
     prefixes = [prefix + f'{i}:'
                 for i in [0, 1, 2]]
