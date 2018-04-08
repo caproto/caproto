@@ -98,6 +98,7 @@ from caproto.threading.client import Context, SharedBroadcaster
 
 from . import pvnames
 from .conftest import default_setup_module, default_teardown_module
+import pytest
 
 
 def setup_module(module):
@@ -348,6 +349,7 @@ class PV_Tests(unittest.TestCase):
         global NEWVALS
         mypv = PV(pvnames.updating_pv1)
         NEWVALS = []
+
         def onChanges(pvname=None, value=None, char_value=None, **kw):
             write('PV %s %s, %s Changed!\n' % (pvname, repr(value), char_value))
             NEWVALS.append(repr(value))
@@ -361,7 +363,6 @@ class PV_Tests(unittest.TestCase):
         write('   saw %i changes.\n' % len(NEWVALS))
         assert len(NEWVALS) > 3
         mypv.clear_callbacks()
-
 
     def test_subarrays(self):
         write("Subarray test:  dynamic length arrays\n")
