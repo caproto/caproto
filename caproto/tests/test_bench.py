@@ -141,11 +141,12 @@ def bench_curio_get_speed(pvname, *, initial_value=None, log_level='DEBUG'):
 
     assert chan.channel.states[ca.CLIENT] is ca.CONNECTED, 'Not connected'
 
-    yield curio_client
-
-    logger.debug('Shutting down the kernel')
-    kernel.run(shutdown=True)
-    logger.debug('Done')
+    try:
+        yield curio_client
+    finally:
+        logger.debug('Shutting down the kernel')
+        kernel.run(shutdown=True)
+        logger.debug('Done')
 
 
 @pytest.mark.parametrize('waveform_size', [4000, 8000, 50000, 1000000])
@@ -225,16 +226,18 @@ def bench_curio_put_speed(pvname, *, value, log_level='DEBUG'):
 
     assert chan.channel.states[ca.CLIENT] is ca.CONNECTED, 'Not connected'
 
-    yield curio_client
+    try:
+        yield curio_client
 
-    async def check():
-        reading = await chan.read()
-        np.testing.assert_array_almost_equal(reading.data, value)
+        async def check():
+            reading = await chan.read()
+            np.testing.assert_array_almost_equal(reading.data, value)
 
-    kernel.run(check())
-    logger.debug('Shutting down the kernel')
-    kernel.run(shutdown=True)
-    logger.debug('Done')
+        kernel.run(check())
+    finally:
+        logger.debug('Shutting down the kernel')
+        kernel.run(shutdown=True)
+        logger.debug('Done')
 
 
 @pytest.mark.parametrize('waveform_size', [4000, 8000, 50000, 1000000])
