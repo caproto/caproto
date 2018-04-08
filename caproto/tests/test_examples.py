@@ -15,24 +15,12 @@ def test_curio_client_example():
         kernel.run(main())
 
 
-@pytest.fixture(scope='module')
-def threading_broadcaster(request):
-    from caproto.threading.client import SharedBroadcaster
-    broadcaster = SharedBroadcaster()
-
-    def cleanup():
-        broadcaster.disconnect()
-
-    request.addfinalizer(cleanup)
-    return broadcaster
-
-
-def test_thread_client_example(threading_broadcaster):
+def test_thread_client_example():
     from caproto.examples.thread_client_simple import main
     main()
 
 
-def test_pyepics_pv(threading_broadcaster):
+def test_pyepics_pv():
     from caproto.threading.pyepics_compat import PV, Context, SharedBroadcaster
 
     pv1 = "sim:mtr1"
