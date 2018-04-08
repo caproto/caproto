@@ -20,7 +20,6 @@ def main(pvname1='sim:mtr1', pvname2='sim:mtr2',
         print("Subscription has received data: {}".format(command))
         called.append(command)
 
-
     pv1, pv2 = ctx.get_pvs(pvname1, pvname2)
     pv1.wait_for_connection()
     pv2.wait_for_connection()
@@ -48,8 +47,8 @@ def main(pvname1='sim:mtr1', pvname2='sim:mtr2',
     # Clean up the subscription
     sub.unsubscribe()
 
-    pv2.disconnect()
-    pv1.disconnect()
+    pv2.go_idle()
+    pv1.go_idle()
     assert called
 
     print('The subscription callback saw the following data:')
