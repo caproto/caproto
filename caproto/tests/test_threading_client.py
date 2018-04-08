@@ -96,14 +96,7 @@ def test_specified_port(monkeypatch, context, ioc):
 
 @pytest.fixture(scope='function')
 def shared_broadcaster(request):
-    broadcaster = SharedBroadcaster(log_level='DEBUG')
-
-    def cleanup():
-        print('*** Broadcaster disconnecting!')
-        broadcaster.disconnect()
-
-    request.addfinalizer(cleanup)
-    return broadcaster
+    return SharedBroadcaster(log_level='DEBUG')
 
 
 @pytest.fixture(scope='function')

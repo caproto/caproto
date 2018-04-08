@@ -68,7 +68,7 @@ logger = logging.getLogger(__name__)
 
 
 class SelectorThread:
-    def __init__(self):
+    def __init__(self, *, parent=None):
         self._running = False
         self.selector = selectors.DefaultSelector()
 
@@ -80,6 +80,10 @@ class SelectorThread:
         self._register_sockets = set()
         self._unregister_sockets = set()
         self._object_id = 0
+
+        if parent is not None:
+            # Stop the selector if the parent goes out of scope
+            self._parent = weakref.ref(parent, lambda obj: self.stop())
 
     @property
     def running(self):
@@ -218,6 +222,7 @@ class SharedBroadcaster:
         self.udp_sock = None
         self._search_lock = threading.RLock()
         self._retry_thread = None
+        self._retries_enabled = threading.Event()
 
         self._id_counter = itertools.count(0)
         self.search_results = {}  # map name to (time, address)
@@ -230,14 +235,17 @@ class SharedBroadcaster:
         self.command_bundle_queue = queue.Queue()
         self.command_cond = threading.Condition()
 
-        self.selector = SelectorThread()
+        self.selector = SelectorThread(parent=self)
         self.command_thread = threading.Thread(target=self.command_loop,
                                                daemon=True)
         self.command_thread.start()
 
-        # Register with the CA repeater.
         self._registration_retry_time = registration_retry_time
         self._registration_last_sent = 0
+
+        # When no listeners exist, automatically disconnect the broadcaster
+        self.disconnect_thread = None
+        self._disconnect_timer = None
 
         try:
             # Always attempt registration on initialization, but allow failures
@@ -270,6 +278,7 @@ class SharedBroadcaster:
 
         with self.command_cond:
             self.send(ca.EPICS_CA2_PORT, command)
+            self._retries_enabled.set()
 
     def new_id(self):
         while True:
@@ -296,8 +305,8 @@ class SharedBroadcaster:
                     target=self._retry_unanswered_searches, daemon=True)
                 self._retry_thread.start()
 
-        self.listeners.add(listener)
-        weakref.finalize(listener, self._listener_removed)
+            self.listeners.add(listener)
+            weakref.finalize(listener, self._listener_removed)
 
     def remove_listener(self, listener):
         try:
@@ -307,9 +316,25 @@ class SharedBroadcaster:
         finally:
             self._listener_removed()
 
+    def _disconnect_wait(self):
+        while len(self.listeners) == 0:
+            self._disconnect_timer -= 1
+            if self._disconnect_timer == 0:
+                logger.debug('Unused broadcaster, disconnecting')
+                self.disconnect()
+                break
+            time.sleep(1.0)
+
+        self.disconnect_thread = None
+
     def _listener_removed(self):
-        if not self.listeners:
-            self.disconnect()
+        with self._search_lock:
+            if not self.listeners:
+                self._disconnect_timer = 30
+                if self.disconnect_thread is None:
+                    self.disconnect_thread = threading.Thread(
+                        target=self._disconnect_wait, daemon=True)
+                    self.disconnect_thread.start()
 
     def disconnect(self, *, wait=True, timeout=2):
         with self.command_cond:
@@ -317,14 +342,10 @@ class SharedBroadcaster:
                 self.selector.remove_socket(self.udp_sock)
 
             self.search_results.clear()
+            self._registration_last_sent = 0
+            self._retries_enabled.clear()
             self.udp_sock = None
             self.broadcaster.disconnect()
-            self._registration_last_sent = 0
-            self._retry_thread = None
-
-            # if (wait and
-            #         self.command_thread is not threading.current_thread()):
-            #     self.command_thread.join()
 
     def send(self, port, *commands):
         """
@@ -467,8 +488,10 @@ class SharedBroadcaster:
     def _retry_unanswered_searches(self):
         logger.debug('Search-retry thread started.')
         while True:  # self.listeners:
-            if self._should_attempt_registration():
-                self._register()
+            try:
+                self._retries_enabled.wait(0.5)
+            except TimeoutError:
+                continue
 
             t = time.monotonic()
             items = list(self.unanswered_searches.items())
@@ -476,8 +499,14 @@ class SharedBroadcaster:
                         for search_id, (name, _) in
                         items)
 
-            for batch in batch_requests(requests, SEARCH_MAX_DATAGRAM_BYTES):
-                self.send(ca.EPICS_CA1_PORT, ca.VersionRequest(0, 13), *batch)
+            with self.command_cond:
+                if not self._retries_enabled.is_set():
+                    continue
+
+                for batch in batch_requests(requests,
+                                            SEARCH_MAX_DATAGRAM_BYTES):
+                    self.send(ca.EPICS_CA1_PORT, ca.VersionRequest(0, 13),
+                              *batch)
 
             time.sleep(max(0, RETRY_SEARCHES_PERIOD - (time.monotonic() - t)))
 
@@ -486,6 +515,7 @@ class SharedBroadcaster:
     def __del__(self):
         try:
             self.disconnect()
+            self.selector = None
         except AttributeError:
             pass
 
@@ -508,7 +538,7 @@ class Context:
                          daemon=True).start()
         threading.Thread(target=self._restart_subscriptions,
                          daemon=True).start()
-        self.selector = SelectorThread()
+        self.selector = SelectorThread(parent=self)
         self.selector.start()
         self._user_disconnected = False
 
@@ -569,6 +599,7 @@ class Context:
                 self.broadcaster.search_results.pop(name, None)
 
             self.broadcaster.search(self._search_results_queue, names)
+
             with self.pv_state_lock:
                 self.resuscitated_pvs.extend(
                     [pv for pv in pvs if pv.subscriptions])
@@ -684,11 +715,12 @@ class Context:
     def __del__(self):
         try:
             self.disconnect(wait=False)
-            self.selector.stop()
-        except (KeyError, AttributeError):
-            pass
-            # clean-up on deletion is best effort...
-            # TODO tacaswell
+        except Exception:
+            ...
+        finally:
+            self.selector = None
+            self.broadcaster = None
+            self.circuit_managers = None
 
 
 class VirtualCircuitManager:
@@ -862,7 +894,6 @@ class VirtualCircuitManager:
         except OSError as ex:
             pass
 
-        # self.selector.remove_socket(sock)
         if wait:
             cond = self.new_command_cond
             states = self.circuit.states

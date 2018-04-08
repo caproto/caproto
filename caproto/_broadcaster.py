@@ -5,11 +5,12 @@ import itertools
 import logging
 
 from ._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
-from ._utils import (CLIENT, SERVER, CaprotoValueError, LocalProtocolError)
+from ._utils import (DISCONNECTED, CLIENT, SERVER, CaprotoValueError,
+                     LocalProtocolError)
 from ._state import get_exception
 from ._commands import (RepeaterConfirmResponse, RepeaterRegisterRequest,
                         SearchRequest, SearchResponse, VersionRequest,
-                        VersionResponse, read_datagram,
+                        read_datagram,
                         )
 
 
@@ -131,7 +132,8 @@ class Broadcaster:
               not self._attempted_registration):
             raise LocalProtocolError("Client must send a "
                                      "RegisterRepeaterRequest before any "
-                                     "other commands")
+                                     "other commands (saw: {})"
+                                     "".format(type(command).__name__))
         elif isinstance(command, SearchRequest):
             if VersionRequest not in map(type, history):
                 err = get_exception(self.our_role, command)
