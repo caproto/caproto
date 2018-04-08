@@ -98,6 +98,8 @@ async def run_caget(pv, *, dbr_type=None):
         raise RuntimeError('caget failed: {}'.format(stderr))
 
     if wide_mode:
+        print('lines')
+        print(lines[0].split(sep))
         pv, timestamp, value, stat, sevr = lines[0].split(sep)
         info = dict(pv=pv,
                     timestamp=timestamp,
