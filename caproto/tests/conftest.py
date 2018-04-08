@@ -79,7 +79,7 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
     return p
 
 
-def poll_readiness(pv_to_check, attempts=5):
+def poll_readiness(pv_to_check, attempts=15):
     print(f'Checking PV {pv_to_check}')
     for attempt in range(attempts):
         try:
