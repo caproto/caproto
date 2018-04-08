@@ -14,7 +14,7 @@ from contextlib import contextmanager
 import pytest
 
 
-def test_pv_disconnect_reconnect(context, ioc):
+def test_go_idle(context, ioc):
     pv, = context.get_pvs(ioc.pvs['str'])
     pv.wait_for_connection()
     assert pv.connected
@@ -118,31 +118,6 @@ def context(request, shared_broadcaster):
     return context
 
 
-def test_user_disconnection(context, ioc):
-    pv, = context.get_pvs(ioc.pvs['str'])
-    pv.wait_for_connection()
-
-    # simulate connection loss (at the circuit-level, of course)
-    pv.circuit_manager.disconnect()
-
-    # TODO: hmm... this is not good
-    pv.wait_for_connection()
-    # as users, we should just be able to call:
-    # pv.wait_for_connection()
-
-    assert pv.connected
-    assert pv.circuit_manager.connected
-
-    pv.reconnect()
-
-    sub = pv.subscribe()
-    sub.add_callback(print)
-    pv.disconnect()
-    assert not pv.connected
-    pv.reconnect()
-    assert pv.connected
-
-
 def test_server_crash(context, prefix, request):
     from caproto.ioc_examples import simple
     from . import conftest
@@ -205,6 +180,5 @@ def test_server_crash(context, prefix, request):
     time.sleep(0.5)
 
     for pv in ioc['pvs']:
-        pv.reconnect()
-        # TODO: should just be pv.wait_for_connection()
+        pv.wait_for_connection()
         assert pv.connected
