@@ -1,9 +1,11 @@
 import logging
+import subprocess
+import sys
 
 from caproto.threading.client import (SharedBroadcaster, Context, logger)
 
 
-def main(pvname1='sim:mtr1', pvname2='sim:mtr2',
+def main(pvname1='pi', pvname2='str',
          log_level='DEBUG'):
     '''Simple example which connects to two motorsim PVs (by default).
 
@@ -59,4 +61,9 @@ def main(pvname1='sim:mtr1', pvname2='sim:mtr2',
 if __name__ == '__main__':
     logger.setLevel('DEBUG')
     logging.basicConfig()
-    main()
+    p = subprocess.Popen([sys.executable, '-m',
+                        'caproto.ioc_examples.type_varieties'])
+    try:
+        main()
+    finally:
+        p.kill()
