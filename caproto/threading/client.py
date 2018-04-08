@@ -21,6 +21,29 @@ from .._constants import MAX_ID
 from .._utils import batch_requests, CaprotoError
 
 
+def ensure_connected(func):
+    def inner(self, *args, **kwargs):
+        with self._in_use:
+            self._usages += 1
+            # If idle, reconnect. Do this inside the lock so that we don't
+            # try to do this twice. (No other threads that need this lock
+            # can proceed until the connection is ready anyway!)
+            if self._idle:
+                self.context.reconnect(((self.name, self.priority),))
+                self.wait_for_connection()
+                self.circuit_manager.send(*self._resubscribe())
+                self._idle = False
+        try:
+            self.wait_for_connection()
+            result = func(self, *args, **kwargs)
+        finally:
+            with self._in_use:
+                self._usages -= 1
+                self._in_use.notify_all()
+        return result
+    return inner
+
+
 class ThreadingClientException(CaprotoError):
     ...
 
@@ -873,7 +896,7 @@ class PV:
     __slots__ = ('name', 'priority', 'context', 'circuit_manager', 'channel',
                  'last_reading', 'last_writing', '_read_notify_callback',
                  'subscriptions', 'command_bundle_queue',
-                 '_write_notify_callback', '_user_disconnected',
+                 '_write_notify_callback', '_idle', '_in_use', '_usages',
                  'connection_state_callback', '_pc_callbacks', '__weakref__')
 
     def __init__(self, name, priority, context, connection_state_callback):
@@ -897,7 +920,9 @@ class PV:
         self._read_notify_callback = None  # called on ReadNotifyResponse
         self._write_notify_callback = None  # called on WriteNotifyResponse
         self._pc_callbacks = {}
-        self._user_disconnected = False
+        self._idle = False
+        self._in_use = threading.Condition()
+        self._usages = 0
 
     def connection_state_changed(self, state, channel):
         logger.debug('%s Connection state changed %s %s', self.name, state,
@@ -908,8 +933,8 @@ class PV:
         self.connection_state_callback.process(self, state)
 
     def __repr__(self):
-        if self._user_disconnected:
-            state = "(disconnected by user)"
+        if self._idle:
+            state = "(idle)"
         elif self.circuit_manager is None:
             state = "(searching....)"
         else:
@@ -958,6 +983,17 @@ class PV:
                 print(ex)
 
     def wait_for_search(self, *, timeout=2):
+        """
+        Wait for this PV to be found.
+
+        This does not wait for the PV's Channel to be created; it merely waits
+        for an address (and a VirtualCircuit) to be assigned.
+
+        Parameters
+        ----------
+        timeout : float
+            Seconds before a TimeoutError is raised. Default is 2.
+        """
         cond = self.context.search_condition
         with cond:
             if self.circuit_manager is not None:
@@ -971,13 +1007,14 @@ class PV:
                                "".format(self.name, timeout))
 
     def wait_for_connection(self, *, timeout=2):
-        """Wait for this Channel to be connected, ready to use.
-
-        The method ``Context.create_channel`` spawns an asynchronous task to
-        initialize the connection in the fist place. This method waits for it
-        to complete.
         """
-        # TODO: old docstring
+        Wait for this PV to be connected, ready to use.
+
+        Parameters
+        ----------
+        timeout : float
+            Seconds before a TimeoutError is raised. Default is 2.
+        """
         if self.circuit_manager is None:
             self.wait_for_search(timeout=timeout)
         elif self.circuit_manager.dead:
@@ -995,51 +1032,42 @@ class PV:
                     f"{self.name!r} within {timeout}-second timeout."
                 )
 
-    def disconnect(self, *, wait=True, timeout=2):
-        "Disconnect this Channel."
+    def go_idle(self):
+        """Request to clear this Channel to reduce load on client and server.
+
+        A new Channel will be automatically, silently created the next time any
+        method requiring a connection is called. Thus, this saves some memory
+        in exchange for making the next request a bit slower, as it has to
+        redo the handshake with the server first.
+
+        If there are any active subscriptions, this request will be ignored. If
+        the PV is in the process of connecting, this request will be ignored.
+        If there are any actions in progress (read, write) this request will be
+        processed when they are complete.
+        """
+        if self.subscriptions:
+            return
         if not self.circuit_manager:
             return
 
-        self._user_disconnected = True
-
-        # TODO
-        # self.connection_state_callback.callbacks.clear()
-
-        with self.circuit_manager.new_command_cond:
-            if not self.connected:
-                return
+        with self._in_use:
+            # Wait until no other methods that employ @self.ensure_connected
+            # are in process.
+            self._in_use.wait_for(lambda: self._usages == 0)
+            # No other threads are using the connection, and we are holding the
+            # self._in_use Condition's lock, so we can safely close the
+            # connection. The next thread to acquire the lock will re-connect
+            # after it acquires the lock.
+            with self.circuit_manager.new_command_cond:
+                if not self.connected:
+                    return
 
             try:
                 self.circuit_manager.send(self.channel.disconnect())
             except OSError:
-                # the socket is dead-dead, return
-                return
-
-        if wait:
-            def is_closed():
-                return self.channel is None
-
-            cond = self.circuit_manager.new_command_cond
-            with cond:
-                done = cond.wait_for(is_closed, timeout)
-            if not done:
-                raise TimeoutError(
-                    f"Server at {self.circuit_manager.circuit.address} did "
-                    f"not respond to attempt to close channel named "
-                    f"{self.name!r} within {timeout}-second timeout."
-                )
-
-    def reconnect(self, *, timeout=2):
-        if self.connected:
-            # Try disconnecting first, but reconnect even if that fails.
-            try:
-                self.disconnect()
-            except Exception:
-                pass
-        self._user_disconnected = False
-        self.context.reconnect(((self.name, self.priority),))
-        self.wait_for_connection(timeout=timeout)
-        self.circuit_manager.send(*self._resubscribe())
+                # the socket is dead-dead, do nothing
+                ...
+            self._idle = True
 
     def _resubscribe(self):
         for sub in self.subscriptions:
@@ -1051,6 +1079,7 @@ class PV:
             self.circuit_manager.subscriptions[subscriptionid] = sub
             yield command
 
+    @ensure_connected
     def read(self, *args, timeout=2, **kwargs):
         """Request a fresh reading, wait for it, return it and stash it.
 
@@ -1084,11 +1113,9 @@ class PV:
             )
         return self.last_reading
 
+    @ensure_connected
     def write(self, *args, wait=True, cb=None, timeout=2, **kwargs):
         "Write a new value and await confirmation from the server."
-        if not self.connected:
-            raise DisconnectedError()
-
         with self.circuit_manager.new_command_cond:
             command = self.channel.write(*args, **kwargs)
         # Stash the ioid to match the response to the request.
@@ -1115,6 +1142,7 @@ class PV:
             )
         return self.last_writing
 
+    @ensure_connected
     def subscribe(self, *args, **kwargs):
         "Start a new subscription and spawn an async task to receive readings."
         if not self.connected:
@@ -1131,6 +1159,7 @@ class PV:
         # TODO verify it worked before returning?
         return sub
 
+    @ensure_connected
     def unsubscribe(self, subscriptionid, *args, **kwargs):
         "Cancel a subscription and await confirmation from the server."
         self.circuit_manager.send(self.channel.unsubscribe(subscriptionid))

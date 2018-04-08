@@ -20,14 +20,13 @@ def test_pv_disconnect_reconnect(context, ioc):
     assert pv.connected
     print(pv.read())
 
-    pv.disconnect()
-    assert not pv.connected
+    pv.go_idle()
+    # Wait for this to be processed.
+    while pv.connected:
+        time.sleep(0.1)
 
-    pv.reconnect()
-    assert pv.connected
     pv.read()
-    pv.disconnect()
-    assert not pv.connected
+    assert pv.connected
 
 
 def test_context_disconnect_is_terminal(context, ioc):
