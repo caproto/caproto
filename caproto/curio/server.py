@@ -551,4 +551,7 @@ async def start_server(pvdb, log_level='DEBUG', *, bind_addr='0.0.0.0'):
     logger.setLevel(log_level)
     ctx = Context(bind_addr, find_next_tcp_port(), pvdb, log_level=log_level)
     logger.info('Server starting up on %s:%d', ctx.host, ctx.port)
-    return await ctx.run()
+    try:
+        return await ctx.run()
+    except ServerExit:
+        print('ServerExit caught; exiting')

@@ -3,7 +3,8 @@ import logging
 import sys
 
 import curio
-from caproto.curio.server import (Context, logger, find_next_tcp_port)
+from caproto.curio.server import (Context, logger, find_next_tcp_port,
+                                  ServerExit)
 import caproto as ca
 
 
@@ -69,7 +70,10 @@ async def main(pvdb, prefix=None, port=None):
     ctx = Context('0.0.0.0', find_next_tcp_port(), pvdb, log_level='DEBUG')
     logger.info('Server starting up on %s:%d', ctx.host, ctx.port)
     logger.info("Available PVs: %s", ' '.join(pvdb))
-    return await ctx.run()
+    try:
+        return await ctx.run()
+    except ServerExit:
+        print('ServerExit caught; exiting')
 
 
 if __name__ == '__main__':

@@ -244,7 +244,7 @@ def curio_server(prefix):
         try:
             await ctx.run()
         except server.ServerExit:
-            print('Server exiting normally')
+            print('ServerExit caught; exiting')
         except Exception as ex:
             print('Server failed', ex)
             raise
