@@ -13,7 +13,7 @@ Simple IOC
     import time
     processes = []
     def run_example(module_name, *args):
-        p = subprocess.Popen([sys.interpreter, '-m', module_name] + args)
+        p = subprocess.Popen([sys.executable, '-m', module_name] + args)
         processes.append(p)  # Clean this up at the end.
         time.sleep(1)  # Give it time to start up.
 
