@@ -99,6 +99,7 @@ from caproto.threading.client import Context, SharedBroadcaster
 from . import pvnames
 from .conftest import default_setup_module, default_teardown_module
 import pytest
+from .conftest import environment_epics_version
 
 
 def setup_module(module):
