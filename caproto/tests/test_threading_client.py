@@ -182,3 +182,29 @@ def test_server_crash(context, prefix, request):
     for pv in ioc['pvs']:
         pv.wait_for_connection()
         assert pv.connected
+
+def test_subscriptions(ioc, context):
+    cntx = context
+
+    pv, = cntx.get_pvs(ioc.pvs['float'])
+    pv.wait_for_connection()
+
+    monitor_values = []
+
+    def callback(command, **kwargs):
+        assert isinstance(command, ca.EventAddResponse)
+        monitor_values.append(command.data[0])
+
+    sub = pv.subscribe()
+    sub.add_callback(callback)
+    pv.write((1, ), wait=True)
+    pv.write((2, ), wait=True)
+    pv.write((3, ), wait=True)
+
+    for i in range(3):
+        if pv.read().data[0] == 3:
+            break
+        else:
+            time.sleep(0.1)
+
+    assert monitor_values[1:] == [1, 2, 3]

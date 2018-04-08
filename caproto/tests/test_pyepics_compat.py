@@ -552,3 +552,42 @@ class PV_Tests(unittest.TestCase):
             print('val is', val, type(val))
             self.assertIsInstance(val, list)
             self.assertEqual(len(val), 1)
+
+
+def test_pyepics_pv():
+    pv1 = "sim:mtr1"
+
+    # Some user function to call when subscriptions receive data.
+    called = []
+
+    def user_callback(*, value, **kwargs):
+        print()
+        print('-- user callback', value)
+        called.append(True)
+
+    shared_broadcaster = SharedBroadcaster(log_level='DEBUG')
+    ctx = Context(broadcaster=shared_broadcaster, log_level='DEBUG')
+    time_pv = PV(pv1, context=ctx, form='time')
+    ctrl_pv = PV(pv1, context=ctx, form='ctrl')
+
+    time_pv.wait_for_connection()
+    time_pv.add_callback(user_callback)
+    print('time read', time_pv.get())
+    print('ctrl read', ctrl_pv.get())
+
+    time_pv.put(3, wait=True)
+    time_pv.put(6, wait=True)
+
+    time.sleep(0.1)
+    assert time_pv.get() == 6
+    assert called
+
+    print('read', time_pv.get())
+    print('done')
+
+    repr(time_pv)
+
+    for k, v in PV.__dict__.items():
+        if isinstance(v, property):
+            getattr(time_pv, k)
+            getattr(ctrl_pv, k)

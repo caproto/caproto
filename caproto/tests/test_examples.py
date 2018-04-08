@@ -20,47 +20,6 @@ def test_thread_client_example():
     main()
 
 
-def test_pyepics_pv():
-    from caproto.threading.pyepics_compat import PV, Context, SharedBroadcaster
-
-    pv1 = "sim:mtr1"
-
-    # Some user function to call when subscriptions receive data.
-    called = []
-
-    def user_callback(*, value, **kwargs):
-        print()
-        print('-- user callback', value)
-        called.append(True)
-
-    shared_broadcaster = SharedBroadcaster(log_level='DEBUG')
-    ctx = Context(broadcaster=shared_broadcaster, log_level='DEBUG')
-    time_pv = PV(pv1, context=ctx, form='time')
-    ctrl_pv = PV(pv1, context=ctx, form='ctrl')
-
-    time_pv.wait_for_connection()
-    time_pv.add_callback(user_callback)
-    print('time read', time_pv.get())
-    print('ctrl read', ctrl_pv.get())
-
-    time_pv.put(3, wait=True)
-    time_pv.put(6, wait=True)
-
-    time.sleep(0.1)
-    assert time_pv.get() == 6
-    assert called
-
-    print('read', time_pv.get())
-    print('done')
-
-    repr(time_pv)
-
-    for k, v in PV.__dict__.items():
-        if isinstance(v, property):
-            getattr(time_pv, k)
-            getattr(ctrl_pv, k)
-
-
 def test_curio_server_example(prefix):
     import caproto.curio.client as client
     from caproto.ioc_examples.type_varieties import (
@@ -245,48 +204,6 @@ def test_curio_server_example(prefix):
         kernel.run(task)
 
     print('done')
-
-
-def test_curio_server_and_thread_client(curio_server):
-    from caproto.threading.client import (SharedBroadcaster,
-                                          Context)
-    from .conftest import threaded_in_curio_wrapper
-    server_runner, prefix, pvdb = curio_server
-    pvname = prefix + 'int'
-
-    @threaded_in_curio_wrapper
-    def client_test():
-        shared_broadcaster = SharedBroadcaster()
-        cntx = Context(broadcaster=shared_broadcaster, log_level='DEBUG')
-
-        pv, = cntx.get_pvs(pvname)
-        pv.wait_for_connection()
-
-        assert pv.read().data[0] == pvdb[pvname].value
-        print('get', pv.read())
-
-        monitor_values = []
-
-        def callback(command, **kwargs):
-            assert isinstance(command, ca.EventAddResponse)
-            monitor_values.append(command.data[0])
-
-        sub = pv.subscribe()
-        sub.add_callback(callback)
-        pv.write((1, ), wait=True)
-        pv.write((2, ), wait=True)
-        pv.write((3, ), wait=True)
-
-        for i in range(3):
-            if pv.read().data[0] == 3:
-                break
-            else:
-                time.sleep(0.1)
-
-        assert len(monitor_values) == 4
-
-    with curio.Kernel() as kernel:
-        kernel.run(server_runner(client=client_test, run_in_thread=True))
 
 
 # See test_ioc_example and test_flaky_ioc_examples, below.
