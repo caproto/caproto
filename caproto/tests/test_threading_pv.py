@@ -127,7 +127,7 @@ def test_user_disconnection(context, ioc):
     pv.circuit_manager.disconnect()
 
     # TODO: hmm... this is not good
-    pv.reconnect()
+    pv.wait_for_connection()
     # as users, we should just be able to call:
     # pv.wait_for_connection()
 

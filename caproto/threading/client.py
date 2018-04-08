@@ -565,7 +565,8 @@ class Context:
                 for name in names:
                     pvs = self.pvs_by_name[name]
                     for pv in pvs:
-                        if pv.circuit_manager is not None:
+                        if (pv.circuit_manager is not None and
+                                not pv.circuit_manager.dead):
                             # This one is already set up. Skip it.
                             continue
 
@@ -602,7 +603,7 @@ class Context:
         Make a new one if necessary.
         """
         cm = self.circuit_managers.get((address, priority), None)
-        if cm is None:
+        if cm is None or cm.dead:
             circuit = ca.VirtualCircuit(our_role=ca.CLIENT, address=address,
                                         priority=priority)
             cm = VirtualCircuitManager(self, circuit, self.selector)
@@ -718,6 +719,10 @@ class VirtualCircuitManager:
     def connected(self):
         return self.circuit.states[ca.CLIENT] is ca.CONNECTED
 
+    @property
+    def dead(self):
+        return self.socket is None
+
     def _socket_send(self, buffers_to_send):
         'Send a list of buffers over the socket'
         try:
@@ -826,6 +831,7 @@ class VirtualCircuitManager:
 
     def disconnect(self, *, wait=True, timeout=2.0):
         self._user_disconnected = True
+        self._disconnected()
         if self.socket is None:
             return
 
@@ -974,6 +980,9 @@ class PV:
         # TODO: old docstring
         if self.circuit_manager is None:
             self.wait_for_search(timeout=timeout)
+        elif self.circuit_manager.dead:
+            self.reconnect()
+            return
         cond = self.circuit_manager.new_command_cond
         with cond:
             if self.connected:
