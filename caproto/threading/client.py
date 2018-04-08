@@ -25,16 +25,14 @@ def ensure_connected(func):
     def inner(self, *args, **kwargs):
         with self._in_use:
             self._usages += 1
-            # If idle, reconnect. Do this inside the lock so that we don't
+            # If needed, reconnect. Do this inside the lock so that we don't
             # try to do this twice. (No other threads that need this lock
             # can proceed until the connection is ready anyway!)
-            if self._idle:
-                self.context.reconnect(((self.name, self.priority),))
-                self.wait_for_connection()
-                self.circuit_manager.send(*self._resubscribe())
-                self._idle = False
+            if self._idle or (self.circuit_manager and
+                              self.circuit_manager.dead):
+                self._reconnect()
         try:
-            self.wait_for_connection()
+            self._wait_for_connection()
             result = func(self, *args, **kwargs)
         finally:
             with self._in_use:
@@ -1006,7 +1004,11 @@ class PV:
                                "timeout."
                                "".format(self.name, timeout))
 
+    @ensure_connected
     def wait_for_connection(self, *, timeout=2):
+        self._wait_for_connection(timeout=timeout)
+
+    def _wait_for_connection(self, *, timeout=2):
         """
         Wait for this PV to be connected, ready to use.
 
@@ -1017,9 +1019,6 @@ class PV:
         """
         if self.circuit_manager is None:
             self.wait_for_search(timeout=timeout)
-        elif self.circuit_manager.dead:
-            self.reconnect()
-            return
         cond = self.circuit_manager.new_command_cond
         with cond:
             if self.connected:
@@ -1031,6 +1030,12 @@ class PV:
                     f"not respond to attempt to create channel named "
                     f"{self.name!r} within {timeout}-second timeout."
                 )
+
+    def _reconnect(self):
+        self.context.reconnect(((self.name, self.priority),))
+        self._wait_for_connection()
+        self.circuit_manager.send(*self._resubscribe())
+        self._idle = False
 
     def go_idle(self):
         """Request to clear this Channel to reduce load on client and server.

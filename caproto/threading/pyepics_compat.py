@@ -221,9 +221,8 @@ class PV:
         return self._connected
 
     def force_connect(self, pvname=None, chid=None, conn=True, **kws):
-        # not quite sure what this is for in pyepics, probably should
-        # be an arias for reconnect?
-        ...
+        # not quite sure what this is for in pyepics
+        raise NotImplementedError
 
     def wait_for_connection(self, timeout=5.0):
         """wait for a connection that started with connect() to finish
@@ -238,11 +237,7 @@ class PV:
 
         with self._state_lock:
             self._connect_event.clear()
-
-            if self._caproto_pv._user_disconnected:
-                self._caproto_pv.reconnect(timeout=timeout)
-            else:
-                self._caproto_pv.wait_for_connection(timeout=timeout)
+            self._caproto_pv.wait_for_connection(timeout=timeout)
 
         # TODO shorten timeouts based on the above
         ok = self._connect_event.wait(timeout=timeout)
@@ -334,7 +329,7 @@ class PV:
 
     def reconnect(self):
         "try to reconnect PV"
-        self._caproto_pv.reconnect()
+
         return True
 
     @ensure_connection
