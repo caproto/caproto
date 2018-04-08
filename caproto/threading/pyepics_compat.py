@@ -795,7 +795,7 @@ class PV:
     def disconnect(self):
         "disconnect PV"
         if self.connected:
-            self._caproto_pv.disconnect()
+            self._caproto_pv.go_idle()
 
     def __del__(self):
         try:
@@ -805,7 +805,7 @@ class PV:
         except AttributeError:
             ...
         else:
-            pv.disconnect(wait=False)
+            pv.go_idle()
 
 
 def get_pv(pvname, *args, context=None, connect=True, timeout=3.0, **kwargs):
@@ -885,8 +885,6 @@ def caget_many(pvlist, as_string=False, count=None, as_numpy=True, timeout=5.0,
     This does not maintain PV objects, and works as fast
     as possible to fetch many values.
     """
-    chids, out = [], []
-
     if context is None:
         context = Context(PV._default_context.broadcaster)
 

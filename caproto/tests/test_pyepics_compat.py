@@ -91,14 +91,12 @@ import sys
 import time
 import unittest
 import numpy
-import pytest
 from contextlib import contextmanager
 from caproto.threading.pyepics_compat import (PV, caput, caget, cainfo,
                                               caget_many, caput_many)
 from caproto.threading.client import Context, SharedBroadcaster
 
 from . import pvnames
-from .conftest import environment_epics_version
 from .conftest import default_setup_module, default_teardown_module
 
 
@@ -128,8 +126,10 @@ def write(msg):
     sys.stdout.write(msg)
     sys.stdout.flush()
 
+
 CONN_DAT ={}
 CHANGE_DAT = {}
+
 
 def onConnect(pvname=None, conn=None, chid=None,  **kws):
     write('  :Connection status changed:  %s  connected=%s\n' % (pvname, conn))
