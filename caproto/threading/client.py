@@ -1068,12 +1068,6 @@ class PV:
                     f"{self.name!r} within {timeout}-second timeout."
                 )
 
-    def _reconnect(self):
-        self.context.reconnect(((self.name, self.priority),))
-        self._wait_for_connection()
-        self.circuit_manager.send(*self._resubscribe())
-        self._idle = False
-
     def go_idle(self):
         """Request to clear this Channel to reduce load on client and server.
 
