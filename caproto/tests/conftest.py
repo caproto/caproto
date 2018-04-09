@@ -93,10 +93,11 @@ def poll_readiness(pv_to_check, attempts=15):
                            f"{attempts} seconds (pv: {pv_to_check})")
 
 
-def run_softioc(request, db):
+def run_softioc(request, db, **kwargs):
     db_text = ca.benchmarking.make_database(db)
     ioc_handler = ca.benchmarking.IocHandler()
-    ioc_handler.setup_ioc(db_text=db_text, max_array_bytes='10000000')
+    ioc_handler.setup_ioc(db_text=db_text, max_array_bytes='10000000',
+                          **kwargs)
 
     request.addfinalizer(ioc_handler.teardown)
 
@@ -139,7 +140,8 @@ def ioc(request):
             ('{}int'.format(prefix_), 'longout'): dict(VAL=1),
         }
 
-        handler = run_softioc(request, db)
+        macros = {'P': 'Py:'}
+        handler = run_softioc(request, db, macros=macros)
         process = handler.processes[-1]
         pvs = {pv[len(prefix_):]: pv
                for pv, rtype in db
