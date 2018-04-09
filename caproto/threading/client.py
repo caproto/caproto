@@ -30,9 +30,15 @@ def ensure_connected(func):
             # can proceed until the connection is ready anyway!)
             if self._idle or (self.circuit_manager and
                               self.circuit_manager.dead):
-                self._reconnect()
+                self.context.reconnect(((self.name, self.priority),))
+                reconnect = True
+            else:
+                reconnect = False
         try:
             self._wait_for_connection()
+            if reconnect:
+                self.circuit_manager.send(*self._resubscribe())
+                self._idle = False
             result = func(self, *args, **kwargs)
         finally:
             with self._in_use:

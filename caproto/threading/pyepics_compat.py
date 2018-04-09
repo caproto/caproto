@@ -310,6 +310,9 @@ class PV:
                 # if not self.connected or self._args['type'] is not None:
                 #     return
                 self._connection_closed()
+        except Exception as ex:
+            logger.exception('Connection state callback failed!')
+            raise
         finally:
             self._connect_event.set()
 
