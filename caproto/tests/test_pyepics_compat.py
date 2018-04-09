@@ -156,9 +156,23 @@ def no_simulator_updates():
         time.sleep(0.5)
 
 
-@pytest.mark.skipif(environment_epics_version() in [(3, 16), (7, 0)],
-                    reason='pyepics simulator segfaults on 3.16/7.0 (TODO)')
+# @pytest.mark.skipif(environment_epics_version() in [(3, 16), (7, 0)],
+#                     reason='pyepics simulator segfaults on 3.16/7.0 (TODO)')
 class PV_Tests(unittest.TestCase):
+    def setUp(self):
+        pv = PV(pvnames.double_pv)
+        print(f'* Test setup: connecting to {pv}')
+        for i in range(5):
+            try:
+                pv.wait_for_connection(timeout=1.0)
+            except TimeoutError:
+                print(f'* {pv} timed out {i + 1} times')
+            else:
+                print(f'* Test setup: connected! {pv}')
+                return
+
+        pytest.skip('Simulator not running after 5 tries :(')
+
     def testA_CreatePV(self):
         write('Simple Test: create pv\n')
         pv = PV(pvnames.double_pv)
