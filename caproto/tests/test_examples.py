@@ -5,6 +5,7 @@ import curio
 
 import caproto as ca
 
+from . import conftest
 from .conftest import default_setup_module as setup_module  # noqa
 from .conftest import default_teardown_module as teardown_module  # noqa
 
@@ -15,9 +16,17 @@ def test_curio_client_example():
         kernel.run(main())
 
 
-def test_thread_client_example():
-    from caproto.examples.thread_client_simple import main
-    main()
+def test_thread_client_example(curio_server):
+    from caproto.examples.thread_client_simple import main as example_main
+    server_runner, prefix, caget_pvdb = curio_server
+
+    @conftest.threaded_in_curio_wrapper
+    def client():
+        example_main(pvname1=prefix + 'pi',
+                     pvname2=prefix + 'str')
+
+    with curio.Kernel() as kernel:
+        kernel.run(server_runner, client)
 
 
 def test_curio_server_example(prefix):

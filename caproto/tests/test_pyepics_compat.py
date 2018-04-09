@@ -152,6 +152,8 @@ def no_simulator_updates():
         yield
     finally:
         caput(pvnames.pause_pv, 0)
+        # Give the simulator some time to start back up
+        time.sleep(0.5)
 
 
 @pytest.mark.skipif(environment_epics_version() in [(3, 16), (7, 0)],

@@ -249,11 +249,12 @@ def curio_server(prefix):
             print('Server failed', ex)
             raise
 
-    async def run_server(client, *, pvdb=caget_pvdb, run_in_thread=False):
+    async def run_server(client, *, pvdb=caget_pvdb):
         server_task = await curio.spawn(_server, pvdb, daemon=True)
 
         try:
-            if run_in_thread:
+            if hasattr(client, 'wait'):
+                # NOTE: wrapped by threaded_in_curio_wrapper
                 await curio.run_in_thread(client)
                 await client.wait()
             else:
