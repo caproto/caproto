@@ -204,6 +204,9 @@ def set_logging_level(level, *, logger=None):
 
 
 
+# vendored from https://github.com/pyepics/testioc/tree/master/testiocApp/Db
+# to test that caproto's pyepics shim passes (selections from) the pyepics test
+# suite
 PYEPICS_TEST_DB = """
 ##
 ## basic data types for debugging
