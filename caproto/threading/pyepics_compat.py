@@ -5,6 +5,7 @@ import copy
 import logging
 import threading
 
+from math import log10
 from collections import Iterable
 
 import caproto as ca
@@ -224,7 +225,7 @@ class PV:
         # not quite sure what this is for in pyepics
         raise NotImplementedError
 
-    def wait_for_connection(self, timeout=5.0):
+    def wait_for_connection(self, timeout=None):
         """wait for a connection that started with connect() to finish
         Returns
         -------
@@ -234,6 +235,9 @@ class PV:
         logger.debug(f'{self} wait for connection...')
         if self.connected:
             return True
+
+        if timeout is None:
+            timeout = self.connection_timeout
 
         with self._state_lock:
             self._connect_event.clear()
@@ -363,6 +367,9 @@ class PV:
         """
         if count is None:
             count = self.default_count
+
+        if timeout is None:
+            timeout = 1.0 + log10(max(1, count))
 
         if with_ctrlvars:
             dt = promote_type(self.type, use_ctrl=True)
