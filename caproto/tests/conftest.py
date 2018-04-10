@@ -6,6 +6,7 @@ import signal
 import subprocess
 import sys
 import time
+import threading
 from types import SimpleNamespace
 import uuid
 
@@ -133,7 +134,18 @@ def epics_base_ioc(prefix, request):
     handler = run_softioc(request, db,
                           additional_db=ca.benchmarking.PYEPICS_TEST_DB,
                           macros=macros)
+
+
     process = handler.processes[-1]
+    def ioc_monitor():
+        process.wait()
+        print('***********************************')
+        print('********IOC process exited!********')
+        print(f'*** Returned: {process.returncode} ****')
+        print('***********************************')
+
+
+    threading.Thread(target=ioc_monitor).start()
     pvs = {pv[len(prefix):]: pv
            for pv, rtype in db
            }

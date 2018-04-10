@@ -408,7 +408,7 @@ def testA_CreatedWithConn(pvnames, simulator):
 
     print(f'Connecting to {pvnames.int_pv}')
     pv = PV(pvnames.int_pv, connection_callback=onConnect)
-    val = pv.get()
+    val = pv.get(timeout=5)
 
     conn = CONN_DAT.get(pvnames.int_pv, None)
     assert conn
