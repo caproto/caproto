@@ -183,8 +183,18 @@ def pvnames(epics_base_ioc):
 def simulator_main(prefix, ready_event, exit_event):
     'simulator.py from pyepics testioc (same license as above)'
     import random
-    from epics import caput, PV
-    prefix = 'Py:'
+    from epics import caput as _caput, PV as _PV
+
+    class PV(_PV):
+        def put(self, value, **kw):
+            rval = repr(value)[:50]
+            print(f'(simulator: put {self.pvname} {rval})')
+            return super().put(value, **kw)
+
+    def caput(pv, value, **kw):
+        rval = repr(value)[:50]
+        print(f'(simulator: caput {pv} {rval})')
+        return _caput(pv, value, **kw)
 
     NEEDS_INIT = True
     SLEEP_TIME = 0.10
@@ -286,9 +296,10 @@ line 11
         time.sleep(SLEEP_TIME)
 
         count = count + 1
-        if not NEEDS_INIT and count == initialized_at + 4:
-            ready_event.set()
-            print('[Pyepics simulator running!]')
+        if not NEEDS_INIT and count >= initialized_at + 4:
+            if not ready_event.is_set():
+                ready_event.set()
+                print('[Pyepics simulator running!]')
         if count > 99999999:
             count = 1
 
@@ -339,18 +350,22 @@ def simulator(request, pvnames):
                   ready_event=ready_event,
                   exit_event=exit_event)
 
-    print(f'Starting up simulator for prefix: {prefix}')
+    print()
+    print()
+    print(f'* Starting up simulator for prefix: {prefix}')
     thread = threading.Thread(target=simulator_main, kwargs=kwargs)
     thread.start()
 
     def stop_simulator():
-        print(f'Joining simulator thread')
+        print()
+        print(f'* Joining simulator thread')
         exit_event.set()
         thread.join(timeout=2)
+        print()
         if thread.is_alive():
-            print(f'Dangling simulator thread (prefix={prefix})... :(')
+            print(f'* Dangling simulator thread (prefix={prefix})... :(')
         else:
-            print(f'Simulator thread exited cleanly (prefix={prefix})')
+            print(f'* Simulator thread exited cleanly (prefix={prefix})')
 
     request.addfinalizer(stop_simulator)
     ok = ready_event.wait(3)
@@ -358,7 +373,8 @@ def simulator(request, pvnames):
     if not ok:
         raise TimeoutError('Simulator thread failed to start!')
 
-    print(f'Simulator thread started up! (prefix={prefix})')
+    print()
+    print(f'* Simulator thread started up! (prefix={prefix})')
     return thread
 
 
@@ -390,6 +406,7 @@ def testA_CreatedWithConn(pvnames, simulator):
         print('  :Connection status changed:  %s  connected=%s\n' % (pvname, conn))
         CONN_DAT[pvname] = conn
 
+    print(f'Connecting to {pvnames.int_pv}')
     pv = PV(pvnames.int_pv, connection_callback=onConnect)
     val = pv.get()
 
