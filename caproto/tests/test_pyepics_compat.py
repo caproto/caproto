@@ -649,13 +649,13 @@ def test_subarray_zerolen(pvnames):
     subarr1.wait_for_connection()
 
     val = subarr1.get(use_monitor=True, as_numpy=True)
-    assert isinstance(val, numpy.ndarray, msg='using monitor')
+    assert isinstance(val, numpy.ndarray), 'using monitor'
     assert len(val) == 0, 'using monitor'
     # caproto returns things in big endian, not native type
     # assert val.dtype == numpy.float64, 'using monitor'
 
     val = subarr1.get(use_monitor=False, as_numpy=True)
-    assert isinstance(val, numpy.ndarray, msg='no monitor')
+    assert isinstance(val, numpy.ndarray), 'no monitor'
     assert len(val) == 0, 'no monitor'
     # caproto returns things in big endian, not native type
     # assert val.dtype == numpy.float64, 'no monitor'
