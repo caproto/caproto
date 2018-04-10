@@ -93,8 +93,12 @@ def poll_readiness(pv_to_check, attempts=15):
                            f"{attempts} seconds (pv: {pv_to_check})")
 
 
-def run_softioc(request, db, **kwargs):
+def run_softioc(request, db, additional_db=None, **kwargs):
     db_text = ca.benchmarking.make_database(db)
+
+    if additional_db is not None:
+        db_text = '\n'.join((db_text, additional_db))
+
     ioc_handler = ca.benchmarking.IocHandler()
     ioc_handler.setup_ioc(db_text=db_text, max_array_bytes='10000000',
                           **kwargs)
@@ -112,46 +116,56 @@ def prefix():
     return str(uuid.uuid4())[:8] + ':'
 
 
+@pytest.fixture(scope='function')
+def epics_base_ioc(prefix, request):
+    name = 'Waveform and standard record IOC'
+    db = {
+        ('{}waveform'.format(prefix), 'waveform'):
+            dict(FTVL='LONG', NELM=4000),
+        ('{}float'.format(prefix), 'ai'): dict(VAL=1),
+        ('{}enum'.format(prefix), 'bi'):
+            dict(VAL=1, ZNAM="zero", ONAM="one"),
+        ('{}str'.format(prefix), 'stringout'): dict(VAL='test'),
+        ('{}int'.format(prefix), 'longout'): dict(VAL=1),
+    }
+
+    macros = {'P': prefix}
+    handler = run_softioc(request, db,
+                          additional_db=ca.benchmarking.PYEPICS_TEST_DB,
+                          macros=macros)
+    process = handler.processes[-1]
+    pvs = {pv[len(prefix):]: pv
+           for pv, rtype in db
+           }
+
+    return SimpleNamespace(process=process, prefix=prefix, name=name, pvs=pvs)
+
+
+@pytest.fixture(scope='function')
+def caproto_ioc(prefix, request):
+    name = 'Caproto type varieties example'
+    pvs = dict(int=prefix + 'int',
+               float=prefix + 'pi',
+               str=prefix + 'str',
+               enum=prefix + 'enum',
+               )
+    process = run_example_ioc('caproto.ioc_examples.type_varieties',
+                              request=request,
+                              pv_to_check=pvs['float'],
+                              args=(prefix,))
+    return SimpleNamespace(process=process, prefix=prefix, name=name, pvs=pvs)
+
+
 @pytest.fixture(params=['caproto', 'epics-base'], scope='function')
-def ioc(request):
+def ioc(prefix, request):
     'A fixture that runs more than one IOC: caproto, epics'
     # Get a new prefix for each IOC type:
-    prefix_ = prefix()
     if request.param == 'caproto':
-        name = 'Caproto type varieties example'
-        pvs = dict(int=prefix_ + 'int',
-                   float=prefix_ + 'pi',
-                   str=prefix_ + 'str',
-                   enum=prefix_ + 'enum',
-                   )
-        process = run_example_ioc('caproto.ioc_examples.type_varieties',
-                                  request=request,
-                                  pv_to_check=pvs['float'],
-                                  args=(prefix_,))
+        ioc_ = caproto_ioc(prefix, request)
     elif request.param == 'epics-base':
-        name = 'Waveform and standard record IOC'
-        db = {
-            ('{}waveform'.format(prefix_), 'waveform'):
-                dict(FTVL='LONG', NELM=4000),
-            ('{}float'.format(prefix_), 'ai'): dict(VAL=1),
-            ('{}enum'.format(prefix_), 'bi'):
-                dict(VAL=1, ZNAM="zero", ONAM="one"),
-            ('{}str'.format(prefix_), 'stringout'): dict(VAL='test'),
-            ('{}int'.format(prefix_), 'longout'): dict(VAL=1),
-        }
-
-        macros = {'P': 'Py:'}
-        handler = run_softioc(request, db, macros=macros)
-        process = handler.processes[-1]
-        pvs = {pv[len(prefix_):]: pv
-               for pv, rtype in db
-               }
-    ret = SimpleNamespace(process=process,
-                          type=request.param,
-                          prefix=prefix_,
-                          name=name,
-                          pvs=pvs)
-    return ret
+        ioc_ = epics_base_ioc(prefix, request)
+    ioc_.type = request.param
+    return ioc_
 
 
 def start_repeater():

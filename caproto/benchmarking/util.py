@@ -79,7 +79,6 @@ def softioc(*, db_text='', access_rules_text='', additional_args=None,
         logger.debug('access rules filename is: %s', cf.name)
         with NamedTemporaryFile(mode='w+') as df:
             df.write(db_text)
-            df.write(PYEPICS_TEST_DB)
             df.flush()
 
             logger.debug('db filename is: %s', df.name)
@@ -333,32 +332,32 @@ record(waveform,"$(P)string64k")  {
 }
 
 record(longin,"$(P)long1") {
-        field(DESC,"longin") 
+        field(DESC,"longin")
     field(DESC, "Soft Channel")
     field(VAL,  "123456")
 }
 
 record(longout,"$(P)long2") {
-        field(DESC,"longout") 
+        field(DESC,"longout")
     field(DTYP, "Soft Channel")
     field(VAL,  "543210")
 }
 
 record(longout,"$(P)long3") {
-        field(DESC,"longout") 
+        field(DESC,"longout")
     field(DTYP, "Soft Channel")
     field(VAL,  "543210")
 }
 
 record(longout,"$(P)long4") {
-        field(DESC,"longout") 
+        field(DESC,"longout")
     field(DTYP, "Soft Channel")
     field(VAL,  "543210")
 }
 
 
 record(stringin,"$(P)str1") {
-        field(DESC,"stringin") 
+        field(DESC,"stringin")
     field(DTYP, "Soft Channel")
     field(VAL,  "s")
 }
