@@ -245,10 +245,10 @@ def simulator_main(prefix, ready_event, exit_event):
         for i, p in enumerate(analogs):
             p.put((i+1)*1.7135000 )
 
-        caput('Py:ao1.EGU', 'microns')
-        caput('Py:ao1.PREC', 4)
-        caput('Py:ai1.PREC', 2)
-        caput('Py:ao2.PREC', 3)
+        caput(f'{prefix}ao1.EGU', 'microns')
+        caput(f'{prefix}ao1.PREC', 4)
+        caput(f'{prefix}ai1.PREC', 2)
+        caput(f'{prefix}ao2.PREC', 3)
 
         char_waves[0].put([60+random.randrange(30) for i in range(128)])
         char_waves[1].put([random.randrange(256) for i in range(256)])
