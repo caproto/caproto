@@ -87,10 +87,9 @@
 #
 # ------------------------------------------------
 
-import sys
 import time
-import unittest
 import numpy
+import threading
 from contextlib import contextmanager
 from caproto.threading.pyepics_compat import (PV, caput, caget, cainfo,
                                               caget_many, caput_many)
@@ -124,9 +123,8 @@ def teardown_module(module):
 
 @pytest.fixture(scope='function')
 def pvnames(epics_base_ioc):
-    prefix = epics_base_ioc.prefix
-
     class PVNames:
+        prefix = epics_base_ioc.prefix
         double_pv = prefix + 'ao1'
         double_pv_units = 'microns'
         double_pv_prec = 4
@@ -177,9 +175,191 @@ def pvnames(epics_base_ioc):
         motor2 = 'sim:mtr2'
 
         def __repr__(self):
-            return f'<PVNames prefix={prefix}>'
+            return f'<PVNames prefix={epics_base_ioc.prefix}>'
 
     return PVNames()
+
+
+def simulator_main(prefix, ready_event, exit_event):
+    'simulator.py from pyepics testioc (same license as above)'
+    import random
+    from epics import caput, PV
+    prefix = 'Py:'
+
+    NEEDS_INIT = True
+    SLEEP_TIME = 0.10
+
+    def onConnect(pvname=None, conn=None, **kws):
+        nonlocal NEEDS_INIT
+        NEEDS_INIT = conn
+
+    def make_pvs(*args, **kwds):
+        # print("Make PVS '  ", prefix,  args)
+        # print( [("%s%s" % (prefix, name)) for name in args])
+        pvlist = [PV("%s%s" % (prefix, name)) for name in args]
+        for pv in pvlist:
+            pv.connect()
+            pv.connection_callbacks.append(onConnect)
+        return pvlist
+
+    mbbos    = make_pvs("mbbo1", "mbbo2")
+    pause_pv = make_pvs("pause",)[0]
+    longs    = make_pvs("long1", "long2", "long3", "long4")
+    strs     = make_pvs("str1", "str2")
+    analogs  =  make_pvs("ao1", "ai1", "ao2", "ao3")
+    binaries = make_pvs("bo1", "bi1")
+
+    char_waves = make_pvs("char128", "char256", "char2k", "char64k")
+    double_waves = make_pvs("double128", "double2k", "double64k")
+    long_waves = make_pvs("long128", "long2k", "long64k")
+    str_waves = make_pvs("string128", "string2k", "string64k")
+
+    subarrays =  make_pvs("subArr1", "subArr2", "subArr3", "subArr4" )
+    subarray_driver = make_pvs("wave_test",)[0]
+
+    def initialize_data():
+        subarray_driver.put(numpy.arange(64)/12.0)
+
+        for p in mbbos:
+            p.put(1)
+
+        for i, p in enumerate(longs):
+            p.put((i+1))
+
+        for i, p in enumerate(strs):
+            p.put(("String %s" % (i+1)))
+
+        for i, p in enumerate(binaries):
+            p.put((i+1))
+
+        for i, p in enumerate(analogs):
+            p.put((i+1)*1.7135000 )
+
+        caput('Py:ao1.EGU', 'microns')
+        caput('Py:ao1.PREC', 4)
+        caput('Py:ai1.PREC', 2)
+        caput('Py:ao2.PREC', 3)
+
+        char_waves[0].put([60+random.randrange(30) for i in range(128)])
+        char_waves[1].put([random.randrange(256) for i in range(256)])
+        char_waves[2].put([random.randrange(256) for i in range(2048)])
+        char_waves[3].put([random.randrange(256) for i in range(65536)])
+
+        long_waves[0].put([i+random.randrange(2) for i in range(128)])
+        long_waves[1].put([i+random.randrange(128) for i in range(2048)])
+        long_waves[2].put([i  for i in range(65536)])
+
+        double_waves[0].put([i+random.randrange(2) for i in range(128)])
+        double_waves[1].put([random.random() for i in range(2048)])
+        double_waves[2].put([random.random() for i in range(65536)])
+
+        pause_pv.put(0)
+        str_waves[0].put([(" String %i" % (i+1)) for i in range(128)])
+        print('Data initialized')
+
+    text = '''line 1
+this is line 2
+and line 3
+here is another line
+this is the 5th line
+line 6
+line 7
+line 8
+line 9
+line 10
+line 11
+'''.split('\n')
+
+    start_time = time.time()
+    count = 0
+    long_update = 0
+    lcount = 1
+    initialized_at = 0
+
+    while not exit_event.is_set():
+        if NEEDS_INIT:
+            initialize_data()
+            time.sleep(SLEEP_TIME)
+            NEEDS_INIT = False
+            initialized_at = count
+
+        time.sleep(SLEEP_TIME)
+
+        count = count + 1
+        if not NEEDS_INIT and count == initialized_at + 4:
+            ready_event.set()
+            print('[Pyepics simulator running!]')
+        if count > 99999999:
+            count = 1
+
+        t0 = time.time()
+        if pause_pv.get() == 1:
+            # pause for up to 120 seconds if pause was selected
+            t0 = time.time()
+            while time.time()-t0 < 120:
+                time.sleep(SLEEP_TIME)
+                if pause_pv.get() == 0:
+                    break
+            pause_pv.put(0)
+        noise = numpy.random.normal
+
+        analogs[0].put(100*(random.random()-0.5))
+        analogs[1].put(76.54321*(time.time()-start_time))
+        analogs[2].put(0.3*numpy.sin(time.time() / 2.302) + noise(scale=0.4))
+        char_waves[0].put([45+random.randrange(64)
+                           for i in range(128)])
+
+        if count % 3 == 0:
+            analogs[3].put(
+                numpy.exp((max(0.001, noise(scale=0.03) +
+                               numpy.sqrt((count/16.0) % 87.)))))
+
+            long_waves[1].put([i+random.randrange(128)
+                               for i in range(2048)])
+            str_waves[0].put([("Str%i_%.3f" % (i+1, 100*random.random()))
+                              for i in range(128)])
+
+        if t0-long_update >= 1.0:
+            long_update=t0
+            lcount = (lcount + 1) % 10
+            longs[0].put(lcount)
+            char_waves[1].put(text[lcount])
+            double_waves[2].put([random.random()
+                                 for i in range(65536)])
+            double_waves[1].put([random.random()
+                                 for i in range(2048)])
+
+
+@pytest.fixture(scope='function')
+def simulator(request, pvnames):
+    prefix = pvnames.prefix
+    ready_event = threading.Event()
+    exit_event = threading.Event()
+    kwargs = dict(prefix=pvnames.prefix,
+                  ready_event=ready_event,
+                  exit_event=exit_event)
+
+    print(f'Starting up simulator for prefix: {prefix}')
+    thread = threading.Thread(target=simulator_main, kwargs=kwargs)
+    thread.start()
+
+    def stop_simulator():
+        print(f'Joining simulator thread')
+        exit_event.set()
+        thread.join(timeout=2)
+        if thread.is_alive():
+            print(f'Dangling simulator thread (prefix={prefix})... :(')
+        else:
+            print(f'Simulator thread exited cleanly (prefix={prefix})')
+
+    request.addfinalizer(stop_simulator)
+    ok = ready_event.wait(3)
+
+    if not ok:
+        raise TimeoutError('Simulator thread failed to start!')
+
+    print(f'Simulator thread started up! (prefix={prefix})')
+    return thread
 
 
 @contextmanager
@@ -201,7 +381,7 @@ def testA_CreatePV(pvnames):
     assert pv is not None
 
 
-def testA_CreatedWithConn(pvnames):
+def testA_CreatedWithConn(pvnames, simulator):
     print('Simple Test: create pv with conn callback\n')
     CONN_DAT = {}
 
@@ -298,7 +478,7 @@ def test_get1(pvnames):
         assert int(cval) == val
 
 
-def test_get_string_waveform(pvnames):
+def test_get_string_waveform(pvnames, simulator):
     print('String Array: \n')
     with no_simulator_updates(pvnames):
         pv = PV(pvnames.string_arr_pv)
@@ -362,12 +542,11 @@ def test_putwait(pvnames):
     assert dt > 0.1
 
     # now with a callback!
-    global put_callback_called
     put_callback_called = False
 
     def onPutdone(pvname=None, **kws):
         print('put done ', pvname, kws)
-        global put_callback_called
+        nonlocal put_callback_called
         put_callback_called = True
     val = pv.get()
     if  val < 5:
@@ -401,13 +580,13 @@ def test_putwait(pvnames):
     assert count > 3
 
 
-def test_get_callback(pvnames):
+def test_get_callback(pvnames, simulator):
     print("Callback test:  changing PV must be updated\n")
-    global NEWVALS
     mypv = PV(pvnames.updating_pv1)
     NEWVALS = []
 
     def onChanges(pvname=None, value=None, char_value=None, **kw):
+        nonlocal NEWVALS
         print('PV %s %s, %s Changed!\n' % (pvname, repr(value), char_value))
         NEWVALS.append(repr(value))
 
@@ -422,7 +601,7 @@ def test_get_callback(pvnames):
     mypv.clear_callbacks()
 
 
-def test_subarrays(pvnames):
+def test_subarrays(pvnames, simulator):
     print("Subarray test:  dynamic length arrays\n")
     driver = PV(pvnames.subarr_driver)
     subarr1 = PV(pvnames.subarr1)
@@ -482,7 +661,7 @@ def test_subarray_zerolen(pvnames):
     # assert val.dtype == numpy.float64, 'no monitor'
 
 
-def test_waveform_get_with_count_arg(pvnames):
+def test_waveform_get_with_count_arg(pvnames, simulator):
     with no_simulator_updates(pvnames):
         wf = PV(pvnames.char_arr_pv, count=32)
         val=wf.get()
@@ -492,7 +671,7 @@ def test_waveform_get_with_count_arg(pvnames):
         assert len(val) == wf.nelm
 
 
-def test_waveform_callback_with_count_arg(pvnames):
+def test_waveform_callback_with_count_arg(pvnames, simulator):
     values = []
 
     wf = PV(pvnames.char_arr_pv, count=32)
@@ -576,7 +755,7 @@ def testEnumPut(pvnames):
     assert pv.get(as_string=True) == 'Stop'
 
 
-def test_DoubleVal(pvnames):
+def test_DoubleVal(pvnames, simulator):
     pvn = pvnames.double_pv
     pv = PV(pvn)
     print('pv', pv)
@@ -585,7 +764,7 @@ def test_DoubleVal(pvnames):
     assert pv.connected
 
     print('%s get value %s' % (pvn, value))
-    cdict  = pv.get_ctrlvars()
+    cdict = pv.get_ctrlvars()
     print('Testing CTRL Values for a Double (%s)\n'   % (pvn))
     assert 'severity' in cdict
     assert len(pv.host) > 1
@@ -599,7 +778,7 @@ def test_waveform_get_1elem(pvnames):
     pv = PV(pvnames.double_arr_pv)
     val = pv.get(count=1, use_monitor=False)
     assert isinstance(val, numpy.ndarray)
-    assert len(val), 1
+    assert len(val) == 1
 
 
 def test_subarray_1elem(pvnames):
