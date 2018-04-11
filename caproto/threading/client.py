@@ -142,9 +142,14 @@ class SelectorThread:
                 except OSError as ex:
                     if ex.errno == errno.EAGAIN:
                         continue
-                    bytes_recv, address = b'', None
-
-                obj.received(bytes_recv, address)
+                    else:
+                        self.remove_socket(sock)
+                else:
+                    if not bytes_recv:
+                        self.remove_socket(sock)
+                        print("got nothing back from socket!")
+                        continue
+                    obj.received(bytes_recv, address)
 
 
 class SharedBroadcaster:
@@ -644,7 +649,7 @@ class Channel:
             raise TimeoutError("Server at {} did not respond to attempt "
                                "to create channel named {} within {}-second "
                                "timeout."
-                               "".format(self.circuit.address,
+                               "".format(self.circuit.circuit.address,
                                          self.channel.name,
                                          timeout))
 
@@ -668,8 +673,8 @@ class Channel:
                 raise TimeoutError("Server at {} did not respond to attempt "
                                    "to close channel named {} within {}-second"
                                    " timeout."
-                                   "".format(self.circuit.address, self.name,
-                                             timeout))
+                                   "".format(self.circuit.circuit.address,
+                                             self.channel.name, timeout))
 
     def read(self, *args, timeout=2, **kwargs):
         """Request a fresh reading, wait for it, return it and stash it.
@@ -686,19 +691,22 @@ class Channel:
         self.circuit.ioids[ioid] = self
         # do not need lock here, happens in send
         self.circuit.send(command)
-        has_reading = lambda: ioid not in self.circuit.ioids
+        print('message sent')
         cond = self.circuit.new_command_cond
         with cond:
-            done = cond.wait_for(has_reading, timeout)
+            print(f'about to wait for {timeout}')
+            done = cond.wait_for(lambda: ioid not in self.circuit.ioids,
+                                 timeout)
+        print('out of waiting')
         if not done:
             raise TimeoutError("Server at {} did not respond to attempt "
                                "to read channel named {} within {}-second "
                                "timeout."
-                               "".format(self.circuit.address,
-                                         self.name, timeout))
+                               "".format(self.circuit.circuit.address,
+                                         self.channel.name, timeout))
         return self.last_reading
 
-    def write(self, *args, wait=True, cb=None, timeout=2, **kwargs):
+    def write(self, *args, wait=False, cb=None, timeout=2, **kwargs):
         "Write a new value and await confirmation from the server."
         with self.circuit.new_command_cond:
             command = self.channel.write(*args, **kwargs)
@@ -709,16 +717,19 @@ class Channel:
             self._pc_callbacks[ioid] = cb
         # do not need to lock this, locking happens in circuit command
         self.circuit.send(command)
-        has_reading = lambda: ioid not in self.circuit.ioids
+        if not wait:
+            return self.last_reading
+
         cond = self.circuit.new_command_cond
         with cond:
-            done = cond.wait_for(has_reading, timeout)
+            done = cond.wait_for(lambda: ioid not in self.circuit.ioids,
+                                 timeout)
         if not done:
             raise TimeoutError("Server at {} did not respond to attempt "
                                "to write to channel named {} within {}-second "
                                "timeout."
-                               "".format(self.circuit.address,
-                                         self.name, timeout))
+                               "".format(self.circuit.circuit.address,
+                                         self.channel.name, timeout))
         return self.last_reading
 
     def subscribe(self, *args, **kwargs):
@@ -740,8 +751,13 @@ def ensure_connection(func):
     # TODO get timeout default from func signature
     @functools.wraps(func)
     def inner(self, *args, **kwargs):
-        self.wait_for_connection(timeout=kwargs.get('timeout', None))
-        return func(self, *args, **kwargs)
+        import uuid
+        uid = {uuid.uuid4()}
+        self.wait_for_connection(timeout=kwargs.get('timeout', 1))
+        print(f'in ensure {func} {uid}')
+        ret = func(self, *args, **kwargs)
+        print(f'     bloody function returned {func} {uid}')
+        return ret
     return inner
 
 
@@ -945,6 +961,9 @@ class PV:
 
         if count is None:
             count = self.dflt_count
+
+        if timeout is None:
+            timeout = 5
         dt = self.typefull
         if not as_string and self.typefull in ca.char_types:
             re_map = {ca.ChannelType.CHAR: ca.ChannelType.INT,
@@ -963,7 +982,8 @@ class PV:
             (count is not None and
              count > len(self._args['value']))):
             command = self.chid.read(data_type=dt,
-                                     data_count=count)
+                                     data_count=count,
+                                     timeout=timeout)
             self.__ingest_read_response_command(command)
 
         info = self._args
@@ -983,8 +1003,12 @@ class PV:
                 ret, = ret
             return ret
 
+        elif count is None and len(info['value']) == 1:
+            return info['value'][0]
+
         elif not as_numpy:
             return list(info['value'])
+
         return info['value']
 
     def __ingest_read_response_command(self, command):
@@ -1026,7 +1050,14 @@ class PV:
                     raise ValueError('{} is not in Enum ({}'.format(
                         value, self.enum_strs))
 
-        if isinstance(value, str) or not isinstance(value, Iterable):
+        if isinstance(value, str):
+            if self.typefull in ca.char_types:
+                # have to zero pad!
+                value = tuple(value.encode(STR_ENC)) + (0,)
+            else:
+                value = (value, )
+
+        if not isinstance(value, Iterable):
             value = (value, )
 
         if isinstance(value[0], str):
@@ -1036,8 +1067,15 @@ class PV:
             callback(*callback_data)
         cb = run_callback if callback is not None else None
         ret = self.value
+        print('     before puts write')
         self.chid.write(value, wait=wait, cb=cb, timeout=timeout)
-        return ret if wait else None
+        print('     after puts write')
+        print(f'  {wait}')
+        print(f'  {ret if wait else None}')
+        if not wait:
+            print("   about to return None")
+            return
+        return ret
 
     @ensure_connection
     def get_ctrlvars(self, timeout=5, warn=True):
@@ -1053,7 +1091,9 @@ class PV:
     def get_timevars(self, timeout=5, warn=True):
         "get time values for variable"
         dtype = ca.promote_type(self.type, use_time=True)
-        command = self.chid.read(data_type=dtype, timeout=timeout)
+        print(f'   in timevars about to read {timeout}')
+        command = self.chid.read(data_type=dtype, timeout=1)
+        print('   read in timevars')
         info = self._parse_dbr_metadata(command.metadata)
         info['value'] = command.data
         self._args.update(**info)
@@ -1249,6 +1289,7 @@ class PV:
     @property
     def timestamp(self):
         "timestamp of last pv action"
+        print('getting timestamp')
         return self._getarg('timestamp')
 
     @property
@@ -1412,9 +1453,10 @@ class PV:
         if self._args[arg] is None and self.connected:
             if arg in ('status', 'severity', 'timestamp',
                        'posixseconds', 'nanoseconds'):
-                self.get_timevars(timeout=1, warn=False)
+                print('trying to get timestamp')
+                self.get_timevars(warn=False)
             else:
-                self.get_ctrlvars(timeout=1, warn=False)
+                self.get_ctrlvars(warn=False)
         return self._args.get(arg, None)
 
     def __repr__(self):
