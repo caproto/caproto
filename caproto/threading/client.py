@@ -584,9 +584,7 @@ class Context:
         # Ask the Broadcaster to search for every PV for which we do not
         # already have an instance. It might already have a cached search
         # result, but that is the concern of broadcaster.search.
-        with self.pv_state_lock:
-            self.broadcaster.search(self._search_results_queue,
-                                    names_to_search)
+        self.broadcaster.search(self._search_results_queue, names_to_search)
         return pvs
 
     def reconnect(self, keys):
@@ -615,11 +613,11 @@ class Context:
         # queue is held by SharedBroadcaster.command_loop.
         while True:
             address, names = self._search_results_queue.get()
+            channels = collections.deque()
             with self.pv_state_lock:
                 # Assign each PV a VirtualCircuitManager for managing a socket
                 # and tracking circuit state, as well as a ClientChannel for
                 # tracking channel state.
-                channels = collections.deque()
                 for name in names:
                     pvs = self.pvs_by_name[name]
                     for pv in pvs:
