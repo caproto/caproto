@@ -88,6 +88,7 @@
 # ------------------------------------------------
 
 import time
+import os
 import numpy
 import threading
 from contextlib import contextmanager
@@ -506,7 +507,8 @@ def test_get1(pvnames):
     assert int(cval) == val
 
 
-@pytest.mark.flaky(reruns=5, reruns_delay=2)
+@pytest.mark.xfail(os.environ.get('BASE') in ('R3.16.1', 'R7.0.1.1'),
+                   reason='known issues with simulator on some BASE versions')
 def test_get_string_waveform(pvnames, simulator):
     print('String Array: \n')
     with no_simulator_updates(pvnames):
@@ -609,7 +611,8 @@ def test_putwait(pvnames):
     assert count > 3
 
 
-@pytest.mark.flaky(reruns=5, reruns_delay=2)
+@pytest.mark.xfail(os.environ.get('BASE') in ('R3.16.1', 'R7.0.1.1'),
+                   reason='known issues with simulator on some BASE versions')
 def test_get_callback(pvnames, simulator):
     print("Callback test:  changing PV must be updated\n")
     mypv = PV(pvnames.updating_pv1)
@@ -701,7 +704,8 @@ def test_waveform_get_with_count_arg(pvnames):
     assert len(val) == wf.nelm
 
 
-@pytest.mark.flaky(reruns=5, reruns_delay=2)
+@pytest.mark.xfail(os.environ.get('BASE') in ('R3.16.1', 'R7.0.1.1'),
+                   reason='known issues with simulator on some BASE versions')
 def test_waveform_callback_with_count_arg(pvnames, simulator):
     values = []
 
@@ -784,7 +788,8 @@ def testEnumPut(pvnames):
     assert pv.get(as_string=True) == 'Stop'
 
 
-@pytest.mark.flaky(reruns=5, reruns_delay=2)
+@pytest.mark.xfail(os.environ.get('BASE') in ('R3.16.1', 'R7.0.1.1'),
+                   reason='known issues with simulator on some BASE versions')
 def test_DoubleVal(pvnames, simulator):
     pvn = pvnames.double_pv
     pv = PV(pvn)
