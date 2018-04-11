@@ -357,15 +357,14 @@ class SharedBroadcaster:
         """
         Process a command and transport it over the UDP socket.
         """
-        with self.command_cond:
-            bytes_to_send = self.broadcaster.send(*commands)
-            for host in ca.get_address_list():
-                if ':' in host:
-                    host, _, specified_port = host.partition(':')
-                    self.udp_sock.sendto(bytes_to_send, (host,
-                                                         int(specified_port)))
-                else:
-                    self.udp_sock.sendto(bytes_to_send, (host, port))
+        bytes_to_send = self.broadcaster.send(*commands)
+        for host in ca.get_address_list():
+            if ':' in host:
+                host, _, specified_port = host.partition(':')
+                self.udp_sock.sendto(bytes_to_send, (host,
+                                                     int(specified_port)))
+            else:
+                self.udp_sock.sendto(bytes_to_send, (host, port))
 
     def get_cached_search_result(self, name, *,
                                  threshold=STALE_SEARCH_EXPIRATION):
@@ -457,40 +456,38 @@ class SharedBroadcaster:
                 logger.warning('Broadcaster command error', exc_info=ex)
                 continue
 
-            with self.command_cond:
-                queues.clear()
-                now = time.monotonic()
-                for command in commands:
-                    if isinstance(command, ca.VersionResponse):
-                        # Check that the server version is one we can talk to.
-                        if command.version <= 11:
-                            logger.warning('Version response <= 11: %r',
-                                           command)
-                    elif isinstance(command, ca.SearchResponse):
-                        cid = command.cid
-                        with self._search_lock:
-                            try:
-                                name, queue = unanswered_searches.pop(cid)
-                            except KeyError:
-                                # This is a redundant response, which the EPICS
-                                # spec tells us to ignore. (The first responder
-                                # to a given request wins.)
-                                pass
-                            else:
-                                address = ca.extract_address(command)
-                                queues[queue].append(name)
-                                # Cache this to save time on future searches.
-                                # (Entries expire after
-                                # STALE_SEARCH_EXPIRATION.)
-                                logger.debug('Found %s at %s', name, address)
-                                search_results[name] = (address, now)
-                # Send the search results to the Contexts that asked for
-                # them. This is probably more general than is has to be but
-                # I'm playing it safe for now.
+            queues.clear()
+            now = time.monotonic()
+            for command in commands:
+                if isinstance(command, ca.VersionResponse):
+                    # Check that the server version is one we can talk to.
+                    if command.version <= 11:
+                        logger.warning('Version response <= 11: %r', command)
+                elif isinstance(command, ca.SearchResponse):
+                    cid = command.cid
+                    try:
+                        name, queue = unanswered_searches.pop(cid)
+                    except KeyError:
+                        # This is a redundant response, which the EPICS
+                        # spec tells us to ignore. (The first responder
+                        # to a given request wins.)
+                        pass
+                    else:
+                        address = ca.extract_address(command)
+                        queues[queue].append(name)
+                        # Cache this to save time on future searches.
+                        # (Entries expire after STALE_SEARCH_EXPIRATION.)
+                        logger.debug('Found %s at %s', name, address)
+                        search_results[name] = (address, now)
+            # Send the search results to the Contexts that asked for
+            # them. This is probably more general than is has to be but
+            # I'm playing it safe for now.
+            if queues:
                 for queue, names in queues.items():
                     queue.put((address, names))
 
-                self.command_cond.notify_all()
+                with self.command_cond:
+                    self.command_cond.notify_all()
 
     def _retry_unanswered_searches(self):
         logger.debug('Search-retry thread started.')
@@ -506,17 +503,15 @@ class SharedBroadcaster:
                         for search_id, (name, _) in
                         items)
 
-            with self.command_cond:
-                if not self._retries_enabled.is_set():
-                    continue
+            if not self._retries_enabled.is_set():
+                continue
 
-                if items:
-                    logger.debug('Retrying searches for %d PVs', len(items))
+            if items:
+                logger.debug('Retrying searches for %d PVs', len(items))
 
-                for batch in batch_requests(requests,
-                                            SEARCH_MAX_DATAGRAM_BYTES):
-                    self.send(ca.EPICS_CA1_PORT, ca.VersionRequest(0, 13),
-                              *batch)
+            for batch in batch_requests(requests,
+                                        SEARCH_MAX_DATAGRAM_BYTES):
+                self.send(ca.EPICS_CA1_PORT, ca.VersionRequest(0, 13), *batch)
 
             time.sleep(max(0, RETRY_SEARCHES_PERIOD - (time.monotonic() - t)))
 
@@ -655,9 +650,8 @@ class Context:
 
             # Notify PVs that they now have a circuit_manager. This will
             # un-block a wait() in the PV.wait_for_search() method.
-            cond = self.search_condition
-            with cond:
-                cond.notify_all()
+            with self.search_condition:
+                self.search_condition.notify_all()
 
             # Initiate channel creation with the server.
             cm.send(*(chan.create() for chan in channels))
@@ -690,6 +684,7 @@ class Context:
                         ready[pv.circuit_manager].append(pv)
                     else:
                         self.resuscitated_pvs.append(pv)
+
             for cm, pvs in ready.items():
                 def requests():
                     for pv in pvs:
@@ -698,6 +693,7 @@ class Context:
                 for batch in batch_requests(requests(),
                                             EVENT_ADD_BATCH_MAX_BYTES):
                     cm.send(*batch)
+
             time.sleep(max(0, RESTART_SUBS_PERIOD - (time.monotonic() - t)))
 
     def disconnect(self, *, wait=True, timeout=2):
@@ -760,8 +756,7 @@ class VirtualCircuitManager:
         self.all_created_pvnames = []
 
         # Connect.
-        cond = self.new_command_cond
-        with cond:
+        with self.new_command_cond:
             if self.connected:
                 return
             if self.circuit.states[ca.SERVER] is ca.IDLE:
@@ -773,7 +768,8 @@ class VirtualCircuitManager:
             else:
                 raise RuntimeError("Cannot connect. States are {} "
                                    "".format(self.circuit.states))
-            if not cond.wait_for(lambda: self.connected, timeout):
+            if not self.new_command_cond.wait_for(lambda: self.connected,
+                                                  timeout):
                 raise TimeoutError("Circuit with server at {} did not "
                                    "connected within {}-second timeout."
                                    "".format(self.circuit.address, timeout))
@@ -910,14 +906,13 @@ class VirtualCircuitManager:
             pass
 
         if wait:
-            cond = self.new_command_cond
             states = self.circuit.states
 
             def is_disconnected():
                 return states[ca.CLIENT] is ca.DISCONNECTED
 
-            with cond:
-                done = cond.wait_for(is_disconnected, timeout)
+            with self.new_command_cond:
+                done = self.new_command_cond.wait_for(is_disconnected, timeout)
 
             if not done:
                 # TODO: this may actually happen due to a long backlog of
@@ -1038,12 +1033,13 @@ class PV:
         timeout : float
             Seconds before a TimeoutError is raised. Default is 2.
         """
-        cond = self.context.search_condition
-        with cond:
+        search_cond = self.context.search_condition
+        with search_cond:
             if self.circuit_manager is not None:
                 return
-            done = cond.wait_for(lambda: self.circuit_manager is not None,
-                                 timeout)
+            done = search_cond.wait_for(
+                lambda: self.circuit_manager is not None,
+                timeout)
         if not done:
             raise TimeoutError("No servers responded to a search for a "
                                "channel named {!r} within {}-second "
@@ -1065,11 +1061,11 @@ class PV:
         """
         if self.circuit_manager is None:
             self.wait_for_search(timeout=timeout)
-        cond = self.circuit_manager.new_command_cond
-        with cond:
+        with self.circuit_manager.new_command_cond:
             if self.connected:
                 return
-            done = cond.wait_for(lambda: self.connected, timeout)
+            done = self.circuit_manager.new_command_cond.wait_for(
+                lambda: self.connected, timeout)
         if not done:
                 raise TimeoutError(
                     f"Server at {self.circuit_manager.circuit.address} did "
@@ -1147,9 +1143,9 @@ class PV:
         def has_reading():
             return ioid not in self.circuit_manager.ioids
 
-        cond = self.circuit_manager.new_command_cond
-        with cond:
-            done = cond.wait_for(has_reading, timeout)
+        with self.circuit_manager.new_command_cond:
+            done = self.circuit_manager.new_command_cond.wait_for(has_reading,
+                                                                  timeout)
         if not done:
             raise TimeoutError(
                 f"Server at {self.circuit_manager.circuit.address} did "
@@ -1176,9 +1172,9 @@ class PV:
         def has_reading():
             return ioid not in self.circuit_manager.ioids
 
-        cond = self.circuit_manager.new_command_cond
-        with cond:
-            done = cond.wait_for(has_reading, timeout)
+        with self.circuit_manager.new_command_cond:
+            done = self.circuit_manager.new_command_cond.wait_for(has_reading,
+                                                                  timeout)
         if not done:
             raise TimeoutError(
                 f"Server at {self.circuit_manager.circuit.address} did "
