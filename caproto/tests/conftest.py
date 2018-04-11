@@ -1,14 +1,16 @@
 import curio
 import functools
+import logging
 import os
 import pytest
 import signal
 import subprocess
 import sys
-import time
 import threading
-from types import SimpleNamespace
+import time
 import uuid
+
+from types import SimpleNamespace
 
 import caproto as ca
 import caproto.benchmarking  # noqa
@@ -34,6 +36,8 @@ _repeater_process = None
 
 REPEATER_PORT = 5065
 SERVER_HOST = '0.0.0.0'
+logger = logging.getLogger(__name__)
+logger.setLevel('DEBUG')
 
 
 def run_example_ioc(module_name, *, request, pv_to_check, args=None,
@@ -51,9 +55,9 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
         args = []
 
     if module_name == '--script':
-        print(f'Running script {args}')
+        logger.debug(f'Running script {args}')
     else:
-        print(f'Running {module_name}')
+        logger.debug(f'Running {module_name}')
     os.environ['COVERAGE_PROCESS_START'] = '.coveragerc'
 
     p = subprocess.Popen([sys.executable, '-m', 'caproto.tests.example_runner',
@@ -63,13 +67,13 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
 
     def stop_ioc():
         if p.poll() is None:
-            print('Sending Ctrl-C to the example IOC')
+            logger.debug('Sending Ctrl-C to the example IOC')
             p.send_signal(signal.SIGINT)
-            print('Waiting on process...')
+            logger.debug('Waiting on process...')
             p.wait()
-            print('IOC has exited')
+            logger.debug('IOC has exited')
         else:
-            print('Example IOC has already exited')
+            logger.debug('Example IOC has already exited')
 
     if request is not None:
         request.addfinalizer(stop_ioc)
@@ -81,7 +85,7 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
 
 
 def poll_readiness(pv_to_check, attempts=15):
-    print(f'Checking PV {pv_to_check}')
+    logger.debug(f'Checking PV {pv_to_check}')
     for attempt in range(attempts):
         try:
             get(pv_to_check, timeout=1)
@@ -139,10 +143,10 @@ def epics_base_ioc(prefix, request):
     process = handler.processes[-1]
     def ioc_monitor():
         process.wait()
-        print('***********************************')
-        print('********IOC process exited!********')
-        print(f'*** Returned: {process.returncode} ****')
-        print('***********************************')
+        logger.info('***********************************')
+        logger.info('********IOC process exited!********')
+        logger.info('******* Returned: %s ******', process.returncode)
+        logger.info('***********************************')
 
 
     threading.Thread(target=ioc_monitor).start()
@@ -185,7 +189,7 @@ def start_repeater():
     if _repeater_process is not None:
         return
 
-    print('Spawning repeater process')
+    logger.info('Spawning repeater process')
     _repeater_process = run_example_ioc('--script',
                                         args=['caproto-repeater', '--verbose'],
                                         request=None,
@@ -198,21 +202,21 @@ def stop_repeater():
     if _repeater_process is None:
         return
 
-    print('[Repeater] Sending Ctrl-C to the repeater')
+    logger.info('[Repeater] Sending Ctrl-C to the repeater')
     _repeater_process.send_signal(signal.SIGINT)
     _repeater_process.wait()
     _repeater_process = None
-    print('[Repeater] Repeater exited')
+    logger.info('[Repeater] Repeater exited')
 
 
 
 def default_setup_module(module):
-    print('-- default module setup {} --'.format(module.__name__))
+    logger.info('-- default module setup {} --'.format(module.__name__))
     start_repeater()
 
 
 def default_teardown_module(module):
-    print('-- default module teardown {} --'.format(module.__name__))
+    logger.info('-- default module teardown {} --'.format(module.__name__))
     stop_repeater()
 
 
@@ -267,14 +271,14 @@ def curio_server(prefix):
 
     async def _server(pvdb):
         port = find_next_tcp_port(host=SERVER_HOST)
-        print('Server will be on', (SERVER_HOST, port))
+        logger.info('Server will be on %s', (SERVER_HOST, port))
         ctx = server.Context(SERVER_HOST, port, pvdb, log_level='DEBUG')
         try:
             await ctx.run()
         except server.ServerExit:
-            print('ServerExit caught; exiting')
+            logger.info('ServerExit caught; exiting')
         except Exception as ex:
-            print('Server failed', ex)
+            logger.exception('Server failed')
             raise
 
     async def run_server(client, *, pvdb=caget_pvdb):
