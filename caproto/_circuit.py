@@ -8,12 +8,8 @@
 # Responses.
 import itertools
 import logging
-import getpass
-import socket
 import collections
 
-# N.B. We do no networking whatsoever in caproto. We only use socket for
-# socket.gethostname() to give a nice default for a HostNameRequest command.
 from ._commands import (AccessRightsResponse, CreateChFailResponse,
                         ClearChannelRequest, ClearChannelResponse,
                         ClientNameRequest, CreateChanRequest,
@@ -482,25 +478,22 @@ class ClientChannel(_BaseChannel):
                                  priority=self.circuit.priority)
         return command
 
-    def host_name(self, host_name=None):
+    def host_name(self, host_name):
         """
         Generate a valid :class:`HostNameRequest`.
 
         Parameters
         ----------
-        host_name : string, optional
-            defaults to output of ``socket.gethostname()``
+        host_name : string
 
         Returns
         -------
         HostNameRequest
         """
-        if host_name is None:
-            host_name = socket.gethostname()
         command = HostNameRequest(host_name)
         return command
 
-    def client_name(self, client_name=None):
+    def client_name(self, client_name):
         """
         Generate a valid :class:`ClientNameRequest`.
 
@@ -513,8 +506,6 @@ class ClientChannel(_BaseChannel):
         -------
         ClientNameRequest
         """
-        if client_name is None:
-            client_name = getpass.getuser()
         command = ClientNameRequest(client_name)
         return command
 
