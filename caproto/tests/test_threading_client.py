@@ -6,6 +6,8 @@ import caproto._utils
 import caproto.threading.client
 import sys
 import time
+import socket
+import getpass
 
 from caproto.threading.client import (Context, SharedBroadcaster, PV, logger,
                                       ContextDisconnectedError)
@@ -201,3 +203,16 @@ def test_subscriptions(ioc, context):
             time.sleep(0.1)
 
     assert monitor_values[1:] == [1, 2, 3]
+
+
+def test_client_and_host_name(shared_broadcaster):
+    ctx = Context(broadcaster=shared_broadcaster, host_name='foo')
+    assert ctx.host_name == 'foo'
+
+    ctx = Context(broadcaster=shared_broadcaster, client_name='bar')
+    assert ctx.client_name == 'bar'
+
+    # test defaults
+    ctx = Context(broadcaster=shared_broadcaster)
+    assert ctx.host_name == socket.gethostname()
+    assert ctx.client_name == getpass.getuser()
