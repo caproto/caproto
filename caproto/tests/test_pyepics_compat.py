@@ -106,7 +106,7 @@ def setup_module(module):
 
     set_logging_level('DEBUG')
 
-    shared_broadcaster = SharedBroadcaster()
+    shared_broadcaster = SharedBroadcaster(log_level='DEBUG')
     PV._default_context = Context(broadcaster=shared_broadcaster,
                                   log_level='DEBUG')
 

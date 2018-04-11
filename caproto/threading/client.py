@@ -482,6 +482,7 @@ class SharedBroadcaster:
                                 # Cache this to save time on future searches.
                                 # (Entries expire after
                                 # STALE_SEARCH_EXPIRATION.)
+                                logger.debug('Found %s at %s', name, address)
                                 search_results[name] = (address, now)
                 # Send the search results to the Contexts that asked for
                 # them. This is probably more general than is has to be but
@@ -508,6 +509,9 @@ class SharedBroadcaster:
             with self.command_cond:
                 if not self._retries_enabled.is_set():
                     continue
+
+                if items:
+                    logger.debug('Retrying searches for %d PVs', len(items))
 
                 for batch in batch_requests(requests,
                                             SEARCH_MAX_DATAGRAM_BYTES):
@@ -540,10 +544,18 @@ class Context:
         self.pvs_by_name = defaultdict(weakref.WeakSet)
         self.broadcaster.add_listener(self)
         self._search_results_queue = queue.Queue()
-        threading.Thread(target=self._process_search_results_loop,
-                         daemon=True).start()
-        threading.Thread(target=self._restart_subscriptions,
-                         daemon=True).start()
+        logger.debug('Context: start process search results loop')
+        self._search_thread = threading.Thread(
+            target=self._process_search_results_loop,
+            daemon=True)
+        self._search_thread.start()
+
+        logger.debug('Context: start restart_subscriptions loop')
+        self._restart_sub_thread = threading.Thread(
+            target=self._restart_subscriptions,
+            daemon=True)
+        self._restart_sub_thread.start()
+
         self.selector = SelectorThread(parent=self)
         self.selector.start()
         self._user_disconnected = False
@@ -602,11 +614,10 @@ class Context:
                 # If there is a cached search result for this name, expire it.
                 self.broadcaster.search_results.pop(name, None)
 
-            self.broadcaster.search(self._search_results_queue, names)
+            self.resuscitated_pvs.extend(
+                [pv for pv in pvs if pv.subscriptions])
 
-            with self.pv_state_lock:
-                self.resuscitated_pvs.extend(
-                    [pv for pv in pvs if pv.subscriptions])
+        self.broadcaster.search(self._search_results_queue, names)
 
     def _process_search_results_loop(self):
         # Receive (address, (name1, name2, ...)). The sending side of this
