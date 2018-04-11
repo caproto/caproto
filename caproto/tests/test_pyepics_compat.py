@@ -499,12 +499,11 @@ def test_caput_many_no_wait(pvnames):
 
 def test_get1(pvnames):
     print('Simple Test: test value and char_value on an integer\n')
-    with no_simulator_updates(pvnames):
-        pv = PV(pvnames.int_pv)
-        val = pv.get()
-        cval = pv.get(as_string=True)
+    pv = PV(pvnames.int_pv)
+    val = pv.get()
+    cval = pv.get(as_string=True)
 
-        assert int(cval) == val
+    assert int(cval) == val
 
 
 def test_get_string_waveform(pvnames, simulator):
@@ -630,7 +629,7 @@ def test_get_callback(pvnames, simulator):
     mypv.clear_callbacks()
 
 
-def test_subarrays(pvnames, simulator):
+def test_subarrays(pvnames):
     print("Subarray test:  dynamic length arrays\n")
     driver = PV(pvnames.subarr_driver)
     subarr1 = PV(pvnames.subarr1)
@@ -643,8 +642,7 @@ def test_subarrays(pvnames, simulator):
     caput("%s.NELM" % pvnames.subarr1, len_sub1)
     caput("%s.INDX" % pvnames.subarr1, 0)
 
-
-    driver.put(full_data) ;
+    driver.put(full_data)
     time.sleep(0.1)
     subval = subarr1.get()
 
@@ -657,7 +655,8 @@ def test_subarrays(pvnames, simulator):
     subarr2 = PV(pvnames.subarr2)
     subarr2.get()
 
-    driver.put(full_data) ;   time.sleep(0.1)
+    driver.put(full_data)
+    time.sleep(0.1)
     subval = subarr2.get()
 
     assert len(subval) == 19
@@ -666,7 +665,8 @@ def test_subarrays(pvnames, simulator):
     caput("%s.NELM" % pvnames.subarr2, 5)
     caput("%s.INDX" % pvnames.subarr2, 13)
 
-    driver.put(full_data) ;   time.sleep(0.1)
+    driver.put(full_data)
+    time.sleep(0.1)
     subval = subarr2.get()
 
     assert len(subval) == 5
@@ -690,14 +690,13 @@ def test_subarray_zerolen(pvnames):
     # assert val.dtype == numpy.float64, 'no monitor'
 
 
-def test_waveform_get_with_count_arg(pvnames, simulator):
-    with no_simulator_updates(pvnames):
-        wf = PV(pvnames.char_arr_pv, count=32)
-        val=wf.get()
-        assert len(val) == 32
+def test_waveform_get_with_count_arg(pvnames):
+    wf = PV(pvnames.char_arr_pv, count=32)
+    val=wf.get()
+    assert len(val) == 32
 
-        val=wf.get(count=wf.nelm)
-        assert len(val) == wf.nelm
+    val=wf.get(count=wf.nelm)
+    assert len(val) == wf.nelm
 
 
 def test_waveform_callback_with_count_arg(pvnames, simulator):
@@ -706,7 +705,7 @@ def test_waveform_callback_with_count_arg(pvnames, simulator):
     wf = PV(pvnames.char_arr_pv, count=32)
     def onChanges(pvname=None, value=None, char_value=None, **kw):
         print('PV %s %s, %s Changed!\n' % (pvname, repr(value), char_value))
-        values.append( value)
+        values.append(value)
 
     wf.add_callback(onChanges)
     print('Added a callback.  Now wait for changes...\n')
@@ -727,49 +726,47 @@ def test_emptyish_char_waveform_no_monitor(pvnames):
     '''a test of a char waveform of length 1 (NORD=1): value "\0"
     without using auto_monitor
     '''
-    with no_simulator_updates(pvnames):
-        zerostr = PV(pvnames.char_arr_pv, auto_monitor=False)
-        zerostr.wait_for_connection()
+    zerostr = PV(pvnames.char_arr_pv, auto_monitor=False)
+    zerostr.wait_for_connection()
 
-        # elem_count = 128, requested count = None, libca returns count = 1
-        zerostr.put([0], wait=True)
-        assert zerostr.get(as_string=True) == ''
-        numpy.testing.assert_array_equal(zerostr.get(as_string=False), [0])
-        assert zerostr.get(as_string=True, as_numpy=False) == ''
-        numpy.testing.assert_array_equal(zerostr.get(as_string=False, as_numpy=False), [0])
+    # elem_count = 128, requested count = None, libca returns count = 1
+    zerostr.put([0], wait=True)
+    assert zerostr.get(as_string=True) == ''
+    numpy.testing.assert_array_equal(zerostr.get(as_string=False), [0])
+    assert zerostr.get(as_string=True, as_numpy=False) == ''
+    numpy.testing.assert_array_equal(zerostr.get(as_string=False, as_numpy=False), [0])
 
-        # elem_count = 128, requested count = None, libca returns count = 2
-        zerostr.put([0, 0], wait=True)
-        assert zerostr.get(as_string=True) == ''
-        numpy.testing.assert_array_equal(zerostr.get(as_string=False), [0, 0])
-        assert zerostr.get(as_string=True, as_numpy=False) == ''
-        numpy.testing.assert_array_equal(zerostr.get(as_string=False,
-                                                     as_numpy=False), [0, 0])
+    # elem_count = 128, requested count = None, libca returns count = 2
+    zerostr.put([0, 0], wait=True)
+    assert zerostr.get(as_string=True) == ''
+    numpy.testing.assert_array_equal(zerostr.get(as_string=False), [0, 0])
+    assert zerostr.get(as_string=True, as_numpy=False) == ''
+    numpy.testing.assert_array_equal(zerostr.get(as_string=False,
+                                                 as_numpy=False), [0, 0])
 
 
 def test_emptyish_char_waveform_monitor(pvnames):
     '''a test of a char waveform of length 1 (NORD=1): value "\0"
     with using auto_monitor
     '''
-    with no_simulator_updates(pvnames):
-        zerostr = PV(pvnames.char_arr_pv, auto_monitor=True)
-        zerostr.wait_for_connection()
+    zerostr = PV(pvnames.char_arr_pv, auto_monitor=True)
+    zerostr.wait_for_connection()
 
-        zerostr.put([0], wait=True)
-        time.sleep(0.2)
+    zerostr.put([0], wait=True)
+    time.sleep(0.2)
 
-        assert zerostr.get(as_string=True) == ''
-        numpy.testing.assert_array_equal(zerostr.get(as_string=False), [0])
-        assert zerostr.get(as_string=True, as_numpy=False) == ''
-        numpy.testing.assert_array_equal(zerostr.get(as_string=False, as_numpy=False), [0])
+    assert zerostr.get(as_string=True) == ''
+    numpy.testing.assert_array_equal(zerostr.get(as_string=False), [0])
+    assert zerostr.get(as_string=True, as_numpy=False) == ''
+    numpy.testing.assert_array_equal(zerostr.get(as_string=False, as_numpy=False), [0])
 
-        zerostr.put([0, 0], wait=True)
-        time.sleep(0.2)
+    zerostr.put([0, 0], wait=True)
+    time.sleep(0.2)
 
-        assert zerostr.get(as_string=True) == ''
-        numpy.testing.assert_array_equal(zerostr.get(as_string=False), [0, 0])
-        assert zerostr.get(as_string=True, as_numpy=False) == ''
-        numpy.testing.assert_array_equal(zerostr.get(as_string=False, as_numpy=False), [0, 0])
+    assert zerostr.get(as_string=True) == ''
+    numpy.testing.assert_array_equal(zerostr.get(as_string=False), [0, 0])
+    assert zerostr.get(as_string=True, as_numpy=False) == ''
+    numpy.testing.assert_array_equal(zerostr.get(as_string=False, as_numpy=False), [0, 0])
 
     zerostr.disconnect()
 
@@ -811,19 +808,18 @@ def test_waveform_get_1elem(pvnames):
 
 
 def test_subarray_1elem(pvnames):
-    with no_simulator_updates(pvnames):
-        # pv = PV(pvnames.zero_len_subarr1)
-        pv = PV(pvnames.double_arr_pv)
-        pv.wait_for_connection()
-        val = pv.get(count=1, use_monitor=False)
-        print('val is', val, type(val))
-        assert isinstance(val, numpy.ndarray)
-        assert len(val) == 1
+    # pv = PV(pvnames.zero_len_subarr1)
+    pv = PV(pvnames.double_arr_pv)
+    pv.wait_for_connection()
+    val = pv.get(count=1, use_monitor=False)
+    print('val is', val, type(val))
+    assert isinstance(val, numpy.ndarray)
+    assert len(val) == 1
 
-        val = pv.get(count=1, as_numpy=False, use_monitor=False)
-        print('val is', val, type(val))
-        assert isinstance(val, list)
-        assert len(val) == 1
+    val = pv.get(count=1, as_numpy=False, use_monitor=False)
+    print('val is', val, type(val))
+    assert isinstance(val, list)
+    assert len(val) == 1
 
 
 def test_pyepics_pv():

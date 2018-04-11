@@ -148,7 +148,6 @@ def epics_base_ioc(prefix, request):
         logger.info('******* Returned: %s ******', process.returncode)
         logger.info('***********************************')
 
-
     threading.Thread(target=ioc_monitor).start()
     pvs = {pv[len(prefix):]: pv
            for pv, rtype in db
