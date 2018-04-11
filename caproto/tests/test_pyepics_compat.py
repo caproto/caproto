@@ -106,23 +106,13 @@ def setup_module(module):
 
     set_logging_level('DEBUG')
 
-    shared_broadcaster = SharedBroadcaster(log_level='DEBUG')
-    PV._default_context = Context(broadcaster=shared_broadcaster,
-                                  log_level='DEBUG')
-
 
 def teardown_module(module):
     default_teardown_module(module)
 
-    broadcaster = PV._default_context.broadcaster
-    broadcaster.disconnect()
-
-    PV._default_context.disconnect()
-    PV._default_context = None
-
 
 @pytest.fixture(scope='function')
-def pvnames(epics_base_ioc):
+def pvnames(request, epics_base_ioc):
     class PVNames:
         prefix = epics_base_ioc.prefix
         double_pv = prefix + 'ao1'
@@ -177,6 +167,20 @@ def pvnames(epics_base_ioc):
         def __repr__(self):
             return f'<PVNames prefix={epics_base_ioc.prefix}>'
 
+    shared_broadcaster = SharedBroadcaster(log_level='DEBUG')
+    PV._default_context = Context(broadcaster=shared_broadcaster,
+                                  log_level='DEBUG')
+
+    def finalize_context():
+        print('Cleaning up PV context')
+        broadcaster = PV._default_context.broadcaster
+        broadcaster.disconnect()
+
+        PV._default_context.disconnect()
+        PV._default_context = None
+        print('Done cleaning up PV context')
+
+    request.addfinalizer(finalize_context)
     return PVNames()
 
 
