@@ -380,7 +380,7 @@ def simulator(request, pvnames):
             print(f'* Simulator thread exited cleanly (prefix={prefix})')
 
     request.addfinalizer(stop_simulator)
-    ok = ready_event.wait(3)
+    ok = ready_event.wait(15)
 
     if not ok:
         raise TimeoutError('Simulator thread failed to start!')
