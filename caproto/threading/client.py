@@ -691,11 +691,13 @@ class Channel:
         self.circuit.ioids[ioid] = self
         # do not need lock here, happens in send
         self.circuit.send(command)
-
+        print('message sent')
         cond = self.circuit.new_command_cond
         with cond:
+            print(f'about to wait for {timeout}')
             done = cond.wait_for(lambda: ioid not in self.circuit.ioids,
                                  timeout)
+        print('out of waiting')
         if not done:
             raise TimeoutError("Server at {} did not respond to attempt "
                                "to read channel named {} within {}-second "
@@ -704,7 +706,7 @@ class Channel:
                                          self.channel.name, timeout))
         return self.last_reading
 
-    def write(self, *args, wait=True, cb=None, timeout=2, **kwargs):
+    def write(self, *args, wait=False, cb=None, timeout=2, **kwargs):
         "Write a new value and await confirmation from the server."
         with self.circuit.new_command_cond:
             command = self.channel.write(*args, **kwargs)
@@ -749,8 +751,13 @@ def ensure_connection(func):
     # TODO get timeout default from func signature
     @functools.wraps(func)
     def inner(self, *args, **kwargs):
-        self.wait_for_connection(timeout=kwargs.get('timeout', None))
-        return func(self, *args, **kwargs)
+        import uuid
+        uid = {uuid.uuid4()}
+        self.wait_for_connection(timeout=kwargs.get('timeout', 1))
+        print(f'in ensure {func} {uid}')
+        ret = func(self, *args, **kwargs)
+        print(f'     bloody function returned {func} {uid}')
+        return ret
     return inner
 
 
@@ -1060,8 +1067,15 @@ class PV:
             callback(*callback_data)
         cb = run_callback if callback is not None else None
         ret = self.value
+        print('     before puts write')
         self.chid.write(value, wait=wait, cb=cb, timeout=timeout)
-        return ret if wait else None
+        print('     after puts write')
+        print(f'  {wait}')
+        print(f'  {ret if wait else None}')
+        if not wait:
+            print("   about to return None")
+            return
+        return ret
 
     @ensure_connection
     def get_ctrlvars(self, timeout=5, warn=True):
@@ -1077,7 +1091,9 @@ class PV:
     def get_timevars(self, timeout=5, warn=True):
         "get time values for variable"
         dtype = ca.promote_type(self.type, use_time=True)
-        command = self.chid.read(data_type=dtype, timeout=timeout)
+        print(f'   in timevars about to read {timeout}')
+        command = self.chid.read(data_type=dtype, timeout=1)
+        print('   read in timevars')
         info = self._parse_dbr_metadata(command.metadata)
         info['value'] = command.data
         self._args.update(**info)
@@ -1273,6 +1289,7 @@ class PV:
     @property
     def timestamp(self):
         "timestamp of last pv action"
+        print('getting timestamp')
         return self._getarg('timestamp')
 
     @property
@@ -1436,6 +1453,7 @@ class PV:
         if self._args[arg] is None and self.connected:
             if arg in ('status', 'severity', 'timestamp',
                        'posixseconds', 'nanoseconds'):
+                print('trying to get timestamp')
                 self.get_timevars(warn=False)
             else:
                 self.get_ctrlvars(warn=False)
