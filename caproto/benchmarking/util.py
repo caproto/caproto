@@ -207,8 +207,6 @@ def set_logging_level(level, *, logger=None):
 # to test that caproto's pyepics shim passes (selections from) the pyepics test
 # suite
 PYEPICS_TEST_DB = """
-##
-## basic data types for debugging
 record(mbbo,"$(P)mbbo1") {
     field(DESC,"mbbo")
         field(ZRVL,"0")
@@ -403,8 +401,6 @@ record(bi,"$(P)bi1") {
     field(VAL,  "1")
 }
 
-## Subarrays Copied from a Tech-Talk conversation, March 2011
-
 record(subArray, "$(P)subArr1") {
   field(DESC, "sub array 1")
   field(NELM, "16")
@@ -444,7 +440,6 @@ record(subArray, "$(P)subArr4") {
 record(subArray, "$(P)ZeroLenSubArr1") {
   field(DESC, "zero-length subarray")
   field(NELM, "1")
-  # field(INP, "$(P)wave_test.VAL")
   field(INDX, "0")
   field(FTVL, "DOUBLE")
   field(MALM, "64")

@@ -311,7 +311,13 @@ line 11
                 time.sleep(SLEEP_TIME)
                 if pause_pv.get() == 0:
                     break
+                elif exit_event.is_set():
+                    break
             pause_pv.put(0)
+
+        if exit_event.is_set():
+            break
+
         noise = numpy.random.normal
 
         analogs[0].put(100*(random.random()-0.5))
@@ -339,6 +345,8 @@ line 11
                                  for i in range(65536)])
             double_waves[1].put([random.random()
                                  for i in range(2048)])
+
+    print('[Simulator loop exiting]')
 
 
 @pytest.fixture(scope='function')
@@ -397,7 +405,7 @@ def testA_CreatePV(pvnames):
     assert pv is not None
 
 
-def testA_CreatedWithConn(pvnames, simulator):
+def testA_CreatedWithConn(pvnames):
     print('Simple Test: create pv with conn callback\n')
     CONN_DAT = {}
 
