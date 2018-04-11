@@ -210,7 +210,6 @@ class PV:
         self._caproto_pv, = self._context.get_pvs(
             self.pvname,
             connection_state_callback=self._connection_state_changed)
-
         if self._caproto_pv.connected and not self._connected:
             # connection state callback was already called
             logger.debug('%s already connected', self.pvname)
@@ -369,7 +368,10 @@ class PV:
             count = self.default_count
 
         if timeout is None:
-            timeout = 1.0 + log10(max(1, count))
+            if count is None:
+                timeout = 1.0
+            else:
+                timeout = 1.0 + log10(max(1, count))
 
         if with_ctrlvars:
             dt = promote_type(self.type, use_ctrl=True)
