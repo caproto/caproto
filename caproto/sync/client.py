@@ -66,37 +66,33 @@ def make_channel(pv_name, logger, udp_sock, priority, timeout):
 
     # Register with the repeater.
     logger.debug('Registering with the Channel Access repeater.')
-    bytes_to_send = b.send(ca.RepeaterRegisterRequest('0.0.0.0'))
+    bytes_to_send = b.send(ca.RepeaterRegisterRequest())
 
     # Do multiple attempts in case the repeater is still starting up....
-    for attempt in range(1, 4):
-        repeater_port = os.environ.get('EPICS_CA_REPEATER_PORT', 5065)
-        for host in ca.get_address_list():
-            udp_sock.sendto(bytes_to_send, (host, repeater_port))
+    repeater_port = os.environ.get('EPICS_CA_REPEATER_PORT', 5065)
+    for host in ca.get_address_list():
+        udp_sock.sendto(bytes_to_send, (host, repeater_port))
 
-        # Await registration confirmation.
-        try:
-            t = time.monotonic()
-            while True:
-                try:
-                    data, address = udp_sock.recvfrom(1024)
-                    if time.monotonic() - t > timeout:
-                        raise socket.timeout
-                except socket.timeout:
-                    raise TimeoutError("Timed out while awaiting confirmation "
-                                       "from the Channel Access repeater.")
-                commands = b.recv(data, address)
-                b.process_commands(commands)
-                if b.registered:
-                    break
-        except TimeoutError:
-            if attempt == 3:
-                raise
-        if b.registered:
-            break
-    logger.debug('Repeater registration confirmed.')
+    # Await registration confirmation.
+    try:
+        t = time.monotonic()
+        while True:
+            try:
+                data, address = udp_sock.recvfrom(1024)
+                if time.monotonic() - t > timeout:
+                    raise socket.timeout
+            except socket.timeout:
+                raise TimeoutError()
+            commands = b.recv(data, address)
+            b.process_commands(commands)
+            if b.registered:
+                break
+    except TimeoutError:
+        logger.debug('Repeater registration timed out; continuing.')
+    else:
+        logger.debug('Repeater registration confirmed.')
 
-    logger.debug("Searching for '%s'...." % pv_name)
+    logger.debug("Searching for '%s'....", pv_name)
     bytes_to_send = b.send(ca.VersionRequest(0, 13),
                            ca.SearchRequest(pv_name, 0, 13))
     for host in ca.get_address_list():

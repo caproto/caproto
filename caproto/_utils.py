@@ -1,6 +1,7 @@
 # This module includes all exceptions raised by caproto, sentinel objects used
 # throughout the package (see detailed comment below), various network-related
 # helper functions, and other miscellaneous utilities.
+import collections
 import os
 import socket
 import sys
@@ -222,7 +223,8 @@ def ensure_bytes(s):
         # be sure to include a null terminator
         return s.encode() + b'\0'
     else:
-        raise CaprotoTypeError("expected str or bytes")
+        raise CaprotoTypeError(f"expected str or bytes, got {s!r} of type "
+                               f"{type(s)}")
 
 
 def bcast_socket(socket_module=socket):
@@ -282,6 +284,75 @@ def incremental_buffer_list_slice(*buffers):
         if total_sent == total_size:
             break
         buffers = buffer_list_slice(*buffers, offset=sent)
+
+
+class SendAllRetry(CaprotoError):
+    ...
+
+
+def send_all(buffers_to_send, send_func):
+    '''Incrementally slice a list of buffers, and send it using `send_func`
+
+    Parameters
+    ----------
+    buffers_to_send : (buffer1, buffer2, ...)
+        Buffers are expected to be memoryviews or similar
+    send_func : callable
+        Function to call with list of buffers to send
+        Expected to return number of bytes sent or raise SendAllRetry otherwise
+    '''
+
+    if not buffers_to_send:
+        return
+
+    gen = incremental_buffer_list_slice(*buffers_to_send)
+
+    # prime the generator
+    gen.send(None)
+
+    while buffers_to_send:
+        try:
+            sent = send_func(buffers_to_send)
+        except SendAllRetry:
+            continue
+
+        try:
+            buffers_to_send = gen.send(sent)
+        except StopIteration:
+            # finished sending
+            break
+
+
+async def async_send_all(buffers_to_send, async_send_func):
+    '''Incrementally slice a list of buffers, and send it using `send_func`
+
+    Parameters
+    ----------
+    buffers_to_send : (buffer1, buffer2, ...)
+        Buffers are expected to be memoryviews or similar
+    async_send_func : callable
+        Async function to call with list of buffers to send
+        Expected to return number of bytes sent or raise SendAllRetry otherwise
+    '''
+
+    if not buffers_to_send:
+        return
+
+    gen = incremental_buffer_list_slice(*buffers_to_send)
+    # prime the generator
+    gen.send(None)
+
+    while buffers_to_send:
+        try:
+            sent = await async_send_func(buffers_to_send)
+        except SendAllRetry:
+            continue
+
+        try:
+            buffers_to_send = gen.send(sent)
+        except StopIteration:
+            # finished sending
+            break
 
 
 def spawn_daemon(func, *args, **kwargs):
@@ -396,3 +467,27 @@ def evaluate_channel_filter(filter_text):
         raise ValueError(f'Unsupported filters: {invalid_keys}')
     # TODO: parse/validate filters into python types?
     return filter_
+
+
+def batch_requests(request_iter, max_length):
+    '''Batch a set of items with length, thresholded on sum of item length
+
+    Yields
+    ------
+    batch : collections.deque
+        Batch of items from request_iter, where:
+            sum(len(b) for b in batch) < max_length
+        NOTE: instance of deque is reused, cleared at each iteration
+    '''
+    size = 0
+    batch = collections.deque()
+    for command in request_iter:
+        _len = len(command)
+        if size + _len > max_length:
+            yield batch
+            batch.clear()
+            size = 0
+        batch.append(command)
+        size += _len
+    if batch:
+        yield batch

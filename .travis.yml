@@ -47,7 +47,6 @@ before_install:
   - bash .ci/install-from-release.sh "https://github.com/klauer/epics-on-travis/releases/download/${PACKAGED_DEPS}"
   - bash ${CI_SCRIPTS}/run-epics-iocs-on-procserv.sh
   - pip install pyepics numpy
-  - bash ${CI_SCRIPTS}/run-pyepics-simulator.sh procserv
 
 install:
   - pip install .
@@ -61,12 +60,12 @@ script:
   - rm -f `which caRepeater`
 
   - pip install -r test-requirements.txt
-  - coverage run run_tests.py -v --benchmark-disable
+  - coverage run run_tests.py -v --benchmark-disable --timeout=50
   - coverage combine
   - coverage report -m
 
   - export ASV_ENV_NAME=${TRAVIS_PYTHON_VERSION}_${BASE}
-  - coverage run run_tests.py -v --benchmark-only --benchmark-json=pytest_bench.json --benchmark-columns=mean,median,rounds,iterations -k bench
+  - coverage run run_tests.py -v --benchmark-only --benchmark-json=pytest_bench.json --benchmark-columns=mean,median,rounds,iterations -k bench --timeout=50
   - coverage combine
 
   - set -e

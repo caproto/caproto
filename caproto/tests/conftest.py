@@ -1,12 +1,16 @@
 import curio
 import functools
+import logging
 import os
 import pytest
 import signal
 import subprocess
 import sys
+import threading
 import time
 import uuid
+
+from types import SimpleNamespace
 
 import caproto as ca
 import caproto.benchmarking  # noqa
@@ -16,6 +20,7 @@ import caproto.curio.client  # noqa
 import caproto.curio.server  # noqa
 import caproto.threading  # noqa
 import caproto.threading.client  # noqa
+
 from caproto.curio.server import find_next_tcp_port
 import caproto.curio.server as server
 
@@ -31,6 +36,8 @@ _repeater_process = None
 
 REPEATER_PORT = 5065
 SERVER_HOST = '0.0.0.0'
+logger = logging.getLogger(__name__)
+logger.setLevel('DEBUG')
 
 
 def run_example_ioc(module_name, *, request, pv_to_check, args=None,
@@ -48,41 +55,65 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
         args = []
 
     if module_name == '--script':
-        print(f'Running script {args}')
+        logger.debug(f'Running script {args}')
     else:
-        print(f'Running {module_name}')
+        logger.debug(f'Running {module_name}')
     os.environ['COVERAGE_PROCESS_START'] = '.coveragerc'
 
-    # p = subprocess.Popen([sys.executable, '-m', module_name] + args,
     p = subprocess.Popen([sys.executable, '-m', 'caproto.tests.example_runner',
-                          module_name] + args,
+                          module_name] + list(args),
                          stdout=stdout, stderr=stderr, stdin=stdin,
                          env=os.environ)
 
     def stop_ioc():
-        print(f'Sending Ctrl-C to the example IOC')
-        p.send_signal(signal.SIGINT)
-        p.wait()
+        if p.poll() is None:
+            logger.debug('Sending Ctrl-C to the example IOC')
+            p.send_signal(signal.SIGINT)
+            logger.debug('Waiting on process...')
+            p.wait()
+            logger.debug('IOC has exited')
+        else:
+            logger.debug('Example IOC has already exited')
 
     if request is not None:
         request.addfinalizer(stop_ioc)
 
-    if not pv_to_check:
-        return p
+    if pv_to_check:
+        poll_readiness(pv_to_check)
 
-    print(f'Checking PV {pv_to_check}')
-    for attempt in range(5):
+    return p
+
+
+def poll_readiness(pv_to_check, attempts=15):
+    logger.debug(f'Checking PV {pv_to_check}')
+    for attempt in range(attempts):
         try:
-            get(pv_to_check, timeout=1.0, verbose=True)
+            get(pv_to_check, timeout=1)
         except TimeoutError:
-            print(f'Still trying to connect to {pv_to_check}')
             continue
         else:
             break
     else:
-        raise TimeoutError("ioc fixture failed to start in 5 seconds.")
+        raise TimeoutError(f"ioc fixture failed to start in "
+                           f"{attempts} seconds (pv: {pv_to_check})")
 
-    return p
+
+def run_softioc(request, db, additional_db=None, **kwargs):
+    db_text = ca.benchmarking.make_database(db)
+
+    if additional_db is not None:
+        db_text = '\n'.join((db_text, additional_db))
+
+    ioc_handler = ca.benchmarking.IocHandler()
+    ioc_handler.setup_ioc(db_text=db_text, max_array_bytes='10000000',
+                          **kwargs)
+
+    request.addfinalizer(ioc_handler.teardown)
+
+    (pv_to_check, _), *_ = db
+    poll_readiness(pv_to_check)
+    return ioc_handler
+
 
 @pytest.fixture(scope='function')
 def prefix():
@@ -91,11 +122,65 @@ def prefix():
 
 
 @pytest.fixture(scope='function')
-def ioc(request):
-    # TODO Randomly generate a prefix and return it.
-    # TODO Use a special server specifically for tests.
-    return run_example_ioc('caproto.ioc_examples.type_varieties',
-                           request=request, pv_to_check='pi')
+def epics_base_ioc(prefix, request):
+    name = 'Waveform and standard record IOC'
+    db = {
+        ('{}waveform'.format(prefix), 'waveform'):
+            dict(FTVL='LONG', NELM=4000),
+        ('{}float'.format(prefix), 'ai'): dict(VAL=1),
+        ('{}enum'.format(prefix), 'bi'):
+            dict(VAL=1, ZNAM="zero", ONAM="one"),
+        ('{}str'.format(prefix), 'stringout'): dict(VAL='test'),
+        ('{}int'.format(prefix), 'longout'): dict(VAL=1),
+    }
+
+    macros = {'P': prefix}
+    handler = run_softioc(request, db,
+                          additional_db=ca.benchmarking.PYEPICS_TEST_DB,
+                          macros=macros)
+
+
+    process = handler.processes[-1]
+    def ioc_monitor():
+        process.wait()
+        logger.info('***********************************')
+        logger.info('********IOC process exited!********')
+        logger.info('******* Returned: %s ******', process.returncode)
+        logger.info('***********************************')
+
+    threading.Thread(target=ioc_monitor).start()
+    pvs = {pv[len(prefix):]: pv
+           for pv, rtype in db
+           }
+
+    return SimpleNamespace(process=process, prefix=prefix, name=name, pvs=pvs)
+
+
+@pytest.fixture(scope='function')
+def caproto_ioc(prefix, request):
+    name = 'Caproto type varieties example'
+    pvs = dict(int=prefix + 'int',
+               float=prefix + 'pi',
+               str=prefix + 'str',
+               enum=prefix + 'enum',
+               )
+    process = run_example_ioc('caproto.ioc_examples.type_varieties',
+                              request=request,
+                              pv_to_check=pvs['float'],
+                              args=(prefix,))
+    return SimpleNamespace(process=process, prefix=prefix, name=name, pvs=pvs)
+
+
+@pytest.fixture(params=['caproto', 'epics-base'], scope='function')
+def ioc(prefix, request):
+    'A fixture that runs more than one IOC: caproto, epics'
+    # Get a new prefix for each IOC type:
+    if request.param == 'caproto':
+        ioc_ = caproto_ioc(prefix, request)
+    elif request.param == 'epics-base':
+        ioc_ = epics_base_ioc(prefix, request)
+    ioc_.type = request.param
+    return ioc_
 
 
 def start_repeater():
@@ -103,7 +188,7 @@ def start_repeater():
     if _repeater_process is not None:
         return
 
-    print('Spawning repeater process')
+    logger.info('Spawning repeater process')
     _repeater_process = run_example_ioc('--script',
                                         args=['caproto-repeater', '--verbose'],
                                         request=None,
@@ -116,26 +201,26 @@ def stop_repeater():
     if _repeater_process is None:
         return
 
-    print('[Repeater] Sending Ctrl-C to the repeater')
+    logger.info('[Repeater] Sending Ctrl-C to the repeater')
     _repeater_process.send_signal(signal.SIGINT)
     _repeater_process.wait()
     _repeater_process = None
-    print('[Repeater] Repeater exited')
+    logger.info('[Repeater] Repeater exited')
 
 
 
 def default_setup_module(module):
-    print('-- default module setup {} --'.format(module.__name__))
+    logger.info('-- default module setup {} --'.format(module.__name__))
     start_repeater()
 
 
 def default_teardown_module(module):
-    print('-- default module teardown {} --'.format(module.__name__))
+    logger.info('-- default module teardown {} --'.format(module.__name__))
     stop_repeater()
 
 
 @pytest.fixture(scope='function')
-def curio_server():
+def curio_server(prefix):
     caget_pvdb = {
         'pi': ca.ChannelDouble(value=3.14,
                                lower_disp_limit=3.13,
@@ -179,19 +264,45 @@ def curio_server():
                                 reported_record_type='caproto'),
     }
 
-    async def run_server():
+    # tack on a unique prefix
+    caget_pvdb = {prefix + key: value
+                  for key, value in caget_pvdb.items()}
+
+    async def _server(pvdb):
         port = find_next_tcp_port(host=SERVER_HOST)
-        print('Server will be on', (SERVER_HOST, port))
-        ctx = server.Context(SERVER_HOST, port, caget_pvdb, log_level='DEBUG')
+        logger.info('Server will be on %s', (SERVER_HOST, port))
+        ctx = server.Context(SERVER_HOST, port, pvdb, log_level='DEBUG')
         try:
             await ctx.run()
+        except server.ServerExit:
+            logger.info('ServerExit caught; exiting')
         except Exception as ex:
-            print('Server failed', ex)
+            logger.exception('Server failed')
             raise
-        finally:
-            print('Server exiting')
 
-    return run_server, caget_pvdb
+    async def run_server(client, *, pvdb=caget_pvdb):
+        server_task = await curio.spawn(_server, pvdb, daemon=True)
+
+        try:
+            if hasattr(client, 'wait'):
+                # NOTE: wrapped by threaded_in_curio_wrapper
+                await curio.run_in_thread(client)
+                await client.wait()
+            else:
+                await client()
+        except server.ServerExit:
+            ...
+        finally:
+            await server_task.cancel()
+
+    return run_server, prefix, caget_pvdb
+
+
+async def get_curio_context(log_level='DEBUG'):
+    broadcaster = caproto.curio.client.SharedBroadcaster(log_level=log_level)
+
+    await broadcaster.register()
+    return caproto.curio.client.Context(broadcaster, log_level=log_level)
 
 
 def pytest_make_parametrize_id(config, val, argname):
@@ -260,3 +371,12 @@ def threaded_in_curio_wrapper(fcn):
 
     wrapped.wait = wait
     return wrapped
+
+
+def environment_epics_version():
+    'Return the reported environment being tested on'
+    if 'EPICS_BASE' in os.environ and 'BASE' in os.environ:
+        base = os.environ['BASE']
+        if base.startswith('R'):
+            major, minor = base[1:].split('.')[:2]
+            return int(major), int(minor)

@@ -6,8 +6,8 @@ import runpy
 
 if __name__ == '__main__':
     cov = coverage.process_startup()
-
-    cov._warn_no_data = True
+    if cov is not None:
+        cov._warn_no_data = True
     print({env: val
            for env, val in os.environ.items()
            if 'COVERAGE' in env})
@@ -26,7 +26,7 @@ if __name__ == '__main__':
         except KeyboardInterrupt:
             print('KeyboardInterrupt received on example_runner; exiting')
         else:
-            print('{script_path} exited cleanly')
+            print(f'{script_path} exited cleanly')
     else:
         print("--------------------------------------")
         print(f"Running {example_module} with coverage")
@@ -38,4 +38,4 @@ if __name__ == '__main__':
         except KeyboardInterrupt:
             print('KeyboardInterrupt received on example_runner; exiting')
         else:
-            print('{example_module} exited cleanly')
+            print(f'{example_module} exited cleanly')

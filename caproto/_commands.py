@@ -787,7 +787,7 @@ class RepeaterRegisterRequest(Message):
     ID = 24
     HAS_PAYLOAD = False
 
-    def __init__(self, client_address):
+    def __init__(self, client_address='0.0.0.0'):
         header = RepeaterRegisterRequestHeader(
             ipv4_to_int32(str(client_address)))
         super().__init__(header)

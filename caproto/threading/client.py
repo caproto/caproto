@@ -1,5 +1,4 @@
-import copy
-import functools
+import collections
 import itertools
 import logging
 import os
@@ -15,12 +14,41 @@ import errno
 import termios
 import inspect
 
-from collections import Iterable
+from collections import defaultdict
 
 import caproto as ca
+from .._constants import MAX_ID
+from .._utils import batch_requests, CaprotoError
 
 
-class ThreadingClientException(Exception):
+def ensure_connected(func):
+    def inner(self, *args, **kwargs):
+        with self._in_use:
+            self._usages += 1
+            # If needed, reconnect. Do this inside the lock so that we don't
+            # try to do this twice. (No other threads that need this lock
+            # can proceed until the connection is ready anyway!)
+            if self._idle or (self.circuit_manager and
+                              self.circuit_manager.dead):
+                self.context.reconnect(((self.name, self.priority),))
+                reconnect = True
+            else:
+                reconnect = False
+        try:
+            self._wait_for_connection()
+            if reconnect:
+                self.circuit_manager.send(*self._resubscribe())
+                self._idle = False
+            result = func(self, *args, **kwargs)
+        finally:
+            with self._in_use:
+                self._usages -= 1
+                self._in_use.notify_all()
+        return result
+    return inner
+
+
+class ThreadingClientException(CaprotoError):
     ...
 
 
@@ -28,8 +56,17 @@ class DisconnectedError(ThreadingClientException):
     ...
 
 
+class ContextDisconnectedError(ThreadingClientException):
+    ...
+
+
 AUTOMONITOR_MAXLENGTH = 65536
-STALE_SEARCH_THRESHOLD = 10.0
+STALE_SEARCH_EXPIRATION = 10.0
+TIMEOUT = 2
+SEARCH_MAX_DATAGRAM_BYTES = (0xffff - 16)
+EVENT_ADD_BATCH_MAX_BYTES = 2**16
+RETRY_SEARCHES_PERIOD = 1
+RESTART_SUBS_PERIOD = 0.1
 STR_ENC = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
 
 
@@ -37,7 +74,7 @@ logger = logging.getLogger(__name__)
 
 
 class SelectorThread:
-    def __init__(self):
+    def __init__(self, *, parent=None):
         self._running = False
         self.selector = selectors.DefaultSelector()
 
@@ -46,9 +83,13 @@ class SelectorThread:
         self.id_to_socket = {}
         self.socket_to_id = {}
 
-        self._register_sockets = []
-        self._unregister_sockets = []
+        self._register_sockets = set()
+        self._unregister_sockets = set()
         self._object_id = 0
+
+        if parent is not None:
+            # Stop the selector if the parent goes out of scope
+            self._parent = weakref.ref(parent, lambda obj: self.stop())
 
     @property
     def running(self):
@@ -66,44 +107,52 @@ class SelectorThread:
         self.thread = threading.Thread(target=self, daemon=True)
         self.thread.start()
 
-    def add_socket(self, socket, target_obj):
+    def add_socket(self, sock, target_obj):
         with self._socket_map_lock:
-            if socket in self.socket_to_id:
+            if sock in self.socket_to_id:
                 raise ValueError('Socket already added')
 
-            socket.setblocking(False)
+            sock.setblocking(False)
 
-            # assumption: only one socket per object
+            # assumption: only one sock per object
             self._object_id += 1
             self.objects[self._object_id] = target_obj
-            self.id_to_socket[self._object_id] = socket
-            self.socket_to_id[socket] = self._object_id
+            self.id_to_socket[self._object_id] = sock
+            self.socket_to_id[sock] = self._object_id
             weakref.finalize(target_obj,
                              lambda obj_id=self._object_id:
                              self._object_removed(obj_id))
-            self._register_sockets.append(socket)
+            self._register_sockets.add(sock)
+            # logger.debug('Socket %s was added (obj %s)', sock, target_obj)
 
     def remove_socket(self, sock):
         with self._socket_map_lock:
             if sock not in self.socket_to_id:
                 return
-
             obj_id = self.socket_to_id.pop(sock)
             del self.id_to_socket[obj_id]
             obj = self.objects.pop(obj_id, None)
             if obj is not None:
                 obj.received(b'', None)
-            self._unregister_sockets.append(sock)
 
-        if not self.socket_to_id:
-            self.stop()
+            if sock in self._register_sockets:
+                # removed before it was even added...
+                # logger.debug('Socket %s was removed before it was added '
+                #              '(obj = %s)', sock, obj)
+                self._register_sockets.remove(sock)
+            else:
+                # logger.debug('Socket %s was removed '
+                #              '(obj = %s)', sock, obj)
+                self._unregister_sockets.add(sock)
 
     def _object_removed(self, obj_id):
         with self._socket_map_lock:
             if obj_id in self.id_to_socket:
                 sock = self.id_to_socket.pop(obj_id)
+                # logger.debug('Object ID %s was destroyed: removing %s', obj_id,
+                #              sock)
                 del self.socket_to_id[sock]
-                self._unregister_sockets.append(sock)
+                self._unregister_sockets.add(sock)
 
     def __call__(self):
         '''Selector poll loop'''
@@ -120,7 +169,8 @@ class SelectorThread:
 
             events = self.selector.select(timeout=0.1)
             with self._socket_map_lock:
-                if self._unregister_sockets or self._register_sockets:
+                if self._unregister_sockets:
+                    # some sockets may be affected here; try again
                     continue
 
                 ready_ids = [self.socket_to_id[key.fileobj]
@@ -129,32 +179,60 @@ class SelectorThread:
                               for obj_id in ready_ids]
 
             for obj, sock in ready_objs:
-                # TODO: consider thread pool for recv and command_loop
+                if sock in self._unregister_sockets:
+                    continue
 
+                # TODO: consider thread pool for recv and command_loop
                 if fcntl.ioctl(sock, termios.FIONREAD, avail_buf) < 0:
                     continue
 
                 bytes_available = avail_buf[0]
 
                 try:
-                    bytes_recv, address = sock.recvfrom(max((4096,
-                                                             bytes_available)))
+                    bytes_recv, address = sock.recvfrom(
+                        max((4096, bytes_available)))
                 except OSError as ex:
-                    if ex.errno == errno.EAGAIN:
-                        continue
-                    bytes_recv, address = b'', None
+                    if ex.errno != errno.EAGAIN:
+                        # register as a disconnection
+                        # logger.error('Removing %s due to %s (%s)', obj, ex,
+                        #              ex.errno)
+                        self.remove_socket(sock)
+                    continue
 
-                obj.received(bytes_recv, address)
+                # Let objects handle disconnection by returning a failure here
+                if obj.received(bytes_recv, address) is ca.DISCONNECTED:
+                    # logger.debug('Removing %s = %s due to receive failure',
+                    #              sock, obj)
+                    self.remove_socket(sock)
+
+                    # TODO: consider adding specific DISCONNECTED instead of b''
+                    # sent to disconnected sockets
+
+        logger.debug('Selector loop exited')
 
 
 class SharedBroadcaster:
-    def __init__(self, *, log_level='ERROR'):
+    def __init__(self, *, log_level='ERROR', registration_retry_time=10.0):
+        '''
+        A broadcaster client which can be shared among multiple clients
+
+        Parameters
+        ----------
+        log_level : str, optional
+            The log level to use
+        registration_retry_time : float, optional
+            The time, in seconds, between attempts made to register with the
+            repeater
+        '''
         self.log_level = log_level
         self.udp_sock = None
         self._search_lock = threading.RLock()
+        self._retry_thread = None
+        self._retries_enabled = threading.Event()
 
+        self._id_counter = itertools.count(0)
         self.search_results = {}  # map name to (time, address)
-        self.unanswered_searches = {}  # map search id (cid) to name
+        self.unanswered_searches = {}  # map search id (cid) to (name, queue)
 
         self.listeners = weakref.WeakSet()
 
@@ -163,22 +241,78 @@ class SharedBroadcaster:
         self.command_bundle_queue = queue.Queue()
         self.command_cond = threading.Condition()
 
-        self.selector = SelectorThread()
+        self.selector = SelectorThread(parent=self)
         self.command_thread = threading.Thread(target=self.command_loop,
                                                daemon=True)
         self.command_thread.start()
 
-    def __create_sock(self):
+        self._registration_retry_time = registration_retry_time
+        self._registration_last_sent = 0
+
+        # When no listeners exist, automatically disconnect the broadcaster
+        self.disconnect_thread = None
+        self._disconnect_timer = None
+
+        try:
+            # Always attempt registration on initialization, but allow failures
+            self._register()
+        except Exception as ex:
+            logger.exception('Broadcaster registration failed on init')
+
+    def _should_attempt_registration(self):
+        'Whether or not a registration attempt should be tried'
+        if self.udp_sock is None:
+            return True
+
+        if (self.broadcaster.registered or
+                self._registration_retry_time is None):
+            return False
+
+        since_last_attempt = time.monotonic() - self._registration_last_sent
+        if since_last_attempt < self._registration_retry_time:
+            return False
+
+        return True
+
+    def _register(self):
+        'Send a registration request to the repeater'
+        if self.udp_sock is None:
+            self._create_sock()
+
+        self._registration_last_sent = time.monotonic()
+        command = self.broadcaster.register()
+
+        with self.command_cond:
+            self.send(ca.EPICS_CA2_PORT, command)
+            self._retries_enabled.set()
+
+    def new_id(self):
+        while True:
+            i = next(self._id_counter)
+            if i == MAX_ID:
+                self._id_counter = itertools.count(0)
+                continue
+            return i
+
+    def _create_sock(self):
         # UDP socket broadcasting to CA servers
         if self.udp_sock is not None:
-            self.selector.remove_socket(self.udp_sock)
+            udp_sock, self.udp_sock = self.udp_sock, None
+            self.selector.remove_socket(udp_sock)
+
         self.selector.start()
         self.udp_sock = ca.bcast_socket()
         self.selector.add_socket(self.udp_sock, self)
 
     def add_listener(self, listener):
-        self.listeners.add(listener)
-        weakref.finalize(listener, self._listener_removed)
+        with self._search_lock:
+            if self._retry_thread is None:
+                self._retry_thread = threading.Thread(
+                    target=self._retry_unanswered_searches, daemon=True)
+                self._retry_thread.start()
+
+            self.listeners.add(listener)
+            weakref.finalize(listener, self._listener_removed)
 
     def remove_listener(self, listener):
         try:
@@ -188,295 +322,485 @@ class SharedBroadcaster:
         finally:
             self._listener_removed()
 
+    def _disconnect_wait(self):
+        while len(self.listeners) == 0:
+            self._disconnect_timer -= 1
+            if self._disconnect_timer == 0:
+                logger.debug('Unused broadcaster, disconnecting')
+                self.disconnect()
+                break
+            time.sleep(1.0)
+
+        self.disconnect_thread = None
+
     def _listener_removed(self):
-        if not self.listeners:
-            self.disconnect()
+        with self._search_lock:
+            if not self.listeners:
+                self._disconnect_timer = 30
+                if self.disconnect_thread is None:
+                    self.disconnect_thread = threading.Thread(
+                        target=self._disconnect_wait, daemon=True)
+                    self.disconnect_thread.start()
 
     def disconnect(self, *, wait=True, timeout=2):
-        if self.udp_sock is not None:
-            self.selector.remove_socket(self.udp_sock)
+        with self.command_cond:
+            if self.udp_sock is not None:
+                self.selector.remove_socket(self.udp_sock)
 
-        with self._search_lock:
             self.search_results.clear()
-        self.udp_sock = None
-        self.broadcaster.disconnect()
-
-        # if wait and self.command_thread is not threading.current_thread():
-        #     self.command_thread.join()
+            self._registration_last_sent = 0
+            self._retries_enabled.clear()
+            self.udp_sock = None
+            self.broadcaster.disconnect()
 
     def send(self, port, *commands):
         """
         Process a command and transport it over the UDP socket.
         """
-        with self.command_cond:
-            bytes_to_send = self.broadcaster.send(*commands)
-            for host in ca.get_address_list():
-                if ':' in host:
-                    host, _, specified_port = host.partition(':')
-                    is_register = isinstance(commands[0],
-                                             ca.RepeaterRegisterRequest)
-                    if not self.registered and is_register:
-                        logger.debug('Specific IOC host/port designated in '
-                                     'address list: %s:%s.  Repeater '
-                                     'registration requirement ignored', host,
-                                     specified_port)
-                        with self.command_cond:
-                            # TODO how does this work with multiple addresses
-                            # listed?
-                            response = ca.RepeaterConfirmResponse(
-                                repeater_address='127.0.0.1')
-                            response.sender_address = ('127.0.0.1',
-                                                       ca.EPICS_CA1_PORT)
-                            self.command_bundle_queue.put([response])
-                            self.command_cond.notify_all()
-                        continue
-                    self.udp_sock.sendto(bytes_to_send, (host,
-                                                         int(specified_port)))
-                else:
-                    self.udp_sock.sendto(bytes_to_send, (host, port))
+        bytes_to_send = self.broadcaster.send(*commands)
+        for host in ca.get_address_list():
+            if ':' in host:
+                host, _, specified_port = host.partition(':')
+                self.udp_sock.sendto(bytes_to_send, (host,
+                                                     int(specified_port)))
+            else:
+                self.udp_sock.sendto(bytes_to_send, (host, port))
 
-    def register(self, *, wait=True, timeout=0.5, attempts=4):
-        "Register this client with the CA Repeater."
-        if self.registered:
+    def get_cached_search_result(self, name, *,
+                                 threshold=STALE_SEARCH_EXPIRATION):
+        'Returns address if found, raises KeyError if missing or stale.'
+        address, timestamp = self.search_results[name]
+        if time.monotonic() - timestamp > threshold:
+            # TODO this is very inefficient
+            for context in self.listeners:
+                for addr, cm in context.circuit_managers.items():
+                    if cm.connected and name in cm.all_created_pvnames:
+                        # A valid connection exists in one of our clients, so
+                        # ignore the stale result status
+                        self.search_results[name] = (address, time.monotonic())
+                        return address
+
+            # Clean up expired result.
+            self.search_results.pop(name, None)
+            raise KeyError(f'{name!r}: stale search result')
+
+        return address
+
+    def search(self, results_queue, names, *, timeout=2):
+        "Generate, process, and the transport a search request."
+        if self._should_attempt_registration():
+            self._register()
+
+        new_id = self.new_id
+        unanswered_searches = self.unanswered_searches
+
+        with self._search_lock:
+            # We have have already searched for these names recently.
+            # Filter `pv_names` down to a subset, `needs_search`.
+            needs_search = []
+            use_cached_search = defaultdict(list)
+            for name in names:
+                try:
+                    address = self.get_cached_search_result(name)
+                except KeyError:
+                    needs_search.append(name)
+                else:
+                    use_cached_search[address].append(name)
+
+            for addr, names in use_cached_search.items():
+                results_queue.put((address, names))
+
+            # Generate search_ids and stash them on Context state so they can
+            # be used to match SearchResponses with SearchRequests.
+            search_ids = []
+            for name in needs_search:
+                search_id = new_id()
+                search_ids.append(search_id)
+                unanswered_searches[search_id] = (name, results_queue)
+
+        if not needs_search:
             return
 
-        if self.udp_sock is None:
-            self.__create_sock()
-
-        with self.command_cond:
-            command = self.broadcaster.register('127.0.0.1')
-            self.send(ca.EPICS_CA2_PORT, command)
-
-        if wait:
-            for attempts in range(attempts):
-                with self.command_cond:
-                    done = self.command_cond.wait_for(lambda: self.registered,
-                                                      timeout)
-                    self.send(ca.EPICS_CA2_PORT, command)
-                if done:
-                    break
-            else:
-                raise TimeoutError('Failed to register with the broadcaster')
-
-    def search(self, name, *, wait=True, timeout=2):
-        "Generate, process, and the transport a search request."
-        if not self.registered:
-            self.register()
-        with self._search_lock:
-            if name in self.search_results:
-                address, timestamp = self.search_results[name]
-                if (time.time() - timestamp) < STALE_SEARCH_THRESHOLD:
-                    return address
-                else:
-                    # Discard any old search result for this name.
-                    self.search_results.pop(name, None)
-
-            ver_command, search_command = self.broadcaster.search(name)
-            # Stash the search ID for recognizes the SearchResponse later.
-            self.unanswered_searches[search_command.cid] = name
-            self.send(ca.EPICS_CA1_PORT, ver_command, search_command)
-        # Wait for the SearchResponse.
-        if wait:
-            with self.command_cond:
-                result_found = lambda: name in self.search_results
-                done = self.command_cond.wait_for(result_found, timeout)
-            if not done:
-                raise TimeoutError("No search result received for {}"
-                                   "".format(name))
-            address, timestamp = self.search_results[name]
-            return address
+        logger.debug('Searching for %r PVs....', len(needs_search))
+        requests = (ca.SearchRequest(name, search_id, 13)
+                    for name, search_id in zip(needs_search, search_ids))
+        for batch in batch_requests(requests, SEARCH_MAX_DATAGRAM_BYTES):
+            self.send(ca.EPICS_CA1_PORT, ca.VersionRequest(0, 13), *batch)
 
     def received(self, bytes_recv, address):
         "Receive and process and next command broadcasted over UDP."
-        commands = self.broadcaster.recv(bytes_recv, address)
-        self.command_bundle_queue.put(commands)
+        if bytes_recv:
+            commands = self.broadcaster.recv(bytes_recv, address)
+            if commands:
+                self.command_bundle_queue.put(commands)
+
         return 0
 
     def command_loop(self):
+        # Receive commands in 'bundles' (corresponding to the contents of one
+        # UDP datagram). Match SearchResponses to their SearchRequests, and
+        # put (address, (name1, name2, name3, ...)) into a queue. The receiving
+        # end of that queue is held by Context._process_search_results.
+
+        # Save doing a 'self' lookup in the inner loop.
+        search_results = self.search_results
+        unanswered_searches = self.unanswered_searches
+        queues = defaultdict(list)
+
         while True:
             commands = self.command_bundle_queue.get()
+
             try:
                 self.broadcaster.process_commands(commands)
             except ca.CaprotoError as ex:
                 logger.warning('Broadcaster command error', exc_info=ex)
                 continue
 
-            with self.command_cond:
-                for command in commands:
-                    if isinstance(command, ca.VersionResponse):
-                        # Check that the server version is one we can talk to.
-                        if command.version <= 11:
-                            logger.warning('Version response <= 11: %r',
-                                           command)
-                    if isinstance(command, ca.SearchResponse):
-                        with self._search_lock:
-                            name = self.unanswered_searches.get(command.cid,
-                                                                None)
-                            if name is not None:
-                                self.search_results[name] = (
-                                    ca.extract_address(command), time.time())
-                                self.unanswered_searches.pop(command.cid)
-                            else:
-                                # This is a redundant response, which the spec
-                                # tell us we must ignore.
-                                pass
+            queues.clear()
+            now = time.monotonic()
+            for command in commands:
+                if isinstance(command, ca.VersionResponse):
+                    # Check that the server version is one we can talk to.
+                    if command.version <= 11:
+                        logger.warning('Version response <= 11: %r', command)
+                elif isinstance(command, ca.SearchResponse):
+                    cid = command.cid
+                    try:
+                        name, queue = unanswered_searches.pop(cid)
+                    except KeyError:
+                        # This is a redundant response, which the EPICS
+                        # spec tells us to ignore. (The first responder
+                        # to a given request wins.)
+                        pass
+                    else:
+                        address = ca.extract_address(command)
+                        queues[queue].append(name)
+                        # Cache this to save time on future searches.
+                        # (Entries expire after STALE_SEARCH_EXPIRATION.)
+                        logger.debug('Found %s at %s', name, address)
+                        search_results[name] = (address, now)
+            # Send the search results to the Contexts that asked for
+            # them. This is probably more general than is has to be but
+            # I'm playing it safe for now.
+            if queues:
+                for queue, names in queues.items():
+                    queue.put((address, names))
+
+                with self.command_cond:
                     self.command_cond.notify_all()
 
-    @property
-    def registered(self):
-        return self.broadcaster.registered
+    def _retry_unanswered_searches(self):
+        logger.debug('Search-retry thread started.')
+        while True:  # self.listeners:
+            try:
+                self._retries_enabled.wait(0.5)
+            except TimeoutError:
+                continue
+
+            t = time.monotonic()
+            items = list(self.unanswered_searches.items())
+            requests = (ca.SearchRequest(name, search_id, 13)
+                        for search_id, (name, _) in
+                        items)
+
+            if not self._retries_enabled.is_set():
+                continue
+
+            if items:
+                logger.debug('Retrying searches for %d PVs', len(items))
+
+            for batch in batch_requests(requests,
+                                        SEARCH_MAX_DATAGRAM_BYTES):
+                self.send(ca.EPICS_CA1_PORT, ca.VersionRequest(0, 13), *batch)
+
+            time.sleep(max(0, RETRY_SEARCHES_PERIOD - (time.monotonic() - t)))
+
+        logger.debug('Search-retry thread exiting.')
 
     def __del__(self):
         try:
             self.disconnect()
+            self.selector = None
         except AttributeError:
             pass
 
 
 class Context:
-    "Wraps a Broadcaster, and cache of VirtualCircuits."
-    __slots__ = ('broadcaster', 'circuits', 'log_level', 'selector',
-                 '__weakref__')
-
-    def __init__(self, broadcaster, *, log_level='ERROR'):
+    "Wraps Broadcaster and a cache of VirtualCircuits"
+    def __init__(self, broadcaster, *, log_level='DEBUG'):
         self.log_level = log_level
         self.broadcaster = broadcaster
-        self.circuits = {}  # map (address, priority) to VirtualCircuit
-        self.selector = None
-
-    def register(self):
-        "Register this client with the CA Repeater."
+        self.search_condition = threading.Condition()
+        self.pv_state_lock = threading.RLock()
+        self.resuscitated_pvs = []
+        self.circuit_managers = {}  # keyed on address
+        self.pvs = {}  # (name, priority) -> pv
+        # name -> set of pvs  --- with varied priority
+        self.pvs_by_name = defaultdict(weakref.WeakSet)
         self.broadcaster.add_listener(self)
-        self.broadcaster.register()
+        self._search_results_queue = queue.Queue()
+        logger.debug('Context: start process search results loop')
+        self._search_thread = threading.Thread(
+            target=self._process_search_results_loop,
+            daemon=True)
+        self._search_thread.start()
 
-    def search(self, name):
-        "Generate, process, and the transport a search request."
-        return self.broadcaster.search(name)
+        logger.debug('Context: start restart_subscriptions loop')
+        self._restart_sub_thread = threading.Thread(
+            target=self._restart_subscriptions,
+            daemon=True)
+        self._restart_sub_thread.start()
 
-    def get_circuit(self, address, priority):
+        self.selector = SelectorThread(parent=self)
+        self.selector.start()
+        self._user_disconnected = False
+
+    def get_pvs(self, *names, priority=0, connection_state_callback=None):
         """
-        Return a VirtualCircuit with this address, priority.
+        Return a list of PV objects.
+
+        These objects may not be connected at first. Channel creation occurs on
+        a background thread.
+        """
+        if self._user_disconnected:
+            raise ContextDisconnectedError("This Context is no longer usable.")
+        pvs = []  # list of all PV objects to return
+        names_to_search = []  # subset of names that we need to search for
+        for name in names:
+            try:
+                pv = self.pvs[(name, priority)]
+            except KeyError:
+                pv = PV(name, priority, self, connection_state_callback)
+                self.pvs[(name, priority)] = pv
+                self.pvs_by_name[name].add(pv)
+                names_to_search.append(name)
+            else:
+                # Re-using a PV instance. Add a new connection state callback,
+                # if necessary:
+                logger.debug('Reusing PV instance for %r', name)
+                if connection_state_callback:
+                    pv.connection_state_callback.add_callback(
+                        connection_state_callback)
+
+            pvs.append(pv)
+
+        # TODO: potential bug?
+        # if callback is quick, is there a chance downstream listeners may
+        # never receive notification?
+
+        # Ask the Broadcaster to search for every PV for which we do not
+        # already have an instance. It might already have a cached search
+        # result, but that is the concern of broadcaster.search.
+        self.broadcaster.search(self._search_results_queue, names_to_search)
+        return pvs
+
+    def reconnect(self, keys):
+        # We will reuse the same PV object but use a new cid.
+        names = []
+        pvs = []
+        with self.pv_state_lock:
+            for key in keys:
+                pv = self.pvs[key]
+                pv.circuit_manager = None
+                pv.channel = None
+                pvs.append(pv)
+                name, _ = key
+                names.append(name)
+                # If there is a cached search result for this name, expire it.
+                self.broadcaster.search_results.pop(name, None)
+
+            self.resuscitated_pvs.extend(
+                [pv for pv in pvs if pv.subscriptions])
+
+        self.broadcaster.search(self._search_results_queue, names)
+
+    def _process_search_results_loop(self):
+        # Receive (address, (name1, name2, ...)). The sending side of this
+        # queue is held by SharedBroadcaster.command_loop.
+        while True:
+            address, names = self._search_results_queue.get()
+            channels = collections.deque()
+            with self.pv_state_lock:
+                # Assign each PV a VirtualCircuitManager for managing a socket
+                # and tracking circuit state, as well as a ClientChannel for
+                # tracking channel state.
+                for name in names:
+                    pvs = self.pvs_by_name[name]
+                    for pv in pvs:
+                        if (pv.circuit_manager is not None and
+                                not pv.circuit_manager.dead):
+                            # This one is already set up. Skip it.
+                            continue
+
+                        # Get (make if necessary) a VirtualCircuitManager. This
+                        # is where TCP socket creation happens.
+                        cm = self.get_circuit_manager(address, pv.priority)
+                        circuit = cm.circuit
+
+                        pv.circuit_manager = cm
+                        # TODO: NOTE: we are not following the suggestion to
+                        # use the same cid as in the search. This simplifies
+                        # things between the broadcaster and Context.
+                        cid = cm.circuit.new_channel_id()
+                        chan = ca.ClientChannel(name, circuit, cid=cid)
+                        cm.channels[cid] = chan
+                        cm.pvs[cid] = pv
+                        pv.channel = chan
+                        channels.append(chan)
+
+            # Notify PVs that they now have a circuit_manager. This will
+            # un-block a wait() in the PV.wait_for_search() method.
+            with self.search_condition:
+                self.search_condition.notify_all()
+
+            # Initiate channel creation with the server.
+            cm.send(*(chan.create() for chan in channels))
+
+    def get_circuit_manager(self, address, priority):
+        """
+        Return a VirtualCircuitManager for this address, priority. (It manages
+        a caproto.VirtualCircuit and a TCP socket.)
 
         Make a new one if necessary.
         """
-        if self.selector is None:
-            self.selector = SelectorThread()
+        cm = self.circuit_managers.get((address, priority), None)
+        if cm is None or cm.dead:
+            circuit = ca.VirtualCircuit(our_role=ca.CLIENT, address=address,
+                                        priority=priority)
+            cm = VirtualCircuitManager(self, circuit, self.selector)
+            cm.circuit.log.setLevel(self.log_level)
+            self.circuit_managers[(address, priority)] = cm
+        return cm
 
-        self.selector.start()
+    def _restart_subscriptions(self):
+        while True:
+            t = time.monotonic()
+            ready = defaultdict(list)
+            with self.pv_state_lock:
+                pvs = list(self.resuscitated_pvs)
+                self.resuscitated_pvs.clear()
+                for pv in pvs:
+                    if pv.connected:
+                        ready[pv.circuit_manager].append(pv)
+                    else:
+                        self.resuscitated_pvs.append(pv)
 
-        circuit = self.circuits.get((address, priority), None)
-        if circuit is None or not circuit.connected:
-            circuit = VirtualCircuit(ca.VirtualCircuit(our_role=ca.CLIENT,
-                                                       address=address,
-                                                       priority=priority,
-                                                       ),
-                                     selector=self.selector)
-            circuit.circuit.log.setLevel(self.log_level)
-            self.circuits[(address, priority)] = circuit
-        return circuit
+            for cm, pvs in ready.items():
+                def requests():
+                    for pv in pvs:
+                        yield from pv._resubscribe()
 
-    def create_channel(self, name, priority=0, *, wait=True, timeout=2):
-        """
-        Create a new channel.
-        """
-        address = self.broadcaster.search(name)
+                for batch in batch_requests(requests(),
+                                            EVENT_ADD_BATCH_MAX_BYTES):
+                    cm.send(*batch)
 
-        circuit = self.get_circuit(address, priority)
-        cid = circuit.circuit.new_channel_id()
-        cachan = ca.ClientChannel(name, circuit.circuit, cid=cid)
-        chan = circuit.channels[cid] = Channel(circuit, cachan)
-
-        with circuit.new_command_cond:
-            if circuit.circuit.states[ca.SERVER] is ca.IDLE:
-                circuit.create_connection()
-                circuit.send(cachan.version(),
-                             cachan.host_name(),
-                             cachan.client_name())
-        cond = circuit.new_command_cond
-        with cond:
-            done = cond.wait_for(lambda: circuit.connected, timeout)
-            if not done:
-                raise TimeoutError("Circuit with server at {} did not "
-                                   "connected within {}-second timeout."
-                                   "".format(address, timeout))
-
-        # do not need to lock here, take care of in send method
-        circuit.send(cachan.create())
-
-        if wait:
-            chan.wait_for_connection()
-
-        return chan
+            time.sleep(max(0, RESTART_SUBS_PERIOD - (time.monotonic() - t)))
 
     def disconnect(self, *, wait=True, timeout=2):
+        self._user_disconnected = True
         try:
             # disconnect any circuits we have
-            for circ in list(self.circuits.values()):
-                if circ.connected:
-                    circ.disconnect(wait=wait, timeout=timeout)
+            circuits = list(self.circuit_managers.values())
+            total_circuits = len(circuits)
+            for idx, circuit in enumerate(circuits, 1):
+                if circuit.connected:
+                    logger.debug('Disconnecting circuit %d/%d: %s',
+                                 idx, total_circuits, circuit)
+                    circuit.disconnect(wait=wait, timeout=timeout)
+                    logger.debug('... Circuit %d disconnect complete.', idx)
+                else:
+                    logger.debug('Circuit %d/%d was already disconnected: %s',
+                                 idx, total_circuits, circuit)
+            logger.debug('All circuits disconnected')
         finally:
             # clear any state about circuits and search results
-            self.circuits.clear()
+            logger.debug('Clearing circuit managers')
+            self.circuit_managers.clear()
 
             # disconnect the underlying state machine
+            logger.debug('Removing Context from the broadcaster')
             self.broadcaster.remove_listener(self)
+
+            logger.debug('Disconnection complete')
 
     def __del__(self):
         try:
             self.disconnect(wait=False)
-        except (KeyError, AttributeError):
-            pass
-            # clean-up on deletion is best effort...
-            # TODO tacaswell
+        except Exception:
+            ...
+        finally:
+            self.selector = None
+            self.broadcaster = None
+            self.circuit_managers = None
 
 
-class VirtualCircuit:
-    __slots__ = ('circuit', 'channels', 'ioids', 'subscriptionids',
-                 'new_command_cond', 'socket', 'selector',
-                 '__weakref__')
+class VirtualCircuitManager:
+    __slots__ = ('context', 'circuit', 'channels', 'ioids', 'subscriptions',
+                 '_user_disconnected', 'new_command_cond', 'socket',
+                 'selector', 'pvs', 'all_created_pvnames', '__weakref__')
 
-    def __init__(self, circuit, selector):
+    def __init__(self, context, circuit, selector, timeout=TIMEOUT):
+        self.context = context
         self.circuit = circuit  # a caproto.VirtualCircuit
         self.channels = {}  # map cid to Channel
+        self.pvs = {}  # map cid to PV
         self.ioids = {}  # map ioid to Channel
-        self.subscriptionids = {}  # map subscriptionid to Channel
+        self.subscriptions = {}  # map subscriptionid to Subscription
         self.new_command_cond = threading.Condition()
         self.socket = None
-
         self.selector = selector
+        self._user_disconnected = False
+
+        # keep track of all PV names that are successfully connected to within
+        # this circuit. This is to be cleared upon disconnection:
+        self.all_created_pvnames = []
+
+        # Connect.
+        with self.new_command_cond:
+            if self.connected:
+                return
+            if self.circuit.states[ca.SERVER] is ca.IDLE:
+                self.socket = socket.create_connection(self.circuit.address)
+                self.selector.add_socket(self.socket, self)
+                self.send(ca.VersionRequest(self.circuit.priority, 13),
+                          ca.HostNameRequest('foo'),  # TODO: hehe
+                          ca.ClientNameRequest('bar'))
+            else:
+                raise RuntimeError("Cannot connect. States are {} "
+                                   "".format(self.circuit.states))
+            if not self.new_command_cond.wait_for(lambda: self.connected,
+                                                  timeout):
+                raise TimeoutError("Circuit with server at {} did not "
+                                   "connected within {}-second timeout."
+                                   "".format(self.circuit.address, timeout))
+
+    def __repr__(self):
+        return (f"<VirtualCircuitManager circuit={self.circuit} "
+                f"pvs={len(self.pvs)} ioids={len(self.ioids)} "
+                f"subscriptions={len(self.subscriptions)}>")
 
     @property
     def connected(self):
-        with self.new_command_cond:
-            return self.circuit.states[ca.CLIENT] is ca.CONNECTED
+        return self.circuit.states[ca.CLIENT] is ca.CONNECTED
 
-    def create_connection(self):
-        # TODO check removed
-        # if self.sock_thread is not None:
-        #     raise RuntimeError('trying to reuse a VC')
-        self.socket = socket.create_connection(self.circuit.address)
-        self.selector.add_socket(self.socket, self)
+    @property
+    def dead(self):
+        return self.socket is None
+
+    def _socket_send(self, buffers_to_send):
+        'Send a list of buffers over the socket'
+        try:
+            return self.socket.sendmsg(buffers_to_send)
+        except BlockingIOError:
+            raise ca.SendAllRetry()
 
     def send(self, *commands):
         with self.new_command_cond:
             # turn the crank on the caproto
             buffers_to_send = self.circuit.send(*commands)
-            # send bytes over the wire
 
-            gen = ca.incremental_buffer_list_slice(*buffers_to_send)
-            # prime the generator
-            gen.send(None)
-
-            while buffers_to_send:
-                try:
-                    sent = self.socket.sendmsg(buffers_to_send)
-                except BlockingIOError:
-                    continue
-                try:
-                    buffers_to_send = gen.send(sent)
-                except StopIteration:
-                    # finished sending
-                    break
+            # send bytes over the wire using some caproto utilities
+            ca.send_all(buffers_to_send, self._socket_send)
 
     def received(self, bytes_recv, address):
         """Receive and process and next command from the virtual circuit.
@@ -487,6 +811,9 @@ class VirtualCircuit:
         for c in commands:
             self._process_command(c)
 
+        if not bytes_recv:
+            # Tell the selector to remove our socket
+            return ca.DISCONNECTED
         return num_bytes_needed
 
     def _process_command(self, command):
@@ -510,9 +837,7 @@ class VirtualCircuit:
 
         with self.new_command_cond:
             if command is ca.DISCONNECTED:
-                # if we are here something else has triggered the
-                # disconnect.
-                pass
+                self._disconnected()
             elif isinstance(command, ca.ReadNotifyResponse):
                 chan = self.ioids.pop(command.ioid)
                 chan.process_read_notify(command)
@@ -520,20 +845,45 @@ class VirtualCircuit:
                 chan = self.ioids.pop(command.ioid)
                 chan.process_write_notify(command)
             elif isinstance(command, ca.EventAddResponse):
-                chan = self.subscriptionids[command.subscriptionid]
-                chan.process_subscription(command)
+                sub = self.subscriptions[command.subscriptionid]
+                sub.process(command)
             elif isinstance(command, ca.EventCancelResponse):
-                self.subscriptionids.pop(command.subscriptionid)
-
+                self.subscriptions.pop(command.subscriptionid)
+            elif isinstance(command, ca.CreateChanResponse):
+                pv = self.pvs[command.cid]
+                chan = self.channels[command.cid]
+                pv.connection_state_changed('connected', chan)
+                self.all_created_pvnames.append(pv.name)
+            elif isinstance(command, (ca.ServerDisconnResponse,
+                                      ca.ClearChannelResponse)):
+                pv = self.pvs[command.cid]
+                pv.connection_state_changed('disconnected', None)
+                # NOTE: pv remains valid until server goes down
             self.new_command_cond.notify_all()
 
-    def disconnect(self, *, wait=True, timeout=2.0):
-        for cid, ch in list(self.channels.items()):
-            ch.disconnect(wait=wait, timeout=timeout)
-            self.channels.pop(cid)
-
+    def _disconnected(self):
         with self.new_command_cond:
+            logger.debug('Entered VCM._disconnected')
+            # Ensure that this method is idempotent.
+            self.all_created_pvnames.clear()
+            for pv in self.pvs.values():
+                pv.connection_state_changed('disconnected', None)
+            # Update circuit state. This will be reflected on all PVs, which
+            # continue to hold a reference to this disconnected circuit.
             self.circuit.disconnect()
+            # Remove VirtualCircuitManager from Context.
+            # This will cause all future calls to Context.get_circuit_manager()
+            # to create a fresh VirtualCiruit and VirtualCircuitManager.
+            self.context.circuit_managers.pop(self.circuit.address, None)
+
+        if not self._user_disconnected:
+            # If the user didn't request disconnection, kick off attempt to
+            # reconnect all PVs via fresh circuit(s).
+            logger.debug('VCM: Attempting reconnection')
+            self.context.reconnect(((chan.name, chan.circuit.priority)
+                                    for chan in self.channels.values()))
+
+        # Clean up the socket if it has not yet been cleared:
         sock = self.socket
         if sock is not None:
             self.selector.remove_socket(sock)
@@ -542,10 +892,36 @@ class VirtualCircuit:
                 sock.close()
             except OSError:
                 pass
-            self.socket = None
 
-        self.channels.clear()
-        self.ioids.clear()
+    def disconnect(self, *, wait=True, timeout=2.0):
+        self._user_disconnected = True
+        self._disconnected()
+        if self.socket is None:
+            return
+
+        sock, self.socket = self.socket, None
+        try:
+            sock.shutdown(socket.SHUT_WR)
+        except OSError as ex:
+            pass
+
+        if wait:
+            states = self.circuit.states
+
+            def is_disconnected():
+                return states[ca.CLIENT] is ca.DISCONNECTED
+
+            with self.new_command_cond:
+                done = self.new_command_cond.wait_for(is_disconnected, timeout)
+
+            if not done:
+                # TODO: this may actually happen due to a long backlog of
+                # incoming data, but may not be critical to wait for...
+                raise TimeoutError(f"Server did not respond to disconnection "
+                                   f"attempt within {timeout}-second timeout."
+                                   )
+
+            logger.debug('Circuit manager disconnected')
 
     def __del__(self):
         try:
@@ -554,53 +930,68 @@ class VirtualCircuit:
             pass
 
 
-class Channel:
+class PV:
     """Wraps a VirtualCircuit and a caproto.ClientChannel."""
-    __slots__ = ('circuit', 'channel', 'last_reading', 'monitoring_tasks',
-                 '_callback', '_read_notify_callback', 'command_bundle_queue',
-                 '_write_notify_callback', '_pc_callbacks')
+    __slots__ = ('name', 'priority', 'context', 'circuit_manager', 'channel',
+                 'last_reading', 'last_writing', '_read_notify_callback',
+                 'subscriptions', 'command_bundle_queue',
+                 '_write_notify_callback', '_idle', '_in_use', '_usages',
+                 'connection_state_callback', '_pc_callbacks', '__weakref__')
 
-    def __init__(self, circuit, channel):
-        self.circuit = circuit  # a VirtualCircuit
-        self.channel = channel  # a caproto.ClientChannel
+    def __init__(self, name, priority, context, connection_state_callback):
+        """
+        These must be instantiated by a Context, never directly.
+        """
+        self.name = name
+        self.priority = priority
+        self.context = context
+        self.connection_state_callback = CallbackHandler(self)
+
+        if connection_state_callback is not None:
+            self.connection_state_callback.add_callback(
+                connection_state_callback)
+
+        self.circuit_manager = None
+        self.channel = None
         self.last_reading = None
-        self.monitoring_tasks = {}  # maps subscriptionid to curio.Task
-        self._callback = None  # user func to call when subscriptions are run
-        self._read_notify_callback = None  # func to call on ReadNotifyResponse
-        self._write_notify_callback = None  # func to call on WriteNotifyResponse
+        self.last_writing = None
+        self.subscriptions = []
+        self._read_notify_callback = None  # called on ReadNotifyResponse
+        self._write_notify_callback = None  # called on WriteNotifyResponse
         self._pc_callbacks = {}
+        self._idle = False
+        self._in_use = threading.Condition()
+        self._usages = 0
+
+    def connection_state_changed(self, state, channel):
+        logger.debug('%s Connection state changed %s %s', self.name, state,
+                     channel)
+        # PV is responsible for updating its channel attribute.
+        self.channel = channel
+
+        self.connection_state_callback.process(self, state)
+
+    def __repr__(self):
+        if self._idle:
+            state = "(idle)"
+        elif self.circuit_manager is None:
+            state = "(searching....)"
+        else:
+            state = (f"address={self.circuit_manager.circuit.address}, "
+                     f"circuit_state="
+                     f"{self.circuit_manager.circuit.states[ca.CLIENT]}")
+            if self.connected:
+                state += f", channel_state={self.channel.states[ca.CLIENT]}"
+            else:
+                state += " (creating...)"
+        return f"<PV name={self.name!r} priority={self.priority} {state}>"
 
     @property
     def connected(self):
-        with self.circuit.new_command_cond:
-            return self.channel.states[ca.CLIENT] is ca.CONNECTED
-
-    def register_user_callback(self, func):
-        """
-        Func to be called when a subscription receives a new EventAdd command.
-
-        This function will be called by a Task in the main thread. If ``func``
-        needs to do CPU-intensive or I/O-related work, it should execute that
-        work in a separate thread of process.
-        """
-        if inspect.ismethod(func):
-            self._callback = weakref.WeakMethod(func, self._callback_cleared)
-        else:
-            self._callback = weakref.ref(func, self._callback_cleared)
-
-    def _callback_cleared(self, ref):
-        self._callback = None
-
-    def process_subscription(self, event_add_command):
-        if self._callback is None:
-            return
-
-        user_callback = self._callback()
-        if user_callback is not None:
-            try:
-                user_callback(event_add_command)
-            except Exception as ex:
-                print(ex)
+        channel = self.channel
+        if channel is None:
+            return False
+        return channel.states[ca.CLIENT] is ca.CONNECTED
 
     def process_read_notify(self, read_notify_command):
         self.last_reading = read_notify_command
@@ -614,6 +1005,8 @@ class Channel:
                 print(ex)
 
     def process_write_notify(self, write_notify_command):
+        self.last_writing = write_notify_command
+
         pc_cb = self._pc_callbacks.pop(write_notify_command.ioid, None)
         if pc_cb is not None:
             try:
@@ -628,49 +1021,106 @@ class Channel:
             except Exception as ex:
                 print(ex)
 
-    def wait_for_connection(self, *, timeout=2):
-        """Wait for this Channel to be connected, ready to use.
-
-        The method ``Context.create_channel`` spawns an asynchronous task to
-        initialize the connection in the fist place. This method waits for it
-        to complete.
+    def wait_for_search(self, *, timeout=2):
         """
-        if self.connected:
-            return
-        cond = self.circuit.new_command_cond
-        with cond:
-            done = cond.wait_for(lambda: self.connected, timeout)
-        if not done:
-            raise TimeoutError("Server at {} did not respond to attempt "
-                               "to create channel named {} within {}-second "
-                               "timeout."
-                               "".format(self.circuit.address,
-                                         self.channel.name,
-                                         timeout))
+        Wait for this PV to be found.
 
-    def disconnect(self, *, wait=True, timeout=2):
-        "Disconnect this Channel."
-        with self.circuit.new_command_cond:
-            if self.connected:
-                try:
-                    self.circuit.send(self.channel.disconnect())
-                except OSError:
-                    # the socket is dead-dead, return
-                    return
-            else:
+        This does not wait for the PV's Channel to be created; it merely waits
+        for an address (and a VirtualCircuit) to be assigned.
+
+        Parameters
+        ----------
+        timeout : float
+            Seconds before a TimeoutError is raised. Default is 2.
+        """
+        search_cond = self.context.search_condition
+        with search_cond:
+            if self.circuit_manager is not None:
                 return
-        if wait:
-            is_closed = lambda: self.channel.states[ca.CLIENT] is ca.CLOSED
-            cond = self.circuit.new_command_cond
-            with cond:
-                done = cond.wait_for(is_closed, timeout)
-            if not done:
-                raise TimeoutError("Server at {} did not respond to attempt "
-                                   "to close channel named {} within {}-second"
-                                   " timeout."
-                                   "".format(self.circuit.address, self.name,
-                                             timeout))
+            done = search_cond.wait_for(
+                lambda: self.circuit_manager is not None,
+                timeout)
+        if not done:
+            raise TimeoutError("No servers responded to a search for a "
+                               "channel named {!r} within {}-second "
+                               "timeout."
+                               "".format(self.name, timeout))
 
+    @ensure_connected
+    def wait_for_connection(self, *, timeout=2):
+        self._wait_for_connection(timeout=timeout)
+
+    def _wait_for_connection(self, *, timeout=2):
+        """
+        Wait for this PV to be connected, ready to use.
+
+        Parameters
+        ----------
+        timeout : float
+            Seconds before a TimeoutError is raised. Default is 2.
+        """
+        if self.circuit_manager is None:
+            self.wait_for_search(timeout=timeout)
+        with self.circuit_manager.new_command_cond:
+            if self.connected:
+                return
+            done = self.circuit_manager.new_command_cond.wait_for(
+                lambda: self.connected, timeout)
+        if not done:
+                raise TimeoutError(
+                    f"Server at {self.circuit_manager.circuit.address} did "
+                    f"not respond to attempt to create channel named "
+                    f"{self.name!r} within {timeout}-second timeout."
+                )
+
+    def go_idle(self):
+        """Request to clear this Channel to reduce load on client and server.
+
+        A new Channel will be automatically, silently created the next time any
+        method requiring a connection is called. Thus, this saves some memory
+        in exchange for making the next request a bit slower, as it has to
+        redo the handshake with the server first.
+
+        If there are any active subscriptions, this request will be ignored. If
+        the PV is in the process of connecting, this request will be ignored.
+        If there are any actions in progress (read, write) this request will be
+        processed when they are complete.
+        """
+        if self.subscriptions:
+            return
+        if not self.circuit_manager:
+            return
+
+        with self._in_use:
+            # Wait until no other methods that employ @self.ensure_connected
+            # are in process.
+            self._in_use.wait_for(lambda: self._usages == 0)
+            # No other threads are using the connection, and we are holding the
+            # self._in_use Condition's lock, so we can safely close the
+            # connection. The next thread to acquire the lock will re-connect
+            # after it acquires the lock.
+            with self.circuit_manager.new_command_cond:
+                if not self.connected:
+                    return
+
+            try:
+                self.circuit_manager.send(self.channel.disconnect())
+            except OSError:
+                # the socket is dead-dead, do nothing
+                ...
+            self._idle = True
+
+    def _resubscribe(self):
+        for sub in self.subscriptions:
+            command = self.channel.subscribe(*sub.sub_args, **sub.sub_kwargs)
+            # Update Subscription object with new id.
+            subscriptionid = command.subscriptionid
+            sub.subscriptionid = subscriptionid
+            # Let the circuit_manager match future responses to this request.
+            self.circuit_manager.subscriptions[subscriptionid] = sub
+            yield command
+
+    @ensure_connected
     def read(self, *args, timeout=2, **kwargs):
         """Request a fresh reading, wait for it, return it and stash it.
 
@@ -679,837 +1129,180 @@ class Channel:
         """
         # need this lock because the socket thread could be trying to
         # update this channel due to an incoming message
-        with self.circuit.new_command_cond:
+        if not self.connected:
+            raise DisconnectedError()
+
+        with self.circuit_manager.new_command_cond:
             command = self.channel.read(*args, **kwargs)
         # Stash the ioid to match the response to the request.
         ioid = command.ioid
-        self.circuit.ioids[ioid] = self
-        # do not need lock here, happens in send
-        self.circuit.send(command)
-        has_reading = lambda: ioid not in self.circuit.ioids
-        cond = self.circuit.new_command_cond
-        with cond:
-            done = cond.wait_for(has_reading, timeout)
+        self.circuit_manager.ioids[ioid] = self
+        # TODO: circuit_manager can be removed from underneath us here
+        self.circuit_manager.send(command)
+
+        def has_reading():
+            return ioid not in self.circuit_manager.ioids
+
+        with self.circuit_manager.new_command_cond:
+            done = self.circuit_manager.new_command_cond.wait_for(has_reading,
+                                                                  timeout)
         if not done:
-            raise TimeoutError("Server at {} did not respond to attempt "
-                               "to read channel named {} within {}-second "
-                               "timeout."
-                               "".format(self.circuit.address,
-                                         self.name, timeout))
+            raise TimeoutError(
+                f"Server at {self.circuit_manager.circuit.address} did "
+                f"not respond to attempt to read channel named "
+                f"{self.name!r} within {timeout}-second timeout."
+            )
         return self.last_reading
 
+    @ensure_connected
     def write(self, *args, wait=True, cb=None, timeout=2, **kwargs):
         "Write a new value and await confirmation from the server."
-        with self.circuit.new_command_cond:
+        with self.circuit_manager.new_command_cond:
             command = self.channel.write(*args, **kwargs)
         # Stash the ioid to match the response to the request.
         ioid = command.ioid
-        self.circuit.ioids[ioid] = self
+        self.circuit_manager.ioids[ioid] = self
         if cb is not None:
             self._pc_callbacks[ioid] = cb
         # do not need to lock this, locking happens in circuit command
-        self.circuit.send(command)
-        has_reading = lambda: ioid not in self.circuit.ioids
-        cond = self.circuit.new_command_cond
-        with cond:
-            done = cond.wait_for(has_reading, timeout)
-        if not done:
-            raise TimeoutError("Server at {} did not respond to attempt "
-                               "to write to channel named {} within {}-second "
-                               "timeout."
-                               "".format(self.circuit.address,
-                                         self.name, timeout))
-        return self.last_reading
+        self.circuit_manager.send(command)
+        if not wait:
+            return
 
+        def has_reading():
+            return ioid not in self.circuit_manager.ioids
+
+        with self.circuit_manager.new_command_cond:
+            done = self.circuit_manager.new_command_cond.wait_for(has_reading,
+                                                                  timeout)
+        if not done:
+            raise TimeoutError(
+                f"Server at {self.circuit_manager.circuit.address} did "
+                f"not respond to attempt to write to channel named "
+                f"{self.name!r} within {timeout}-second timeout."
+            )
+        return self.last_writing
+
+    @ensure_connected
     def subscribe(self, *args, **kwargs):
         "Start a new subscription and spawn an async task to receive readings."
-        command = self.channel.subscribe(*args, **kwargs)
-        # Stash the subscriptionid to match the response to the request.
-        self.circuit.subscriptionids[command.subscriptionid] = self
-        self.circuit.send(command)
-        # TODO verify it worked before returning?
-        return command.subscriptionid
+        if not self.connected:
+            raise DisconnectedError()
 
+        command = self.channel.subscribe(*args, **kwargs)
+        subscriptionid = command.subscriptionid
+        sub = Subscription(self, subscriptionid, args, kwargs)
+        # Let the circuit_manager match future responses to this request.
+        self.circuit_manager.subscriptions[subscriptionid] = sub
+        # Stash this in case we need to re-connect later.
+        self.subscriptions.append(sub)
+        self.circuit_manager.send(command)
+        # TODO verify it worked before returning?
+        return sub
+
+    @ensure_connected
     def unsubscribe(self, subscriptionid, *args, **kwargs):
         "Cancel a subscription and await confirmation from the server."
-        self.circuit.send(self.channel.unsubscribe(subscriptionid))
+        self.circuit_manager.send(self.channel.unsubscribe(subscriptionid))
+        sub, = [sub for sub in self.subscriptions
+                if sub.subscriptionid == subscriptionid]
+        self.subscriptions.remove(sub)
         # TODO verify it worked before returning?
 
-
-def ensure_connection(func):
-    # TODO get timeout default from func signature
-    @functools.wraps(func)
-    def inner(self, *args, **kwargs):
-        self.wait_for_connection(timeout=kwargs.get('timeout', None))
-        return func(self, *args, **kwargs)
-    return inner
+    # def __hash__(self):
+    #     return id((self.context, self.circuit_manager, self.name))
 
 
-class PVContext(Context):
-    def __init__(self, broadcaster=None, *, log_level='ERROR'):
-        if broadcaster is None:
-            broadcaster = SharedBroadcaster()
-        super().__init__(broadcaster=broadcaster, log_level=log_level)
-
-        if not self.broadcaster.registered:
-            self.register()
-
-    def get_pv(self, pvname, *args, **kwargs):
-        # TODO add PV cache to this class
-        return PV(pvname, *args, context=self, **kwargs)
-
-
-class PV:
-    """Epics Process Variable
-
-    A PV encapsulates an Epics Process Variable.
-
-    The primary interface methods for a pv are to get() and put() is value::
-
-      >>> p = PV(pv_name)  # create a pv object given a pv name
-      >>> p.get()          # get pv value
-      >>> p.put(val)       # set pv to specified value.
-
-    Additional important attributes include::
-
-      >>> p.pvname         # name of pv
-      >>> p.value          # pv value (can be set or get)
-      >>> p.char_value     # string representation of pv value
-      >>> p.count          # number of elements in array pvs
-      >>> p.type           # EPICS data type: 'string','double','enum','long',..
-"""
-
-    _fmtsca = "<PV '%(pvname)s', count=%(count)i, type=%(typefull)s, access=%(access)s>"
-    _fmtarr = "<PV '%(pvname)s', count=%(count)i/%(nelm)i, type=%(typefull)s, access=%(access)s>"
-    _fields = ('pvname',  'value',  'char_value',  'status',  'ftype',  'chid',
-               'host', 'count', 'access', 'write_access', 'read_access',
-               'severity', 'timestamp', 'posixseconds', 'nanoseconds',
-               'precision', 'units', 'enum_strs',
-               'upper_disp_limit', 'lower_disp_limit', 'upper_alarm_limit',
-               'lower_alarm_limit', 'lower_warning_limit',
-               'upper_warning_limit', 'upper_ctrl_limit', 'lower_ctrl_limit')
-    _default_context = None
-
-    def __init__(self, pvname, callback=None, form='time',
-                 verbose=False, auto_monitor=False, count=None,
-                 connection_callback=None,
-                 connection_timeout=None, *, context=None):
-        # TODO
-        # - connection_callback
-        # - connection_timeout
-        self.chid = None
-
-        if context is None:
-            context = self._default_context
-        if context is None:
-            raise RuntimeError("must have a valid context")
-        self._context = context
-        self.pvname = pvname.strip()
-        self.form = form.lower()
-        self.verbose = verbose
-        self.auto_monitor = auto_monitor
-        self.ftype = None
-        self.connection_timeout = connection_timeout
-        self.dflt_count = count
-        self._subid = None
-
-        if self.connection_timeout is None:
-            self.connection_timeout = 1
-
-        self._args = {}.fromkeys(self._fields)
-        self._args['pvname'] = self.pvname
-        self._args['count'] = count
-        self._args['nelm'] = -1
-        self._args['type'] = 'unknown'
-        self._args['typefull'] = 'unknown'
-        self._args['access'] = 'unknown'
-        self.connection_callbacks = []
-
-        if connection_callback is not None:
-            self.connection_callbacks = [connection_callback]
-
+class CallbackHandler:
+    def __init__(self, pv):
+        # NOTE: not a WeakValueDictionary or WeakSet as PV is unhashable...
         self.callbacks = {}
-        self._conn_started = False
+        self.pv = pv
+        self._callback_id = 0
 
-        if isinstance(callback, (tuple, list)):
-            for i, thiscb in enumerate(callback):
-                if hasattr(thiscb, '__call__'):
-                    self.callbacks[i] = (thiscb, {})
+    def add_callback(self, func):
+        # TODO thread safety
+        cb_id = self._callback_id
+        self._callback_id += 1
 
-        elif hasattr(callback, '__call__'):
-            self.callbacks[0] = (callback, {})
+        def removed(_):
+            self.remove_callback(cb_id)
 
-        # DIFF
-        # not handling lazy connecting, pyepics is
-        self._context.search(self.pvname)
-        self.wait_for_connection(form=form, count=count)
-
-    @property
-    def connected(self):
-        return self.chid is not None and self.chid.connected
-
-    def force_connect(self, pvname=None, chid=None, conn=True, **kws):
-        # not quite sure what this is for in pyepics, probably should
-        # be an arias for reconnect?
-        ...
-
-    def wait_for_connection(self, timeout=None, *, form=None, count=None):
-        """wait for a connection that started with connect() to finish
-        Returns
-        -------
-        connected : bool
-            If the PV is connected when this method returns
-        """
-        # TODO
-        # - check if there is a form or count on the object we should respect
-        # - do something with the timeout value
-        if self.connected:
-            return
-
-        self.chid = self._context.create_channel(self.pvname)
-
-        self._args['type'] = ca.ChannelType(self.chid.channel.native_data_type)
-        self._args['typefull'] = ca.promote_type(self.type,
-                                                 use_time=(form == 'time'),
-                                                 use_ctrl=(form != 'time'))
-        self._args['nelm'] = self.chid.channel.native_data_count
-        self._args['count'] = self.chid.channel.native_data_count
-
-        # yeah... enum.Flag would be nice here
-        self._args['write_access'] = (self.chid.channel.access_rights & 2) == 2
-        self._args['read_access'] = (self.chid.channel.access_rights & 1) == 1
-
-        access_strs = ('no access', 'read-only', 'write-only', 'read/write')
-        self._args['access'] = access_strs[self.chid.channel.access_rights]
-
-        self.chid.register_user_callback(self.__on_changes)
-
-        if self.auto_monitor is None:
-            mcount = count if count is not None else self._args['count']
-            self.auto_monitor = mcount < AUTOMONITOR_MAXLENGTH
-
-        if self.auto_monitor:
-            self._subid = self.chid.subscribe(data_type=self.typefull,
-                                              data_count=count)
-
-        self._cb_count = iter(itertools.count())
-
-        # todo move to async connect logic
-        for cb in self.connection_callbacks:
-            cb(pvname=self.pvname, conn=True, pv=self)
-
-    def connect(self, timeout=None):
-        """check that a PV is connected, forcing a connection if needed
-
-        Returns
-        -------
-        connected : bool
-            If the PV is connected when this method returns
-        """
-        self.wait_for_connection(timeout=timeout)
-
-    def reconnect(self):
-        "try to reconnect PV"
-        self.disconnect()
-        return self.wait_for_connection()
-
-    @ensure_connection
-    def get(self, *, count=None, as_string=False, as_numpy=True,
-            timeout=None, with_ctrlvars=False, use_monitor=True):
-        """returns current value of PV.
-
-        Parameters
-        ----------
-        count : int, optional
-             explicitly limit count for array data
-        as_string : bool, optional
-            flag(True/False) to get a string representation
-            of the value.
-        as_numpy : bool, optional
-            use numpy array as the return type for array data.
-        timeout : float, optional
-            maximum time to wait for value to be received.
-            (default = 0.5 + log10(count) seconds)
-        use_monitor : bool, optional
-            use value from latest monitor callback (True, default)
-            or to make an explicit CA call for the value.
-
-        Returns
-        -------
-        val : Object
-            The value, the type is dependent on the underlying PV
-        """
-        # TODO
-        # - timeout
-        # - with_ctrlvars
-
-        if count is None:
-            count = self.dflt_count
-        dt = self.typefull
-        if not as_string and self.typefull in ca.char_types:
-            re_map = {ca.ChannelType.CHAR: ca.ChannelType.INT,
-                      ca.ChannelType.CTRL_CHAR: ca.ChannelType.CTRL_INT,
-                      ca.ChannelType.TIME_CHAR: ca.ChannelType.TIME_INT,
-                      ca.ChannelType.STS_CHAR: ca.ChannelType.STS_INT}
-            dt = re_map[self.typefull]
-            # TODO if you want char arrays not as_string
-            # force no-monitor rather than
-            use_monitor = False
-
-        # trigger going out to got data from network
-        if ((not use_monitor) or
-            (self._subid is None) or
-            (self._args['value'] is None) or
-            (count is not None and
-             count > len(self._args['value']))):
-            command = self.chid.read(data_type=dt,
-                                     data_count=count)
-            self.__ingest_read_response_command(command)
-
-        info = self._args
-
-        if (as_string and (self.typefull in ca.char_types) or
-                self.typefull in ca.string_types):
-            return info['char_value']
-        elif as_string and self.typefull in ca.enum_types:
-            enum_strs = self.enum_strs
-            ret = []
-            for r in info['value']:
-                try:
-                    ret.append(enum_strs[r])
-                except IndexError:
-                    ret.append('')
-            if len(ret) == 1:
-                ret, = ret
-            return ret
-
-        elif not as_numpy:
-            return list(info['value'])
-        return info['value']
-
-    def __ingest_read_response_command(self, command):
-        info = self._parse_dbr_metadata(command.metadata)
-        info['value'] = command.data
-
-        ret = info['value']
-        if self.typefull in ca.char_types:
-            ret = ret.tobytes().partition(b'\x00')[0].decode(STR_ENC)
-            info['char_value'] = ret
-        elif self.typefull in ca.string_types:
-            ret = [v.decode(STR_ENC).strip() for v in ret]
-            if len(ret) == 1:
-                ret = ret[0]
-            info['char_value'] = ret
-
-        self._args.update(**info)
-
-    @ensure_connection
-    def put(self, value, *, wait=False, timeout=30.0,
-            use_complete=False, callback=None, callback_data=None):
-        """set value for PV, optionally waiting until the processing is
-        complete, and optionally specifying a callback function to be run
-        when the processing is complete.
-        """
-        # TODO
-        # - wait
-        # - timeout
-        # - put complete (use_complete, callback, callback_data)
-        # API
-        # consider returning futures instead of storing state on the PV object
-        if callback_data is None:
-            callback_data = ()
-        if self._args['typefull'] in ca.enum_types:
-            if isinstance(value, str):
-                try:
-                    value = self.enum_strs.index(value)
-                except ValueError:
-                    raise ValueError('{} is not in Enum ({}'.format(
-                        value, self.enum_strs))
-
-        if isinstance(value, str) or not isinstance(value, Iterable):
-            value = (value, )
-
-        if isinstance(value[0], str):
-            value = tuple(v.encode(STR_ENC) for v in value)
-
-        def run_callback(cmd):
-            callback(*callback_data)
-        cb = run_callback if callback is not None else None
-        ret = self.value
-        self.chid.write(value, wait=wait, cb=cb, timeout=timeout)
-        return ret if wait else None
-
-    @ensure_connection
-    def get_ctrlvars(self, timeout=5, warn=True):
-        "get control values for variable"
-        dtype = ca.promote_type(self.type, use_ctrl=True)
-        command = self.chid.read(data_type=dtype, timeout=timeout)
-        info = self._parse_dbr_metadata(command.metadata)
-        info['value'] = command.data
-        self._args.update(**info)
-        return info
-
-    @ensure_connection
-    def get_timevars(self, timeout=5, warn=True):
-        "get time values for variable"
-        dtype = ca.promote_type(self.type, use_time=True)
-        command = self.chid.read(data_type=dtype, timeout=timeout)
-        info = self._parse_dbr_metadata(command.metadata)
-        info['value'] = command.data
-        self._args.update(**info)
-
-    def _parse_dbr_metadata(self, dbr_data):
-        ret = {}
-
-        arg_map = {'status': 'status',
-                   'severity': 'severity',
-                   'precision': 'precision',
-                   'units': 'units',
-                   'upper_disp_limit': 'upper_disp_limit',
-                   'lower_disp_limit': 'lower_disp_limit',
-                   'upper_alarm_limit': 'upper_alarm_limit',
-                   'upper_warning_limit': 'upper_warning_limit',
-                   'lower_warning_limit': 'lower_warning_limit',
-                   'lower_alarm_limit': 'lower_alarm_limit',
-                   'upper_ctrl_limit': 'upper_ctrl_limit',
-                   'lower_ctrl_limit': 'lower_ctrl_limit',
-                   'strs': 'enum_strs',
-                   # 'secondsSinceEpoch': 'posixseconds',
-                   # 'nanoSeconds': 'nanoseconds',
-                   }
-
-        for attr, arg in arg_map.items():
-            if hasattr(dbr_data, attr):
-                ret[arg] = getattr(dbr_data, attr)
-
-        if ret.get('enum_strs', None):
-            ret['enum_strs'] = tuple(k.value.decode(STR_ENC) for
-                                     k in ret['enum_strs'] if k.value)
-
-        if hasattr(dbr_data, 'nanoSeconds'):
-            ret['posixseconds'] = dbr_data.secondsSinceEpoch
-            ret['nanoseconds'] = dbr_data.nanoSeconds
-            timestamp = ca.epics_timestamp_to_unix(dbr_data.secondsSinceEpoch,
-                                                   dbr_data.nanoSeconds)
-            ret['timestamp'] = timestamp
-
-        if 'units' in ret:
-            ret['units'] = ret['units'].decode(STR_ENC)
-
-        return ret
-
-    def __on_changes(self, command):
-        """internal callback function: do not overwrite!!
-        To have user-defined code run when the PV value changes,
-        use add_callback()
-        """
-        self.__ingest_read_response_command(command)
-        self.run_callbacks()
-
-    def run_callbacks(self):
-        """run all user-defined callbacks with the current data
-
-        Normally, this is to be run automatically on event, but
-        it is provided here as a separate function for testing
-        purposes.
-        """
-        for index in sorted(list(self.callbacks.keys())):
-            self.run_callback(index)
-
-    def run_callback(self, index):
-        """run a specific user-defined callback, specified by index,
-        with the current data
-        Note that callback functions are called with keyword/val
-        arguments including:
-             self._args  (all PV data available, keys = __fields)
-             keyword args included in add_callback()
-             keyword 'cb_info' = (index, self)
-        where the 'cb_info' is provided as a hook so that a callback
-        function  that fails may de-register itself (for example, if
-        a GUI resource is no longer available).
-        """
-        try:
-            fcn, kwargs = self.callbacks[index]
-        except KeyError:
-            return
-        kwd = copy.copy(self._args)
-        kwd.update(kwargs)
-        kwd['cb_info'] = (index, self)
-        if hasattr(fcn, '__call__'):
-            fcn(**kwd)
-
-    def add_callback(self, callback, *, index=None, run_now=False,
-                     with_ctrlvars=True, **kw):
-        """add a callback to a PV.  Optional keyword arguments
-        set here will be preserved and passed on to the callback
-        at runtime.
-
-        Note that a PV may have multiple callbacks, so that each
-        has a unique index (small integer) that is returned by
-        add_callback.  This index is needed to remove a callback."""
-        if not callable(callback):
-            raise ValueError()
-        if self._subid is None:
-            self._subid = self.chid.subscribe(data_type=self.typefull,
-                                              data_count=self.dflt_count)
-        if index is not None:
-            raise ValueError("why do this")
-        index = next(self._cb_count)
-        self.callbacks[index] = (callback, kw)
-
-        if with_ctrlvars and self.connected:
-            self.get_ctrlvars()
-        if run_now:
-            self.get(as_string=True)
-            if self.connected:
-                self.run_callback(index)
-        return index
-
-    def remove_callback(self, index):
-        """remove a callback by index"""
-        self.callbacks.pop(index, None)
-
-    def clear_callbacks(self):
-        "clear all callbacks"
-        self.callbacks = {}
-
-    def __getval(self):
-        "get value"
-        return self.get()
-
-    def __setval(self, val):
-        "put-value"
-        return self.put(val)
-
-    value = property(__getval, __setval, None, "value property")
-
-    @property
-    def char_value(self):
-        "character string representation of value"
-        return self._getarg('char_value')
-
-    @property
-    def status(self):
-        "pv status"
-        return self._getarg('status')
-
-    @property
-    def type(self):
-        "pv type"
-        return self._args['type']
-
-    @property
-    def typefull(self):
-        "pv type"
-        return self._args['typefull']
-
-    @property
-    def host(self):
-        "pv host"
-        return self.chid.channel.host_name().name.decode(STR_ENC)
-
-    @property
-    def count(self):
-        """count (number of elements). For array data and later EPICS versions,
-        this is equivalent to the .NORD field.  See also 'nelm' property"""
-        if self._args['count'] is not None:
-            return self._args['count']
+        if inspect.ismethod(func):
+            ref = weakref.WeakMethod(func, removed)
         else:
-            return self._getarg('count')
+            # TODO: strong reference to non-instance methods?
+            def ref():
+                return func
 
-    @property
-    def nelm(self):
-        """native count (number of elements).
-        For array data this will return the full array size (ie, the
-        .NELM field).  See also 'count' property"""
-        if self._getarg('count') == 1:
-            return 1
-        return self.chid.channel.native_data_count
+        self.callbacks[cb_id] = ref
+        return cb_id
 
-    @property
-    def read_access(self):
-        "read access"
-        return self._getarg('read_access')
+    def remove_callback(self, cb_id):
+        self.callbacks.pop(cb_id, None)
 
-    @property
-    def write_access(self):
-        "write access"
-        return self._getarg('write_access')
-
-    @property
-    def access(self):
-        "read/write access as string"
-        return self._getarg('access')
-
-    @property
-    def severity(self):
-        "pv severity"
-        return self._getarg('severity')
-
-    @property
-    def timestamp(self):
-        "timestamp of last pv action"
-        return self._getarg('timestamp')
-
-    @property
-    def posixseconds(self):
-        """integer seconds for timestamp of last pv action
-        using POSIX time convention"""
-        return self._getarg('posixseconds')
-
-    @property
-    def nanoseconds(self):
-        "integer nanoseconds for timestamp of last pv action"
-        return self._getarg('nanoseconds')
-
-    @property
-    def precision(self):
-        "number of digits after decimal point"
-        return self._getarg('precision')
-
-    @property
-    def units(self):
-        "engineering units for pv"
-        return self._getarg('units')
-
-    @property
-    def enum_strs(self):
-        "list of enumeration strings"
-        return self._getarg('enum_strs')
-
-    @property
-    def upper_disp_limit(self):
-        "limit"
-        return self._getarg('upper_disp_limit')
-
-    @property
-    def lower_disp_limit(self):
-        "limit"
-        return self._getarg('lower_disp_limit')
-
-    @property
-    def upper_alarm_limit(self):
-        "limit"
-        return self._getarg('upper_alarm_limit')
-
-    @property
-    def lower_alarm_limit(self):
-        "limit"
-        return self._getarg('lower_alarm_limit')
-
-    @property
-    def lower_warning_limit(self):
-        "limit"
-        return self._getarg('lower_warning_limit')
-
-    @property
-    def upper_warning_limit(self):
-        "limit"
-        return self._getarg('upper_warning_limit')
-
-    @property
-    def upper_ctrl_limit(self):
-        "limit"
-        return self._getarg('upper_ctrl_limit')
-
-    @property
-    def lower_ctrl_limit(self):
-        "limit"
-        return self._getarg('lower_ctrl_limit')
-
-    @property
-    def info(self):
-        "info string"
-        return self._getinfo()
-
-    @property
-    def put_complete(self):
-        "returns True if a put-with-wait has completed"
-        True
-
-    def _getinfo(self):
-        "get information paragraph"
-        self.get_ctrlvars()
-        out = []
-        xtype = self._args['typefull']
-        mod_map = {'enum': ca.enum_types,
-                   'status': ca.status_types,
-                   'time': ca.time_types,
-                   'control': ca.control_types,
-                   'native': ca.native_types}
-        mod = next(k for k, v in mod_map.items() if xtype in v)
-        nt_type = ca.native_type(xtype)
-        fmt = '%i'
-
-        if nt_type in (ca.ChannelType.FLOAT, ca.ChannelType.DOUBLE):
-            fmt = '%g'
-        elif nt_type in (ca.ChannelType.CHAR, ca.ChannelType.STRING):
-            fmt = '%s'
-
-        # self._set_charval(self._args['value'], call_ca=False)
-        out.append("== %s  (%s) ==" % (self.pvname, ca.DBR_TYPES[xtype].__name__))
-        if self.count == 1:
-            val = self._args['value']
-            out.append('   value      = %s' % fmt % val)
-        else:
-            ext = {True: '...', False: ''}[self.count > 10]
-            elems = range(min(5, self.count))
+    def process(self, *args, **kwargs):
+        to_remove = []
+        for cb_id, ref in self.callbacks.items():
             try:
-                aval = [fmt % self._args['value'][i] for i in elems]
+                callback = ref()
             except TypeError:
-                aval = ('unknown',)
-            out.append("   value      = array  [%s%s]" % (",".join(aval), ext))
-        for nam in ('char_value', 'count', 'nelm', 'type', 'units',
-                    'precision', 'host', 'access',
-                    'status', 'severity', 'timestamp',
-                    'posixseconds', 'nanoseconds',
-                    'upper_ctrl_limit', 'lower_ctrl_limit',
-                    'upper_disp_limit', 'lower_disp_limit',
-                    'upper_alarm_limit', 'lower_alarm_limit',
-                    'upper_warning_limit', 'lower_warning_limit'):
-            if hasattr(self, nam):
-                att = getattr(self, nam)
-                if att is not None:
-                    if nam == 'timestamp':
-                        def fmt_time(tstamp=None):
-                            "simple formatter for time values"
-                            if tstamp is None:
-                                tstamp = time.time()
-                            tstamp, frac = divmod(tstamp, 1)
-                            return "%s.%5.5i" % (time.strftime("%Y-%m-%d %H:%M:%S",
-                                                               time.localtime(tstamp)),
-                                                 round(1.e5*frac))
+                to_remove.append(cb_id)
+                continue
 
-                        att = "%.3f (%s)" % (att, fmt_time(att))
-                    elif nam == 'char_value':
-                        att = "'%s'" % att
-                    if len(nam) < 12:
-                        out.append('   %.11s= %s' % (nam+' '*12, str(att)))
-                    else:
-                        out.append('   %.20s= %s' % (nam+' '*20, str(att)))
-        if xtype == 'enum':  # list enum strings
-            out.append('   enum strings: ')
-            for index, nam in enumerate(self.enum_strs):
-                out.append("       %i = %s " % (index, nam))
+            try:
+                callback(*args, **kwargs)
+            except Exception as ex:
+                print(ex)
 
-        if len(self.chid.channel.subscriptions) > 0:
-            msg = 'PV is internally monitored'
-            out.append('   %s, with %i user-defined callbacks:' %
-                       (msg, len(self.callbacks)))
-            if len(self.callbacks) > 0:
-                for nam in sorted(self.callbacks.keys()):
-                    cback = self.callbacks[nam][0]
-                    out.append('      {!r}'.format(cback))
-        else:
-            out.append('   PV is NOT internally monitored')
-        out.append('=============================')
-        return '\n'.join(out)
+        for remove_id in to_remove:
+            self._callbacks.pop(remove_id, None)
 
-    def _getarg(self, arg):
-        "wrapper for property retrieval"
-        if self._args['value'] is None:
-            self.get()
-        if self._args[arg] is None and self.connected:
-            if arg in ('status', 'severity', 'timestamp',
-                       'posixseconds', 'nanoseconds'):
-                self.get_timevars(timeout=1, warn=False)
+
+class Subscription(CallbackHandler):
+    def __init__(self, pv, subscriptionid, sub_args, sub_kwargs):
+        super().__init__(pv)
+
+        self.subscriptionid = subscriptionid
+        # These will be used by the PV to re-subscribe if we need to reconnect.
+        self.sub_args = sub_args
+        self.sub_kwargs = sub_kwargs
+        self._unsubscribed = False
+        self._callback_lock = threading.RLock()
+        self._process_backlog = []
+
+    def unsubscribe(self):
+        if self._unsubscribed:
+            return
+
+        self._unsubscribed = True
+        self.pv.unsubscribe(self.subscriptionid)
+
+    def process(self, *args, **kwargs):
+        # TODO here i think we can decouple PV update rates and callback
+        # handling rates, if desirable, to not bog down performance.
+        # As implemented below, updates are blocking further messages from
+        # the CA servers from processing. (-> ThreadPool, etc.)
+
+        with self._callback_lock:
+            if not self.callbacks:
+                # Record everything that happened prior to getting a subscription
+                self._process_backlog.append((args, kwargs))
             else:
-                self.get_ctrlvars(timeout=1, warn=False)
-        return self._args.get(arg, None)
+                super().process(*args, **kwargs)
 
-    def __repr__(self):
-        "string representation"
+    def add_callback(self, func):
+        cb_id = super().add_callback(func)
 
-        if self.connected:
-            if self.count == 1:
-                return self._fmtsca % self._args
-            else:
-                return self._fmtarr % self._args
-        else:
-            return "<PV '%s': not connected>" % self.pvname
+        with self._callback_lock:
+            if self._process_backlog:
+                # yeah... locking will be an issue here again
+                items, self._process_backlog = self._process_backlog, []
+                for args, kwargs in items:
+                    self.process(*args, **kwargs)
 
-    def __eq__(self, other):
-        "test for equality"
-        return False
-
-    def disconnect(self):
-        "disconnect PV"
-        if self.connected:
-            self.chid.disconnect()
+        return cb_id
 
     def __del__(self):
-        if self.connected:
-            self.chid.disconnect(wait=False)
-
-
-_dflt_context = None
-
-
-def get_pv(pvname, *args, **kwargs):
-    global _dflt_context
-    if _dflt_context is None:
-        _dflt_context = PVContext()
-
-    return _dflt_context.get_pv(pvname)
-
-
-def caput(pvname, value, wait=False, timeout=60):
-    """caput(pvname, value, wait=False, timeout=60)
-    simple put to a pv's value.
-       >>> caput('xx.VAL',3.0)
-
-    to wait for pv to complete processing, use 'wait=True':
-       >>> caput('xx.VAL',3.0,wait=True)
-    """
-    thispv = get_pv(pvname, connect=True)
-    if thispv.connected:
-        return thispv.put(value, wait=wait, timeout=timeout)
-
-
-def caget(pvname, as_string=False, count=None, as_numpy=True,
-          use_monitor=False, timeout=5.0):
-    """caget(pvname, as_string=False)
-    simple get of a pv's value..
-       >>> x = caget('xx.VAL')
-
-    to get the character string representation (formatted double,
-    enum string, etc):
-       >>> x = caget('xx.VAL', as_string=True)
-
-    to get a truncated amount of data from an array, you can specify
-    the count with
-       >>> x = caget('MyArray.VAL', count=1000)
-    """
-    start_time = time.time()
-    thispv = get_pv(pvname, timeout=timeout, connect=True)
-    if thispv.connected:
-        if as_string:
-            thispv.get_ctrlvars()
-        timeout -= (time.time() - start_time)
-        val = thispv.get(count=count, timeout=timeout,
-                         use_monitor=use_monitor,
-                         as_string=as_string,
-                         as_numpy=as_numpy)
-
-        return val
-
-
-def cainfo(pvname, print_out=True):
-    """cainfo(pvname,print_out=True)
-
-    return printable information about pv
-       >>>cainfo('xx.VAL')
-
-    will return a status report for the pv.
-
-    If print_out=False, the status report will be printed,
-    and not returned.
-    """
-    thispv = get_pv(pvname, connect=True)
-    if thispv.connected:
-        thispv.get()
-        thispv.get_ctrlvars()
-        if print_out:
-            print(thispv.info)
-        else:
-            return thispv.info
+        if not self._unsubscribed:
+            self.unsubscribe()

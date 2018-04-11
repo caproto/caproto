@@ -86,6 +86,10 @@ class VirtualCircuit:
         '''Port number'''
         return self.address[1]
 
+    def __repr__(self):
+        return (f"<VirtualCircuit host={self.host} port={self.port} "
+                f"our_role={self.our_role}> logger_name={self.log.name}>")
+
     @property
     def key(self):
         if self.priority is None:
@@ -94,6 +98,12 @@ class VirtualCircuit:
                                       "priority. Therefore, it does not yet "
                                       "have a key.")
         return self.address, self.priority  # a unique identifier
+
+    def __eq__(self, other):
+        return hash(self) == hash(other)
+
+    def __hash__(self):
+        return hash((self.address, self.priority, self.our_role))
 
     def send(self, *commands):
         """

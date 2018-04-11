@@ -42,7 +42,8 @@ def test_with_caget(curio_server, pv, dbr_type):
                  'upper_alarm_limit', 'lower_warning_limit',
                  'upper_warning_limit', 'lower_ctrl_limit',
                  'upper_ctrl_limit', 'precision')
-    curio_server, caget_pvdb = curio_server
+    server_runner, prefix, caget_pvdb = curio_server
+    pv = prefix + pv
 
     async def client():
         print('* client_test', pv, dbr_type)
@@ -145,16 +146,9 @@ def test_with_caget(curio_server, pv, dbr_type):
                 ack_severity = getattr(ca._dbr.AlarmSeverity, ack_severity)
                 assert ack_severity == db_entry.alarm.severity_to_acknowledge
 
-    async def task():
-        server_task = await curio.spawn(curio_server)
-
-        try:
-            await client()
-        finally:
-            await server_task.cancel()
-
     with curio.Kernel() as kernel:
-        kernel.run(task)
+        kernel.run(server_runner(client))
+
     print('done')
 
 
@@ -171,7 +165,8 @@ caput_checks = [('int', '1', [1]),
 @pytest.mark.parametrize('pv, put_value, check_value', caput_checks)
 # @pytest.mark.parametrize('async_put', [True, False])
 def test_with_caput(curio_server, pv, put_value, check_value, async_put=True):
-    curio_server, caget_pvdb = curio_server
+    server_runner, prefix, caget_pvdb = curio_server
+    pv = prefix + pv
 
     async def client():
         print('* client_test', pv, 'put value', put_value, 'check value',
@@ -204,14 +199,7 @@ def test_with_caput(curio_server, pv, put_value, check_value, async_put=True):
         # check value from database compared to value the test expects
         assert db_new == check_value
 
-    async def task():
-        server_task = await curio.spawn(curio_server)
-
-        try:
-            await client()
-        finally:
-            await server_task.cancel()
-
     with curio.Kernel() as kernel:
-        kernel.run(task)
+        kernel.run(server_runner(client))
+
     print('done')

@@ -22,7 +22,7 @@ from ._commands import (AccessRightsResponse, ClearChannelRequest,
                         ServerDisconnResponse, VersionRequest, VersionResponse,
                         WriteNotifyRequest, WriteNotifyResponse, WriteRequest,
                         EventsOnRequest, EventsOffRequest, CreateChFailResponse
-                       )
+                        )
 from ._utils import (AWAIT_CREATE_CHAN_RESPONSE, AWAIT_VERSION_RESPONSE,
                      CLIENT, CLOSED, CONNECTED, DISCONNECTED, FAILED, IDLE,
                      MUST_CLOSE, REQUEST, RESPONSE, SEND_CREATE_CHAN_REQUEST,
@@ -153,6 +153,13 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
             ClearChannelResponse: CLOSED,
             ServerDisconnResponse: CLOSED,
             ErrorResponse: MUST_CLOSE,
+
+            # All other received commands are acceptable:
+            AccessRightsResponse: MUST_CLOSE,
+            ReadNotifyResponse: MUST_CLOSE,
+            WriteNotifyResponse: MUST_CLOSE,
+            EventAddResponse: MUST_CLOSE,
+            EventCancelResponse: MUST_CLOSE,
         },
         CLOSED: {
             # a terminal state
@@ -200,6 +207,16 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
             ClearChannelResponse: CLOSED,
             ServerDisconnResponse: CLOSED,
             ErrorResponse: MUST_CLOSE,
+
+            # These are allowed because they may already be in flight when
+            # the client requests to close. The important thing is that there
+            # is a restriction on any additional client _requests_ in this
+            # state.
+            AccessRightsResponse: MUST_CLOSE,
+            ReadNotifyResponse: MUST_CLOSE,
+            WriteNotifyResponse: MUST_CLOSE,
+            EventAddResponse: MUST_CLOSE,
+            EventCancelResponse: MUST_CLOSE,
         },
         CLOSED: {
             # a terminal state
@@ -248,10 +265,11 @@ class _BaseState:
         try:
             new_state = allowed_transitions[command_type]
         except KeyError:
-            err = get_exception(role, command_type)
-            raise err(
-                "{} cannot handle command type {} when role={} and state={}"
-                .format(self, command_type.__name__, role, self.states[role]))
+            err_cls = get_exception(role, command_type)
+            err = err_cls(f"{self} cannot handle command type "
+                          f"{command_type.__name__} when role={role} and "
+                          f"state={self.states[role]}")
+            raise err from None
         self.states[role] = new_state
 
     def process_command_type(self, role, command_type):

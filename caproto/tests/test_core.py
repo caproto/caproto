@@ -191,9 +191,11 @@ def test_broadcaster_checks():
     res = ca.SearchResponse(port=6666, ip='1.2.3.4', cid=0, version=13)
     addr = ('1.2.3.4', 6666)
     commands = b.recv(bytes(res), addr)
-    with pytest.raises(ca.RemoteProtocolError):
-        b.process_commands(commands)
-    commands = b.recv(bytes(ca.VersionResponse(version=13)) + bytes(res), addr)
+    # see changes to _broadcaster.py.  Apparently rsrv does not always conform
+    # to the protocol and include a version response before search responsesq
+    # with pytest.raises(ca.RemoteProtocolError):
+    #     b.process_commands(commands)
+    # commands = b.recv(bytes(ca.VersionResponse(version=13)) + bytes(res), addr)
     b.process_commands(commands)  # this gets both
 
 
@@ -351,3 +353,10 @@ def test_dead_circuit(circuit_pair):
     assert srv_channel2.states[ca.CLIENT] is ca.CLOSED
     assert cli_channel2.states[ca.SERVER] is ca.CLOSED
     assert srv_channel2.states[ca.SERVER] is ca.CLOSED
+
+
+def test_circuit_equality():
+    a = ca.VirtualCircuit(ca.CLIENT, ('asdf', 1234), 1)
+    b = ca.VirtualCircuit(ca.CLIENT, ('asdf', 1234), 1)
+    c = ca.VirtualCircuit(ca.CLIENT, ('asdf', 1234), 2)
+    assert a == b != c

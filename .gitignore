@@ -8,3 +8,4 @@ doc/build
 .coverage
 .coverage.*
 .asv/
+pytest_bench.json

@@ -3,14 +3,14 @@
 # UDP socket provided by a client or server implementation.
 import itertools
 import logging
-import socket
 
 from ._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
-from ._utils import (CLIENT, SERVER, CaprotoValueError, LocalProtocolError)
+from ._utils import (DISCONNECTED, CLIENT, SERVER, CaprotoValueError,
+                     LocalProtocolError)
 from ._state import get_exception
 from ._commands import (RepeaterConfirmResponse, RepeaterRegisterRequest,
                         SearchRequest, SearchResponse, VersionRequest,
-                        VersionResponse, read_datagram,
+                        read_datagram,
                         )
 
 
@@ -132,7 +132,8 @@ class Broadcaster:
               not self._attempted_registration):
             raise LocalProtocolError("Client must send a "
                                      "RegisterRepeaterRequest before any "
-                                     "other commands")
+                                     "other commands (saw: {})"
+                                     "".format(type(command).__name__))
         elif isinstance(command, SearchRequest):
             if VersionRequest not in map(type, history):
                 err = get_exception(self.our_role, command)
@@ -140,10 +141,12 @@ class Broadcaster:
                           "VersionResponse in the same datagram.")
             self.unanswered_searches[command.cid] = command.name
         elif isinstance(command, SearchResponse):
-            if VersionResponse not in map(type, history):
-                err = get_exception(self.our_role, command)
-                raise err("A broadcasted SearchResponse must be preceded by a "
-                          "VersionResponse in the same datagram.")
+            # TODO Do all versions of Rsrv respect this? Unclear why softIoc
+            # seems to sometimes violate this part of the protocol.
+            # if VersionResponse not in map(type, history):
+            #     err = get_exception(self.our_role, command)
+            #     raise err("A broadcasted SearchResponse must be preceded by a "
+            #               "VersionResponse in the same datagram.")
             self.unanswered_searches.pop(command.cid, None)
 
         history.append(command)
@@ -182,23 +185,29 @@ class Broadcaster:
                     SearchRequest(name, cid, self.protocol_version))
         return commands
 
-    def register(self, ip=None):
+    def register(self, ip='0.0.0.0'):
         """
         Generate a valid :class:`RepeaterRegisterRequest`.
 
         Parameters
         ----------
         ip : string, optional
-            Our IP address. Defaults is output of ``socket.gethostbyname``.
+            Our IP address. Defaults is '0.0.0.0', which ends up being
+            converted by the repeater to the IP from which it receives the
+            packet.
 
         Returns
         -------
         RepeaterRegisterRequest
         """
         if ip is None:
-            hostname = socket.gethostname()
-            ip = socket.gethostbyname(hostname)
+            ip = '0.0.0.0'
         command = RepeaterRegisterRequest(ip)
+
+        # NOTE: consider this enough for a registration attempt.
+        # TODO this is required for moving forward with the threading client,
+        # and may be implemented better in the future
+        self._attempted_registration = True
         return command
 
     def disconnect(self):

@@ -14,6 +14,10 @@ class DisconnectedCircuit(Exception):
     ...
 
 
+class ServerExit(curio.KernelExit):
+    ...
+
+
 Subscription = namedtuple('Subscription', ('mask', 'circuit', 'channel',
                                            'data_type',
                                            'data_count', 'subscriptionid'))
@@ -97,7 +101,9 @@ class CurioVirtualCircuit:
         """
         if self.connected:
             buffers_to_send = self.circuit.send(*commands)
-            await self.client.sendmsg(buffers_to_send)
+
+            # send bytes over the wire using some caproto utilities
+            await ca.async_send_all(buffers_to_send, self.client.sendmsg)
 
     async def recv(self):
         """
@@ -130,6 +136,42 @@ class CurioVirtualCircuit:
                 self.circuit.process_command(command)
             except curio.TaskCancelled:
                 break
+            except ca.RemoteProtocolError as ex:
+                if hasattr(command, 'sid'):
+                    sid = command.sid
+                    cid = self.circuit.channels_sid[sid].cid
+                elif hasattr(command, 'cid'):
+                    cid = command.cid
+                    sid = self.circuit.channels[cid].sid
+
+                else:
+                    cid, sid = None, None
+
+                if cid is not None:
+                    try:
+                        await self.send(ca.ServerDisconnResponse(cid=cid))
+                    except Exception:
+                        logger.error(
+                            "Client broke the protocol in a recoverable "
+                            "way, but channel disconnection of cid=%d sid=%d "
+                            "failed.", cid, sid,
+                            exc_info=ex)
+                        break
+                    else:
+                        logger.error(
+                            "Client broke the protocol in a recoverable "
+                            "way. Disconnected channel cid=%d sid=%d "
+                            "but keeping the circuit alive.", cid, sid,
+                            exc_info=ex)
+
+                    async with self.new_command_condition:
+                        await self.new_command_condition.notify_all()
+                    continue
+                else:
+                    logger.error("Client broke the protocol in an "
+                                 "unrecoverable way.", exc_info=ex)
+                    # TODO: Kill the circuit.
+                    break
             except Exception as ex:
                 logger.error('Circuit command queue evaluation failed',
                              exc_info=ex)
@@ -257,30 +299,38 @@ class CurioVirtualCircuit:
             await db_entry.subscribe(self.context.subscription_queue, sub_spec)
         elif isinstance(command, ca.EventCancelRequest):
             chan, db_entry = get_db_entry()
-            # Search self.subscriptions for a Subscription with a matching id.
-            for _sub_spec, _subs in self.subscriptions.items():
-                for _sub in _subs:
-                    if _sub.subscriptionid == command.subscriptionid:
-                        sub_spec = _sub_spec
-                        sub = _sub
-
-            unsub_response = chan.unsubscribe(command.subscriptionid)
-
-            if sub:
-                self.subscriptions[sub_spec].remove(sub)
-                self.context.subscriptions[sub_spec].remove(sub)
-                # Does anything else on the Context still care about sub_spec?
-                # If not unsubscribe the Context's queue from the db_entry.
-                if not self.context.subscriptions[sub_spec]:
-                    queue = self.context.subscription_queue
-                    await sub_spec.db_entry.unsubscribe(queue, sub_spec)
-                return [unsub_response]
+            await self._cull_subscriptions(db_entry,
+                lambda sub: sub.subscriptionid == command.subscriptionid)
+            return [chan.unsubscribe(command.subscriptionid)]
         elif isinstance(command, ca.ClearChannelRequest):
             chan, db_entry = get_db_entry()
+            await self._cull_subscriptions(db_entry,
+                lambda sub: sub.channel == command.sid)
             return [chan.disconnect()]
         elif isinstance(command, ca.EchoRequest):
             return [ca.EchoResponse()]
 
+    async def _cull_subscriptions(self, db_entry, func):
+        # Iterate through each Subscription, passing each one to func(sub).
+        # Collect a list of (SubscriptionSpec, Subscription) for which
+        # func(sub) is True.
+        #
+        # Remove any matching Subscriptions, and then remove any empty
+        # SubsciprtionSpecs. Return the list of matching pairs.
+        to_remove = []
+        for sub_spec, subs in self.subscriptions.items():
+            for sub in subs:
+                if func(sub):
+                    to_remove.append((sub_spec, sub))
+        for sub_spec, sub in to_remove:
+            self.subscriptions[sub_spec].remove(sub)
+            self.context.subscriptions[sub_spec].remove(sub)
+            # Does anything else on the Context still care about sub_spec?
+            # If not unsubscribe the Context's queue from the db_entry.
+            if not self.context.subscriptions[sub_spec]:
+                queue = self.context.subscription_queue
+                await sub_spec.db_entry.unsubscribe(queue, sub_spec)
+        return tuple(to_remove)
 
 class Context:
     def __init__(self, host, port, pvdb, *, log_level='ERROR'):
@@ -411,11 +461,15 @@ class Context:
 
         await circuit.run()
 
-        while True:
-            try:
-                await circuit.recv()
-            except DisconnectedCircuit:
-                break
+        try:
+            while True:
+                try:
+                    await circuit.recv()
+                except DisconnectedCircuit:
+                    break
+        except KeyboardInterrupt as ex:
+            logger.debug('TCP handler received KeyboardInterrupt')
+            raise ServerExit() from ex
 
     async def circuit_disconnected(self, circuit):
         '''Notification from circuit that its connection has closed'''
@@ -443,7 +497,10 @@ class Context:
                                          data_count=data_count,
                                          subscriptionid=sub.subscriptionid,
                                          status_code=1)
-                await sub.circuit.send(command)
+                # Check that the Channel did not close at some point after
+                # this update started its flight.
+                if chan.states[ca.SERVER] is ca.CONNECTED:
+                    await sub.circuit.send(command)
 
     async def broadcast_beacon_loop(self):
         beacon_period = self.environ['EPICS_CAS_BEACON_PERIOD']
@@ -484,12 +541,9 @@ class Context:
             logger.error('Curio server failed: %s', ex.errors)
             for task in ex:
                 logger.error('Task %s failed: %s', task, task.exception)
-        except curio.TaskCancelled:
-            logger.info('Server task cancelled')
-            await g.cancel_remaining()
-            for circuit in list(self.circuits):
-                logger.debug('Cancelling tasks from circuit %s', circuit)
-                await circuit.pending_tasks.cancel_remaining()
+        except curio.TaskCancelled as ex:
+            logger.info('Server task cancelled; exiting')
+            raise ServerExit() from ex
 
 
 async def start_server(pvdb, log_level='DEBUG', *, bind_addr='0.0.0.0'):
@@ -497,4 +551,7 @@ async def start_server(pvdb, log_level='DEBUG', *, bind_addr='0.0.0.0'):
     logger.setLevel(log_level)
     ctx = Context(bind_addr, find_next_tcp_port(), pvdb, log_level=log_level)
     logger.info('Server starting up on %s:%d', ctx.host, ctx.port)
-    return await ctx.run()
+    try:
+        return await ctx.run()
+    except ServerExit:
+        print('ServerExit caught; exiting')

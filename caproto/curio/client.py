@@ -8,11 +8,12 @@
 # Context: has a caproto.Broadcaster, a UDP socket, a cache of
 #          search results and a cache of VirtualCircuits.
 #
-import caproto as ca
-import curio
-from curio import socket
 import logging
 import getpass
+import caproto as ca
+import curio
+from collections import OrderedDict
+from curio import socket
 
 
 logger = logging.getLogger(__name__)
@@ -34,22 +35,22 @@ class VirtualCircuit:
         self.socket = None
         self.command_queue = curio.Queue()
         self.new_command_condition = curio.Condition()
-        self._socket_lock = curio.Lock()
+        self._socket_lock = curio.RLock()
 
     async def connect(self):
         async with self._socket_lock:
             self.socket = await socket.create_connection(self.circuit.address)
-        # Kick off background loops that read from the socket
-        # and process the commands read from it.
-        await curio.spawn(self._receive_loop(), daemon=True)
-        await curio.spawn(self._command_queue_loop(), daemon=True)
-        # Send commands that initialize the Circuit.
-        await self.send(ca.VersionRequest(version=13,
-                                          priority=self.circuit.priority))
-        host_name = await socket.gethostname()
-        await self.send(ca.HostNameRequest(name=host_name))
-        client_name = getpass.getuser()
-        await self.send(ca.ClientNameRequest(name=client_name))
+            # Kick off background loops that read from the socket
+            # and process the commands read from it.
+            await curio.spawn(self._receive_loop, daemon=True)
+            await curio.spawn(self._command_queue_loop, daemon=True)
+            # Send commands that initialize the Circuit.
+            await self.send(ca.VersionRequest(version=13,
+                                              priority=self.circuit.priority))
+            host_name = await socket.gethostname()
+            await self.send(ca.HostNameRequest(name=host_name))
+            client_name = getpass.getuser()
+            await self.send(ca.ClientNameRequest(name=client_name))
 
     async def _receive_loop(self):
         num_bytes_needed = 0
@@ -106,17 +107,8 @@ class VirtualCircuit:
                 if self.socket is None:
                     raise RuntimeError('socket connection failed')
 
-                gen = ca.incremental_buffer_list_slice(*buffers_to_send)
-                # prime the generator
-                gen.send(None)
-
-                while buffers_to_send:
-                    sent = await self.socket.sendmsg(buffers_to_send)
-                    try:
-                        buffers_to_send = gen.send(sent)
-                    except StopIteration:
-                        # finished sending
-                        break
+                # send bytes over the wire using some caproto utilities
+                await ca.async_send_all(buffers_to_send, self.socket.sendmsg)
 
 
 class Channel:
@@ -272,7 +264,7 @@ class SharedBroadcaster:
 
     async def register(self):
         "Register this client with the CA Repeater."
-        await curio.spawn(self._broadcaster_queue_loop(), daemon=True)
+        await curio.spawn(self._broadcaster_queue_loop, daemon=True)
 
         while not self.registered:
             async with self.broadcaster_command_condition:
@@ -292,7 +284,7 @@ class SharedBroadcaster:
                 await self.command_bundle_queue.put(commands)
 
     async def _broadcaster_queue_loop(self):
-        await curio.spawn(self._broadcaster_recv_loop(), daemon=True)
+        await curio.spawn(self._broadcaster_recv_loop, daemon=True)
         command = self.broadcaster.register('127.0.0.1')
         await self.send(ca.EPICS_CA2_PORT, command)
 
@@ -332,11 +324,10 @@ class SharedBroadcaster:
         ver_command, search_command = self.broadcaster.search(name)
         # Stash the search ID for recognizes the SearchResponse later.
         self.unanswered_searches[search_command.cid] = name
-        await self.send(ca.EPICS_CA1_PORT, ver_command, search_command)
         # Wait for the SearchResponse.
         while search_command.cid in self.unanswered_searches:
-            await self.wait_on_new_command()
-
+            await self.send(ca.EPICS_CA1_PORT, ver_command, search_command)
+            await curio.ignore_after(1, self.wait_on_new_command)
         return name
 
     async def wait_on_new_command(self):
@@ -368,7 +359,7 @@ class Context:
         circuit = VirtualCircuit(ca_circuit)
         circuit.circuit.log.setLevel(self.log_level)
         self.circuits.append(circuit)
-        await curio.spawn(circuit.connect())
+        await curio.spawn(circuit.connect, daemon=True)
         return circuit
 
     async def search(self, name):
@@ -392,3 +383,53 @@ class Context:
         # Send command that creates the Channel.
         await circuit.send(chan.create())
         return Channel(circuit, chan)
+
+    async def create_many_channels(self, *names, priority=0,
+                                   wait_for_connection=True,
+                                   move_on_after=2):
+        '''Create many channels in parallel through this context
+
+        Parameters
+        ----------
+        *names : str
+            Channel / PV names
+        priority : int, optional
+            Set priority of circuits
+        wait_for_connection : bool, optional
+            Wait for connections
+
+        Returns
+        -------
+        channel_dict : OrderedDict
+            Ordered dictionary of name to Channel
+        '''
+
+        async def connect_one(name):
+            await self.search(name)
+            chan = await self.create_channel(name, priority=priority)
+            if wait_for_connection:
+                await chan.wait_for_connection()
+
+            return name, chan
+
+        async def create_many_outer():
+            async with curio.TaskGroup() as task:
+                for name in names:
+                    await task.spawn(connect_one, name)
+                while True:
+                    res = await task.next_done()
+                    if res is None:
+                        break
+
+                    name, chan = res.result
+                    channels[name] = chan
+
+        channels = OrderedDict()
+
+        if move_on_after is not None:
+            async with curio.ignore_after(move_on_after):
+                await create_many_outer()
+        else:
+            await create_many_outer()
+
+        return channels
