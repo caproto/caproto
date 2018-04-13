@@ -1,4 +1,5 @@
 import collections
+import getpass
 import itertools
 import logging
 import os
@@ -527,9 +528,17 @@ class SharedBroadcaster:
 
 class Context:
     "Wraps Broadcaster and a cache of VirtualCircuits"
-    def __init__(self, broadcaster, *, log_level='DEBUG'):
-        self.log_level = log_level
+    def __init__(self, broadcaster, *,
+                 host_name=None, client_name=None,
+                 log_level='DEBUG'):
         self.broadcaster = broadcaster
+        if host_name is None:
+            host_name = socket.gethostname()
+        self.host_name = host_name
+        if client_name is None:
+            client_name = getpass.getuser()
+        self.client_name = client_name
+        self.log_level = log_level
         self.search_condition = threading.Condition()
         self.pv_state_lock = threading.RLock()
         self.resuscitated_pvs = []
@@ -763,8 +772,8 @@ class VirtualCircuitManager:
                 self.socket = socket.create_connection(self.circuit.address)
                 self.selector.add_socket(self.socket, self)
                 self.send(ca.VersionRequest(self.circuit.priority, 13),
-                          ca.HostNameRequest('foo'),  # TODO: hehe
-                          ca.ClientNameRequest('bar'))
+                          ca.HostNameRequest(self.context.host_name),
+                          ca.ClientNameRequest(self.context.client_name))
             else:
                 raise RuntimeError("Cannot connect. States are {} "
                                    "".format(self.circuit.states))

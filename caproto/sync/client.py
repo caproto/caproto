@@ -16,6 +16,7 @@ import argparse
 import ast
 from collections import Iterable
 from datetime import datetime
+import getpass
 import logging
 import os
 import time
@@ -138,8 +139,8 @@ def make_channel(pv_name, logger, udp_sock, priority, timeout):
     try:
         # Initialize our new TCP-based CA connection with a VersionRequest.
         send(chan.circuit, ca.VersionRequest(priority=priority, version=13))
-        send(chan.circuit, chan.host_name())
-        send(chan.circuit, chan.client_name())
+        send(chan.circuit, chan.host_name(socket.gethostname()))
+        send(chan.circuit, chan.client_name(getpass.getuser()))
         send(chan.circuit, chan.create())
         t = time.monotonic()
         while True:
