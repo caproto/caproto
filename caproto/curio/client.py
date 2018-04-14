@@ -282,7 +282,10 @@ class SharedBroadcaster:
                     self.registered = True
                 if isinstance(command, ca.VersionResponse):
                     # Check that the server version is one we can talk to.
-                    assert command.version > 11
+                    if command.version <= 11:
+                        logger.debug('Old client on version %s',
+                                     command.version)
+                        continue
                 if isinstance(command, ca.SearchResponse):
                     name = self.unanswered_searches.pop(command.cid, None)
                     if name is not None:
