@@ -68,12 +68,15 @@ def asv_bench_result(name, md_list):
                                        **md0['pytest_result'])
     else:
         # parameterized version - need to group params
-        pytest_results = [md['pytest_result'] for md in md_list]
+        pytest_results = [md.get('pytest_result', {}) for md in md_list]
         param_names = md0['param_names']
         params = md0['all_params']
 
         def get_stat_key(key):
-            return [res['stats'][key] for res in pytest_results]
+            return [res['stats'][key]
+                    if res and 'stats' in res
+                    else None
+                    for res in pytest_results]
 
         return dict(
             param_names=param_names,
@@ -130,7 +133,7 @@ def asv_bench_outline(name, md_list):
         param_names=md['param_names'],
         params=md['all_params'],
         pretty_name=name,
-        repeat=md['pytest_result']['stats']['iterations'],  # ?
+        repeat=1,
         # timeout=60.0,
         type='time',
         unit='seconds',

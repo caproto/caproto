@@ -295,8 +295,12 @@ class ChannelData:
             timestamp = time.time()
         if alarm is None:
             alarm = ChannelAlarm()
+
+        self._alarm = None
+
+        # now use the setter to attach the alarm correctly:
         self.alarm = alarm
-        self.alarm.connect(self)
+
         self.string_encoding = string_encoding
         self.reported_record_type = reported_record_type
         self._data = dict(value=value,
@@ -313,6 +317,24 @@ class ChannelData:
 
     value = _read_only_property('value')
     timestamp = _read_only_property('timestamp')
+
+    @property
+    def alarm(self):
+        'The ChannelAlarm associated with this data'
+        return self._alarm
+
+    @alarm.setter
+    def alarm(self, alarm):
+        old_alarm = self._alarm
+        if old_alarm is alarm:
+            return
+
+        if old_alarm is not None:
+            old_alarm.disconnect(self)
+
+        self._alarm = alarm
+        if alarm is not None:
+            alarm.connect(self)
 
     async def subscribe(self, queue, sub_spec):
         self._queues[queue][sub_spec.data_type].add(sub_spec)

@@ -149,6 +149,27 @@ def get_address_list():
     return addr_list.split(' ')
 
 
+def get_server_address_list(default_port):
+    '''Get the server interface addresses based on environment variables
+
+    Returns
+    -------
+    list of (addr, port)
+    '''
+    intf_addrs = get_environment_variables()['EPICS_CAS_INTF_ADDR_LIST']
+
+    if not intf_addrs:
+        return [('0.0.0.0', default_port)]
+
+    def get_addr_port(addr):
+        if ':' in addr:
+            addr, _, specified_port = addr.partition(':')
+            return (addr, int(specified_port))
+        return (addr, default_port)
+
+    return [get_addr_port(addr) for addr in intf_addrs.split(' ')]
+
+
 def get_beacon_address_list():
     '''Get channel access beacon address list based on environment variables
 
