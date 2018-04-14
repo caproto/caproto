@@ -34,9 +34,23 @@ class AsyncLibraryLayer:
     ...
 
 
+class UniversalQueue(curio.UniversalQueue):
+    def put(self, value):
+        super().put(value)
+
+    async def async_put(self, value):
+        await super().put(value)
+
+    def get(self):
+        return super().get()
+
+    async def async_get(self):
+        return await super().get()
+
+
 class CurioAsyncLayer(AsyncLibraryLayer):
     name = 'curio'
-    ThreadsafeQueue = curio.UniversalQueue
+    ThreadsafeQueue = UniversalQueue
     library = curio
 
 

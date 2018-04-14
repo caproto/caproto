@@ -81,7 +81,7 @@ class IOInterruptIOC(PVGroup):
 
         # Loop and grab items from the queue one at a time
         while True:
-            value = await queue.get()
+            value = await queue.async_get()
             print(f'Saw new value on async side: {value!r}')
 
             # Propagate the keypress to the EPICS PV, triggering any monitors

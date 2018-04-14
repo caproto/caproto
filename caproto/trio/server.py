@@ -1,7 +1,6 @@
 from collections import defaultdict, deque, namedtuple
 import logging
 import os
-import random
 
 import trio
 from trio import socket
@@ -27,9 +26,34 @@ logger = logging.getLogger(__name__)
 STR_ENC = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
 
 
-class CurioAsyncLayer(AsyncLibraryLayer):
+def _universal_queue(portal, max_len=1000):
+    class UniversalQueue:
+        def __init__(self):
+            self.queue = trio.Queue(max_len)
+            self.portal = portal
+
+        async def async_put(self, value):
+            await self.queue.put(value)
+
+        def put(self, value):
+            self.portal.run(self.queue.put, value)
+
+        async def async_get(self):
+            return await self.queue.get()
+
+        def get(self):
+            return self.portal.run(self.queue.get)
+
+    return UniversalQueue
+
+
+class TrioAsyncLayer(AsyncLibraryLayer):
+    def __init__(self):
+        self.portal = trio.BlockingTrioPortal()
+        self.ThreadsafeQueue = _universal_queue(self.portal)
+
     name = 'trio'
-    ThreadsafeQueue = None  # TODO (portal?)
+    ThreadsafeQueue = None
     library = trio
 
 
@@ -457,6 +481,14 @@ class Context:
                 client_sock, addr = await listen_sock.accept()
                 self.nursery.start_soon(self.tcp_handler, client_sock, addr)
 
+    @property
+    def startup_methods(self):
+        'Notify all ChannelData instances of the server startup'
+        return [instance.server_startup
+                for name, instance in self.pvdb.items()
+                if hasattr(instance, 'server_startup') and
+                instance.server_startup is not None]
+
     async def run(self):
         'Start the server'
         try:
@@ -468,12 +500,18 @@ class Context:
                 await self.nursery.start(self.broadcaster_queue_loop)
                 await self.nursery.start(self.subscription_queue_loop)
                 await self.nursery.start(self.broadcast_beacon_loop)
+
+                async_lib = TrioAsyncLayer()
+                for method in self.startup_methods:
+                    logger.debug('Calling startup method %r', method)
+
+                    async def startup(task_status):
+                        task_status.started()
+                        await method(async_lib)
+
+                    await self.nursery.start(startup)
         except trio.Cancelled:
             logger.info('Server task cancelled')
-            # await g.cancel_remaining()
-            for circuit in list(self.circuits):
-                logger.debug('Cancelling tasks from circuit %s', circuit)
-                # await circuit.pending_tasks.cancel_remaining()
 
     async def stop(self):
         'Stop the server'
