@@ -1,4 +1,4 @@
-# This is a channel access client implemented using curio.
+# This is a channel access client implemented using trio.
 
 # It builds on the abstractions used in caproto, adding transport and some
 # caches for matching requests with responses.
@@ -8,55 +8,80 @@
 # Context: has a caproto.Broadcaster, a UDP socket, a cache of
 #          search results and a cache of VirtualCircuits.
 #
-import logging
 import getpass
+import logging
+import time
+
 import caproto as ca
-import curio
-from collections import OrderedDict
-from curio import socket
+import trio
+
+from collections import OrderedDict, defaultdict
+from trio import socket
+from .._utils import batch_requests, CaprotoError, ThreadsafeCounter
+from .._constants import (STALE_SEARCH_EXPIRATION, SEARCH_MAX_DATAGRAM_BYTES)
 
 
 logger = logging.getLogger(__name__)
 
 
-class ChannelReadError(Exception):
+class TrioClientError(CaprotoError):
     ...
+
+
+class ChannelReadError(TrioClientError):
+    ...
+
+
+if not hasattr(trio.SocketStream, 'sendmsg'):
+    # monkey-patch in sendmsg in trio
+    async def sendmsg(self, buffers):
+        from trio._highlevel_socket import _translate_socket_errors_to_stream_errors  # noqa
+        if self.socket.did_shutdown_SHUT_WR:
+            await trio._core.checkpoint()
+            raise trio.ClosedStreamError("can't send data after sending EOF")
+        with self._send_conflict_detector.sync:
+            with _translate_socket_errors_to_stream_errors():
+                return (await self.socket.sendmsg(buffers))
+
+    trio.SocketStream.sendmsg = sendmsg
+    del sendmsg
 
 
 class VirtualCircuit:
     "Wraps a caproto.VirtualCircuit and adds transport."
-    def __init__(self, circuit):
+    def __init__(self, circuit, *, nursery):
         self.circuit = circuit  # a caproto.VirtualCircuit
+        self.nursery = nursery
         self.channels = {}  # map cid to Channel
         self.ioids = {}  # map ioid to Channel
         self.ioid_data = {}  # map ioid to server response
         self.subscriptionids = {}  # map subscriptionid to Channel
         self.connected = True
         self.socket = None
-        self.command_queue = curio.Queue()
-        self.new_command_condition = curio.Condition()
-        self._socket_lock = curio.RLock()
+        self.command_queue = trio.Queue(capacity=1000)
+        self.new_command_condition = trio.Condition()
+        self._socket_lock = trio.Lock()
 
     async def connect(self):
         async with self._socket_lock:
-            self.socket = await socket.create_connection(self.circuit.address)
-            # Kick off background loops that read from the socket
-            # and process the commands read from it.
-            await curio.spawn(self._receive_loop, daemon=True)
-            await curio.spawn(self._command_queue_loop, daemon=True)
-            # Send commands that initialize the Circuit.
-            await self.send(ca.VersionRequest(version=13,
-                                              priority=self.circuit.priority))
-            host_name = await socket.gethostname()
-            await self.send(ca.HostNameRequest(name=host_name))
-            client_name = getpass.getuser()
-            await self.send(ca.ClientNameRequest(name=client_name))
+            self.socket = await trio.open_tcp_stream(*self.circuit.address)
+        # Kick off background loops that read from the socket
+        # and process the commands read from it.
+        self.nursery.start_soon(self._receive_loop)
+        self.nursery.start_soon(self._command_queue_loop)
+        # Send commands that initialize the Circuit.
+        await self.send(ca.VersionRequest(version=13,
+                                          priority=self.circuit.priority))
+        host_name = socket.gethostname()
+        await self.send(ca.HostNameRequest(name=host_name))
+        client_name = getpass.getuser()
+        await self.send(ca.ClientNameRequest(name=client_name))
 
     async def _receive_loop(self):
         num_bytes_needed = 0
         while True:
-            bytes_received = await self.socket.recv(max(32768,
-                                                        num_bytes_needed))
+            bytes_to_recv = max(32768, num_bytes_needed)
+            bytes_received = await self.socket.receive_some(bytes_to_recv)
             if not len(bytes_received):
                 self.connected = False
                 break
@@ -69,18 +94,19 @@ class VirtualCircuit:
             try:
                 command = await self.command_queue.get()
                 self.circuit.process_command(command)
-            except curio.TaskCancelled:
-                break
             except Exception as ex:
                 logger.error('Command queue evaluation failed: {!r}'
                              ''.format(command), exc_info=ex)
                 continue
 
-            if isinstance(command, (ca.ReadNotifyResponse,
-                                    ca.WriteNotifyResponse)):
+            if command is ca.DISCONNECTED:
+                logger.debug('Command queue loop exiting')
+                break
+            elif isinstance(command, (ca.ReadNotifyResponse,
+                                      ca.WriteNotifyResponse)):
                 user_event = self.ioids.pop(command.ioid)
                 self.ioid_data[command.ioid] = command
-                await user_event.set()
+                user_event.set()
             elif isinstance(command, ca.EventAddResponse):
                 user_queue = self.subscriptionids[command.subscriptionid]
                 await user_queue.put(command)
@@ -93,9 +119,9 @@ class VirtualCircuit:
                     ioid = original_req.parameter2
                     user_event = self.ioids.pop(ioid)
                     self.ioid_data[ioid] = command
-                    await user_event.set()
+                    user_event.set()
             async with self.new_command_condition:
-                await self.new_command_condition.notify_all()
+                self.new_command_condition.notify_all()
 
     async def send(self, *commands):
         """
@@ -107,7 +133,6 @@ class VirtualCircuit:
                 if self.socket is None:
                     raise RuntimeError('socket connection failed')
 
-                # send bytes over the wire using some caproto utilities
                 await ca.async_send_all(buffers_to_send, self.socket.sendmsg)
 
 
@@ -117,8 +142,12 @@ class Channel:
         self.circuit = circuit  # a VirtualCircuit
         self.channel = channel  # a caproto.ClientChannel
         self.last_reading = None
-        self.monitoring_tasks = {}  # maps subscriptionid to curio.Task
+        self.monitoring_queues = {}  # maps subscriptionid to trio.Task
         self._callback = None  # user func to call when subscriptions are run
+
+    @property
+    def nursery(self):
+        return self.circuit.nursery
 
     def register_user_callback(self, func):
         """
@@ -148,9 +177,14 @@ class Channel:
 
     async def disconnect(self):
         "Disconnect this Channel."
-        await self.circuit.send(self.channel.disconnect())
+        if self.channel.states[ca.CLIENT] is ca.CONNECTED:
+            await self.circuit.send(self.channel.disconnect())
         while self.channel.states[ca.CLIENT] is ca.MUST_CLOSE:
             await self.wait_on_new_command()
+
+        for sub_id, queue in self.circuit.subscriptionids.items():
+            logger.debug("Disconnecting subscription id %s", sub_id)
+            await queue.put(ca.DISCONNECTED)
 
     async def read(self, *args, **kwargs):
         """Request a fresh reading, wait for it, return it and stash it.
@@ -161,11 +195,7 @@ class Channel:
         command = self.channel.read(*args, **kwargs)
         # Stash the ioid to match the response to the request.
         ioid = command.ioid
-        # TODO this could be implemented as a concurrent.Future and use
-        #      curio.traps._future_wait. A Future is really what we want here,
-        #      but it doesn't seem like curio provides such a primitive for us
-        ioid = command.ioid
-        event = curio.Event()
+        event = trio.Event()
         self.circuit.ioids[ioid] = event
         await self.circuit.send(command)
         await event.wait()
@@ -182,7 +212,7 @@ class Channel:
         command = self.channel.write(*args, **kwargs)
         # Stash the ioid to match the response to the request.
         ioid = command.ioid
-        event = curio.Event()
+        event = trio.Event()
         self.circuit.ioids[ioid] = event
         await self.circuit.send(command)
         await event.wait()
@@ -192,26 +222,27 @@ class Channel:
         "Start a new subscription and spawn an async task to receive readings."
         command = self.channel.subscribe(*args, **kwargs)
         # Stash the subscriptionid to match the response to the request.
-        queue = curio.Queue()
+        queue = trio.Queue(capacity=100)
         self.circuit.subscriptionids[command.subscriptionid] = queue
         await self.circuit.send(command)
 
-        async def _queue_loop():
+        async def _queue_loop(task_status):
+            task_status.started()
             while True:
                 command = await queue.get()
+                if command is ca.DISCONNECTED:
+                    break
                 self.process_subscription(command)
 
-        task = await curio.spawn(_queue_loop, daemon=True)
-        self.monitoring_tasks[command.subscriptionid] = task
+        await self.nursery.start(_queue_loop)
         return command.subscriptionid
 
     async def unsubscribe(self, subscriptionid, *args, **kwargs):
         "Cancel a subscription and await confirmation from the server."
+        # queue = self.circuit.subscriptionids[subscriptionid]
         await self.circuit.send(self.channel.unsubscribe(subscriptionid))
         while subscriptionid in self.circuit.subscriptionids:
             await self.wait_on_new_command()
-        task = self.monitoring_tasks.pop(subscriptionid)
-        await task.cancel()
 
     async def wait_on_new_command(self):
         '''Wait for a new command to come in'''
@@ -220,18 +251,23 @@ class Channel:
 
 
 class SharedBroadcaster:
-    def __init__(self, *, log_level='ERROR'):
+    def __init__(self, *, nursery, log_level='ERROR'):
+        self.nursery = nursery
         self.log_level = log_level
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
         self.broadcaster.log.setLevel(self.log_level)
-        self.command_bundle_queue = curio.Queue()
-        self.broadcaster_command_condition = curio.Condition()
+        self.command_bundle_queue = trio.Queue(capacity=1000)
+        self.broadcaster_command_condition = trio.Condition()
+        self._cleanup_condition = trio.Condition()
+        self._cleanup_event = trio.Event()
 
         # UDP socket broadcasting to CA servers
-        self.udp_sock = ca.bcast_socket(socket)
+        self.udp_sock = None
         self.registered = False  # refers to RepeaterRegisterRequest
         self.unanswered_searches = {}  # map search id (cid) to name
         self.search_results = {}  # map name to address
+        self.new_id = ThreadsafeCounter(
+            dont_clash_with=self.unanswered_searches)
 
     async def send(self, port, *commands):
         """
@@ -246,32 +282,58 @@ class SharedBroadcaster:
             else:
                 await self.udp_sock.sendto(bytes_to_send, (host, port))
 
+    async def disconnect(self):
+        'Disconnect the broadcaster and stop listening'
+        async with self._cleanup_condition:
+            self._cleanup_event.set()
+            logger.debug('Broadcaster: Disconnecting the command queue loop')
+            await self.command_bundle_queue.put(ca.DISCONNECTED)
+            logger.debug('Broadcaster: Closing the UDP socket')
+            self._cleanup_condition.notify_all()
+        logger.debug('Broadcaster disconnect complete')
+
     async def register(self):
         "Register this client with the CA Repeater."
-        await curio.spawn(self._broadcaster_queue_loop, daemon=True)
+        self.nursery.start_soon(self._broadcaster_queue_loop)
 
         while not self.registered:
             async with self.broadcaster_command_condition:
                 await self.broadcaster_command_condition.wait()
 
-    async def _broadcaster_recv_loop(self):
+    async def _broadcaster_recv_loop(self, task_status):
+        # with ca.bcast_socket(socket_module=socket) as self.udp_sock:
+        self.udp_sock = ca.bcast_socket(socket_module=socket)
+        task_status.started()
+
         while True:
-            bytes_received, address = await self.udp_sock.recvfrom(4096)
+            async with self._cleanup_condition:
+                if self._cleanup_event.is_set():
+                    logger.debug('Exiting broadcaster recv loop')
+                    break
+
+            try:
+                with trio.fail_after(0.5):
+                    bytes_received, address = await self.udp_sock.recvfrom(4096)
+            except trio.TooSlowError:
+                continue
+
             if bytes_received:
+                if bytes_received is ca.DISCONNECTED:
+                    break
                 commands = self.broadcaster.recv(bytes_received, address)
                 await self.command_bundle_queue.put(commands)
 
     async def _broadcaster_queue_loop(self):
-        await curio.spawn(self._broadcaster_recv_loop, daemon=True)
+        await self.nursery.start(self._broadcaster_recv_loop)
         command = self.broadcaster.register('127.0.0.1')
         await self.send(ca.EPICS_CA2_PORT, command)
 
         while True:
             try:
                 commands = await self.command_bundle_queue.get()
+                if commands is ca.DISCONNECTED:
+                    break
                 self.broadcaster.process_commands(commands)
-            except curio.TaskCancelled:
-                break
             except Exception as ex:
                 logger.error('Broadcaster command queue evaluation failed',
                              exc_info=ex)
@@ -280,13 +342,13 @@ class SharedBroadcaster:
             for command in commands:
                 if isinstance(command, ca.RepeaterConfirmResponse):
                     self.registered = True
-                if isinstance(command, ca.VersionResponse):
+                elif isinstance(command, ca.VersionResponse):
                     # Check that the server version is one we can talk to.
                     if command.version <= 11:
                         logger.debug('Old client on version %s',
                                      command.version)
                         continue
-                if isinstance(command, ca.SearchResponse):
+                elif isinstance(command, ca.SearchResponse):
                     name = self.unanswered_searches.pop(command.cid, None)
                     if name is not None:
                         self.search_results[name] = ca.extract_address(command)
@@ -296,20 +358,84 @@ class SharedBroadcaster:
                         pass
 
                 async with self.broadcaster_command_condition:
-                    await self.broadcaster_command_condition.notify_all()
+                    self.broadcaster_command_condition.notify_all()
+
+    def get_cached_search_result(self, name, *,
+                                 threshold=STALE_SEARCH_EXPIRATION):
+        'Returns address if found, raises KeyError if missing or stale.'
+        address, timestamp = self.search_results[name]
+        if time.monotonic() - timestamp > threshold:
+            # TODO i have no idea which contexts are using me and are still
+            #      alive as in the threaded client
+            # Clean up expired result.
+            self.search_results.pop(name, None)
+            raise KeyError(f'{name!r}: stale search result')
+
+        return address
 
     async def search(self, name):
         "Generate, process, and transport a search request."
         # Discard any old search result for this name.
         self.search_results.pop(name, None)
-        ver_command, search_command = self.broadcaster.search(name)
+        ver_command, search_command = self.broadcaster.search(
+            name, cid=self.new_id())
         # Stash the search ID for recognizes the SearchResponse later.
         self.unanswered_searches[search_command.cid] = name
         # Wait for the SearchResponse.
         while search_command.cid in self.unanswered_searches:
             await self.send(ca.EPICS_CA1_PORT, ver_command, search_command)
-            await curio.ignore_after(1, self.wait_on_new_command)
+            with trio.move_on_after(1):
+                await self.wait_on_new_command()
         return name
+
+    async def search_many(self, *names):
+        "Generate, process, and transport search request(s)"
+        # We have have already searched for these names recently.
+        # Filter `pv_names` down to a subset, `needs_search`.
+        needs_search = []
+        use_cached_search = defaultdict(list)
+        for name in names:
+            try:
+                address = self.get_cached_search_result(name)
+            except KeyError:
+                needs_search.append((self.new_id(), name))
+            else:
+                use_cached_search[address].append(name)
+
+        for addr, names in use_cached_search.items():
+            yield (address, names)
+
+        use_cached_search.clear()
+
+        # Generate search_ids and stash them on Context state so they can
+        # be used to match SearchResponses with SearchRequests.
+        for search_id, name in needs_search:
+            self.unanswered_searches[search_id] = name
+
+        results = defaultdict(list)
+
+        while needs_search:
+            logger.debug('Searching for %r PVs....', len(needs_search))
+            requests = (ca.SearchRequest(name, search_id, 13)
+                        for search_id, name in needs_search)
+            for batch in batch_requests(requests, SEARCH_MAX_DATAGRAM_BYTES):
+                await self.send(ca.EPICS_CA1_PORT, ca.VersionRequest(0, 13),
+                                *batch)
+
+            with trio.move_on_after(1):
+                await self.wait_on_new_command()
+
+            results.clear()
+            found = [(search_id, name) for search_id, name in needs_search
+                     if search_id not in self.unanswered_searches]
+            needs_search = [key for key in needs_search
+                            if key not in found]
+            for search_id, name in found:
+                address, timestamp = self.search_results[name]
+                results[address].append(name)
+
+            for addr, names in results.items():
+                yield (address, names)
 
     async def wait_on_new_command(self):
         '''Wait for a new broadcaster command to come in'''
@@ -319,7 +445,8 @@ class SharedBroadcaster:
 
 class Context:
     "Wraps a caproto.Broadcaster, a UDP socket, and cache of VirtualCircuits."
-    def __init__(self, broadcaster, *, log_level='ERROR'):
+    def __init__(self, broadcaster, *, nursery, log_level='ERROR'):
+        self.nursery = nursery
         self.log_level = log_level
         self.circuits = []  # list of VirtualCircuits
         self.broadcaster = broadcaster
@@ -337,10 +464,10 @@ class Context:
 
         ca_circuit = ca.VirtualCircuit(our_role=ca.CLIENT, address=address,
                                        priority=priority)
-        circuit = VirtualCircuit(ca_circuit)
+        circuit = VirtualCircuit(ca_circuit, nursery=self.nursery)
         circuit.circuit.log.setLevel(self.log_level)
         self.circuits.append(circuit)
-        await curio.spawn(circuit.connect, daemon=True)
+        self.nursery.start_soon(circuit.connect)
         return circuit
 
     async def search(self, name):
@@ -367,7 +494,7 @@ class Context:
 
     async def create_many_channels(self, *names, priority=0,
                                    wait_for_connection=True,
-                                   move_on_after=2):
+                                   move_on_after=5):
         '''Create many channels in parallel through this context
 
         Parameters
@@ -385,32 +512,25 @@ class Context:
             Ordered dictionary of name to Channel
         '''
 
-        async def connect_one(name):
-            await self.search(name)
-            chan = await self.create_channel(name, priority=priority)
-            if wait_for_connection:
-                await chan.wait_for_connection()
-
-            return name, chan
-
-        async def create_many_outer():
-            async with curio.TaskGroup() as task:
-                for name in names:
-                    await task.spawn(connect_one, name)
-                while True:
-                    res = await task.next_done()
-                    if res is None:
-                        break
-
-                    name, chan = res.result
-                    channels[name] = chan
-
         channels = OrderedDict()
 
-        if move_on_after is not None:
-            async with curio.ignore_after(move_on_after):
-                await create_many_outer()
-        else:
-            await create_many_outer()
+        async def connect_outer(names):
+            nonlocal channels
 
+            async for addr, names in self.broadcaster.search_many(*names):
+                for name in names:
+                    channels[name] = await self.create_channel(name,
+                                                               priority=priority)
+
+            if wait_for_connection:
+                for name, channel in channels.items():
+                    await channel.wait_for_connection()
+
+        if move_on_after is not None:
+            with trio.move_on_after(move_on_after):
+                async with trio.open_nursery() as nursery:
+                    nursery.start_soon(connect_outer, names)
+        else:
+            async with trio.open_nursery() as nursery:
+                nursery.start_soon(connect_outer, names)
         return channels

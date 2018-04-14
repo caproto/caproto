@@ -8,10 +8,12 @@ import datetime
 import curio
 import curio.subprocess
 
+import trio
+
 import caproto as ca
 
 
-async def run_epics_base_binary(*args):
+async def run_epics_base_binary(backend, *args):
     '''Run an EPICS-base binary with the environment variables set
 
     Returns
@@ -29,18 +31,31 @@ async def run_epics_base_binary(*args):
                EPICS_CA_AUTO_ADDR_LIST=epics_env['EPICS_CA_AUTO_ADDR_LIST'],
                EPICS_CA_ADDR_LIST=epics_env['EPICS_CA_ADDR_LIST'])
 
-    p = curio.subprocess.Popen(args, env=env,
-                               stdout=curio.subprocess.PIPE,
-                               stderr=curio.subprocess.PIPE)
-    await p.wait()
-    raw_stdout = await p.stdout.read()
-    raw_stderr = await p.stderr.read()
+    if backend == 'curio':
+        p = curio.subprocess.Popen(args, env=env,
+                                   stdout=curio.subprocess.PIPE,
+                                   stderr=curio.subprocess.PIPE)
+        await p.wait()
+        raw_stdout = await p.stdout.read()
+        raw_stderr = await p.stderr.read()
+    elif backend == 'trio':
+        def trio_subprocess():
+            import subprocess
+            pipes = subprocess.Popen(args, env=env, stdout=subprocess.PIPE,
+                                     stderr=subprocess.PIPE)
+            return pipes.communicate()
+
+        raw_stdout, raw_stderr = await trio.run_sync_in_worker_thread(
+            trio_subprocess)
+    else:
+        raise NotImplementedError('Unsupported async backend')
+
     stdout = raw_stdout.decode('latin-1')
     stderr = raw_stderr.decode('latin-1')
     return stdout, stderr
 
 
-async def run_caget(pv, *, dbr_type=None):
+async def run_caget(backend, pv, *, dbr_type=None):
     '''Execute epics-base caget and parse results into a dictionary
 
     Parameters
@@ -61,7 +76,7 @@ async def run_caget(pv, *, dbr_type=None):
         wide_mode = False
     args.append(pv)
 
-    output, stderr = await run_epics_base_binary(*args)
+    output, stderr = await run_epics_base_binary(backend, *args)
 
     print('----------------------------------------------------------')
     print(output)
@@ -133,7 +148,7 @@ async def run_caget(pv, *, dbr_type=None):
     return info
 
 
-async def run_catest(pv, *, dbr_type=None):
+async def run_catest(backend, pv, *, dbr_type=None):
     '''Execute epics-base ca_test and parse results into a dictionary
 
     Parameters
@@ -141,7 +156,7 @@ async def run_catest(pv, *, dbr_type=None):
     pv : str
         PV name
     '''
-    output, stderr = await run_epics_base_binary('ca_test', pv)
+    output, stderr = await run_epics_base_binary(backend, 'ca_test', pv)
 
     print('----------------------------------------------------------')
 
@@ -160,7 +175,7 @@ async def run_catest(pv, *, dbr_type=None):
     return lines
 
 
-async def run_caput(pv, value, *, async_put=True, as_string=False):
+async def run_caput(backend, pv, value, *, async_put=True, as_string=False):
     '''Execute epics-base caput and parse results into a dictionary
 
     Parameters
@@ -182,7 +197,7 @@ async def run_caput(pv, value, *, async_put=True, as_string=False):
             '0.2',
             pv, value]
 
-    output, stderr = await run_epics_base_binary(*args)
+    output, stderr = await run_epics_base_binary(backend, *args)
 
     print('----------------------------------------------------------')
     print(output)

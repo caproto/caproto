@@ -164,7 +164,7 @@ class Broadcaster:
                 continue
             return i
 
-    def search(self, name):
+    def search(self, name, *, cid=None):
         """
         Generate a valid :class:`VersionRequest` and :class:`SearchRequest`.
 
@@ -180,7 +180,9 @@ class Broadcaster:
         -------
         (VersionRequest, SearchRequest)
         """
-        cid = self.new_search_id()
+        if cid is None:
+            # TODO all client implementations want to handle cids on their own...
+            cid = self.new_search_id()
         commands = (VersionRequest(0, self.protocol_version),
                     SearchRequest(name, cid, self.protocol_version))
         return commands

@@ -7,6 +7,7 @@ import socket
 import sys
 import enum
 import json
+import threading
 from collections import namedtuple
 
 try:
@@ -512,3 +513,40 @@ def batch_requests(request_iter, max_length):
         size += _len
     if batch:
         yield batch
+
+
+class ThreadsafeCounter:
+    '''A thread-safe counter with a couple features:
+
+    1. Loops around at 2 ** 16
+    2. Optionally ensures no clashing with existing IDs
+
+    Note: if necessary, use the counter lock to keep the dont_clash_with object
+    in sync.
+    '''
+    MAX_ID = 2 ** 16
+
+    def __init__(self, *, initial_value=0, dont_clash_with=None):
+        self.value = initial_value
+        self.lock = threading.RLock()
+        self.dont_clash_with = dont_clash_with
+
+    def __call__(self):
+        'Get next ID, wrapping around at 2**16, ensuring no clashes'
+        if not self.dont_clash_with:
+            with self.lock:
+                self.value += 1
+                if self.value >= self.MAX_ID:
+                    self.value = 0
+                return self.value
+        else:
+            with self.lock:
+                value = self.value
+
+                while value in self.dont_clash_with or value >= self.MAX_ID:
+                    value += 1
+                    if value >= self.MAX_ID:
+                        value = 0
+
+                self.value = value
+                return value

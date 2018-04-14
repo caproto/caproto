@@ -1,20 +1,16 @@
 from collections import defaultdict, deque, namedtuple
 import logging
 import os
-import random
 
-import curio
-from curio import socket
+import trio
+from trio import socket
 
 import caproto as ca
 from caproto import (get_beacon_address_list, get_environment_variables)
+from ..curio.server import find_next_tcp_port, AsyncLibraryLayer
 
 
 class DisconnectedCircuit(Exception):
-    ...
-
-
-class ServerExit(curio.KernelExit):
     ...
 
 
@@ -30,65 +26,53 @@ logger = logging.getLogger(__name__)
 STR_ENC = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
 
 
-class AsyncLibraryLayer:
-    ...
+def _universal_queue(portal, max_len=1000):
+    class UniversalQueue:
+        def __init__(self):
+            self.queue = trio.Queue(max_len)
+            self.portal = portal
+
+        async def async_put(self, value):
+            await self.queue.put(value)
+
+        def put(self, value):
+            self.portal.run(self.queue.put, value)
+
+        async def async_get(self):
+            return await self.queue.get()
+
+        def get(self):
+            return self.portal.run(self.queue.get)
+
+    return UniversalQueue
 
 
-class UniversalQueue(curio.UniversalQueue):
-    def put(self, value):
-        super().put(value)
+class TrioAsyncLayer(AsyncLibraryLayer):
+    def __init__(self):
+        self.portal = trio.BlockingTrioPortal()
+        self.ThreadsafeQueue = _universal_queue(self.portal)
 
-    async def async_put(self, value):
-        await super().put(value)
-
-    def get(self):
-        return super().get()
-
-    async def async_get(self):
-        return await super().get()
+    name = 'trio'
+    ThreadsafeQueue = None
+    library = trio
 
 
-class CurioAsyncLayer(AsyncLibraryLayer):
-    name = 'curio'
-    ThreadsafeQueue = UniversalQueue
-    library = curio
-
-
-def find_next_tcp_port(host='0.0.0.0', starting_port=ca.EPICS_CA2_PORT + 1):
-    import socket
-
-    port = starting_port
-    attempts = 0
-
-    while attempts < 100:
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.bind((host, port))
-        except IOError as ex:
-            port = random.randint(49152, 65535)
-            attempts += 1
-        else:
-            break
-
-    return port
-
-
-class CurioVirtualCircuit:
-    "Wraps a caproto.VirtualCircuit with a curio client."
+class TrioVirtualCircuit:
+    "Wraps a caproto.VirtualCircuit with a trio client."
     def __init__(self, circuit, client, context):
+        self.nursery = context.nursery
         self.connected = True
         self.circuit = circuit  # a caproto.VirtualCircuit
         self.client = client
         self.context = context
         self.client_hostname = None
         self.client_username = None
-        self.command_queue = curio.Queue()
-        self.new_command_condition = curio.Condition()
-        self.pending_tasks = curio.TaskGroup()
+        self.command_queue = trio.Queue(1000)
+        self.new_command_condition = trio.Condition()
         self.subscriptions = defaultdict(deque)
 
     async def run(self):
-        await self.pending_tasks.spawn(self.command_queue_loop())
+        await self.nursery.start(self.command_queue_loop)
 
     async def _on_disconnect(self):
         """Executed when disconnection detected"""
@@ -108,6 +92,8 @@ class CurioVirtualCircuit:
 
         # TODO this may cancel some caputs in progress, need to rethink it
         # await self.pending_tasks.cancel_remaining()
+        print('client connection closed')
+        self.client.close()
 
     async def send(self, *commands):
         """
@@ -115,8 +101,6 @@ class CurioVirtualCircuit:
         """
         if self.connected:
             buffers_to_send = self.circuit.send(*commands)
-
-            # send bytes over the wire using some caproto utilities
             await ca.async_send_all(buffers_to_send, self.client.sendmsg)
 
     async def recv(self):
@@ -135,7 +119,7 @@ class CurioVirtualCircuit:
             await self._on_disconnect()
             raise DisconnectedCircuit()
 
-    async def command_queue_loop(self):
+    async def command_queue_loop(self, task_status):
         """
         Coroutine which feeds from the circuit command queue.
 
@@ -144,11 +128,12 @@ class CurioVirtualCircuit:
               caproto.ErrorResponse
         2. Update Channel state if applicable.
         """
+        task_status.started()
         while True:
             try:
                 command = await self.command_queue.get()
                 self.circuit.process_command(command)
-            except curio.TaskCancelled:
+            except trio.Cancelled:
                 break
             except ca.RemoteProtocolError as ex:
                 if hasattr(command, 'sid'):
@@ -203,11 +188,11 @@ class CurioVirtualCircuit:
             except Exception as ex:
                 if not self.connected:
                     if not isinstance(command, ca.ClearChannelRequest):
-                        logger.error('Curio server error after client '
+                        logger.error('Trio server error after client '
                                      'disconnection: %s', command)
                     break
 
-                logger.error('Curio server failed to process command: %s',
+                logger.error('Trio server failed to process command: %s',
                              command, exc_info=ex)
 
                 if hasattr(command, 'sid'):
@@ -222,7 +207,7 @@ class CurioVirtualCircuit:
                     await self.send(response_command)
 
             async with self.new_command_condition:
-                await self.new_command_condition.notify_all()
+                self.new_command_condition.notify_all()
 
     async def _process_command(self, command):
         '''Process a command from a client, and return the server response'''
@@ -293,7 +278,7 @@ class CurioVirtualCircuit:
                 if client_waiting:
                     await self.send(response_command)
 
-            await self.pending_tasks.spawn(handle_write, ignore_result=True)
+            self.nursery.start_soon(handle_write)
             # TODO pretty sure using the taskgroup will bog things down,
             # but it suppresses an annoying warning message, so... there
         elif isinstance(command, ca.EventAddRequest):
@@ -346,8 +331,10 @@ class CurioVirtualCircuit:
                 await sub_spec.db_entry.unsubscribe(queue, sub_spec)
         return tuple(to_remove)
 
+
 class Context:
     def __init__(self, host, port, pvdb, *, log_level='ERROR'):
+        self.nursery = None
         self.host = host
         self.port = port
         self.pvdb = pvdb
@@ -356,23 +343,25 @@ class Context:
         self.log_level = log_level
         self.broadcaster = ca.Broadcaster(our_role=ca.SERVER)
         self.broadcaster.log.setLevel(self.log_level)
-        self.command_bundle_queue = curio.Queue()
+        self.command_bundle_queue = trio.Queue(1000)
 
         self.subscriptions = defaultdict(deque)
-        self.subscription_queue = curio.UniversalQueue()
+        self.subscription_queue = trio.Queue(1000)
         self.beacon_count = 0
         self.environ = get_environment_variables()
 
         ignore_addresses = self.environ['EPICS_CAS_IGNORE_ADDR_LIST']
         self.ignore_addresses = ignore_addresses.split(' ')
 
-    async def broadcaster_udp_server_loop(self):
+    async def broadcaster_udp_server_loop(self, task_status):
         self.udp_sock = ca.bcast_socket(socket)
         try:
-            self.udp_sock.bind((self.host, ca.EPICS_CA1_PORT))
+            await self.udp_sock.bind((self.host, ca.EPICS_CA1_PORT))
         except Exception:
-            logger.error('[server] udp bind failure!')
+            logger.exception('[server] udp bind failure!')
             raise
+
+        task_status.started()
 
         while True:
             bytes_received, address = await self.udp_sock.recvfrom(4096)
@@ -450,15 +439,15 @@ class Context:
             bytes_to_send = self.broadcaster.send(*responses)
             await self.udp_sock.sendto(bytes_to_send, addr)
 
-    async def broadcaster_queue_loop(self):
+    async def broadcaster_queue_loop(self, task_status):
+        task_status.started()
         while True:
             try:
                 addr, commands = await self.command_bundle_queue.get()
                 self.broadcaster.process_commands(commands)
-                if addr in self.ignore_addresses:
-                    continue
-                await self._broadcaster_evaluate(addr, commands)
-            except curio.TaskCancelled:
+                if addr not in self.ignore_addresses:
+                    await self._broadcaster_evaluate(addr, commands)
+            except trio.Cancelled:
                 break
             except Exception as ex:
                 logger.error('Broadcaster command queue evaluation failed',
@@ -468,28 +457,25 @@ class Context:
     async def tcp_handler(self, client, addr):
         '''Handler for each new TCP client to the server'''
         cavc = ca.VirtualCircuit(ca.SERVER, addr, None)
-        circuit = CurioVirtualCircuit(cavc, client, self)
+        circuit = TrioVirtualCircuit(cavc, client, self)
         self.circuits.add(circuit)
 
         circuit.circuit.log.setLevel(self.log_level)
 
         await circuit.run()
 
-        try:
-            while True:
-                try:
-                    await circuit.recv()
-                except DisconnectedCircuit:
-                    break
-        except KeyboardInterrupt as ex:
-            logger.debug('TCP handler received KeyboardInterrupt')
-            raise ServerExit() from ex
+        while True:
+            try:
+                await circuit.recv()
+            except DisconnectedCircuit:
+                break
 
     async def circuit_disconnected(self, circuit):
         '''Notification from circuit that its connection has closed'''
         self.circuits.remove(circuit)
 
-    async def subscription_queue_loop(self):
+    async def subscription_queue_loop(self, task_status):
+        task_status.started()
         while True:
             # This queue receives updates that match the db_entry, data_type
             # and mask ("subscription spec") of one or more subscriptions.
@@ -511,14 +497,13 @@ class Context:
                                          data_count=data_count,
                                          subscriptionid=sub.subscriptionid,
                                          status_code=1)
-                # Check that the Channel did not close at some point after
-                # this update started its flight.
-                if chan.states[ca.SERVER] is ca.CONNECTED:
-                    await sub.circuit.send(command)
+                await sub.circuit.send(command)
 
-    async def broadcast_beacon_loop(self):
+    async def broadcast_beacon_loop(self, task_status):
         beacon_period = self.environ['EPICS_CAS_BEACON_PERIOD']
         addresses = get_beacon_address_list()
+
+        task_status.started()
 
         while True:
             beacon = ca.RsrvIsUpResponse(13, self.port, self.beacon_count,
@@ -527,7 +512,19 @@ class Context:
             for addr_port in addresses:
                 await self.udp_sock.sendto(bytes_to_send, addr_port)
             self.beacon_count += 1
-            await curio.sleep(beacon_period)
+            await trio.sleep(beacon_period)
+
+    async def server_accept_loop(self, addr, port, *, task_status):
+        with trio.socket.socket() as listen_sock:
+            logger.debug('Listening on %s:%d', addr, port)
+            await listen_sock.bind((addr, port))
+            listen_sock.listen()
+
+            task_status.started()
+
+            while True:
+                client_sock, addr = await listen_sock.accept()
+                self.nursery.start_soon(self.tcp_handler, client_sock, addr)
 
     @property
     def startup_methods(self):
@@ -538,36 +535,41 @@ class Context:
                 instance.server_startup is not None]
 
     async def run(self):
+        'Start the server'
         try:
-            async with curio.TaskGroup() as g:
+            async with trio.open_nursery() as self.nursery:
                 for addr, port in ca.get_server_address_list(self.port):
-                    logger.debug('Listening on %s:%d', addr, port)
-                    await g.spawn(curio.tcp_server,
-                                  addr, port, self.tcp_handler)
-                await g.spawn(self.broadcaster_udp_server_loop)
-                await g.spawn(self.broadcaster_queue_loop)
-                await g.spawn(self.subscription_queue_loop)
-                await g.spawn(self.broadcast_beacon_loop)
+                    await self.nursery.start(self.server_accept_loop,
+                                             addr, port)
+                await self.nursery.start(self.broadcaster_udp_server_loop)
+                await self.nursery.start(self.broadcaster_queue_loop)
+                await self.nursery.start(self.subscription_queue_loop)
+                await self.nursery.start(self.broadcast_beacon_loop)
 
-                async_lib = CurioAsyncLayer()
+                async_lib = TrioAsyncLayer()
                 for method in self.startup_methods:
                     logger.debug('Calling startup method %r', method)
-                    await g.spawn(method, async_lib)
-        except curio.TaskGroupError as ex:
-            logger.error('Curio server failed: %s', ex.errors)
-            for task in ex:
-                logger.error('Task %s failed: %s', task, task.exception)
-        except curio.TaskCancelled as ex:
-            logger.info('Server task cancelled; exiting')
-            raise ServerExit() from ex
+
+                    async def startup(task_status):
+                        task_status.started()
+                        await method(async_lib)
+
+                    await self.nursery.start(startup)
+        except trio.Cancelled:
+            logger.info('Server task cancelled')
+
+    async def stop(self):
+        'Stop the server'
+        nursery = self.nursery
+        if nursery is None:
+            return
+
+        nursery.cancel_scope.cancel()
 
 
-async def start_server(pvdb, log_level='DEBUG', *, bind_addr='0.0.0.0'):
-    '''Start a curio server with a given PV database'''
+async def start_server(pvdb, log_level='DEBUG'):
+    '''Start a trio server with a given PV database'''
     logger.setLevel(log_level)
-    ctx = Context(bind_addr, find_next_tcp_port(), pvdb, log_level=log_level)
+    ctx = Context('0.0.0.0', find_next_tcp_port(), pvdb, log_level=log_level)
     logger.info('Server starting up on %s:%d', ctx.host, ctx.port)
-    try:
-        return await ctx.run()
-    except ServerExit:
-        print('ServerExit caught; exiting')
+    return await ctx.run()

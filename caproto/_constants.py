@@ -16,6 +16,9 @@ MAX_ENUM_STATES = 16
 MAX_RECORD_LENGTH = 59  # from 3.14 on
 MAX_UDP_RECV = 0xffff - 16
 
+STALE_SEARCH_EXPIRATION = 10.0
+SEARCH_MAX_DATAGRAM_BYTES = (0xffff - 16)
+
 # Servers send beacons at some maximum interval. ("Maximum delay between
 # beacons will be limited by server specified parameter, but is commonly 15
 # seconds.") Servers can be presumed dead and dropped by circuits and repeaters
