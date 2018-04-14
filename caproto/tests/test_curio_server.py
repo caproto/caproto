@@ -193,6 +193,7 @@ def test_with_caput(prefix, pvdb_from_server_example, server, pv, put_value,
                 if ' ' not in v:
                     return [v]
                 return [v.split(' ', 1)[1]]
+            # db_new = [db_entry.enum_strings[db_new[0]]]
         elif isinstance(db_entry, ca.ChannelByte):
             if pv.endswith('bytearray'):
                 def clean_func(v):

@@ -14,7 +14,8 @@ from ._constants import (EPICS2UNIX_EPOCH, EPICS_EPOCH, MAX_STRING_SIZE,
                          MAX_UNITS_SIZE, MAX_ENUM_STRING_SIZE, MAX_ENUM_STATES)
 
 try:
-    import numpy
+    # import numpy
+    raise ImportError
 except ImportError:
     USE_NUMPY = False
 else:
@@ -265,17 +266,17 @@ def native_to_builtin(value, native_type, data_count):
      - Everything else is, straightforwardly, an array of numbers.
     '''
 
+    if native_type == ChannelType.STRING:
+        return DbrStringArray.frombuffer(value, data_count)
+
     if USE_NUMPY:
         # Return an ndarray
         dt = _numpy_map[native_type]
-        if native_type == ChannelType.STRING:
-            return DbrStringArray.frombuffer(value, data_count)
-
         return numpy.frombuffer(value, dtype=dt)
     else:
-        # TODO
-        raise NotImplementedError("the non-numpy version has not been "
-                                  "written yet")
+        # Return an array.array
+        dt = _array_type_code_map[native_type]
+        return array.array(dt, value)
 
 
 class DbrTypeBase(ctypes.BigEndianStructure):
@@ -557,6 +558,13 @@ class DBR_GR_ENUM(GraphicControlBase):
         return tuple(self.strs[i].value
                      for i in range(self.no_str))
 
+    @enum_strings.setter
+    def enum_strings(self, enum_strings):
+        for i, bytes_ in enumerate(enum_strings):
+            bytes_ = bytes_[:MAX_ENUM_STRING_SIZE - 1]
+            self.strs[i][:] = bytes_.ljust(MAX_ENUM_STRING_SIZE, b'\x00')
+        self.no_str = len(enum_strings)
+
 
 class DBR_GR_CHAR(GraphicTypeUnits):
     DBR_ID = ChannelType.GR_CHAR
@@ -602,6 +610,13 @@ class DBR_CTRL_ENUM(GraphicControlBase):
         '''Enum byte strings as a tuple'''
         return tuple(self.strs[i].value
                      for i in range(self.no_str))
+
+    @enum_strings.setter
+    def enum_strings(self, enum_strings):
+        for i, bytes_ in enumerate(enum_strings):
+            bytes_ = bytes_[:MAX_ENUM_STRING_SIZE - 1]
+            self.strs[i][:] = bytes_.ljust(MAX_ENUM_STRING_SIZE, b'\x00')
+        self.no_str = len(enum_strings)
 
 
 class DBR_CTRL_CHAR(ControlTypeUnits):
@@ -751,6 +766,8 @@ if USE_NUMPY:
          (ChannelType.PUT_ACKS, numpy.ushort),
          ]
     }
+else:
+    _numpy_map = {}
 
 
 _array_type_code_map = {
