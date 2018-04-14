@@ -255,12 +255,6 @@ class SharedBroadcaster:
                 await self.broadcaster_command_condition.wait()
 
     async def _broadcaster_recv_loop(self):
-        # TODO: broadcaster info should be shared application-wide if possible,
-        # as they are not really tied to a context in any way?
-        # also: these coroutines could probably be merged intelligently
-        # somehow, but isn't the point rather that you can break it up into
-        # these readable co-friendly routines?
-
         while True:
             bytes_received, address = await self.udp_sock.recvfrom(4096)
             if bytes_received:

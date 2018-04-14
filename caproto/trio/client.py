@@ -205,10 +205,6 @@ class Channel:
         command = self.channel.read(*args, **kwargs)
         # Stash the ioid to match the response to the request.
         ioid = command.ioid
-        # TODO this could be implemented as a concurrent.Future and use
-        #      trio.traps._future_wait. A Future is really what we want here,
-        #      but it doesn't seem like trio provides such a primitive for us
-        ioid = command.ioid
         event = trio.Event()
         self.circuit.ioids[ioid] = event
         await self.circuit.send(command)
