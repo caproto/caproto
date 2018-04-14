@@ -344,7 +344,7 @@ def bench_trio_many_connections(pv_names, *, initial_value=None,
 
 @pytest.mark.parametrize('connection_count', [5, 100, 500])
 @pytest.mark.parametrize('pv_format', ['connections:{}'])
-@pytest.mark.parametrize('backend', ['pyepics', 'curio', 'trio'])
+@pytest.mark.parametrize('backend', ['pyepics', 'curio', 'trio', 'threading'])
 @pytest.mark.parametrize('log_level', ['INFO'])
 def test_many_connections_same_ioc(benchmark, backend, connection_count,
                                    pv_format, log_level):
