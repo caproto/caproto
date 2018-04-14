@@ -11,4 +11,4 @@ pytest-rerunfailures
 asv
 asks
 ophyd
-git+https://github.com/python-trio/trio
+trio==0.4.0
