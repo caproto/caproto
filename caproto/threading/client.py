@@ -18,7 +18,8 @@ import inspect
 from collections import defaultdict
 
 import caproto as ca
-from .._constants import MAX_ID
+from .._constants import (MAX_ID, STALE_SEARCH_EXPIRATION,
+                          SEARCH_MAX_DATAGRAM_BYTES)
 from .._utils import batch_requests, CaprotoError
 
 
@@ -62,9 +63,7 @@ class ContextDisconnectedError(ThreadingClientException):
 
 
 AUTOMONITOR_MAXLENGTH = 65536
-STALE_SEARCH_EXPIRATION = 10.0
 TIMEOUT = 2
-SEARCH_MAX_DATAGRAM_BYTES = (0xffff - 16)
 EVENT_ADD_BATCH_MAX_BYTES = 2**16
 RETRY_SEARCHES_PERIOD = 1
 RESTART_SUBS_PERIOD = 0.1
