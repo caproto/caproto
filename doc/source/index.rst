@@ -45,7 +45,7 @@ introspection, debug logging, and simple installation.
 Vital Statistics
 ================
 
-* Requirements: Python 3.5+ and (optional) numpy
+* Requirements: Python 3.6+ and (optional) numpy
 * License: 3-clause BSD
 
 How do you know it works?
