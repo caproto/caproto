@@ -195,8 +195,13 @@ async def run_caput(backend, pv, value, *, async_put=True, as_string=False):
                    ('S' if as_string else '') +
                    'w'),
             '0.2',
-            pv, value]
+            pv]
 
+    if isinstance(value, (list, tuple)):
+        args.extend(list(value))
+    else:
+        args.append(value)
+    print(args)
     output, stderr = await run_epics_base_binary(backend, *args)
 
     print('----------------------------------------------------------')

@@ -23,7 +23,8 @@ class Forbidden(CaprotoError):
     ...
 
 
-def _convert_enum_values(values, to_dtype, string_encoding, enum_strings):
+def _convert_enum_values(values, to_dtype, string_encoding, enum_strings,
+                         direction):
     if isinstance(values, (str, bytes)):
         values = [values]
 
@@ -57,24 +58,21 @@ def _convert_enum_values(values, to_dtype, string_encoding, enum_strings):
         return values
 
 
-def _convert_char_values(values, to_dtype, string_encoding, enum_strings):
+def _convert_char_values(values, to_dtype, string_encoding, enum_strings,
+                         direction):
+    if isinstance(values, list):
+        # exception to handling things as lists...
+        values = values[0]
+
     if isinstance(values, str):
         values = values.encode(string_encoding)
 
-    if not isinstance(values, bytes):
-        # for single value or metadata conversion, let numpy take care of
-        # typing
-        return np.asarray(values).astype(_numpy_map[to_dtype])
-    elif to_dtype in native_int_types or to_dtype in native_float_types:
-        arr = np.frombuffer(values, dtype=np.uint8)
-        if to_dtype != ChannelType.CHAR:
-            return arr.astype(_numpy_map[to_dtype])
-        return arr
-
-    return values
+    values = np.frombuffer(values, dtype=np.uint8)
+    return values.astype(_numpy_map[to_dtype])
 
 
-def _convert_string_values(values, to_dtype, string_encoding, enum_strings):
+def _convert_string_values(values, to_dtype, string_encoding, enum_strings,
+                           direction):
     if to_dtype == ChannelType.ENUM:
         if not isinstance(values, (str, bytes)):
             values = values[0]
@@ -87,13 +85,15 @@ def _convert_string_values(values, to_dtype, string_encoding, enum_strings):
                 str_value = values
 
             if byte_value in enum_strings:
-                return byte_value
+                return [byte_value]
             elif str_value in enum_strings:
-                return str_value
+                return [str_value]
             else:
                 raise ValueError('Invalid enum string')
         else:
-            return 0
+            return [0]
+    elif string_encoding is None and to_dtype == ChannelType.CHAR:
+        return np.frombuffer(values, dtype=np.uint8)
     elif to_dtype in native_int_types or to_dtype in native_float_types:
         return np.asarray(values).astype(_numpy_map[to_dtype])
 
@@ -117,8 +117,8 @@ _custom_conversions = {ChannelType.ENUM: _convert_enum_values,
                        }
 
 
-def convert_values(values, from_dtype, to_dtype, *, string_encoding='latin-1',
-                   enum_strings=None):
+def convert_values(values, from_dtype, to_dtype, *, direction,
+                   string_encoding='latin-1', enum_strings=None):
     '''Convert values from one ChannelType to another
 
     Parameters
@@ -149,12 +149,26 @@ def convert_values(values, from_dtype, to_dtype, *, string_encoding='latin-1',
 
     if from_dtype in _custom_conversions:
         convert_func = _custom_conversions[from_dtype]
-        return convert_func(values=values, to_dtype=to_dtype,
-                            string_encoding=string_encoding,
-                            enum_strings=enum_strings)
+        values = convert_func(values=values, to_dtype=to_dtype,
+                              string_encoding=string_encoding,
+                              enum_strings=enum_strings, direction=direction)
 
     if to_dtype == ChannelType.STRING:
-        return [str(v).encode(string_encoding) for v in values]
+        if direction == 'encoding':
+            if isinstance(values[0], str):
+                return [val.encode(string_encoding) for val in values]
+            elif isinstance(values[0], bytes):
+                return values
+            return [str(v).encode(string_encoding) for v in values]
+        elif direction == 'decoding':
+            if isinstance(values[0], bytes):
+                return [val.decode(string_encoding) for val in values]
+            elif isinstance(values[0], str):
+                return [val.encode(string_encoding) for val in values]
+            return [str(v) for v in values]
+
+    if from_dtype in _custom_conversions:
+        return values
 
     return np.asarray(values).astype(_numpy_map[to_dtype])
 
@@ -386,7 +400,8 @@ class ChannelData:
                                 from_dtype=self.data_type,
                                 to_dtype=native_to,
                                 string_encoding=self.string_encoding,
-                                enum_strings=self._data.get('enum_strings'))
+                                enum_strings=self._data.get('enum_strings'),
+                                direction='encoding')
 
         # for native types, there is no dbr metadata - just data
         if data_type in native_types:
@@ -435,7 +450,8 @@ class ChannelData:
                                to_dtype=self.data_type,
                                string_encoding=self.string_encoding,
                                enum_strings=getattr(self, 'enum_strings',
-                                                    None))
+                                                    None),
+                               direction='decoding')
 
         try:
             modified_value = await self.verify_value(value)
@@ -539,7 +555,8 @@ class ChannelData:
                                             for key in convert_attrs],
                                     from_dtype=self.data_type,
                                     to_dtype=native_type(to_type),
-                                    string_encoding=self.string_encoding)
+                                    string_encoding=self.string_encoding,
+                                    direction='encoding')
             if isinstance(values, np.ndarray):
                 values = values.tolist()
             for attr, value in zip(convert_attrs, values):
@@ -688,13 +705,49 @@ class ChannelDouble(ChannelNumeric):
     precision = _read_only_property('precision')
 
 
-class ChannelChar(ChannelNumeric):
+class ChannelByte(ChannelNumeric):
+    'CHAR data which has no encoding'
     # 'Limits' on chars do not make much sense and are rarely used.
     data_type = ChannelType.CHAR
 
-    def __init__(self, *, max_length=100, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, *, value=None, max_length=100, string_encoding=None,
+                 **kwargs):
+        if string_encoding is not None:
+            raise ValueError('ChannelBytes cannot have a string encoding')
+
+        super().__init__(value=value, string_encoding=None, **kwargs)
         self.max_length = max_length
+
+    async def verify_value(self, data):
+        if isinstance(data, list):
+            data = data[0]
+
+        if isinstance(data, str):
+            return list(data.encode('ascii'))  # TODO: just reject?
+
+        return data
+
+
+class ChannelChar(ChannelData):
+    'CHAR data which masquerades as a string'
+    data_type = ChannelType.CHAR
+
+    def __init__(self, *, value=None, max_length=100,
+                 string_encoding='latin-1', **kwargs):
+        if isinstance(value, (str, bytes)):
+            if isinstance(value, bytes):
+                value = value.decode(string_encoding)
+
+        super().__init__(value=value, **kwargs)
+        self.max_length = max_length
+
+    async def verify_value(self, data):
+        if isinstance(data, np.ndarray) and data.dtype == np.int8:
+            bytes_ = data.tobytes()
+            bytes_, _, _ = bytes_.partition(b'\0')
+            return [bytes_.decode(self.string_encoding)]
+
+        return data
 
 
 class ChannelString(ChannelData):
@@ -706,6 +759,8 @@ class ChannelString(ChannelData):
                  string_encoding='latin-1',
                  reported_record_type='caproto'):
         if isinstance(value, (str, bytes)):
+            if isinstance(value, bytes):
+                value = value.decode(string_encoding)
             value = [value]
         super().__init__(alarm=alarm, value=value, timestamp=timestamp,
                          string_encoding=string_encoding,

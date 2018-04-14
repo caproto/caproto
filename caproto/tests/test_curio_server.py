@@ -1,6 +1,7 @@
 import ast
 import datetime
 
+import numpy as np
 import pytest
 
 import caproto as ca
@@ -154,14 +155,14 @@ def test_with_caget(prefix, pvdb_from_server_example, server, pv, dbr_type):
 
 caput_checks = [('int', '1', [1]),
                 ('pi', '3.18', [3.18]),
-                ('enum', 'd', 'd'),  # TODO inconsistency
-                # ('enum2', 'cc', 'cc'),  # TODO inconsistency
-                # ('str', 'resolve', [b'resolve']),  # TODO inconsistency - encoding
-                # ('char', 'testing', 'testing'),  # TODO comes in as byte array
-                # TODO string array, longer char array
+                ('enum', 'd', ['d']),
+                ('enum2', 'cc', ['cc']),
+                ('str', 'resolve', ['resolve']),
+                ('char', '51', b'3'),
+                ('chararray', 'testing', ['testing']),
+                # ('bytearray', 'testing', list(b'testing')),
+                ('stra', ['char array'], ['char array']),
                 ]
-
-
 @pytest.mark.parametrize('pv, put_value, check_value', caput_checks)
 # @pytest.mark.parametrize('async_put', [True, False])
 def test_with_caput(prefix, pvdb_from_server_example, server, pv, put_value,
@@ -181,13 +182,33 @@ def test_with_caput(prefix, pvdb_from_server_example, server, pv, put_value,
         db_entry = caget_pvdb[pv]
         db_old = db_entry.value
         data = await run_caput(server.backend, pv, put_value,
-                               as_string=isinstance(db_entry, ca.ChannelChar))
+                               as_string=isinstance(db_entry, (ca.ChannelByte,
+                                                               ca.ChannelChar)))
         db_new = db_entry.value
 
         if isinstance(db_entry, (ca.ChannelInteger, ca.ChannelDouble)):
             clean_func = ast.literal_eval
-        # elif isinstance(db_entry, ca.ChannelString):
-        #     clean_func = lambda v: v.split(' ', 1)[1]
+        elif isinstance(db_entry, (ca.ChannelEnum, )):
+            def clean_func(v):
+                if ' ' not in v:
+                    return [v]
+                return [v.split(' ', 1)[1]]
+        elif isinstance(db_entry, ca.ChannelByte):
+            if pv.endswith('bytearray'):
+                def clean_func(v):
+                    return np.frombuffer(v.encode('latin-1'), dtype=np.uint8)
+            else:
+                def clean_func(v):
+                    return chr(int(v)).encode('latin-1')
+        elif isinstance(db_entry, (ca.ChannelChar, ca.ChannelString)):
+            if pv.endswith('stra'):
+                # database holds ['char array'], caput shows [len char array]
+                def clean_func(v):
+                    return [v.split(' ', 1)[1]]
+            else:
+                # database holds ['string'], caput doesn't show it
+                def clean_func(v):
+                    return [v]
         else:
             clean_func = None
 
@@ -201,9 +222,9 @@ def test_with_caput(prefix, pvdb_from_server_example, server, pv, put_value,
         print('new from caput', data['new'])
 
         # check value from database compared to value from caput output
-        assert db_new == data['new']
+        assert db_new == data['new'], 'left = database/right = caput output'
         # check value from database compared to value the test expects
-        assert db_new == check_value
+        assert db_new == check_value, 'left = database/right = test expected'
 
     server(pvdb=caget_pvdb, client=client)
     print('done')
