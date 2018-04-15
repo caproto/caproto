@@ -745,7 +745,9 @@ class Context:
 class VirtualCircuitManager:
     __slots__ = ('context', 'circuit', 'channels', 'ioids', 'subscriptions',
                  '_user_disconnected', 'new_command_cond', 'socket',
-                 'selector', 'pvs', 'all_created_pvnames', '__weakref__')
+                 'selector', 'pvs', 'all_created_pvnames', 'callback_queue',
+                 'callback_thread',
+                 '__weakref__')
 
     def __init__(self, context, circuit, selector, timeout=TIMEOUT):
         self.context = context
@@ -758,6 +760,10 @@ class VirtualCircuitManager:
         self.socket = None
         self.selector = selector
         self._user_disconnected = False
+        self.callback_queue = queue.Queue()
+        self.callback_thread = threading.Thread(target=self._callback_loop,
+                                                daemon=True)
+        self.callback_thread.start()
 
         # keep track of all PV names that are successfully connected to within
         # this circuit. This is to be cleared upon disconnection:
@@ -786,6 +792,18 @@ class VirtualCircuitManager:
         return (f"<VirtualCircuitManager circuit={self.circuit} "
                 f"pvs={len(self.pvs)} ioids={len(self.ioids)} "
                 f"subscriptions={len(self.subscriptions)}>")
+
+    def _callback_loop(self):
+        while True:
+            t0, sub, command = self.callback_queue.get()
+            if sub is ca.DISCONNECTED:
+                break
+
+            dt = time.monotonic() - t0
+            logger.debug('Executing callback (dt=%.1f ms): %s %s',
+                         dt * 1000., sub, command)
+
+            sub.process(command)
 
     @property
     def connected(self):
@@ -854,7 +872,8 @@ class VirtualCircuitManager:
                 chan.process_write_notify(command)
             elif isinstance(command, ca.EventAddResponse):
                 sub = self.subscriptions[command.subscriptionid]
-                sub.process(command)
+                self.callback_queue.put((time.monotonic(), sub, command))
+                # sub.process(command)
             elif isinstance(command, ca.EventCancelResponse):
                 self.subscriptions.pop(command.subscriptionid)
             elif isinstance(command, ca.CreateChanResponse):
@@ -883,6 +902,7 @@ class VirtualCircuitManager:
             # This will cause all future calls to Context.get_circuit_manager()
             # to create a fresh VirtualCiruit and VirtualCircuitManager.
             self.context.circuit_managers.pop(self.circuit.address, None)
+            self.callback_queue.put((time.monotonic(), ca.DISCONNECTED, None))
 
         if not self._user_disconnected:
             # If the user didn't request disconnection, kick off attempt to
