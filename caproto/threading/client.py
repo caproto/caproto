@@ -873,7 +873,6 @@ class VirtualCircuitManager:
             elif isinstance(command, ca.EventAddResponse):
                 sub = self.subscriptions[command.subscriptionid]
                 self.callback_queue.put((time.monotonic(), sub, command))
-                # sub.process(command)
             elif isinstance(command, ca.EventCancelResponse):
                 self.subscriptions.pop(command.subscriptionid)
             elif isinstance(command, ca.CreateChanResponse):
