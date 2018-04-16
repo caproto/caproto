@@ -820,7 +820,7 @@ class PV:
             pv.go_idle()
 
 
-def get_pv(pvname, *args, context=None, connect=True, timeout=3.0, **kwargs):
+def get_pv(pvname, *args, context=None, connect=False, timeout=3.0, **kwargs):
     if context is None:
         context = PV._default_context
     pv = PV(pvname, *args, context=context, **kwargs)
