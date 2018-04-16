@@ -260,7 +260,6 @@ class PV:
     def _connection_established(self):
         'Callback when connection is initially established'
         logger.debug('%r connected', self)
-        caproto_pv = self._caproto_pv
         ch = self._caproto_pv.channel
         form = self.form
         count = self.default_count
@@ -703,12 +702,6 @@ class PV:
         self.get_ctrlvars()
         out = []
         xtype = self._args['typefull']
-        mod_map = {'enum': ca.enum_types,
-                   'status': ca.status_types,
-                   'time': ca.time_types,
-                   'control': ca.control_types,
-                   'native': ca.native_types}
-        mod = next(k for k, v in mod_map.items() if xtype in v)
         nt_type = ca.native_type(xtype)
         fmt = '%i'
 
