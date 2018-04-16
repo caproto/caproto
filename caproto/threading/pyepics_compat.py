@@ -123,7 +123,6 @@ def _pyepics_get_value(value, string_value, full_type, native_count, *,
     return value
 
 
-
 class PV:
     """Epics Process Variable
 
@@ -248,7 +247,8 @@ class PV:
 
         if not ok:
             raise TimeoutError(f'{self.pvname} failed to connect within '
-                               f'{timeout} seconds (caproto={self._caproto_pv})')
+                               f'{timeout} seconds '
+                               f'(caproto={self._caproto_pv})')
 
         return True
 
@@ -820,7 +820,7 @@ class PV:
             pv.go_idle()
 
 
-def get_pv(pvname, *args, context=None, connect=False, timeout=3.0, **kwargs):
+def get_pv(pvname, *args, context=None, connect=False, timeout=5, **kwargs):
     if context is None:
         context = PV._default_context
     pv = PV(pvname, *args, context=context, **kwargs)
@@ -931,7 +931,8 @@ def caget_many(pvlist, as_string=False, count=None, as_numpy=True, timeout=5.0,
     return [final_get(pv) for pv in pvs]
 
 
-def caput_many(pvlist, values, wait=False, connection_timeout=None, put_timeout=60):
+def caput_many(pvlist, values, wait=False, connection_timeout=None,
+               put_timeout=60):
     """put values to a list of PVs, as fast as possible
 
     This does not maintain the PV objects it makes.
