@@ -1,3 +1,12 @@
+'''
+caproto IOC "high-level" server framework
+
+This does not define any wire protocol information or have anything specific to
+a single asyncio library.
+
+For an example server implementation, see caproto.curio.server
+'''
+
 import copy
 import logging
 import inspect
@@ -9,6 +18,32 @@ from .. import (ChannelDouble, ChannelInteger, ChannelString,
                 AccessRights)
 
 logger = logging.getLogger(__name__)
+
+
+__all__ = ['AsyncLibraryLayer',
+           'NestedPvproperty', 'PVGroup', 'PVSpec', 'SubGroup',
+           'channeldata_from_pvspec', 'data_class_from_pvspec',
+           'expand_macros', 'get_pv_pair_wrapper', 'pvfunction', 'pvproperty',
+
+           'PvpropertyData','PvpropertyReadOnlyData',
+           'PvpropertyChar', 'PvpropertyCharRO',
+           'PvpropertyDouble', 'PvpropertyDoubleRO',
+           'PvpropertyEnum', 'PvpropertyEnumRO',
+           'PvpropertyInteger', 'PvpropertyIntegerRO',
+           'PvpropertyString', 'PvpropertyStringRO',
+           ]
+
+
+class AsyncLibraryLayer:
+    '''Library compatibility layer
+
+    To be subclassed/customized by async library layer for compatibility Then,
+    a single IOC written within the high-level server framework can potentially
+    use the same code base and still be run on either curio or trio, etc.
+    '''
+    name = None
+    ThreadsafeQueue = None
+    library = None
 
 
 class PvpropertyData:

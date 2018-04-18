@@ -225,7 +225,7 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
                        prefix):
     from .conftest import run_example_ioc
     from caproto.sync.client import get, put
-    from caproto.curio import high_level_server
+    from caproto.server import PvpropertyReadOnlyData
     import subprocess
 
     module = __import__(module_name,
@@ -253,7 +253,7 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
     print(f'{module_name} IOC now running')
 
     put_values = [
-        (high_level_server.PvpropertyReadOnlyData, None),
+        (PvpropertyReadOnlyData, None),
         (ca.ChannelNumeric, [1]),
         (ca.ChannelString, ['USD']),
     ]

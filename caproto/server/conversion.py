@@ -2,7 +2,7 @@ import inspect
 import numpy as np
 import ophyd
 
-from .high_level_server import pvfunction, PVGroup
+from .server import pvfunction, PVGroup
 from .._data import (ChannelDouble, ChannelEnum, ChannelChar,
                      ChannelInteger, ChannelString)
 from .menus import menus

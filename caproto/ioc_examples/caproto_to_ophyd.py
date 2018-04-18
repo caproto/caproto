@@ -9,8 +9,7 @@ from ophyd import Component as Cpt, EpicsSignal, EpicsSignalRO
 
 from caproto.benchmarking import set_logging_level
 from caproto.curio.server import start_server
-from caproto.curio.high_level_server import (pvproperty, PVGroup,
-                                             pvfunction)
+from caproto.server import (pvproperty, PVGroup, pvfunction)
 from caproto.curio.conversion import group_to_device
 
 logger = logging.getLogger(__name__)

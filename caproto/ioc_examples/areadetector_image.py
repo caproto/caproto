@@ -8,9 +8,8 @@ import curio
 import ophyd
 
 from caproto.curio.server import start_server
-# from caproto.curio import high_level_server
-from caproto.curio.high_level_server import (logger, PVGroup, pvproperty,
-                                             SubGroup, get_pv_pair_wrapper)
+from caproto.server import (logger, PVGroup, pvproperty, SubGroup,
+                            get_pv_pair_wrapper)
 
 from caproto.curio.conversion import ophyd_device_to_caproto_ioc
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from caproto.curio.high_level_server import pvproperty, PVGroup
+from caproto.server import pvproperty, PVGroup
 import random
 
 

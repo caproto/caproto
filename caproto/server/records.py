@@ -4,7 +4,7 @@ Contains PVGroups representing all fields of EPICS base records (minus .VAL)
 
 import inspect
 
-from .high_level_server import PVGroup, pvproperty
+from .server import PVGroup, pvproperty
 from .._data import ChannelType
 from . import menus
 
