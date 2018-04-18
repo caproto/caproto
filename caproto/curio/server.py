@@ -1,13 +1,13 @@
 from collections import defaultdict, deque, namedtuple
 import logging
 import os
-import random
 
 import curio
 from curio import socket
 
 import caproto as ca
-from caproto import (get_beacon_address_list, get_environment_variables)
+from caproto import (get_beacon_address_list, get_environment_variables,
+                     find_available_tcp_port)
 from ..server import AsyncLibraryLayer
 
 
@@ -49,25 +49,6 @@ class CurioAsyncLayer(AsyncLibraryLayer):
     name = 'curio'
     ThreadsafeQueue = UniversalQueue
     library = curio
-
-
-def find_next_tcp_port(host='0.0.0.0', starting_port=ca.EPICS_CA2_PORT + 1):
-    import socket
-
-    port = starting_port
-    attempts = 0
-
-    while attempts < 100:
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.bind((host, port))
-        except IOError as ex:
-            port = random.randint(49152, 65535)
-            attempts += 1
-        else:
-            break
-
-    return port
 
 
 class CurioVirtualCircuit:
@@ -563,7 +544,8 @@ class Context:
 async def start_server(pvdb, log_level='DEBUG', *, bind_addr='0.0.0.0'):
     '''Start a curio server with a given PV database'''
     logger.setLevel(log_level)
-    ctx = Context(bind_addr, find_next_tcp_port(), pvdb, log_level=log_level)
+    ctx = Context(bind_addr, find_available_tcp_port(), pvdb,
+                  log_level=log_level)
     logger.info('Server starting up on %s:%d', ctx.host, ctx.port)
     try:
         return await ctx.run()

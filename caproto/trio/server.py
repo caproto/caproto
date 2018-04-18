@@ -6,8 +6,9 @@ import trio
 from trio import socket
 
 import caproto as ca
-from caproto import (get_beacon_address_list, get_environment_variables)
-from ..curio.server import find_next_tcp_port, AsyncLibraryLayer
+from caproto import (get_beacon_address_list, get_environment_variables,
+                     find_available_tcp_port)
+from ..server import AsyncLibraryLayer
 
 
 class DisconnectedCircuit(Exception):
@@ -567,9 +568,10 @@ class Context:
         nursery.cancel_scope.cancel()
 
 
-async def start_server(pvdb, log_level='DEBUG'):
+async def start_server(pvdb, log_level='DEBUG', *, bind_addr='0.0.0.0'):
     '''Start a trio server with a given PV database'''
     logger.setLevel(log_level)
-    ctx = Context('0.0.0.0', find_next_tcp_port(), pvdb, log_level=log_level)
+    ctx = Context(bind_addr, find_available_tcp_port(), pvdb,
+                  log_level=log_level)
     logger.info('Server starting up on %s:%d', ctx.host, ctx.port)
     return await ctx.run()

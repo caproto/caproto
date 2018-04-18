@@ -17,15 +17,8 @@ import caproto as ca
 import caproto.benchmarking  # noqa
 from caproto.sync.client import get
 import caproto.curio  # noqa
-import caproto.curio.client  # noqa
-import caproto.curio.server  # noqa
 import caproto.threading  # noqa
-import caproto.threading.client  # noqa
 import caproto.trio  # noqa
-import caproto.trio.client  # noqa
-import caproto.trio.server  # noqa
-
-from caproto.curio.server import find_next_tcp_port
 
 
 _repeater_process = None
@@ -326,7 +319,7 @@ def curio_server(prefix):
                   for key, value in caget_pvdb.items()}
 
     async def _server(pvdb):
-        port = find_next_tcp_port(host=SERVER_HOST)
+        port = ca.find_available_tcp_port(host=SERVER_HOST)
         logger.info('Server will be on %s', (SERVER_HOST, port))
         ctx = caproto.curio.server.Context(SERVER_HOST, port, pvdb,
                                            log_level='DEBUG')
@@ -394,7 +387,7 @@ def run_with_trio_context(func, *, log_level='DEBUG', **kwargs):
 def server(request):
     def curio_runner(pvdb, client, *, threaded_client=False):
         async def server_main():
-            port = find_next_tcp_port(host=SERVER_HOST)
+            port = ca.find_available_tcp_port(host=SERVER_HOST)
             print('Server will be on', (SERVER_HOST, port))
             ctx = caproto.curio.server.Context(SERVER_HOST, port, pvdb,
                                                log_level='DEBUG')
@@ -423,7 +416,7 @@ def server(request):
 
     def trio_runner(pvdb, client, *, threaded_client=False):
         async def trio_server_main(task_status):
-            port = find_next_tcp_port(host=SERVER_HOST)
+            port = ca.find_available_tcp_port(host=SERVER_HOST)
             print('Server will be on', (SERVER_HOST, port))
             ctx = caproto.trio.server.Context(SERVER_HOST, port, pvdb,
                                               log_level='DEBUG')

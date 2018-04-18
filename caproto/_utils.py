@@ -249,6 +249,39 @@ def ensure_bytes(s):
                                f"{type(s)}")
 
 
+def find_available_tcp_port(host='0.0.0.0', starting_port=None):
+    '''Find the next available TCP server port
+
+    Parameters
+    ----------
+    host : str, optional
+        Host/interface to bind on; defaults to 0.0.0.0
+    starting_port : int, optional
+        Port to try first
+    '''
+    import random
+    if starting_port is None:
+        from ._constants import EPICS_CA2_PORT
+        starting_port = EPICS_CA2_PORT + 1
+
+    port = starting_port
+    stashed_ex = None
+
+    for attempt in range(100):
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.bind((host, port))
+        except IOError as ex:
+            stashed_ex = ex
+        else:
+            s.close()
+            return port
+
+        port = random.randint(49152, 65535)
+
+    raise RuntimeError('No available ports and/or bind failed') from stashed_ex
+
+
 def bcast_socket(socket_module=socket):
     """
     Make a socket and configure it for UDP broadcast.
