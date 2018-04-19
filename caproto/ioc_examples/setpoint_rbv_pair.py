@@ -3,7 +3,7 @@ import sys
 import curio
 
 from caproto.curio.server import start_server
-from caproto.curio.high_level_server import (PVGroup, get_pv_pair_wrapper)
+from caproto.server import (PVGroup, get_pv_pair_wrapper)
 
 
 # Create _two_ PVs with a single pvproperty_with_rbv:

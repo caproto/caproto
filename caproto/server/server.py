@@ -1,3 +1,12 @@
+'''
+caproto IOC "high-level" server framework
+
+This does not define any wire protocol information or have anything specific to
+a single asyncio library.
+
+For an example server implementation, see caproto.curio.server
+'''
+
 import copy
 import logging
 import inspect
@@ -8,15 +17,42 @@ from .. import (ChannelDouble, ChannelInteger, ChannelString,
                 ChannelEnum, ChannelType, ChannelChar, ChannelAlarm,
                 AccessRights)
 
-logger = logging.getLogger(__name__)
+module_logger = logging.getLogger(__name__)
+
+
+__all__ = ['AsyncLibraryLayer',
+           'NestedPvproperty', 'PVGroup', 'PVSpec', 'SubGroup',
+           'channeldata_from_pvspec', 'data_class_from_pvspec',
+           'expand_macros', 'get_pv_pair_wrapper', 'pvfunction', 'pvproperty',
+
+           'PvpropertyData', 'PvpropertyReadOnlyData',
+           'PvpropertyChar', 'PvpropertyCharRO',
+           'PvpropertyDouble', 'PvpropertyDoubleRO',
+           'PvpropertyEnum', 'PvpropertyEnumRO',
+           'PvpropertyInteger', 'PvpropertyIntegerRO',
+           'PvpropertyString', 'PvpropertyStringRO',
+           ]
+
+
+class AsyncLibraryLayer:
+    '''Library compatibility layer
+
+    To be subclassed/customized by async library layer for compatibility Then,
+    a single IOC written within the high-level server framework can potentially
+    use the same code base and still be run on either curio or trio, etc.
+    '''
+    name = None
+    ThreadsafeQueue = None
+    library = None
 
 
 class PvpropertyData:
     def __init__(self, *, pvname, group, pvspec, doc=None, mock_record=None,
-                 **kwargs):
+                 logger=None, **kwargs):
         self.pvname = pvname  # the full, expanded PV name
         self.group = group
         self.pvspec = pvspec
+        self.logger = logger if logger is not None else module_logger
         self.getter = (MethodType(pvspec.get, group)
                        if pvspec.get is not None
                        else group.group_read)
@@ -47,19 +83,21 @@ class PvpropertyData:
         value = await self.getter(self)
         if value is not None:
             if self.pvspec.get is None:
-                logger.debug('group read value for %s updated: %r',
-                             self.pvspec, value)
+                self.logger.debug('group read value for %s updated: %r',
+                                  self.pvspec, value)
             else:
-                logger.debug('value for %s updated: %r', self.pvspec, value)
+                self.logger.debug('value for %s updated: %r', self.pvspec,
+                                  value)
             # update the internal state
             await self.write(value)
         return await self._read(data_type)
 
     async def verify_value(self, value):
         if self.pvspec.put is None:
-            logger.debug('group verify value for %s: %r', self.pvspec, value)
+            self.logger.debug('group verify value for %s: %r', self.pvspec,
+                              value)
         else:
-            logger.debug('verify value for %s: %r', self.pvspec, value)
+            self.logger.debug('verify value for %s: %r', self.pvspec, value)
         return await self.putter(self, value)
 
     async def _server_startup(self, async_lib):
@@ -707,7 +745,8 @@ class PVGroupMeta(type):
                 dct['_pvs_'].update(**base._pvs_)
 
         for attr, prop in metacls.find_subgroups(dct):
-            logger.debug('class %s subgroup attr %s: %r', name, attr, prop)
+            module_logger.debug('class %s subgroup attr %s: %r', name, attr,
+                                prop)
             subgroups[attr] = prop
 
             # TODO a bit messy
@@ -719,7 +758,8 @@ class PVGroupMeta(type):
 
         for attr, prop in metacls.find_pvproperties(dct):
             pvspec = prop.pvspec
-            logger.debug('class %s pvproperty attr %s: %r', name, attr, pvspec)
+            module_logger.debug('class %s pvproperty attr %s: %r', name, attr,
+                                pvspec)
             pvs[attr] = prop
 
             if pvspec.cls_kwargs:
@@ -799,7 +839,7 @@ class PVGroup(metaclass=PVGroupMeta):
         ChannelType.CHAR: '',
     }
 
-    def __init__(self, prefix, *, macros=None, parent=None):
+    def __init__(self, prefix, *, macros=None, parent=None, logger=None):
         self.parent = parent
         self.macros = macros if macros is not None else {}
         self.prefix = expand_macros(prefix, self.macros)
@@ -808,6 +848,7 @@ class PVGroup(metaclass=PVGroupMeta):
         self.attr_pvdb = OrderedDict()
         self.attr_to_pvname = OrderedDict()
         self.groups = OrderedDict()
+        self.logger = logger if logger is not None else module_logger
         self._create_pvdb()
 
     def _create_pvdb(self):
@@ -866,9 +907,10 @@ class PVGroup(metaclass=PVGroupMeta):
 
     async def group_read(self, instance):
         'Generic read called for channels without `get` defined'
-        logger.debug('no-op group read of %s', instance.pvspec.attr)
+        self.logger.debug('no-op group read of %s', instance.pvspec.attr)
 
     async def group_write(self, instance, value):
         'Generic write called for channels without `put` defined'
-        logger.debug('group write of %s = %s', instance.pvspec.attr, value)
+        self.logger.debug('group write of %s = %s', instance.pvspec.attr,
+                          value)
         return value

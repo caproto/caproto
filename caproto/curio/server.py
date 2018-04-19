@@ -1,13 +1,14 @@
 from collections import defaultdict, deque, namedtuple
 import logging
 import os
-import random
 
 import curio
 from curio import socket
 
 import caproto as ca
-from caproto import (get_beacon_address_list, get_environment_variables)
+from caproto import (get_beacon_address_list, get_environment_variables,
+                     find_available_tcp_port)
+from ..server import AsyncLibraryLayer
 
 
 class DisconnectedCircuit(Exception):
@@ -30,10 +31,6 @@ logger = logging.getLogger(__name__)
 STR_ENC = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
 
 
-class AsyncLibraryLayer:
-    ...
-
-
 class UniversalQueue(curio.UniversalQueue):
     def put(self, value):
         super().put(value)
@@ -52,25 +49,6 @@ class CurioAsyncLayer(AsyncLibraryLayer):
     name = 'curio'
     ThreadsafeQueue = UniversalQueue
     library = curio
-
-
-def find_next_tcp_port(host='0.0.0.0', starting_port=ca.EPICS_CA2_PORT + 1):
-    import socket
-
-    port = starting_port
-    attempts = 0
-
-    while attempts < 100:
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.bind((host, port))
-        except IOError as ex:
-            port = random.randint(49152, 65535)
-            attempts += 1
-        else:
-            break
-
-    return port
 
 
 class CurioVirtualCircuit:
@@ -255,7 +233,7 @@ class CurioVirtualCircuit:
             chan, db_entry = get_db_entry()
             metadata, data = await db_entry.auth_read(
                 self.client_hostname, self.client_username,
-                command.data_type)
+                command.data_type, user_address=self.circuit.address)
             return [chan.read(data=data, data_type=command.data_type,
                               data_count=len(data), status=1,
                               ioid=command.ioid, metadata=metadata)
@@ -269,7 +247,8 @@ class CurioVirtualCircuit:
                 try:
                     write_status = await db_entry.auth_write(
                         self.client_hostname, self.client_username,
-                        command.data, command.data_type, command.metadata)
+                        command.data, command.data_type, command.metadata,
+                        user_address=self.circuit.address)
                 except Exception as ex:
                     logger.exception('Invalid write request by %s (%s): %r',
                                      self.client_username,
@@ -565,7 +544,8 @@ class Context:
 async def start_server(pvdb, log_level='DEBUG', *, bind_addr='0.0.0.0'):
     '''Start a curio server with a given PV database'''
     logger.setLevel(log_level)
-    ctx = Context(bind_addr, find_next_tcp_port(), pvdb, log_level=log_level)
+    ctx = Context(bind_addr, find_available_tcp_port(), pvdb,
+                  log_level=log_level)
     logger.info('Server starting up on %s:%d', ctx.host, ctx.port)
     try:
         return await ctx.run()

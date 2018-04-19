@@ -3,8 +3,7 @@ import logging
 import sys
 
 import curio
-from caproto.curio.server import (Context, logger, find_next_tcp_port,
-                                  ServerExit)
+from caproto.curio.server import (Context, logger, ServerExit)
 import caproto as ca
 
 
@@ -66,8 +65,8 @@ async def main(pvdb, prefix=None, port=None):
         pvdb = {prefix + key: value
                 for key, value in pvdb.items()}
     if port is None:
-        port = find_next_tcp_port()
-    ctx = Context('0.0.0.0', find_next_tcp_port(), pvdb, log_level='DEBUG')
+        port = ca.find_available_tcp_port()
+    ctx = Context('0.0.0.0', port, pvdb, log_level='DEBUG')
     logger.info('Server starting up on %s:%d', ctx.host, ctx.port)
     logger.info("Available PVs: %s", ' '.join(pvdb))
     try:

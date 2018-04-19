@@ -356,7 +356,8 @@ class ChannelData:
     async def unsubscribe(self, queue, sub_spec):
         self._queues[queue][sub_spec.data_type].remove(sub_spec)
 
-    async def auth_read(self, hostname, username, data_type):
+    async def auth_read(self, hostname, username, data_type, *,
+                        user_address=None):
         '''Get DBR data and native data, converted to a specific type'''
         access = self.check_access(hostname, username)
         if AccessRights.READ not in access:
@@ -402,7 +403,7 @@ class ChannelData:
 
         return dbr_metadata, values
 
-    async def auth_write(self, hostname, username, data, data_type, metadata):
+    async def auth_write(self, hostname, username, data, data_type, metadata, *, user_address=None):
         access = self.check_access(hostname, username)
         if AccessRights.WRITE not in access:
             raise Forbidden("Client with hostname {} and username {} cannot "

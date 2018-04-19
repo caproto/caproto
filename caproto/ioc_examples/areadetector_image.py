@@ -8,11 +8,8 @@ import curio
 import ophyd
 
 from caproto.curio.server import start_server
-# from caproto.curio import high_level_server
-from caproto.curio.high_level_server import (logger, PVGroup, pvproperty,
-                                             SubGroup, get_pv_pair_wrapper)
-
-from caproto.curio.conversion import ophyd_device_to_caproto_ioc
+from caproto.server import (PVGroup, pvproperty, SubGroup, get_pv_pair_wrapper)
+from caproto.server.conversion import ophyd_device_to_caproto_ioc
 
 
 async def get_images(w, h):
@@ -315,7 +312,6 @@ def generate_detector_code(prefix='13SIM1:'):
 
 
 if __name__ == '__main__':
-    logger.setLevel(logging.DEBUG)
     logging.basicConfig()
 
     try:
@@ -326,6 +322,7 @@ if __name__ == '__main__':
 
     from pprint import pprint
     detector_ioc = DetectorGroup(prefix)
+    detector_ioc.logger.setLevel('DEBUG')
 
     print('The whole Detector pvdb:')
     pprint(detector_ioc.pvdb)

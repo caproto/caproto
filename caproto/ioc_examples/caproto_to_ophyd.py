@@ -9,9 +9,8 @@ from ophyd import Component as Cpt, EpicsSignal, EpicsSignalRO
 
 from caproto.benchmarking import set_logging_level
 from caproto.curio.server import start_server
-from caproto.curio.high_level_server import (pvproperty, PVGroup,
-                                             pvfunction)
-from caproto.curio.conversion import group_to_device
+from caproto.server import (pvproperty, PVGroup, pvfunction)
+from caproto.server.conversion import group_to_device
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +45,7 @@ class Group(PVGroup):
 
 
 # Step 2a: write supporting methods to make simple ophyd Devices (moved to
-#          caproto.curio.conversion module)
+#          caproto.server.conversion module)
 
 # Step 2b: copy/pasting the auto-generated output (OK, slightly modified for
 #                                                  PEP8 readability)

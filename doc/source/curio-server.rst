@@ -21,8 +21,9 @@ this to a :class:`Context` object with a given address. Calling
 .. code-block:: python
 
     import curio
-    from caproto.curio.server import Context, find_next_tcp_port
-    from caproto import ChannelDouble, ChannelEnum, ChannelInteger
+    from caproto.curio.server import Context
+    from caproto import (find_available_tcp_port, ChannelDouble, ChannelEnum,
+                         ChannelInteger)
 
     pvdb = {'pi': ChannelDouble(value=3.14,
                                 lower_disp_limit=3.13,
@@ -44,5 +45,5 @@ this to a :class:`Context` object with a given address. Calling
                                   ),
             }
 
-    ctx = Context('0.0.0.0', find_next_tcp_port(), pvdb)
+    ctx = Context('0.0.0.0', find_available_tcp_port(), pvdb)
     curio.run(ctx.run())
