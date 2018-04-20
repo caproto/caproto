@@ -12,6 +12,7 @@ if __name__ == '__main__':
     # usage: simple.py [PREFIX]
     import sys
     import curio
+    import logging
     from caproto.curio.server import start_server
 
     try:
@@ -22,6 +23,10 @@ if __name__ == '__main__':
     # Instantiate the IOC, assigning a prefix for the PV names.
     ioc = SimpleIOC(prefix=prefix)
     print('PVs:', list(ioc.pvdb))
+
+    # Print out some information when clients access
+    logging.basicConfig()
+    ioc.log.setLevel('DEBUG')
 
     # Run IOC using curio.
     curio.run(start_server(ioc.pvdb))

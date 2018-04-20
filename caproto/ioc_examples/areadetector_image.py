@@ -322,7 +322,8 @@ if __name__ == '__main__':
 
     from pprint import pprint
     detector_ioc = DetectorGroup(prefix)
-    detector_ioc.logger.setLevel('DEBUG')
+    detector_ioc.log.setLevel('DEBUG')
+    print(detector_ioc.log.name)
 
     print('The whole Detector pvdb:')
     pprint(detector_ioc.pvdb)
