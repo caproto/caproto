@@ -8,6 +8,7 @@
 import array
 import ctypes
 import datetime
+import collections
 from enum import IntEnum, IntFlag
 from ._constants import (EPICS2UNIX_EPOCH, EPICS_EPOCH, MAX_STRING_SIZE,
                          MAX_UNITS_SIZE, MAX_ENUM_STRING_SIZE, MAX_ENUM_STATES)
@@ -219,6 +220,40 @@ def array_type_code(native_type):
     return _array_type_code_map[native_type]
 
 
+class DbrStringArray(collections.UserList):
+    '''A mockup of numpy.array, intended to hold byte strings
+
+    String arrays in numpy are special and inconvenient to work with.
+    '''
+
+    def __getitem__(self, i):
+        res = self.data[i]
+        return type(self)(res) if isinstance(i, slice) else res
+
+    @classmethod
+    def frombuffer(cls, buf, data_count):
+        'Create a DbrStringArray from a buffer'
+        def safely_find_eos():
+            'Find null terminator, else MAX_STRING_SIZE/length of the string'
+            try:
+                return min((MAX_STRING_SIZE, buf.index(b'\00')))
+            except ValueError:
+                return min((MAX_STRING_SIZE, len(buf)))
+
+        buf = bytes(buf)
+        strings = cls()
+        for i in range(data_count):
+            strings.append(buf[:safely_find_eos()])
+            buf = buf[MAX_STRING_SIZE:]
+
+        return strings
+
+    def tobytes(self):
+        # numpy compat
+        return b''.join(item.ljust(MAX_STRING_SIZE, b'\x00')
+                        for item in self)
+
+
 def native_to_builtin(value, native_type, data_count):
     '''Convert from a native EPICS DBR type to a builtin Python type
 
@@ -233,10 +268,8 @@ def native_to_builtin(value, native_type, data_count):
     if USE_NUMPY:
         # Return an ndarray
         dt = _numpy_map[native_type]
-        if native_type == ChannelType.STRING and len(value) < MAX_STRING_SIZE:
-            # caput behaves this way
-            return numpy.frombuffer(
-                bytes(value).ljust(MAX_STRING_SIZE, b'\x00'), dtype=dt)
+        if native_type == ChannelType.STRING:
+            return DbrStringArray.frombuffer(value, data_count)
 
         return numpy.frombuffer(value, dtype=dt)
     else:

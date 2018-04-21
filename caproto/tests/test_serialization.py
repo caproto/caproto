@@ -162,8 +162,8 @@ payloads = [
 
     (ca.ChannelType.STRING, 1, b'abc'.ljust(40, b'\x00'), None),
     (ca.ChannelType.STRING, 3, 3 * b'abc'.ljust(40, b'\x00'), None),
-    (ca.ChannelType.STRING, 3, numpy.array(['abc', 'def'], '>S40'), None),
-    (ca.ChannelType.STRING, 3, numpy.array(['abc', 'def'], 'S40'), None),
+    (ca.ChannelType.STRING, 2, numpy.array(['abc', 'def'], '>S40'), None),
+    (ca.ChannelType.STRING, 2, numpy.array(['abc', 'def'], 'S40'), None),
     (ca.ChannelType.CHAR, 1, b'z', None),
     (ca.ChannelType.CHAR, 3, b'abc', None),
 ]
