@@ -26,10 +26,9 @@ import subprocess
 import sys
 
 import caproto as ca
-from caproto._dbr import (promote_type, ChannelType, native_type,
-                          SubscriptionType)
-from caproto._utils import ErrorResponseReceived, CaprotoError
-from caproto.sync.repeater import run as run_repeater
+from .._dbr import (promote_type, ChannelType, native_type, SubscriptionType)
+from .._utils import ErrorResponseReceived, CaprotoError
+from .repeater import run as run_repeater
 
 
 __all__ = ['get', 'put', 'monitor']
@@ -60,73 +59,83 @@ def recv(circuit):
     return commands
 
 
-def make_channel(pv_name, logger, udp_sock, priority, timeout):
+def search(pv_name, logger, udp_sock, timeout, *, max_retries=2):
     # Set Broadcaster log level to match our logger.
     b = ca.Broadcaster(our_role=ca.CLIENT)
     b.log.setLevel(logger.level)
 
-    # Register with the repeater.
+    # Send registration request to the repeater
     logger.debug('Registering with the Channel Access repeater.')
     bytes_to_send = b.send(ca.RepeaterRegisterRequest())
 
-    # Do multiple attempts in case the repeater is still starting up....
     repeater_port = os.environ.get('EPICS_CA_REPEATER_PORT', 5065)
     for host in ca.get_address_list():
         udp_sock.sendto(bytes_to_send, (host, repeater_port))
 
-    # Await registration confirmation.
-    try:
-        t = time.monotonic()
-        while True:
-            try:
-                data, address = udp_sock.recvfrom(1024)
-                if time.monotonic() - t > timeout:
-                    raise socket.timeout
-            except socket.timeout:
-                raise TimeoutError()
-            commands = b.recv(data, address)
-            b.process_commands(commands)
-            if b.registered:
-                break
-    except TimeoutError:
-        logger.debug('Repeater registration timed out; continuing.')
-    else:
-        logger.debug('Repeater registration confirmed.')
-
     logger.debug("Searching for '%s'....", pv_name)
     bytes_to_send = b.send(ca.VersionRequest(0, 13),
                            ca.SearchRequest(pv_name, 0, 13))
-    for host in ca.get_address_list():
-        if ':' in host:
-            host, _, specified_port = host.partition(':')
-            dest = (host, int(specified_port))
-        else:
-            dest = (host, CA_SERVER_PORT)
-        udp_sock.sendto(bytes_to_send, dest)
-        logger.debug('Search request sent to %r.', dest)
 
-    # Await a search response.
+    def send_search():
+        for host in ca.get_address_list():
+            if ':' in host:
+                host, _, specified_port = host.partition(':')
+                dest = (host, int(specified_port))
+            else:
+                dest = (host, CA_SERVER_PORT)
+            udp_sock.sendto(bytes_to_send, dest)
+            logger.debug('Search request sent to %r.', dest)
+
+    def check_timeout():
+        nonlocal retry_at
+
+        if time.monotonic() >= retry_at:
+            send_search()
+            retry_at = time.monotonic() + retry_timeout
+
+        if time.monotonic() - t > timeout:
+            raise TimeoutError(f"Timed out while awaiting a response "
+                               f"from the search for {pv_name!r}")
+
+    # Initial search attempt
+    send_search()
+
+    # Await a search response, and keep track of registration status
+    retry_timeout = timeout / max((max_retries, 1))
     t = time.monotonic()
-    while True:
-        try:
-            bytes_received, address = udp_sock.recvfrom(1024)
-            if time.monotonic() - t > timeout:
-                raise socket.timeout
-        except socket.timeout:
-            raise TimeoutError("Timed out while awaiting a response "
-                               "from the search for '%s'" % pv_name)
-        commands = b.recv(bytes_received, address)
-        b.process_commands(commands)
-        for command in commands:
-            if isinstance(command, ca.SearchResponse) and command.cid == 0:
-                address = ca.extract_address(command)
-                break
-        else:
-            # None of the commands we have seen are a reply to our request.
-            # Receive more data.
-            continue
-        break
+    retry_at = t + retry_timeout
+    registered = False
 
+    try:
+        orig_timeout = udp_sock.gettimeout()
+        udp_sock.settimeout(retry_timeout)
+        while True:
+            try:
+                bytes_received, address = udp_sock.recvfrom(ca.MAX_UDP_RECV)
+            except socket.timeout:
+                check_timeout()
+                continue
+
+            check_timeout()
+
+            commands = b.recv(bytes_received, address)
+            b.process_commands(commands)
+            for command in commands:
+                if isinstance(command, ca.SearchResponse) and command.cid == 0:
+                    return ca.extract_address(command)
+                elif not registered and b.registered:
+                    registered = True
+                    logger.debug('Registered with the repeater')
+            else:
+                # None of the commands we have seen are a reply to our request.
+                # Receive more data.
+                continue
+    finally:
+        udp_sock.settimeout(orig_timeout)
+
+
+def make_channel(pv_name, logger, udp_sock, priority, timeout):
+    address = search(pv_name, logger, udp_sock, timeout)
     circuit = ca.VirtualCircuit(our_role=ca.CLIENT,
                                 address=address,
                                 priority=priority)
