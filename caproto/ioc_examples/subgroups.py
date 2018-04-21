@@ -102,4 +102,22 @@ if __name__ == '__main__':
     # here is the auto-generated pvdb:
     pprint(ioc.pvdb)
 
+    # Print out some information when clients access
+    logging.basicConfig()
+    ioc.log.setLevel('DEBUG')
+
+    # And look in wonder (cough) at the layers of logging we can use:
+    for item in [ioc,
+                 ioc.random,
+                 ioc.recordlike1,
+                 ioc.recordlike2,
+                 ioc.group1,
+                 ioc.group2,
+                 ioc.group3,
+                 ioc.group3.random,
+                 ioc.group4,
+                 ioc.group4.subgroup4,
+                 ioc.group4.subgroup4.random]:
+        print(f'Class: {item.__class__.__name__:30s} Log name: {item.log.name}')
+
     curio.run(start_server, ioc.pvdb)

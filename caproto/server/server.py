@@ -50,9 +50,10 @@ class PvpropertyData:
     def __init__(self, *, pvname, group, pvspec, doc=None, mock_record=None,
                  logger=None, **kwargs):
         self.pvname = pvname  # the full, expanded PV name
+        self.name = f'{group.name}.{pvspec.attr}'
         self.group = group
+        self.log = group.log
         self.pvspec = pvspec
-        self.logger = logger if logger is not None else module_logger
         self.getter = (MethodType(pvspec.get, group)
                        if pvspec.get is not None
                        else group.group_read)
@@ -73,7 +74,9 @@ class PvpropertyData:
         if mock_record is not None:
             from .records import records
             field_class = records[mock_record]
-            self.field_inst = field_class(prefix='', parent=self)
+            self.field_inst = field_class(
+                prefix='', parent=self,
+                name=f'{self.name}.fields')
             self.fields = self.field_inst.pvdb
         else:
             self.field_inst = None
@@ -83,21 +86,19 @@ class PvpropertyData:
         value = await self.getter(self)
         if value is not None:
             if self.pvspec.get is None:
-                self.logger.debug('group read value for %s updated: %r',
-                                  self.pvspec, value)
+                self.log.debug('group read value for %s updated: %r',
+                               self.name, value)
             else:
-                self.logger.debug('value for %s updated: %r', self.pvspec,
-                                  value)
+                self.log.debug('value for %s updated: %r', self.name, value)
             # update the internal state
             await self.write(value)
         return await self._read(data_type)
 
     async def verify_value(self, value):
         if self.pvspec.put is None:
-            self.logger.debug('group verify value for %s: %r', self.pvspec,
-                              value)
+            self.log.debug('group verify value for %s: %r', self.name, value)
         else:
-            self.logger.debug('verify value for %s: %r', self.pvspec, value)
+            self.log.debug('verify value for %s: %r', self.name, value)
         return await self.putter(self, value)
 
     async def _server_startup(self, async_lib):
@@ -620,8 +621,8 @@ class pvfunction(SubGroup):
 
         return PVSpec(
             get=None, put=None, attr=param.name,
-            # the name defaults to the parameter name, but can be remapped with
-            # the 'names' dictionary
+            # the pvname defaults to the parameter name, but can be remapped
+            # with the 'names' dictionary
             name=self.names.get(param.name, param.name),
             dtype=dtype,
             value=default, alarm_group=self.alarm_group,
@@ -839,16 +840,32 @@ class PVGroup(metaclass=PVGroupMeta):
         ChannelType.CHAR: '',
     }
 
-    def __init__(self, prefix, *, macros=None, parent=None, logger=None):
+    def __init__(self, prefix, *, macros=None, parent=None, logger=None,
+                 name=None):
         self.parent = parent
         self.macros = macros if macros is not None else {}
         self.prefix = expand_macros(prefix, self.macros)
-        self.alarms = defaultdict(lambda: ChannelAlarm())
+        self.alarms = defaultdict(ChannelAlarm)
         self.pvdb = OrderedDict()
         self.attr_pvdb = OrderedDict()
         self.attr_to_pvname = OrderedDict()
         self.groups = OrderedDict()
-        self.logger = logger if logger is not None else module_logger
+
+        # Create logger name from parent or from module class
+        self.name = (self.__class__.__name__
+                     if name is None
+                     else name)
+        log_name = type(self).__name__
+        if self.parent:
+            base = self.parent.log.name
+            parent_log_prefix = f'{base}.'
+            if log_name.startswith(parent_log_prefix):
+                log_name = log_name[parent_log_prefix:]
+        else:
+            base = self.__class__.__module__
+
+        # Instantiate logger
+        self.log = logging.getLogger(f'{base}.{log_name}')
         self._create_pvdb()
 
     def _create_pvdb(self):
@@ -868,7 +885,8 @@ class PVGroup(metaclass=PVGroupMeta):
             macros.update(subgroup.macros)
 
             # instantiate the subgroup
-            inst = subgroup_cls(prefix=prefix, macros=macros, parent=self)
+            inst = subgroup_cls(prefix=prefix, macros=macros, parent=self,
+                                name=f'{self.name}.{attr}')
             self.groups[attr] = inst
 
             # find all sub-subgroups, giving direct access to them
@@ -903,14 +921,12 @@ class PVGroup(metaclass=PVGroupMeta):
 
             # and a convenient map of attr -> pvname
             self.attr_to_pvname[attr] = pvname
-            # TODO maybe this could all be simplified?
 
     async def group_read(self, instance):
         'Generic read called for channels without `get` defined'
-        self.logger.debug('no-op group read of %s', instance.pvspec.attr)
+        self.log.debug('no-op group read of %s', instance.pvspec.attr)
 
     async def group_write(self, instance, value):
         'Generic write called for channels without `put` defined'
-        self.logger.debug('group write of %s = %s', instance.pvspec.attr,
-                          value)
+        self.log.debug('group write of %s = %s', instance.pvspec.attr, value)
         return value
