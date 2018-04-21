@@ -29,7 +29,6 @@ except ImportError:
 
 
 __all__ = (  # noqa F822
-    'make_sentinel',
     'get_environment_variables',
     'get_address_list',
     'get_server_address_list',
@@ -74,42 +73,49 @@ __all__ = (  # noqa F822
 
 # This module defines sentinels used in the state machine and elsewhere, such
 # as NEED_DATA, CLIENT, SERVER, AWAITING_SEARCH_RESPONSE, etc.
-# It also defines some custom Exceptions. That is all.
+# It also defines some custom Exceptions.
 
-# This sentinel code is copied, with thanks and admiration, from h11,
-# which is released under an MIT license.
-#
-# Sentinel values
-#
-# - Inherit identity-based comparison and hashing from object
-# - Have a nice repr
-# - Have a *bonus property*: type(sentinel) is sentinel
-#
-# The bonus property is useful if you want to take the return value from
-# next_event() and do some sort of dispatch based on type(event).
-class _SentinelBase(type):
+class _SimpleReprEnum(enum.Enum):
     def __repr__(self):
-        return self.__name__
+        return self.name
 
 
-def make_sentinel(name):
-    cls = _SentinelBase(name, (_SentinelBase,), {})
-    cls.__class__ = cls
-    return cls
+class Role(_SimpleReprEnum):
+    CLIENT = enum.auto()
+    SERVER = enum.auto()
+
+
+class Direction(_SimpleReprEnum):
+    RESPONSE = enum.auto()
+    REQUEST = enum.auto()
+
+
+class States(_SimpleReprEnum):
+    SEND_SEARCH_REQUEST = enum.auto()
+    AWAIT_SEARCH_RESPONSE = enum.auto()
+    SEND_SEARCH_RESPONSE = enum.auto()
+    SEND_VERSION_REQUEST = enum.auto()
+    AWAIT_VERSION_RESPONSE = enum.auto()
+    SEND_VERSION_RESPONSE = enum.auto()
+    SEND_CREATE_CHAN_REQUEST = enum.auto()
+    AWAIT_CREATE_CHAN_RESPONSE = enum.auto()
+    SEND_CREATE_CHAN_RESPONSE = enum.auto()
+    CONNECTED = enum.auto()
+    MUST_CLOSE = enum.auto()
+    CLOSED = enum.auto()
+    IDLE = enum.auto()
+    FAILED = enum.auto()
+    DISCONNECTED = enum.auto()
+
+    # Special old 'sentinel' for needing more data
+    NEED_DATA = enum.auto()
 
 
 globals().update(
-    {token: make_sentinel(token) for token in
-     ('CLIENT', 'SERVER',  # roles
-      'RESPONSE', 'REQUEST',  # directions
-      'NEED_DATA',  # special sentinel for read_* functions
-      # and states
-      'SEND_SEARCH_REQUEST', 'AWAIT_SEARCH_RESPONSE',
-      'SEND_SEARCH_RESPONSE', 'SEND_VERSION_REQUEST',
-      'AWAIT_VERSION_RESPONSE', 'SEND_VERSION_RESPONSE',
-      'SEND_CREATE_CHAN_REQUEST', 'AWAIT_CREATE_CHAN_RESPONSE',
-      'SEND_CREATE_CHAN_RESPONSE', 'CONNECTED', 'MUST_CLOSE', 'CLOSED',
-      'IDLE', 'FAILED', 'DISCONNECTED')
+    {token: getattr(_enum, token)
+     for _enum in [Role, Direction, States]
+     for token in dir(_enum)
+     if not token.startswith('_')
      })
 
 

@@ -514,7 +514,7 @@ def monitor(*pv_names, callback, mask=None, timeout=1,
                     for response in commands:
                         if isinstance(response, ca.ErrorResponse):
                             raise ErrorResponseReceived(response)
-                        if isinstance(response, ca.DISCONNECTED):
+                        if response is ca.DISCONNECTED:
                             # TODO Re-connect.
                             raise CaprotoError("Disconnected")
                         chan = sub_ids.get(response.subscriptionid)
