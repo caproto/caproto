@@ -1,0 +1,55 @@
+name:   sim:mtr1.DESC
+native type:    DBR_STRING
+native count:   1
+DBR_STRING      non_numerical
+DBR_STS_STRING   0  0   Value: non_numerical
+DBR_TIME_STRING  0  0   TimeStamp: 2018/04/21 13:00:31.780178   Value:
+non_numerical
+DBR_GR_STRING    0  0   Value: non_numerical
+DBR_CTRL_STRING  0  0   Value: non_numerical
+
+
+
+modified ca_test, extended output:
+
+name:   sim:mtr1.DESC
+native type:    DBR_STRING
+native count:   1
+DBR_STRING      non_numerical
+DBR_SHORT       Channel read request failed
+DBR_FLOAT       Channel read request failed
+DBR_ENUM        Channel read request failed
+DBR_CHAR        Channel read request failed
+DBR_LONG        Channel read request failed
+DBR_DOUBLE      Channel read request failed
+DBR_STS_STRING   0  0   Value: non_numerical
+DBR_STS_SHORT   Channel read request failed
+DBR_STS_FLOAT   Channel read request failed
+DBR_STS_ENUM    Channel read request failed
+DBR_STS_CHAR    Channel read request failed
+DBR_STS_LONG    Channel read request failed
+DBR_STS_DOUBLE  Channel read request failed
+DBR_TIME_STRING  0  0   TimeStamp: 2018/04/21 13:00:31.780178   Value:
+non_numerical
+DBR_TIME_SHORT  Channel read request failed
+DBR_TIME_FLOAT  Channel read request failed
+DBR_TIME_ENUM   Channel read request failed
+DBR_TIME_CHAR   Channel read request failed
+DBR_TIME_LONG   Channel read request failed
+DBR_TIME_DOUBLE Channel read request failed
+DBR_GR_STRING    0  0   Value: non_numerical
+DBR_GR_SHORT    Channel read request failed
+DBR_GR_FLOAT    Channel read request failed
+DBR_GR_ENUM     Channel read request failed
+DBR_GR_CHAR     Channel read request failed
+DBR_GR_LONG     Channel read request failed
+DBR_GR_DOUBLE   Channel read request failed
+DBR_CTRL_STRING  0  0   Value: non_numerical
+DBR_CTRL_SHORT  Channel read request failed
+DBR_CTRL_FLOAT  Channel read request failed
+DBR_CTRL_ENUM   Channel read request failed
+DBR_CTRL_CHAR   Channel read request failed
+DBR_CTRL_LONG   Channel read request failed
+DBR_CTRL_DOUBLE Channel read request failed
+DBR_STSACK_STRING        0  0  1  0 non_numerical
+DBR_CLASS_NAME  motor

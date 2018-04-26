@@ -1,0 +1,66 @@
+name:   Py:string128
+native type:    DBR_STRING
+native count:   128
+DBR_STRING
+Str1_14.200 Str2_61.686 Str3_29.723 Str4_51.996 Str5_73.575
+Str6_65.377 Str7_36.923 Str8_91.890 Str9_5.596 Str10_81.735
+Str11_95.004 Str12_0.182 Str13_14.829 Str14_56.777 Str15_6.086
+Str16_6.064 Str17_50.894 Str18_63.399 Str19_21.307 Str20_8.722
+Str21_34.361 Str22_41.508 Str23_30.963 Str24_57.865 Str25_95.939
+Str26_94.955 Str27_24.589 Str28_54.061 Str29_85.156 Str30_94.494
+Str31_29.331 Str32_16.328 Str33_92.880 Str34_90.620 Str35_64.635
+Str36_71.736 Str37_47.675 Str38_58.874 Str39_43.653 Str40_15.297
+Str41_14.385 Str42_81.562 Str43_57.433 Str44_73.505 Str45_7.588
+Str46_98.483 Str47_73.615 Str48_46.357 Str49_21.502 Str50_97.032
+Str51_12.815 Str52_88.769 Str53_9.581 Str54_73.916 Str55_16.204
+Str56_75.220 Str57_84.151 Str58_56.323 Str59_69.095 Str60_76.691
+Str61_96.578 Str62_35.750 Str63_15.691 Str64_27.448 Str65_37.908
+Str66_84.528 Str67_58.317 Str68_52.602 Str69_59.467 Str70_49.578
+Str71_3.807 Str72_0.080 Str73_91.920 Str74_23.847 Str75_52.128
+Str76_32.341 Str77_56.180 Str78_38.090 Str79_64.382 Str80_78.759
+Str81_77.585 Str82_76.585 Str83_29.635 Str84_25.213 Str85_60.828
+Str86_3.388 Str87_20.175 Str88_77.138 Str89_70.060 Str90_57.494
+Str91_69.250 Str92_60.812 Str93_17.449 Str94_79.459 Str95_41.758
+Str96_97.763 Str97_58.686 Str98_18.757 Str99_42.207 Str100_94.021
+Str101_19.420 Str102_21.792 Str103_69.486 Str104_18.325 Str105_37.051
+Str106_76.227 Str107_17.102 Str108_4.993 Str109_6.931 Str110_56.032
+Str111_54.472 Str112_69.976 Str113_57.279 Str114_32.871 Str115_3.507
+Str116_97.385 Str117_33.694 Str118_42.605 Str119_12.034 Str120_55.305
+Str121_37.358 Str122_7.442 Str123_67.304 Str124_7.508 Str125_16.877
+Str126_98.838 Str127_55.353 Str128_53.759
+DBR_SHORT       Channel read request failed
+DBR_FLOAT       Channel read request failed
+DBR_ENUM        Channel read request failed
+DBR_CHAR        Channel read request failed
+DBR_LONG        Channel read request failed
+DBR_DOUBLE      Channel read request failed
+DBR_STS_STRING   0  0   Value: Str1_14.200
+DBR_STS_SHORT   Channel read request failed
+DBR_STS_FLOAT   Channel read request failed
+DBR_STS_ENUM    Channel read request failed
+DBR_STS_CHAR    Channel read request failed
+DBR_STS_LONG    Channel read request failed
+DBR_STS_DOUBLE  Channel read request failed
+DBR_TIME_STRING  0  0   TimeStamp: 2018/04/21 09:38:29.007101   Value: Str1_14.200
+DBR_TIME_SHORT  Channel read request failed
+DBR_TIME_FLOAT  Channel read request failed
+DBR_TIME_ENUM   Channel read request failed
+DBR_TIME_CHAR   Channel read request failed
+DBR_TIME_LONG   Channel read request failed
+DBR_TIME_DOUBLE Channel read request failed
+DBR_GR_STRING    0  0   Value: Str1_14.200
+DBR_GR_SHORT    Channel read request failed
+DBR_GR_FLOAT    Channel read request failed
+DBR_GR_ENUM     Channel read request failed
+DBR_GR_CHAR     Channel read request failed
+DBR_GR_LONG     Channel read request failed
+DBR_GR_DOUBLE   Channel read request failed
+DBR_CTRL_STRING  0  0   Value: Str1_14.200
+DBR_CTRL_SHORT  Channel read request failed
+DBR_CTRL_FLOAT  Channel read request failed
+DBR_CTRL_ENUM   Channel read request failed
+DBR_CTRL_CHAR   Channel read request failed
+DBR_CTRL_LONG   Channel read request failed
+DBR_CTRL_DOUBLE Channel read request failed
+DBR_STSACK_STRING        0  0  1  0 Str1_14.200
+DBR_CLASS_NAME  waveform

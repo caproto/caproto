@@ -1,0 +1,62 @@
+name:   sim:mtr1.SPMG
+native type:    DBR_ENUM
+native count:   1
+DBR_STRING      Go
+DBR_SHORT       3
+DBR_FLOAT       3.0000
+DBR_ENUM        3
+DBR_CHAR        3
+DBR_LONG        3
+DBR_DOUBLE      3.0000
+DBR_STS_STRING   0  0   Value: Go
+DBR_STS_SHORT    0  0   Value: 3
+DBR_STS_FLOAT    0  0   Value: 3.0000
+DBR_STS_ENUM     0  0   Value: 3
+DBR_STS_CHAR     0  0   Value: 3
+DBR_STS_LONG     0  0   Value: 3
+DBR_STS_DOUBLE   0  0   Value: 3.0000
+DBR_TIME_STRING  0  0   TimeStamp: 2018/04/21 13:00:31.780178   Value: Go
+DBR_TIME_SHORT   0  0   TimeStamp: 2018/04/21 13:00:31.780178   Value: 3
+DBR_TIME_FLOAT   0  0   TimeStamp: 2018/04/21 13:00:31.780178   Value: 3.0000
+DBR_TIME_ENUM    0  0   TimeStamp: 2018/04/21 13:00:31.780178   Value: 3
+DBR_TIME_CHAR    0  0   TimeStamp: 2018/04/21 13:00:31.780178   Value: 3
+DBR_TIME_LONG    0  0   TimeStamp: 2018/04/21 13:00:31.780178   Value: 3
+DBR_TIME_DOUBLE  0  0   TimeStamp: 2018/04/21 13:00:31.780178   Value: 3.0000
+DBR_GR_STRING    0  0   Value: Go
+DBR_GR_SHORT     0  0 deg
+               0        0        0        0        0        0   Value: 3
+DBR_GR_FLOAT     0  0 deg   0
+           0.000    0.000      nan      nan      nan      nan   Value: 3.0000
+DBR_GR_ENUM      0  0   Value: 3
+          4
+        Stop
+        Pause
+        Move
+        Go
+DBR_GR_CHAR      0  0 deg
+               0        0        0        0        0        0   Value: 3
+DBR_GR_LONG      0  0 deg
+               0        0 -2147483648 -2147483648 -2147483648 -2147483648       Value: 3
+DBR_GR_DOUBLE    0  0 deg   0
+           0.000    0.000      nan      nan      nan      nan   Value: 3.0000
+DBR_CTRL_STRING  0  0   Value: Go
+DBR_CTRL_SHORT   0  0 deg
+               0        0        0        0        0        0        0        0 Value: 3
+DBR_CTRL_FLOAT   0  0 deg   0
+           0.000    0.000      nan      nan      nan      nan    0.000    0.000 Value: 3.0000
+DBR_CTRL_ENUM    0  0   Value: 3
+          4
+        Stop
+        Pause
+        Move
+        Go
+DBR_CTRL_CHAR    0  0 deg
+               0        0        0        0        0        0        0        0 Value:    3
+DBR_CTRL_LONG    0  0 deg
+               0        0 -2147483648 -2147483648 -2147483648 -2147483648        0        0     Value: 3
+DBR_CTRL_DOUBLE  0  0 deg   0
+           0.000    0.000      nan      nan      nan      nan    0.000    0.000 Value: 3.000000
+DBR_STSACK_STRING        0  0  1  0 Go
+DBR_CLASS_NAME  motor
+
+

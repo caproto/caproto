@@ -1,0 +1,62 @@
+name:   sim:mtr1.DESC
+native type:    DBR_STRING
+native count:   1
+DBR_STRING      1
+DBR_STS_STRING   0  0   Value: 1
+DBR_TIME_STRING  0  0   TimeStamp: 2018/04/21 13:00:31.780178   Value: 1
+DBR_GR_STRING    0  0   Value: 1
+DBR_CTRL_STRING  0  0   Value: 1
+
+
+modified ca_test, extended output:
+
+name:   sim:mtr1.DESC
+native type:    DBR_STRING
+native count:   1
+DBR_STRING      1
+DBR_SHORT       1
+DBR_FLOAT       1.0000
+DBR_ENUM        Channel read request failed
+DBR_CHAR        1
+DBR_LONG        1
+DBR_DOUBLE      1.0000
+DBR_STS_STRING   0  0   Value: 1
+DBR_STS_SHORT    0  0   Value: 1
+DBR_STS_FLOAT    0  0   Value: 1.0000
+DBR_STS_ENUM    Channel read request failed
+DBR_STS_CHAR     0  0   Value: 1
+DBR_STS_LONG     0  0   Value: 1
+DBR_STS_DOUBLE   0  0   Value: 1.0000
+DBR_TIME_STRING  0  0   TimeStamp: 2018/04/21 13:00:31.780178   Value: 1
+DBR_TIME_SHORT   0  0   TimeStamp: 2018/04/21 13:00:31.780178   Value: 1
+DBR_TIME_FLOAT   0  0   TimeStamp: 2018/04/21 13:00:31.780178   Value: 1.0000
+DBR_TIME_ENUM   Channel read request failed
+DBR_TIME_CHAR    0  0   TimeStamp: 2018/04/21 13:00:31.780178   Value: 1
+DBR_TIME_LONG    0  0   TimeStamp: 2018/04/21 13:00:31.780178   Value: 1
+DBR_TIME_DOUBLE  0  0   TimeStamp: 2018/04/21 13:00:31.780178   Value: 1.0000
+DBR_GR_STRING    0  0   Value: 1
+DBR_GR_SHORT     0  0 deg
+               0        0        0        0        0        0   Value: 1
+DBR_GR_FLOAT     0  0 deg   0
+           0.000    0.000      nan      nan      nan      nan   Value: 1.0000
+DBR_GR_ENUM     Channel read request failed
+DBR_GR_CHAR      0  0 deg
+               0        0        0        0        0        0   Value: 1
+DBR_GR_LONG      0  0 deg
+               0        0 -2147483648 -2147483648 -2147483648 -2147483648       Value: 1
+DBR_GR_DOUBLE    0  0 deg   0
+           0.000    0.000      nan      nan      nan      nan   Value: 1.0000
+DBR_CTRL_STRING  0  0   Value: 1
+DBR_CTRL_SHORT   0  0 deg
+               0        0        0        0        0        0        0        0 Value: 1
+DBR_CTRL_FLOAT   0  0 deg   0
+           0.000    0.000      nan      nan      nan      nan    0.000    0.000 Value: 1.0000
+DBR_CTRL_ENUM   Channel read request failed
+DBR_CTRL_CHAR    0  0 deg
+               0        0        0        0        0        0        0        0 Value:    1
+DBR_CTRL_LONG    0  0 deg
+               0        0 -2147483648 -2147483648 -2147483648 -2147483648        0        0     Value: 1
+DBR_CTRL_DOUBLE  0  0 deg   0
+           0.000    0.000      nan      nan      nan      nan    0.000    0.000 Value: 1.000000
+DBR_STSACK_STRING        0  0  1  0 1
+DBR_CLASS_NAME  motor

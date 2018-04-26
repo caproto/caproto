@@ -1,0 +1,50 @@
+name:   Py:long1
+native type:    DBR_LONG
+native count:   1
+DBR_STRING      6
+DBR_SHORT       6
+DBR_FLOAT       6.0000
+DBR_ENUM        6
+DBR_CHAR        6
+DBR_LONG        6
+DBR_DOUBLE      6.0000
+DBR_STS_STRING   0  0   Value: 6
+DBR_STS_SHORT    0  0   Value: 6
+DBR_STS_FLOAT    0  0   Value: 6.0000
+DBR_STS_ENUM     0  0   Value: 6
+DBR_STS_CHAR     0  0   Value: 6
+DBR_STS_LONG     0  0   Value: 6
+DBR_STS_DOUBLE   0  0   Value: 6.0000
+DBR_TIME_STRING  0  0   TimeStamp: 2018/04/21 09:49:08.302031   Value: 6
+DBR_TIME_SHORT   0  0   TimeStamp: 2018/04/21 09:49:08.302031   Value: 6
+DBR_TIME_FLOAT   0  0   TimeStamp: 2018/04/21 09:49:08.302031   Value: 6.0000
+DBR_TIME_ENUM    0  0   TimeStamp: 2018/04/21 09:49:08.302031   Value: 6
+DBR_TIME_CHAR    0  0   TimeStamp: 2018/04/21 09:49:08.302031   Value: 6
+DBR_TIME_LONG    0  0   TimeStamp: 2018/04/21 09:49:08.302031   Value: 6
+DBR_TIME_DOUBLE  0  0   TimeStamp: 2018/04/21 09:49:08.302031   Value: 6.0000
+DBR_GR_STRING    0  0   Value: 6
+DBR_GR_SHORT     0  0
+               0        0        0        0        0        0   Value: 6
+DBR_GR_FLOAT     0  0    0
+           0.000    0.000    0.000    0.000    0.000    0.000   Value: 6.0000
+DBR_GR_ENUM      0  0   Value: 6
+DBR_GR_CHAR      0  0
+               0        0        0        0        0        0   Value: 6
+DBR_GR_LONG      0  0
+               0        0        0        0        0        0   Value: 6
+DBR_GR_DOUBLE    0  0    0
+           0.000    0.000    0.000    0.000    0.000    0.000   Value: 6.0000
+DBR_CTRL_STRING  0  0   Value: 6
+DBR_CTRL_SHORT   0  0
+               0        0        0        0        0        0        0        0 Value: 6
+DBR_CTRL_FLOAT   0  0    0
+           0.000    0.000    0.000    0.000    0.000    0.000    0.000    0.000 Value: 6.0000
+DBR_CTRL_ENUM    0  0   Value: 6
+DBR_CTRL_CHAR    0  0
+               0        0        0        0        0        0        0        0 Value:    6
+DBR_CTRL_LONG    0  0
+               0        0        0        0        0        0        0        0 Value: 6
+DBR_CTRL_DOUBLE  0  0    0
+           0.000    0.000    0.000    0.000    0.000    0.000    0.000    0.000 Value: 6.000000
+DBR_STSACK_STRING        0  0  1  0 6
+DBR_CLASS_NAME  longin

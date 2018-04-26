@@ -1,0 +1,51 @@
+name:   Py:ao1
+native type:    DBR_DOUBLE
+native count:   1
+DBR_STRING      7.4815
+DBR_SHORT       7
+DBR_FLOAT       7.4815
+DBR_ENUM        7
+DBR_CHAR        7
+DBR_LONG        7
+DBR_DOUBLE      7.4815
+DBR_STS_STRING   0  0   Value: 7.4815
+DBR_STS_SHORT    0  0   Value: 7
+DBR_STS_FLOAT    0  0   Value: 7.4815
+DBR_STS_ENUM     0  0   Value: 7
+DBR_STS_CHAR     0  0   Value: 7
+DBR_STS_LONG     0  0   Value: 7
+DBR_STS_DOUBLE   0  0   Value: 7.4815
+DBR_TIME_STRING  0  0   TimeStamp: 2018/04/21 09:48:15.465364   Value: 7.4815
+DBR_TIME_SHORT   0  0   TimeStamp: 2018/04/21 09:48:15.465364   Value: 7
+DBR_TIME_FLOAT   0  0   TimeStamp: 2018/04/21 09:48:15.465364   Value: 7.4815
+DBR_TIME_ENUM    0  0   TimeStamp: 2018/04/21 09:48:15.465364   Value: 7
+DBR_TIME_CHAR    0  0   TimeStamp: 2018/04/21 09:48:15.465364   Value: 7
+DBR_TIME_LONG    0  0   TimeStamp: 2018/04/21 09:48:15.465364   Value: 7
+DBR_TIME_DOUBLE  0  0   TimeStamp: 2018/04/21 09:48:15.465364   Value: 7.4815
+DBR_GR_STRING    0  0   Value: 7.4815
+DBR_GR_SHORT     0  0 microns
+               0        0        0        0        0        0   Value: 7
+DBR_GR_FLOAT     0  0 microns   4
+           0.000    0.000      nan      nan      nan      nan   Value: 7.4815
+DBR_GR_ENUM      0  0   Value: 7
+DBR_GR_CHAR      0  0 microns
+               0        0        0        0        0        0   Value: 7
+DBR_GR_LONG      0  0 microns
+               0        0 -2147483648 -2147483648 -2147483648 -2147483648       Value: 7
+DBR_GR_DOUBLE    0  0 microns   4
+           0.000    0.000      nan      nan      nan      nan   Value: 7.4815
+DBR_CTRL_STRING  0  0   Value: 7.4815
+DBR_CTRL_SHORT   0  0 microns
+               0        0        0        0        0        0        0        0 Value: 7
+DBR_CTRL_FLOAT   0  0 microns   4
+           0.000    0.000      nan      nan      nan      nan    0.000    0.000 Value: 7.4815
+DBR_CTRL_ENUM    0  0   Value: 7
+DBR_CTRL_CHAR    0  0 microns
+               0        0        0        0        0        0        0        0 Value:    7
+DBR_CTRL_LONG    0  0 microns
+               0        0 -2147483648 -2147483648 -2147483648 -2147483648        0        0     Value: 7
+DBR_CTRL_DOUBLE  0  0 microns   4
+           0.000    0.000      nan      nan      nan      nan    0.000    0.000 Value: 7.481485
+DBR_STSACK_STRING        0  0  1  0 7.4815
+DBR_CLASS_NAME  ao
+
