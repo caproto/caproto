@@ -198,9 +198,10 @@ def test_subscriptions(ioc, context):
 
     for i in range(3):
         if pv.read().data[0] == 3:
+            time.sleep(0.2)
             break
         else:
-            time.sleep(0.1)
+            time.sleep(0.2)
 
     assert monitor_values[1:] == [1, 2, 3]
 
