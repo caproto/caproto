@@ -231,15 +231,16 @@ class PV:
             If the PV is connected when this method returns
         """
         logger.debug(f'{self} wait for connection...')
-        if self.connected:
-            return True
 
         if timeout is None:
             timeout = self.connection_timeout
 
         with self._state_lock:
+            if self.connected:
+                return True
             self._connect_event.clear()
-            self._caproto_pv.wait_for_connection(timeout=timeout)
+
+        self._caproto_pv.wait_for_connection(timeout=timeout)
 
         # TODO shorten timeouts based on the above
         ok = self._connect_event.wait(timeout=timeout)
@@ -303,20 +304,21 @@ class PV:
     def _connection_state_changed(self, caproto_pv, state):
         'Connection callback hook from threading.PV.connection_state_changed'
         connected = (state == 'connected')
-        try:
-            if connected:
-                self._connection_established()
-            else:
-                ...
-                # TODO type can change if reconnected
-                # if not self.connected or self._args['type'] is not None:
-                #     return
-                self._connection_closed()
-        except Exception as ex:
-            logger.exception('Connection state callback failed!')
-            raise
-        finally:
-            self._connect_event.set()
+        with self._state_lock:
+            try:
+                if connected:
+                    self._connection_established()
+                else:
+                    ...
+                    # TODO type can change if reconnected
+                    # if not self.connected or self._args['type'] is not None:
+                    #     return
+                    self._connection_closed()
+            except Exception as ex:
+                logger.exception('Connection state callback failed!')
+                raise
+            finally:
+                self._connect_event.set()
 
         # todo move to async connect logic
         for cb in self.connection_callbacks:
