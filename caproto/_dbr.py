@@ -14,8 +14,8 @@ from ._constants import (EPICS2UNIX_EPOCH, EPICS_EPOCH, MAX_STRING_SIZE,
                          MAX_UNITS_SIZE, MAX_ENUM_STRING_SIZE, MAX_ENUM_STATES)
 
 try:
-    # import numpy
-    raise ImportError
+    import numpy
+    # raise ImportError
 except ImportError:
     USE_NUMPY = False
 else:
@@ -276,7 +276,9 @@ def native_to_builtin(value, native_type, data_count):
     else:
         # Return an array.array
         dt = _array_type_code_map[native_type]
-        return array.array(dt, value)
+        arr = array.array(dt, value)
+        arr.byteswap()
+        return arr
 
 
 class DbrTypeBase(ctypes.BigEndianStructure):

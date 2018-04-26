@@ -85,7 +85,8 @@ def run_conversion_test(values, from_dtype, to_dtype, expected,
                                    to_dtype=to_dtype,
                                    string_encoding=string_encoding,
                                    enum_strings=enum_strings,
-                                   direction=direction)
+                                   direction=direction,
+                                   byteswap_automatically=False)
         print(f'Converted: {converted!r}')
         return converted
 
@@ -253,3 +254,7 @@ def test_char_from_wire(from_dtype, to_dtype, values, expected, kwargs):
     run_conversion_test(values=values, from_dtype=from_dtype,
                         to_dtype=to_dtype, expected=expected,
                         direction=FROM_WIRE, **kwargs)
+
+
+
+# TODO: between numerical types testing (int/float/long...)

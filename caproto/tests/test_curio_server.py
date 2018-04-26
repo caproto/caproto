@@ -1,5 +1,6 @@
 import ast
 import datetime
+import array
 
 import numpy as np
 import pytest
@@ -187,7 +188,8 @@ def test_with_caput(prefix, pvdb_from_server_example, server, pv, put_value,
         db_new = db_entry.value
 
         if isinstance(db_entry, (ca.ChannelInteger, ca.ChannelDouble)):
-            clean_func = ast.literal_eval
+            def clean_func(v):
+                return [ast.literal_eval(v)]
         elif isinstance(db_entry, (ca.ChannelEnum, )):
             def clean_func(v):
                 if ' ' not in v:
@@ -221,6 +223,9 @@ def test_with_caput(prefix, pvdb_from_server_example, server, pv, put_value,
         print('new from db', db_new)
         print('old from caput', data['old'])
         print('new from caput', data['new'])
+
+        if isinstance(db_new, (array.array, np.ndarray)):
+            db_new = db_new.tolist()
 
         # check value from database compared to value from caput output
         assert db_new == data['new'], 'left = database/right = caput output'

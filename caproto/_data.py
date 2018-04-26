@@ -106,8 +106,13 @@ def _convert_char_values(values, to_dtype, string_encoding, enum_strings,
         # list of bytes already
         ...
 
-    print('CHAR->', to_dtype, string_encoding, values)
-    return values
+    try:
+        # TODO lazy check
+        values[0]
+    except TypeError:
+        return [values]
+    else:
+        return values
 
 
 def encode_or_fail(s, encoding):
@@ -164,7 +169,8 @@ _custom_conversions = {
 
 
 def convert_values(values, from_dtype, to_dtype, *, direction,
-                   string_encoding='latin-1', enum_strings=None):
+                   string_encoding='latin-1', enum_strings=None,
+                   byteswap_automatically=True):
     '''Convert values from one ChannelType to another
 
     Parameters
@@ -180,6 +186,9 @@ def convert_values(values, from_dtype, to_dtype, *, direction,
         The encoding to be used for strings
     enum_strings : list, optional
         List of enum strings, if available
+    byteswap_automatically : bool, optional
+        If sending over the wire and using built-in arrays, the data should
+        first be byte-swapped to big-endian.
     '''
 
     if (from_dtype in (ChannelType.STSACK_STRING, ChannelType.CLASS_NAME) or
@@ -244,12 +253,16 @@ def convert_values(values, from_dtype, to_dtype, *, direction,
 
     if USE_NUMPY:
         return np.asarray(values).astype(_numpy_map[to_dtype])
-    else:
-        # array.array
-        arr = array.array(_array_type_code_map[to_dtype], values)
-        if direction == ConversionDirection.TO_WIRE:
-            arr.byteswap()
-        return arr
+
+    # array.array
+    if from_dtype in native_float_types and to_dtype in native_int_types:
+        values = [int(v) for v in values]
+    # elif from_dtype in native_int_types and to_dtype in native_float_types:
+
+    arr = array.array(_array_type_code_map[to_dtype], values)
+    if byteswap_automatically and direction == ConversionDirection.TO_WIRE:
+        arr.byteswap()
+    return arr
 
 
 def dbr_metadata_to_dict(dbr_metadata, string_encoding):
@@ -639,7 +652,8 @@ class ChannelData:
                                     from_dtype=dt,
                                     to_dtype=native_type(to_type),
                                     string_encoding=self.string_encoding,
-                                    direction=ConversionDirection.TO_WIRE)
+                                    direction=ConversionDirection.TO_WIRE,
+                                    byteswap_automatically=False)
             if isinstance(values, array_types):
                 values = values.tolist()
             for attr, value in zip(convert_attrs, values):
