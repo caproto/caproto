@@ -452,10 +452,6 @@ class ChannelData:
             # a future subscription wants the same data type.
             metadata, values = await self._read(data_type)
             self._content[data_type] = metadata, values
-        flags = (SubscriptionType.DBE_VALUE |
-                 SubscriptionType.DBE_ALARM |
-                 SubscriptionType.DBE_LOG |
-                 SubscriptionType.DBE_PROPERTY)
         await queue.put(((sub_spec,), metadata, values))
 
     async def unsubscribe(self, queue, sub_spec):
@@ -509,7 +505,8 @@ class ChannelData:
 
         return dbr_metadata, values
 
-    async def auth_write(self, hostname, username, data, data_type, metadata, *, user_address=None):
+    async def auth_write(self, hostname, username, data, data_type, metadata,
+                         *, user_address=None):
         access = self.check_access(hostname, username)
         if AccessRights.WRITE not in access:
             raise Forbidden("Client with hostname {} and username {} cannot "
@@ -658,7 +655,6 @@ class ChannelData:
                 values = values.tolist()
             for attr, value in zip(convert_attrs, values):
                 if hasattr(dbr_metadata, attr):
-                    print('setattr', type(dbr_metadata), attr, type(value), value)
                     setattr(dbr_metadata, attr, value)
 
     async def write_metadata(self, publish=True, units=None, precision=None,
