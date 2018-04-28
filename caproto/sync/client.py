@@ -26,7 +26,7 @@ import subprocess
 import sys
 
 import caproto as ca
-from .._dbr import (promote_type, ChannelType, native_type, SubscriptionType)
+from .._dbr import (field_types, ChannelType, native_type, SubscriptionType)
 from .._utils import ErrorResponseReceived, CaprotoError
 from .repeater import run as run_repeater
 
@@ -484,10 +484,12 @@ def monitor(*pv_names, callback, mask=None, verbose=False, timeout=1,
         for chan in channels:
             logger.debug("Detected native data_type %r.",
                          chan.native_data_type)
-            ntype = native_type(chan.native_data_type)  # abundance of caution
+
+            # abundance of caution
+            ntype = field_types['native'][chan.native_data_type]
             if ((ntype is ChannelType.ENUM) and (not force_int_enums)):
                 ntype = ChannelType.STRING
-            time_type = promote_type(ntype, use_time=True)
+            time_type = field_types['time'][ntype]
             # Adjust the timeout during monitoring.
             sockets[chan.circuit].settimeout(None)
             logger.debug("Subscribing with data_type %r.", time_type)
@@ -661,7 +663,8 @@ def put(pv_name, data, *, verbose=False, timeout=1, priority=0, repeater=True):
         udp_sock.close()
     try:
         logger.debug("Detected native data_type %r.", chan.native_data_type)
-        ntype = native_type(chan.native_data_type)  # abundance of caution
+        # abundance of caution
+        ntype = field_types['native'][chan.native_data_type]
         # Stash initial value
         logger.debug("Taking 'initial' reading before writing.")
         initial_response = read(chan, timeout, None)

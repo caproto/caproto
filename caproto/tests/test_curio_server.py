@@ -12,10 +12,10 @@ from .epics_test_utils import (run_caget, run_caput)
 
 caget_checks = sum(
     ([(pv, dtype),
-      (pv, ca.promote_type(dtype, use_status=True)),
-      (pv, ca.promote_type(dtype, use_time=True)),
-      (pv, ca.promote_type(dtype, use_ctrl=True)),
-      (pv, ca.promote_type(dtype, use_gr=True)),
+      (pv, ca.field_types['status'][dtype]),
+      (pv, ca.field_types['time'][dtype]),
+      (pv, ca.field_types['control'][dtype]),
+      (pv, ca.field_types['graphic'][dtype]),
       ]
      for pv in ('int', 'pi', 'enum')
      for dtype in ca.native_types),

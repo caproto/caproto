@@ -49,7 +49,7 @@ from ._headers import (MessageHeader, ExtendedMessageHeader,
 
 from ._constants import (DO_REPLY, NO_REPLY, MAX_RECORD_LENGTH)
 from ._dbr import (DBR_INT, DBR_TYPES, ChannelType, float_t, short_t, ushort_t,
-                   native_type, MAX_STRING_SIZE, USE_NUMPY,
+                   native_type, special_types, MAX_STRING_SIZE, USE_NUMPY,
                    array_type_code, AccessRights)
 
 from . import _dbr as dbr
@@ -87,10 +87,8 @@ def ipv4_from_int32(int_packed_ip: int) -> str:
 
 def has_metadata(data_type):
     'Does data_type have associated metadata?'
-    return (data_type in (ChannelType.PUT_ACKS, ChannelType.PUT_ACKT,
-                          ChannelType.STSACK_STRING, ChannelType.CLASS_NAME)
-            or data_type != native_type(data_type)
-            )
+    return (data_type in special_types or
+            data_type != native_type(data_type))
 
 
 def from_buffer(data_type, data_count, buffer):

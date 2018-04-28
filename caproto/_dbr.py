@@ -163,43 +163,7 @@ double_t = ctypes.c_double  # epicsFloat64
 
 def native_type(ftype):
     '''return native field type from TIME or CTRL variant'''
-    return _native_map[ftype]
-
-
-def promote_type(ftype, *, use_status=False, use_time=False, use_ctrl=False,
-                 use_gr=False):
-    """Promotes a native field type to its STS, TIME, CTRL, or GR variant.
-
-    Returns
-    -------
-    ftype : int
-        the promoted field value.
-    """
-    if sum([use_status, use_time, use_ctrl, use_gr]) > 1:
-        raise ValueError("Only one of the kwargs may be True.")
-    elif ftype in special_types:
-        # Special types have no promoted versions
-        return ftype
-
-    if _native_map:  # only during initialization
-        # Demote it back to a native type, if necessary
-        ftype = _native_map[ChannelType(ftype)]
-
-    # Use the fact that the types are ordered in blocks and that the STRING
-    # variant is the first element of each block.
-    if use_ctrl:
-        if ftype == ChannelType.STRING:
-            return ChannelType.TIME_STRING
-        ftype += ChannelType.CTRL_STRING
-    elif use_time:
-        ftype += ChannelType.TIME_STRING
-    elif use_status:
-        ftype += ChannelType.STS_STRING
-    elif use_gr:
-        if ftype == ChannelType.STRING:
-            return ChannelType.STS_STRING
-        ftype += ChannelType.GR_STRING
-    return ChannelType(ftype)
+    return field_types['native'][ftype]
 
 
 def epics_timestamp_to_unix(seconds_since_epoch, nano_seconds):
@@ -822,6 +786,275 @@ class DBR_CLASS_NAME(DbrSpecialType):
 # End of DBR type classes
 
 
+# Full mapping of promoted -> native field types, and native -> promoted types
+field_types = {
+    'native': {
+        # Native
+        ChannelType.STRING: ChannelType.STRING,
+        ChannelType.INT: ChannelType.INT,
+        ChannelType.FLOAT: ChannelType.FLOAT,
+        ChannelType.ENUM: ChannelType.ENUM,
+        ChannelType.CHAR: ChannelType.CHAR,
+        ChannelType.LONG: ChannelType.LONG,
+        ChannelType.DOUBLE: ChannelType.DOUBLE,
+
+        # Status
+        ChannelType.STS_STRING: ChannelType.STRING,
+        ChannelType.STS_INT: ChannelType.INT,
+        ChannelType.STS_FLOAT: ChannelType.FLOAT,
+        ChannelType.STS_ENUM: ChannelType.ENUM,
+        ChannelType.STS_CHAR: ChannelType.CHAR,
+        ChannelType.STS_LONG: ChannelType.LONG,
+        ChannelType.STS_DOUBLE: ChannelType.DOUBLE,
+
+        # Time
+        ChannelType.TIME_STRING: ChannelType.STRING,
+        ChannelType.TIME_INT: ChannelType.INT,
+        ChannelType.TIME_FLOAT: ChannelType.FLOAT,
+        ChannelType.TIME_ENUM: ChannelType.ENUM,
+        ChannelType.TIME_CHAR: ChannelType.CHAR,
+        ChannelType.TIME_LONG: ChannelType.LONG,
+        ChannelType.TIME_DOUBLE: ChannelType.DOUBLE,
+
+        # Graphic
+        ChannelType.GR_STRING: ChannelType.STRING,
+        ChannelType.GR_INT: ChannelType.INT,
+        ChannelType.GR_FLOAT: ChannelType.FLOAT,
+        ChannelType.GR_ENUM: ChannelType.ENUM,
+        ChannelType.GR_CHAR: ChannelType.CHAR,
+        ChannelType.GR_LONG: ChannelType.LONG,
+        ChannelType.GR_DOUBLE: ChannelType.DOUBLE,
+
+        # Control
+        ChannelType.CTRL_STRING: ChannelType.STRING,
+        ChannelType.CTRL_INT: ChannelType.INT,
+        ChannelType.CTRL_FLOAT: ChannelType.FLOAT,
+        ChannelType.CTRL_ENUM: ChannelType.ENUM,
+        ChannelType.CTRL_CHAR: ChannelType.CHAR,
+        ChannelType.CTRL_LONG: ChannelType.LONG,
+        ChannelType.CTRL_DOUBLE: ChannelType.DOUBLE,
+
+        # Special
+        ChannelType.PUT_ACKT: ChannelType.PUT_ACKT,
+        ChannelType.PUT_ACKS: ChannelType.PUT_ACKS,
+        ChannelType.STSACK_STRING: ChannelType.STSACK_STRING,
+        ChannelType.CLASS_NAME: ChannelType.CLASS_NAME,
+    },
+
+    'status': {
+        # Native
+        ChannelType.STRING: ChannelType.STS_STRING,
+        ChannelType.INT: ChannelType.STS_INT,
+        ChannelType.FLOAT: ChannelType.STS_FLOAT,
+        ChannelType.ENUM: ChannelType.STS_ENUM,
+        ChannelType.CHAR: ChannelType.STS_CHAR,
+        ChannelType.LONG: ChannelType.STS_LONG,
+        ChannelType.DOUBLE: ChannelType.STS_DOUBLE,
+
+        # Status
+        ChannelType.STS_STRING: ChannelType.STS_STRING,
+        ChannelType.STS_INT: ChannelType.STS_INT,
+        ChannelType.STS_FLOAT: ChannelType.STS_FLOAT,
+        ChannelType.STS_ENUM: ChannelType.STS_ENUM,
+        ChannelType.STS_CHAR: ChannelType.STS_CHAR,
+        ChannelType.STS_LONG: ChannelType.STS_LONG,
+        ChannelType.STS_DOUBLE: ChannelType.STS_DOUBLE,
+
+        # Time
+        ChannelType.TIME_STRING: ChannelType.STS_STRING,
+        ChannelType.TIME_INT: ChannelType.STS_INT,
+        ChannelType.TIME_FLOAT: ChannelType.STS_FLOAT,
+        ChannelType.TIME_ENUM: ChannelType.STS_ENUM,
+        ChannelType.TIME_CHAR: ChannelType.STS_CHAR,
+        ChannelType.TIME_LONG: ChannelType.STS_LONG,
+        ChannelType.TIME_DOUBLE: ChannelType.STS_DOUBLE,
+
+        # Graphic
+        ChannelType.STS_STRING: ChannelType.STS_STRING,
+        ChannelType.GR_INT: ChannelType.STS_INT,
+        ChannelType.GR_FLOAT: ChannelType.STS_FLOAT,
+        ChannelType.GR_ENUM: ChannelType.STS_ENUM,
+        ChannelType.GR_CHAR: ChannelType.STS_CHAR,
+        ChannelType.GR_LONG: ChannelType.STS_LONG,
+        ChannelType.GR_DOUBLE: ChannelType.STS_DOUBLE,
+
+        # Control
+        # ChannelType.TIME_STRING: ChannelType.STS_STRING,
+        ChannelType.CTRL_INT: ChannelType.STS_INT,
+        ChannelType.CTRL_FLOAT: ChannelType.STS_FLOAT,
+        ChannelType.CTRL_ENUM: ChannelType.STS_ENUM,
+        ChannelType.CTRL_CHAR: ChannelType.STS_CHAR,
+        ChannelType.CTRL_LONG: ChannelType.STS_LONG,
+        ChannelType.CTRL_DOUBLE: ChannelType.STS_DOUBLE,
+
+        # Special types
+        ChannelType.PUT_ACKT: ChannelType.PUT_ACKT,
+        ChannelType.PUT_ACKS: ChannelType.PUT_ACKS,
+        ChannelType.STSACK_STRING: ChannelType.STSACK_STRING,
+        ChannelType.CLASS_NAME: ChannelType.CLASS_NAME,
+    },
+
+    'time': {
+        # Native
+        ChannelType.STRING: ChannelType.TIME_STRING,
+        ChannelType.INT: ChannelType.TIME_INT,
+        ChannelType.FLOAT: ChannelType.TIME_FLOAT,
+        ChannelType.ENUM: ChannelType.TIME_ENUM,
+        ChannelType.CHAR: ChannelType.TIME_CHAR,
+        ChannelType.LONG: ChannelType.TIME_LONG,
+        ChannelType.DOUBLE: ChannelType.TIME_DOUBLE,
+
+        # Status
+        ChannelType.STS_STRING: ChannelType.TIME_STRING,
+        ChannelType.STS_INT: ChannelType.TIME_INT,
+        ChannelType.STS_FLOAT: ChannelType.TIME_FLOAT,
+        ChannelType.STS_ENUM: ChannelType.TIME_ENUM,
+        ChannelType.STS_CHAR: ChannelType.TIME_CHAR,
+        ChannelType.STS_LONG: ChannelType.TIME_LONG,
+        ChannelType.STS_DOUBLE: ChannelType.TIME_DOUBLE,
+
+        # Time
+        ChannelType.TIME_STRING: ChannelType.TIME_STRING,
+        ChannelType.TIME_INT: ChannelType.TIME_INT,
+        ChannelType.TIME_FLOAT: ChannelType.TIME_FLOAT,
+        ChannelType.TIME_ENUM: ChannelType.TIME_ENUM,
+        ChannelType.TIME_CHAR: ChannelType.TIME_CHAR,
+        ChannelType.TIME_LONG: ChannelType.TIME_LONG,
+        ChannelType.TIME_DOUBLE: ChannelType.TIME_DOUBLE,
+
+        # Graphic
+        ChannelType.STS_STRING: ChannelType.TIME_STRING,
+        ChannelType.GR_INT: ChannelType.TIME_INT,
+        ChannelType.GR_FLOAT: ChannelType.TIME_FLOAT,
+        ChannelType.GR_ENUM: ChannelType.TIME_ENUM,
+        ChannelType.GR_CHAR: ChannelType.TIME_CHAR,
+        ChannelType.GR_LONG: ChannelType.TIME_LONG,
+        ChannelType.GR_DOUBLE: ChannelType.TIME_DOUBLE,
+
+        # Control
+        # ChannelType.TIME_STRING: ChannelType.TIME_STRING,
+        ChannelType.CTRL_INT: ChannelType.TIME_INT,
+        ChannelType.CTRL_FLOAT: ChannelType.TIME_FLOAT,
+        ChannelType.CTRL_ENUM: ChannelType.TIME_ENUM,
+        ChannelType.CTRL_CHAR: ChannelType.TIME_CHAR,
+        ChannelType.CTRL_LONG: ChannelType.TIME_LONG,
+        ChannelType.CTRL_DOUBLE: ChannelType.TIME_DOUBLE,
+
+        # Special types
+        ChannelType.PUT_ACKT: ChannelType.PUT_ACKT,
+        ChannelType.PUT_ACKS: ChannelType.PUT_ACKS,
+        ChannelType.STSACK_STRING: ChannelType.STSACK_STRING,
+        ChannelType.CLASS_NAME: ChannelType.CLASS_NAME,
+    },
+
+    'graphic': {
+        # Native
+        ChannelType.STRING: ChannelType.STS_STRING,
+        ChannelType.INT: ChannelType.GR_INT,
+        ChannelType.FLOAT: ChannelType.GR_FLOAT,
+        ChannelType.ENUM: ChannelType.GR_ENUM,
+        ChannelType.CHAR: ChannelType.GR_CHAR,
+        ChannelType.LONG: ChannelType.GR_LONG,
+        ChannelType.DOUBLE: ChannelType.GR_DOUBLE,
+
+        # Status
+        ChannelType.STS_STRING: ChannelType.STS_STRING,
+        ChannelType.STS_INT: ChannelType.GR_INT,
+        ChannelType.STS_FLOAT: ChannelType.GR_FLOAT,
+        ChannelType.STS_ENUM: ChannelType.GR_ENUM,
+        ChannelType.STS_CHAR: ChannelType.GR_CHAR,
+        ChannelType.STS_LONG: ChannelType.GR_LONG,
+        ChannelType.STS_DOUBLE: ChannelType.GR_DOUBLE,
+
+        # Time
+        ChannelType.TIME_STRING: ChannelType.STS_STRING,
+        ChannelType.TIME_INT: ChannelType.GR_INT,
+        ChannelType.TIME_FLOAT: ChannelType.GR_FLOAT,
+        ChannelType.TIME_ENUM: ChannelType.GR_ENUM,
+        ChannelType.TIME_CHAR: ChannelType.GR_CHAR,
+        ChannelType.TIME_LONG: ChannelType.GR_LONG,
+        ChannelType.TIME_DOUBLE: ChannelType.GR_DOUBLE,
+
+        # Graphic
+        ChannelType.STS_STRING: ChannelType.STS_STRING,
+        ChannelType.GR_INT: ChannelType.GR_INT,
+        ChannelType.GR_FLOAT: ChannelType.GR_FLOAT,
+        ChannelType.GR_ENUM: ChannelType.GR_ENUM,
+        ChannelType.GR_CHAR: ChannelType.GR_CHAR,
+        ChannelType.GR_LONG: ChannelType.GR_LONG,
+        ChannelType.GR_DOUBLE: ChannelType.GR_DOUBLE,
+
+        # Control
+        # ChannelType.TIME_STRING: ChannelType.STS_STRING,
+        ChannelType.CTRL_INT: ChannelType.GR_INT,
+        ChannelType.CTRL_FLOAT: ChannelType.GR_FLOAT,
+        ChannelType.CTRL_ENUM: ChannelType.GR_ENUM,
+        ChannelType.CTRL_CHAR: ChannelType.GR_CHAR,
+        ChannelType.CTRL_LONG: ChannelType.GR_LONG,
+        ChannelType.CTRL_DOUBLE: ChannelType.GR_DOUBLE,
+
+        # Special types
+        ChannelType.PUT_ACKT: ChannelType.PUT_ACKT,
+        ChannelType.PUT_ACKS: ChannelType.PUT_ACKS,
+        ChannelType.STSACK_STRING: ChannelType.STSACK_STRING,
+        ChannelType.CLASS_NAME: ChannelType.CLASS_NAME,
+    },
+
+    'control': {
+        # Native
+        ChannelType.STRING: ChannelType.TIME_STRING,
+        ChannelType.INT: ChannelType.CTRL_INT,
+        ChannelType.FLOAT: ChannelType.CTRL_FLOAT,
+        ChannelType.ENUM: ChannelType.CTRL_ENUM,
+        ChannelType.CHAR: ChannelType.CTRL_CHAR,
+        ChannelType.LONG: ChannelType.CTRL_LONG,
+        ChannelType.DOUBLE: ChannelType.CTRL_DOUBLE,
+
+        # Status
+        ChannelType.STS_STRING: ChannelType.TIME_STRING,
+        ChannelType.STS_INT: ChannelType.CTRL_INT,
+        ChannelType.STS_FLOAT: ChannelType.CTRL_FLOAT,
+        ChannelType.STS_ENUM: ChannelType.CTRL_ENUM,
+        ChannelType.STS_CHAR: ChannelType.CTRL_CHAR,
+        ChannelType.STS_LONG: ChannelType.CTRL_LONG,
+        ChannelType.STS_DOUBLE: ChannelType.CTRL_DOUBLE,
+
+        # Time
+        ChannelType.TIME_STRING: ChannelType.TIME_STRING,
+        ChannelType.TIME_INT: ChannelType.CTRL_INT,
+        ChannelType.TIME_FLOAT: ChannelType.CTRL_FLOAT,
+        ChannelType.TIME_ENUM: ChannelType.CTRL_ENUM,
+        ChannelType.TIME_CHAR: ChannelType.CTRL_CHAR,
+        ChannelType.TIME_LONG: ChannelType.CTRL_LONG,
+        ChannelType.TIME_DOUBLE: ChannelType.CTRL_DOUBLE,
+
+        # Graphic
+        ChannelType.STS_STRING: ChannelType.TIME_STRING,
+        ChannelType.GR_INT: ChannelType.CTRL_INT,
+        ChannelType.GR_FLOAT: ChannelType.CTRL_FLOAT,
+        ChannelType.GR_ENUM: ChannelType.CTRL_ENUM,
+        ChannelType.GR_CHAR: ChannelType.CTRL_CHAR,
+        ChannelType.GR_LONG: ChannelType.CTRL_LONG,
+        ChannelType.GR_DOUBLE: ChannelType.CTRL_DOUBLE,
+
+        # Control
+        # ChannelType.TIME_STRING: ChannelType.TIME_STRING,
+        ChannelType.CTRL_INT: ChannelType.CTRL_INT,
+        ChannelType.CTRL_FLOAT: ChannelType.CTRL_FLOAT,
+        ChannelType.CTRL_ENUM: ChannelType.CTRL_ENUM,
+        ChannelType.CTRL_CHAR: ChannelType.CTRL_CHAR,
+        ChannelType.CTRL_LONG: ChannelType.CTRL_LONG,
+        ChannelType.CTRL_DOUBLE: ChannelType.CTRL_DOUBLE,
+
+        # Special types
+        ChannelType.PUT_ACKT: ChannelType.PUT_ACKT,
+        ChannelType.PUT_ACKS: ChannelType.PUT_ACKS,
+        ChannelType.STSACK_STRING: ChannelType.STSACK_STRING,
+        ChannelType.CLASS_NAME: ChannelType.CLASS_NAME,
+    },
+}
+
+
 # All native types available
 native_types = {ChannelType.STRING, ChannelType.INT, ChannelType.FLOAT,
                 ChannelType.ENUM, ChannelType.CHAR, ChannelType.LONG,
@@ -831,21 +1064,13 @@ native_types = {ChannelType.STRING, ChannelType.INT, ChannelType.FLOAT,
 special_types = {ChannelType.PUT_ACKS, ChannelType.PUT_ACKS,
                  ChannelType.STSACK_STRING, ChannelType.CLASS_NAME}
 
-# Map of promoted types to native types, to be filled below
-# (this is necessary for the promote_type call)
-_native_map = {}
-
 # ChannelTypes grouped by included metadata
-status_types = {promote_type(nt, use_status=True)
-                for nt in native_types}
-time_types = {promote_type(nt, use_time=True)
-              for nt in native_types}
-graphical_types = {promote_type(nt, use_gr=True)
-                   for nt in native_types
-                   if nt != ChannelType.STRING}
-control_types = {promote_type(nt, use_ctrl=True)
-                 for nt in native_types
-                 if nt != ChannelType.STRING}
+status_types = set(field_types['status'].values()) - set(special_types)
+time_types = set(field_types['time'].values()) - set(special_types)
+graphical_types = (set(field_types['graphic'].values()) - set(special_types) -
+                   {ChannelType.STS_STRING})
+control_types = (set(field_types['control'].values()) - set(special_types) -
+                 {ChannelType.TIME_STRING})
 
 # ChannelTypes grouped by value data type
 char_types = {ChannelType.CHAR, ChannelType.TIME_CHAR, ChannelType.CTRL_CHAR,
@@ -877,28 +1102,6 @@ native_float_types = {ChannelType.FLOAT, ChannelType.DOUBLE}
 native_int_types = {ChannelType.INT, ChannelType.CHAR, ChannelType.LONG,
                     ChannelType.ENUM
                     }
-
-# Map of promoted types to native types
-_native_map = {
-    promote_type(native_type, **kw): native_type
-    for kw in [dict(),
-               dict(use_status=True),
-               dict(use_time=True),
-               dict(use_gr=True),
-               dict(use_ctrl=True)]
-    for native_type in native_types
-}
-
-# Special types need to be added as well:
-_native_map.update({
-    ChannelType.GR_STRING: ChannelType.STRING,
-    ChannelType.CTRL_STRING: ChannelType.STRING,
-
-    ChannelType.PUT_ACKS: ChannelType.PUT_ACKS,
-    ChannelType.PUT_ACKT: ChannelType.PUT_ACKT,
-    ChannelType.STSACK_STRING: ChannelType.STSACK_STRING,
-    ChannelType.CLASS_NAME: ChannelType.CLASS_NAME,
-})
 
 # map of Epics DBR types to ctypes types
 DBR_TYPES = {
