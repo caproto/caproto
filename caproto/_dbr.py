@@ -823,57 +823,71 @@ class DBR_CLASS_NAME(DbrSpecialType):
 
 
 # All native types available
-native_types = (ChannelType.STRING, ChannelType.INT, ChannelType.FLOAT,
+native_types = {ChannelType.STRING, ChannelType.INT, ChannelType.FLOAT,
                 ChannelType.ENUM, ChannelType.CHAR, ChannelType.LONG,
-                ChannelType.DOUBLE)
+                ChannelType.DOUBLE}
 
 # Special types without any corresponding promoted versions
-special_types = (ChannelType.PUT_ACKS, ChannelType.PUT_ACKS,
-                 ChannelType.STSACK_STRING, ChannelType.CLASS_NAME)
+special_types = {ChannelType.PUT_ACKS, ChannelType.PUT_ACKS,
+                 ChannelType.STSACK_STRING, ChannelType.CLASS_NAME}
 
 # Map of promoted types to native types, to be filled below
+# (this is necessary for the promote_type call)
 _native_map = {}
 
 # ChannelTypes grouped by included metadata
-status_types = tuple(promote_type(nt, use_status=True) for nt in native_types)
-time_types = tuple(promote_type(nt, use_time=True) for nt in native_types)
-graphical_types = tuple(promote_type(nt, use_gr=True) for nt in native_types
-                        if nt != ChannelType.STRING)
-control_types = tuple(promote_type(nt, use_ctrl=True) for nt in native_types
-                      if nt != ChannelType.STRING)
+status_types = {promote_type(nt, use_status=True)
+                for nt in native_types}
+time_types = {promote_type(nt, use_time=True)
+              for nt in native_types}
+graphical_types = {promote_type(nt, use_gr=True)
+                   for nt in native_types
+                   if nt != ChannelType.STRING}
+control_types = {promote_type(nt, use_ctrl=True)
+                 for nt in native_types
+                 if nt != ChannelType.STRING}
 
 # ChannelTypes grouped by value data type
-char_types = (ChannelType.CHAR, ChannelType.TIME_CHAR, ChannelType.CTRL_CHAR,
-              ChannelType.STS_CHAR)
+char_types = {ChannelType.CHAR, ChannelType.TIME_CHAR, ChannelType.CTRL_CHAR,
+              ChannelType.STS_CHAR
+              }
 
-string_types = (ChannelType.STRING, ChannelType.TIME_STRING,
-                ChannelType.CTRL_STRING, ChannelType.STS_STRING)
+string_types = {ChannelType.STRING, ChannelType.TIME_STRING,
+                ChannelType.CTRL_STRING, ChannelType.STS_STRING
+                }
 
-int_types = (ChannelType.INT, ChannelType.TIME_INT, ChannelType.CTRL_INT,
-             ChannelType.CTRL_INT, ChannelType.LONG, ChannelType.TIME_LONG,
-             ChannelType.CTRL_LONG, ChannelType.CTRL_LONG)
+int_types = {ChannelType.INT, ChannelType.TIME_INT, ChannelType.CTRL_INT,
+             ChannelType.LONG, ChannelType.TIME_LONG, ChannelType.CTRL_LONG,
+             }
 
-float_types = (ChannelType.FLOAT, ChannelType.TIME_FLOAT,
-               ChannelType.CTRL_FLOAT, ChannelType.CTRL_FLOAT,
+float_types = {ChannelType.FLOAT, ChannelType.TIME_FLOAT,
+               ChannelType.CTRL_FLOAT,
                ChannelType.DOUBLE, ChannelType.TIME_DOUBLE,
-               ChannelType.CTRL_DOUBLE, ChannelType.CTRL_DOUBLE)
+               ChannelType.CTRL_DOUBLE,
+               }
 
-enum_types = (ChannelType.ENUM, ChannelType.STS_ENUM, ChannelType.TIME_ENUM,
-              ChannelType.CTRL_ENUM)
-char_types = (ChannelType.CHAR, ChannelType.TIME_CHAR, ChannelType.CTRL_CHAR)
-native_float_types = (ChannelType.FLOAT, ChannelType.DOUBLE)
-native_int_types = (ChannelType.INT, ChannelType.CHAR, ChannelType.LONG,
-                    ChannelType.ENUM)
+enum_types = {ChannelType.ENUM, ChannelType.STS_ENUM, ChannelType.TIME_ENUM,
+              ChannelType.CTRL_ENUM
+              }
 
-# Fill in the map of promoted types to native types
-_native_map.update({promote_type(native_type, **kw): native_type
-                    for kw in [dict(),
-                               dict(use_status=True),
-                               dict(use_time=True),
-                               dict(use_gr=True),
-                               dict(use_ctrl=True)]
-                    for native_type in native_types
-                    })
+char_types = {ChannelType.CHAR, ChannelType.TIME_CHAR, ChannelType.CTRL_CHAR}
+
+native_float_types = {ChannelType.FLOAT, ChannelType.DOUBLE}
+
+native_int_types = {ChannelType.INT, ChannelType.CHAR, ChannelType.LONG,
+                    ChannelType.ENUM
+                    }
+
+# Map of promoted types to native types
+_native_map = {
+    promote_type(native_type, **kw): native_type
+    for kw in [dict(),
+               dict(use_status=True),
+               dict(use_time=True),
+               dict(use_gr=True),
+               dict(use_ctrl=True)]
+    for native_type in native_types
+}
 
 # Special types need to be added as well:
 _native_map.update({
@@ -887,37 +901,39 @@ _native_map.update({
 })
 
 # map of Epics DBR types to ctypes types
-DBR_TYPES = {cls.DBR_ID: cls
-             for name, cls in globals().items()
-             if (name.startswith('DBR_') and issubclass(cls, DbrTypeBase) and
-                 hasattr(cls, 'DBR_ID'))
-             }
+DBR_TYPES = {
+    cls.DBR_ID: cls
+    for name, cls in globals().items()
+    if (name.startswith('DBR_') and issubclass(cls, DbrTypeBase) and
+        hasattr(cls, 'DBR_ID'))
+}
 
 # Unimplemented STRING types are mapped to DBR_TIME_STRING
 DBR_TYPES[ChannelType.GR_STRING] = DBR_STS_STRING
 DBR_TYPES[ChannelType.CTRL_STRING] = DBR_TIME_STRING
 
 
-if USE_NUMPY:
-    _numpy_map = {
-        ch_type: numpy.dtype(dtype).newbyteorder('>')
-        for ch_type, dtype in
-        [(ChannelType.INT, numpy.int16),
-         (ChannelType.FLOAT, numpy.float32),
-         (ChannelType.ENUM, numpy.uint16),
-         (ChannelType.CHAR, numpy.uint8),
-         (ChannelType.LONG, numpy.int32),
-         (ChannelType.DOUBLE, numpy.float64),
-         (ChannelType.STRING, '>S40'),
-         (ChannelType.CHAR, 'b'),
-         (ChannelType.STSACK_STRING, numpy.uint8),
-         (ChannelType.CLASS_NAME, numpy.uint8),
-         (ChannelType.PUT_ACKT, numpy.ushort),
-         (ChannelType.PUT_ACKS, numpy.ushort),
-         ]
-    }
-else:
-    _numpy_map = {}
+_numpy_map = {
+    ChannelType.INT: '>i2',
+    ChannelType.FLOAT: '>f4',
+    ChannelType.ENUM: '>u2',
+    ChannelType.CHAR: '>u8',
+    ChannelType.LONG: '>i4',
+    ChannelType.DOUBLE: '>f8',
+    ChannelType.STRING: 'S40',
+    ChannelType.CHAR: 'b',
+    ChannelType.STSACK_STRING: 'u8',
+    ChannelType.CLASS_NAME: 'u8',
+    ChannelType.PUT_ACKT: '>u2',
+    ChannelType.PUT_ACKS: '>u2',
+}
+
+
+if numpy is not None:
+    # Make the dtypes ahead of time
+    _numpy_map = {ch_type: numpy.dtype(dtype)
+                  for ch_type, dtype in _numpy_map.items()
+                  }
 
 
 _array_type_code_map = {
@@ -937,7 +953,10 @@ _array_type_code_map = {
 }
 
 for _type in set(native_types) - set([ChannelType.STRING]):
-    assert (array.array(_array_type_code_map[_type]).itemsize ==
-            ctypes.sizeof(DBR_TYPES[_type])), '{!r} check failed'.format(_type)
+    _size = ctypes.sizeof(DBR_TYPES[_type])
+    assert array.array(_array_type_code_map[_type]).itemsize == _size
+    if numpy is not None:
+        assert _numpy_map[_type].itemsize == _size
 
 del _type
+del _size
