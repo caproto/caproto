@@ -66,6 +66,9 @@ def epics_to_python(value, native_type, data_count, *, auto_byteswap=True):
 
 def python_to_epics(dtype, values, *, byteswap=True, convert_from=None):
     'Convert values from_dtype -> to_dtype'
+    if dtype == ChannelType.STRING:
+        return DbrStringArray(values).tobytes()
+
     endian = getattr(values, 'endian', default_endian)
     if isinstance(values, array.array):
         if byteswap and endian != '>':
@@ -75,9 +78,6 @@ def python_to_epics(dtype, values, *, byteswap=True, convert_from=None):
             arr.byteswap()
             return arr
         return values
-
-    if dtype == ChannelType.STRING:
-        return DbrStringArray(values).tobytes()
 
     if convert_from is not None:
         if convert_from in native_float_types and dtype in native_int_types:

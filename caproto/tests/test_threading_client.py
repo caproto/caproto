@@ -44,7 +44,7 @@ def test_context_disconnect_is_terminal(context, ioc):
         pv, = context.get_pvs(ioc.pvs['str'])
 
 
-def test_put_complete(context, ioc):
+def test_put_complete(backends, context, ioc):
     pv, = context.get_pvs(ioc.pvs['float'])
     pv.wait_for_connection()
     assert pv.connected

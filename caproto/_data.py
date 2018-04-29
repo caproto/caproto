@@ -34,26 +34,40 @@ class ConversionDirection(enum.Enum):
 
 def _convert_enum_values(values, to_dtype, string_encoding, enum_strings,
                          direction):
+    if enum_strings is None:
+        raise ConversionError('enum_strings not specified')
+
+    num_strings = len(enum_strings)
+
     if to_dtype == ChannelType.STRING:
         def get_value(v):
             if isinstance(v, bytes):
                 raise ConversionError('Enum strings must be integer or string')
 
             if isinstance(v, str):
+                if v not in enum_strings:
+                    raise ConversionError(f'Invalid enum string: {v!r}')
                 return v
-            elif enum_strings is not None:
+
+            if 0 <= v < num_strings:
                 return enum_strings[v]
-            raise ConversionError('enum_strings unset')
+            raise ConversionError(f'Invalid enum index: {v!r} '
+                                  f'count={num_strings}')
     else:
         def get_value(v):
             if isinstance(v, bytes):
                 raise ConversionError('Enum strings must be integer or string')
 
             if isinstance(v, str):
-                return enum_strings.index(v)
-            elif enum_strings is not None:
+                try:
+                    return enum_strings.index(v)
+                except ValueError:
+                    raise ConversionError(f'Invalid enum string: {v!r}')
+
+            if 0 <= v < num_strings:
                 return v
-            raise ConversionError('enum_strings unset')
+            raise ConversionError(f'Invalid enum index: {v!r} '
+                                  f'count={num_strings}')
 
     return [get_value(v) for v in values]
 
@@ -71,8 +85,10 @@ def _convert_char_values(values, to_dtype, string_encoding, enum_strings,
         if direction == ConversionDirection.TO_WIRE:
             # NOTE: accurate, but results in very inefficient CA response
             #       40 * len(values)
-            if isinstance(values, (bytes, str)):
-                return list(values)
+            if isinstance(values, str):
+                return [bytes([v]) for v in encode_or_fail(values, string_encoding)]
+            elif isinstance(values, bytes):
+                return [bytes([v]) for v in values]
             else:
                 # list of numbers
                 return values
@@ -112,7 +128,10 @@ def encode_or_fail(s, encoding):
         if encoding is None:
             raise ConversionError('String encoding required')
         return s.encode(encoding)
-    return s
+    elif isinstance(s, bytes):
+        return s
+
+    raise ConversionError('Expected string or bytes')
 
 
 def decode_or_fail(s, encoding):
@@ -120,7 +139,10 @@ def decode_or_fail(s, encoding):
         if encoding is None:
             raise ConversionError('String encoding required')
         return s.decode(encoding)
-    return s
+    elif isinstance(s, str):
+        return s
+
+    raise ConversionError('Expected string or bytes')
 
 
 def _convert_string_values(values, to_dtype, string_encoding, enum_strings,
@@ -137,8 +159,6 @@ def _convert_string_values(values, to_dtype, string_encoding, enum_strings,
                   for v in values]
 
     if to_dtype == ChannelType.ENUM:
-        if not enum_strings:
-            raise ConversionError('enum strings not specified?')
         # TODO: this is used where caput('enum', 'string_value')
         #       i.e., putting a string to an enum
         return _convert_enum_values(values, to_dtype=ChannelType.INT,
@@ -190,7 +210,7 @@ def convert_values(values, from_dtype, to_dtype, *, direction,
                                   'class_name to other types')
         return values
 
-    if to_dtype not in native_types:
+    if to_dtype not in native_types or from_dtype not in native_types:
         raise ConversionError('Expecting a native type')
 
     if isinstance(values, (str, bytes)):
@@ -201,21 +221,20 @@ def convert_values(values, from_dtype, to_dtype, *, direction,
         except TypeError:
             values = (values, )
 
-    if from_dtype in _custom_conversions:
+    try:
         convert_func = _custom_conversions[from_dtype]
-        # try:
-        if True:
+    except KeyError:
+        ...
+    else:
+        try:
             values = convert_func(values=values, to_dtype=to_dtype,
                                   string_encoding=string_encoding,
                                   enum_strings=enum_strings,
                                   direction=direction)
-        # except Exception as ex:
-        #     raise ConversionError() from ex
+        except Exception as ex:
+            raise ConversionError() from ex
 
     if to_dtype == ChannelType.STRING:
-        if not string_encoding:
-            return values
-
         if direction == ConversionDirection.TO_WIRE:
             string_target = bytes
         else:
@@ -224,7 +243,9 @@ def convert_values(values, from_dtype, to_dtype, *, direction,
         if string_target is str:
             def get_value(v):
                 if isinstance(v, bytes):
-                    return v.decode(string_encoding)
+                    if string_encoding:  # can have bytes in ChannelString
+                        return v.decode(string_encoding)
+                    return v
                 elif isinstance(v, str):
                     return v
                 else:
@@ -235,16 +256,15 @@ def convert_values(values, from_dtype, to_dtype, *, direction,
             if isinstance(v, bytes):
                 return v
             elif isinstance(v, str):
-                return v.encode(string_encoding)
+                return encode_or_fail(v, string_encoding)
             else:
-                return str(v).encode(string_encoding)
+                return encode_or_fail(str(v), string_encoding)
         return DbrStringArray(get_value(v) for v in values)
     elif to_dtype == ChannelType.CHAR:
         if string_encoding and isinstance(values[0], str):
             return values
 
     byteswap = (auto_byteswap and direction == ConversionDirection.TO_WIRE)
-
     return backend.python_to_epics(to_dtype, values, byteswap=byteswap,
                                    convert_from=from_dtype)
 

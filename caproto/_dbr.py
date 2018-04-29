@@ -163,8 +163,11 @@ class DbrStringArray(collections.UserList):
         return type(self)(res) if isinstance(i, slice) else res
 
     @classmethod
-    def frombuffer(cls, buf, data_count):
+    def frombuffer(cls, buf, data_count=None):
         'Create a DbrStringArray from a buffer'
+        if data_count is None:
+            data_count = max((1, len(buf) // MAX_STRING_SIZE))
+
         def safely_find_eos():
             'Find null terminator, else MAX_STRING_SIZE/length of the string'
             try:
@@ -182,7 +185,7 @@ class DbrStringArray(collections.UserList):
 
     def tobytes(self):
         # numpy compat
-        return b''.join(item.ljust(MAX_STRING_SIZE, b'\x00')
+        return b''.join(item[:MAX_STRING_SIZE].ljust(MAX_STRING_SIZE, b'\x00')
                         for item in self)
 
 
