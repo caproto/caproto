@@ -37,7 +37,8 @@ caget_checks += [('char', ChannelType.CHAR),
 
 
 @pytest.mark.parametrize('pv, dbr_type', caget_checks)
-def test_with_caget(prefix, pvdb_from_server_example, server, pv, dbr_type):
+def test_with_caget(backends, prefix, pvdb_from_server_example, server, pv,
+                    dbr_type):
     caget_pvdb = {prefix + pv_: value
                   for pv_, value in pvdb_from_server_example.items()}
     pv = prefix + pv
@@ -166,8 +167,8 @@ caput_checks = [('int', '1', [1]),
                 ]
 @pytest.mark.parametrize('pv, put_value, check_value', caput_checks)
 # @pytest.mark.parametrize('async_put', [True, False])
-def test_with_caput(prefix, pvdb_from_server_example, server, pv, put_value,
-                    check_value, async_put=True):
+def test_with_caput(backends, prefix, pvdb_from_server_example, server, pv,
+                    put_value, check_value, async_put=True):
 
     caget_pvdb = {prefix + pv_: value
                   for pv_, value in pvdb_from_server_example.items()

@@ -59,8 +59,14 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
             logger.debug('Sending Ctrl-C to the example IOC')
             p.send_signal(signal.SIGINT)
             logger.debug('Waiting on process...')
-            p.wait()
-            logger.debug('IOC has exited')
+            try:
+                p.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                logger.debug('IOC did not exit in a timely fashion')
+                p.terminate()
+                logger.debug('IOC terminated')
+            else:
+                logger.debug('IOC has exited')
         else:
             logger.debug('Example IOC has already exited')
 

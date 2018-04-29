@@ -5,6 +5,24 @@ from ._dbr import (ChannelType, DbrStringArray,
 from ._backend import Backend, register_backend
 
 
+default_endian = ('>' if sys.byteorder == 'big'
+                  else '<')
+
+
+class Array(array.ArrayType):
+    'Simple array.array subclass which tracks endianness'
+    __dict__ = {}
+
+    def __init__(self, type_code, values, *, endian=default_endian):
+        super().__init__()
+        self.endian = endian
+
+    def byteswap(self):
+        self.endian = {'<': '>',
+                       '>': '<'}[self.endian]
+        super().byteswap()
+
+
 type_map = {
     ChannelType.STRING: 'B',  # TO DO
     ChannelType.INT: 'h',
@@ -37,19 +55,22 @@ def epics_to_python(value, native_type, data_count, *, auto_byteswap=True):
         return DbrStringArray.frombuffer(value, data_count)
 
     dt = type_map[native_type]
-    arr = array.array(dt, value)
-    print('epics to python', value, arr, auto_byteswap)
-    if sys.byteorder == 'little' and auto_byteswap:
+    arr = Array(dt, value, endian='>')
+    if default_endian == '<' and auto_byteswap:
         arr.byteswap()
     return arr
 
 
 def python_to_epics(dtype, values, *, byteswap=True, convert_from=None):
     'Convert values from_dtype -> to_dtype'
-    print('python to epics', values, byteswap)
+    endian = getattr(values, 'endian', default_endian)
     if isinstance(values, array.array):
-        if byteswap:
-            values.byteswap()
+        if byteswap and endian != '>':
+            # TODO if immutable, a separate big-endian version could be stored
+            # separately
+            arr = Array(values.typecode, values.tolist(), endian=endian)
+            arr.byteswap()
+            return arr
         return values
 
     if dtype == ChannelType.STRING:
@@ -59,8 +80,11 @@ def python_to_epics(dtype, values, *, byteswap=True, convert_from=None):
         if convert_from in native_float_types and dtype in native_int_types:
             values = [int(v) for v in values]
 
-    arr = array.array(type_map[dtype], values)
-    if byteswap:
+    # Make a new array with the system endianness
+    endian = default_endian
+    arr = Array(type_map[dtype], values, endian=endian)
+    if byteswap and endian != '>':
+        # Byteswap if it's not big endian
         arr.byteswap()
     return arr
 
@@ -76,9 +100,9 @@ def _setup():
     try:
         import numpy
     except ImportError:
-        array_types = (array.ArrayType, )
+        array_types = (Array, array.ArrayType, )
     else:
-        array_types = (array.ArrayType, numpy.ndarray)
+        array_types = (Array, array.ArrayType, numpy.ndarray)
 
     return Backend(name='array',
                    array_types=array_types,

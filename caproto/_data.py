@@ -162,7 +162,7 @@ _custom_conversions = {
 
 def convert_values(values, from_dtype, to_dtype, *, direction,
                    string_encoding='latin-1', enum_strings=None,
-                   byteswap_automatically=True):
+                   auto_byteswap=True):
     '''Convert values from one ChannelType to another
 
     Parameters
@@ -178,7 +178,7 @@ def convert_values(values, from_dtype, to_dtype, *, direction,
         The encoding to be used for strings
     enum_strings : list, optional
         List of enum strings, if available
-    byteswap_automatically : bool, optional
+    auto_byteswap : bool, optional
         If sending over the wire and using built-in arrays, the data should
         first be byte-swapped to big-endian.
     '''
@@ -243,11 +243,10 @@ def convert_values(values, from_dtype, to_dtype, *, direction,
         if string_encoding and isinstance(values[0], str):
             return values
 
-    byteswap = (byteswap_automatically and
-                direction == ConversionDirection.TO_WIRE)
+    byteswap = (auto_byteswap and direction == ConversionDirection.TO_WIRE)
 
-    return backend.convert_to_dtype(from_dtype, to_dtype, values,
-                                    byteswap=byteswap)
+    return backend.python_to_epics(to_dtype, values, byteswap=byteswap,
+                                   convert_from=from_dtype)
 
 
 def dbr_metadata_to_dict(dbr_metadata, string_encoding):
@@ -635,7 +634,7 @@ class ChannelData:
                                     to_dtype=native_type(to_type),
                                     string_encoding=self.string_encoding,
                                     direction=ConversionDirection.TO_WIRE,
-                                    byteswap_automatically=False)
+                                    auto_byteswap=False)
             if isinstance(values, backend.array_types):
                 values = values.tolist()
             for attr, value in zip(convert_attrs, values):

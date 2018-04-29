@@ -136,7 +136,7 @@ def bytelen(item):
     - ``array.array`` (from the builtin Python lib)
     - ``ctypes`` objects
     - an object that has an ``nbytes`` attribute (notably, numpy arrays and
-      ``memoryview``)
+    ``memoryview``)
     - ``bytes``
     - ``bytearray``
     """
@@ -220,7 +220,6 @@ def data_payload(data, metadata, data_type, data_count):
     size, md_payload, data_payload[, pad_payload]
         pad_payload will only be returned if needed
     """
-    ntype = native_type(data_type)
 
     # Make the data payload.
     if isinstance(data, bytes):
@@ -228,7 +227,8 @@ def data_payload(data, metadata, data_type, data_count):
         data_payload = data
     elif (isinstance(data, backend.array_types) or
           isinstance(data, collections.Iterable)):
-        data_payload = backend.python_to_epics(ntype, data, byteswap=False)
+        data_payload = backend.python_to_epics(
+            native_type(data_type), data, byteswap=True)
     elif data is None:
         data_payload = b''
     else:
@@ -1334,8 +1334,6 @@ class ReadNotifyResponse(Message):
 
     @property
     def data(self):
-        print('extract')
-        print('ext.', extract_data(self.buffers[1], self.data_type, self.data_count))
         return extract_data(self.buffers[1], self.data_type, self.data_count)
 
     @property

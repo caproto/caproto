@@ -171,6 +171,8 @@ payloads = [
 
 @pytest.mark.parametrize('data_type, data_count, data, metadata', payloads)
 def test_reads(backends, circuit_pair, data_type, data_count, data, metadata):
+    print('-------------------------------')
+    print(data_type, data_count, data)
 
     cli_circuit, srv_circuit = circuit_pair
     cli_channel, srv_channel = make_channels(*circuit_pair, data_type,

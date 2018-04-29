@@ -21,38 +21,6 @@ CHAR = ChannelType.CHAR
 LONG = ChannelType.LONG
 DOUBLE = ChannelType.DOUBLE
 
-STS_STRING = ChannelType.STS_STRING
-STS_INT = ChannelType.STS_INT
-STS_FLOAT = ChannelType.STS_FLOAT
-STS_ENUM = ChannelType.STS_ENUM
-STS_CHAR = ChannelType.STS_CHAR
-STS_LONG = ChannelType.STS_LONG
-STS_DOUBLE = ChannelType.STS_DOUBLE
-
-TIME_STRING = ChannelType.TIME_STRING
-TIME_INT = ChannelType.TIME_INT
-TIME_FLOAT = ChannelType.TIME_FLOAT
-TIME_ENUM = ChannelType.TIME_ENUM
-TIME_CHAR = ChannelType.TIME_CHAR
-TIME_LONG = ChannelType.TIME_LONG
-TIME_DOUBLE = ChannelType.TIME_DOUBLE
-
-# GR_STRING = ChannelType.GR_STRING  # not implemented by EPICS
-GR_INT = ChannelType.GR_INT
-GR_FLOAT = ChannelType.GR_FLOAT
-GR_ENUM = ChannelType.GR_ENUM
-GR_CHAR = ChannelType.GR_CHAR
-GR_LONG = ChannelType.GR_LONG
-GR_DOUBLE = ChannelType.GR_DOUBLE
-
-# CTRL_STRING = ChannelType.CTRL_STRING  # not implemented by EPICS
-CTRL_INT = ChannelType.CTRL_INT
-CTRL_FLOAT = ChannelType.CTRL_FLOAT
-CTRL_ENUM = ChannelType.CTRL_ENUM
-CTRL_CHAR = ChannelType.CTRL_CHAR
-CTRL_LONG = ChannelType.CTRL_LONG
-CTRL_DOUBLE = ChannelType.CTRL_DOUBLE
-
 PUT_ACKT = ChannelType.PUT_ACKT
 PUT_ACKS = ChannelType.PUT_ACKS
 
@@ -62,7 +30,6 @@ CLASS_NAME = ChannelType.CLASS_NAME
 
 @pytest.mark.parametrize('ntype', (STSACK_STRING, CLASS_NAME))
 def test_special_types(backends, ntype):
-    # should pass,
     in_value = expected_value = 0.2
     out_value = convert_values(values=in_value, from_dtype=ntype,
                                to_dtype=ntype, direction=FROM_WIRE)
@@ -86,13 +53,17 @@ def run_conversion_test(values, from_dtype, to_dtype, expected,
                                    string_encoding=string_encoding,
                                    enum_strings=enum_strings,
                                    direction=direction,
-                                   byteswap_automatically=False)
+                                   auto_byteswap=False)
         print(f'Converted: {converted!r}')
         return converted
 
     if direction == FROM_WIRE:
+        # TODO: data_count not correct here, but largely unused
+        count = 1
         values = backend.epics_to_python(values, from_dtype,
-                                         auto_byteswap=False)
+                                         data_count=count,
+                                         auto_byteswap=True,
+                                         )
 
     if isclass(expected) and issubclass(expected, Exception):
         with pytest.raises(expected):
@@ -147,8 +118,8 @@ string_encoding_tests = [
 
 @pytest.mark.parametrize('from_dtype, to_dtype, values, expected, kwargs',
                          string_encoding_tests)
-def test_string_encoding(backends, from_dtype, to_dtype, values, expected,
-                         kwargs):
+def test_string_to_wire(backends, from_dtype, to_dtype, values, expected,
+                        kwargs):
     run_conversion_test(values=values, from_dtype=from_dtype,
                         to_dtype=to_dtype, expected=expected,
                         direction=TO_WIRE, **kwargs)
@@ -162,31 +133,31 @@ enum_strs = dict(enum_strings=['aa', 'bb', 'cc'],
 
 # FROM WIRE: client wrote STRING -> store in DTYPE
 string_decoding_tests = [
-    [STRING, STRING, [b'abc'], [b'abc'], no_encoding],
-    [STRING, STRING, [b'abc'], ['abc'], ascii_encoding],
-    [STRING, INT, [b"1"], [1], ascii_encoding],
-    [STRING, FLOAT, [b"1.2"], [1.2], ascii_encoding],
-    [STRING, ENUM, [b'bb'], [1], enum_strs],
+    [STRING, STRING, b'abc', [b'abc'], no_encoding],
+    [STRING, STRING, b'abc', ['abc'], ascii_encoding],
+    [STRING, INT, b"1", [1], ascii_encoding],
+    [STRING, FLOAT, b"1.2", [1.2], ascii_encoding],
+    [STRING, ENUM, b'bb', [1], enum_strs],
     # we received string b'1' from wire. expect to convert this to
     # a ChannelChar. Should store: [int('1')]
-    [STRING, CHAR, [b'1'], [1], ascii_encoding],
-    [STRING, CHAR, [b'2'], [2], ascii_encoding],
-    [STRING, LONG, [b"3"], [3], ascii_encoding],
-    [STRING, DOUBLE, [b"1.2"], [1.2], ascii_encoding],
+    [STRING, CHAR, b'1', [1], ascii_encoding],
+    [STRING, CHAR, b'2', [2], ascii_encoding],
+    [STRING, LONG, b"3", [3], ascii_encoding],
+    [STRING, DOUBLE, b"1.2", [1.2], ascii_encoding],
 
-    [STRING, INT, [b"x"], ValueError, no_encoding],  # no encoding
-    [STRING, ENUM, [b'bad'], ValueError, enum_strs],
-    [STRING, CHAR, [b'abc'], ValueError, no_encoding],
-    [STRING, CHAR, [b'abc'], ValueError, ascii_encoding],
-    [STRING, LONG, [b"x"], ValueError, no_encoding],
-    [STRING, DOUBLE, [b"x"], ValueError, no_encoding],
+    [STRING, INT, b"x", ValueError, no_encoding],  # no encoding
+    [STRING, ENUM, b'bad', ValueError, enum_strs],
+    [STRING, CHAR, b'abc', ValueError, no_encoding],
+    [STRING, CHAR, b'abc', ValueError, ascii_encoding],
+    [STRING, LONG, b"x", ValueError, no_encoding],
+    [STRING, DOUBLE, b"x", ValueError, no_encoding],
 ]
 
 
 @pytest.mark.parametrize('from_dtype, to_dtype, values, expected, kwargs',
                          string_decoding_tests)
-def test_string_decoding(backends, from_dtype, to_dtype, values, expected,
-                         kwargs):
+def test_string_from_wire(backends, from_dtype, to_dtype, values, expected,
+                          kwargs):
     run_conversion_test(values=values, from_dtype=from_dtype,
                         to_dtype=to_dtype, expected=expected,
                         direction=FROM_WIRE, **kwargs)
@@ -221,7 +192,7 @@ char_tests = [
 
 @pytest.mark.parametrize('from_dtype, to_dtype, values, expected, kwargs',
                          char_tests)
-def test_char(backends, from_dtype, to_dtype, values, expected, kwargs):
+def test_char_to_wire(backends, from_dtype, to_dtype, values, expected, kwargs):
     run_conversion_test(values=values, from_dtype=from_dtype,
                         to_dtype=to_dtype, expected=expected,
                         direction=TO_WIRE, **kwargs)
@@ -233,16 +204,16 @@ enum_strs = dict(enum_strings=['aa', 'bb', 'cc'])
 
 # FROM WIRE: client wrote CHAR -> store in DTYPE
 char_from_wire_tests = [
-    [CHAR, STRING, list(b'abc'), ['abc'], ascii_encoding],
-    [CHAR, INT, [1], [1], no_encoding],
-    [CHAR, FLOAT, [5], [5.0], no_encoding],
-    [CHAR, ENUM, [1], [1], no_encoding],
+    [CHAR, STRING, b'abc', ['abc'], ascii_encoding],
+    [CHAR, INT, b'\x01', [1], no_encoding],
+    [CHAR, FLOAT, b'\x05', [5.0], no_encoding],
+    [CHAR, ENUM, b'\x01', [1], no_encoding],
     # like channelbytes (no encoding)
-    [CHAR, CHAR, list(b'abc'), list(b'abc'), no_encoding],
+    [CHAR, CHAR, b'abc', list(b'abc'), no_encoding],
     # like channelchar (with encoding)
-    [CHAR, CHAR, list(b'abc'), ['abc'], ascii_encoding],
-    [CHAR, LONG, [ord(b"x")], [ord('x')], no_encoding],
-    [CHAR, DOUBLE, [ord(b"x")], [ord('x')], no_encoding],
+    [CHAR, CHAR, b'abc', ['abc'], ascii_encoding],
+    [CHAR, LONG, b"x", [ord('x')], no_encoding],
+    [CHAR, DOUBLE, b"x", [ord('x')], no_encoding],
 ]
 
 

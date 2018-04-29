@@ -44,7 +44,6 @@ def epics_to_python(value, native_type, data_count, *, auto_byteswap=True):
     if native_type == ChannelType.STRING:
         return DbrStringArray.frombuffer(value, data_count)
 
-    print('numpy conv', value)
     # Return an ndarray
     dt = type_map[native_type]
     return np.frombuffer(value, dtype=dt)
