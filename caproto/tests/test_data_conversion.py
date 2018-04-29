@@ -6,8 +6,8 @@ import numpy as np
 from numpy.testing import assert_array_almost_equal
 
 from .._data import convert_values, ConversionDirection
-from .._dbr import (ChannelType, DbrStringArray, _numpy_map,
-                    _array_type_code_map, USE_NUMPY)
+from .._dbr import ChannelType
+from .. import backend
 
 
 FROM_WIRE = ConversionDirection.FROM_WIRE
@@ -61,7 +61,7 @@ CLASS_NAME = ChannelType.CLASS_NAME
 
 
 @pytest.mark.parametrize('ntype', (STSACK_STRING, CLASS_NAME))
-def test_special_types(ntype):
+def test_special_types(backends, ntype):
     # should pass,
     in_value = expected_value = 0.2
     out_value = convert_values(values=in_value, from_dtype=ntype,
@@ -91,12 +91,8 @@ def run_conversion_test(values, from_dtype, to_dtype, expected,
         return converted
 
     if direction == FROM_WIRE:
-        if from_dtype == ChannelType.STRING:
-            values = DbrStringArray(values)
-        elif USE_NUMPY:
-            values = np.array(values, dtype=_numpy_map[from_dtype])
-        else:
-            values = array.array(_array_type_code_map[from_dtype], values)
+        values = backend.epics_to_python(values, from_dtype,
+                                         auto_byteswap=False)
 
     if isclass(expected) and issubclass(expected, Exception):
         with pytest.raises(expected):
@@ -104,12 +100,12 @@ def run_conversion_test(values, from_dtype, to_dtype, expected,
     else:
         returned = _test()
         if isinstance(returned, array.array):
-            assert returned.typecode == _array_type_code_map[to_dtype]
+            assert returned.typecode == backend.type_map[to_dtype]
             print(f'array to list {returned} -> {returned.tolist()}'
                   f' ({returned.typecode})')
             returned = returned.tolist()
         elif isinstance(returned, np.ndarray):
-            assert returned.dtype == _numpy_map[to_dtype]
+            assert returned.dtype == backend.type_map[to_dtype]
             print(f'numpy to list {returned} -> {returned.tolist()}'
                   f' ({returned.dtype})')
             returned = returned.tolist()
@@ -151,7 +147,8 @@ string_encoding_tests = [
 
 @pytest.mark.parametrize('from_dtype, to_dtype, values, expected, kwargs',
                          string_encoding_tests)
-def test_string_encoding(from_dtype, to_dtype, values, expected, kwargs):
+def test_string_encoding(backends, from_dtype, to_dtype, values, expected,
+                         kwargs):
     run_conversion_test(values=values, from_dtype=from_dtype,
                         to_dtype=to_dtype, expected=expected,
                         direction=TO_WIRE, **kwargs)
@@ -188,7 +185,8 @@ string_decoding_tests = [
 
 @pytest.mark.parametrize('from_dtype, to_dtype, values, expected, kwargs',
                          string_decoding_tests)
-def test_string_decoding(from_dtype, to_dtype, values, expected, kwargs):
+def test_string_decoding(backends, from_dtype, to_dtype, values, expected,
+                         kwargs):
     run_conversion_test(values=values, from_dtype=from_dtype,
                         to_dtype=to_dtype, expected=expected,
                         direction=FROM_WIRE, **kwargs)
@@ -223,7 +221,7 @@ char_tests = [
 
 @pytest.mark.parametrize('from_dtype, to_dtype, values, expected, kwargs',
                          char_tests)
-def test_char(from_dtype, to_dtype, values, expected, kwargs):
+def test_char(backends, from_dtype, to_dtype, values, expected, kwargs):
     run_conversion_test(values=values, from_dtype=from_dtype,
                         to_dtype=to_dtype, expected=expected,
                         direction=TO_WIRE, **kwargs)
@@ -250,11 +248,11 @@ char_from_wire_tests = [
 
 @pytest.mark.parametrize('from_dtype, to_dtype, values, expected, kwargs',
                          char_from_wire_tests)
-def test_char_from_wire(from_dtype, to_dtype, values, expected, kwargs):
+def test_char_from_wire(backends, from_dtype, to_dtype, values, expected,
+                        kwargs):
     run_conversion_test(values=values, from_dtype=from_dtype,
                         to_dtype=to_dtype, expected=expected,
                         direction=FROM_WIRE, **kwargs)
-
 
 
 # TODO: between numerical types testing (int/float/long...)

@@ -170,7 +170,7 @@ payloads = [
 
 
 @pytest.mark.parametrize('data_type, data_count, data, metadata', payloads)
-def test_reads(circuit_pair, data_type, data_count, data, metadata):
+def test_reads(backends, circuit_pair, data_type, data_count, data, metadata):
 
     cli_circuit, srv_circuit = circuit_pair
     cli_channel, srv_channel = make_channels(*circuit_pair, data_type,
@@ -200,6 +200,7 @@ def test_reads(circuit_pair, data_type, data_count, data, metadata):
         # the byte order to little-endian.
         expected = copy.deepcopy(data)
         expected.byteswap()
+        print(res_received.data, expected)
         assert_array_almost_equal(res_received.data, expected)
     elif isinstance(data, bytes):
         assert data == _np_hack(res_received.data)
@@ -211,7 +212,7 @@ def test_reads(circuit_pair, data_type, data_count, data, metadata):
 
 
 @pytest.mark.parametrize('data_type, data_count, data, metadata', payloads)
-def test_writes(circuit_pair, data_type, data_count, data, metadata):
+def test_writes(backends, circuit_pair, data_type, data_count, data, metadata):
 
     cli_circuit, srv_circuit = circuit_pair
     cli_channel, srv_channel = make_channels(*circuit_pair, 5, 1)

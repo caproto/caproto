@@ -523,10 +523,17 @@ def threaded_in_curio_wrapper(fcn):
     return wrapped_threaded_func
 
 
-def environment_epics_version():
-    'Return the reported environment being tested on'
-    if 'EPICS_BASE' in os.environ and 'BASE' in os.environ:
-        base = os.environ['BASE']
-        if base.startswith('R'):
-            major, minor = base[1:].split('.')[:2]
-            return int(major), int(minor)
+@pytest.fixture(scope='function', params=['array', 'numpy'])
+def backends(request):
+    from caproto import select_backend, backend
+
+    def switch_back():
+        select_backend(initial_backend)
+
+    initial_backend = backend.backend_name
+    request.addfinalizer(switch_back)
+
+    try:
+        select_backend(request.param)
+    except KeyError:
+        raise pytest.skip(f'backend {request.param} unavailable')

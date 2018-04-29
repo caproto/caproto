@@ -5,21 +5,12 @@
 # The organizational code, making use of Enum, comes from pypvasync by Kenneth
 # Lauer.
 
-import array
 import ctypes
 import datetime
 import collections
 from enum import IntEnum, IntFlag
 from ._constants import (EPICS2UNIX_EPOCH, EPICS_EPOCH, MAX_STRING_SIZE,
                          MAX_UNITS_SIZE, MAX_ENUM_STRING_SIZE, MAX_ENUM_STATES)
-
-try:
-    import numpy
-    # raise ImportError
-except ImportError:
-    USE_NUMPY = False
-else:
-    USE_NUMPY = True
 
 
 class AccessRights(IntFlag):
@@ -161,30 +152,6 @@ float_t = ctypes.c_float  # epicsFloat32
 double_t = ctypes.c_double  # epicsFloat64
 
 
-def native_type(ftype):
-    '''return native field type from TIME or CTRL variant'''
-    return field_types['native'][ftype]
-
-
-def epics_timestamp_to_unix(seconds_since_epoch, nano_seconds):
-    '''UNIX timestamp (seconds) from Epics TimeStamp structure'''
-    return (EPICS2UNIX_EPOCH + seconds_since_epoch + 1.e-6 *
-            int(1.e-3 * nano_seconds))
-
-
-def timestamp_to_epics(ts):
-    '''Python timestamp from EPICS TimeStamp structure'''
-    if isinstance(ts, float):
-        ts = datetime.datetime.utcfromtimestamp(ts)
-    dt = ts - EPICS_EPOCH
-    return int(dt.total_seconds()), int(dt.microseconds * 1e3)
-
-
-def array_type_code(native_type):
-    '''Get an array.array type code for a given native type'''
-    return _array_type_code_map[native_type]
-
-
 class DbrStringArray(collections.UserList):
     '''A mockup of numpy.array, intended to hold byte strings
 
@@ -217,32 +184,6 @@ class DbrStringArray(collections.UserList):
         # numpy compat
         return b''.join(item.ljust(MAX_STRING_SIZE, b'\x00')
                         for item in self)
-
-
-def native_to_builtin(value, native_type, data_count):
-    '''Convert from a native EPICS DBR type to a builtin Python type
-
-    Notes:
-     - A waveform of characters is just a bytestring.
-     - A waveform of strings is an array whose elements are fixed-length (40-
-       character) strings.
-     - Enums are just integers that happen to have special significance.
-     - Everything else is, straightforwardly, an array of numbers.
-    '''
-
-    if native_type == ChannelType.STRING:
-        return DbrStringArray.frombuffer(value, data_count)
-
-    if USE_NUMPY:
-        # Return an ndarray
-        dt = _numpy_map[native_type]
-        return numpy.frombuffer(value, dtype=dt)
-    else:
-        # Return an array.array
-        dt = _array_type_code_map[native_type]
-        arr = array.array(dt, value)
-        arr.byteswap()
-        return arr
 
 
 class DbrTypeBase(ctypes.BigEndianStructure):
@@ -1116,50 +1057,20 @@ DBR_TYPES[ChannelType.GR_STRING] = DBR_STS_STRING
 DBR_TYPES[ChannelType.CTRL_STRING] = DBR_TIME_STRING
 
 
-_numpy_map = {
-    ChannelType.INT: '>i2',
-    ChannelType.FLOAT: '>f4',
-    ChannelType.ENUM: '>u2',
-    ChannelType.CHAR: '>u8',
-    ChannelType.LONG: '>i4',
-    ChannelType.DOUBLE: '>f8',
-    ChannelType.STRING: 'S40',
-    ChannelType.CHAR: 'b',
-    ChannelType.STSACK_STRING: 'u8',
-    ChannelType.CLASS_NAME: 'u8',
-    ChannelType.PUT_ACKT: '>u2',
-    ChannelType.PUT_ACKS: '>u2',
-}
+def native_type(ftype):
+    '''return native field type from TIME or CTRL variant'''
+    return field_types['native'][ftype]
 
 
-if numpy is not None:
-    # Make the dtypes ahead of time
-    _numpy_map = {ch_type: numpy.dtype(dtype)
-                  for ch_type, dtype in _numpy_map.items()
-                  }
+def epics_timestamp_to_unix(seconds_since_epoch, nano_seconds):
+    '''UNIX timestamp (seconds) from Epics TimeStamp structure'''
+    return (EPICS2UNIX_EPOCH + seconds_since_epoch + 1.e-6 *
+            int(1.e-3 * nano_seconds))
 
 
-_array_type_code_map = {
-    ChannelType.STRING: 'B',  # TO DO
-    ChannelType.INT: 'h',
-    ChannelType.FLOAT: 'f',
-    ChannelType.ENUM: 'H',
-    ChannelType.CHAR: 'b',
-    ChannelType.LONG: 'i',
-    ChannelType.DOUBLE: 'd',
-
-    ChannelType.STSACK_STRING: 'b',
-    ChannelType.CLASS_NAME: 'b',
-
-    ChannelType.PUT_ACKS: 'H',  # ushort_t
-    ChannelType.PUT_ACKT: 'H',
-}
-
-for _type in set(native_types) - set([ChannelType.STRING]):
-    _size = ctypes.sizeof(DBR_TYPES[_type])
-    assert array.array(_array_type_code_map[_type]).itemsize == _size
-    if numpy is not None:
-        assert _numpy_map[_type].itemsize == _size
-
-del _type
-del _size
+def timestamp_to_epics(ts):
+    '''Python timestamp from EPICS TimeStamp structure'''
+    if isinstance(ts, float):
+        ts = datetime.datetime.utcfromtimestamp(ts)
+    dt = ts - EPICS_EPOCH
+    return int(dt.total_seconds()), int(dt.microseconds * 1e3)

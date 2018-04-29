@@ -4,27 +4,19 @@
 # data as a certain type, and they push updates into queues registered by a
 # higher-level server.
 from collections import defaultdict
-import array
 import time
 import weakref
 import enum
 
-from ._dbr import (USE_NUMPY, DBR_TYPES, ChannelType, native_type,
-                   native_float_types, native_int_types, native_types,
-                   timestamp_to_epics, time_types, DBR_STSACK_STRING,
-                   AccessRights, _numpy_map, _array_type_code_map,
+from ._dbr import (DBR_TYPES, ChannelType, native_type, native_float_types,
+                   native_int_types, native_types, timestamp_to_epics,
+                   time_types, DBR_STSACK_STRING, AccessRights,
                    GraphicControlBase, AlarmStatus, AlarmSeverity,
                    SubscriptionType, DbrStringArray)
 
 from ._utils import CaprotoError
 from ._commands import parse_metadata
-
-if USE_NUMPY:
-    import numpy as np
-    array_types = (array.array, np.ndarray)
-else:
-    array_types = (array.array, )
-    np = None
+from ._backend import backend_ns as backend
 
 
 class Forbidden(CaprotoError):
@@ -251,18 +243,11 @@ def convert_values(values, from_dtype, to_dtype, *, direction,
         if string_encoding and isinstance(values[0], str):
             return values
 
-    if USE_NUMPY:
-        return np.asarray(values).astype(_numpy_map[to_dtype])
+    byteswap = (byteswap_automatically and
+                direction == ConversionDirection.TO_WIRE)
 
-    # array.array
-    if from_dtype in native_float_types and to_dtype in native_int_types:
-        values = [int(v) for v in values]
-    # elif from_dtype in native_int_types and to_dtype in native_float_types:
-
-    arr = array.array(_array_type_code_map[to_dtype], values)
-    if byteswap_automatically and direction == ConversionDirection.TO_WIRE:
-        arr.byteswap()
-    return arr
+    return backend.convert_to_dtype(from_dtype, to_dtype, values,
+                                    byteswap=byteswap)
 
 
 def dbr_metadata_to_dict(dbr_metadata, string_encoding):
@@ -651,7 +636,7 @@ class ChannelData:
                                     string_encoding=self.string_encoding,
                                     direction=ConversionDirection.TO_WIRE,
                                     byteswap_automatically=False)
-            if isinstance(values, array_types):
+            if isinstance(values, backend.array_types):
                 values = values.tolist()
             for attr, value in zip(convert_attrs, values):
                 if hasattr(dbr_metadata, attr):
