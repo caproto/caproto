@@ -55,6 +55,9 @@ def epics_to_python(value, native_type, data_count, *, auto_byteswap=True):
         return DbrStringArray.frombuffer(value, data_count)
 
     dt = type_map[native_type]
+    if isinstance(value, memoryview):
+        value = value.cast(dt)
+
     arr = Array(dt, value, endian='>')
     if default_endian == '<' and auto_byteswap:
         arr.byteswap()
@@ -67,7 +70,7 @@ def python_to_epics(dtype, values, *, byteswap=True, convert_from=None):
     if isinstance(values, array.array):
         if byteswap and endian != '>':
             # TODO if immutable, a separate big-endian version could be stored
-            # separately
+            # and sent (having only been swapped once)
             arr = Array(values.typecode, values.tolist(), endian=endian)
             arr.byteswap()
             return arr
