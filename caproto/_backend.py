@@ -10,7 +10,6 @@ try:
     import numpy  # noqa
 except ImportError:
     default_backend = 'array'
-    np = None
 else:
     default_backend = 'numpy'
 
@@ -24,7 +23,6 @@ Backend = collections.namedtuple(
 
 
 def register_backend(new_backend):
-    global backend
     logger.debug('Backend %r registered', new_backend.name)
     _backends[new_backend.name] = new_backend
 
@@ -33,6 +31,7 @@ def register_backend(new_backend):
 
 
 def select_backend(name):
+    global backend
     logger.debug('Selecting backend: %r', name)
     backend = _backends[name]
     backend_ns.backend_name = backend.name
