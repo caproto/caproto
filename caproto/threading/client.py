@@ -1246,6 +1246,7 @@ class CallbackHandler:
         self.callbacks = {}
         self.pv = pv
         self._callback_id = 0
+        self._callback_lock = threading.RLock()
 
     def add_callback(self, func):
         # TODO thread safety
@@ -1261,29 +1262,32 @@ class CallbackHandler:
             # TODO: strong reference to non-instance methods?
             def ref():
                 return func
-
-        self.callbacks[cb_id] = ref
+        with self._callback_lock:
+            self.callbacks[cb_id] = ref
         return cb_id
 
     def remove_callback(self, cb_id):
-        self.callbacks.pop(cb_id, None)
+        with self._callback_lock:
+            self.callbacks.pop(cb_id, None)
 
     def process(self, *args, **kwargs):
+
         to_remove = []
-        for cb_id, ref in self.callbacks.items():
-            try:
-                callback = ref()
-            except TypeError:
-                to_remove.append(cb_id)
-                continue
+        with self._callback_lock:
+            for cb_id, ref in self.callbacks.items():
+                try:
+                    callback = ref()
+                except TypeError:
+                    to_remove.append(cb_id)
+                    continue
 
-            try:
-                callback(*args, **kwargs)
-            except Exception as ex:
-                print(ex)
+                try:
+                    callback(*args, **kwargs)
+                except Exception as ex:
+                    print(ex)
 
-        for remove_id in to_remove:
-            self._callbacks.pop(remove_id, None)
+            for remove_id in to_remove:
+                self.callbacks.pop(remove_id, None)
 
 
 class Subscription(CallbackHandler):
@@ -1295,7 +1299,6 @@ class Subscription(CallbackHandler):
         self.sub_args = sub_args
         self.sub_kwargs = sub_kwargs
         self._unsubscribed = False
-        self._callback_lock = threading.RLock()
         self._process_backlog = []
 
     def unsubscribe(self):
@@ -1321,12 +1324,11 @@ class Subscription(CallbackHandler):
     def add_callback(self, func):
         cb_id = super().add_callback(func)
 
-        with self._callback_lock:
-            if self._process_backlog:
-                # yeah... locking will be an issue here again
-                items, self._process_backlog = self._process_backlog, []
-                for args, kwargs in items:
-                    self.process(*args, **kwargs)
+        if self._process_backlog:
+            # yeah... locking will be an issue here again
+            items, self._process_backlog = self._process_backlog, []
+            for args, kwargs in items:
+                self.process(*args, **kwargs)
 
         return cb_id
 
