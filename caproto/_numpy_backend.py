@@ -1,5 +1,6 @@
-from ._dbr import (ChannelType, DbrStringArray)
+import ctypes
 from ._backend import Backend, register_backend
+from ._dbr import (ChannelType, DbrStringArray, native_types, DBR_TYPES)
 
 try:
     import numpy as np
@@ -59,9 +60,7 @@ def python_to_epics(dtype, values, *, byteswap=True, convert_from=None):
 
 
 def _setup():
-    from ._dbr import native_types, DBR_TYPES
-    import ctypes
-
+    # Sanity check: array item size should match struct size.
     for _type in set(native_types) - set([ChannelType.STRING]):
         _size = ctypes.sizeof(DBR_TYPES[_type])
         assert type_map[_type].itemsize == _size
