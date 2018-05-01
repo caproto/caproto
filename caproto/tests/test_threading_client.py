@@ -44,7 +44,7 @@ def test_context_disconnect_is_terminal(context, ioc):
         pv, = context.get_pvs(ioc.pvs['str'])
 
 
-def test_put_complete(context, ioc):
+def test_put_complete(backends, context, ioc):
     pv, = context.get_pvs(ioc.pvs['float'])
     pv.wait_for_connection()
     assert pv.connected
@@ -198,9 +198,10 @@ def test_subscriptions(ioc, context):
 
     for i in range(3):
         if pv.read().data[0] == 3:
+            time.sleep(0.2)
             break
         else:
-            time.sleep(0.1)
+            time.sleep(0.2)
 
     assert monitor_values[1:] == [1, 2, 3]
 

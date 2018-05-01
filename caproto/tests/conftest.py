@@ -59,8 +59,14 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
             logger.debug('Sending Ctrl-C to the example IOC')
             p.send_signal(signal.SIGINT)
             logger.debug('Waiting on process...')
-            p.wait()
-            logger.debug('IOC has exited')
+            try:
+                p.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                logger.debug('IOC did not exit in a timely fashion')
+                p.terminate()
+                logger.debug('IOC terminated')
+            else:
+                logger.debug('IOC has exited')
         else:
             logger.debug('Example IOC has already exited')
 
@@ -238,7 +244,7 @@ def pvdb_from_server_example():
         'int': ca.ChannelInteger(value=96,
                                  units='doodles',
                                  ),
-        'char': ca.ChannelChar(value=b'3',
+        'char': ca.ChannelByte(value=b'3',
                                units='poodles',
                                lower_disp_limit=33,
                                upper_disp_limit=35,
@@ -249,6 +255,7 @@ def pvdb_from_server_example():
                                lower_ctrl_limit=30,
                                upper_ctrl_limit=38,
                                ),
+        'bytearray': ca.ChannelByte(value=b'1234567890' * 2),
         'chararray': ca.ChannelChar(value=b'1234567890' * 2),
         'str': ca.ChannelString(value='hello',
                                 string_encoding='latin-1',
@@ -298,7 +305,7 @@ def curio_server(prefix):
                                  lower_ctrl_limit=30,
                                  upper_ctrl_limit=38,
                                  ),
-        'char': ca.ChannelChar(value=b'3',
+        'char': ca.ChannelByte(value=b'3',
                                units='poodles',
                                lower_disp_limit=33,
                                upper_disp_limit=35,
@@ -522,10 +529,17 @@ def threaded_in_curio_wrapper(fcn):
     return wrapped_threaded_func
 
 
-def environment_epics_version():
-    'Return the reported environment being tested on'
-    if 'EPICS_BASE' in os.environ and 'BASE' in os.environ:
-        base = os.environ['BASE']
-        if base.startswith('R'):
-            major, minor = base[1:].split('.')[:2]
-            return int(major), int(minor)
+@pytest.fixture(scope='function', params=['array', 'numpy'])
+def backends(request):
+    from caproto import select_backend, backend
+
+    def switch_back():
+        select_backend(initial_backend)
+
+    initial_backend = backend.backend_name
+    request.addfinalizer(switch_back)
+
+    try:
+        select_backend(request.param)
+    except KeyError:
+        raise pytest.skip(f'backend {request.param} unavailable')

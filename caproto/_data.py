@@ -6,119 +6,183 @@
 from collections import defaultdict
 import time
 import weakref
-
-# TODO: assuming USE_NUMPY for now
-import numpy as np
+import enum
 
 from ._dbr import (DBR_TYPES, ChannelType, native_type, native_float_types,
                    native_int_types, native_types, timestamp_to_epics,
-                   time_types, MAX_ENUM_STRING_SIZE, DBR_STSACK_STRING,
-                   AccessRights, _numpy_map, GraphicControlBase, AlarmStatus,
-                   AlarmSeverity, SubscriptionType)
+                   time_types, DBR_STSACK_STRING, AccessRights,
+                   GraphicControlBase, AlarmStatus, AlarmSeverity,
+                   SubscriptionType, DbrStringArray)
+
 from ._utils import CaprotoError
 from ._commands import parse_metadata
+from ._backend import backend_ns as backend
 
 
 class Forbidden(CaprotoError):
     ...
 
 
-def _convert_enum_values(values, to_dtype, string_encoding, enum_strings):
-    if isinstance(values, (str, bytes)):
-        values = [values]
+class ConversionError(ValueError, CaprotoError):
+    ...
 
-    if isinstance(values[0], str):
-        # STRING -> BYTES
-        if to_dtype == ChannelType.STRING:
-            return [value.encode(string_encoding) for value in values]
-        # STRING -> NUMERIC
-        else:
-            if enum_strings is not None:
-                return [enum_strings.index(value) for value in values]
-            else:
-                return [0 for value in values]
-    elif isinstance(values[0], bytes):
-        # BYTES -> BYTES
-        if to_dtype == ChannelType.STRING:
-            return values
-        else:
-            # BYTES -> NUMERIC
-            if enum_strings is not None:
-                return [enum_strings.index(value.decode(string_encoding))
-                        for value in values]
-            else:
-                return [0 for value in values]
+
+class ConversionDirection(enum.Enum):
+    FROM_WIRE = enum.auto()
+    TO_WIRE = enum.auto()
+
+
+def _convert_enum_values(values, to_dtype, string_encoding, enum_strings,
+                         direction):
+    if enum_strings is None:
+        raise ConversionError('enum_strings not specified')
+
+    num_strings = len(enum_strings)
+
+    if to_dtype == ChannelType.STRING:
+        def get_value(v):
+            if isinstance(v, bytes):
+                raise ConversionError('Enum strings must be integer or string')
+
+            if isinstance(v, str):
+                if v not in enum_strings:
+                    raise ConversionError(f'Invalid enum string: {v!r}')
+                return v
+
+            if 0 <= v < num_strings:
+                return enum_strings[v]
+            raise ConversionError(f'Invalid enum index: {v!r} '
+                                  f'count={num_strings}')
     else:
-        # NUMERIC -> STRING
-        if to_dtype == ChannelType.STRING:
-            return [enum_strings[value].encode(string_encoding)
-                    for value in values]
-        # NUMERIC -> NUMERIC
+        def get_value(v):
+            if isinstance(v, bytes):
+                raise ConversionError('Enum strings must be integer or string')
+
+            if isinstance(v, str):
+                try:
+                    return enum_strings.index(v)
+                except ValueError:
+                    raise ConversionError(f'Invalid enum string: {v!r}')
+
+            if 0 <= v < num_strings:
+                return v
+            raise ConversionError(f'Invalid enum index: {v!r} '
+                                  f'count={num_strings}')
+
+    return [get_value(v) for v in values]
+
+
+def _convert_char_values(values, to_dtype, string_encoding, enum_strings,
+                         direction):
+    if isinstance(values, list) and len(values) == 1:
+        # exception to handling things as lists...
+        values = values[0]
+
+    if direction == ConversionDirection.FROM_WIRE:
+        values = values.tobytes()  # b''.join(values)
+
+    if to_dtype == ChannelType.STRING:
+        if direction == ConversionDirection.TO_WIRE:
+            # NOTE: accurate, but results in very inefficient CA response
+            #       40 * len(values)
+            if isinstance(values, str):
+                return [bytes([v]) for v in encode_or_fail(values, string_encoding)]
+            elif isinstance(values, bytes):
+                return [bytes([v]) for v in values]
+            else:
+                # list of numbers
+                return values
+        else:
+            return [decode_or_fail(values, string_encoding)]
+    elif to_dtype == ChannelType.CHAR:
+        if direction == ConversionDirection.FROM_WIRE and string_encoding:
+            values = values.decode(string_encoding)
+            try:
+                return [values[:values.index('\x00')]]
+            except ValueError:
+                return [values]
+
+    # if not converting to a string, we need a list of numbers.
+    if isinstance(values, bytes):
+        # b'bytes' -> [ord('b'), ord('y'), ...]
+        values = list(values)
+    elif isinstance(values, str):
+        values = encode_or_fail(values, string_encoding)
+        # b'bytes' -> [ord('b'), ord('y'), ...]
+        values = list(values)
+    else:
+        # list of bytes already
+        ...
+
+    try:
+        # TODO lazy check
+        values[0]
+    except TypeError:
+        return [values]
+    else:
         return values
 
 
-def _convert_char_values(values, to_dtype, string_encoding, enum_strings):
-    if isinstance(values, str):
-        values = values.encode(string_encoding)
+def encode_or_fail(s, encoding):
+    if isinstance(s, str):
+        if encoding is None:
+            raise ConversionError('String encoding required')
+        return s.encode(encoding)
+    elif isinstance(s, bytes):
+        return s
 
-    if not isinstance(values, bytes):
-        # for single value or metadata conversion, let numpy take care of
-        # typing
-        return np.asarray(values).astype(_numpy_map[to_dtype])
-    elif to_dtype in native_int_types or to_dtype in native_float_types:
-        arr = np.frombuffer(values, dtype=np.uint8)
-        if to_dtype != ChannelType.CHAR:
-            return arr.astype(_numpy_map[to_dtype])
-        return arr
-
-    return values
+    raise ConversionError('Expected string or bytes')
 
 
-def _convert_string_values(values, to_dtype, string_encoding, enum_strings):
+def decode_or_fail(s, encoding):
+    if isinstance(s, bytes):
+        if encoding is None:
+            raise ConversionError('String encoding required')
+        return s.decode(encoding)
+    elif isinstance(s, str):
+        return s
+
+    raise ConversionError('Expected string or bytes')
+
+
+def _convert_string_values(values, to_dtype, string_encoding, enum_strings,
+                           direction):
+    if to_dtype == ChannelType.STRING:
+        return values
+
+    if (direction == ConversionDirection.FROM_WIRE or
+            to_dtype == ChannelType.ENUM):
+        # from the wire (or for enums), decode bytes -> strings
+        values = [decode_or_fail(v, string_encoding)
+                  if isinstance(v, bytes)
+                  else v
+                  for v in values]
+
     if to_dtype == ChannelType.ENUM:
-        if not isinstance(values, (str, bytes)):
-            values = values[0]
-        if enum_strings:
-            if isinstance(values, bytes):
-                byte_value = values
-                str_value = values.decode(string_encoding)
-            else:
-                byte_value = values.encode(string_encoding)
-                str_value = values
-
-            if byte_value in enum_strings:
-                return byte_value
-            elif str_value in enum_strings:
-                return str_value
-            else:
-                raise ValueError('Invalid enum string')
-        else:
-            return 0
-    elif to_dtype in native_int_types or to_dtype in native_float_types:
-        return np.asarray(values).astype(_numpy_map[to_dtype])
-
-    if isinstance(values, str):
-        # single string
-        return [values.encode(string_encoding)]
-    elif isinstance(values, bytes):
-        # single bytestring
-        return [values]
-    else:
-        # array of strings/bytestrings
-        return [v.encode(string_encoding)
-                if isinstance(v, str)
-                else v
-                for v in values]
+        # TODO: this is used where caput('enum', 'string_value')
+        #       i.e., putting a string to an enum
+        return _convert_enum_values(values, to_dtype=ChannelType.INT,
+                                    string_encoding=string_encoding,
+                                    enum_strings=enum_strings,
+                                    direction=direction)
+    elif to_dtype in native_int_types:
+        # TODO ca_test: for enums, string arrays seem to work, but not
+        # scalars?
+        return [int(v) for v in values]
+    elif to_dtype in native_float_types:
+        return [float(v) for v in values]
 
 
-_custom_conversions = {ChannelType.ENUM: _convert_enum_values,
-                       ChannelType.CHAR: _convert_char_values,
-                       ChannelType.STRING: _convert_string_values,
-                       }
+_custom_conversions = {
+    ChannelType.ENUM: _convert_enum_values,
+    ChannelType.CHAR: _convert_char_values,
+    ChannelType.STRING: _convert_string_values,
+}
 
 
-def convert_values(values, from_dtype, to_dtype, *, string_encoding='latin-1',
-                   enum_strings=None):
+def convert_values(values, from_dtype, to_dtype, *, direction,
+                   string_encoding='latin-1', enum_strings=None,
+                   auto_byteswap=True):
     '''Convert values from one ChannelType to another
 
     Parameters
@@ -128,46 +192,91 @@ def convert_values(values, from_dtype, to_dtype, *, string_encoding='latin-1',
         The dtype of the values
     to_dtype : caproto.ChannelType
         The dtype to convert to
+    direction : caproto.ConversionDirection
+        Direction of conversion, from or to the wire
     string_encoding : str, optional
         The encoding to be used for strings
     enum_strings : list, optional
         List of enum strings, if available
+    auto_byteswap : bool, optional
+        If sending over the wire and using built-in arrays, the data should
+        first be byte-swapped to big-endian.
     '''
 
-    if to_dtype not in native_types:
-        raise ValueError('Expecting a native type')
-
-    if to_dtype in (ChannelType.STSACK_STRING, ChannelType.CLASS_NAME):
+    if (from_dtype in (ChannelType.STSACK_STRING, ChannelType.CLASS_NAME) or
+            (to_dtype in (ChannelType.STSACK_STRING, ChannelType.CLASS_NAME))):
         if from_dtype != to_dtype:
-            raise ValueError('Cannot convert values for stsack_string or '
-                             'class_name to other types')
+            raise ConversionError('Cannot convert values for stsack_string or '
+                                  'class_name to other types')
+        return values
+
+    if to_dtype not in native_types or from_dtype not in native_types:
+        raise ConversionError('Expecting a native type')
+
+    if isinstance(values, (str, bytes)):
+        values = [values]
+    else:
+        try:
+            len(values)
+        except TypeError:
+            values = (values, )
 
     try:
-        len(values)
-    except TypeError:
-        values = (values, )
-
-    if from_dtype in _custom_conversions:
         convert_func = _custom_conversions[from_dtype]
-        return convert_func(values=values, to_dtype=to_dtype,
-                            string_encoding=string_encoding,
-                            enum_strings=enum_strings)
+    except KeyError:
+        ...
+    else:
+        try:
+            values = convert_func(values=values, to_dtype=to_dtype,
+                                  string_encoding=string_encoding,
+                                  enum_strings=enum_strings,
+                                  direction=direction)
+        except Exception as ex:
+            raise ConversionError() from ex
 
     if to_dtype == ChannelType.STRING:
-        return [str(v).encode(string_encoding) for v in values]
+        if direction == ConversionDirection.TO_WIRE:
+            string_target = bytes
+        else:
+            string_target = str
 
-    return np.asarray(values).astype(_numpy_map[to_dtype])
+        if string_target is str:
+            def get_value(v):
+                if isinstance(v, bytes):
+                    if string_encoding:  # can have bytes in ChannelString
+                        return v.decode(string_encoding)
+                    return v
+                elif isinstance(v, str):
+                    return v
+                else:
+                    return str(v)
+            return [get_value(v) for v in values]
+
+        def get_value(v):
+            if isinstance(v, bytes):
+                return v
+            elif isinstance(v, str):
+                return encode_or_fail(v, string_encoding)
+            else:
+                return encode_or_fail(str(v), string_encoding)
+        return DbrStringArray(get_value(v) for v in values)
+    elif to_dtype == ChannelType.CHAR:
+        if string_encoding and isinstance(values[0], str):
+            return values
+
+    byteswap = (auto_byteswap and direction == ConversionDirection.TO_WIRE)
+    return backend.python_to_epics(to_dtype, values, byteswap=byteswap,
+                                   convert_from=from_dtype)
 
 
 def dbr_metadata_to_dict(dbr_metadata, string_encoding):
     '''Return a dictionary of metadata keys to values'''
-    # TODO: Note that if dbr.py is restructured to be more like pypvasync
-    # (again, but correctly this time) this could be handled nicely as a method
-    # on the dbr types
-
     info = dbr_metadata.to_dict()
-    if 'units' in info:
+
+    try:
         info['units'] = info['units'].decode(string_encoding)
+    except KeyError:
+        ...
 
     return info
 
@@ -347,10 +456,6 @@ class ChannelData:
             # a future subscription wants the same data type.
             metadata, values = await self._read(data_type)
             self._content[data_type] = metadata, values
-        flags = (SubscriptionType.DBE_VALUE |
-                 SubscriptionType.DBE_ALARM |
-                 SubscriptionType.DBE_LOG |
-                 SubscriptionType.DBE_PROPERTY)
         await queue.put(((sub_spec,), metadata, values))
 
     async def unsubscribe(self, queue, sub_spec):
@@ -386,7 +491,8 @@ class ChannelData:
                                 from_dtype=self.data_type,
                                 to_dtype=native_to,
                                 string_encoding=self.string_encoding,
-                                enum_strings=self._data.get('enum_strings'))
+                                enum_strings=self._data.get('enum_strings'),
+                                direction=ConversionDirection.TO_WIRE)
 
         # for native types, there is no dbr metadata - just data
         if data_type in native_types:
@@ -403,7 +509,8 @@ class ChannelData:
 
         return dbr_metadata, values
 
-    async def auth_write(self, hostname, username, data, data_type, metadata, *, user_address=None):
+    async def auth_write(self, hostname, username, data, data_type, metadata,
+                         *, user_address=None):
         access = self.check_access(hostname, username)
         if AccessRights.WRITE not in access:
             raise Forbidden("Client with hostname {} and username {} cannot "
@@ -435,7 +542,8 @@ class ChannelData:
                                to_dtype=self.data_type,
                                string_encoding=self.string_encoding,
                                enum_strings=getattr(self, 'enum_strings',
-                                                    None))
+                                                    None),
+                               direction=ConversionDirection.FROM_WIRE)
 
         try:
             modified_value = await self.verify_value(value)
@@ -520,7 +628,9 @@ class ChannelData:
         if hasattr(dbr_metadata, 'units'):
             units = data.get('units', '')
             if isinstance(units, str):
-                units = units.encode(self.string_encoding)
+                units = units.encode(self.string_encoding
+                                     if self.string_encoding
+                                     else 'latin-1')
             dbr_metadata.units = units
 
         if hasattr(dbr_metadata, 'precision'):
@@ -535,12 +645,17 @@ class ChannelData:
 
         if any(hasattr(dbr_metadata, attr) for attr in convert_attrs):
             # convert all metadata types to the target type
+            dt = (self.data_type
+                  if self.data_type != ChannelType.ENUM
+                  else ChannelType.INT)
             values = convert_values(values=[data.get(key, 0)
                                             for key in convert_attrs],
-                                    from_dtype=self.data_type,
+                                    from_dtype=dt,
                                     to_dtype=native_type(to_type),
-                                    string_encoding=self.string_encoding)
-            if isinstance(values, np.ndarray):
+                                    string_encoding=self.string_encoding,
+                                    direction=ConversionDirection.TO_WIRE,
+                                    auto_byteswap=False)
+            if isinstance(values, backend.array_types):
                 values = values.tolist()
             for attr, value in zip(convert_attrs, values):
                 if hasattr(dbr_metadata, attr):
@@ -627,14 +742,18 @@ class ChannelEnum(ChannelData):
 
     enum_strings = _read_only_property('enum_strings')
 
+    async def verify_value(self, data):
+        try:
+            return [self.enum_strings[data[0]]]
+        except (IndexError, TypeError):
+            ...
+        return data
+
     def _read_metadata(self, dbr_metadata):
         if isinstance(dbr_metadata, (DBR_TYPES[ChannelType.GR_ENUM],
                                      DBR_TYPES[ChannelType.CTRL_ENUM])):
-            for i, string in enumerate(self.enum_strings):
-                bytes_ = bytes(string, self.string_encoding)
-                dbr_metadata.strs[i][:] = bytes_.ljust(MAX_ENUM_STRING_SIZE,
-                                                       b'\x00')
-            dbr_metadata.no_str = len(self.enum_strings)
+            dbr_metadata.enum_strings = [s.encode(self.string_encoding)
+                                         for s in self.enum_strings]
 
         return super()._read_metadata(dbr_metadata)
 
@@ -688,12 +807,41 @@ class ChannelDouble(ChannelNumeric):
     precision = _read_only_property('precision')
 
 
-class ChannelChar(ChannelNumeric):
+class ChannelByte(ChannelNumeric):
+    'CHAR data which has no encoding'
     # 'Limits' on chars do not make much sense and are rarely used.
     data_type = ChannelType.CHAR
 
-    def __init__(self, *, max_length=100, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, *, value=None, max_length=100, string_encoding=None,
+                 **kwargs):
+        if string_encoding is not None:
+            raise ValueError('ChannelByte cannot have a string encoding')
+
+        super().__init__(value=value, string_encoding=None, **kwargs)
+        self.max_length = max_length
+
+    async def verify_value(self, data):
+        if isinstance(data, list):
+            data = data[0]
+
+        if isinstance(data, str):
+            # return list(data.encode('ascii'))  # TODO: just reject?
+            raise ValueError('ChannelByte does not accept decoded strings')
+
+        return data
+
+
+class ChannelChar(ChannelData):
+    'CHAR data which masquerades as a string'
+    data_type = ChannelType.CHAR
+
+    def __init__(self, *, value=None, max_length=100,
+                 string_encoding='latin-1', **kwargs):
+        if isinstance(value, (str, bytes)):
+            if isinstance(value, bytes):
+                value = value.decode(string_encoding)
+
+        super().__init__(value=value, **kwargs)
         self.max_length = max_length
 
 
@@ -706,6 +854,8 @@ class ChannelString(ChannelData):
                  string_encoding='latin-1',
                  reported_record_type='caproto'):
         if isinstance(value, (str, bytes)):
+            if isinstance(value, bytes):
+                value = value.decode(string_encoding)
             value = [value]
         super().__init__(alarm=alarm, value=value, timestamp=timestamp,
                          string_encoding=string_encoding,

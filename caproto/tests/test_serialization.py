@@ -120,13 +120,13 @@ def make_channels(cli_circuit, srv_circuit, data_type, data_count, name='a'):
 
 
 # Define big-endian arrays for use below in test_reads and test_writes.
-int_arr = array.array('h', [7, 21, 2, 4, 5])
+int_arr = ca.Array('h', [7, 21, 2, 4, 5])
 int_arr.byteswap()
-float_arr = array.array('f', [7, 21.1, 3.1])
+float_arr = ca.Array('f', [7, 21.1, 3.1])
 float_arr.byteswap()
-long_arr = array.array('i', [7, 21, 2, 4, 5])
+long_arr = ca.Array('i', [7, 21, 2, 4, 5])
 long_arr.byteswap()
-double_arr = array.array('d', [7, 21.1, 3.1])
+double_arr = ca.Array('d', [7, 21.1, 3.1])
 double_arr.byteswap()
 
 payloads = [
@@ -162,15 +162,17 @@ payloads = [
 
     (ca.ChannelType.STRING, 1, b'abc'.ljust(40, b'\x00'), None),
     (ca.ChannelType.STRING, 3, 3 * b'abc'.ljust(40, b'\x00'), None),
-    (ca.ChannelType.STRING, 3, numpy.array(['abc', 'def'], '>S40'), None),
-    (ca.ChannelType.STRING, 3, numpy.array(['abc', 'def'], 'S40'), None),
+    (ca.ChannelType.STRING, 2, numpy.array(['abc', 'def'], '>S40'), None),
+    (ca.ChannelType.STRING, 2, numpy.array(['abc', 'def'], 'S40'), None),
     (ca.ChannelType.CHAR, 1, b'z', None),
     (ca.ChannelType.CHAR, 3, b'abc', None),
 ]
 
 
 @pytest.mark.parametrize('data_type, data_count, data, metadata', payloads)
-def test_reads(circuit_pair, data_type, data_count, data, metadata):
+def test_reads(backends, circuit_pair, data_type, data_count, data, metadata):
+    print('-------------------------------')
+    print(data_type, data_count, data)
 
     cli_circuit, srv_circuit = circuit_pair
     cli_channel, srv_channel = make_channels(*circuit_pair, data_type,
@@ -195,14 +197,25 @@ def test_reads(circuit_pair, data_type, data_count, data, metadata):
     cli_circuit.process_command(res_received)
 
     if isinstance(data, array.ArrayType):
-        # Before comparing array.array (which exposes the byteorder naively)
-        # with a numpy.ndarray (which buries the byteorder in dtype), flip
-        # the byte order to little-endian.
         expected = copy.deepcopy(data)
-        expected.byteswap()
+        if (data.endian == '>' and isinstance(res_received.data,
+                                              array.ArrayType)):
+            # Before comparing array.array (which exposes the byteorder
+            # naively) with a numpy.ndarray (which buries the byteorder in
+            # dtype), flip the byte order to little-endian.
+            expected.byteswap()
+
+        # NOTE: arrays are automatically byteswapped now...
+        print(res_received.data, expected)
         assert_array_almost_equal(res_received.data, expected)
     elif isinstance(data, bytes):
-        assert data == _np_hack(res_received.data)
+        received_data = res_received.data
+        if hasattr(received_data, 'endian'):
+            # tests store data in big endian. swap received data endian for
+            # comparison.
+            received_data.byteswap()
+
+        assert data == _np_hack(received_data)
     else:
         try:
             assert_array_equal(res_received.data, data)  # for strings
@@ -211,7 +224,7 @@ def test_reads(circuit_pair, data_type, data_count, data, metadata):
 
 
 @pytest.mark.parametrize('data_type, data_count, data, metadata', payloads)
-def test_writes(circuit_pair, data_type, data_count, data, metadata):
+def test_writes(backends, circuit_pair, data_type, data_count, data, metadata):
 
     cli_circuit, srv_circuit = circuit_pair
     cli_channel, srv_channel = make_channels(*circuit_pair, 5, 1)
@@ -237,14 +250,22 @@ def test_writes(circuit_pair, data_type, data_count, data, metadata):
         cli_circuit.process_command(command)
 
     if isinstance(data, array.ArrayType):
-        # Before comparing array.array (which exposes the byteorder naively)
-        # with a numpy.ndarray (which buries the byteorder in dtype), flip
-        # the byte order to little-endian.
         expected = copy.deepcopy(data)
-        expected.byteswap()
+        if (data.endian == '>' and isinstance(req_received.data,
+                                              array.ArrayType)):
+            # Before comparing array.array (which exposes the byteorder
+            # naively) with a numpy.ndarray (which buries the byteorder in
+            # dtype), flip the byte order to little-endian.
+            expected.byteswap()
         assert_array_almost_equal(req_received.data, expected)
     elif isinstance(data, bytes):
-        assert data == _np_hack(req_received.data)
+        received_data = req_received.data
+        if hasattr(received_data, 'endian'):
+            # tests store data in big endian. swap received data endian for
+            # comparison>
+            received_data.byteswap()
+
+        assert data == _np_hack(received_data)
     else:
         try:
             assert_array_equal(req_received.data, data)  # for strings

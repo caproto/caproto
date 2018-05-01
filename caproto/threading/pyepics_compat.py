@@ -11,7 +11,7 @@ from collections import Iterable
 import caproto as ca
 from .client import (Context, SharedBroadcaster, AUTOMONITOR_MAXLENGTH,
                      STR_ENC)
-from caproto import AccessRights, promote_type, ChannelType
+from caproto import AccessRights, field_types, ChannelType
 
 
 __all__ = ['PV', 'get_pv', 'caget', 'caput']
@@ -271,9 +271,9 @@ class PV:
             return
 
         self._args['type'] = ch.native_data_type
-        self._args['typefull'] = promote_type(self.type,
-                                              use_time=(form == 'time'),
-                                              use_ctrl=(form != 'time'))
+
+        type_key = 'control' if form == 'ctrl' else form
+        self._args['typefull'] = field_types[type_key][ch.native_data_type]
         self._args['nelm'] = ch.native_data_count
         self._args['count'] = ch.native_data_count
 
@@ -375,7 +375,7 @@ class PV:
                 timeout = 1.0 + log10(max(1, count))
 
         if with_ctrlvars:
-            dt = promote_type(self.type, use_ctrl=True)
+            dt = field_types['control'][self.type]
 
         dt = self.typefull
         if not as_string and self.typefull in ca.char_types:
@@ -453,7 +453,7 @@ class PV:
     @ensure_connection
     def get_ctrlvars(self, timeout=5, warn=True):
         "get control values for variable"
-        dtype = ca.promote_type(self.type, use_ctrl=True)
+        dtype = field_types['control'][self.type]
         command = self._caproto_pv.read(data_type=dtype, timeout=timeout)
         info = _parse_dbr_metadata(command.metadata)
         info['value'] = command.data
@@ -463,7 +463,7 @@ class PV:
     @ensure_connection
     def get_timevars(self, timeout=5, warn=True):
         "get time values for variable"
-        dtype = ca.promote_type(self.type, use_time=True)
+        dtype = field_types['time'][self.type]
         command = self._caproto_pv.read(data_type=dtype, timeout=timeout)
         info = _parse_dbr_metadata(command.metadata)
         info['value'] = command.data

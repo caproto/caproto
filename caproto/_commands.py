@@ -25,7 +25,6 @@ import _ctypes
 import inspect
 import struct
 import socket
-import sys
 from ._headers import (MessageHeader, ExtendedMessageHeader,
                        AccessRightsResponseHeader, ClearChannelRequestHeader,
                        ClearChannelResponseHeader, ClientNameRequestHeader,
@@ -49,21 +48,16 @@ from ._headers import (MessageHeader, ExtendedMessageHeader,
 
 from ._constants import (DO_REPLY, NO_REPLY, MAX_RECORD_LENGTH)
 from ._dbr import (DBR_INT, DBR_TYPES, ChannelType, float_t, short_t, ushort_t,
-                   native_type, MAX_STRING_SIZE, USE_NUMPY,
-                   array_type_code, AccessRights)
+                   native_type, special_types, MAX_STRING_SIZE, AccessRights)
 
 from . import _dbr as dbr
+from ._backend import backend_ns as backend
 from ._status import eca_value_to_status
 from ._utils import (CLIENT, NEED_DATA, REQUEST, RESPONSE, SERVER,
                      CaprotoTypeError, CaprotoValueError,
                      CaprotoNotImplementedError,
                      ensure_bytes)
 
-# numpy is only used if it is available
-try:
-    import numpy as np
-except ImportError:
-    pass
 
 _MessageHeaderSize = ctypes.sizeof(MessageHeader)
 _ExtendedMessageHeaderSize = ctypes.sizeof(ExtendedMessageHeader)
@@ -87,10 +81,8 @@ def ipv4_from_int32(int_packed_ip: int) -> str:
 
 def has_metadata(data_type):
     'Does data_type have associated metadata?'
-    return (data_type in (ChannelType.PUT_ACKS, ChannelType.PUT_ACKT,
-                          ChannelType.STSACK_STRING, ChannelType.CLASS_NAME)
-            or data_type != native_type(data_type)
-            )
+    return (data_type in special_types or
+            data_type != native_type(data_type))
 
 
 def from_buffer(data_type, data_count, buffer):
@@ -144,7 +136,7 @@ def bytelen(item):
     - ``array.array`` (from the builtin Python lib)
     - ``ctypes`` objects
     - an object that has an ``nbytes`` attribute (notably, numpy arrays and
-      ``memoryview``)
+    ``memoryview``)
     - ``bytes``
     - ``bytearray``
     """
@@ -228,31 +220,21 @@ def data_payload(data, metadata, data_type, data_count):
     size, md_payload, data_payload[, pad_payload]
         pad_payload will only be returned if needed
     """
-    ntype = native_type(data_type)
 
     # Make the data payload.
-    if isinstance(data, array.array):
-        # Assume array is big-endian; we have no way of checking.
-        data_payload = data
-    elif isinstance(data, bytes):
+    if isinstance(data, bytes):
         # Assume bytes are big-endian; we have no way of checking.
         data_payload = data
-    elif USE_NUMPY and isinstance(data, np.ndarray):
-        # Make big-endian.
-        data_payload = data.astype(data.dtype.newbyteorder('>'))
-    elif isinstance(data, collections.Iterable):
-        if ntype == ChannelType.STRING:
-            data_payload = b''.join(d[:39].ljust(40, b'\0') for d in data)
-        else:
-            data_payload = array.array(array_type_code(ntype), data)
-            # Make big-endian.
-            if sys.byteorder == 'little':
-                data_payload.byteswap()
+    elif (isinstance(data, backend.array_types) or
+          isinstance(data, collections.Iterable)):
+        data_payload = backend.python_to_epics(
+            native_type(data_type), data, byteswap=True)
     elif data is None:
         data_payload = b''
     else:
         raise CaprotoTypeError("data given as type we cannot handle - {}"
                                "".format(type(data)))
+
     md_payload = parse_metadata(metadata, data_type)
     size, pad_payload = pad_buffers(md_payload, data_payload)
     if pad_payload:
@@ -263,8 +245,11 @@ def data_payload(data, metadata, data_type, data_count):
 
 def extract_data(buffer, data_type, data_count):
     "Return a scalar or big-endian array (numpy.ndarray or array.array)."
-    data = dbr.native_to_builtin(buffer, native_type(data_type), data_count)
-    return data[:data_count]  # TODO Does this make a copy?
+    data = backend.epics_to_python(buffer, native_type(data_type), data_count,
+                                   auto_byteswap=True)
+    if data_count < len(data):
+        return data[:data_count]  # (no copy)
+    return data
 
 
 def extract_metadata(payload, data_type):
@@ -893,7 +878,6 @@ class EventAddRequest(Message):
     @property
     def payload_struct(self):
         return EventAddRequestPayload.from_buffer(self.buffers[0])
-
 
     data_type = property(lambda self: ChannelType(self.header.data_type))
     data_count = property(lambda self: self.header.data_count)
