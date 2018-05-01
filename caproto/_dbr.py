@@ -1005,7 +1005,7 @@ native_types = {ChannelType.STRING, ChannelType.INT, ChannelType.FLOAT,
                 ChannelType.DOUBLE}
 
 # Special types without any corresponding promoted versions
-special_types = {ChannelType.PUT_ACKS, ChannelType.PUT_ACKS,
+special_types = {ChannelType.PUT_ACKT, ChannelType.PUT_ACKS,
                  ChannelType.STSACK_STRING, ChannelType.CLASS_NAME}
 
 # ChannelTypes grouped by included metadata
