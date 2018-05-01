@@ -22,10 +22,13 @@ from ._commands import (AccessRightsResponse, CreateChFailResponse,
                         read_from_bytestream,)
 from ._state import (ChannelState, CircuitState, get_exception)
 from ._utils import (CLIENT, SERVER, NEED_DATA, DISCONNECTED, CaprotoKeyError,
-                     CaprotoValueError, CaprotoRuntimeError, CaprotoError,
-                     )
+                     CaprotoValueError, CaprotoRuntimeError, CaprotoError)
 from ._dbr import (SubscriptionType, )
 from ._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
+
+
+__all__ = ('VirtualCircuit', 'ClientChannel', 'ServerChannel',
+           'extract_address')
 
 
 class VirtualCircuit:
