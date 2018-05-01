@@ -104,7 +104,6 @@ def search(pv_name, logger, udp_sock, timeout, *, max_retries=2):
     retry_timeout = timeout / max((max_retries, 1))
     t = time.monotonic()
     retry_at = t + retry_timeout
-    registered = False
 
     try:
         orig_timeout = udp_sock.gettimeout()
@@ -123,9 +122,6 @@ def search(pv_name, logger, udp_sock, timeout, *, max_retries=2):
             for command in commands:
                 if isinstance(command, ca.SearchResponse) and command.cid == 0:
                     return ca.extract_address(command)
-                elif not registered and b.registered:
-                    registered = True
-                    logger.debug('Registered with the repeater')
             else:
                 # None of the commands we have seen are a reply to our request.
                 # Receive more data.
