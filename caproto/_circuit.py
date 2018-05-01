@@ -27,7 +27,6 @@ from ._utils import (CLIENT, SERVER, NEED_DATA, DISCONNECTED, CaprotoKeyError,
 from ._dbr import (SubscriptionType, )
 from ._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
 
-
 class VirtualCircuit:
     """
     An object encapulating the state of one CA client--server connection.
