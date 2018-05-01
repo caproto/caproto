@@ -598,7 +598,9 @@ def put_cli():
             print(exc)
 
 
-def put(pv_name, data, *, verbose=False, timeout=1, priority=0, repeater=True):
+def put(pv_name, data, *, data_type=None, metadata=None,
+        verbose=False, timeout=1, priority=0,
+        repeater=True):
     """
     Write to a Channel.
 
@@ -608,7 +610,9 @@ def put(pv_name, data, *, verbose=False, timeout=1, priority=0, repeater=True):
     data : str, int, or float or a list of these
         Value to write.
     data_type : int, optional
-        Request specific data type. Default is Channel's native data type.
+        Request specific data type. Default is inferred from input.
+    metadata : ``ctypes.BigEndianStructure`` or tuple
+        Status and control metadata for the values
     verbose : boolean, optional
         Verbose logging. Default is False.
     timeout : float, optional
@@ -651,7 +655,7 @@ def put(pv_name, data, *, verbose=False, timeout=1, priority=0, repeater=True):
             data = raw_data
     if not isinstance(data, Iterable) or isinstance(data, (str, bytes)):
         data = [data]
-    if isinstance(data[0], str):
+    if data and isinstance(data[0], str):
         data = [val.encode('latin-1') for val in data]
     logger.debug('Data argument %s parsed as %r.', raw_data, data)
 
@@ -669,15 +673,14 @@ def put(pv_name, data, *, verbose=False, timeout=1, priority=0, repeater=True):
         logger.debug("Taking 'initial' reading before writing.")
         initial_response = read(chan, timeout, None)
 
-        # Handle ENUM: If data is INT, carry on. If data is STRING,
-        # write it specifically as STRING data_Type.
-        if (ntype is ChannelType.ENUM) and isinstance(data[0], bytes):
-            logger.debug("Writing to ENUM as data_type STRING.")
-            data_type = ChannelType.STRING
-        else:
-            logger.debug("Writing.")
-            data_type = None
-        req = chan.write(data=data, data_type=data_type)
+        if data_type is None:
+            # Handle ENUM: If data is INT, carry on. If data is STRING,
+            # write it specifically as STRING data_Type.
+            if (ntype is ChannelType.ENUM) and isinstance(data[0], bytes):
+                logger.debug("Will write to ENUM as data_type STRING.")
+                data_type = ChannelType.STRING
+        logger.debug("Writing.")
+        req = chan.write(data=data, data_type=data_type, metadata=metadata)
         send(chan.circuit, req)
         t = time.monotonic()
         while True:
