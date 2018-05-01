@@ -51,7 +51,7 @@ from ._dbr import (DBR_INT, DBR_TYPES, ChannelType, float_t, short_t, ushort_t,
                    native_type, special_types, MAX_STRING_SIZE, AccessRights)
 
 from . import _dbr as dbr
-from ._backend import backend_ns as backend
+from ._backend import backend
 from ._status import eca_value_to_status
 from ._utils import (CLIENT, NEED_DATA, REQUEST, RESPONSE, SERVER,
                      CaprotoTypeError, CaprotoValueError,
