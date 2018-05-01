@@ -54,6 +54,7 @@ class VirtualCircuit(_VirtualCircuit):
 
     async def _start_write_task(self, handle_write):
         await self.pending_tasks.spawn(handle_write, ignore_result=True)
+
     async def _wake_new_command(self):
         async with self.new_command_condition:
             await self.new_command_condition.notify_all()

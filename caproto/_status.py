@@ -104,7 +104,7 @@ class CAStatus(Enum):
     ECA_TOLARGE = _ca_status_code(
         'ECA_TOLARGE', severity=CASeverity.WARNING, code=9,
         desc=("The requested data transfer is greater than available memory "
-            "or EPICS_CA_MAX_ARRAY_BYTES"))
+              "or EPICS_CA_MAX_ARRAY_BYTES"))
     ECA_TIMEOUT = _ca_status_code(
         'ECA_TIMEOUT', severity=CASeverity.WARNING, code=10,
         desc="User specified timeout on IO operation expired")
@@ -119,7 +119,7 @@ class CAStatus(Enum):
     ECA_DISCONNCHID = _ca_status_code(
         'ECA_DISCONNCHID', severity=CASeverity.ERROR, code=13,
         desc=("The request was ignored because the specified channel is "
-            "disconnected"),
+              "disconnected"),
         defunct=True)
     ECA_BADTYPE = _ca_status_code(
         'ECA_BADTYPE', severity=CASeverity.ERROR, code=14,
@@ -164,21 +164,21 @@ class CAStatus(Enum):
     ECA_EVDISALLOW = _ca_status_code(
         'ECA_EVDISALLOW', severity=CASeverity.ERROR, code=26,
         desc=("Request inappropriate within subscription (monitor) update "
-            "callback"))
+              "callback"))
     ECA_BUILDGET = _ca_status_code(
         'ECA_BUILDGET', severity=CASeverity.WARNING, code=27,
         desc=("Database value get for that channel failed during channel "
-            "search"),
+              "search"),
         defunct=True)
     ECA_NEEDSFP = _ca_status_code(
         'ECA_NEEDSFP', severity=CASeverity.WARNING, code=28,
         desc=("Unable to initialize without the vxWorks VX_FP_TASKtask "
-            "option set"),
+              "option set"),
         defunct=True)
     ECA_OVEVFAIL = _ca_status_code(
         'ECA_OVEVFAIL', severity=CASeverity.WARNING, code=29,
         desc=("Event queue overflow has prevented first pass event after "
-            "event add"),
+              "event add"),
         defunct=True)
     ECA_BADMONID = _ca_status_code(
         'ECA_BADMONID', severity=CASeverity.ERROR, code=30,
@@ -206,7 +206,7 @@ class CAStatus(Enum):
     ECA_NOREPEATER = _ca_status_code(
         'ECA_NOREPEATER', severity=CASeverity.WARNING, code=36,
         desc=("Unable to spawn the CA repeater thread; auto reconnect will "
-            "fail"),
+              "fail"),
         defunct=True)
     ECA_NOCHANMSG = _ca_status_code(
         'ECA_NOCHANMSG', severity=CASeverity.WARNING, code=37,
@@ -219,7 +219,7 @@ class CAStatus(Enum):
     ECA_SERVBEHIND = _ca_status_code(
         'ECA_SERVBEHIND', severity=CASeverity.WARNING, code=39,
         desc=("Server (IOC) has fallen behind or is not responding; still "
-            "waiting"),
+              "waiting"),
         defunct=True)
     ECA_NOCAST = _ca_status_code(
         'ECA_NOCAST', severity=CASeverity.WARNING, code=40,
@@ -276,11 +276,11 @@ class CAStatus(Enum):
     ECA_NOTTHREADED = _ca_status_code(
         'ECA_NOTTHREADED', severity=CASeverity.ERROR, code=57,
         desc=("Preemptive callback not enabled - additional threads may not "
-            "join context"))
+              "join context"))
     ECA_16KARRAYCLIENT = _ca_status_code(
         'ECA_16KARRAYCLIENT', severity=CASeverity.WARNING, code=58,
         desc=("Client’s protocol revision does not support transfers "
-            "exceeding 16k bytes"))
+              "exceeding 16k bytes"))
     ECA_CONNSEQTMO = _ca_status_code(
         'ECA_CONNSEQTMO', severity=CASeverity.WARNING, code=59,
         desc="Virtual circuit connection sequence aborted")

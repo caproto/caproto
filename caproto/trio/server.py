@@ -74,6 +74,7 @@ class VirtualCircuit(_VirtualCircuit):
         async with self.new_command_condition:
             self.new_command_condition.notify_all()
 
+
 class Context(_Context):
     CircuitClass = VirtualCircuit
     async_layer = TrioAsyncLayer

@@ -4,7 +4,7 @@ import ctypes
 
 import caproto as ca
 from caproto._dbr import DBR_LONG, DBR_TIME_DOUBLE, TimeStamp
-from caproto._commands import read_datagram, bytelen, Message, bytelen
+from caproto._commands import read_datagram, bytelen, Message
 from caproto._headers import MessageHeader, ExtendedMessageHeader
 import inspect
 import pytest

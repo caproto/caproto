@@ -28,7 +28,7 @@ except ImportError:
     netifaces = None
 
 
-__all__ = (
+__all__ = (  # noqa F822
     'make_sentinel',
     'get_environment_variables',
     'get_address_list',
@@ -62,16 +62,14 @@ __all__ = (
     'RecordModifier',
     'RecordAndField',
     'ThreadsafeCounter',
-    'CLIENT', 'SERVER',  # roles
-    'RESPONSE', 'REQUEST',  # directions
-    'NEED_DATA',  # special sentinel for read_* functions
-    # and states
+     # sentinels dynamically defined and added to globals() below
+    'CLIENT', 'SERVER', 'RESPONSE', 'REQUEST', 'NEED_DATA',
     'SEND_SEARCH_REQUEST', 'AWAIT_SEARCH_RESPONSE',
     'SEND_SEARCH_RESPONSE', 'SEND_VERSION_REQUEST',
     'AWAIT_VERSION_RESPONSE', 'SEND_VERSION_RESPONSE',
     'SEND_CREATE_CHAN_REQUEST', 'AWAIT_CREATE_CHAN_RESPONSE',
-    'SEND_CREATE_CHAN_RESPONSE', 'CONNECTED', 'MUST_CLOSE', 'CLOSED',
-    'IDLE', 'FAILED', 'DISCONNECTED')
+    'SEND_CREATE_CHAN_RESPONSE', 'CONNECTED', 'MUST_CLOSE',
+    'CLOSED', 'IDLE', 'FAILED', 'DISCONNECTED')
 
 
 # This module defines sentinels used in the state machine and elsewhere, such
