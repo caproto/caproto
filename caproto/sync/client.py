@@ -170,8 +170,11 @@ def make_channel(pv_name, logger, udp_sock, priority, timeout):
 
 
 def spawn_repeater(logger):
-    subprocess.Popen(['caproto-repeater', '--quiet'], cwd="/",
-                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    try:
+        subprocess.Popen(['caproto-repeater', '--quiet'], cwd="/",
+                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    except Exception:
+        logger.exception('Failed to spawn repeater.')
     logger.debug('Spawned caproto-repeater process.')
 
 
