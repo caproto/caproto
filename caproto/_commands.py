@@ -248,7 +248,7 @@ def extract_data(buffer, data_type, data_count):
     data = backend.epics_to_python(buffer, native_type(data_type), data_count,
                                    auto_byteswap=True)
     if data_count < len(data):
-        return data[:data_count]  # TODO Does this make a copy?
+        return data[:data_count]  # (no copy)
     return data
 
 
