@@ -150,7 +150,7 @@ def make_channel(pv_name, logger, udp_sock, priority, timeout):
         t = time.monotonic()
         while True:
             try:
-                commands = recv(chan.circuit)
+                recv(chan.circuit)
                 if time.monotonic() - t > timeout:
                     raise socket.timeout
             except socket.timeout:
