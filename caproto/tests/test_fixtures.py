@@ -9,4 +9,4 @@ def test_ioc(ioc):
     print(f'Name: {ioc.name}')
     print(f'Available PVs: {ioc.pvs.items()}')
     if ioc.type == 'epics-base':
-       get(f'{ioc.prefix}ao1')  # test a PV from the pyepics 'debug' IOC
+        get(f'{ioc.prefix}ao1')  # test a PV from the pyepics 'debug' IOC

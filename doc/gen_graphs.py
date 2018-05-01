@@ -41,7 +41,6 @@ def generate(format_='png'):
                        if attr.endswith('_TRANSITIONS')
                        )
 
-
     for name, d in state_dicts.items():
         if name == 'STATE_TRIGGERED_TRANSITIONS':
             continue

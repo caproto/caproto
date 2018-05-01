@@ -15,6 +15,7 @@ srv_b.log.setLevel('DEBUG')
 req_cache = bytearray()
 res_cache = bytearray()
 
+
 def srv_send(circuit, command):
     buffers_to_send = circuit.send(command)
     for buffer in buffers_to_send:
@@ -62,7 +63,6 @@ def test_nonet():
     # one datagram.
     bytes_to_send = cli_b.send(ca.VersionRequest(0, 13),
                                ca.SearchRequest(pv1, 0, 13))
-
 
     commands = srv_b.recv(bytes_to_send, cli_addr)
     srv_b.process_commands(commands)
@@ -150,7 +150,6 @@ def test_nonet():
                                  low=0, high=0, to=0, mask=1)
     cli_send(chan1.circuit, add_req)
     srv_recv(srv_circuit)
-    subscriptionid = add_req.subscriptionid
     add_res = ca.EventAddResponse(data=(3,),
                                   data_type=chan1.native_data_type,
                                   data_count=chan1.native_data_count,
@@ -169,8 +168,8 @@ def test_nonet():
 
     # Test reading.
     cli_send(chan1.circuit, ca.ReadNotifyRequest(data_type=5, data_count=1,
-                                            sid=chan1.sid,
-                                            ioid=12))
+                                                 sid=chan1.sid,
+                                                 ioid=12))
     srv_recv(srv_circuit)
     srv_send(srv_circuit, ca.ReadNotifyResponse(data=(3,),
                                                 data_type=5, data_count=1,

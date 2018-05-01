@@ -107,7 +107,6 @@ def _run_repeater(server_sock, bind_addr):
                 logger.debug('New client %s (zero-length registration)', addr)
             continue
 
-
         to_forward = []
         for command in commands:
             if isinstance(command, caproto.RsrvIsUpResponse):

@@ -80,6 +80,7 @@ script:
   - pushd doc
   - make html
   - popd
+  - flake8 .
 
   # Upload the docs to gh-pages.
   - if [[ $TRAVIS_PULL_REQUEST == false && $TRAVIS_REPO_SLUG == 'NSLS-II/caproto' && $BUILD_DOCS == 1 && $TRAVIS_BRANCH == 'master' ]]; then

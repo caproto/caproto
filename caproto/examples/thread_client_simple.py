@@ -62,7 +62,7 @@ if __name__ == '__main__':
     logger.setLevel('DEBUG')
     logging.basicConfig()
     p = subprocess.Popen([sys.executable, '-m',
-                        'caproto.ioc_examples.type_varieties'])
+                         'caproto.ioc_examples.type_varieties'])
     try:
         main()
     finally:

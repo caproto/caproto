@@ -1,6 +1,7 @@
 codecov
 coverage
 curio
+flake8
 netifaces
 pyepics
 pytest

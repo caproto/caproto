@@ -40,7 +40,7 @@ async def main(pv1="XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL",
         print('reading:', reading)
         sub_id = await chan1.subscribe()
         await chan2.read()
-        # await chan1.unsubscribe(sub_id)
+        await chan1.unsubscribe(sub_id)
         await chan1.write((5,))
         reading = await chan1.read()
         print('reading:', reading)

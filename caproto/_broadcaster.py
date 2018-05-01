@@ -5,8 +5,7 @@ import itertools
 import logging
 
 from ._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
-from ._utils import (DISCONNECTED, CLIENT, SERVER, CaprotoValueError,
-                     LocalProtocolError)
+from ._utils import (CLIENT, SERVER, CaprotoValueError, LocalProtocolError)
 from ._state import get_exception
 from ._commands import (RepeaterConfirmResponse, RepeaterRegisterRequest,
                         SearchRequest, SearchResponse, VersionRequest,
@@ -145,13 +144,13 @@ class Broadcaster:
             # seems to sometimes violate this part of the protocol.
             # if VersionResponse not in map(type, history):
             #     err = get_exception(self.our_role, command)
-            #     raise err("A broadcasted SearchResponse must be preceded by a "
-            #               "VersionResponse in the same datagram.")
+            #     raise err("A broadcasted SearchResponse must be preceded by "
+            #               "a VersionResponse in the same datagram.")
             self.unanswered_searches.pop(command.cid, None)
 
         history.append(command)
 
-    ### CONVENIENCE METHODS ###
+    # CONVENIENCE METHODS
 
     def new_search_id(self):
         # Return the next sequential unused id. Wrap back to 0 on overflow.
@@ -181,7 +180,7 @@ class Broadcaster:
         (VersionRequest, SearchRequest)
         """
         if cid is None:
-            # TODO all client implementations want to handle cids on their own...
+            # TODO all client implementations want to handle cids on their own.
             cid = self.new_search_id()
         commands = (VersionRequest(0, self.protocol_version),
                     SearchRequest(name, cid, self.protocol_version))

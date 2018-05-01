@@ -243,7 +243,7 @@ def test_create_channel_failure(circuit_pair):
     cid = cli_circuit.new_channel_id()
     sid = srv_circuit.new_channel_id()
     cli_channel = ca.ClientChannel('doomed', cli_circuit, cid)
-    srv_channel = ca.ServerChannel('doomed', srv_circuit, cid)
+    srv_channel = ca.ServerChannel('doomed', srv_circuit, sid)
 
     # Send and receive CreateChanRequest
     req = cli_channel.create()

@@ -86,7 +86,8 @@ def _convert_char_values(values, to_dtype, string_encoding, enum_strings,
             # NOTE: accurate, but results in very inefficient CA response
             #       40 * len(values)
             if isinstance(values, str):
-                return [bytes([v]) for v in encode_or_fail(values, string_encoding)]
+                return [bytes([v])
+                        for v in encode_or_fail(values, string_encoding)]
             elif isinstance(values, bytes):
                 return [bytes([v]) for v in values]
             else:

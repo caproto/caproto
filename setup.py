@@ -1,6 +1,6 @@
 from distutils.core import setup
 import glob
-import setuptools
+import setuptools  # noqa F401
 import versioneer
 
 
@@ -20,6 +20,6 @@ setup(name='caproto',
                 'caproto.tests',
                 'caproto.threading',
                 'caproto.trio',
-               ],
+                ],
       scripts=glob.glob('scripts/*'),
       )

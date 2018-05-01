@@ -10,8 +10,6 @@ from .conftest import default_setup_module, default_teardown_module
 from .conftest import get_curio_context, run_with_trio_context
 from . import _asv_shim
 
-from .conftest import get_curio_context
-
 
 ioc_handler = None
 logger = logging.getLogger(__name__)
