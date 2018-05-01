@@ -52,7 +52,7 @@ from ._dbr import (DBR_INT, DBR_TYPES, ChannelType, float_t, short_t, ushort_t,
 
 from . import _dbr as dbr
 from ._backend import backend
-from ._status import eca_value_to_status, CAStatusCode
+from ._status import eca_value_to_status, ensure_eca_value
 from ._utils import (CLIENT, NEED_DATA, REQUEST, RESPONSE, SERVER,
                      CaprotoTypeError, CaprotoValueError,
                      CaprotoNotImplementedError,
@@ -950,8 +950,7 @@ class EventAddResponse(Message):
     def __init__(self, data, data_type, data_count,
                  status_code, subscriptionid, *, metadata=None):
         size, *buffers = data_payload(data, metadata, data_type, data_count)
-        if isinstance(status_code, CAStatusCode):
-            status_code = status_code.code_with_severity
+        status_code = ensure_eca_value(status_code)
         header = EventAddResponseHeader(size, data_type, data_count,
                                         status_code, subscriptionid)
         super().__init__(header, *buffers)
@@ -1200,8 +1199,7 @@ class ErrorResponse(Message):
         size = len(req_bytes) + msg_size
         payload = req_bytes + msg_payload
 
-        if isinstance(status_code, CAStatusCode):
-            status_code = status_code.code_with_severity
+        status_code = ensure_eca_value(status_code)
         header = ErrorResponseHeader(size, cid, status_code)
         super().__init__(header, b'', payload)
 
@@ -1353,8 +1351,7 @@ class ReadNotifyResponse(Message):
     def __init__(self, data, data_type, data_count, status, ioid, *,
                  metadata=None):
         size, *buffers = data_payload(data, metadata, data_type, data_count)
-        if isinstance(status, CAStatusCode):
-            status = status.code_with_severity
+        status = ensure_eca_value(status)
         header = ReadNotifyResponseHeader(size, data_type, data_count, status,
                                           ioid)
         super().__init__(header, *buffers)
@@ -1553,8 +1550,7 @@ class WriteNotifyResponse(Message):
     HAS_PAYLOAD = False
 
     def __init__(self, data_type, data_count, status, ioid):
-        if isinstance(status, CAStatusCode):
-            status = status.code_with_severity
+        status = ensure_eca_value(status)
         header = WriteNotifyResponseHeader(data_type, data_count, status, ioid)
         super().__init__(header)
 
