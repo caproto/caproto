@@ -33,7 +33,7 @@ if __name__ == '__main__':
     try:
         prefix = sys.argv[1]
     except IndexError:
-        prefix='inline_style:'
+        prefix = 'inline_style:'
 
     # Instantiate the IOC, assigning a prefix for the PV names.
     ioc = InlineStyleIOC(prefix=prefix)

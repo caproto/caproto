@@ -209,10 +209,16 @@ def test_string_array_to_wire(backends, from_dtype, to_dtype, values, expected,
 
 # FROM WIRE: client wrote STRING -> store in DTYPE
 
-no_encoding = lambda count: dict(string_encoding=None, count=count,
-                                 enum_strings=['abc', 'def', 'ghi'])
-ascii_encoding = lambda count: dict(string_encoding='ascii', count=count,
-                                    enum_strings=['abc', 'def', 'ghi'])
+def no_encoding(count):
+    return dict(string_encoding=None, count=count,
+                enum_strings=['abc', 'def', 'ghi'])
+
+
+def ascii_encoding(count):
+    return dict(string_encoding='ascii', count=count,
+                enum_strings=['abc', 'def', 'ghi'])
+
+
 str_two = DbrStringArray([b'abc', b'def'])
 str_three = DbrStringArray([b'abc', b'def', b'ghi'])
 str_three_numbers = DbrStringArray([b'1', b'2', b'3'])
@@ -245,6 +251,7 @@ def test_string_array_from_wire(backends, from_dtype, to_dtype, values,
                         to_dtype=to_dtype, expected=expected,
                         direction=FROM_WIRE, **kwargs)
 
+
 # ---- CHAR CONVERSION ----
 
 no_encoding = dict(string_encoding=None)
@@ -252,6 +259,7 @@ ascii_encoding = dict(string_encoding='ascii')
 enum_strs = dict(enum_strings=['aa', 'bb', 'cc'])
 str_three = DbrStringArray([b'a', b'b', b'c'])
 str_three_nums = DbrStringArray([b'0', b'1', b'2'])
+
 
 # TO WIRE: channeldata stores CHAR -> caget of DTYPE
 char_to_wire = [
@@ -312,7 +320,6 @@ def test_char_from_wire(backends, from_dtype, to_dtype, values, expected,
 
 
 # TODO: between numerical types testing (int/float/long...)
-
 
 
 # ---- ENUM CONVERSION ----

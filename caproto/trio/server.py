@@ -299,12 +299,14 @@ class TrioVirtualCircuit:
             await db_entry.subscribe(self.context.subscription_queue, sub_spec)
         elif isinstance(command, ca.EventCancelRequest):
             chan, db_entry = get_db_entry()
-            await self._cull_subscriptions(db_entry,
+            await self._cull_subscriptions(
+                db_entry,
                 lambda sub: sub.subscriptionid == command.subscriptionid)
             return [chan.unsubscribe(command.subscriptionid)]
         elif isinstance(command, ca.ClearChannelRequest):
             chan, db_entry = get_db_entry()
-            await self._cull_subscriptions(db_entry,
+            await self._cull_subscriptions(
+                db_entry,
                 lambda sub: sub.channel == command.sid)
             return [chan.disconnect()]
         elif isinstance(command, ca.EchoRequest):

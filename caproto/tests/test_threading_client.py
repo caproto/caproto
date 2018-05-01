@@ -4,15 +4,13 @@
 import caproto
 import caproto._utils
 import caproto.threading.client
-import sys
 import time
 import socket
 import getpass
 
-from caproto.threading.client import (Context, SharedBroadcaster, PV, logger,
+from caproto.threading.client import (Context, SharedBroadcaster,
                                       ContextDisconnectedError)
 import caproto as ca
-from contextlib import contextmanager
 import pytest
 
 
@@ -48,13 +46,13 @@ def test_put_complete(backends, context, ioc):
     pv, = context.get_pvs(ioc.pvs['float'])
     pv.wait_for_connection()
     assert pv.connected
-    mutable = []
 
     # start in a known initial state
     pv.write((0.0, ), wait=True)
     pv.read()
 
     responses = []
+
     def cb(response):
         responses.append(response)
 
@@ -68,6 +66,7 @@ def test_put_complete(backends, context, ioc):
     while not responses:
         time.sleep(0.1)
     pv.read().data == 0.4
+
 
 def test_specified_port(monkeypatch, context, ioc):
     pv, = context.get_pvs(ioc.pvs['float'])
@@ -177,6 +176,7 @@ def test_server_crash(context, prefix, request):
     for pv in ioc['pvs']:
         pv.wait_for_connection()
         assert pv.connected
+
 
 def test_subscriptions(ioc, context):
     cntx = context

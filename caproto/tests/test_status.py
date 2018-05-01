@@ -1,5 +1,4 @@
 import caproto as ca
-from caproto import _status
 from caproto._status import eca_value_to_status
 
 

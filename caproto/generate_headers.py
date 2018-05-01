@@ -85,11 +85,8 @@ def parse_commands(h2):
             # There is no spec for this.
             continue
         if len(tables) == 1:
-            # There is a header spec but no payload for this command.
-            has_payload = False
             header_table, = tables
         elif len(tables) == 2:
-            has_payload = True
             header_table, payload_table = tables
         else:
             raise ValueError("expected at most two tables per <h3>")

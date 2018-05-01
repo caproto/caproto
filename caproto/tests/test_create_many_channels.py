@@ -11,6 +11,7 @@ from . import conftest
 @pytest.mark.parametrize('backend', ['curio', 'trio'])
 def test_create_many_channels(backend):
     logging.getLogger('caproto.{}.client'.format(backend)).setLevel('DEBUG')
+
     async def client_test(context):
         if context is None:
             context = await conftest.get_curio_context()

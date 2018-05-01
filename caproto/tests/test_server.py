@@ -165,6 +165,8 @@ caput_checks = [('int', '1', [1]),
                 # ('bytearray', 'testing', list(b'testing')),
                 ('stra', ['char array'], ['char array']),
                 ]
+
+
 @pytest.mark.parametrize('pv, put_value, check_value', caput_checks)
 # @pytest.mark.parametrize('async_put', [True, False])
 def test_with_caput(backends, prefix, pvdb_from_server_example, server, pv,

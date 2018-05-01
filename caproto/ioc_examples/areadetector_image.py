@@ -27,6 +27,7 @@ class Detector(ophyd.SimDetector):
 pvproperty_with_rbv = get_pv_pair_wrapper(setpoint_suffix='',
                                           readback_suffix='_RBV')
 
+
 # -- DetectorGroup --
 class DetectorGroup(PVGroup):
     # configuration_names = pvproperty(name=None, dtype=str)
@@ -159,7 +160,6 @@ class DetectorGroup(PVGroup):
             peak_num_y = pvproperty_with_rbv(name='PeakNumY', dtype=int)
 
         peak_num = SubGroup(SimDetectorCamPeakNumGroup, prefix='')
-
 
         class SimDetectorCamPeakStartGroup(PVGroup):
             peak_start_x = pvproperty_with_rbv(name='PeakStartX', dtype=int)

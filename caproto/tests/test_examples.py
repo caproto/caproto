@@ -1,7 +1,5 @@
-import time
-
-import pytest
 import curio
+import pytest
 import trio
 
 import caproto as ca
@@ -289,7 +287,7 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
 
 @pytest.mark.parametrize(
     'module_name, pvdb_class_name, class_kwargs',
-     [('caproto.ioc_examples.custom_write', 'CustomWrite', {}),
+    [('caproto.ioc_examples.custom_write', 'CustomWrite', {}),
      ('caproto.ioc_examples.inline_style', 'InlineStyleIOC', {}),
      ('caproto.ioc_examples.io_interrupt', 'IOInterruptIOC', {}),
      ('caproto.ioc_examples.macros', 'MacroifiedNames',

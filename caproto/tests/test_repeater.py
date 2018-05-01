@@ -1,7 +1,4 @@
 import logging
-import time
-import threading
-import pytest
 
 import curio
 
