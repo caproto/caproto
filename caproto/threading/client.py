@@ -36,6 +36,9 @@ def ensure_connected(func):
                 reconnect = True
             else:
                 reconnect = False
+            # Do not bother notifying the self._in_use condition because we
+            # have *increased* the usages here. It will be notified below,
+            # inside the `finally` block, when we decrease the usages.
         try:
             self._wait_for_connection()
             if reconnect:
