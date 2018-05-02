@@ -114,6 +114,7 @@ def context(request, shared_broadcaster):
 
 def test_server_crash(context, ioc_factory):
     first_ioc = ioc_factory()
+    # The factory function does not return until readiness is confirmed.
 
     # TODO
     # This exposes a bug where the socket dies on send. To be solved
@@ -121,19 +122,37 @@ def test_server_crash(context, ioc_factory):
     if first_ioc.type == 'epics-base':
         raise pytest.skip()
 
-    # The factory function does not return until readiness is confirmed.
     pvs = context.get_pvs(*first_ioc.pvs.values())
+    # Set up a subscription so that we can check that it re-subscribes later.
+    some_pv, *_ = pvs
+    assert not some_pv.subscriptions
+    sub = some_pv.subscribe()
+    assert some_pv.subscriptions
+    # Add a user callback so that the subscription takes effect.
+    collector = []
+    def collect(item):
+        collector.append(item)
+    sub.add_callback(collect)
     # Wait for everything to connect.
     for pv in pvs:
         pv.wait_for_connection()
+    # Wait to confirm that the subscription produced a response.
+    while not collector:
+        time.sleep(0.05)
     # Kill the IOC!
     first_ioc.process.terminate()
     first_ioc.process.wait()
+
+    collector.clear()
+
     # Start the ioc again (it has the same prefix).
     second_ioc = ioc_factory()
     for pv in pvs:
         pv.wait_for_connection()
         assert pv.connected
+    # Wait to confirm that the subscription produced a new response.
+    while not collector:
+        time.sleep(0.05)
 
 
 def test_subscriptions(ioc, context):
