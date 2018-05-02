@@ -172,6 +172,9 @@ def test_subscriptions(ioc, context):
     pv.write((1, ), wait=True)
     pv.write((2, ), wait=True)
     pv.write((3, ), wait=True)
+    sub.unsubscribe()
+    time.sleep(0.2)  # Wait for that to process...
+    pv.write((4, ), wait=True)  # This update should not be received by us.
 
     for i in range(3):
         if pv.read().data[0] == 3:

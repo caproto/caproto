@@ -1333,16 +1333,25 @@ class Subscription(CallbackHandler):
         return command
 
     def unsubscribe(self):
-        # TODO This should be called automatically if all user callbacks have
-        # been removed.
+        """
+        Stop receiving updates.
+
+        This may be called by the user to deactivate the Subscription. It may
+        later be reactivated by calling subscribe().
+
+        This will be called automatically if all the user callbacks are
+        removed. If a callback is added again, subscribe() will automatically
+        be called.
+        """
         with self._callback_lock:
             if self.subscriptionid is None:
                 # Already unsubscribed.
                 return
-            self.pv.unsubscribe(self.subscriptionid)
+            subscriptionid = self.subscriptionid
             self.subscriptionid = None
             self.most_recent_response = None
-            self.circuit_manager.send(self.channel.unsubscribe(subscriptionid))
+        command = self.pv.channel.unsubscribe(subscriptionid)
+        self.pv.circuit_manager.send(command)
 
     def process(self, *args, **kwargs):
         # TODO here i think we can decouple PV update rates and callback
@@ -1376,6 +1385,13 @@ class Subscription(CallbackHandler):
                         print(ex)
 
         return cb_id
+
+    def remove_callback(self, cb_id):
+        with self._callback_lock:
+            super().remove_callback(cb_id)
+            if not self.callbacks:
+                # Go dormant.
+                self.unsubscribe()
 
     def __del__(self):
         if not self.subscriptionid:
