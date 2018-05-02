@@ -148,7 +148,8 @@ def epics_base_ioc(prefix, request):
            for pv, rtype in db
            }
 
-    return SimpleNamespace(process=process, prefix=prefix, name=name, pvs=pvs)
+    return SimpleNamespace(process=process, prefix=prefix, name=name, pvs=pvs,
+                           type='epics-base')
 
 
 @pytest.fixture(scope='function')
@@ -163,7 +164,18 @@ def caproto_ioc(prefix, request):
                               request=request,
                               pv_to_check=pvs['float'],
                               args=(prefix,))
-    return SimpleNamespace(process=process, prefix=prefix, name=name, pvs=pvs)
+    return SimpleNamespace(process=process, prefix=prefix, name=name, pvs=pvs,
+                           type='caproto')
+
+
+@pytest.fixture(params=['caproto', 'epics-base'], scope='function')
+def ioc_factory(prefix, request):
+    'A fixture that runs more than one IOC: caproto, epics'
+    # Get a new prefix for each IOC type:
+    if request.param == 'caproto':
+        return functools.partial(caproto_ioc, prefix, request)
+    elif request.param == 'epics-base':
+        return functools.partial(epics_base_ioc, prefix, request)
 
 
 @pytest.fixture(params=['caproto', 'epics-base'], scope='function')
@@ -174,7 +186,6 @@ def ioc(prefix, request):
         ioc_ = caproto_ioc(prefix, request)
     elif request.param == 'epics-base':
         ioc_ = epics_base_ioc(prefix, request)
-    ioc_.type = request.param
     return ioc_
 
 
