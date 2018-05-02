@@ -39,7 +39,21 @@ def ensure_connected(func):
         try:
             self._wait_for_connection()
             if reconnect:
-                self.circuit_manager.send(*self._resubscribe())
+                def requests():
+                    for sub in self.subscriptions:
+                        command = sub.compose_command()
+                        # compose_command() returns None if this
+                        # Subscription is inactive (meaning there are no
+                        # user callbacks attached). It will send an
+                        # EventAddRequest on its own if/when the user does
+                        # add any callbacks, so we can skip it here.
+                        if command is not None:
+                            yield command
+                # Batching is probably overkill...unlikely to be very many
+                # requests here....
+                for batch in batch_requests(requests(),
+                                            EVENT_ADD_BATCH_MAX_BYTES):
+                    self.circuit_manager.send(*batch)
                 self._idle = False
             result = func(self, *args, **kwargs)
         finally:
@@ -695,8 +709,17 @@ class Context:
 
             for cm, pvs in ready.items():
                 def requests():
+                    "Yield EventAddRequest commands."
                     for pv in pvs:
-                        yield from pv._resubscribe()
+                        for sub in pv.subscriptions:
+                            command = sub.compose_command()
+                            # compose_command() returns None if this
+                            # Subscription is inactive (meaning there are no
+                            # user callbacks attached). It will send an
+                            # EventAddRequest on its own if/when the user does
+                            # add any callbacks, so we can skip it here.
+                            if command is not None:
+                                yield command
 
                 for batch in batch_requests(requests(),
                                             EVENT_ADD_BATCH_MAX_BYTES):
@@ -1137,16 +1160,6 @@ class PV:
                 ...
             self._idle = True
 
-    def _resubscribe(self):
-        for sub in self.subscriptions:
-            command = self.channel.subscribe(*sub.sub_args, **sub.sub_kwargs)
-            # Update Subscription object with new id.
-            subscriptionid = command.subscriptionid
-            sub.subscriptionid = subscriptionid
-            # Let the circuit_manager match future responses to this request.
-            self.circuit_manager.subscriptions[subscriptionid] = sub
-            yield command
-
     @ensure_connected
     def read(self, *args, timeout=2, **kwargs):
         """Request a fresh reading, wait for it, return it and stash it.
@@ -1212,29 +1225,12 @@ class PV:
 
     @ensure_connected
     def subscribe(self, *args, **kwargs):
-        "Start a new subscription and spawn an async task to receive readings."
-        if not self.connected:
-            raise DisconnectedError()
-
-        command = self.channel.subscribe(*args, **kwargs)
-        subscriptionid = command.subscriptionid
-        sub = Subscription(self, subscriptionid, args, kwargs)
-        # Let the circuit_manager match future responses to this request.
-        self.circuit_manager.subscriptions[subscriptionid] = sub
-        # Stash this in case we need to re-connect later.
+        "Start a new subscription to which user callback may be added."
+        sub = Subscription(self, args, kwargs)
         self.subscriptions.append(sub)
-        self.circuit_manager.send(command)
-        # TODO verify it worked before returning?
+        # The actual EPICS messages will not be sent until the user adds
+        # callbacks via sub.add_callback(user_func).
         return sub
-
-    @ensure_connected
-    def unsubscribe(self, subscriptionid, *args, **kwargs):
-        "Cancel a subscription and await confirmation from the server."
-        self.circuit_manager.send(self.channel.unsubscribe(subscriptionid))
-        sub, = [sub for sub in self.subscriptions
-                if sub.subscriptionid == subscriptionid]
-        self.subscriptions.remove(sub)
-        # TODO verify it worked before returning?
 
     # def __hash__(self):
     #     return id((self.context, self.circuit_manager, self.name))
@@ -1291,22 +1287,59 @@ class CallbackHandler:
 
 
 class Subscription(CallbackHandler):
-    def __init__(self, pv, subscriptionid, sub_args, sub_kwargs):
+    def __init__(self, pv, sub_args, sub_kwargs):
         super().__init__(pv)
-
-        self.subscriptionid = subscriptionid
-        # These will be used by the PV to re-subscribe if we need to reconnect.
+        # Stash everything, but do not send any EPICS messages until the first
+        # user callback is attached.
         self.sub_args = sub_args
         self.sub_kwargs = sub_kwargs
-        self._unsubscribed = False
-        self._process_backlog = []
+        self.subscriptionid = None
+        self.most_recent_response = None
+
+    def subscribe(self):
+        """This is called automatically after the first callback is added.
+
+        This can also be called by the user to re-activate a Subscription that
+        has been previously unsubscribed.
+
+        If this is called by the user when no callbacks are attached, nothing
+        is done. The return value indicates whether a subscription was sent.
+        """
+        with self._callback_lock:
+            # Ensure we are not already subscribed. Multiple calls to
+            # unsubscribe() are idempotent, so this is always safe to do.
+            self.unsubscribe()
+            command = self.compose_command()  # None if there are no callbacks
+        has_callbacks = command is not None
+        if has_callbacks:
+            self.pv.circuit_manager.send(command)
+        return has_callbacks
+
+    def compose_command(self):
+        "This is used by the Context to re-subscribe after connection loss."
+        with self._callback_lock:
+            if not self.callbacks:
+                return None
+            command = self.pv.channel.subscribe(*self.sub_args,
+                                                **self.sub_kwargs)
+            subscriptionid = command.subscriptionid
+            self.subscriptionid = subscriptionid
+        # The circuit_manager needs to know the subscriptionid so that it can
+        # route responses to this request.
+        self.pv.circuit_manager.subscriptions[subscriptionid] = self
+        return command
 
     def unsubscribe(self):
-        if self._unsubscribed:
-            return
-
-        self._unsubscribed = True
-        self.pv.unsubscribe(self.subscriptionid)
+        # TODO This should be called automatically if all user callbacks have
+        # been removed.
+        with self._callback_lock:
+            if self.subscriptionid is None:
+                # Already unsubscribed.
+                return
+            self.pv.unsubscribe(self.subscriptionid)
+            self.subscriptionid = None
+            self.most_recent_response = None
+            self.circuit_manager.send(self.channel.unsubscribe(subscriptionid))
 
     def process(self, *args, **kwargs):
         # TODO here i think we can decouple PV update rates and callback
@@ -1315,23 +1348,32 @@ class Subscription(CallbackHandler):
         # the CA servers from processing. (-> ThreadPool, etc.)
 
         with self._callback_lock:
-            if not self.callbacks:
-                # Record everything that happened prior to getting a subscription
-                self._process_backlog.append((args, kwargs))
-            else:
+            if self.callbacks:
                 super().process(*args, **kwargs)
+                self.most_recent_response = (args, kwargs)
 
     def add_callback(self, func):
         cb_id = super().add_callback(func)
-
-        if self._process_backlog:
-            # yeah... locking will be an issue here again
-            items, self._process_backlog = self._process_backlog, []
-            for args, kwargs in items:
-                self.process(*args, **kwargs)
+        with self._callback_lock:
+            if not self.subscriptionid:
+                # This is the first callback. Set up a subscription, which
+                # should elicit a response from the server soon giving the
+                # current value to this func (and any other funcs added in the
+                # mean time).
+                self.subscribe()
+            else:
+                # This callback is piggy-backing onto an existing subscription.
+                # Send it the most recent response, unless we are still waiting
+                # for that first response from the server.
+                if self.most_recent_response is not None:
+                    args, kwargs = self.most_recent_response
+                    try:
+                        func(*args, **kwargs)
+                    except Exception as ex:
+                        print(ex)
 
         return cb_id
 
     def __del__(self):
-        if not self._unsubscribed:
+        if not self.subscriptionid:
             self.unsubscribe()
