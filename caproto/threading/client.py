@@ -37,7 +37,12 @@ def ensure_connected(func):
             else:
                 reconnect = False
         try:
-            self._wait_for_connection()
+            timeout = kwargs.get('timeout', 2)
+
+            t = time.monotonic()
+            self._wait_for_connection(timeout=timeout)
+            if 'timeout' in kwargs:
+                kwargs['timeout'] = timeout - (time.monotonic() - t)
             if reconnect:
                 self.circuit_manager.send(*self._resubscribe())
                 self._idle = False
