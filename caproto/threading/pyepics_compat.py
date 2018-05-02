@@ -241,22 +241,17 @@ class PV:
             self._connect_event.clear()
 
         self._caproto_pv.wait_for_connection(timeout=timeout)
+        with self._state_lock:
+            # TODO shorten timeouts based on the above
+            ok = self._connect_event.wait(timeout=timeout)
+            ok = ok and self.connected
 
-        # TODO shorten timeouts based on the above
-        ok = self._connect_event.wait(timeout=timeout)
-        ok = ok and self.connected
+            if not ok:
+                raise TimeoutError(f'{self.pvname} failed to connect within '
+                                   f'{timeout} seconds '
+                                   f'(caproto={self._caproto_pv})')
 
-        if not ok:
-            raise TimeoutError(f'{self.pvname} failed to connect within '
-                               f'{timeout} seconds '
-                               f'(caproto={self._caproto_pv})')
-
-        return True
-
-    def _connection_closed(self):
-        'Callback when connection is closed'
-        logger.debug('%r disconnected', self)
-        self._connected = False
+            return True
 
     def _connection_established(self):
         'Callback when connection is initially established'
@@ -264,31 +259,29 @@ class PV:
         ch = self._caproto_pv.channel
         form = self.form
         count = self.default_count
+        with self._state_lock:
+            if ch is None:
+                logger.error('Connection dropped in connection callback')
+                return
 
-        if ch is None:
-            logger.error('Connection dropped in connection callback')
-            logger.error('Connected = %r', self._connected)
-            return
+            self._args['type'] = ch.native_data_type
 
-        self._args['type'] = ch.native_data_type
+            type_key = 'control' if form == 'ctrl' else form
+            self._args['typefull'] = field_types[type_key][ch.native_data_type]
+            self._args['nelm'] = ch.native_data_count
+            self._args['count'] = ch.native_data_count
 
-        type_key = 'control' if form == 'ctrl' else form
-        self._args['typefull'] = field_types[type_key][ch.native_data_type]
-        self._args['nelm'] = ch.native_data_count
-        self._args['count'] = ch.native_data_count
+            self._args['write_access'] = AccessRights.WRITE in ch.access_rights
+            self._args['read_access'] = AccessRights.READ in ch.access_rights
 
-        self._args['write_access'] = AccessRights.WRITE in ch.access_rights
-        self._args['read_access'] = AccessRights.READ in ch.access_rights
+            access_strs = ('no access', 'read-only', 'write-only', 'read/write')
+            self._args['access'] = access_strs[ch.access_rights]
 
-        access_strs = ('no access', 'read-only', 'write-only', 'read/write')
-        self._args['access'] = access_strs[ch.access_rights]
+            if self.auto_monitor is None:
+                mcount = count if count is not None else self._args['count']
+                self.auto_monitor = mcount < AUTOMONITOR_MAXLENGTH
 
-        if self.auto_monitor is None:
-            mcount = count if count is not None else self._args['count']
-            self.auto_monitor = mcount < AUTOMONITOR_MAXLENGTH
-
-        self._check_auto_monitor_sub()
-        self._connected = True
+            self._check_auto_monitor_sub()
 
     def _check_auto_monitor_sub(self, count=None):
         'Ensure auto-monitor subscription is running'
