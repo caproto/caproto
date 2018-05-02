@@ -1350,8 +1350,10 @@ class Subscription(CallbackHandler):
             subscriptionid = self.subscriptionid
             self.subscriptionid = None
             self.most_recent_response = None
-        command = self.pv.channel.unsubscribe(subscriptionid)
-        self.pv.circuit_manager.send(command)
+        chan = self.pv.channel
+        if chan:
+            command = self.pv.channel.unsubscribe(subscriptionid)
+            self.pv.circuit_manager.send(command)
 
     def process(self, *args, **kwargs):
         # TODO here i think we can decouple PV update rates and callback
