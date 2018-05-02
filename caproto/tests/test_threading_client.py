@@ -112,68 +112,19 @@ def context(request, shared_broadcaster):
     return context
 
 
-def test_server_crash(context, prefix, request):
-    from caproto.ioc_examples import simple
-    from . import conftest
-
-    prefixes = [prefix + f'{i}:'
-                for i in [0, 1, 2]]
-
-    iocs = {}
-    for prefix in prefixes:
-        print(f'\n\n* Starting up IOC with prefix: {prefix}')
-        pv_names = list(simple.SimpleIOC(prefix=prefix).pvdb.keys())
-        print('PV names:', pv_names)
-        pvs = context.get_pvs(*pv_names)
-        proc = conftest.run_example_ioc('caproto.ioc_examples.simple',
-                                        args=(prefix, ), request=request,
-                                        pv_to_check=pv_names[0])
-        iocs[prefix] = dict(
-            process=proc,
-            pv_names=pv_names,
-            pvs=pvs,
-        )
-
-        print('\n\nConnecting PVs:', pvs)
-        assert proc.returncode is None, 'IOC exited unexpectedly'
-        [pv.wait_for_connection(timeout=5.0) for pv in pvs]
-        print(f'\n\n* {prefix} IOC started up, PVs connected')
-
-    print('********************')
-    print('* Killing the first IOC')
-    print('********************')
-
-    for i, prefix in enumerate(prefixes):
-        ioc = iocs[prefix]
-        pvs = ioc['pvs']
-        process = ioc['process']
-        if i == 0:
-            # kill the first IOC
-            process.terminate()
-            process.wait()
-            time.sleep(2.0)
-            for pv in pvs:
-                print(pv.circuit_manager)
-                assert not pv.circuit_manager
-                assert not pv.connected
-        else:
-            for pv in pvs:
-                assert pv.connected
-
-    prefix = prefixes[0]
-
-    print('********************')
-    print('* Restarting the IOC')
-    print('********************')
-
-    ioc = iocs[prefix]
-    proc = conftest.run_example_ioc('caproto.ioc_examples.simple',
-                                    args=(prefix, ), request=request,
-                                    pv_to_check=ioc['pv_names'][0]
-                                    )
-    time.sleep(0.5)
-
-    for pv in ioc['pvs']:
+def test_server_crash(context, ioc_factory):
+    first_ioc = ioc_factory()
+    # The factory function does not return until readiness is confirmed.
+    pvs = context.get_pvs(*first_ioc.pvs.values())
+    # Wait for everything to connect.
+    for pv in pvs:
+        pv.wait_for_connection()
+    # Kill the IOC!
+    first_ioc.process.terminate()
+    first_ioc.process.wait()
+    # Start the ioc again (it has the same prefix).
+    second_ioc = ioc_factory()
+    for pv in pvs:
         pv.wait_for_connection()
         assert pv.connected
 
