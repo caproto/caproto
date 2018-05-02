@@ -177,7 +177,6 @@ class PV:
         self.connection_timeout = connection_timeout
         self.default_count = count
         self._auto_monitor_sub = None
-        self._connected = False
 
         if self.connection_timeout is None:
             self.connection_timeout = 1
@@ -209,7 +208,8 @@ class PV:
         self._caproto_pv, = self._context.get_pvs(
             self.pvname,
             connection_state_callback=self._connection_state_changed)
-        if self._caproto_pv.connected and not self._connected:
+
+        if self._caproto_pv.connected:
             # connection state callback was already called
             logger.debug('%s already connected', self.pvname)
             self._connection_established()
@@ -217,7 +217,7 @@ class PV:
     @property
     def connected(self):
         'Connection state'
-        return self._connected
+        return self._caproto_pv.connected
 
     def force_connect(self, pvname=None, chid=None, conn=True, **kws):
         # not quite sure what this is for in pyepics
@@ -308,12 +308,6 @@ class PV:
             try:
                 if connected:
                     self._connection_established()
-                else:
-                    ...
-                    # TODO type can change if reconnected
-                    # if not self.connected or self._args['type'] is not None:
-                    #     return
-                    self._connection_closed()
             except Exception as ex:
                 logger.exception('Connection state callback failed!')
                 raise
