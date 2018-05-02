@@ -558,7 +558,7 @@ class Context:
         self.circuit_managers = {}  # keyed on address
         self.pvs = {}  # (name, priority) -> pv
         # name -> set of pvs  --- with varied priority
-        self.pvs_by_name = defaultdict(weakref.WeakSet)
+        self.pvs_needing_circuits = defaultdict(set)
         self.broadcaster.add_listener(self)
         self._search_results_queue = queue.Queue()
         logger.debug('Context: start process search results loop')
@@ -588,23 +588,24 @@ class Context:
             raise ContextDisconnectedError("This Context is no longer usable.")
         pvs = []  # list of all PV objects to return
         names_to_search = []  # subset of names that we need to search for
-        for name in names:
-            try:
-                pv = self.pvs[(name, priority)]
-            except KeyError:
-                pv = PV(name, priority, self, connection_state_callback)
-                self.pvs[(name, priority)] = pv
-                self.pvs_by_name[name].add(pv)
-                names_to_search.append(name)
-            else:
-                # Re-using a PV instance. Add a new connection state callback,
-                # if necessary:
-                logger.debug('Reusing PV instance for %r', name)
-                if connection_state_callback:
-                    pv.connection_state_callback.add_callback(
-                        connection_state_callback)
+        with self.pv_state_lock:
+            for name in names:
+                try:
+                    pv = self.pvs[(name, priority)]
+                except KeyError:
+                    pv = PV(name, priority, self, connection_state_callback)
+                    self.pvs[(name, priority)] = pv
+                    self.pvs_needing_circuits[name].add(pv)
+                    names_to_search.append(name)
+                else:
+                    # Re-using a PV instance. Add a new connection state callback,
+                    # if necessary:
+                    logger.debug('Reusing PV instance for %r', name)
+                    if connection_state_callback:
+                        pv.connection_state_callback.add_callback(
+                            connection_state_callback)
 
-            pvs.append(pv)
+                pvs.append(pv)
 
         # TODO: potential bug?
         # if callback is quick, is there a chance downstream listeners may
@@ -628,6 +629,7 @@ class Context:
                 pvs.append(pv)
                 name, _ = key
                 names.append(name)
+                self.pvs_needing_circuits[name].add(pv)
                 # If there is a cached search result for this name, expire it.
                 self.broadcaster.search_results.pop(name, None)
 
@@ -647,13 +649,12 @@ class Context:
                 # and tracking circuit state, as well as a ClientChannel for
                 # tracking channel state.
                 for name in names:
-                    pvs = self.pvs_by_name[name]
-                    for pv in pvs:
-                        if (pv.circuit_manager is not None and
-                                not pv.circuit_manager.dead):
-                            # This one is already set up. Skip it.
-                            continue
-
+                    # There could be multiple PVs with the same name and
+                    # different priority. That is what we are looping over
+                    # here. There could also be NO PVs with this name that need
+                    # a circuit, because we could be receiving a duplicate
+                    # search response (which we are supposed to ignore).
+                    for pv in self.pvs_needing_circuits.pop(name, set()):
                         # Get (make if necessary) a VirtualCircuitManager. This
                         # is where TCP socket creation happens.
                         cm = self.get_circuit_manager(address, pv.priority)
