@@ -36,6 +36,7 @@ def ensure_connected(func):
                 reconnect = True
             else:
                 reconnect = False
+            self._in_use.notify_all()
         try:
             timeout = kwargs.get('timeout', 2)
 
