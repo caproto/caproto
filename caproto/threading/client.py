@@ -646,7 +646,7 @@ class Context:
         # queue is held by SharedBroadcaster.command_loop.
         while True:
             address, names = self._search_results_queue.get()
-            channels = collections.deque()
+            channels_grouped_by_circuit = defaultdict(list)
             with self.pv_state_lock:
                 # Assign each PV a VirtualCircuitManager for managing a socket
                 # and tracking circuit state, as well as a ClientChannel for
@@ -672,7 +672,7 @@ class Context:
                         cm.channels[cid] = chan
                         cm.pvs[cid] = pv
                         pv.channel = chan
-                        channels.append(chan)
+                        channels_grouped_by_circuit[cm].append(chan)
 
             # Notify PVs that they now have a circuit_manager. This will
             # un-block a wait() in the PV.wait_for_search() method.
@@ -680,7 +680,9 @@ class Context:
                 self.search_condition.notify_all()
 
             # Initiate channel creation with the server.
-            cm.send(*(chan.create() for chan in channels))
+            for cm, channels in channels_grouped_by_circuit.items():
+                commands = [chan.create() for chan in channels]
+                cm.send(*commands)
 
     def get_circuit_manager(self, address, priority):
         """
