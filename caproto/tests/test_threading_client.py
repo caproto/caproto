@@ -276,3 +276,37 @@ def test_subscription_objects_are_reused(ioc, context):
     sub_different.add_callback(f)
     actual_cached_subs = list(pv.circuit_manager.subscriptions.values())
     assert actual_cached_subs == [sub, sub_different]
+
+
+def test_unsubscribe_all(ioc, context):
+    pv, = context.get_pvs(ioc.pvs['int'])
+    pv.wait_for_connection()
+    sub0 = pv.subscribe(data_type=0)
+    sub1 = pv.subscribe(data_type=1)
+
+    collector = []
+
+    def f(response):
+        collector.append(response)
+
+    sub0.add_callback(f)
+    sub1.add_callback(f)
+
+    pv.write((123,))
+    pv.write((456,))
+    time.sleep(0.2)
+    assert len(collector) == 6
+    pv.unsubscribe_all()
+    time.sleep(0.2)
+    collector.clear()
+    # These should be ignored:
+    pv.write((123,))
+    pv.write((456,))
+    assert len(collector) == 0
+    # Switch 'em back on....
+    sub0.subscribe()
+    sub1.subscribe()
+    time.sleep(0.2)
+    pv.write((345,))
+    pv.write((789,))
+    assert len(collector) == 6

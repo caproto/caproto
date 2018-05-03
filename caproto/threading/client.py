@@ -1282,6 +1282,10 @@ class PV:
         # callbacks via sub.add_callback(user_func).
         return sub
 
+    def unsubscribe_all(self):
+        for sub in self.subscriptions.values():
+            sub.unsubscribe()
+
     # def __hash__(self):
     #     return id((self.context, self.circuit_manager, self.name))
 
