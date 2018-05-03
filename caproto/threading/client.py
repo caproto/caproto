@@ -600,24 +600,24 @@ class Context:
             raise ContextDisconnectedError("This Context is no longer usable.")
         pvs = []  # list of all PV objects to return
         names_to_search = []  # subset of names that we need to search for
-        with self.pv_cache_lock:
-            for name in names:
-                try:
-                    pv = self.pvs[(name, priority)]
-                except KeyError:
-                    pv = PV(name, priority, self, connection_state_callback)
+        for name in names:
+            try:
+                pv = self.pvs[(name, priority)]
+            except KeyError:
+                pv = PV(name, priority, self, None)
+                if connection_state_callback:
+                    pv.connection_state_callback.add_callback(
+                        connection_state_callback)
+                with self.pv_cache_lock:
                     self.pvs[(name, priority)] = pv
                     self.pvs_needing_circuits[name].add(pv)
-                    names_to_search.append(name)
-                else:
-                    # Re-using a PV instance. Add a new connection state callback,
-                    # if necessary:
-                    logger.debug('Reusing PV instance for %r', name)
-                    if connection_state_callback:
-                        pv.connection_state_callback.add_callback(
-                            connection_state_callback)
+                names_to_search.append(name)
+            else:
+                # Re-using a PV instance. Add a new connection state callback,
+                # if necessary:
+                logger.debug('Reusing PV instance for %r', name)
 
-                pvs.append(pv)
+            pvs.append(pv)
 
         # TODO: potential bug?
         # if callback is quick, is there a chance downstream listeners may
