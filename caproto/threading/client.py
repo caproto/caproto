@@ -680,7 +680,6 @@ class Context:
                         chan = ca.ClientChannel(name, circuit, cid=cid)
                         cm.channels[cid] = chan
                         cm.pvs[cid] = pv
-                        pv.channel = chan
                         channels_grouped_by_circuit[cm].append(chan)
 
             # Notify PVs that they now have a circuit_manager. This will
