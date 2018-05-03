@@ -1315,7 +1315,7 @@ class Subscription(CallbackHandler):
         self.most_recent_response = None
 
     def __repr__(self):
-        return f"<Subscription to {self.pv.name}, id={self.subscriptionid}>"
+        return f"<Subscription to {self.pv.name!r}, id={self.subscriptionid}>"
 
     def subscribe(self):
         """This is called automatically after the first callback is added.
