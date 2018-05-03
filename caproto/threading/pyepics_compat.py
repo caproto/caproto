@@ -212,7 +212,7 @@ class PV:
         if self._caproto_pv.connected:
             # connection state callback was already called
             logger.debug('%s already connected', self.pvname)
-            self._connection_established()
+            self._connection_established(self._caproto_pv)
 
     @property
     def connected(self):
@@ -258,10 +258,12 @@ class PV:
         logger.debug('%r disconnected', self)
         self._connected = False
 
-    def _connection_established(self):
+    def _connection_established(self, caproto_pv):
         'Callback when connection is initially established'
+        # Take in caproto_pv as an argument because this might be called
+        # before self._caproto_pv is set.
         logger.debug('%r connected', self)
-        ch = self._caproto_pv.channel
+        ch = caproto_pv.channel
         form = self.form
         count = self.default_count
 
@@ -307,7 +309,7 @@ class PV:
         with self._state_lock:
             try:
                 if connected:
-                    self._connection_established()
+                    self._connection_established(caproto_pv)
             except Exception as ex:
                 logger.exception('Connection state callback failed!')
                 raise
