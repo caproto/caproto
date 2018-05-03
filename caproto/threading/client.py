@@ -565,7 +565,7 @@ class Context:
         self.client_name = client_name
         self.log_level = log_level
         self.search_condition = threading.Condition()
-        self.pv_state_lock = threading.RLock()
+        self.pv_cache_lock = threading.RLock()
         self.resuscitated_pvs = []
         self.circuit_managers = {}  # keyed on address
         self.pvs = {}  # (name, priority) -> pv
@@ -600,7 +600,7 @@ class Context:
             raise ContextDisconnectedError("This Context is no longer usable.")
         pvs = []  # list of all PV objects to return
         names_to_search = []  # subset of names that we need to search for
-        with self.pv_state_lock:
+        with self.pv_cache_lock:
             for name in names:
                 try:
                     pv = self.pvs[(name, priority)]
@@ -633,7 +633,7 @@ class Context:
         # We will reuse the same PV object but use a new cid.
         names = []
         pvs = []
-        with self.pv_state_lock:
+        with self.pv_cache_lock:
             for key in keys:
                 pv = self.pvs[key]
                 pv.circuit_manager = None
@@ -656,7 +656,7 @@ class Context:
         while True:
             address, names = self._search_results_queue.get()
             channels_grouped_by_circuit = defaultdict(list)
-            with self.pv_state_lock:
+            with self.pv_cache_lock:
                 # Assign each PV a VirtualCircuitManager for managing a socket
                 # and tracking circuit state, as well as a ClientChannel for
                 # tracking channel state.
@@ -713,7 +713,7 @@ class Context:
         while True:
             t = time.monotonic()
             ready = defaultdict(list)
-            with self.pv_state_lock:
+            with self.pv_cache_lock:
                 pvs = list(self.resuscitated_pvs)
                 self.resuscitated_pvs.clear()
                 for pv in pvs:
