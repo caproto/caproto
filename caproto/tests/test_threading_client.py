@@ -1,6 +1,8 @@
 # TODO: all of this needs to be tested with the pyepics PVs as well
 #   ... on top of the normal ugly suite of pyepics tests
 
+import collections
+import functools
 import caproto
 import caproto._utils
 import caproto.threading.client
@@ -233,3 +235,20 @@ def test_two_iocs_one_pv(ioc_factory, context):
     second_ioc.process.terminate()
     first_ioc.process.wait()
     second_ioc.process.wait()
+
+
+def test_mutl_subscriptions_one_server(ioc, context):
+    pvs = context.get_pvs(*ioc.pvs.values())
+    for pv in pvs:
+        pv.wait_for_connection()
+    collector = collections.defaultdict(list)
+
+    def collect(sub, response):
+        collector[sub].append(response)
+
+    subs = [pv.subscribe() for pv in pvs]
+    for sub in subs:
+        sub.add_callback(functools.partial(collect, sub))
+    for sub, responses in collector.items():
+        assert len(responses) == 1
+    assert len(pv.circuit_manager.subscriptions) == len(pvs)
