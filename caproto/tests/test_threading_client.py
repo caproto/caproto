@@ -237,7 +237,7 @@ def test_two_iocs_one_pv(ioc_factory, context):
     second_ioc.process.wait()
 
 
-def test_mutl_subscriptions_one_server(ioc, context):
+def test_multiple_subscriptions_one_server(ioc, context):
     pvs = context.get_pvs(*ioc.pvs.values())
     for pv in pvs:
         pv.wait_for_connection()
