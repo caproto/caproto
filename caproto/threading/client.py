@@ -662,31 +662,32 @@ class Context:
         while True:
             address, names = self._search_results_queue.get()
             channels_grouped_by_circuit = defaultdict(list)
-            with self.pv_cache_lock:
-                # Assign each PV a VirtualCircuitManager for managing a socket
-                # and tracking circuit state, as well as a ClientChannel for
-                # tracking channel state.
-                for name in names:
-                    # There could be multiple PVs with the same name and
-                    # different priority. That is what we are looping over
-                    # here. There could also be NO PVs with this name that need
-                    # a circuit, because we could be receiving a duplicate
-                    # search response (which we are supposed to ignore).
-                    for pv in self.pvs_needing_circuits.pop(name, set()):
-                        # Get (make if necessary) a VirtualCircuitManager. This
-                        # is where TCP socket creation happens.
-                        cm = self.get_circuit_manager(address, pv.priority)
-                        circuit = cm.circuit
+            # Assign each PV a VirtualCircuitManager for managing a socket
+            # and tracking circuit state, as well as a ClientChannel for
+            # tracking channel state.
+            for name in names:
+                # There could be multiple PVs with the same name and
+                # different priority. That is what we are looping over
+                # here. There could also be NO PVs with this name that need
+                # a circuit, because we could be receiving a duplicate
+                # search response (which we are supposed to ignore).
+                with self.pv_cache_lock:
+                    pvs = self.pvs_needing_circuits.pop(name, set())
+                for pv in pvs:
+                    # Get (make if necessary) a VirtualCircuitManager. This
+                    # is where TCP socket creation happens.
+                    cm = self.get_circuit_manager(address, pv.priority)
+                    circuit = cm.circuit
 
-                        pv.circuit_manager = cm
-                        # TODO: NOTE: we are not following the suggestion to
-                        # use the same cid as in the search. This simplifies
-                        # things between the broadcaster and Context.
-                        cid = cm.circuit.new_channel_id()
-                        chan = ca.ClientChannel(name, circuit, cid=cid)
-                        cm.channels[cid] = chan
-                        cm.pvs[cid] = pv
-                        channels_grouped_by_circuit[cm].append(chan)
+                    pv.circuit_manager = cm
+                    # TODO: NOTE: we are not following the suggestion to
+                    # use the same cid as in the search. This simplifies
+                    # things between the broadcaster and Context.
+                    cid = cm.circuit.new_channel_id()
+                    chan = ca.ClientChannel(name, circuit, cid=cid)
+                    cm.channels[cid] = chan
+                    cm.pvs[cid] = pv
+                    channels_grouped_by_circuit[cm].append(chan)
 
             # Notify PVs that they now have a circuit_manager. This will
             # un-block a wait() in the PV.wait_for_search() method.
