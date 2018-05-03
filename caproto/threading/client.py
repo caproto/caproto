@@ -1050,7 +1050,7 @@ class PV:
     @circuit_manager.setter
     def circuit_manager(self, val):
         with self._component_lock:
-            self._circuit_manager = circuit_manager
+            self._circuit_manager = val
 
     @property
     def channel(self):
@@ -1060,7 +1060,7 @@ class PV:
     @channel.setter
     def channel(self, val):
         with self._component_lock:
-            self._channel = channel
+            self._channel = val
 
     def connection_state_changed(self, state, channel):
         logger.debug('%s Connection state changed %s %s', self.name, state,
