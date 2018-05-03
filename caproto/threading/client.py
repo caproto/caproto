@@ -1,4 +1,3 @@
-import collections
 import getpass
 import itertools
 import logging
