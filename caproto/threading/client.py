@@ -259,6 +259,7 @@ class SharedBroadcaster:
         self.command_cond = threading.Condition()
 
         self.selector = SelectorThread(parent=self)
+        self.selector.start()
         self.command_thread = threading.Thread(target=self.command_loop,
                                                daemon=True)
         self.command_thread.start()
@@ -317,7 +318,6 @@ class SharedBroadcaster:
             udp_sock, self.udp_sock = self.udp_sock, None
             self.selector.remove_socket(udp_sock)
 
-        self.selector.start()
         self.udp_sock = ca.bcast_socket()
         self.selector.add_socket(self.udp_sock, self)
 
