@@ -1,3 +1,12 @@
+# There are 7 threads plus one callback-processing thread per VirtualCircuit
+
+# UDP socket selector
+# TCP socket selector
+# UDP command processing
+# forever retrying search requests for disconnected PV
+# handle disconnection
+# process search results
+# restart subscriptions
 import getpass
 import itertools
 import logging
