@@ -1327,6 +1327,7 @@ class CallbackHandler:
             callback = ref()
             if callback is None:
                 to_remove.append(cb_id)
+                continue
 
             try:
                 callback(*args, **kwargs)
