@@ -1288,18 +1288,19 @@ class CallbackHandler:
 
         to_remove = []
         with self._callback_lock:
-            for cb_id, ref in self.callbacks.items():
-                try:
-                    callback = ref()
-                except TypeError:
-                    to_remove.append(cb_id)
-                    continue
+            callbacks = list(self.callbacks.items())
 
-                try:
-                    callback(*args, **kwargs)
-                except Exception as ex:
-                    print(ex)
+        for cb_id, ref in callbacks:
+            callback = ref()
+            if callback is None:
+                to_remove.append(cb_id)
 
+            try:
+                callback(*args, **kwargs)
+            except Exception as ex:
+                print(ex)
+
+        with self._callback_lock:
             for remove_id in to_remove:
                 self.callbacks.pop(remove_id, None)
 
@@ -1379,10 +1380,8 @@ class Subscription(CallbackHandler):
         # As implemented below, updates are blocking further messages from
         # the CA servers from processing. (-> ThreadPool, etc.)
 
-        with self._callback_lock:
-            if self.callbacks:
-                super().process(*args, **kwargs)
-                self.most_recent_response = (args, kwargs)
+        super().process(*args, **kwargs)
+        self.most_recent_response = (args, kwargs)
 
     def add_callback(self, func):
         cb_id = super().add_callback(func)
