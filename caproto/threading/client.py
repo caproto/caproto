@@ -1419,7 +1419,7 @@ class Subscription(CallbackHandler):
     def add_callback(self, func):
         cb_id = super().add_callback(func)
         with self._callback_lock:
-            if not self.subscriptionid:
+            if self.subscriptionid is None:
                 # This is the first callback. Set up a subscription, which
                 # should elicit a response from the server soon giving the
                 # current value to this func (and any other funcs added in the
