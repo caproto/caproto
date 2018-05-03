@@ -14,6 +14,7 @@ import fcntl
 import errno
 import termios
 import inspect
+from inspect import Parameter, Signature
 
 from collections import defaultdict
 
@@ -43,7 +44,7 @@ def ensure_connected(func):
             self._wait_for_connection()
             if reconnect:
                 def requests():
-                    for sub in self.subscriptions:
+                    for sub in self.subscriptions.values():
                         command = sub.compose_command()
                         # compose_command() returns None if this
                         # Subscription is inactive (meaning there are no
@@ -717,7 +718,7 @@ class Context:
                 def requests():
                     "Yield EventAddRequest commands."
                     for pv in pvs:
-                        for sub in pv.subscriptions:
+                        for sub in pv.subscriptions.values():
                             command = sub.compose_command()
                             # compose_command() returns None if this
                             # Subscription is inactive (meaning there are no
@@ -899,8 +900,15 @@ class VirtualCircuitManager:
                 chan = self.ioids.pop(command.ioid)
                 chan.process_write_notify(command)
             elif isinstance(command, ca.EventAddResponse):
-                sub = self.subscriptions[command.subscriptionid]
-                self.callback_queue.put((time.monotonic(), sub, command))
+                try:
+                    sub = self.subscriptions[command.subscriptionid]
+                except KeyError:
+                    # This subscription has been removed. We assume that this
+                    # response was in flight before the server processed our
+                    # unsubscription.
+                    pass
+                else:
+                    self.callback_queue.put((time.monotonic(), sub, command))
             elif isinstance(command, ca.EventCancelResponse):
                 self.subscriptions.pop(command.subscriptionid)
             elif isinstance(command, ca.CreateChanResponse):
@@ -1010,7 +1018,7 @@ class PV:
         self.channel = None
         self.last_reading = None
         self.last_writing = None
-        self.subscriptions = []
+        self.subscriptions = {}
         self._read_notify_callback = None  # called on ReadNotifyResponse
         self._write_notify_callback = None  # called on WriteNotifyResponse
         self._pc_callbacks = {}
@@ -1231,8 +1239,14 @@ class PV:
     @ensure_connected
     def subscribe(self, *args, **kwargs):
         "Start a new subscription to which user callback may be added."
-        sub = Subscription(self, args, kwargs)
-        self.subscriptions.append(sub)
+        # A Subscription is uniquely identified by the Signature created by its
+        # args and kwargs.
+        key = tuple(SUBSCRIBE_SIG.bind(*args, **kwargs).arguments.items())
+        try:
+            sub = self.subscriptions[key]
+        except KeyError:
+            sub = Subscription(self, args, kwargs)
+            self.subscriptions[key] = sub
         # The actual EPICS messages will not be sent until the user adds
         # callbacks via sub.add_callback(user_func).
         return sub
@@ -1301,6 +1315,9 @@ class Subscription(CallbackHandler):
         self.subscriptionid = None
         self.most_recent_response = None
 
+    def __repr__(self):
+        return f"<Subscription to {self.pv.name}, id={self.subscriptionid}>"
+
     def subscribe(self):
         """This is called automatically after the first callback is added.
 
@@ -1321,7 +1338,7 @@ class Subscription(CallbackHandler):
         return has_callbacks
 
     def compose_command(self):
-        "This is used by the Context to re-subscribe after connection loss."
+        "This is used by the Context to re-subscribe in bulk after dropping."
         with self._callback_lock:
             if not self.callbacks:
                 return None
@@ -1356,6 +1373,7 @@ class Subscription(CallbackHandler):
         if chan:
             command = self.pv.channel.unsubscribe(subscriptionid)
             self.pv.circuit_manager.send(command)
+            self.pv.circuit_manager.subscriptions.pop(subscriptionid)
 
     def process(self, *args, **kwargs):
         # TODO here i think we can decouple PV update rates and callback
@@ -1400,3 +1418,14 @@ class Subscription(CallbackHandler):
     def __del__(self):
         if not self.subscriptionid:
             self.unsubscribe()
+
+
+# The signature of caproto._circuit.ClientChannel.subscribe, which is used to
+# resolve the (args, kwargs) of a Subscription into a unique key.
+SUBSCRIBE_SIG = Signature([
+    Parameter('data_type', Parameter.POSITIONAL_OR_KEYWORD, default=None),
+    Parameter('data_count', Parameter.POSITIONAL_OR_KEYWORD, default=None),
+    Parameter('low', Parameter.POSITIONAL_OR_KEYWORD, default=0),
+    Parameter('high', Parameter.POSITIONAL_OR_KEYWORD, default=0),
+    Parameter('to', Parameter.POSITIONAL_OR_KEYWORD, default=0),
+    Parameter('mask', Parameter.POSITIONAL_OR_KEYWORD, default=None)])
