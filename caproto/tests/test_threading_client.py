@@ -251,4 +251,4 @@ def test_mutl_subscriptions_one_server(ioc, context):
         sub.add_callback(functools.partial(collect, sub))
     for sub, responses in collector.items():
         assert len(responses) == 1
-    assert len(pv.circuit_manager.subscriptions) == len(pvs)
+    assert len(pv.circuit_manager.subscriptions) == len(pvs) > 1
