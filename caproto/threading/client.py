@@ -603,11 +603,14 @@ class Context:
         for name in names:
             try:
                 pv = self.pvs[(name, priority)]
+                new_instance = False
             except KeyError:
                 pv = PV(name, priority, self, None)
-                if connection_state_callback:
-                    pv.connection_state_callback.add_callback(
-                        connection_state_callback)
+                new_instance = True
+            if connection_state_callback:
+                pv.connection_state_callback.add_callback(
+                    connection_state_callback)
+            if new_instance:
                 with self.pv_cache_lock:
                     self.pvs[(name, priority)] = pv
                     self.pvs_needing_circuits[name].add(pv)
