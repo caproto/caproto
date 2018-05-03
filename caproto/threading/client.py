@@ -1284,7 +1284,7 @@ class PV:
 
     def unsubscribe_all(self):
         for sub in self.subscriptions.values():
-            sub.unsubscribe()
+            sub.clear()
 
     # def __hash__(self):
     #     return id((self.context, self.circuit_manager, self.name))
@@ -1355,21 +1355,12 @@ class Subscription(CallbackHandler):
     def __repr__(self):
         return f"<Subscription to {self.pv.name!r}, id={self.subscriptionid}>"
 
-    def subscribe(self):
+    def _subscribe(self):
         """This is called automatically after the first callback is added.
-
-        This can also be called by the user to re-activate a Subscription that
-        has been previously unsubscribed.
-
-        If this is called by the user when no callbacks are attached, nothing
-        is done. The return value indicates whether a subscription was sent.
         """
         # some contorions employed to reuse the ensure_connected decorator here
         ensure_connected(lambda self: None)(self.pv)
         with self._callback_lock:
-            # Ensure we are not already subscribed. Multiple calls to
-            # unsubscribe() are idempotent, so this is always safe to do.
-            self.unsubscribe()
             command = self.compose_command()  # None if there are no callbacks
         has_callbacks = command is not None
         if has_callbacks:
@@ -1390,16 +1381,19 @@ class Subscription(CallbackHandler):
         self.pv.circuit_manager.subscriptions[subscriptionid] = self
         return command
 
-    def unsubscribe(self):
+    def clear(self):
         """
-        Stop receiving updates.
+        Remove all callbacks.
+        """
+        with self._callback_lock:
+            for cb_id in list(self.callbacks):
+                self.remove_callback(cb_id)
+        # Once self.callbacks is empty, self.remove_callback calls
+        # self._unsubscribe for us.
 
-        This may be called by the user to deactivate the Subscription. It may
-        later be reactivated by calling subscribe().
-
-        This will be called automatically if all the user callbacks are
-        removed. If a callback is added again, subscribe() will automatically
-        be called.
+    def _unsubscribe(self):
+        """
+        This is automatically called if the number of callbacks goes to 0.
         """
         with self._callback_lock:
             if self.subscriptionid is None:
@@ -1430,7 +1424,7 @@ class Subscription(CallbackHandler):
                 # should elicit a response from the server soon giving the
                 # current value to this func (and any other funcs added in the
                 # mean time).
-                self.subscribe()
+                self._subscribe()
             else:
                 # This callback is piggy-backing onto an existing subscription.
                 # Send it the most recent response, unless we are still waiting
@@ -1449,11 +1443,10 @@ class Subscription(CallbackHandler):
             super().remove_callback(cb_id)
             if not self.callbacks:
                 # Go dormant.
-                self.unsubscribe()
+                self._unsubscribe()
 
     def __del__(self):
-        if not self.subscriptionid:
-            self.unsubscribe()
+        self.clear()
 
 
 # The signature of caproto._circuit.ClientChannel.subscribe, which is used to

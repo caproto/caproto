@@ -181,8 +181,8 @@ def test_subscriptions(ioc, context):
     pv.write((1, ), wait=True)
     pv.write((2, ), wait=True)
     pv.write((3, ), wait=True)
-    sub.unsubscribe()
     time.sleep(0.2)  # Wait for that to process...
+    sub.clear()
     pv.write((4, ), wait=True)  # This update should not be received by us.
 
     for i in range(3):
@@ -303,10 +303,5 @@ def test_unsubscribe_all(ioc, context):
     pv.write((123,))
     pv.write((456,))
     assert len(collector) == 0
-    # Switch 'em back on....
-    sub0.subscribe()
-    sub1.subscribe()
-    time.sleep(0.2)
-    pv.write((345,))
-    pv.write((789,))
-    assert len(collector) == 6
+    assert not sub0.callbacks
+    assert not sub1.callbacks
