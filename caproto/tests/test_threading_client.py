@@ -128,11 +128,14 @@ def test_server_crash(context, ioc_factory):
     assert not some_pv.subscriptions
     sub = some_pv.subscribe()
     assert some_pv.subscriptions
+
     # Add a user callback so that the subscription takes effect.
     collector = []
+
     def collect(item):
         collector.append(item)
     sub.add_callback(collect)
+
     # Wait for everything to connect.
     for pv in pvs:
         pv.wait_for_connection()
@@ -153,6 +156,10 @@ def test_server_crash(context, ioc_factory):
     # Wait to confirm that the subscription produced a new response.
     while not collector:
         time.sleep(0.05)
+
+    # Clean up.
+    second_ioc.process.terminate()
+    second_ioc.process.wait()
 
 
 def test_subscriptions(ioc, context):
