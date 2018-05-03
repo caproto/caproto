@@ -602,7 +602,8 @@ class Context:
         names_to_search = []  # subset of names that we need to search for
         for name in names:
             try:
-                pv = self.pvs[(name, priority)]
+                with self.pv_cache_lock:
+                    pv = self.pvs[(name, priority)]
                 new_instance = False
             except KeyError:
                 pv = PV(name, priority, self, None)
