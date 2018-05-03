@@ -800,16 +800,6 @@ class PV:
         if self.connected:
             self._caproto_pv.go_idle()
 
-    def __del__(self):
-        try:
-            pv = self._caproto_pv
-            if pv is None:
-                raise AttributeError()
-        except AttributeError:
-            ...
-        else:
-            pv.go_idle()
-
 
 def get_pv(pvname, *args, context=None, connect=False, timeout=5, **kwargs):
     if context is None:
