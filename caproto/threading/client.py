@@ -637,20 +637,22 @@ class Context:
         # We will reuse the same PV object but use a new cid.
         names = []
         pvs = []
-        with self.pv_cache_lock:
-            for key in keys:
-                pv = self.pvs[key]
-                pv.circuit_manager = None
-                pv.channel = None
-                pvs.append(pv)
-                name, _ = key
-                names.append(name)
-                self.pvs_needing_circuits[name].add(pv)
-                # If there is a cached search result for this name, expire it.
-                self.broadcaster.search_results.pop(name, None)
 
-            self.resuscitated_pvs.extend(
-                [pv for pv in pvs if pv.subscriptions])
+        for key in keys:
+            with self.pv_cache_lock:
+                pv = self.pvs[key]
+            pv.circuit_manager = None
+            pv.channel = None
+            pvs.append(pv)
+            name, _ = key
+            names.append(name)
+            # If there is a cached search result for this name, expire it.
+            self.broadcaster.search_results.pop(name, None)
+            with self.pv_cache_lock:
+                self.pvs_needing_circuits[name].add(pv)
+            with self.pv_cache_lock:
+                self.resuscitated_pvs.extend(
+                    [pv for pv in pvs if pv.subscriptions])
 
         self.broadcaster.search(self._search_results_queue, names)
 
