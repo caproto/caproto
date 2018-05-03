@@ -204,3 +204,12 @@ def test_client_and_host_name(shared_broadcaster):
     ctx = Context(broadcaster=shared_broadcaster)
     assert ctx.host_name == socket.gethostname()
     assert ctx.client_name == getpass.getuser()
+
+
+def test_many_priorities_same_name(ioc, context):
+    pv, *_others = ioc.pvs.values()
+    pvs = {}
+    for priority in range(0, 10, 9):
+        pvs[priority], = context.get_pvs(pv, priority=priority)
+    for pv in pvs.values():
+        pv.wait_for_connection()
