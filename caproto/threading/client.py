@@ -1268,7 +1268,6 @@ class PV:
             )
         return self.last_writing
 
-    @ensure_connected
     def subscribe(self, *args, **kwargs):
         "Start a new subscription to which user callback may be added."
         # A Subscription is uniquely identified by the Signature created by its
@@ -1361,6 +1360,8 @@ class Subscription(CallbackHandler):
         If this is called by the user when no callbacks are attached, nothing
         is done. The return value indicates whether a subscription was sent.
         """
+        # some contorions employed to reuse the ensure_connected decorator here
+        ensure_connected(lambda self: None)(self.pv)
         with self._callback_lock:
             # Ensure we are not already subscribed. Multiple calls to
             # unsubscribe() are idempotent, so this is always safe to do.
