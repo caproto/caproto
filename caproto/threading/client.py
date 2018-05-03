@@ -601,25 +601,21 @@ class Context:
         pvs = []  # list of all PV objects to return
         names_to_search = []  # subset of names that we need to search for
         for name in names:
-            try:
-                with self.pv_cache_lock:
+
+            with self.pv_cache_lock:
+                try:
                     pv = self.pvs[(name, priority)]
-                new_instance = False
-            except KeyError:
-                pv = PV(name, priority, self, None)
-                new_instance = True
-            if connection_state_callback:
-                pv.connection_state_callback.add_callback(
-                    connection_state_callback)
-            if new_instance:
-                with self.pv_cache_lock:
+                    new_instance = False
+                except KeyError:
+                    pv = PV(name, priority, self, connection_state_callback)
+                    names_to_search.append(name)
                     self.pvs[(name, priority)] = pv
                     self.pvs_needing_circuits[name].add(pv)
-                names_to_search.append(name)
-            else:
-                # Re-using a PV instance. Add a new connection state callback,
-                # if necessary:
-                logger.debug('Reusing PV instance for %r', name)
+                    new_instance = True
+
+            if not new_instance and connection_state_callback:
+                pv.connection_state_callback.add_callback(
+                    connection_state_callback)
 
             pvs.append(pv)
 
