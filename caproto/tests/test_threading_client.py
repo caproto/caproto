@@ -207,9 +207,29 @@ def test_client_and_host_name(shared_broadcaster):
 
 
 def test_many_priorities_same_name(ioc, context):
-    pv, *_others = ioc.pvs.values()
+    pv_name, *_others = ioc.pvs.values()
     pvs = {}
     for priority in range(0, 10, 9):
-        pvs[priority], = context.get_pvs(pv, priority=priority)
+        pvs[priority], = context.get_pvs(pv_name, priority=priority)
     for pv in pvs.values():
         pv.wait_for_connection()
+
+
+def test_two_iocs_one_pv(ioc_factory, context):
+    # If two IOCs answer a search requestion, the Channel Access spec says we
+    # should establish the VirtualCircuit with whoever answers first and ignore
+    # the second one.
+    first_ioc = ioc_factory()
+    second_ioc = ioc_factory()
+    assert first_ioc.pvs == second_ioc.pvs
+    pv_name, *_others = first_ioc.pvs.values()
+    pv, = context.get_pvs(pv_name)
+    pv.wait_for_connection()
+    time.sleep(0.2)  # By now both IOC will have answered.
+    # Exercise it a bit as a smoke test of sorts.
+    pv.read()
+    pv.write((3,))
+    first_ioc.process.terminate()
+    second_ioc.process.terminate()
+    first_ioc.process.wait()
+    second_ioc.process.wait()
