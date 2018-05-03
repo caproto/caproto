@@ -252,3 +252,27 @@ def test_multiple_subscriptions_one_server(ioc, context):
     for sub, responses in collector.items():
         assert len(responses) == 1
     assert len(pv.circuit_manager.subscriptions) == len(pvs) > 1
+
+
+def test_subscription_objects_are_reused(ioc, context):
+    pv, = context.get_pvs(ioc.pvs['int'])
+
+    pv.wait_for_connection()
+    sub = pv.subscribe(data_type=0)
+    sub_redundant = pv.subscribe(data_type=0)  # should return `sub` again
+    sub_different = pv.subscribe(data_type=1)  # different args -- new sub
+
+    assert sub is sub_redundant
+    assert sub is not sub_different
+
+    # Attach a callback so that these subs are activated and enter the
+    # Context's cache.
+
+    def f(item):
+        ...
+
+    sub.add_callback(f)
+    sub_redundant.add_callback(f)
+    sub_different.add_callback(f)
+    actual_cached_subs = list(pv.circuit_manager.subscriptions.values())
+    assert actual_cached_subs == [sub, sub_different]
