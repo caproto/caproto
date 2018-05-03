@@ -1003,9 +1003,9 @@ class VirtualCircuitManager:
 
 class PV:
     """Wraps a VirtualCircuit and a caproto.ClientChannel."""
-    __slots__ = ('name', 'priority', 'context', 'circuit_manager', 'channel',
+    __slots__ = ('name', 'priority', 'context', '_circuit_manager', '_channel',
                  'last_reading', 'last_writing', '_read_notify_callback',
-                 'subscriptions', 'command_bundle_queue',
+                 'subscriptions', 'command_bundle_queue', '_component_lock',
                  '_write_notify_callback', '_idle', '_in_use', '_usages',
                  'connection_state_callback', '_pc_callbacks', '__weakref__')
 
@@ -1016,14 +1016,16 @@ class PV:
         self.name = name
         self.priority = priority
         self.context = context
+        # Use this lock whenever we touch circuit_manager or channel.
+        self._component_lock = threading.RLock()
         self.connection_state_callback = CallbackHandler(self)
 
         if connection_state_callback is not None:
             self.connection_state_callback.add_callback(
                 connection_state_callback)
 
-        self.circuit_manager = None
-        self.channel = None
+        self._circuit_manager = None
+        self._channel = None
         self.last_reading = None
         self.last_writing = None
         self.subscriptions = {}
@@ -1033,6 +1035,26 @@ class PV:
         self._idle = False
         self._in_use = threading.Condition()
         self._usages = 0
+
+    @property
+    def circuit_manager(self):
+        with self._component_lock:
+            return self._circuit_manager
+
+    @circuit_manager.setter
+    def circuit_manager(self, val):
+        with self._component_lock:
+            self._circuit_manager = circuit_manager
+
+    @property
+    def channel(self):
+        with self._component_lock:
+            return self._channel
+
+    @channel.setter
+    def channel(self, val):
+        with self._component_lock:
+            self._channel = channel
 
     def connection_state_changed(self, state, channel):
         logger.debug('%s Connection state changed %s %s', self.name, state,
