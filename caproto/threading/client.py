@@ -749,6 +749,10 @@ class Context:
                         "Yield EventAddRequest commands."
                         for pv in pvs:
                             for sub in pv.subscriptions.values():
+                                # the old subscription is dead, remove it
+                                if sub.subscriptionid is not None:
+                                    del self.subscriptions.pop[sub.subscriptionid]
+                                # this will add the subscription into our self.subscriptions
                                 command = sub.compose_command()
                                 # compose_command() returns None if this
                                 # Subscription is inactive (meaning there are no
@@ -977,13 +981,6 @@ class VirtualCircuitManager:
             self.context.circuit_managers.pop(self.circuit.address, None)
             self.callback_queue.put((time.monotonic(), ca.DISCONNECTED, None))
 
-        if not self._user_disconnected:
-            # If the user didn't request disconnection, kick off attempt to
-            # reconnect all PVs via fresh circuit(s).
-            logger.debug('VCM: Attempting reconnection')
-            self.context.reconnect(((chan.name, chan.circuit.priority)
-                                    for chan in self.channels.values()))
-
         # Clean up the socket if it has not yet been cleared:
         sock = self.socket
         if sock is not None:
@@ -995,6 +992,13 @@ class VirtualCircuitManager:
                 pass
         print(self)
         print('exit disconnected', self.connected, id(self))
+
+        if not self._user_disconnected:
+            # If the user didn't request disconnection, kick off attempt to
+            # reconnect all PVs via fresh circuit(s).
+            logger.debug('VCM: Attempting reconnection')
+            self.context.reconnect(((chan.name, chan.circuit.priority)
+                                    for chan in self.channels.values()))
 
     @lockenate
     def disconnect(self, *, wait=True, timeout=2.0):
