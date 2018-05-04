@@ -247,8 +247,10 @@ def test_multiple_subscriptions_one_server(ioc, context):
         collector[sub].append(response)
 
     subs = [pv.subscribe() for pv in pvs]
-    for sub in subs:
-        sub.add_callback(functools.partial(collect, sub))
+    cbs = {sub: functools.partial(collect, sub) for sub in subs}
+    for sub, cb in cbs.items():
+        sub.add_callback(cb)
+    time.sleep(0.2)
     for sub, responses in collector.items():
         assert len(responses) == 1
     assert len(pv.circuit_manager.subscriptions) == len(pvs) > 1
