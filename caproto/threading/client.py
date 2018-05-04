@@ -982,7 +982,7 @@ class VirtualCircuitManager:
             self.callback_queue.put((time.monotonic(), ca.DISCONNECTED, None))
 
         # Clean up the socket if it has not yet been cleared:
-        sock = self.socket
+        sock, self.socket = self.socket, None
         if sock is not None:
             self.selector.remove_socket(sock)
             try:
