@@ -751,10 +751,12 @@ class Context:
                     def requests():
                         "Yield EventAddRequest commands."
                         for pv in pvs:
-                            for sub in pv.subscriptions.values():
+                            subs = pv.subscriptions
+                            cm_subs_cache = pv.circuit_manager.subscriptions
+                            for sub in list(subs.values()):
                                 # the old subscription is dead, remove it
                                 if sub.subscriptionid is not None:
-                                    del self.subscriptions.pop[sub.subscriptionid]
+                                    cm_subs_cache.pop(sub.subscriptionid, None)
                                 # this will add the subscription into our self.subscriptions
                                 command = sub.compose_command()
                                 # compose_command() returns None if this
