@@ -1442,6 +1442,7 @@ class Subscription(CallbackHandler):
         # Once self.callbacks is empty, self.remove_callback calls
         # self._unsubscribe for us.
 
+    @lockenate
     def _unsubscribe(self):
         """
         This is automatically called if the number of callbacks goes to 0.
