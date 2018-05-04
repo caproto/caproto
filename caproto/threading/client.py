@@ -35,7 +35,12 @@ from .._utils import batch_requests, CaprotoError
 print = partial(print, flush=True)
 
 
-def lockenate(func):
+def master_lock(func):
+    """
+    Apply to a lock during an instance method's execution.
+
+    This expects the instance to have an attribute named `master_lock`.
+    """
     counter = itertools.count()
 
     def inner(self, *args, **kwargs):
@@ -955,7 +960,7 @@ class VirtualCircuitManager:
                 # NOTE: pv remains valid until server goes down
             self.new_command_cond.notify_all()
 
-    @lockenate
+    @master_lock
     def _disconnected(self):
         if not self.connected:
             return
@@ -992,7 +997,7 @@ class VirtualCircuitManager:
             self.context.reconnect(((chan.name, chan.circuit.priority)
                                     for chan in self.channels.values()))
 
-    @lockenate
+    @master_lock
     def disconnect(self, *, wait=True, timeout=2.0):
         self._user_disconnected = True
         self._disconnected()
@@ -1086,7 +1091,7 @@ class PV:
         with self._component_lock:
             self._channel = val
 
-    @lockenate
+    @master_lock
     def connection_state_changed(self, state, channel):
         logger.debug('%s Connection state changed %s %s', self.name, state,
                      channel)
@@ -1095,7 +1100,7 @@ class PV:
 
         self.connection_state_callback.process(self, state)
 
-    @lockenate
+    @master_lock
     def __repr__(self):
         if self._idle:
             state = "(idle)"
@@ -1119,7 +1124,7 @@ class PV:
                 return False
             return channel.states[ca.CLIENT] is ca.CONNECTED
 
-    @lockenate
+    @master_lock
     def process_read_notify(self, read_notify_command):
         self.last_reading = read_notify_command
 
@@ -1131,7 +1136,7 @@ class PV:
             except Exception as ex:
                 print(ex)
 
-    @lockenate
+    @master_lock
     def process_write_notify(self, write_notify_command):
         self.last_writing = write_notify_command
 
@@ -1201,7 +1206,7 @@ class PV:
                     f"{self.name!r} within {timeout}-second timeout."
                 )
 
-    @lockenate
+    @master_lock
     def go_idle(self):
         """Request to clear this Channel to reduce load on client and server.
 
@@ -1302,7 +1307,7 @@ class PV:
             )
         return self.last_writing
 
-    @lockenate
+    @master_lock
     def subscribe(self, *args, **kwargs):
         "Start a new subscription to which user callback may be added."
         # A Subscription is uniquely identified by the Signature created by its
@@ -1317,7 +1322,7 @@ class PV:
         # callbacks via sub.add_callback(user_func).
         return sub
 
-    @lockenate
+    @master_lock
     def unsubscribe_all(self):
         for sub in self.subscriptions.values():
             sub.clear()
@@ -1335,7 +1340,7 @@ class CallbackHandler:
         self._callback_lock = threading.RLock()
         self.master_lock = threading.RLock()
 
-    @lockenate
+    @master_lock
     def add_callback(self, func):
         # TODO thread safety
         cb_id = self._callback_id
@@ -1354,12 +1359,12 @@ class CallbackHandler:
             self.callbacks[cb_id] = ref
         return cb_id
 
-    @lockenate
+    @master_lock
     def remove_callback(self, cb_id):
         with self._callback_lock:
             self.callbacks.pop(cb_id, None)
 
-    @lockenate
+    @master_lock
     def process(self, *args, **kwargs):
 
         to_remove = []
@@ -1395,7 +1400,7 @@ class Subscription(CallbackHandler):
     def __repr__(self):
         return f"<Subscription to {self.pv.name!r}, id={self.subscriptionid}>"
 
-    @lockenate
+    @master_lock
     def _subscribe(self):
         """This is called automatically after the first callback is added.
         """
@@ -1408,7 +1413,7 @@ class Subscription(CallbackHandler):
             self.pv.circuit_manager.send(command)
         return has_callbacks
 
-    @lockenate
+    @master_lock
     def compose_command(self):
         "This is used by the Context to re-subscribe in bulk after dropping."
         with self._callback_lock:
@@ -1423,7 +1428,7 @@ class Subscription(CallbackHandler):
         self.pv.circuit_manager.subscriptions[subscriptionid] = self
         return command
 
-    @lockenate
+    @master_lock
     def clear(self):
         """
         Remove all callbacks.
@@ -1434,7 +1439,7 @@ class Subscription(CallbackHandler):
         # Once self.callbacks is empty, self.remove_callback calls
         # self._unsubscribe for us.
 
-    @lockenate
+    @master_lock
     def _unsubscribe(self):
         """
         This is automatically called if the number of callbacks goes to 0.
@@ -1460,7 +1465,7 @@ class Subscription(CallbackHandler):
             if subscriptionid is not None:
                 del self.pv.circuit_manager.subscriptions[subscriptionid]
 
-    @lockenate
+    @master_lock
     def process(self, *args, **kwargs):
         # TODO here i think we can decouple PV update rates and callback
         # handling rates, if desirable, to not bog down performance.
@@ -1470,7 +1475,7 @@ class Subscription(CallbackHandler):
         super().process(*args, **kwargs)
         self.most_recent_response = (args, kwargs)
 
-    @lockenate
+    @master_lock
     def add_callback(self, func):
         cb_id = super().add_callback(func)
         with self._callback_lock:
@@ -1493,7 +1498,7 @@ class Subscription(CallbackHandler):
 
         return cb_id
 
-    @lockenate
+    @master_lock
     def remove_callback(self, cb_id):
         with self._callback_lock:
             super().remove_callback(cb_id)
