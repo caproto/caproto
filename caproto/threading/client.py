@@ -23,13 +23,29 @@ import errno
 import termios
 import inspect
 from inspect import Parameter, Signature
-
+from functools import partial
 from collections import defaultdict
-
+import traceback
+import sys
 import caproto as ca
 from .._constants import (MAX_ID, STALE_SEARCH_EXPIRATION,
                           SEARCH_MAX_DATAGRAM_BYTES)
 from .._utils import batch_requests, CaprotoError
+
+print = partial(print, flush=True)
+
+
+def lockenate(func):
+    counter = itertools.count()
+
+    def inner(self, *args, **kwargs):
+        j = next(counter)
+        with self.master_lock:
+            print(f'enter master lock {func} on {threading.current_thread().name} time {j} ')
+            ret = func(self, *args, **kwargs)
+            print(f'exit master lock {func} on {threading.current_thread().name} time {j} ')
+            return ret
+    return inner
 
 
 def ensure_connected(func):
@@ -39,12 +55,13 @@ def ensure_connected(func):
             # If needed, reconnect. Do this inside the lock so that we don't
             # try to do this twice. (No other threads that need this lock
             # can proceed until the connection is ready anyway!)
-            if self._idle or (self.circuit_manager and
-                              self.circuit_manager.dead):
-                self.context.reconnect(((self.name, self.priority),))
-                reconnect = True
-            else:
-                reconnect = False
+            with self.master_lock:
+                if self._idle or (self.circuit_manager and
+                                  self.circuit_manager.dead):
+                    self.context.reconnect(((self.name, self.priority),))
+                    reconnect = True
+                else:
+                    reconnect = False
             # Do not bother notifying the self._in_use condition because we
             # have *increased* the usages here. It will be notified below,
             # inside the `finally` block, when we decrease the usages.
@@ -63,10 +80,11 @@ def ensure_connected(func):
                             yield command
                 # Batching is probably overkill...unlikely to be very many
                 # requests here....
-                for batch in batch_requests(requests(),
-                                            EVENT_ADD_BATCH_MAX_BYTES):
-                    self.circuit_manager.send(*batch)
-                self._idle = False
+                with self.master_lock:
+                    for batch in batch_requests(requests(),
+                                                EVENT_ADD_BATCH_MAX_BYTES):
+                        self.circuit_manager.send(*batch)
+                    self._idle = False
             result = func(self, *args, **kwargs)
         finally:
             with self._in_use:
@@ -130,7 +148,7 @@ class SelectorThread:
             return
 
         self._running = True
-        self.thread = threading.Thread(target=self, daemon=True)
+        self.thread = threading.Thread(target=self, daemon=True, name='selector')
         self.thread.start()
 
     def add_socket(self, sock, target_obj):
@@ -270,7 +288,7 @@ class SharedBroadcaster:
         self.selector = SelectorThread(parent=self)
         self.selector.start()
         self.command_thread = threading.Thread(target=self.command_loop,
-                                               daemon=True)
+                                               daemon=True, name='command')
         self.command_thread.start()
 
         self._registration_retry_time = registration_retry_time
@@ -334,7 +352,7 @@ class SharedBroadcaster:
         with self._search_lock:
             if self._retry_thread is None:
                 self._retry_thread = threading.Thread(
-                    target=self._retry_unanswered_searches, daemon=True)
+                    target=self._retry_unanswered_searches, daemon=True, name='retry')
                 self._retry_thread.start()
 
             self.listeners.add(listener)
@@ -365,7 +383,7 @@ class SharedBroadcaster:
                 self._disconnect_timer = 30
                 if self.disconnect_thread is None:
                     self.disconnect_thread = threading.Thread(
-                        target=self._disconnect_wait, daemon=True)
+                        target=self._disconnect_wait, daemon=True, name='disconnect')
                     self.disconnect_thread.start()
 
     def disconnect(self, *, wait=True, timeout=2):
@@ -566,6 +584,7 @@ class Context:
         self.log_level = log_level
         self.search_condition = threading.Condition()
         self.pv_cache_lock = threading.RLock()
+        self.master_lock = threading.RLock()
         self.resuscitated_pvs = []
         self.circuit_managers = {}  # keyed on address
         self.pvs = {}  # (name, priority) -> pv
@@ -576,13 +595,13 @@ class Context:
         logger.debug('Context: start process search results loop')
         self._search_thread = threading.Thread(
             target=self._process_search_results_loop,
-            daemon=True)
+            daemon=True, name='search')
         self._search_thread.start()
 
         logger.debug('Context: start restart_subscriptions loop')
         self._restart_sub_thread = threading.Thread(
             target=self._restart_subscriptions,
-            daemon=True)
+            daemon=True, name='restart_subscriptions')
         self._restart_sub_thread.start()
 
         self.selector = SelectorThread(parent=self)
@@ -713,36 +732,37 @@ class Context:
 
     def _restart_subscriptions(self):
         while True:
-            t = time.monotonic()
-            ready = defaultdict(list)
-            with self.pv_cache_lock:
-                pvs = list(self.resuscitated_pvs)
-                self.resuscitated_pvs.clear()
-                for pv in pvs:
-                    if pv.connected:
-                        ready[pv.circuit_manager].append(pv)
-                    else:
-                        self.resuscitated_pvs.append(pv)
-
-            for cm, pvs in ready.items():
-                def requests():
-                    "Yield EventAddRequest commands."
+            with self.master_lock:
+                t = time.monotonic()
+                ready = defaultdict(list)
+                with self.pv_cache_lock:
+                    pvs = list(self.resuscitated_pvs)
+                    self.resuscitated_pvs.clear()
                     for pv in pvs:
-                        for sub in pv.subscriptions.values():
-                            command = sub.compose_command()
-                            # compose_command() returns None if this
-                            # Subscription is inactive (meaning there are no
-                            # user callbacks attached). It will send an
-                            # EventAddRequest on its own if/when the user does
-                            # add any callbacks, so we can skip it here.
-                            if command is not None:
-                                yield command
+                        if pv.connected:
+                            ready[pv.circuit_manager].append(pv)
+                        else:
+                            self.resuscitated_pvs.append(pv)
 
-                for batch in batch_requests(requests(),
-                                            EVENT_ADD_BATCH_MAX_BYTES):
-                    cm.send(*batch)
+                for cm, pvs in ready.items():
+                    def requests():
+                        "Yield EventAddRequest commands."
+                        for pv in pvs:
+                            for sub in pv.subscriptions.values():
+                                command = sub.compose_command()
+                                # compose_command() returns None if this
+                                # Subscription is inactive (meaning there are no
+                                # user callbacks attached). It will send an
+                                # EventAddRequest on its own if/when the user does
+                                # add any callbacks, so we can skip it here.
+                                if command is not None:
+                                    yield command
 
-            time.sleep(max(0, RESTART_SUBS_PERIOD - (time.monotonic() - t)))
+                    for batch in batch_requests(requests(),
+                                                EVENT_ADD_BATCH_MAX_BYTES):
+                        cm.send(*batch)
+
+                time.sleep(max(0, RESTART_SUBS_PERIOD - (time.monotonic() - t)))
 
     def disconnect(self, *, wait=True, timeout=2):
         self._user_disconnected = True
@@ -787,7 +807,7 @@ class VirtualCircuitManager:
                  '_user_disconnected', 'new_command_cond', 'socket',
                  'selector', 'pvs', 'all_created_pvnames', 'callback_queue',
                  'callback_thread',
-                 '__weakref__')
+                 '__weakref__', 'master_lock')
 
     def __init__(self, context, circuit, selector, timeout=TIMEOUT):
         self.context = context
@@ -802,9 +822,9 @@ class VirtualCircuitManager:
         self._user_disconnected = False
         self.callback_queue = queue.Queue()
         self.callback_thread = threading.Thread(target=self._callback_loop,
-                                                daemon=True)
+                                                daemon=True, name='vcm_cb')
         self.callback_thread.start()
-
+        self.master_lock = threading.RLock()
         # keep track of all PV names that are successfully connected to within
         # this circuit. This is to be cleared upon disconnection:
         self.all_created_pvnames = []
@@ -933,7 +953,15 @@ class VirtualCircuitManager:
                 # NOTE: pv remains valid until server goes down
             self.new_command_cond.notify_all()
 
+    @lockenate
     def _disconnected(self):
+        print('in disconnected', self.connected, id(self))
+        th = threading.current_thread()
+        traceback.print_stack(sys._current_frames()[th.ident])
+        print(self)
+        if not self.connected:
+            return
+
         with self.new_command_cond:
             logger.debug('Entered VCM._disconnected')
             # Ensure that this method is idempotent.
@@ -965,7 +993,10 @@ class VirtualCircuitManager:
                 sock.close()
             except OSError:
                 pass
+        print(self)
+        print('exit disconnected', self.connected, id(self))
 
+    @lockenate
     def disconnect(self, *, wait=True, timeout=2.0):
         self._user_disconnected = True
         self._disconnected()
@@ -1009,12 +1040,13 @@ class PV:
                  'last_reading', 'last_writing', '_read_notify_callback',
                  'subscriptions', 'command_bundle_queue', '_component_lock',
                  '_write_notify_callback', '_idle', '_in_use', '_usages',
-                 'connection_state_callback', '_pc_callbacks', '__weakref__')
+                 'connection_state_callback', '_pc_callbacks', '__weakref__', 'master_lock')
 
     def __init__(self, name, priority, context, connection_state_callback):
         """
         These must be instantiated by a Context, never directly.
         """
+        self.master_lock = threading.RLock()
         self.name = name
         self.priority = priority
         self.context = context
@@ -1058,6 +1090,7 @@ class PV:
         with self._component_lock:
             self._channel = val
 
+    @lockenate
     def connection_state_changed(self, state, channel):
         logger.debug('%s Connection state changed %s %s', self.name, state,
                      channel)
@@ -1066,6 +1099,7 @@ class PV:
 
         self.connection_state_callback.process(self, state)
 
+    @lockenate
     def __repr__(self):
         if self._idle:
             state = "(idle)"
@@ -1083,11 +1117,13 @@ class PV:
 
     @property
     def connected(self):
-        channel = self.channel
-        if channel is None:
-            return False
-        return channel.states[ca.CLIENT] is ca.CONNECTED
+        with self._component_lock:
+            channel = self.channel
+            if channel is None:
+                return False
+            return channel.states[ca.CLIENT] is ca.CONNECTED
 
+    @lockenate
     def process_read_notify(self, read_notify_command):
         self.last_reading = read_notify_command
 
@@ -1099,6 +1135,7 @@ class PV:
             except Exception as ex:
                 print(ex)
 
+    @lockenate
     def process_write_notify(self, write_notify_command):
         self.last_writing = write_notify_command
 
@@ -1168,6 +1205,7 @@ class PV:
                     f"{self.name!r} within {timeout}-second timeout."
                 )
 
+    @lockenate
     def go_idle(self):
         """Request to clear this Channel to reduce load on client and server.
 
@@ -1268,6 +1306,7 @@ class PV:
             )
         return self.last_writing
 
+    @lockenate
     def subscribe(self, *args, **kwargs):
         "Start a new subscription to which user callback may be added."
         # A Subscription is uniquely identified by the Signature created by its
@@ -1282,6 +1321,7 @@ class PV:
         # callbacks via sub.add_callback(user_func).
         return sub
 
+    @lockenate
     def unsubscribe_all(self):
         for sub in self.subscriptions.values():
             sub.clear()
@@ -1297,7 +1337,9 @@ class CallbackHandler:
         self.pv = pv
         self._callback_id = 0
         self._callback_lock = threading.RLock()
+        self.master_lock = threading.RLock()
 
+    @lockenate
     def add_callback(self, func):
         # TODO thread safety
         cb_id = self._callback_id
@@ -1310,16 +1352,18 @@ class CallbackHandler:
             ref = weakref.WeakMethod(func, removed)
         else:
             # TODO: strong reference to non-instance methods?
-            def ref():
-                return func
+            ref = weakref.weakref(func, removed)
+
         with self._callback_lock:
             self.callbacks[cb_id] = ref
         return cb_id
 
+    @lockenate
     def remove_callback(self, cb_id):
         with self._callback_lock:
             self.callbacks.pop(cb_id, None)
 
+    @lockenate
     def process(self, *args, **kwargs):
 
         to_remove = []
@@ -1355,6 +1399,7 @@ class Subscription(CallbackHandler):
     def __repr__(self):
         return f"<Subscription to {self.pv.name!r}, id={self.subscriptionid}>"
 
+    @lockenate
     def _subscribe(self):
         """This is called automatically after the first callback is added.
         """
@@ -1367,6 +1412,7 @@ class Subscription(CallbackHandler):
             self.pv.circuit_manager.send(command)
         return has_callbacks
 
+    @lockenate
     def compose_command(self):
         "This is used by the Context to re-subscribe in bulk after dropping."
         with self._callback_lock:
@@ -1381,6 +1427,7 @@ class Subscription(CallbackHandler):
         self.pv.circuit_manager.subscriptions[subscriptionid] = self
         return command
 
+    @lockenate
     def clear(self):
         """
         Remove all callbacks.
@@ -1404,9 +1451,14 @@ class Subscription(CallbackHandler):
             self.most_recent_response = None
         chan = self.pv.channel
         if chan:
-            command = self.pv.channel.unsubscribe(subscriptionid)
-            self.pv.circuit_manager.send(command)
+            try:
+                command = self.pv.channel.unsubscribe(subscriptionid)
+            except Exception:
+                ...
+            else:
+                self.pv.circuit_manager.send(command)
 
+    @lockenate
     def process(self, *args, **kwargs):
         # TODO here i think we can decouple PV update rates and callback
         # handling rates, if desirable, to not bog down performance.
@@ -1416,6 +1468,7 @@ class Subscription(CallbackHandler):
         super().process(*args, **kwargs)
         self.most_recent_response = (args, kwargs)
 
+    @lockenate
     def add_callback(self, func):
         cb_id = super().add_callback(func)
         with self._callback_lock:
@@ -1438,6 +1491,7 @@ class Subscription(CallbackHandler):
 
         return cb_id
 
+    @lockenate
     def remove_callback(self, cb_id):
         with self._callback_lock:
             super().remove_callback(cb_id)
