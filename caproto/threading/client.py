@@ -1355,7 +1355,7 @@ class CallbackHandler:
             ref = weakref.WeakMethod(func, removed)
         else:
             # TODO: strong reference to non-instance methods?
-            ref = weakref.weakref(func, removed)
+            ref = weakref.ref(func, removed)
 
         with self._callback_lock:
             self.callbacks[cb_id] = ref
