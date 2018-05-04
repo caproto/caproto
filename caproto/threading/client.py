@@ -41,9 +41,7 @@ def lockenate(func):
     def inner(self, *args, **kwargs):
         j = next(counter)
         with self.master_lock:
-            print(f'enter master lock {func} on {threading.current_thread().name} time {j} ')
             ret = func(self, *args, **kwargs)
-            print(f'exit master lock {func} on {threading.current_thread().name} time {j} ')
             return ret
     return inner
 
@@ -959,10 +957,6 @@ class VirtualCircuitManager:
 
     @lockenate
     def _disconnected(self):
-        print('in disconnected', self.connected, id(self))
-        th = threading.current_thread()
-        traceback.print_stack(sys._current_frames()[th.ident])
-        print(self)
         if not self.connected:
             return
 
@@ -990,8 +984,6 @@ class VirtualCircuitManager:
                 sock.close()
             except OSError:
                 pass
-        print(self)
-        print('exit disconnected', self.connected, id(self))
 
         if not self._user_disconnected:
             # If the user didn't request disconnection, kick off attempt to
