@@ -1453,15 +1453,20 @@ class Subscription(CallbackHandler):
                 return
             subscriptionid = self.subscriptionid
             self.subscriptionid = None
+
             self.most_recent_response = None
         chan = self.pv.channel
         if chan:
             try:
                 command = self.pv.channel.unsubscribe(subscriptionid)
             except Exception:
-                ...
+                if subscriptionid is not None:
+                    del self.pv.circuit_manager.subscriptions[subscriptionid]
             else:
                 self.pv.circuit_manager.send(command)
+        else:
+            if subscriptionid is not None:
+                del self.pv.circuit_manager.subscriptions[subscriptionid]
 
     @lockenate
     def process(self, *args, **kwargs):
