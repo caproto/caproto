@@ -815,7 +815,7 @@ class VirtualCircuitManager:
     __slots__ = ('context', 'circuit', 'channels', 'ioids', 'subscriptions',
                  '_user_disconnected', 'new_command_cond', 'socket',
                  'selector', 'pvs', 'all_created_pvnames', 'callback_queue',
-                 'callback_thread',
+                 'callback_thread', '_torn_down',
                  '__weakref__', 'master_lock')
 
     def __init__(self, context, circuit, selector, timeout=TIMEOUT):
@@ -837,6 +837,7 @@ class VirtualCircuitManager:
         # keep track of all PV names that are successfully connected to within
         # this circuit. This is to be cleared upon disconnection:
         self.all_created_pvnames = []
+        self._torn_down = False
 
         # Connect.
         with self.new_command_cond:
@@ -964,23 +965,24 @@ class VirtualCircuitManager:
 
     @master_lock
     def _disconnected(self):
-        if not self.connected:
+        print("DISCONNECTED")
+        # Ensure that this method is idempotent.
+        if self._torn_down:
             return
+        self._torn_down = True
 
-        with self.new_command_cond:
-            logger.debug('Entered VCM._disconnected')
-            # Ensure that this method is idempotent.
-            self.all_created_pvnames.clear()
-            for pv in self.pvs.values():
-                pv.connection_state_changed('disconnected', None)
-            # Update circuit state. This will be reflected on all PVs, which
-            # continue to hold a reference to this disconnected circuit.
-            self.circuit.disconnect()
-            # Remove VirtualCircuitManager from Context.
-            # This will cause all future calls to Context.get_circuit_manager()
-            # to create a fresh VirtualCiruit and VirtualCircuitManager.
-            self.context.circuit_managers.pop(self.circuit.address, None)
-            self.callback_queue.put((time.monotonic(), ca.DISCONNECTED, None))
+        logger.debug('Entered VCM._disconnected')
+        self.all_created_pvnames.clear()
+        for pv in self.pvs.values():
+            pv.connection_state_changed('disconnected', None)
+        # Update circuit state. This will be reflected on all PVs, which
+        # continue to hold a reference to this disconnected circuit.
+        self.circuit.disconnect()
+        # Remove VirtualCircuitManager from Context.
+        # This will cause all future calls to Context.get_circuit_manager()
+        # to create a fresh VirtualCiruit and VirtualCircuitManager.
+        self.context.circuit_managers.pop(self.circuit.address, None)
+        self.callback_queue.put((time.monotonic(), ca.DISCONNECTED, None))
 
         # Clean up the socket if it has not yet been cleared:
         sock, self.socket = self.socket, None
