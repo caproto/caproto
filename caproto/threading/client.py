@@ -1455,7 +1455,7 @@ class Subscription(CallbackHandler):
 
             self.most_recent_response = None
         chan = self.pv.channel
-        if chan:
+        if chan and chan.states[ca.CLIENT] is ca.CONNECTED:
             try:
                 command = self.pv.channel.unsubscribe(subscriptionid)
             except ca.CaprotoKeyError:
