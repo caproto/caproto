@@ -1456,14 +1456,10 @@ class Subscription(CallbackHandler):
         if chan:
             try:
                 command = self.pv.channel.unsubscribe(subscriptionid)
-            except Exception:
-                if subscriptionid is not None:
-                    del self.pv.circuit_manager.subscriptions[subscriptionid]
+            except ca.CaprotoKeyError:
+                pass
             else:
                 self.pv.circuit_manager.send(command)
-        else:
-            if subscriptionid is not None:
-                del self.pv.circuit_manager.subscriptions[subscriptionid]
 
     @master_lock
     def process(self, *args, **kwargs):
