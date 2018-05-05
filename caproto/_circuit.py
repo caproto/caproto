@@ -532,7 +532,7 @@ class ClientChannel(_BaseChannel):
         command = ClearChannelRequest(self.sid, self.cid)
         return command
 
-    def read(self, data_type=None, data_count=None):
+    def read(self, data_type=None, data_count=None, ioid=None):
         """
         Generate a valid :class:`ReadNotifyRequest`.
 
@@ -552,11 +552,12 @@ class ClientChannel(_BaseChannel):
         ReadNotifyRequest
         """
         data_type, data_count = self._fill_defaults(data_type, data_count)
-        ioid = self.circuit.new_ioid()
+        if ioid is None:
+            ioid = self.circuit.new_ioid()
         command = ReadNotifyRequest(data_type, data_count, self.sid, ioid)
         return command
 
-    def write(self, data, data_type=None, data_count=None, metadata=None):
+    def write(self, data, data_type=None, data_count=None, metadata=None, ioid=None):
         """
         Generate a valid :class:`WriteNotifyRequest`.
 
@@ -581,7 +582,8 @@ class ClientChannel(_BaseChannel):
         data_type, data_count = self._fill_defaults(data_type, data_count)
         if data_count == 0:
             data_count = len(data)
-        ioid = self.circuit.new_ioid()
+        if ioid is None:
+            ioid = self.circuit.new_ioid()
         command = WriteNotifyRequest(data, data_type, data_count, self.sid,
                                      ioid, metadata=metadata)
         return command

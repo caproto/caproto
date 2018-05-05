@@ -113,7 +113,7 @@ def _pyepics_get_value(value, string_value, full_type, native_count, *,
 
     elif native_count == 1 and len(value) == 1:
         if requested_count is None:
-            return value[0]
+            return value.tolist()[0]
         else:
             return value
 

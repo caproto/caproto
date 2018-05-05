@@ -22,13 +22,14 @@ import fcntl
 import errno
 import termios
 import inspect
+import concurrent
 from inspect import Parameter, Signature
 from functools import partial
-from collections import defaultdict
+from collections import defaultdict, deque
 import caproto as ca
 from .._constants import (MAX_ID, STALE_SEARCH_EXPIRATION,
                           SEARCH_MAX_DATAGRAM_BYTES)
-from .._utils import batch_requests, CaprotoError
+from .._utils import batch_requests, CaprotoError, ThreadsafeCounter
 
 print = partial(print, flush=True)
 
@@ -252,7 +253,6 @@ class SelectorThread:
 
                     # TODO: consider adding specific DISCONNECTED instead of b''
                     # sent to disconnected sockets
-
         logger.debug('Selector loop exited')
 
 
@@ -478,7 +478,6 @@ class SharedBroadcaster:
             commands = self.broadcaster.recv(bytes_recv, address)
             if commands:
                 self.command_bundle_queue.put(commands)
-
         return 0
 
     def command_loop(self):
@@ -810,11 +809,12 @@ class Context:
 
 
 class VirtualCircuitManager:
-    __slots__ = ('context', 'circuit', 'channels', 'ioids', 'subscriptions',
-                 '_user_disconnected', 'new_command_cond', 'socket',
-                 'selector', 'pvs', 'all_created_pvnames', 'callback_queue',
-                 'callback_thread', '_torn_down',
-                 '__weakref__', 'master_lock')
+    __slots__ = ('context', 'circuit', 'channels', 'ioids', 'ioid_events',
+                 'subscriptions', '_user_disconnected', 'new_command_cond',
+                 'socket', 'selector', 'pvs', 'all_created_pvnames',
+                 'callback_queue', 'callback_thread', '_torn_down',
+                 'process_queue', 'processing', 'master_lock', '_ioid_counter',
+                 '__weakref__')
 
     def __init__(self, context, circuit, selector, timeout=TIMEOUT):
         self.context = context
@@ -822,6 +822,7 @@ class VirtualCircuitManager:
         self.channels = {}  # map cid to Channel
         self.pvs = {}  # map cid to PV
         self.ioids = {}  # map ioid to Channel
+        self.ioid_events = {}  # map ioid to Event
         self.subscriptions = {}  # map subscriptionid to Subscription
         self.new_command_cond = threading.Condition()
         self.socket = None
@@ -836,6 +837,7 @@ class VirtualCircuitManager:
         # this circuit. This is to be cleared upon disconnection:
         self.all_created_pvnames = []
         self._torn_down = False
+        self._ioid_counter = ThreadsafeCounter()
 
         # Connect.
         with self.new_command_cond:
@@ -893,7 +895,8 @@ class VirtualCircuitManager:
         # be send, and convert them to buffers.
         buffers_to_send = self.circuit.send(*commands)
         # Send bytes over the wire using some caproto utilities.
-        ca.send_all(buffers_to_send, self._socket_send)
+        # ca.send_all(buffers_to_send, self._socket_send)
+        self.socket.sendall(b''.join(buffers_to_send))
 
     def received(self, bytes_recv, address):
         """Receive and process and next command from the virtual circuit.
@@ -931,12 +934,18 @@ class VirtualCircuitManager:
         with self.new_command_cond:
             if command is ca.DISCONNECTED:
                 self._disconnected()
-            elif isinstance(command, ca.ReadNotifyResponse):
+            elif isinstance(command, (ca.ReadNotifyResponse,
+                                      ca.WriteNotifyResponse)):
                 chan = self.ioids.pop(command.ioid)
-                chan.process_read_notify(command)
-            elif isinstance(command, ca.WriteNotifyResponse):
-                chan = self.ioids.pop(command.ioid)
-                chan.process_write_notify(command)
+
+                if isinstance(command, ca.WriteNotifyResponse):
+                    chan.process_write_notify(command)
+                else:
+                    chan.process_read_notify(command)
+
+                event = self.ioid_events.pop(command.ioid)
+                if event:
+                    event.set()
             elif isinstance(command, ca.EventAddResponse):
                 try:
                     sub = self.subscriptions[command.subscriptionid]
@@ -959,6 +968,8 @@ class VirtualCircuitManager:
                 pv = self.pvs[command.cid]
                 pv.connection_state_changed('disconnected', None)
                 # NOTE: pv remains valid until server goes down
+            else:
+                logger.debug('other command %s', command)
             self.new_command_cond.notify_all()
 
     @master_lock
@@ -1093,7 +1104,6 @@ class PV:
         with self._component_lock:
             self._channel = val
 
-    @master_lock
     def connection_state_changed(self, state, channel):
         logger.debug('%s Connection state changed %s %s', self.name, state,
                      channel)
@@ -1126,7 +1136,6 @@ class PV:
                 return False
             return channel.states[ca.CLIENT] is ca.CONNECTED
 
-    @master_lock
     def process_read_notify(self, read_notify_command):
         self.last_reading = read_notify_command
 
@@ -1138,7 +1147,6 @@ class PV:
             except Exception as ex:
                 print(ex)
 
-    @master_lock
     def process_write_notify(self, write_notify_command):
         self.last_writing = write_notify_command
 
@@ -1258,21 +1266,17 @@ class PV:
         if not self.connected:
             raise DisconnectedError()
 
-        with self.circuit_manager.new_command_cond:
-            command = self.channel.read(*args, **kwargs)
+        ioid = self.circuit_manager._ioid_counter()
+        command = self.channel.read(*args, ioid=ioid, **kwargs)
         # Stash the ioid to match the response to the request.
-        ioid = command.ioid
+
+        event = threading.Event()
         self.circuit_manager.ioids[ioid] = self
+        self.circuit_manager.ioid_events[ioid] = event
         # TODO: circuit_manager can be removed from underneath us here
         self.circuit_manager.send(command)
 
-        def has_reading():
-            return ioid not in self.circuit_manager.ioids
-
-        with self.circuit_manager.new_command_cond:
-            done = self.circuit_manager.new_command_cond.wait_for(has_reading,
-                                                                  timeout)
-        if not done:
+        if not event.wait(timeout=timeout):
             raise TimeoutError(
                 f"Server at {self.circuit_manager.circuit.address} did "
                 f"not respond to attempt to read channel named "
@@ -1283,11 +1287,11 @@ class PV:
     @ensure_connected
     def write(self, *args, wait=True, cb=None, timeout=2, **kwargs):
         "Write a new value and await confirmation from the server."
-        with self.circuit_manager.new_command_cond:
-            command = self.channel.write(*args, **kwargs)
-        # Stash the ioid to match the response to the request.
-        ioid = command.ioid
+        ioid = self.circuit_manager._ioid_counter()
+        command = self.channel.write(*args, ioid=ioid, **kwargs)
+        event = threading.Event()
         self.circuit_manager.ioids[ioid] = self
+        self.circuit_manager.ioid_events[ioid] = event
         if cb is not None:
             self._pc_callbacks[ioid] = cb
         # do not need to lock this, locking happens in circuit command
@@ -1295,13 +1299,7 @@ class PV:
         if not wait:
             return
 
-        def has_reading():
-            return ioid not in self.circuit_manager.ioids
-
-        with self.circuit_manager.new_command_cond:
-            done = self.circuit_manager.new_command_cond.wait_for(has_reading,
-                                                                  timeout)
-        if not done:
+        if not event.wait(timeout=timeout):
             raise TimeoutError(
                 f"Server at {self.circuit_manager.circuit.address} did "
                 f"not respond to attempt to write to channel named "
