@@ -47,7 +47,7 @@ def main(pvname1='pi', pvname2='str',
     print(f'wrote {value2} and read back: {reading}')
 
     # Clean up the subscription
-    sub.unsubscribe()
+    sub.clear()
 
     pv2.go_idle()
     pv1.go_idle()
