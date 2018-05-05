@@ -444,7 +444,7 @@ class PV:
 
         self._args['put_complete'] = False
         self._caproto_pv.write(value, wait=wait, cb=run_callback,
-                               timeout=timeout)
+                               timeout=timeout, use_notify=use_complete)
 
     @ensure_connection
     def get_ctrlvars(self, timeout=5, warn=True):

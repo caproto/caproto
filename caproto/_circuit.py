@@ -557,7 +557,8 @@ class ClientChannel(_BaseChannel):
         command = ReadNotifyRequest(data_type, data_count, self.sid, ioid)
         return command
 
-    def write(self, data, data_type=None, data_count=None, metadata=None, ioid=None):
+    def write(self, data, data_type=None, data_count=None, metadata=None, ioid=None,
+              use_notify=True):
         """
         Generate a valid :class:`WriteNotifyRequest`.
 
@@ -584,8 +585,15 @@ class ClientChannel(_BaseChannel):
             data_count = len(data)
         if ioid is None:
             ioid = self.circuit.new_ioid()
-        command = WriteNotifyRequest(data, data_type, data_count, self.sid,
-                                     ioid, metadata=metadata)
+
+        # TODO: change use_notify default value; may break tests
+
+        if use_notify:
+            command = WriteNotifyRequest(data, data_type, data_count, self.sid,
+                                         ioid, metadata=metadata)
+        else:
+            command = WriteRequest(data, data_type, data_count, self.sid, ioid,
+                                   metadata=metadata)
         return command
 
     def subscribe(self, data_type=None, data_count=None, low=0.0, high=0.0,

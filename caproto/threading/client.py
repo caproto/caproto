@@ -1285,10 +1285,14 @@ class PV:
         return self.last_reading
 
     @ensure_connected
-    def write(self, *args, wait=True, cb=None, timeout=2, **kwargs):
+    def write(self, *args, wait=True, cb=None, timeout=2, use_notify=True,
+              **kwargs):
         "Write a new value and await confirmation from the server."
+        # TODO: change use_notify default value; may break tests
         ioid = self.circuit_manager._ioid_counter()
-        command = self.channel.write(*args, ioid=ioid, **kwargs)
+        command = self.channel.write(*args, ioid=ioid,
+                                     use_notify=use_notify,
+                                     **kwargs)
         event = threading.Event()
         self.circuit_manager.ioids[ioid] = self
         self.circuit_manager.ioid_events[ioid] = event
