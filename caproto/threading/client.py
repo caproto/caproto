@@ -25,8 +25,6 @@ import inspect
 from inspect import Parameter, Signature
 from functools import partial
 from collections import defaultdict
-import traceback
-import sys
 import caproto as ca
 from .._constants import (MAX_ID, STALE_SEARCH_EXPIRATION,
                           SEARCH_MAX_DATAGRAM_BYTES)
@@ -44,7 +42,7 @@ def master_lock(func):
     counter = itertools.count()
 
     def inner(self, *args, **kwargs):
-        j = next(counter)
+        next(counter)
         with self.master_lock:
             ret = func(self, *args, **kwargs)
             return ret
