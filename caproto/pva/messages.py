@@ -53,35 +53,35 @@ class QOS(enum.IntEnum):
 
 
 class ApplicationCommands(enum.IntEnum):
-    CMD_BEACON = 0
-    CMD_CONNECTION_VALIDATION = 1
-    CMD_ECHO = 2
-    CMD_SEARCH_REQUEST = 3
-    CMD_SEARCH_RESPONSE = 4
-    CMD_AUTHNZ = 5
-    CMD_ACL_CHANGE = 6
-    CMD_CREATE_CHANNEL = 7
-    CMD_DESTROY_CHANNEL = 8
-    CMD_CONNECTION_VALIDATED = 9
-    CMD_GET = 10
-    CMD_PUT = 11
-    CMD_PUT_GET = 12
-    CMD_MONITOR = 13
-    CMD_ARRAY = 14
-    CMD_DESTROY_REQUEST = 15
-    CMD_PROCESS = 16
-    CMD_GET_FIELD = 17
-    CMD_MESSAGE = 18
-    CMD_MULTIPLE_DATA = 19
-    CMD_RPC = 20
-    CMD_CANCEL_REQUEST = 21
-    CMD_ORIGIN_TAG = 22
+    BEACON = 0
+    CONNECTION_VALIDATION = 1
+    ECHO = 2
+    SEARCH_REQUEST = 3
+    SEARCH_RESPONSE = 4
+    AUTHNZ = 5
+    ACL_CHANGE = 6
+    CREATE_CHANNEL = 7
+    DESTROY_CHANNEL = 8
+    CONNECTION_VALIDATED = 9
+    GET = 10
+    PUT = 11
+    PUT_GET = 12
+    MONITOR = 13
+    ARRAY = 14
+    DESTROY_REQUEST = 15
+    PROCESS = 16
+    GET_FIELD = 17
+    MESSAGE = 18
+    MULTIPLE_DATA = 19
+    RPC = 20
+    CANCEL_REQUEST = 21
+    ORIGIN_TAG = 22
 
 
 class ControlCommands(enum.IntEnum):
-    CMD_SET_MARKER = 0
-    CMD_ACK_MARKER = 1
-    CMD_SET_ENDIANESS = 2
+    SET_MARKER = 0
+    ACK_MARKER = 1
+    SET_ENDIANESS = 2
 
 
 class GetSubcommands(enum.IntEnum):
@@ -455,7 +455,7 @@ class _Status(ExtendedMessageBase):
 
 @_dual_endian_decorator
 class _BeaconMessage(ExtendedMessageBase):
-    ID = ApplicationCommands.CMD_BEACON
+    ID = ApplicationCommands.BEACON
     # FieldDesc serverStatusIF;
     # [if serverStatusIF != NULL_TYPE_CODE] PVField serverStatus;
     _fields_ = [
@@ -478,15 +478,15 @@ class _BeaconMessage(ExtendedMessageBase):
 
 
 class SetMarker(MessageHeaderLE):
-    ID = ControlCommands.CMD_SET_MARKER
+    ID = ControlCommands.SET_MARKER
 
 
 class AcknowledgeMarker(MessageHeaderLE):
-    ID = ControlCommands.CMD_ACK_MARKER
+    ID = ControlCommands.ACK_MARKER
 
 
 class SetByteOrder(MessageHeaderLE):
-    ID = ControlCommands.CMD_SET_ENDIANESS
+    ID = ControlCommands.SET_ENDIANESS
     # uses EndianSetting in header payload size
 
     @property
@@ -496,7 +496,7 @@ class SetByteOrder(MessageHeaderLE):
 
 @_dual_endian_decorator
 class _ConnectionValidationRequest(ExtendedMessageBase):
-    ID = ApplicationCommands.CMD_CONNECTION_VALIDATION
+    ID = ApplicationCommands.CONNECTION_VALIDATION
 
     _fields_ = [
         ('server_buffer_size', c_int),
@@ -510,7 +510,7 @@ class _ConnectionValidationRequest(ExtendedMessageBase):
 
 @_dual_endian_decorator
 class _ConnectionValidationResponse(ExtendedMessageBase):
-    ID = ApplicationCommands.CMD_CONNECTION_VALIDATION
+    ID = ApplicationCommands.CONNECTION_VALIDATION
 
     _fields_ = [
         ('client_buffer_size', c_int),
@@ -525,7 +525,7 @@ class _ConnectionValidationResponse(ExtendedMessageBase):
 
 @_dual_endian_decorator
 class _Echo(ExtendedMessageBase):
-    ID = ApplicationCommands.CMD_ECHO
+    ID = ApplicationCommands.ECHO
     _additional_fields_ = [
         RequiredField('payload', 'byte[]'),
     ]
@@ -533,12 +533,12 @@ class _Echo(ExtendedMessageBase):
 
 @_dual_endian_decorator
 class _ConnectionValidatedResponse(_Status):
-    ID = ApplicationCommands.CMD_CONNECTION_VALIDATED
+    ID = ApplicationCommands.CONNECTION_VALIDATED
 
 
 @_dual_endian_decorator
 class _SearchRequest(ExtendedMessageBase):
-    ID = ApplicationCommands.CMD_SEARCH_REQUEST
+    ID = ApplicationCommands.SEARCH_REQUEST
 
     _fields_ = [
         ('sequence_id', c_int),
@@ -587,7 +587,7 @@ def _array_property(name, doc):
 
 @_dual_endian_decorator
 class _SearchResponse(ExtendedMessageBase):
-    ID = ApplicationCommands.CMD_SEARCH_RESPONSE
+    ID = ApplicationCommands.SEARCH_RESPONSE
 
     _fields_ = [
         ('_guid', c_ubyte * 12),
@@ -621,7 +621,7 @@ class _SearchResponse(ExtendedMessageBase):
 
 @_dual_endian_decorator
 class _CreateChannelRequest(ExtendedMessageBase):
-    ID = ApplicationCommands.CMD_CREATE_CHANNEL
+    ID = ApplicationCommands.CREATE_CHANNEL
 
     _additional_fields_ = [
         # RequiredField('channels', 'channel_with_id[]'),
@@ -634,7 +634,7 @@ class _CreateChannelRequest(ExtendedMessageBase):
 
 @_dual_endian_decorator
 class _CreateChannelResponse(ExtendedMessageBase):
-    ID = ApplicationCommands.CMD_CREATE_CHANNEL
+    ID = ApplicationCommands.CREATE_CHANNEL
 
     _fields_ = [('client_chid', c_int),
                 ('server_chid', c_int),
@@ -654,7 +654,7 @@ def _is_get_init_condition(msg, buf):
 
 @_dual_endian_decorator
 class _ChannelGetRequest(ExtendedMessageBase):
-    ID = ApplicationCommands.CMD_GET
+    ID = ApplicationCommands.GET
 
     _fields_ = [('server_chid', c_int),
                 ('ioid', c_int),
@@ -685,7 +685,7 @@ def _get_response_get_cond(msg, buf):
 
 @_dual_endian_decorator
 class _ChannelGetResponse(ExtendedMessageBase):
-    ID = ApplicationCommands.CMD_GET
+    ID = ApplicationCommands.GET
 
     _fields_ = [('request_id', c_int),
                 ('subcommand', c_byte),
@@ -714,7 +714,7 @@ class _ChannelGetResponse(ExtendedMessageBase):
 
 @_dual_endian_decorator
 class _ChannelFieldInfoRequest(ExtendedMessageBase):
-    ID = ApplicationCommands.CMD_GET_FIELD
+    ID = ApplicationCommands.GET_FIELD
 
     _fields_ = [('server_chid', c_int),
                 ('ioid', c_int),
@@ -726,7 +726,7 @@ class _ChannelFieldInfoRequest(ExtendedMessageBase):
 
 @_dual_endian_decorator
 class _ChannelFieldInfoResponse(ExtendedMessageBase):
-    ID = ApplicationCommands.CMD_GET_FIELD
+    ID = ApplicationCommands.GET_FIELD
 
     _fields_ = [('ioid', c_int),
                 ('status_type', c_byte),
@@ -740,7 +740,7 @@ class _ChannelFieldInfoResponse(ExtendedMessageBase):
 
 # List of entries where the server is requesting information and the client is
 # replying:
-_server_requests = (ApplicationCommands.CMD_CONNECTION_VALIDATION, )
+_server_requests = (ApplicationCommands.CONNECTION_VALIDATION, )
 
 
 def _build_message_dict():
