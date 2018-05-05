@@ -165,6 +165,10 @@ class Channel:
         else:
             self._callback(event_add_command)
 
+    @property
+    def connected(self):
+        return self.channel.states[ca.CLIENT] is ca.CONNECTED
+
     async def wait_for_connection(self):
         """Wait for this Channel to be connected, ready to use.
 
