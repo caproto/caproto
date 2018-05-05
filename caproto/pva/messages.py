@@ -115,7 +115,7 @@ class SegmentFlag(enum.IntFlag):
     MIDDLE = 0b11
 
 
-class DirectionFlag(enum.IntFlag):
+class DirectionFlag(enum.IntEnum):
     FROM_CLIENT = 0
     FROM_SERVER = 1
 
