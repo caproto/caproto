@@ -8,7 +8,8 @@
 # - TCP socket selector
 # - restart subscriptions
 # The VirtualCircuit has:
-# - callback thread for processing user subscriptions
+# - ThreadPoolExecutor for processing user callbacks on read, write, subscribe
+import concurrent.futures
 import getpass
 import itertools
 import logging
@@ -115,6 +116,7 @@ EVENT_ADD_BATCH_MAX_BYTES = 2**16
 RETRY_SEARCHES_PERIOD = 1
 RESTART_SUBS_PERIOD = 0.1
 STR_ENC = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
+MAX_USER_CALLBACK_WORKERS = os.environ.get('MAX_USER_CALLBACK_WORKERS', 5)
 
 
 logger = logging.getLogger(__name__)
@@ -601,6 +603,10 @@ class Context:
         self.selector.start()
         self._user_disconnected = False
 
+        self.user_callback_executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=MAX_USER_CALLBACK_WORKERS,
+            thread_name_prefix='user-callback-executor')
+
     def get_pvs(self, *names, priority=0, connection_state_callback=None):
         """
         Return a list of PV objects.
@@ -805,6 +811,9 @@ class Context:
             logger.debug("Stopping Context's SelectorThread")
             self.selector.stop()
 
+            logger.debug("Shutting down ThreadPoolExecutor for user callbacks")
+            self.user_callback_executor.shutdown()
+
             logger.debug('Disconnection complete')
 
     def __del__(self):
@@ -822,8 +831,7 @@ class VirtualCircuitManager:
     __slots__ = ('context', 'circuit', 'channels', 'ioids', '_ioid_counter',
                  'subscriptions', '_user_disconnected', 'new_command_cond',
                  'socket', 'selector', 'pvs', 'all_created_pvnames',
-                 'callback_queue', 'callback_thread', '_torn_down',
-                 'process_queue', 'processing', 'master_lock',
+                 '_torn_down', 'process_queue', 'processing', 'master_lock',
                  '__weakref__')
 
     def __init__(self, context, circuit, selector, timeout=TIMEOUT):
@@ -837,10 +845,6 @@ class VirtualCircuitManager:
         self.socket = None
         self.selector = selector
         self._user_disconnected = False
-        self.callback_queue = Queue()
-        self.callback_thread = threading.Thread(target=self._callback_loop,
-                                                daemon=True, name='vcm_cb')
-        self.callback_thread.start()
         self.master_lock = threading.RLock()
         # keep track of all PV names that are successfully connected to within
         # this circuit. This is to be cleared upon disconnection:
@@ -871,20 +875,6 @@ class VirtualCircuitManager:
         return (f"<VirtualCircuitManager circuit={self.circuit} "
                 f"pvs={len(self.pvs)} ioids={len(self.ioids)} "
                 f"subscriptions={len(self.subscriptions)}>")
-
-    def _callback_loop(self):
-        while not self.context._close_event.is_set():
-            t0, sub, command = self.callback_queue.get()
-            if sub is ca.DISCONNECTED:
-                break
-
-            dt = time.monotonic() - t0
-            logger.debug('Executing callback (dt=%.1f ms): %s %s',
-                         dt * 1000., sub, command)
-
-            sub.process(command)
-
-        logger.debug('Callback loop exiting')
 
     @property
     def connected(self):
@@ -957,16 +947,10 @@ class VirtualCircuitManager:
                                 )
                 else:
                     chan = ioid_info['channel']
-                    if isinstance(command, ca.WriteNotifyResponse):
-                        chan.process_write_notify(command)
-                    else:
-                        chan.process_read_notify(command)
                     callback = ioid_info.get('callback')
                     if callback is not None:
-                        try:
-                            callback(command)
-                        except Exception as ex:
-                            logger.exception('ioid callback failed')
+                        self.context.user_callback_executor.submit(
+                            callback, command)
 
                 event = ioid_info['event']
                 # If PV.read() or PV.write() are waiting on this response,
@@ -986,7 +970,9 @@ class VirtualCircuitManager:
                     # unsubscription.
                     pass
                 else:
-                    self.callback_queue.put((time.monotonic(), sub, command))
+                    # This method submits jobs to the Contexts's
+                    # ThreadPoolExecutor for user callbacks.
+                    sub.process(command)
             elif isinstance(command, ca.EventCancelResponse):
                 self.subscriptions.pop(command.subscriptionid)
             elif isinstance(command, ca.CreateChanResponse):
@@ -1022,7 +1008,6 @@ class VirtualCircuitManager:
         # This will cause all future calls to Context.get_circuit_manager()
         # to create a fresh VirtualCiruit and VirtualCircuitManager.
         self.context.circuit_managers.pop(self.circuit.address, None)
-        self.callback_queue.put((time.monotonic(), ca.DISCONNECTED, None))
 
         # Clean up the socket if it has not yet been cleared:
         sock, self.socket = self.socket, None
@@ -1082,9 +1067,8 @@ class VirtualCircuitManager:
 class PV:
     """Wraps a VirtualCircuit and a caproto.ClientChannel."""
     __slots__ = ('name', 'priority', 'context', '_circuit_manager', '_channel',
-                 '_read_notify_callback',
                  'subscriptions', 'command_bundle_queue', '_component_lock',
-                 '_write_notify_callback', '_idle', '_in_use', '_usages',
+                 '_idle', '_in_use', '_usages',
                  'connection_state_callback', 'master_lock', '__weakref__')
 
     def __init__(self, name, priority, context, connection_state_callback):
@@ -1106,8 +1090,6 @@ class PV:
         self._circuit_manager = None
         self._channel = None
         self.subscriptions = {}
-        self._read_notify_callback = None  # called on ReadNotifyResponse
-        self._write_notify_callback = None  # called on WriteNotifyResponse
         self._idle = False
         self._in_use = threading.Condition()
         self._usages = 0
@@ -1163,24 +1145,6 @@ class PV:
             if channel is None:
                 return False
             return channel.states[ca.CLIENT] is ca.CONNECTED
-
-    def process_read_notify(self, read_notify_command):
-        if self._read_notify_callback is None:
-            return
-        else:
-            try:
-                return self._read_notify_callback(read_notify_command)
-            except Exception as ex:
-                print(ex)
-
-    def process_write_notify(self, write_notify_command):
-        if self._write_notify_callback is None:
-            return
-        else:
-            try:
-                return self._write_notify_callback(write_notify_command)
-            except Exception as ex:
-                print(ex)
 
     def wait_for_search(self, *, timeout=2):
         """
@@ -1473,7 +1437,10 @@ class CallbackHandler:
 
     @master_lock
     def process(self, *args, **kwargs):
-
+        """
+        This is a fast operation that submits jobs to the Context's
+        ThreadPoolExecutor and then returns.
+        """
         to_remove = []
         with self._callback_lock:
             callbacks = list(self.callbacks.items())
@@ -1484,10 +1451,8 @@ class CallbackHandler:
                 to_remove.append(cb_id)
                 continue
 
-            try:
-                callback(*args, **kwargs)
-            except Exception as ex:
-                print(ex)
+            self.pv.circuit_manager.context.user_callback_executor.submit(
+                callback, *args, **kwargs)
 
         with self._callback_lock:
             for remove_id in to_remove:
