@@ -20,6 +20,22 @@ __all__ = ['PV', 'get_pv', 'caget', 'caput']
 logger = logging.getLogger(__name__)
 
 
+def _args_lock(func):
+    """
+    Apply to a lock during an instance method's execution.
+
+    This expects the instance to have an attribute named `master_lock`.
+    """
+    counter = itertools.count()
+
+    def inner(self, *args, **kwargs):
+        next(counter)
+        with self._args_lock:
+            ret = func(self, *args, **kwargs)
+            return ret
+    return inner
+
+
 def ensure_connection(func):
     # TODO get timeout default from func signature
     @functools.wraps(func)
@@ -174,6 +190,7 @@ class PV:
         self.ftype = None
         self._connect_event = threading.Event()
         self._state_lock = threading.RLock()
+        self._args_lock = threading.RLock()
         self.connection_timeout = connection_timeout
         self.default_count = count
         self._auto_monitor_sub = None
@@ -181,13 +198,14 @@ class PV:
         if self.connection_timeout is None:
             self.connection_timeout = 1
 
-        self._args = {}.fromkeys(self._fields)
-        self._args['pvname'] = self.pvname
-        self._args['count'] = count
-        self._args['nelm'] = -1
-        self._args['type'] = None
-        self._args['typefull'] = None
-        self._args['access'] = None
+        with self._args_lock:
+            self._args = {}.fromkeys(self._fields)
+            self._args['pvname'] = self.pvname
+            self._args['count'] = count
+            self._args['nelm'] = -1
+            self._args['type'] = None
+            self._args['typefull'] = None
+            self._args['access'] = None
         self.connection_callbacks = []
         self._cb_count = iter(itertools.count())
 
@@ -272,22 +290,23 @@ class PV:
             logger.error('Connected = %r', self._connected)
             return
 
-        self._args['type'] = ch.native_data_type
+        with self._args_lock:
+            self._args['type'] = ch.native_data_type
 
-        type_key = 'control' if form == 'ctrl' else form
-        self._args['typefull'] = field_types[type_key][ch.native_data_type]
-        self._args['nelm'] = ch.native_data_count
-        self._args['count'] = ch.native_data_count
+            type_key = 'control' if form == 'ctrl' else form
+            self._args['typefull'] = field_types[type_key][ch.native_data_type]
+            self._args['nelm'] = ch.native_data_count
+            self._args['count'] = ch.native_data_count
 
-        self._args['write_access'] = AccessRights.WRITE in ch.access_rights
-        self._args['read_access'] = AccessRights.READ in ch.access_rights
+            self._args['write_access'] = AccessRights.WRITE in ch.access_rights
+            self._args['read_access'] = AccessRights.READ in ch.access_rights
 
-        access_strs = ('no access', 'read-only', 'write-only', 'read/write')
-        self._args['access'] = access_strs[ch.access_rights]
+            access_strs = ('no access', 'read-only', 'write-only', 'read/write')
+            self._args['access'] = access_strs[ch.access_rights]
 
-        if self.auto_monitor is None:
-            mcount = count if count is not None else self._args['count']
-            self.auto_monitor = mcount < AUTOMONITOR_MAXLENGTH
+            if self.auto_monitor is None:
+                mcount = count if count is not None else self._args['count']
+                self.auto_monitor = mcount < AUTOMONITOR_MAXLENGTH
 
         self._check_auto_monitor_sub()
         self._connected = True
@@ -383,32 +402,34 @@ class PV:
             # TODO if you want char arrays not as_string
             # force no-monitor rather than
             use_monitor = False
+        with self._args_lock:
+            # trigger going out to got data from network
+            if ((not use_monitor) or
+                (self._auto_monitor_sub is None) or
+                (self._args['value'] is None) or
+                (count is not None and
+                 count > len(self._args['value']))):
 
-        # trigger going out to got data from network
-        if ((not use_monitor) or
-            (self._auto_monitor_sub is None) or
-            (self._args['value'] is None) or
-            (count is not None and
-             count > len(self._args['value']))):
-            command = self._caproto_pv.read(data_type=dt,
-                                            data_count=count)
-            info = _read_response_to_pyepics(self.typefull, command)
-            self._args.update(**info)
+                command = self._caproto_pv.read(data_type=dt,
+                                                data_count=count)
+                info = _read_response_to_pyepics(self.typefull, command)
+                self._args.update(**info)
 
-        info = self._args
+            info = self._args
 
-        if as_string and self.typefull in ca.enum_types:
-            enum_strs = self.enum_strs
-        else:
-            enum_strs = None
+            if as_string and self.typefull in ca.enum_types:
+                enum_strs = self.enum_strs
+            else:
+                enum_strs = None
 
-        return _pyepics_get_value(
-            value=info['value'], string_value=info['char_value'],
-            full_type=self.typefull, native_count=info['count'],
-            requested_count=count, enum_strings=enum_strs,
-            as_string=as_string, as_numpy=as_numpy)
+            return _pyepics_get_value(
+                value=info['value'], string_value=info['char_value'],
+                full_type=self.typefull, native_count=info['count'],
+                requested_count=count, enum_strings=enum_strs,
+                as_string=as_string, as_numpy=as_numpy)
 
     @ensure_connection
+    @_args_lock
     def put(self, value, *, wait=False, timeout=30.0,
             use_complete=False, callback=None, callback_data=None):
         """set value for PV, optionally waiting until the processing is
@@ -461,6 +482,7 @@ class PV:
                                timeout=timeout, use_notify=use_notify)
 
     @ensure_connection
+    @_args_lock
     def get_ctrlvars(self, timeout=5, warn=True):
         "get control values for variable"
         dtype = field_types['control'][self.type]
@@ -471,6 +493,7 @@ class PV:
         return info
 
     @ensure_connection
+    @_args_lock
     def get_timevars(self, timeout=5, warn=True):
         "get time values for variable"
         dtype = field_types['time'][self.type]
@@ -479,12 +502,14 @@ class PV:
         info['value'] = command.data
         self._args.update(**info)
 
+    @_args_lock
     def __on_changes(self, command):
         """internal callback function: do not overwrite!!
         To have user-defined code run when the PV value changes,
         use add_callback()
         """
         info = _read_response_to_pyepics(self.typefull, command)
+
         self._args.update(**info)
         self.run_callbacks()
 
@@ -576,11 +601,13 @@ class PV:
         return self._getarg('status')
 
     @property
+    @_args_lock
     def type(self):
         "pv type"
         return self._args['type']
 
     @property
+    @_args_lock
     def typefull(self):
         "pv type"
         return self._args['typefull']
@@ -709,6 +736,7 @@ class PV:
         "returns True if a put-with-wait has completed"
         return self._args['put_complete']
 
+    @_args_lock
     def _getinfo(self):
         "get information paragraph"
         self.get_ctrlvars()
@@ -782,6 +810,7 @@ class PV:
         out.append('=============================')
         return '\n'.join(out)
 
+    @_args_lock
     def _getarg(self, arg):
         "wrapper for property retrieval"
         if self._args['value'] is None:
