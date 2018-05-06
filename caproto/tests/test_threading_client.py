@@ -372,9 +372,12 @@ def test_timeout(ioc, context):
     def cb(response):
         responses.append(response)
 
-    with pytest.raises(TimeoutError):
-        pv.write((1, ), timeout=0, callback=cb)
-
-    # Wait and make sure that the callback is not called either.
+    # This may or may not raise a TimeoutError depending on who wins the race.
+    # The important thing is that the callback should _never_ be processed.
+    try:
+        pv.write((2, ), timeout=0, callback=cb)
+    except TimeoutError:
+        pass
+    # Wait and make sure that the callback is not called.
     time.sleep(0.2)
     assert not responses

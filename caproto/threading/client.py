@@ -276,7 +276,12 @@ class SharedBroadcaster:
         self.udp_sock = None
         self._search_lock = threading.RLock()
         self._retry_unanswered_searches_thread = None
-        self._retries_enabled = threading.Event()
+        # This Event ensures that we send a registration request before our
+        # first search request.
+        self._searching_enabled = threading.Event()
+        # This Event lets us nudge the search thread when the user asks for new
+        # PVs (via Context.get_pvs).
+        self._search_now = threading.Event()
 
         self._id_counter = itertools.count(0)
         self.search_results = {}  # map name to (time, address)
@@ -332,7 +337,7 @@ class SharedBroadcaster:
 
         with self.command_cond:
             self.send(ca.EPICS_CA2_PORT, command)
-            self._retries_enabled.set()
+            self._searching_enabled.set()
 
     def new_id(self):
         while True:
@@ -375,7 +380,7 @@ class SharedBroadcaster:
             self._close_event.set()
             self.search_results.clear()
             self._registration_last_sent = 0
-            self._retries_enabled.clear()
+            self._searching_enabled.clear()
             self.udp_sock = None
             self.broadcaster.disconnect()
             self.selector.stop()
@@ -414,7 +419,20 @@ class SharedBroadcaster:
         return address
 
     def search(self, results_queue, names, *, timeout=2):
-        "Generate, process, and the transport a search request."
+        """
+        Search for PV names.
+
+        The ``results_queue`` will receive ``(address, names)`` (the address of
+        a server and a list of name(s) that it has) when results are received.
+
+        If a cached result is already known, it will be put immediately into
+        ``results_queue`` from this thread during this method's execution.
+
+        If not, a SearchRequest will be sent from another thread. If necessary,
+        the request will be re-sent periodically. When a matching response is
+        received (by yet another thread) ``(address, names)`` will be put into
+        the ``results_queue``.
+        """
         if self._should_attempt_registration():
             self._register()
 
@@ -444,15 +462,7 @@ class SharedBroadcaster:
                 search_id = new_id()
                 search_ids.append(search_id)
                 unanswered_searches[search_id] = (name, results_queue)
-
-        if not needs_search:
-            return
-
-        logger.debug('Searching for %r PVs....', len(needs_search))
-        requests = (ca.SearchRequest(name, search_id, 13)
-                    for name, search_id in zip(needs_search, search_ids))
-        for batch in batch_requests(requests, SEARCH_MAX_DATAGRAM_BYTES):
-            self.send(ca.EPICS_CA1_PORT, ca.VersionRequest(0, 13), *batch)
+        self._search_now.set()
 
     def received(self, bytes_recv, address):
         "Receive and process and next command broadcasted over UDP."
@@ -475,7 +485,7 @@ class SharedBroadcaster:
 
         while not self._close_event.is_set():
             try:
-                commands = self.command_bundle_queue.get(timeout=1)
+                commands = self.command_bundle_queue.get(timeout=0.5)
             except Empty:
                 # By restarting the loop, we will first check that we are not
                 # supposed to shut down the thread before we go back to
@@ -524,11 +534,18 @@ class SharedBroadcaster:
         logger.debug('Broadcaster command loop exiting')
 
     def _retry_unanswered_searches(self):
+        """
+        Periodically (re-)send a SearchRequest for all unanswered searches.
+
+        When the self._search_now Event is set, stop waiting and re-issue
+        SearchRequests immediately.
+        """
         logger.debug('Search-retry thread started.')
         while not self._close_event.is_set():
             try:
-                self._retries_enabled.wait(0.5)
+                self._searching_enabled.wait(0.5)
             except TimeoutError:
+                # Here we go check on self._close_event before waiting again.
                 continue
 
             t = time.monotonic()
@@ -537,18 +554,18 @@ class SharedBroadcaster:
                         for search_id, (name, _) in
                         items)
 
-            if not self._retries_enabled.is_set():
+            if not self._searching_enabled.is_set():
                 continue
 
             if items:
-                logger.debug('Retrying searches for %d PVs', len(items))
+                logger.debug('Sending %d SearchRequests', len(items))
 
             for batch in batch_requests(requests,
                                         SEARCH_MAX_DATAGRAM_BYTES):
                 self.send(ca.EPICS_CA1_PORT, ca.VersionRequest(0, 13), *batch)
 
             wait_time = max(0, RETRY_SEARCHES_PERIOD - (time.monotonic() - t))
-            self._close_event.wait(wait_time)
+            self._search_now.wait(wait_time)
 
         logger.debug('Search-retry thread exiting.')
 
@@ -682,7 +699,7 @@ class Context:
         # queue is held by SharedBroadcaster.command_loop.
         while not self._close_event.is_set():
             try:
-                address, names = self._search_results_queue.get(timeout=1)
+                address, names = self._search_results_queue.get(timeout=0.5)
             except Empty:
                 # By restarting the loop, we will first check that we are not
                 # supposed to shut down the thread before we go back to
