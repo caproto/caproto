@@ -91,9 +91,11 @@ import time
 import os
 import numpy
 import threading
+from types import SimpleNamespace
 from contextlib import contextmanager
 from caproto.threading.pyepics_compat import (PV, caput, caget, cainfo,
-                                              caget_many, caput_many)
+                                              caget_many, caput_many,
+                                              AccessRightsException)
 from caproto.threading.client import Context, SharedBroadcaster
 
 from .conftest import default_setup_module, default_teardown_module
@@ -868,3 +870,124 @@ def test_pyepics_pv():
         if isinstance(v, property):
             getattr(time_pv, k)
             getattr(ctrl_pv, k)
+
+
+
+@pytest.fixture(scope='function')
+def access_security_softioc(request, prefix):
+    'From pyepics test_cas.py'
+    access_rights_db = {
+        ('{}:ao'.format(prefix), 'ao') : {
+            'ASG': "rps_threshold",
+            'DRVH': "10",
+            'DRVL': "0",
+        },
+        ('{}:bo'.format(prefix), 'bo') : {
+            'ASG': "rps_lock",
+            'ZNAM': "OUT",
+            'ONAM': "IN",
+        },
+        ('{}:ao2'.format(prefix), 'ao') : {
+            'DRVH': "5",
+            'DRVL': "1",
+        },
+        ('{}:permit'.format(prefix), 'bo') : {
+            'VAL': "0",
+            'PINI': "1",
+            'ZNAM': "DISABLED",
+            'ONAM': "ENABLED",
+        },
+    }
+
+    access_rights_asg_rules = '''
+        ASG(DEFAULT) {
+            RULE(1,READ)
+            RULE(1,WRITE,TRAPWRITE)
+        }
+        ASG(rps_threshold) {
+            INPA("$(P):permit")
+            RULE(1, READ)
+            RULE(0, WRITE, TRAPWRITE) {
+                CALC("A=1")
+            }
+            RULE(1, WRITE, TRAPWRITE) {
+                CALC("A=0")
+            }
+        }
+        ASG(rps_lock) {
+            INPA("$(P):permit")
+            RULE(1, READ)
+            RULE(1, WRITE, TRAPWRITE) {
+                CALC("A=0")
+            }
+        }
+    '''
+
+    from .conftest import run_softioc, poll_readiness
+
+    handler = run_softioc(request, db=access_rights_db,
+                          access_rules_text=access_rights_asg_rules,
+                          macros={'P': prefix},
+                          )
+
+    process = handler.processes[-1]
+    pvs = {pv[len(prefix) + 1:]: PV(pv)
+           for pv, rtype in access_rights_db
+           }
+    pvs['ao.DRVH'] = PV(prefix + ':ao.DRVH')
+
+    poll_readiness(pvs['ao'].pvname)
+
+    for pv in pvs.values():
+        pv.wait_for_connection()
+
+    return SimpleNamespace(process=process, prefix=prefix,
+                           name='access_rights', pvs=pvs, type='epics-base')
+
+
+def test_permit_disabled(access_security_softioc):
+    # with the permit disabled, all test pvs should be readable/writable
+    pvs = access_security_softioc.pvs
+
+    for pv in pvs.values():
+        assert pv.read_access and pv.write_access
+
+
+def test_permit_enabled(access_security_softioc):
+    pvs = access_security_softioc.pvs
+    # set the run-permit
+    pvs['permit'].put(1, wait=True)
+    assert pvs['permit'].get(as_string=True, use_monitor=False) == 'ENABLED'
+
+    # rps_lock rule should disable write access
+    assert pvs['bo'].write_access is False
+    with pytest.raises(AccessRightsException):
+        pvs['bo'].put(1, wait=True)
+
+    # rps_threshold rule should disable write access to metadata, not VAL
+    assert pvs['ao'].write_access is True
+    assert pvs['ao.DRVH'].write_access is False
+    with pytest.raises(AccessRightsException):
+        pvs['ao.DRVH'].put(100, wait=True)
+
+
+def test_pv_access_event_callback(access_security_softioc):
+    pvs = access_security_softioc.pvs
+
+    # clear the run-permit
+    pvs['permit'].put(0, wait=True)
+    assert pvs['permit'].get(as_string=True, use_monitor=False) == 'DISABLED'
+
+    def lcb(read_access, write_access, pv=None):
+        assert pv.read_access == read_access
+        assert pv.write_access == write_access
+        pv.flag = True
+
+    bo = PV(pvs['bo'].pvname, access_callback=lcb)
+    bo.flag = False
+
+    # set the run-permit to trigger an access rights event
+    pvs['permit'].put(1, wait=True)
+    assert pvs['permit'].get(as_string=True, use_monitor=False) == 'ENABLED'
+
+    assert bo.flag is True

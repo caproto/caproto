@@ -287,7 +287,7 @@ class VirtualCircuit:
             # Update other Channel and Circuit state.
             if isinstance(command, AccessRightsResponse):
                 chan.access_rights = command.access_rights
-            if isinstance(command, CreateChanResponse):
+            elif isinstance(command, CreateChanResponse):
                 chan.sid = command.sid
                 self.channels_sid[chan.sid] = chan
             elif isinstance(command, ClearChannelResponse):

@@ -20,6 +20,10 @@ __all__ = ['PV', 'get_pv', 'caget', 'caput']
 logger = logging.getLogger(__name__)
 
 
+class AccessRightsException(ca.CaprotoError):
+    ...
+
+
 def _args_lock(func):
     """
     Apply to a lock during an instance method's execution.
@@ -183,7 +187,8 @@ class PV:
     def __init__(self, pvname, callback=None, form='time',
                  verbose=False, auto_monitor=False, count=None,
                  connection_callback=None,
-                 connection_timeout=None, *, context=None):
+                 connection_timeout=None, access_callback=None, *,
+                 context=None):
 
         if context is None:
             context = self._default_context
@@ -218,6 +223,11 @@ class PV:
         if connection_callback is not None:
             self.connection_callbacks = [connection_callback]
 
+        self.access_callbacks = []
+        if access_callback is not None:
+            logger.debug('%s registered callback!', self.pvname)
+            self.access_callbacks.append(access_callback)
+
         self.callbacks = {}
         self._conn_started = False
 
@@ -231,7 +241,9 @@ class PV:
 
         self._caproto_pv, = self._context.get_pvs(
             self.pvname,
-            connection_state_callback=self._connection_state_changed)
+            connection_state_callback=self._connection_state_changed,
+            access_rights_callback=self._access_rights_changed,
+        )
 
         if self._caproto_pv.connected:
             # connection state callback was already called
@@ -303,12 +315,7 @@ class PV:
             self._args['typefull'] = field_types[type_key][ch.native_data_type]
             self._args['nelm'] = ch.native_data_count
             self._args['count'] = ch.native_data_count
-
-            self._args['write_access'] = AccessRights.WRITE in ch.access_rights
-            self._args['read_access'] = AccessRights.READ in ch.access_rights
-
-            access_strs = ('no access', 'read-only', 'write-only', 'read/write')
-            self._args['access'] = access_strs[ch.access_rights]
+            self._access_rights_changed(ch.access_rights)
 
             if self.auto_monitor is None:
                 mcount = count if count is not None else self._args['count']
@@ -444,6 +451,9 @@ class PV:
         """
         if callback_data is None:
             callback_data = ()
+        if not self._args['write_access']:
+            raise AccessRightsException('Cannot put to PV according to write access')
+
         if self._args['typefull'] in ca.enum_types:
             if isinstance(value, str):
                 try:
@@ -498,6 +508,7 @@ class PV:
         info['raw_value'] = value
         info['value'] = _scalarify(value, command.data_type, command.data_count)
         self._args.update(**info)
+        self.force_read_access_rights()
         return info
 
     @ensure_connection
@@ -511,6 +522,29 @@ class PV:
         info['raw_value'] = value
         info['value'] = _scalarify(value, command.data_type, command.data_count)
         self._args.update(**info)
+
+    @ensure_connection
+    def force_read_access_rights(self):
+        'Force a read of access rights, not relying on last event callback.'
+        self._access_rights_changed(self._caproto_pv.channel.access_rights)
+
+    def _access_rights_changed(self, access_rights):
+        with self._args_lock:
+            read_access = AccessRights.READ in access_rights
+            write_access = AccessRights.WRITE in access_rights
+            self._args['write_access'] = write_access
+            self._args['read_access'] = read_access
+
+            access_strs = ('no access', 'read-only', 'write-only', 'read/write')
+            self._args['access'] = access_strs[access_rights]
+
+        logger.debug('%r access rights updated', self)
+
+        for cb in self.access_callbacks:
+            try:
+                cb(read_access, write_access, pv=self)
+            except Exception:
+                logger.exception('Access rights callback failed')
 
     @_args_lock
     def __on_changes(self, command):

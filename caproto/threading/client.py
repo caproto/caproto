@@ -607,7 +607,8 @@ class Context:
             max_workers=MAX_USER_CALLBACK_WORKERS,
             thread_name_prefix='user-callback-executor')
 
-    def get_pvs(self, *names, priority=0, connection_state_callback=None):
+    def get_pvs(self, *names, priority=0, connection_state_callback=None,
+                access_rights_callback=None):
         """
         Return a list of PV objects.
 
@@ -619,21 +620,25 @@ class Context:
         pvs = []  # list of all PV objects to return
         names_to_search = []  # subset of names that we need to search for
         for name in names:
-
             with self.pv_cache_lock:
                 try:
                     pv = self.pvs[(name, priority)]
                     new_instance = False
                 except KeyError:
-                    pv = PV(name, priority, self, connection_state_callback)
+                    pv = PV(name, priority, self, connection_state_callback,
+                            access_rights_callback)
                     names_to_search.append(name)
                     self.pvs[(name, priority)] = pv
                     self.pvs_needing_circuits[name].add(pv)
                     new_instance = True
 
-            if not new_instance and connection_state_callback:
-                pv.connection_state_callback.add_callback(
-                    connection_state_callback)
+            if not new_instance:
+                if connection_state_callback is not None:
+                    pv.connection_state_callback.add_callback(
+                        connection_state_callback)
+                if access_rights_callback is not None:
+                    pv.access_rights_callback.add_callback(
+                        access_rights_callback)
 
             pvs.append(pv)
 
@@ -644,7 +649,9 @@ class Context:
         # Ask the Broadcaster to search for every PV for which we do not
         # already have an instance. It might already have a cached search
         # result, but that is the concern of broadcaster.search.
-        self.broadcaster.search(self._search_results_queue, names_to_search)
+        if names_to_search:
+            self.broadcaster.search(self._search_results_queue,
+                                    names_to_search)
         return pvs
 
     def reconnect(self, keys):
@@ -973,6 +980,9 @@ class VirtualCircuitManager:
                     # This method submits jobs to the Contexts's
                     # ThreadPoolExecutor for user callbacks.
                     sub.process(command)
+            elif isinstance(command, ca.AccessRightsResponse):
+                pv = self.pvs[command.cid]
+                pv.access_rights_changed(command.access_rights)
             elif isinstance(command, ca.EventCancelResponse):
                 self.subscriptions.pop(command.subscriptionid)
             elif isinstance(command, ca.CreateChanResponse):
@@ -1067,11 +1077,13 @@ class VirtualCircuitManager:
 class PV:
     """Wraps a VirtualCircuit and a caproto.ClientChannel."""
     __slots__ = ('name', 'priority', 'context', '_circuit_manager', '_channel',
-                 'subscriptions', 'command_bundle_queue', '_component_lock',
-                 '_idle', '_in_use', '_usages',
-                 'connection_state_callback', 'master_lock', '__weakref__')
+                 'access_rights_callback', 'subscriptions',
+                 'command_bundle_queue', '_component_lock', '_idle', '_in_use',
+                 '_usages', 'connection_state_callback', 'master_lock',
+                 '__weakref__')
 
-    def __init__(self, name, priority, context, connection_state_callback):
+    def __init__(self, name, priority, context, connection_state_callback,
+                 access_rights_callback):
         """
         These must be instantiated by a Context, never directly.
         """
@@ -1082,10 +1094,15 @@ class PV:
         # Use this lock whenever we touch circuit_manager or channel.
         self._component_lock = threading.RLock()
         self.connection_state_callback = CallbackHandler(self)
+        self.access_rights_callback = CallbackHandler(self)
 
         if connection_state_callback is not None:
             self.connection_state_callback.add_callback(
                 connection_state_callback)
+
+        if access_rights_callback is not None:
+            self.access_rights_callback.add_callback(
+                access_rights_callback)
 
         self._circuit_manager = None
         self._channel = None
@@ -1113,6 +1130,9 @@ class PV:
     def channel(self, val):
         with self._component_lock:
             self._channel = val
+
+    def access_rights_changed(self, rights):
+        self.access_rights_callback.process(rights)
 
     def connection_state_changed(self, state, channel):
         logger.debug('%s Connection state changed %s %s', self.name, state,
