@@ -271,7 +271,7 @@ class SharedBroadcaster:
         self.log_level = log_level
         self.udp_sock = None
         self._search_lock = threading.RLock()
-        self._retry_thread = None
+        self._retry_unanswered_searches_thread = None
         self._retries_enabled = threading.Event()
 
         self._id_counter = itertools.count(0)
@@ -296,10 +296,6 @@ class SharedBroadcaster:
 
         self._registration_retry_time = registration_retry_time
         self._registration_last_sent = 0
-
-        # When no listeners exist, automatically disconnect the broadcaster
-        self.disconnect_thread = None
-        self._disconnect_timer = None
 
         try:
             # Always attempt registration on initialization, but allow failures
@@ -353,42 +349,19 @@ class SharedBroadcaster:
 
     def add_listener(self, listener):
         with self._search_lock:
-            if self._retry_thread is None:
-                self._retry_thread = threading.Thread(
-                    target=self._retry_unanswered_searches, daemon=True, name='retry')
-                self._retry_thread.start()
+            if self._retry_unanswered_searches_thread is None:
+                self._retry_unanswered_searches_thread = threading.Thread(
+                    target=self._retry_unanswered_searches, daemon=True,
+                    name='retry')
+                self._retry_unanswered_searches_thread.start()
 
             self.listeners.add(listener)
-            weakref.finalize(listener, self._listener_removed)
 
     def remove_listener(self, listener):
         try:
             self.listeners.remove(listener)
         except KeyError:
             pass
-        finally:
-            self._listener_removed()
-
-    def _disconnect_wait(self):
-        while len(self.listeners) == 0:
-            self._disconnect_timer -= 1
-            if self._disconnect_timer == 0:
-                logger.debug('Unused broadcaster, disconnecting')
-                self.disconnect()
-                break
-            time.sleep(1.0)
-
-        self.disconnect_thread = None
-
-    def _listener_removed(self):
-        with self._search_lock:
-            if not self.listeners:
-                self._disconnect_timer = 30
-                if self.disconnect_thread is None:
-                    self.disconnect_thread = threading.Thread(
-                        target=self._disconnect_wait, daemon=True,
-                        name='disconnect')
-                    self.disconnect_thread.start()
 
     def disconnect(self, *, wait=True, timeout=2):
         with self.command_cond:
@@ -611,10 +584,10 @@ class Context:
         self._close_event = threading.Event()
 
         logger.debug('Context: start process search results loop')
-        self._search_thread = threading.Thread(
+        self._process_search_results_thread = threading.Thread(
             target=self._process_search_results_loop,
             daemon=True, name='search')
-        self._search_thread.start()
+        self._process_search_results_thread.start()
 
         logger.debug('Context: start restart_subscriptions loop')
         self._restart_sub_thread = threading.Thread(
@@ -826,6 +799,9 @@ class Context:
             # disconnect the underlying state machine
             logger.debug('Removing Context from the broadcaster')
             self.broadcaster.remove_listener(self)
+
+            logger.debug("Stopping Context's SelectorThread")
+            self.selector.stop()
 
             logger.debug('Disconnection complete')
 
