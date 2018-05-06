@@ -320,3 +320,23 @@ def test_unsubscribe_all(ioc, context):
     assert len(collector) == 0
     assert not sub0.callbacks
     assert not sub1.callbacks
+
+
+def test_timeout(ioc, context):
+    pv, = context.get_pvs(ioc.pvs['int'])
+    pv.wait_for_connection()
+
+    # Check that timeout=None is allowed.
+    pv.write((1, ), timeout=None)
+
+    responses = []
+
+    def cb(response):
+        responses.append(response)
+
+    with pytest.raises(TimeoutError):
+        pv.write((1, ), timeout=0, callback=cb)
+
+    # Wait and make sure that the callback is not called either.
+    time.sleep(0.2)
+    assert not responses

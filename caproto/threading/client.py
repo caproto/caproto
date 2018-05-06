@@ -954,7 +954,8 @@ class VirtualCircuitManager:
             elif isinstance(command, (ca.ReadNotifyResponse,
                                       ca.WriteNotifyResponse)):
                 ioid_info = self.ioids.pop(command.ioid)
-                if time.monotonic() > ioid_info['deadline']:
+                deadline = ioid_info['deadline']
+                if deadline is not None and time.monotonic() > deadline:
                     logger.warn(f"ignoring late response with "
                                 f"ioid={command.ioid} because it arrived "
                                 f"{time.monotonic() - ioid_info['deadline']} "
@@ -1295,7 +1296,7 @@ class PV:
             not received within the time specified by the `timeout` parameter.
         callback : callable or None
             Called with the WriteNotifyResponse as its argument when received.
-        timeout : number
+        timeout : number or None
             Number of seconds to wait before raising TimeoutError. Default is
             2.
         data_type : a ChannelType or corresponding integer ID, optional
@@ -1325,7 +1326,8 @@ class PV:
 
         self.circuit_manager.ioids[ioid] = ioid_info
 
-        ioid_info['deadline'] = time.monotonic() + timeout
+        deadline = time.monotonic() + timeout if timeout is not None else None
+        ioid_info['deadline'] = deadline
         # TODO: circuit_manager can be removed from underneath us here
         self.circuit_manager.send(command)
 
@@ -1360,7 +1362,7 @@ class PV:
             not received within the time specified by the `timeout` parameter.
         callback : callable or None
             Called with the WriteNotifyResponse as its argument when received.
-        timeout : number
+        timeout : number or None
             Number of seconds to wait before raising TimeoutError. Default is
             2.
         use_notify : boolean or None
@@ -1401,7 +1403,8 @@ class PV:
 
         self.circuit_manager.ioids[ioid] = ioid_info
 
-        ioid_info['deadline'] = time.monotonic() + timeout
+        deadline = time.monotonic() + timeout if timeout is not None else None
+        ioid_info['deadline'] = deadline
         # do not need to lock this, locking happens in circuit command
         self.circuit_manager.send(command)
         if not wait:
