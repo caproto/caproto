@@ -92,7 +92,8 @@ def _read_response_to_pyepics(full_type, command):
     info = _parse_dbr_metadata(command.metadata)
 
     value = command.data
-    info['value'] = value
+    info['raw_value'] = value
+    info['value'] = _scalerify(value, command.data_type, command.data_count)
 
     if full_type in ca.char_types:
         value = value.tobytes().partition(b'\x00')[0].decode(STR_ENC)
@@ -106,6 +107,12 @@ def _read_response_to_pyepics(full_type, command):
         info['char_value'] = None
 
     return info
+
+
+def _scalerify(data, ntype, count):
+    if count == 1 and ntype not in (ChannelType.CHAR, ChannelType.STRING):
+        return data[0]
+    return data
 
 
 def _pyepics_get_value(value, string_value, full_type, native_count, *,
@@ -423,7 +430,7 @@ class PV:
                 enum_strs = None
 
             return _pyepics_get_value(
-                value=info['value'], string_value=info['char_value'],
+                value=info['raw_value'], string_value=info['char_value'],
                 full_type=self.typefull, native_count=info['count'],
                 requested_count=count, enum_strings=enum_strs,
                 as_string=as_string, as_numpy=as_numpy)
@@ -488,7 +495,9 @@ class PV:
         dtype = field_types['control'][self.type]
         command = self._caproto_pv.read(data_type=dtype, timeout=timeout)
         info = _parse_dbr_metadata(command.metadata)
-        info['value'] = command.data
+        value = command.data
+        info['raw_value'] = value
+        info['value'] = _scalerify(value, command.data_type, command.data_count)
         self._args.update(**info)
         return info
 
@@ -499,7 +508,9 @@ class PV:
         dtype = field_types['time'][self.type]
         command = self._caproto_pv.read(data_type=dtype, timeout=timeout)
         info = _parse_dbr_metadata(command.metadata)
-        info['value'] = command.data
+        value = command.data
+        info['raw_value'] = value
+        info['value'] = _scalerify(value, command.data_type, command.data_count)
         self._args.update(**info)
 
     @_args_lock
@@ -945,7 +956,7 @@ def caget_many(pvlist, as_string=False, count=None, as_numpy=True, timeout=5.0,
         full_type = pv.channel.native_data_type
         info = _read_response_to_pyepics(full_type=full_type,
                                          command=readings[pv])
-        return _pyepics_get_value(value=info['value'],
+        return _pyepics_get_value(value=info['raw_value'],
                                   string_value=info['char_value'],
                                   full_type=pv.channel.native_data_type,
                                   native_count=pv.channel.native_data_count,
