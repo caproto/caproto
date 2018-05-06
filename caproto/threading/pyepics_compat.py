@@ -205,14 +205,13 @@ class PV:
         if self.connection_timeout is None:
             self.connection_timeout = 1
 
-        with self._args_lock:
-            self._args = {}.fromkeys(self._fields)
-            self._args['pvname'] = self.pvname
-            self._args['count'] = count
-            self._args['nelm'] = -1
-            self._args['type'] = None
-            self._args['typefull'] = None
-            self._args['access'] = None
+        self._args = {}.fromkeys(self._fields)
+        self._args['pvname'] = self.pvname
+        self._args['count'] = count
+        self._args['nelm'] = -1
+        self._args['type'] = None
+        self._args['typefull'] = None
+        self._args['access'] = None
         self.connection_callbacks = []
         self._cb_count = iter(itertools.count())
 
