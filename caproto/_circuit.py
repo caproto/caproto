@@ -538,7 +538,7 @@ class ClientChannel(_BaseChannel):
 
         Parameters
         ----------
-        data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
+        data_type : a ChannelType or corresponding integer ID, optional
             Requested Channel Access data type. Default is the channel's
             native data type, which can be checked in the Channel's attribute
             :attr:`native_data_type`.
@@ -565,7 +565,7 @@ class ClientChannel(_BaseChannel):
         Parameters
         ----------
         data : tuple, ``numpy.ndarray``, ``array.array``, or bytes
-        data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
+        data_type : a ChannelType or corresponding integer ID, optional
             Requested Channel Access data type. Default is the channel's
             native data type, which can be checked in the Channel's attribute
             :attr:`native_data_type`.
@@ -602,7 +602,7 @@ class ClientChannel(_BaseChannel):
 
         Parameters
         ----------
-        data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
+        data_type : a ChannelType or corresponding integer ID, optional
             Requested Channel Access data type. Default is the channel's
             native data type, which can be checked in the Channel's attribute
             :attr:`native_data_type`.
@@ -693,7 +693,7 @@ class ServerChannel(_BaseChannel):
 
         Parameters
         ----------
-        native_data_type : a :class:`DBR_TYPE` or its designation integer ID
+        native_data_type : a ChannelType or corresponding integer ID, optional
             Default Channel Access data type.
         native_data_count : integer
             Default number of values
@@ -728,7 +728,7 @@ class ServerChannel(_BaseChannel):
         ----------
         data : tuple, ``numpy.ndarray``, ``array.array``, or bytes
         ioid : integer
-        data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
+        data_type : a ChannelType or corresponding integer ID, optional
             Requested Channel Access data type. Default is the channel's
             native data type, which can be checked in the Channel's attribute
             :attr:`native_data_type`.
@@ -757,7 +757,7 @@ class ServerChannel(_BaseChannel):
         Parameters
         ----------
         ioid : integer
-        data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
+        data_type : a ChannelType or corresponding integer ID, optional
             Requested Channel Access data type. Default is the channel's
             native data type, which can be checked in the Channel's attribute
             :attr:`native_data_type`.
@@ -785,7 +785,7 @@ class ServerChannel(_BaseChannel):
         ----------
         data : tuple, ``numpy.ndarray``, ``array.array``, or bytes
         subscriptionid : integer
-        data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
+        data_type : a ChannelType or corresponding integer ID, optional
             Requested Channel Access data type. Default is the channel's
             native data type, which can be checked in the Channel's attribute
             :attr:`native_data_type`.
@@ -815,7 +815,7 @@ class ServerChannel(_BaseChannel):
         Parameters
         ----------
         subscriptionid : integer
-        data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
+        data_type : a ChannelType or corresponding integer ID, optional
             Requested Channel Access data type. Default is the channel's
             native data type, which can be checked in the Channel's attribute
             :attr:`native_data_type`.
