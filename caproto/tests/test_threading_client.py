@@ -15,6 +15,9 @@ from caproto.threading.client import (Context, SharedBroadcaster,
 import caproto as ca
 import pytest
 
+from .conftest import default_setup_module as setup_module  # noqa
+from .conftest import default_teardown_module as teardown_module  # noqa
+
 
 def test_go_idle(context, ioc):
     pv, = context.get_pvs(ioc.pvs['str'])

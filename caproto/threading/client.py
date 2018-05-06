@@ -285,7 +285,10 @@ class SharedBroadcaster:
         self.command_bundle_queue = queue.Queue()
         self.command_cond = threading.Condition()
 
+        # an event to tear down and clean up the broadcaster
+        self._close_event = threading.Event()
         self.selector = SelectorThread(parent=self)
+
         self.selector.start()
         self.command_thread = threading.Thread(target=self.command_loop,
                                                daemon=True, name='command')
@@ -391,6 +394,7 @@ class SharedBroadcaster:
             if self.udp_sock is not None:
                 self.selector.remove_socket(self.udp_sock)
 
+            self._close_event.set()
             self.search_results.clear()
             self._registration_last_sent = 0
             self._retries_enabled.clear()
@@ -490,7 +494,7 @@ class SharedBroadcaster:
         unanswered_searches = self.unanswered_searches
         queues = defaultdict(list)
 
-        while True:
+        while not self._close_event.is_set():
             commands = self.command_bundle_queue.get()
 
             try:
@@ -532,9 +536,11 @@ class SharedBroadcaster:
                 with self.command_cond:
                     self.command_cond.notify_all()
 
+        logger.debug('Broadcaster command loop exiting')
+
     def _retry_unanswered_searches(self):
         logger.debug('Search-retry thread started.')
-        while True:  # self.listeners:
+        while not self._close_event.is_set():
             try:
                 self._retries_enabled.wait(0.5)
             except TimeoutError:
@@ -556,7 +562,8 @@ class SharedBroadcaster:
                                         SEARCH_MAX_DATAGRAM_BYTES):
                 self.send(ca.EPICS_CA1_PORT, ca.VersionRequest(0, 13), *batch)
 
-            time.sleep(max(0, RETRY_SEARCHES_PERIOD - (time.monotonic() - t)))
+            wait_time = max(0, RETRY_SEARCHES_PERIOD - (time.monotonic() - t))
+            self._close_event.wait(wait_time)
 
         logger.debug('Search-retry thread exiting.')
 
@@ -591,6 +598,10 @@ class Context:
         self.pvs_needing_circuits = defaultdict(set)
         self.broadcaster.add_listener(self)
         self._search_results_queue = queue.Queue()
+
+        # an event to close and clean up the whole context
+        self._close_event = threading.Event()
+
         logger.debug('Context: start process search results loop')
         self._search_thread = threading.Thread(
             target=self._process_search_results_loop,
@@ -673,7 +684,7 @@ class Context:
     def _process_search_results_loop(self):
         # Receive (address, (name1, name2, ...)). The sending side of this
         # queue is held by SharedBroadcaster.command_loop.
-        while True:
+        while not self._close_event.is_set():
             address, names = self._search_results_queue.get()
             channels_grouped_by_circuit = defaultdict(list)
             # Assign each PV a VirtualCircuitManager for managing a socket
@@ -713,6 +724,8 @@ class Context:
                 commands = [chan.create() for chan in channels]
                 cm.send(*commands)
 
+        logger.debug('Process search results thread exiting')
+
     def get_circuit_manager(self, address, priority):
         """
         Return a VirtualCircuitManager for this address, priority. (It manages
@@ -730,7 +743,7 @@ class Context:
         return cm
 
     def _restart_subscriptions(self):
-        while True:
+        while not self._close_event.is_set():
             with self.master_lock:
                 t = time.monotonic()
                 ready = defaultdict(list)
@@ -767,11 +780,16 @@ class Context:
                                                 EVENT_ADD_BATCH_MAX_BYTES):
                         cm.send(*batch)
 
-                time.sleep(max(0, RESTART_SUBS_PERIOD - (time.monotonic() - t)))
+                wait_time = max(0, (RESTART_SUBS_PERIOD -
+                                    (time.monotonic() - t)))
+                self._close_event.wait(wait_time)
+
+        logger.debug('Restart subscriptions thread exiting')
 
     def disconnect(self, *, wait=True, timeout=2):
         self._user_disconnected = True
         try:
+            self._close_event.set()
             # disconnect any circuits we have
             circuits = list(self.circuit_managers.values())
             total_circuits = len(circuits)
@@ -862,7 +880,7 @@ class VirtualCircuitManager:
                 f"subscriptions={len(self.subscriptions)}>")
 
     def _callback_loop(self):
-        while True:
+        while not self.context._close_event.is_set():
             t0, sub, command = self.callback_queue.get()
             if sub is ca.DISCONNECTED:
                 break
@@ -872,6 +890,8 @@ class VirtualCircuitManager:
                          dt * 1000., sub, command)
 
             sub.process(command)
+
+        logger.debug('Callback loop exiting')
 
     @property
     def connected(self):
