@@ -954,11 +954,25 @@ class VirtualCircuitManager:
             elif isinstance(command, (ca.ReadNotifyResponse,
                                       ca.WriteNotifyResponse)):
                 ioid_info = self.ioids.pop(command.ioid)
-                chan = ioid_info['channel']
-                if isinstance(command, ca.WriteNotifyResponse):
-                    chan.process_write_notify(command)
+                if time.monotonic() > ioid_info['deadline']:
+                    logger.warn(f"ignoring late response with "
+                                f"ioid={command.ioid} because it arrived "
+                                f"{time.monotonic() - ioid_info['deadline']} "
+                                f"seconds after the deadline specified by the "
+                                f"timeout."
+                                )
                 else:
-                    chan.process_read_notify(command)
+                    chan = ioid_info['channel']
+                    if isinstance(command, ca.WriteNotifyResponse):
+                        chan.process_write_notify(command)
+                    else:
+                        chan.process_read_notify(command)
+                    callback = ioid_info.get('callback')
+                    if callback is not None:
+                        try:
+                            callback(command)
+                        except Exception as ex:
+                            logger.exception('ioid callback failed')
 
                 event = ioid_info['event']
                 # If PV.read() or PV.write() are waiting on this response,
@@ -969,12 +983,6 @@ class VirtualCircuitManager:
                 if event is not None:
                     event.set()
 
-                callback = ioid_info.get('callback')
-                if callback is not None:
-                    try:
-                        callback(command)
-                    except Exception as ex:
-                        logger.exception('ioid callback failed')
             elif isinstance(command, ca.EventAddResponse):
                 try:
                     sub = self.subscriptions[command.subscriptionid]
@@ -1317,6 +1325,7 @@ class PV:
 
         self.circuit_manager.ioids[ioid] = ioid_info
 
+        ioid_info['deadline'] = time.monotonic() + timeout
         # TODO: circuit_manager can be removed from underneath us here
         self.circuit_manager.send(command)
 
@@ -1392,6 +1401,7 @@ class PV:
 
         self.circuit_manager.ioids[ioid] = ioid_info
 
+        ioid_info['deadline'] = time.monotonic() + timeout
         # do not need to lock this, locking happens in circuit command
         self.circuit_manager.send(command)
         if not wait:
