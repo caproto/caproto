@@ -121,6 +121,21 @@ def context(request, shared_broadcaster):
     def cleanup():
         print('*** Cleaning up the context!')
         context.disconnect()
+        # Wait for up to 5 seconds for the Context to clean up its threads via
+        # the Context._close_event poison pill.
+        deadline = time.monotonic() + 5
+        err = None
+        while time.monotonic() < deadline:
+            try:
+                assert not context._search_thread.is_alive()
+                assert not context._restart_sub_thread.is_alive()
+            except AssertionError as _err:
+                err = _err
+                time.sleep(0.05)
+                continue  # try again until we time out
+            else:
+                return
+        raise err
 
     request.addfinalizer(cleanup)
     return context
