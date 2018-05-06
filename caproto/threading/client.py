@@ -685,7 +685,14 @@ class Context:
         # Receive (address, (name1, name2, ...)). The sending side of this
         # queue is held by SharedBroadcaster.command_loop.
         while not self._close_event.is_set():
-            address, names = self._search_results_queue.get()
+            try:
+                address, names = self._search_results_queue.get(timeout=1)
+            except queue.Empty:
+                # By restarting the loop, we will first check that we are not
+                # supposed to shut down the thread before we go back to
+                # waiting on the queue again.
+                continue
+
             channels_grouped_by_circuit = defaultdict(list)
             # Assign each PV a VirtualCircuitManager for managing a socket
             # and tracking circuit state, as well as a ClientChannel for
