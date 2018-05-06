@@ -897,14 +897,12 @@ def caget_many(pvlist, as_string=False, count=None, as_numpy=True, timeout=5.0,
 
     pvs = context.get_pvs(*pvlist)
 
-    for pv in pvs:
-        pv.last_reading = None
-
+    readings = {}
     pending_pvs = list(pvs)
     while pending_pvs:
         for pv in list(pending_pvs):
             if pv.connected:
-                pv.read()
+                readings[pv] = pv.read()
                 pending_pvs.remove(pv)
         time.sleep(0.01)
 
@@ -917,7 +915,7 @@ def caget_many(pvlist, as_string=False, count=None, as_numpy=True, timeout=5.0,
     def final_get(pv):
         full_type = pv.channel.native_data_type
         info = _read_response_to_pyepics(full_type=full_type,
-                                         command=pv.last_reading)
+                                         command=readings[pv])
         return _pyepics_get_value(value=info['value'],
                                   string_value=info['char_value'],
                                   full_type=pv.channel.native_data_type,
