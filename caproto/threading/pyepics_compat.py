@@ -93,7 +93,7 @@ def _read_response_to_pyepics(full_type, command):
 
     value = command.data
     info['raw_value'] = value
-    info['value'] = _scalerify(value, command.data_type, command.data_count)
+    info['value'] = _scalarify(value, command.data_type, command.data_count)
 
     if full_type in ca.char_types:
         value = value.tobytes().partition(b'\x00')[0].decode(STR_ENC)
@@ -109,7 +109,7 @@ def _read_response_to_pyepics(full_type, command):
     return info
 
 
-def _scalerify(data, ntype, count):
+def _scalarify(data, ntype, count):
     if count == 1 and ntype not in (ChannelType.CHAR, ChannelType.STRING):
         return data[0]
     return data
@@ -497,7 +497,7 @@ class PV:
         info = _parse_dbr_metadata(command.metadata)
         value = command.data
         info['raw_value'] = value
-        info['value'] = _scalerify(value, command.data_type, command.data_count)
+        info['value'] = _scalarify(value, command.data_type, command.data_count)
         self._args.update(**info)
         return info
 
@@ -510,7 +510,7 @@ class PV:
         info = _parse_dbr_metadata(command.metadata)
         value = command.data
         info['raw_value'] = value
-        info['value'] = _scalerify(value, command.data_type, command.data_count)
+        info['value'] = _scalarify(value, command.data_type, command.data_count)
         self._args.update(**info)
 
     @_args_lock
