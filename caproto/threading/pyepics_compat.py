@@ -437,14 +437,28 @@ class PV:
         if isinstance(value[0], str):
             value = tuple(v.encode(STR_ENC) for v in value)
 
-        def run_callback(cmd):
-            self._args['put_complete'] = True
-            if callback is not None:
-                callback(*callback_data)
+        use_notify = any((use_complete, callback is not None, wait))
 
-        self._args['put_complete'] = False
-        self._caproto_pv.write(value, wait=wait, cb=run_callback,
-                               timeout=timeout, use_notify=use_complete)
+        if callback is None and not use_complete:
+            run_callback = None
+        else:
+            def run_callback(cmd):
+                if use_complete:
+                    self._args['put_complete'] = True
+                if callback is not None:
+                    callback(*callback_data)
+
+        # So, in pyepics, put_complete strictly refers to the functionality
+        # where we toggle 'put_complete' in the args after a
+        # WriteNotifyResponse.
+        if use_notify:
+            if use_complete:
+                self._args['put_complete'] = False
+        else:
+            wait = False
+
+        self._caproto_pv.write(value, wait=wait, callback=run_callback,
+                               timeout=timeout, use_notify=use_notify)
 
     @ensure_connection
     def get_ctrlvars(self, timeout=5, warn=True):
@@ -934,6 +948,9 @@ def caput_many(pvlist, values, wait=False, connection_timeout=None,
     """
     if len(pvlist) != len(values):
         raise ValueError("List of PV names must be equal to list of values.")
+
+    # context = PV._default_context
+    # TODO: context.get_pvs(...)
 
     out = []
     pvs = [PV(name, auto_monitor=False, connection_timeout=connection_timeout)

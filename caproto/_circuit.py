@@ -587,7 +587,6 @@ class ClientChannel(_BaseChannel):
             ioid = self.circuit.new_ioid()
 
         # TODO: change use_notify default value; may break tests
-
         if use_notify:
             command = WriteNotifyRequest(data, data_type, data_count, self.sid,
                                          ioid, metadata=metadata)

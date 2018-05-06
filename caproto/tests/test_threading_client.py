@@ -64,7 +64,7 @@ def test_put_complete(backends, context, ioc):
     assert result.data[0] == 0.1
 
     # put and do not wait with callback
-    pv.write((0.4, ), wait=False, cb=cb)
+    pv.write((0.4, ), wait=False, callback=cb)
     while not responses:
         time.sleep(0.1)
     pv.read().data == 0.4

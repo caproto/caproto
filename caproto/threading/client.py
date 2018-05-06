@@ -22,10 +22,9 @@ import fcntl
 import errno
 import termios
 import inspect
-import concurrent
 from inspect import Parameter, Signature
 from functools import partial
-from collections import defaultdict, deque
+from collections import defaultdict
 import caproto as ca
 from .._constants import (MAX_ID, STALE_SEARCH_EXPIRATION,
                           SEARCH_MAX_DATAGRAM_BYTES)
@@ -809,11 +808,11 @@ class Context:
 
 
 class VirtualCircuitManager:
-    __slots__ = ('context', 'circuit', 'channels', 'ioids', 'ioid_events',
+    __slots__ = ('context', 'circuit', 'channels', 'ioids', '_ioid_counter',
                  'subscriptions', '_user_disconnected', 'new_command_cond',
                  'socket', 'selector', 'pvs', 'all_created_pvnames',
                  'callback_queue', 'callback_thread', '_torn_down',
-                 'process_queue', 'processing', 'master_lock', '_ioid_counter',
+                 'process_queue', 'processing', 'master_lock',
                  '__weakref__')
 
     def __init__(self, context, circuit, selector, timeout=TIMEOUT):
@@ -821,8 +820,7 @@ class VirtualCircuitManager:
         self.circuit = circuit  # a caproto.VirtualCircuit
         self.channels = {}  # map cid to Channel
         self.pvs = {}  # map cid to PV
-        self.ioids = {}  # map ioid to Channel
-        self.ioid_events = {}  # map ioid to Event
+        self.ioids = {}  # map ioid to Channel and info dict
         self.subscriptions = {}  # map subscriptionid to Subscription
         self.new_command_cond = threading.Condition()
         self.socket = None
@@ -936,16 +934,23 @@ class VirtualCircuitManager:
                 self._disconnected()
             elif isinstance(command, (ca.ReadNotifyResponse,
                                       ca.WriteNotifyResponse)):
-                chan = self.ioids.pop(command.ioid)
-
+                ioid_info = self.ioids.pop(command.ioid)
+                chan = ioid_info['channel']
                 if isinstance(command, ca.WriteNotifyResponse):
                     chan.process_write_notify(command)
                 else:
                     chan.process_read_notify(command)
 
-                event = self.ioid_events.pop(command.ioid)
-                if event:
+                event = ioid_info['event']
+                if event is not None:
                     event.set()
+
+                callback = ioid_info.get('callback')
+                if callback is not None:
+                    try:
+                        callback(command)
+                    except Exception as ex:
+                        logger.exception('ioid callback failed')
             elif isinstance(command, ca.EventAddResponse):
                 try:
                     sub = self.subscriptions[command.subscriptionid]
@@ -1054,7 +1059,7 @@ class PV:
                  'last_reading', 'last_writing', '_read_notify_callback',
                  'subscriptions', 'command_bundle_queue', '_component_lock',
                  '_write_notify_callback', '_idle', '_in_use', '_usages',
-                 'connection_state_callback', '_pc_callbacks', '__weakref__', 'master_lock')
+                 'connection_state_callback', 'master_lock', '__weakref__')
 
     def __init__(self, name, priority, context, connection_state_callback):
         """
@@ -1079,7 +1084,6 @@ class PV:
         self.subscriptions = {}
         self._read_notify_callback = None  # called on ReadNotifyResponse
         self._write_notify_callback = None  # called on WriteNotifyResponse
-        self._pc_callbacks = {}
         self._idle = False
         self._in_use = threading.Condition()
         self._usages = 0
@@ -1150,12 +1154,6 @@ class PV:
     def process_write_notify(self, write_notify_command):
         self.last_writing = write_notify_command
 
-        pc_cb = self._pc_callbacks.pop(write_notify_command.ioid, None)
-        if pc_cb is not None:
-            try:
-                pc_cb(write_notify_command)
-            except Exception as ex:
-                print(ex)
         if self._write_notify_callback is None:
             return
         else:
@@ -1255,7 +1253,7 @@ class PV:
             self._idle = True
 
     @ensure_connected
-    def read(self, *args, timeout=2, **kwargs):
+    def read(self, *args, timeout=2, wait=True, callback=None, **kwargs):
         """Request a fresh reading, wait for it, return it and stash it.
 
         The most recent reading is always available in the ``last_reading``
@@ -1271,8 +1269,12 @@ class PV:
         # Stash the ioid to match the response to the request.
 
         event = threading.Event()
-        self.circuit_manager.ioids[ioid] = self
-        self.circuit_manager.ioid_events[ioid] = event
+        ioid_info = dict(channel=self, event=event)
+        if callback is not None:
+            ioid_info['callback'] = callback
+
+        self.circuit_manager.ioids[ioid] = ioid_info
+
         # TODO: circuit_manager can be removed from underneath us here
         self.circuit_manager.send(command)
 
@@ -1282,22 +1284,33 @@ class PV:
                 f"not respond to attempt to read channel named "
                 f"{self.name!r} within {timeout}-second timeout."
             )
+
+        # TODO shouldn't we get access to the ioid of our request?
         return self.last_reading
 
     @ensure_connected
-    def write(self, *args, wait=True, cb=None, timeout=2, use_notify=True,
-              **kwargs):
+    def write(self, *args, wait=True, callback=None, timeout=2,
+              use_notify=True, **kwargs):
         "Write a new value and await confirmation from the server."
         # TODO: change use_notify default value; may break tests
         ioid = self.circuit_manager._ioid_counter()
         command = self.channel.write(*args, ioid=ioid,
                                      use_notify=use_notify,
                                      **kwargs)
+        if not use_notify:
+            # TODO:
+            # if wait or callback is not None:
+            #      raise ValueError('Not guaranteed a WriteNotifyResponse')
+            self.circuit_manager.send(command)
+            return
+
         event = threading.Event()
-        self.circuit_manager.ioids[ioid] = self
-        self.circuit_manager.ioid_events[ioid] = event
-        if cb is not None:
-            self._pc_callbacks[ioid] = cb
+        ioid_info = dict(channel=self, event=event)
+        if callback is not None:
+            ioid_info['callback'] = callback
+
+        self.circuit_manager.ioids[ioid] = ioid_info
+
         # do not need to lock this, locking happens in circuit command
         self.circuit_manager.send(command)
         if not wait:
