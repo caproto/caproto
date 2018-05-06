@@ -941,6 +941,11 @@ class VirtualCircuitManager:
                     chan.process_read_notify(command)
 
                 event = ioid_info['event']
+                # If PV.read() or PV.write() are waiting on this response,
+                # they hold a reference to ioid_info. We will use that to
+                # provide the response to them and then set the Event that they
+                # are waiting on.
+                ioid_info['response'] = command
                 if event is not None:
                     event.set()
 
@@ -1055,7 +1060,7 @@ class VirtualCircuitManager:
 class PV:
     """Wraps a VirtualCircuit and a caproto.ClientChannel."""
     __slots__ = ('name', 'priority', 'context', '_circuit_manager', '_channel',
-                 'last_reading', 'last_writing', '_read_notify_callback',
+                 '_read_notify_callback',
                  'subscriptions', 'command_bundle_queue', '_component_lock',
                  '_write_notify_callback', '_idle', '_in_use', '_usages',
                  'connection_state_callback', 'master_lock', '__weakref__')
@@ -1078,8 +1083,6 @@ class PV:
 
         self._circuit_manager = None
         self._channel = None
-        self.last_reading = None
-        self.last_writing = None
         self.subscriptions = {}
         self._read_notify_callback = None  # called on ReadNotifyResponse
         self._write_notify_callback = None  # called on WriteNotifyResponse
@@ -1140,8 +1143,6 @@ class PV:
             return channel.states[ca.CLIENT] is ca.CONNECTED
 
     def process_read_notify(self, read_notify_command):
-        self.last_reading = read_notify_command
-
         if self._read_notify_callback is None:
             return
         else:
@@ -1151,8 +1152,6 @@ class PV:
                 print(ex)
 
     def process_write_notify(self, write_notify_command):
-        self.last_writing = write_notify_command
-
         if self._write_notify_callback is None:
             return
         else:
@@ -1254,9 +1253,6 @@ class PV:
     @ensure_connected
     def read(self, *args, timeout=2, wait=True, callback=None, **kwargs):
         """Request a fresh reading, wait for it, return it and stash it.
-
-        The most recent reading is always available in the ``last_reading``
-        attribute.
         """
         # need this lock because the socket thread could be trying to
         # update this channel due to an incoming message
@@ -1277,6 +1273,8 @@ class PV:
         # TODO: circuit_manager can be removed from underneath us here
         self.circuit_manager.send(command)
 
+        # The circuit_manager will put a reference to the response into
+        # ioid_info and then set event.
         if not event.wait(timeout=timeout):
             raise TimeoutError(
                 f"Server at {self.circuit_manager.circuit.address} did "
@@ -1337,13 +1335,16 @@ class PV:
         if not wait:
             return
 
+        # The circuit_manager will put a reference to the response into
+        # ioid_info and then set event.
         if not event.wait(timeout=timeout):
             raise TimeoutError(
                 f"Server at {self.circuit_manager.circuit.address} did "
                 f"not respond to attempt to write to channel named "
-                f"{self.name!r} within {timeout}-second timeout."
+                f"{self.name!r} within {timeout}-second timeout. The ioid of "
+                f"the expected response is {ioid}."
             )
-        return self.last_writing
+        return ioid_info['response']
 
     @master_lock
     def subscribe(self, *args, **kwargs):
