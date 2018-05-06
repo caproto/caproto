@@ -1271,8 +1271,33 @@ class PV:
             self._idle = True
 
     @ensure_connected
-    def read(self, *args, timeout=2, wait=True, callback=None, **kwargs):
-        """Request a fresh reading, wait for it, return it and stash it.
+    def read(self, wait=True, callback=None, timeout=2, data_type=None,
+             data_count=None):
+        """Request a fresh reading.
+
+        Can do one or both of:
+        - Block while waiting for the response, and return it.
+        - Pass the response to callback, with or without blocking.
+
+        Parameters
+        ----------
+        wait : boolean
+            If True (default) block until a matching WriteNotifyResponse is
+            received from the server. Raises TimeoutError if that response is
+            not received within the time specified by the `timeout` parameter.
+        callback : callable or None
+            Called with the WriteNotifyResponse as its argument when received.
+        timeout : number
+            Number of seconds to wait before raising TimeoutError. Default is
+            2.
+        data_type : a ChannelType or corresponding integer ID, optional
+            Requested Channel Access data type. Default is the channel's
+            native data type, which can be checked in the Channel's attribute
+            :attr:`native_data_type`.
+        data_count : integer, optional
+            Requested number of values. Default is the channel's native data
+            count, which can be checked in the Channel's attribute
+            :attr:`native_data_count`.
         """
         # need this lock because the socket thread could be trying to
         # update this channel due to an incoming message
@@ -1280,7 +1305,9 @@ class PV:
             raise DisconnectedError()
 
         ioid = self.circuit_manager._ioid_counter()
-        command = self.channel.read(*args, ioid=ioid, **kwargs)
+        command = self.channel.read(ioid=ioid,
+                                    data_type=data_type,
+                                    data_count=data_count)
         # Stash the ioid to match the response to the request.
 
         event = threading.Event()
@@ -1302,17 +1329,22 @@ class PV:
                 f"{self.name!r} within {timeout}-second timeout."
             )
 
-        # TODO shouldn't we get access to the ioid of our request?
         return ioid_info['response']
 
     @ensure_connected
-    def write(self, *args, wait=True, callback=None, timeout=2,
-              use_notify=None, **kwargs):
+    def write(self, data, wait=True, callback=None, timeout=2, use_notify=None,
+              data_type=None, data_count=None):
         """
-        Write a new value. Optionally, await confirmation from the server.
+        Write a new value. Optionally, request confirmation from the server.
+
+        Can do one or both of:
+        - Block while waiting for the response, and return it.
+        - Pass the response to callback, with or without blocking.
 
         Parameters
         ----------
+        data : Iterable
+            values to write
         wait : boolean
             If True (default) block until a matching WriteNotifyResponse is
             received from the server. Raises TimeoutError if that response is
@@ -1326,13 +1358,23 @@ class PV:
             If None (default), set to True if wait=True or callback is set.
             Can be manually set to True or False. Will raise ValueError if set
             to False while wait=True or callback is set.
+        data_type : a ChannelType or corresponding integer ID, optional
+            Requested Channel Access data type. Default is the channel's
+            native data type, which can be checked in the Channel's attribute
+            :attr:`native_data_type`.
+        data_count : integer, optional
+            Requested number of values. Default is the channel's native data
+            count, which can be checked in the Channel's attribute
+            :attr:`native_data_count`.
         """
         if use_notify is None:
             use_notify=(wait or callback is not None)
         ioid = self.circuit_manager._ioid_counter()
-        command = self.channel.write(*args, ioid=ioid,
+        command = self.channel.write(data,
+                                     ioid=ioid,
                                      use_notify=use_notify,
-                                     **kwargs)
+                                     data_type=data_type,
+                                     data_count=data_count)
         if not use_notify:
             if wait or callback is not None:
                 raise ValueError("Must set use_notify=True in order to use "
