@@ -1289,7 +1289,7 @@ class PV:
 
     @ensure_connected
     def write(self, *args, wait=True, callback=None, timeout=2,
-              use_notify=True, **kwargs):
+              use_notify=False, **kwargs):
         "Write a new value and await confirmation from the server."
         # TODO: change use_notify default value; may break tests
         ioid = self.circuit_manager._ioid_counter()
