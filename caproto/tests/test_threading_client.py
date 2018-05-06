@@ -61,7 +61,6 @@ def test_put_complete(backends, context, ioc):
     def cb(response):
         responses.append(response)
 
-
     with pytest.raises(ValueError):
         pv.write((0.1, ), use_notify=False, wait=True)
 

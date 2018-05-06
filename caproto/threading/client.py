@@ -1379,7 +1379,7 @@ class PV:
             :attr:`native_data_count`.
         """
         if use_notify is None:
-            use_notify=(wait or callback is not None)
+            use_notify = (wait or callback is not None)
         ioid = self.circuit_manager._ioid_counter()
         command = self.channel.write(data,
                                      ioid=ioid,
