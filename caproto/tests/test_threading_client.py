@@ -111,7 +111,30 @@ def test_specified_port(monkeypatch, context, ioc):
 
 @pytest.fixture(scope='function')
 def shared_broadcaster(request):
-    return SharedBroadcaster(log_level='DEBUG')
+    shared_broadcaster = SharedBroadcaster(log_level='DEBUG')
+
+    def cleanup():
+        shared_broadcaster.disconnect()
+        # Wait for up to 5 seconds for this to clean up its threads via
+        # the SharedBroadcaster._close_event poison pill.
+        deadline = time.monotonic() + 5
+
+        err = None
+        while time.monotonic() < deadline:
+            try:
+                assert not shared_broadcaster.command_thread.is_alive()
+                assert not shared_broadcaster.selector.running
+                assert not shared_broadcaster.selector.thread.is_alive()
+            except AssertionError as _err:
+                err = _err
+                time.sleep(0.05)
+                continue  # try again until we time out
+            else:
+                return
+        raise err
+
+    request.addfinalizer(cleanup)
+    return shared_broadcaster
 
 
 @pytest.fixture(scope='function')
