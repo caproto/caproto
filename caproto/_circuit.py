@@ -595,8 +595,9 @@ class ClientChannel(_BaseChannel):
                                    metadata=metadata)
         return command
 
-    def subscribe(self, data_type=None, data_count=None, low=0.0, high=0.0,
-                  to=0.0, mask=None):
+    def subscribe(self, data_type=None, data_count=None,
+                  subscriptionid=None,
+                  low=0.0, high=0.0, to=0.0, mask=None):
         """
         Generate a valid :class:`EventAddRequest`.
 
@@ -610,6 +611,7 @@ class ClientChannel(_BaseChannel):
             Requested number of values. Default is the channel's native data
             count, which can be checked in the Channel's attribute
             :attr:`native_data_count`.
+        subscriptionid : integer, optional
         low : number
             Default is 0.
         high : number
@@ -631,7 +633,8 @@ class ClientChannel(_BaseChannel):
             mask = (SubscriptionType.DBE_VALUE |
                     SubscriptionType.DBE_ALARM |
                     SubscriptionType.DBE_PROPERTY)
-        subscriptionid = self.circuit.new_subscriptionid()
+        if subscriptionid is None:
+            subscriptionid = self.circuit.new_subscriptionid()
         command = EventAddRequest(data_type, data_count, self.sid,
                                   subscriptionid, low, high, to, mask)
         return command
