@@ -1,12 +1,14 @@
-# There are 7 threads plus one callback-processing thread per VirtualCircuit
-
-# UDP socket selector
-# TCP socket selector
-# UDP command processing
-# forever retrying search requests for disconnected PV
-# handle disconnection
-# process search results
-# restart subscriptions
+# Regarding threads...
+# The SharedBroadcaster has:
+# - UDP socket selector
+# - UDP command processing
+# - forever retrying search requests for disconnected PV
+# The Context has:
+# - process search results
+# - TCP socket selector
+# - restart subscriptions
+# The VirtualCircuit has:
+# - callback thread for processing user subscriptions
 import getpass
 import itertools
 import logging

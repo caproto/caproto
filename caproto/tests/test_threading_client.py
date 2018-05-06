@@ -123,7 +123,6 @@ def shared_broadcaster(request):
         while time.monotonic() < deadline:
             try:
                 assert not sb.command_thread.is_alive()
-                assert not sb.selector.running
                 assert not sb.selector.thread.is_alive()
                 assert not sb._retry_unanswered_searches_thread.is_alive()
             except AssertionError as _err:
@@ -153,7 +152,6 @@ def context(request, shared_broadcaster):
             try:
                 assert not context._process_search_results_thread.is_alive()
                 assert not context._restart_sub_thread.is_alive()
-                assert not context.selector.running
                 assert not context.selector.thread.is_alive()
             except AssertionError as _err:
                 err = _err
