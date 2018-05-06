@@ -11,7 +11,7 @@ import getpass
 import itertools
 import logging
 import os
-import queue
+from queue import Queue, Empty
 import socket
 import threading
 import time
@@ -120,7 +120,8 @@ logger = logging.getLogger(__name__)
 
 class SelectorThread:
     def __init__(self, *, parent=None):
-        self._running = False
+        self.thread = None  # set by the `start` method
+        self._close_event = threading.Event()
         self.selector = selectors.DefaultSelector()
 
         self._socket_map_lock = threading.RLock()
@@ -139,17 +140,16 @@ class SelectorThread:
     @property
     def running(self):
         '''Selector thread is running'''
-        return self._running
+        return not self._close_event.is_set()
 
     def stop(self):
-        self._running = False
+        self._close_event.set()
 
     def start(self):
-        if self._running:
-            return
-
-        self._running = True
-        self.thread = threading.Thread(target=self, daemon=True, name='selector')
+        if self._close_event.is_set():
+            raise RuntimeError("Cannot be restarted once stopped.")
+        self.thread = threading.Thread(target=self, daemon=True,
+                                       name='selector')
         self.thread.start()
 
     def add_socket(self, sock, target_obj):
@@ -202,7 +202,7 @@ class SelectorThread:
     def __call__(self):
         '''Selector poll loop'''
         avail_buf = array.array('i', [0])
-        while self._running:
+        while not self._close_event.is_set():
             with self._socket_map_lock:
                 for sock in self._unregister_sockets:
                     self.selector.unregister(sock)
@@ -282,7 +282,7 @@ class SharedBroadcaster:
 
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
         self.broadcaster.log.setLevel(self.log_level)
-        self.command_bundle_queue = queue.Queue()
+        self.command_bundle_queue = Queue()
         self.command_cond = threading.Condition()
 
         # an event to tear down and clean up the broadcaster
@@ -386,7 +386,8 @@ class SharedBroadcaster:
                 self._disconnect_timer = 30
                 if self.disconnect_thread is None:
                     self.disconnect_thread = threading.Thread(
-                        target=self._disconnect_wait, daemon=True, name='disconnect')
+                        target=self._disconnect_wait, daemon=True,
+                        name='disconnect')
                     self.disconnect_thread.start()
 
     def disconnect(self, *, wait=True, timeout=2):
@@ -400,6 +401,7 @@ class SharedBroadcaster:
             self._retries_enabled.clear()
             self.udp_sock = None
             self.broadcaster.disconnect()
+            self.selector.stop()
 
     def send(self, port, *commands):
         """
@@ -495,7 +497,13 @@ class SharedBroadcaster:
         queues = defaultdict(list)
 
         while not self._close_event.is_set():
-            commands = self.command_bundle_queue.get()
+            try:
+                commands = self.command_bundle_queue.get(timeout=1)
+            except Empty:
+                # By restarting the loop, we will first check that we are not
+                # supposed to shut down the thread before we go back to
+                # waiting on the queue again.
+                continue
 
             try:
                 self.broadcaster.process_commands(commands)
@@ -597,7 +605,7 @@ class Context:
         # name -> set of pvs  --- with varied priority
         self.pvs_needing_circuits = defaultdict(set)
         self.broadcaster.add_listener(self)
-        self._search_results_queue = queue.Queue()
+        self._search_results_queue = Queue()
 
         # an event to close and clean up the whole context
         self._close_event = threading.Event()
@@ -687,7 +695,7 @@ class Context:
         while not self._close_event.is_set():
             try:
                 address, names = self._search_results_queue.get(timeout=1)
-            except queue.Empty:
+            except Empty:
                 # By restarting the loop, we will first check that we are not
                 # supposed to shut down the thread before we go back to
                 # waiting on the queue again.
@@ -851,7 +859,7 @@ class VirtualCircuitManager:
         self.socket = None
         self.selector = selector
         self._user_disconnected = False
-        self.callback_queue = queue.Queue()
+        self.callback_queue = Queue()
         self.callback_thread = threading.Thread(target=self._callback_loop,
                                                 daemon=True, name='vcm_cb')
         self.callback_thread.start()
