@@ -111,10 +111,10 @@ def test_specified_port(monkeypatch, context, ioc):
 
 @pytest.fixture(scope='function')
 def shared_broadcaster(request):
-    shared_broadcaster = SharedBroadcaster(log_level='DEBUG')
+    sb = SharedBroadcaster(log_level='DEBUG')
 
     def cleanup():
-        shared_broadcaster.disconnect()
+        sb.disconnect()
         # Wait for up to 5 seconds for this to clean up its threads via
         # the SharedBroadcaster._close_event poison pill.
         deadline = time.monotonic() + 5
@@ -122,9 +122,10 @@ def shared_broadcaster(request):
         err = None
         while time.monotonic() < deadline:
             try:
-                assert not shared_broadcaster.command_thread.is_alive()
-                assert not shared_broadcaster.selector.running
-                assert not shared_broadcaster.selector.thread.is_alive()
+                assert not sb.command_thread.is_alive()
+                assert not sb.selector.running
+                assert not sb.selector.thread.is_alive()
+                assert not sb._retry_unanswered_searches_thread.is_alive()
             except AssertionError as _err:
                 err = _err
                 time.sleep(0.05)
@@ -134,7 +135,7 @@ def shared_broadcaster(request):
         raise err
 
     request.addfinalizer(cleanup)
-    return shared_broadcaster
+    return sb
 
 
 @pytest.fixture(scope='function')
@@ -150,8 +151,10 @@ def context(request, shared_broadcaster):
         err = None
         while time.monotonic() < deadline:
             try:
-                assert not context._search_thread.is_alive()
+                assert not context._process_search_results_thread.is_alive()
                 assert not context._restart_sub_thread.is_alive()
+                assert not context.selector.running
+                assert not context.selector.thread.is_alive()
             except AssertionError as _err:
                 err = _err
                 time.sleep(0.05)
