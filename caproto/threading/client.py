@@ -1285,21 +1285,43 @@ class PV:
             )
 
         # TODO shouldn't we get access to the ioid of our request?
-        return self.last_reading
+        return ioid_info['response']
 
     @ensure_connected
     def write(self, *args, wait=True, callback=None, timeout=2,
-              use_notify=False, **kwargs):
-        "Write a new value and await confirmation from the server."
-        # TODO: change use_notify default value; may break tests
+              use_notify=None, **kwargs):
+        """
+        Write a new value. Optionally, await confirmation from the server.
+
+        Parameters
+        ----------
+        wait : boolean
+            If True (default) block until a matching WriteNotifyResponse is
+            received from the server. Raises TimeoutError if that response is
+            not received within the time specified by the `timeout` parameter.
+        callback : callable or None
+            Called with the WriteNotifyResponse as its argument when received.
+        timeout : number
+            Number of seconds to wait before raising TimeoutError. Default is
+            2.
+        use_notify : boolean or None
+            If None (default), set to True if wait=True or callback is set.
+            Can be manually set to True or False. Will raise ValueError if set
+            to False while wait=True or callback is set.
+        """
+        if use_notify is None:
+            use_notify=(wait or callback is not None)
         ioid = self.circuit_manager._ioid_counter()
         command = self.channel.write(*args, ioid=ioid,
                                      use_notify=use_notify,
                                      **kwargs)
         if not use_notify:
-            # TODO:
-            # if wait or callback is not None:
-            #      raise ValueError('Not guaranteed a WriteNotifyResponse')
+            if wait or callback is not None:
+                raise ValueError("Must set use_notify=True in order to use "
+                                 "`wait` or `callback` because, without a "
+                                 "notification of 'put-completion' from the "
+                                 "server, there is nothing to wait on or to "
+                                 "trigger a callback.")
             self.circuit_manager.send(command)
             return
 
