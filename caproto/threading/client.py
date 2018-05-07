@@ -397,7 +397,7 @@ class SharedBroadcaster:
         except KeyError:
             pass
 
-    def disconnect(self, *, wait=True, timeout=2):
+    def disconnect(self, *, wait=True):
         with self.command_cond:
             if self.udp_sock is not None:
                 self.selector.remove_socket(self.udp_sock)
@@ -409,6 +409,10 @@ class SharedBroadcaster:
             self.udp_sock = None
             self.broadcaster.disconnect()
             self.selector.stop()
+        if wait:
+            self.command_thread.join()
+            self.selector.thread.join()
+            self._retry_unanswered_searches_thread.join()
 
     def send(self, port, *commands):
         """
@@ -838,7 +842,7 @@ class Context:
 
     logger.debug('Restart subscriptions thread exiting')
 
-    def disconnect(self, *, wait=True, timeout=2):
+    def disconnect(self, *, wait=True):
         self._user_disconnected = True
         try:
             self._close_event.set()
@@ -849,7 +853,7 @@ class Context:
                 if circuit.connected:
                     logger.debug('Disconnecting circuit %d/%d: %s',
                                  idx, total_circuits, circuit)
-                    circuit.disconnect(wait=wait, timeout=timeout)
+                    circuit.disconnect(wait=wait)
                     logger.debug('... Circuit %d disconnect complete.', idx)
                 else:
                     logger.debug('Circuit %d/%d was already disconnected: %s',
@@ -869,6 +873,11 @@ class Context:
 
             logger.debug("Shutting down ThreadPoolExecutor for user callbacks")
             self.user_callback_executor.shutdown()
+
+            if wait:
+                self._process_search_results_thread.join()
+                self._restart_sub_thread.join()
+                self.selector.thread.join()
 
             logger.debug('Disconnection complete')
 
