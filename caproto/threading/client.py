@@ -566,6 +566,7 @@ class SharedBroadcaster:
 
             wait_time = max(0, RETRY_SEARCHES_PERIOD - (time.monotonic() - t))
             self._search_now.wait(wait_time)
+            self._search_now.clear()
 
         logger.debug('Search-retry thread exiting.')
 
