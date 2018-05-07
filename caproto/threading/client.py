@@ -521,7 +521,7 @@ class SharedBroadcaster:
                         # This is a redundant response, which the EPICS
                         # spec tells us to ignore. (The first responder
                         # to a given request wins.)
-                        if name is self.search_results:
+                        if name in self.search_results:
                             accepted_address = self.search_results[name]
                             new_address = ca.extract_address(command)
                             self.log.warning("PV found on multiple servers. "
