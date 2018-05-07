@@ -291,6 +291,8 @@ class SharedBroadcaster:
 
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
         self.broadcaster.log.setLevel(self.log_level)
+        self.log = logging.getLogger(self.__class__.__name__)
+        self.log.setLevel(self.log_level)
         self.command_bundle_queue = Queue()
         self.command_cond = threading.Condition()
 
@@ -391,6 +393,7 @@ class SharedBroadcaster:
         """
         bytes_to_send = self.broadcaster.send(*commands)
         for host in ca.get_address_list():
+            self.broadcaster.log.debug('sending bytes to %s', host)
             if ':' in host:
                 host, _, specified_port = host.partition(':')
                 self.udp_sock.sendto(bytes_to_send, (host,
@@ -402,6 +405,10 @@ class SharedBroadcaster:
                                  threshold=STALE_SEARCH_EXPIRATION):
         'Returns address if found, raises KeyError if missing or stale.'
         address, timestamp = self.search_results[name]
+        # this block of code is only to re-fresh the time found on
+        # any PVs.  If we can find any context which has any circuit which
+        # has any channel talking to this PV name then it is not stale so
+        # re-up the timestamp to now.
         if time.monotonic() - timestamp > threshold:
             # TODO this is very inefficient
             for context in self.listeners:
@@ -410,6 +417,7 @@ class SharedBroadcaster:
                         # A valid connection exists in one of our clients, so
                         # ignore the stale result status
                         self.search_results[name] = (address, time.monotonic())
+                        # TODO verify that addr matches address
                         return address
 
             # Clean up expired result.
@@ -513,7 +521,13 @@ class SharedBroadcaster:
                         # This is a redundant response, which the EPICS
                         # spec tells us to ignore. (The first responder
                         # to a given request wins.)
-                        pass
+                        if name is self.search_results:
+                            accepted_address = self.search_results[name]
+                            new_address = ca.extract_address(command)
+                            self.log.warning("PV found on multiple servers. "
+                                             "Accepted address is %s. "
+                                             "Also found on %s",
+                                             accepted_address, new_address)
                     else:
                         address = ca.extract_address(command)
                         queues[queue].append(name)
@@ -944,6 +958,7 @@ class VirtualCircuitManager:
             if hasattr(ex, 'channel'):
                 channel = ex.channel
                 logger.warning('Invalid command %s for Channel %s in state %s',
+
                                command, channel, channel.states,
                                exc_info=ex)
                 # channel exceptions are not fatal
