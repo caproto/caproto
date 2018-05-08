@@ -205,7 +205,7 @@ def test_subscriptions(ioc, context):
 
     sub = pv.subscribe()
     sub.add_callback(callback)
-    time.sleep(0.2)  # Wait the callback to be added.
+    time.sleep(0.2)  # Wait for EventAddRequest to be sent and processed.
     pv.write((1, ), wait=True)
     pv.write((2, ), wait=True)
     pv.write((3, ), wait=True)
@@ -304,7 +304,7 @@ def test_subscription_objects_are_reused(ioc, context):
     sub.add_callback(f)
     sub_redundant.add_callback(f)
     sub_different.add_callback(f)
-    time.sleep(0.2)  # Wait the callbacks to be added.
+    time.sleep(0.2)  # Wait for EventAddRequest to be sent and processed.
     actual_cached_subs = set(pv.circuit_manager.subscriptions.values())
     assert actual_cached_subs == set([sub, sub_different])
 
@@ -322,7 +322,7 @@ def test_unsubscribe_all(ioc, context):
 
     sub0.add_callback(f)
     sub1.add_callback(f)
-    time.sleep(0.2)  # Wait the callbacks to be added.
+    time.sleep(0.2)  # Wait for EventAddRequest to be sent and processed.
 
     pv.write((123,))
     pv.write((456,))
@@ -478,7 +478,9 @@ def test_multithreaded_many_write(ioc, context, thread_count,
                                   multi_iterations):
     def _test(thread_id):
         pv.wait_for_connection()
-        return pv.write(data=[thread_id], wait=True)
+        ret = pv.write(data=[thread_id], wait=True)
+        time.sleep(0.2)  # Wait for EventAddResponse to be received, processed.
+        return ret
 
     pv, = context.get_pvs(ioc.pvs['int'])
     values = []
@@ -488,9 +490,10 @@ def test_multithreaded_many_write(ioc, context, thread_count,
 
     sub = pv.subscribe()
     sub.add_callback(callback)
+    time.sleep(0.2)  # Wait for EventAddRequest to be sent and processed.
 
     _multithreaded_exec(_test, thread_count)
-    assert values == set(range(thread_count))
+    assert set(values[1:]) == set(range(thread_count))
 
     sub.clear()
 
