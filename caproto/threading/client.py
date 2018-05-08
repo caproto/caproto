@@ -138,7 +138,18 @@ EVENT_ADD_BATCH_MAX_BYTES = 2**16
 RETRY_SEARCHES_PERIOD = 1
 RESTART_SUBS_PERIOD = 0.1
 STR_ENC = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
-MAX_USER_CALLBACK_WORKERS = os.environ.get('MAX_USER_CALLBACK_WORKERS', 5)
+
+# WARNING
+# Using more than 1 worker for processing user callbacks can avoid the jamming
+# up of callback-processing by any user callbacks that sleep or do I/O work
+# (i.e. things that release the GIL). BUT, parallelizing callback-processing
+# across multiple workers means that closely-spaced updates (~0.001 seconds)
+# may sometimes be processed out of order. Tasks are submitted to the pool of
+# workers in order, but that does not provide any guarantees about whether the
+# internal work in those tasks is completed in order. Providing better
+# guarantees, allowing the number of workers to be safely increased above 1,
+# will require significant additional complexity in caproto.
+MAX_USER_CALLBACK_WORKERS = os.environ.get('MAX_USER_CALLBACK_WORKERS', 1)
 
 
 logger = logging.getLogger(__name__)
