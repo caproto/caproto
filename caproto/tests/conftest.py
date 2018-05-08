@@ -425,10 +425,19 @@ def server(request):
         async def run_server_and_client():
             try:
                 server_task = await curio.spawn(server_main)
-                if threaded_client:
-                    await threaded_in_curio_wrapper(client)()
+                # Give this a couple tries, akin to poll_readiness.
+                for _ in range(15):
+                    try:
+                        if threaded_client:
+                            await threaded_in_curio_wrapper(client)()
+                        else:
+                            await client()
+                    except TimeoutError:
+                        continue
+                    else:
+                        break
                 else:
-                    await client()
+                    raise TimeoutError(f"ioc failed to start")
             finally:
                 await server_task.cancel()
 
@@ -455,11 +464,18 @@ def server(request):
         async def run_server_and_client():
             async with trio.open_nursery() as test_nursery:
                 server_context = await test_nursery.start(trio_server_main)
-                if threaded_client:
-                    await trio.run_sync_in_worker_thread(client)
-                else:
-                    print('async client')
-                    await client(test_nursery, server_context)
+                # Give this a couple tries, akin to poll_readiness.
+                for _ in range(15):
+                    try:
+                        if threaded_client:
+                            await trio.run_sync_in_worker_thread(client)
+                        else:
+                            print('async client')
+                            await client(test_nursery, server_context)
+                    except TimeoutError:
+                        continue
+                    else:
+                        break
                 await server_context.stop()
                 # don't leave the server running:
                 test_nursery.cancel_scope.cancel()
