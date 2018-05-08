@@ -850,6 +850,7 @@ class Context:
             wait_time = max(0, (RESTART_SUBS_PERIOD -
                                 (time.monotonic() - t)))
             self.activate_subscriptions_now.wait(wait_time)
+            self.activate_subscriptions_now.clear()
 
     logger.debug('Restart subscriptions thread exiting')
 
