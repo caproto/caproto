@@ -505,7 +505,9 @@ def test_multithreaded_many_subscribe(ioc, context, thread_count,
             init_barrier.wait(timeout=2)
             print('-- write thread initialized --')
             pv.write((1, ), wait=True)
+            time.sleep(0.01)
             pv.write((2, ), wait=True)
+            time.sleep(0.01)
             pv.write((3, ), wait=True)
             time.sleep(0.2)
             print('-- write thread hit sub barrier --')
@@ -520,6 +522,7 @@ def test_multithreaded_many_subscribe(ioc, context, thread_count,
 
         sub = pv.subscribe()
         sub.add_callback(callback)
+        time.sleep(0.2)  # Wait for EventAddRequest to be sent and processed.
         # print(thread_id, sub)
         init_barrier.wait(timeout=2)
         # Everybody here? On my signal... SUBSCRIBE!! Ahahahahaha!
