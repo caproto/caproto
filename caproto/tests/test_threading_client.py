@@ -301,8 +301,9 @@ def test_subscription_objects_are_reused(ioc, context):
     sub.add_callback(f)
     sub_redundant.add_callback(f)
     sub_different.add_callback(f)
-    actual_cached_subs = list(pv.circuit_manager.subscriptions.values())
-    assert actual_cached_subs == [sub, sub_different]
+    time.sleep(0.2)  # Wait the callbacks to be added.
+    actual_cached_subs = set(pv.circuit_manager.subscriptions.values())
+    assert actual_cached_subs == set([sub, sub_different])
 
 
 def test_unsubscribe_all(ioc, context):

@@ -1,13 +1,12 @@
 # Regarding threads...
 # The SharedBroadcaster has:
-# - UDP socket selector
+# - UDP socket SelectorThread
 # - UDP command processing
 # - forever retrying search requests for disconnected PV
 # The Context has:
 # - process search results
-# - TCP socket selector
+# - TCP socket SelectorThread
 # - restart subscriptions
-# The VirtualCircuit has:
 # - ThreadPoolExecutor for processing user callbacks on read, write, subscribe
 import concurrent.futures
 import getpass
@@ -324,7 +323,7 @@ class SharedBroadcaster:
 
         self.selector.start()
         self._command_thread = threading.Thread(target=self.command_loop,
-                                               daemon=True, name='command')
+                                                daemon=True, name='command')
         self._command_thread.start()
 
         self._registration_retry_time = registration_retry_time
@@ -854,7 +853,7 @@ class Context:
                 if circuit.connected:
                     logger.debug('Disconnecting circuit %d/%d: %s',
                                  idx, total_circuits, circuit)
-                    circuit.disconnect(wait=wait)
+                    circuit.disconnect()
                     logger.debug('... Circuit %d disconnect complete.', idx)
                 else:
                     logger.debug('Circuit %d/%d was already disconnected: %s',
@@ -895,7 +894,7 @@ class Context:
 
 class VirtualCircuitManager:
     __slots__ = ('context', 'circuit', 'channels', 'ioids', '_ioid_counter',
-                 'subscriptions', '_user_disconnected', 'new_command_cond',
+                 'subscriptions', '_user_disconnected', '_ready',
                  'socket', 'selector', 'pvs', 'all_created_pvnames',
                  'dead', 'process_queue', 'processing',
                  '_subscriptionid_counter', '__weakref__')
@@ -907,7 +906,6 @@ class VirtualCircuitManager:
         self.pvs = {}  # map cid to PV
         self.ioids = {}  # map ioid to Channel and info dict
         self.subscriptions = {}  # map subscriptionid to Subscription
-        self.new_command_cond = threading.Condition()
         self.socket = None
         self.selector = selector
         self._user_disconnected = False
@@ -917,25 +915,23 @@ class VirtualCircuitManager:
         self.dead = threading.Event()
         self._ioid_counter = ThreadsafeCounter()
         self._subscriptionid_counter = ThreadsafeCounter()
+        self._ready = threading.Event()
 
         # Connect.
-        with self.new_command_cond:
-            if self.connected:
-                return
-            if self.circuit.states[ca.SERVER] is ca.IDLE:
-                self.socket = socket.create_connection(self.circuit.address)
-                self.selector.add_socket(self.socket, self)
-                self.send(ca.VersionRequest(self.circuit.priority, 13),
-                          ca.HostNameRequest(self.context.host_name),
-                          ca.ClientNameRequest(self.context.client_name))
-            else:
-                raise RuntimeError("Cannot connect. States are {} "
-                                   "".format(self.circuit.states))
-            if not self.new_command_cond.wait_for(lambda: self.connected,
-                                                  timeout):
-                raise TimeoutError("Circuit with server at {} did not "
-                                   "connected within {}-second timeout."
-                                   "".format(self.circuit.address, timeout))
+        if self.circuit.states[ca.SERVER] is ca.IDLE:
+            self.socket = socket.create_connection(self.circuit.address)
+            self.selector.add_socket(self.socket, self)
+            self.send(ca.VersionRequest(self.circuit.priority, 13),
+                      ca.HostNameRequest(self.context.host_name),
+                      ca.ClientNameRequest(self.context.client_name))
+        else:
+            raise RuntimeError("Cannot connect. States are {} "
+                               "".format(self.circuit.states))
+        ready = self._ready.wait(timeout=timeout)
+        if not ready:
+            raise TimeoutError("Circuit with server at {} did not "
+                               "connected within {}-second timeout."
+                               "".format(self.circuit.address, timeout))
 
     def __repr__(self):
         return (f"<VirtualCircuitManager circuit={self.circuit} "
@@ -994,82 +990,82 @@ class VirtualCircuitManager:
                 self.disconnect()
                 return
 
-        with self.new_command_cond:
-            if command is ca.DISCONNECTED:
-                self._disconnected()
-            elif isinstance(command, (ca.ReadNotifyResponse,
-                                      ca.WriteNotifyResponse)):
-                ioid_info = self.ioids.pop(command.ioid)
-                deadline = ioid_info['deadline']
-                if deadline is not None and time.monotonic() > deadline:
-                    logger.warn(f"ignoring late response with "
-                                f"ioid={command.ioid} because it arrived "
-                                f"{time.monotonic() - ioid_info['deadline']} "
-                                f"seconds after the deadline specified by the "
-                                f"timeout."
-                                )
-                else:
-                    chan = ioid_info['channel']
-                    callback = ioid_info.get('callback')
-                    if callback is not None:
-                        self.context.user_callback_executor.submit(
-                            callback, command)
-
-                event = ioid_info['event']
-                # If PV.read() or PV.write() are waiting on this response,
-                # they hold a reference to ioid_info. We will use that to
-                # provide the response to them and then set the Event that they
-                # are waiting on.
-                ioid_info['response'] = command
-                if event is not None:
-                    event.set()
-
-            elif isinstance(command, ca.EventAddResponse):
-                try:
-                    sub = self.subscriptions[command.subscriptionid]
-                except KeyError:
-                    # This subscription has been removed. We assume that this
-                    # response was in flight before the server processed our
-                    # unsubscription.
-                    pass
-                else:
-                    # This method submits jobs to the Contexts's
-                    # ThreadPoolExecutor for user callbacks.
-                    sub.process(command)
-            elif isinstance(command, ca.AccessRightsResponse):
-                pv = self.pvs[command.cid]
-                pv.access_rights_changed(command.access_rights)
-            elif isinstance(command, ca.EventCancelResponse):
-                ...
-            elif isinstance(command, ca.CreateChanResponse):
-                pv = self.pvs[command.cid]
-                chan = self.channels[command.cid]
-                pv.connection_state_changed('connected', chan)
-                self.all_created_pvnames.append(pv.name)
-                with pv.component_lock:
-                    pv.channel = chan
-                    cm = pv.circuit_manager
-                    pv.channel_ready.set()
-                # If we have just revived an existing PV whose
-                # VirtualCircuit died and reconnected, we are now ready to
-                # reinstate its Subsciprtions. If this is a new PV, it
-                # won't have any Subscriptions.
-                for sub in pv.subscriptions.values():
-                    self.context.subscriptions_to_activate[cm].add(sub)
-            elif isinstance(command, (ca.ServerDisconnResponse,
-                                      ca.ClearChannelResponse)):
-                pv = self.pvs[command.cid]
-                pv.connection_state_changed('disconnected', None)
-                # NOTE: pv remains valid until server goes down
+        if command is ca.DISCONNECTED:
+            self._disconnected()
+        elif isinstance(command, (ca.VersionResponse,)):
+            assert self.connected  # double check that the state machine agrees
+            self._ready.set()
+        elif isinstance(command, (ca.ReadNotifyResponse,
+                                  ca.WriteNotifyResponse)):
+            ioid_info = self.ioids.pop(command.ioid)
+            deadline = ioid_info['deadline']
+            if deadline is not None and time.monotonic() > deadline:
+                logger.warn(f"ignoring late response with "
+                            f"ioid={command.ioid} because it arrived "
+                            f"{time.monotonic() - ioid_info['deadline']} "
+                            f"seconds after the deadline specified by the "
+                            f"timeout."
+                            )
             else:
-                logger.debug('other command %s', command)
-            self.new_command_cond.notify_all()
+                chan = ioid_info['channel']
+                callback = ioid_info.get('callback')
+                if callback is not None:
+                    self.context.user_callback_executor.submit(
+                        callback, command)
+
+            event = ioid_info['event']
+            # If PV.read() or PV.write() are waiting on this response,
+            # they hold a reference to ioid_info. We will use that to
+            # provide the response to them and then set the Event that they
+            # are waiting on.
+            ioid_info['response'] = command
+            if event is not None:
+                event.set()
+
+        elif isinstance(command, ca.EventAddResponse):
+            try:
+                sub = self.subscriptions[command.subscriptionid]
+            except KeyError:
+                # This subscription has been removed. We assume that this
+                # response was in flight before the server processed our
+                # unsubscription.
+                pass
+            else:
+                # This method submits jobs to the Contexts's
+                # ThreadPoolExecutor for user callbacks.
+                sub.process(command)
+        elif isinstance(command, ca.AccessRightsResponse):
+            pv = self.pvs[command.cid]
+            pv.access_rights_changed(command.access_rights)
+        elif isinstance(command, ca.EventCancelResponse):
+            ...
+        elif isinstance(command, ca.CreateChanResponse):
+            pv = self.pvs[command.cid]
+            chan = self.channels[command.cid]
+            pv.connection_state_changed('connected', chan)
+            self.all_created_pvnames.append(pv.name)
+            with pv.component_lock:
+                pv.channel = chan
+                cm = pv.circuit_manager
+                pv.channel_ready.set()
+            # If we have just revived an existing PV whose
+            # VirtualCircuit died and reconnected, we are now ready to
+            # reinstate its Subsciprtions. If this is a new PV, it
+            # won't have any Subscriptions.
+            for sub in pv.subscriptions.values():
+                self.context.subscriptions_to_activate[cm].add(sub)
+        elif isinstance(command, (ca.ServerDisconnResponse,
+                                  ca.ClearChannelResponse)):
+            pv = self.pvs[command.cid]
+            pv.connection_state_changed('disconnected', None)
+            # NOTE: pv remains valid until server goes down
+        else:
+            logger.debug('other command %s', command)
 
     def _disconnected(self):
         # Ensure that this method is idempotent.
         if self.dead.is_set():
             return
-        print("_disconnected")
         logger.debug('Entered VCM._disconnected')
         # Update circuit state. This will be reflected on all PVs, which
         # continue to hold a reference to this disconnected circuit.
@@ -1109,8 +1105,7 @@ class VirtualCircuitManager:
             self.context.reconnect(((chan.name, chan.circuit.priority)
                                     for chan in self.channels.values()))
 
-    def disconnect(self, *, wait=True, timeout=2.0):
-        print('user disconnected')
+    def disconnect(self):
         self._user_disconnected = True
         self._disconnected()
         if self.socket is None:
@@ -1121,24 +1116,7 @@ class VirtualCircuitManager:
             sock.shutdown(socket.SHUT_WR)
         except OSError as ex:
             pass
-
-        if wait:
-            states = self.circuit.states
-
-            def is_disconnected():
-                return states[ca.CLIENT] is ca.DISCONNECTED
-
-            with self.new_command_cond:
-                done = self.new_command_cond.wait_for(is_disconnected, timeout)
-
-            if not done:
-                # TODO: this may actually happen due to a long backlog of
-                # incoming data, but may not be critical to wait for...
-                raise TimeoutError(f"Server did not respond to disconnection "
-                                   f"attempt within {timeout}-second timeout."
-                                   )
-
-            logger.debug('Circuit manager disconnected')
+        logger.debug('Circuit manager disconnected by user')
 
     def __del__(self):
         try:
