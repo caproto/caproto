@@ -115,7 +115,7 @@ def shared_broadcaster(request):
 
     def cleanup():
         sb.disconnect()
-        assert not sb.command_thread.is_alive()
+        assert not sb._command_thread.is_alive()
         assert not sb.selector.thread.is_alive()
         assert not sb._retry_unanswered_searches_thread.is_alive()
 
@@ -131,7 +131,7 @@ def context(request, shared_broadcaster):
         print('*** Cleaning up the context!')
         context.disconnect()
         assert not context._process_search_results_thread.is_alive()
-        assert not context._restart_sub_thread.is_alive()
+        assert not context._activate_subscriptions_thread.is_alive()
         assert not context.selector.thread.is_alive()
 
     request.addfinalizer(cleanup)
@@ -202,10 +202,11 @@ def test_subscriptions(ioc, context):
 
     sub = pv.subscribe()
     sub.add_callback(callback)
+    time.sleep(0.2)  # Wait the callback to be added.
     pv.write((1, ), wait=True)
     pv.write((2, ), wait=True)
     pv.write((3, ), wait=True)
-    time.sleep(0.2)  # Wait for that to process...
+    time.sleep(0.2)  # Wait for the last update to be processed.
     sub.clear()
     pv.write((4, ), wait=True)  # This update should not be received by us.
 
@@ -317,13 +318,14 @@ def test_unsubscribe_all(ioc, context):
 
     sub0.add_callback(f)
     sub1.add_callback(f)
+    time.sleep(0.2)  # Wait the callbacks to be added.
 
     pv.write((123,))
     pv.write((456,))
-    time.sleep(0.2)
+    time.sleep(0.2)  # Wait for the updates to process.
     assert len(collector) == 6
     pv.unsubscribe_all()
-    time.sleep(0.2)
+    # Unsubscribing is synchronous -- no need to sleep here.
     collector.clear()
     # These should be ignored:
     pv.write((123,))

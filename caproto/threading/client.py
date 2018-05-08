@@ -69,7 +69,7 @@ def ensure_connected(func):
                 if not ready:
                     raise TimeoutError(f"Could not connect within "
                                        f"{raw_timeout}-second timeout.")
-                with pv._component_lock:
+                with pv.component_lock:
                     cm = pv.circuit_manager
                     cid = cm.circuit.new_channel_id()
                     chan = ca.ClientChannel(pv.name, cm.circuit, cid=cid)
@@ -89,7 +89,7 @@ def ensure_connected(func):
                 if timeout is not None:
                     timeout = deadline - time.monotonic()
                     kwargs['timeout'] = timeout
-                with pv._component_lock:
+                with pv.component_lock:
                     cm = pv.circuit_manager
                     try:
                         return func(self, *args, **kwargs)
@@ -317,16 +317,15 @@ class SharedBroadcaster:
         self.log = logging.getLogger(self.__class__.__name__)
         self.log.setLevel(self.log_level)
         self.command_bundle_queue = Queue()
-        self.command_cond = threading.Condition()
 
         # an event to tear down and clean up the broadcaster
         self._close_event = threading.Event()
         self.selector = SelectorThread(parent=self)
 
         self.selector.start()
-        self.command_thread = threading.Thread(target=self.command_loop,
+        self._command_thread = threading.Thread(target=self.command_loop,
                                                daemon=True, name='command')
-        self.command_thread.start()
+        self._command_thread.start()
 
         self._registration_retry_time = registration_retry_time
         self._registration_last_sent = 0
@@ -360,9 +359,8 @@ class SharedBroadcaster:
         self._registration_last_sent = time.monotonic()
         command = self.broadcaster.register()
 
-        with self.command_cond:
-            self.send(ca.EPICS_CA2_PORT, command)
-            self._searching_enabled.set()
+        self.send(ca.EPICS_CA2_PORT, command)
+        self._searching_enabled.set()
 
     def new_id(self):
         while True:
@@ -398,19 +396,18 @@ class SharedBroadcaster:
             pass
 
     def disconnect(self, *, wait=True):
-        with self.command_cond:
-            if self.udp_sock is not None:
-                self.selector.remove_socket(self.udp_sock)
+        if self.udp_sock is not None:
+            self.selector.remove_socket(self.udp_sock)
 
-            self._close_event.set()
-            self.search_results.clear()
-            self._registration_last_sent = 0
-            self._searching_enabled.clear()
-            self.udp_sock = None
-            self.broadcaster.disconnect()
-            self.selector.stop()
+        self._close_event.set()
+        self.search_results.clear()
+        self._registration_last_sent = 0
+        self._searching_enabled.clear()
+        self.udp_sock = None
+        self.broadcaster.disconnect()
+        self.selector.stop()
         if wait:
-            self.command_thread.join()
+            self._command_thread.join()
             self.selector.thread.join()
             self._retry_unanswered_searches_thread.join()
 
@@ -569,9 +566,6 @@ class SharedBroadcaster:
                 for queue, names in queues.items():
                     queue.put((address, names))
 
-                with self.command_cond:
-                    self.command_cond.notify_all()
-
         logger.debug('Broadcaster command loop exiting')
 
     def _retry_unanswered_searches(self):
@@ -590,10 +584,11 @@ class SharedBroadcaster:
                 continue
 
             t = time.monotonic()
+            # Listify just so we can count the number of items and print a more
+            # informative debug message.
             items = list(self.unanswered_searches.items())
             requests = (ca.SearchRequest(name, search_id, 13)
-                        for search_id, (name, _) in
-                        items)
+                        for search_id, (name, _) in items)
 
             if not self._searching_enabled.is_set():
                 continue
@@ -633,7 +628,6 @@ class Context:
         self.client_name = client_name
         self.log_level = log_level
         self.pv_cache_lock = threading.RLock()
-        self.resuscitated_pvs = []
         self.circuit_managers = {}  # keyed on address
         self._lock_during_get_circuit_manager = threading.RLock()
         self.pvs = {}  # (name, priority) -> pv
@@ -641,9 +635,11 @@ class Context:
         self.pvs_needing_circuits = defaultdict(set)
         self.broadcaster.add_listener(self)
         self._search_results_queue = Queue()
-
         # an event to close and clean up the whole context
         self._close_event = threading.Event()
+        self.subscriptions_lock = threading.RLock()
+        self.subscriptions_to_activate = defaultdict(set)
+        self.activate_subscriptions_now = threading.Event()
 
         logger.debug('Context: start process search results loop')
         self._process_search_results_thread = threading.Thread(
@@ -652,10 +648,10 @@ class Context:
         self._process_search_results_thread.start()
 
         logger.debug('Context: start restart_subscriptions loop')
-        self._restart_sub_thread = threading.Thread(
-            target=self._restart_subscriptions,
-            daemon=True, name='restart_subscriptions')
-        self._restart_sub_thread.start()
+        self._activate_subscriptions_thread = threading.Thread(
+            target=self._activate_subscriptions,
+            daemon=True, name='activate_subscriptions')
+        self._activate_subscriptions_thread.start()
 
         self.selector = SelectorThread(parent=self)
         self.selector.start()
@@ -727,9 +723,6 @@ class Context:
             self.broadcaster.search_results.pop(name, None)
             with self.pv_cache_lock:
                 self.pvs_needing_circuits[name].add(pv)
-            with self.pv_cache_lock:
-                self.resuscitated_pvs.extend(
-                    [pv for pv in pvs if pv.subscriptions])
 
         self.broadcaster.search(self._search_results_queue, names)
 
@@ -777,7 +770,18 @@ class Context:
             # Initiate channel creation with the server.
             for cm, channels in channels_grouped_by_circuit.items():
                 commands = [chan.create() for chan in channels]
-                cm.send(*commands)
+                try:
+                    cm.send(*commands)
+                except Exception:
+                    if cm.dead.is_set():
+                        logger.debug("Circuit died while we were trying "
+                                     "to create the channel. We will "
+                                     "keep attempting this until it "
+                                     "works.")
+                        # When the Context creates a new circuit, we will end
+                        # up here again. No big deal.
+                        continue
+                    raise
 
         logger.debug('Process search results thread exiting')
 
@@ -799,46 +803,43 @@ class Context:
                 self.circuit_managers[(address, priority)] = cm
             return cm
 
-    def _restart_subscriptions(self):
+    def _activate_subscriptions(self):
         while not self._close_event.is_set():
             t = time.monotonic()
-            ready = defaultdict(list)
-            with self.pv_cache_lock:
-                pvs = list(self.resuscitated_pvs)
-                self.resuscitated_pvs.clear()
-                for pv in pvs:
-                    if pv.connected:
-                        ready[pv.circuit_manager].append(pv)
-                    else:
-                        self.resuscitated_pvs.append(pv)
-
-            for cm, pvs in ready.items():
+            with self.subscriptions_lock:
+                items = list(self.subscriptions_to_activate.items())
+                self.subscriptions_to_activate.clear()
+            for cm, subs in items:
                 def requests():
                     "Yield EventAddRequest commands."
-                    for pv in pvs:
-                        subs = pv.subscriptions
-                        cm_subs_cache = pv.circuit_manager.subscriptions
-                        for sub in list(subs.values()):
-                            # the old subscription is dead, remove it
-                            if sub.subscriptionid is not None:
-                                cm_subs_cache.pop(sub.subscriptionid, None)
-                            # this will add the subscription into our self.subscriptions
-                            command = sub.compose_command()
-                            # compose_command() returns None if this
-                            # Subscription is inactive (meaning there are no
-                            # user callbacks attached). It will send an
-                            # EventAddRequest on its own if/when the user does
-                            # add any callbacks, so we can skip it here.
-                            if command is not None:
-                                yield command
+                    for sub in subs:
+                        command = sub.compose_command()
+                        # compose_command() returns None if this
+                        # Subscription is inactive (meaning there are no
+                        # user callbacks attached). It will send an
+                        # EventAddRequest on its own if/when the user does
+                        # add any callbacks, so we can skip it here.
+                        if command is not None:
+                            yield command
 
                 for batch in batch_requests(requests(),
                                             EVENT_ADD_BATCH_MAX_BYTES):
-                    cm.send(*batch)
+                    try:
+                        cm.send(*batch)
+                    except Exception:
+                        if cm.dead.is_set():
+                            logger.debug("Circuit died while we were "
+                                         "trying to activate "
+                                         "subscriptions. We will "
+                                         "keep attempting this until it "
+                                         "works.")
+                        # When the Context creates a new circuit, we will
+                        # end up here again. No big deal.
+                        break
 
             wait_time = max(0, (RESTART_SUBS_PERIOD -
                                 (time.monotonic() - t)))
-            self._close_event.wait(wait_time)
+            self.activate_subscriptions_now.wait(wait_time)
 
     logger.debug('Restart subscriptions thread exiting')
 
@@ -876,7 +877,7 @@ class Context:
 
             if wait:
                 self._process_search_results_thread.join()
-                self._restart_sub_thread.join()
+                self._activate_subscriptions_thread.join()
                 self.selector.thread.join()
 
             logger.debug('Disconnection complete')
@@ -1039,14 +1040,22 @@ class VirtualCircuitManager:
                 pv = self.pvs[command.cid]
                 pv.access_rights_changed(command.access_rights)
             elif isinstance(command, ca.EventCancelResponse):
-                self.subscriptions.pop(command.subscriptionid)
+                ...
             elif isinstance(command, ca.CreateChanResponse):
                 pv = self.pvs[command.cid]
                 chan = self.channels[command.cid]
                 pv.connection_state_changed('connected', chan)
                 self.all_created_pvnames.append(pv.name)
-                pv.channel = chan
-                pv.channel_ready.set()
+                with pv.component_lock:
+                    pv.channel = chan
+                    cm = pv.circuit_manager
+                    pv.channel_ready.set()
+                # If we have just revived an existing PV whose
+                # VirtualCircuit died and reconnected, we are now ready to
+                # reinstate its Subsciprtions. If this is a new PV, it
+                # won't have any Subscriptions.
+                for sub in pv.subscriptions.values():
+                    self.context.subscriptions_to_activate[cm].add(sub)
             elif isinstance(command, (ca.ServerDisconnResponse,
                                       ca.ClearChannelResponse)):
                 pv = self.pvs[command.cid]
@@ -1143,7 +1152,7 @@ class PV:
     __slots__ = ('name', 'priority', 'context', '_circuit_manager', '_channel',
                  'circuit_ready', 'channel_ready',
                  'access_rights_callback', 'subscriptions',
-                 'command_bundle_queue', '_component_lock', '_idle', '_in_use',
+                 'command_bundle_queue', 'component_lock', '_idle', '_in_use',
                  '_usages', 'connection_state_callback',
                  '__weakref__')
 
@@ -1156,7 +1165,7 @@ class PV:
         self.priority = priority
         self.context = context
         # Use this lock whenever we touch circuit_manager or channel.
-        self._component_lock = threading.RLock()
+        self.component_lock = threading.RLock()
         self.circuit_ready = threading.Event()
         self.channel_ready = threading.Event()
         self.connection_state_callback = CallbackHandler(self)
@@ -1183,7 +1192,7 @@ class PV:
 
     @circuit_manager.setter
     def circuit_manager(self, val):
-        with self._component_lock:
+        with self.component_lock:
             self._circuit_manager = val
 
     @property
@@ -1192,7 +1201,7 @@ class PV:
 
     @channel.setter
     def channel(self, val):
-        with self._component_lock:
+        with self.component_lock:
             self._channel = val
 
     def access_rights_changed(self, rights):
@@ -1223,7 +1232,7 @@ class PV:
 
     @property
     def connected(self):
-        with self._component_lock:
+        with self.component_lock:
             channel = self.channel
             if channel is None:
                 return False
@@ -1528,10 +1537,13 @@ class Subscription(CallbackHandler):
         """This is called automatically after the first callback is added.
         """
         with self._callback_lock:
-            command = self.compose_command()  # None if there are no callbacks
-        has_callbacks = command is not None
+            has_callbacks = bool(self.callbacks)
         if has_callbacks:
-            self.pv.circuit_manager.send(command)
+            cm = self.pv.circuit_manager
+            ctx = cm.context
+            with ctx.subscriptions_lock:
+                ctx.subscriptions_to_activate[cm].add(self)
+            ctx.activate_subscriptions_now.set()
         return has_callbacks
 
     @ensure_connected
@@ -1561,7 +1573,8 @@ class Subscription(CallbackHandler):
         # Once self.callbacks is empty, self.remove_callback calls
         # self._unsubscribe for us.
 
-    def _unsubscribe(self):
+    @ensure_connected
+    def _unsubscribe(self, timeout=2):
         """
         This is automatically called if the number of callbacks goes to 0.
         """
@@ -1571,8 +1584,8 @@ class Subscription(CallbackHandler):
                 return
             subscriptionid = self.subscriptionid
             self.subscriptionid = None
-
             self.most_recent_response = None
+        self.pv.circuit_manager.subscriptions.pop(subscriptionid, None)
         chan = self.pv.channel
         if chan and chan.states[ca.CLIENT] is ca.CONNECTED:
             try:
@@ -1621,7 +1634,10 @@ class Subscription(CallbackHandler):
                 self._unsubscribe()
 
     def __del__(self):
-        self.clear()
+        try:
+            self.clear()
+        except TimeoutError:
+            pass
 
 
 # The signature of caproto._circuit.ClientChannel.subscribe, which is used to
