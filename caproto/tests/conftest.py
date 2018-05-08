@@ -81,9 +81,10 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
 
 def poll_readiness(pv_to_check, attempts=15):
     logger.debug(f'Checking PV {pv_to_check}')
+    start_repeater()
     for attempt in range(attempts):
         try:
-            get(pv_to_check, timeout=1)
+            get(pv_to_check, timeout=1, repeater=False)
         except TimeoutError:
             continue
         else:
@@ -138,10 +139,12 @@ def epics_base_ioc(prefix, request):
 
     def ioc_monitor():
         process.wait()
-        logger.info('***********************************')
-        logger.info('********IOC process exited!********')
-        logger.info('******* Returned: %s ******', process.returncode)
-        logger.info('***********************************')
+        logger.info('''
+***********************************
+********IOC process exited!********
+******* Returned: %s ******
+***********************************''',
+                    process.returncode)
 
     threading.Thread(target=ioc_monitor).start()
     pvs = {pv[len(prefix):]: pv

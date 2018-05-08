@@ -9,9 +9,12 @@ import caproto.threading.client
 import time
 import socket
 import getpass
+import threading
+import concurrent.futures
 
 from caproto.threading.client import (Context, SharedBroadcaster,
                                       ContextDisconnectedError)
+from caproto import ChannelType
 import caproto as ca
 import pytest
 
@@ -357,3 +360,192 @@ def test_timeout(ioc, context):
     # Wait and make sure that the callback is not called.
     time.sleep(0.2)
     assert not responses
+
+
+@pytest.fixture(params=[1, 4, 16])
+def thread_count(request):
+    return request.param
+
+
+@pytest.fixture(params=[f'iter{i}' for i in range(1, 3)])
+def multi_iterations(request):
+    return request.param
+
+
+def _multithreaded_exec(test_func, thread_count, *, start_timeout=5,
+                        end_timeout=2):
+    threads = {}
+    return_values = {i: None for i in range(thread_count)}
+    start_barrier = threading.Barrier(parties=thread_count + 1)
+    end_barrier = threading.Barrier(parties=thread_count + 1)
+
+    def thread_wrapper(thread_id):
+        print(f'* thread {thread_id} entered *')
+        start_barrier.wait(timeout=start_timeout)
+
+        try:
+            return_values[thread_id] = test_func(thread_id)
+        except Exception as ex:
+            print(f'* thread {thread_id} failed: {ex.__class__.__name__} {ex}')
+            return_values[thread_id] = ex
+
+        end_barrier.wait(timeout=end_timeout)
+        print(f'* thread {thread_id} exiting *')
+
+    for i in range(thread_count):
+        threads[i] = threading.Thread(target=thread_wrapper,
+                                      args=(i, ),
+                                      daemon=True)
+        threads[i].start()
+
+    try:
+        # Start all the threads at the same time
+        start_barrier.wait(timeout=start_timeout)
+    except threading.BrokenBarrierError:
+        raise RuntimeError('Start barrier synchronization failed')
+
+    try:
+        # Wait until all threads have completed
+        end_barrier.wait(timeout=end_timeout)
+    except threading.BrokenBarrierError:
+        raise RuntimeError('End barrier synchronization failed')
+
+    ex = None
+    for thread_id in range(thread_count):
+        ret_val = return_values[thread_id]
+        print(f'Result {thread_id} {ret_val}')
+        threads[thread_id].join(timeout=0.1)
+        if isinstance(ret_val, Exception):
+            ex = ret_val
+
+    if ex is not None:
+        raise ex
+
+    return [return_values[thread_id] for thread_id in range(thread_count)]
+
+
+def test_multithreaded_many_get_pvs(ioc, context, thread_count,
+                                    multi_iterations):
+    def _test(thread_id):
+        pv, = context.get_pvs(ioc.pvs['int'])
+        pv.wait_for_connection()
+
+        pvs[thread_id] = pv
+        return pv.connected
+
+    pvs = {}
+    for connected in _multithreaded_exec(_test, thread_count):
+        assert connected
+
+    assert len(set(pvs.values())) == 1
+
+
+def test_multithreaded_many_wait_for_connection(ioc, context, thread_count,
+                                                multi_iterations):
+    def _test(thread_id):
+        pv.wait_for_connection()
+        return pv.connected
+
+    pv, = context.get_pvs(ioc.pvs['int'])
+
+    for connected in _multithreaded_exec(_test, thread_count):
+        assert connected
+
+
+def test_multithreaded_many_read(ioc, context, thread_count,
+                                 multi_iterations):
+    def _test(thread_id):
+        data_id = thread_id % max(data_types)
+        pv.wait_for_connection()
+        value = pv.read(data_type=data_types[data_id])
+        values[data_id] = value
+        return (data_id, value)
+
+    pv, = context.get_pvs(ioc.pvs['int'])
+    values = {}
+
+    data_types = {0: ChannelType.INT,
+                  1: ChannelType.STS_INT,
+                  2: ChannelType.CTRL_INT,
+                  3: ChannelType.GR_INT
+                  }
+
+    for data_id, value in _multithreaded_exec(_test, thread_count):
+        assert value.data_type == data_types[data_id]
+
+
+def test_multithreaded_many_write(ioc, context, thread_count,
+                                  multi_iterations):
+    def _test(thread_id):
+        pv.wait_for_connection()
+        return pv.write(data=[thread_id], wait=True)
+
+    pv, = context.get_pvs(ioc.pvs['int'])
+    values = []
+
+    def callback(command):
+        values.append(command.data.tolist()[0])
+
+    sub = pv.subscribe()
+    sub.add_callback(callback)
+
+    _multithreaded_exec(_test, thread_count)
+    assert values == set(range(thread_count))
+
+    sub.clear()
+
+
+def test_multithreaded_many_subscribe(ioc, context, thread_count,
+                                      multi_iterations):
+    def _test(thread_id):
+        if thread_id == 0:
+            init_barrier.wait(timeout=2)
+            print('-- write thread initialized --')
+            pv.write((1, ), wait=True)
+            pv.write((2, ), wait=True)
+            pv.write((3, ), wait=True)
+            time.sleep(0.2)
+            print('-- write thread hit sub barrier --')
+            sub_ended_barrier.wait(timeout=2)
+            print('-- write thread exiting --')
+            return [initial_value, 1, 2, 3]
+
+        values[thread_id] = []
+        def callback(command):
+            print(thread_id, command)
+            values[thread_id].append(command.data.tolist()[0])
+
+        sub = pv.subscribe()
+        sub.add_callback(callback)
+        # print(thread_id, sub)
+        init_barrier.wait(timeout=2)
+        # Everybody here? On my signal... SUBSCRIBE!! Ahahahahaha!
+        # Destruction!!
+        sub_ended_barrier.wait(timeout=2)
+
+        sub.clear()
+        return values[thread_id]
+
+    values = {}
+    init_barrier = threading.Barrier(parties=thread_count + 1)
+    sub_ended_barrier = threading.Barrier(parties=thread_count + 1)
+
+    pv, = context.get_pvs(ioc.pvs['int'])
+    pv.wait_for_connection()
+    initial_value = pv.read().data.tolist()[0]
+
+    print()
+    print()
+    print(f'initial value is: {initial_value!r}')
+    try:
+        results = _multithreaded_exec(_test, thread_count + 1)
+    except threading.BrokenBarrierError as ex:
+        if init_barrier.broken:
+            print(f'Init barrier broken!')
+        if sub_ended_barrier.broken:
+            print(f'Sub_ended barrier broken!')
+        raise
+
+    for value_list in results:
+        assert len(value_list) == 4
+        assert list(value_list) == [initial_value, 1, 2, 3]
