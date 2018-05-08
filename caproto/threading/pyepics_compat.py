@@ -326,7 +326,7 @@ class PV:
 
     def _check_auto_monitor_sub(self, count=None):
         'Ensure auto-monitor subscription is running'
-        if ((self.auto_monitor or self.callbacks) and
+        if ((self.auto_monitor and self.callbacks) and
                 not self._auto_monitor_sub):
             if count is None:
                 count = self.default_count
