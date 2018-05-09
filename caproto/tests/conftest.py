@@ -81,9 +81,10 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
 
 def poll_readiness(pv_to_check, attempts=15):
     logger.debug(f'Checking PV {pv_to_check}')
+    start_repeater()
     for attempt in range(attempts):
         try:
-            get(pv_to_check, timeout=1)
+            get(pv_to_check, timeout=1, repeater=False)
         except TimeoutError:
             continue
         else:
@@ -138,17 +139,20 @@ def epics_base_ioc(prefix, request):
 
     def ioc_monitor():
         process.wait()
-        logger.info('***********************************')
-        logger.info('********IOC process exited!********')
-        logger.info('******* Returned: %s ******', process.returncode)
-        logger.info('***********************************')
+        logger.info('''
+***********************************
+********IOC process exited!********
+******* Returned: %s ******
+***********************************''',
+                    process.returncode)
 
     threading.Thread(target=ioc_monitor).start()
     pvs = {pv[len(prefix):]: pv
            for pv, rtype in db
            }
 
-    return SimpleNamespace(process=process, prefix=prefix, name=name, pvs=pvs)
+    return SimpleNamespace(process=process, prefix=prefix, name=name, pvs=pvs,
+                           type='epics-base')
 
 
 @pytest.fixture(scope='function')
@@ -163,7 +167,18 @@ def caproto_ioc(prefix, request):
                               request=request,
                               pv_to_check=pvs['float'],
                               args=(prefix,))
-    return SimpleNamespace(process=process, prefix=prefix, name=name, pvs=pvs)
+    return SimpleNamespace(process=process, prefix=prefix, name=name, pvs=pvs,
+                           type='caproto')
+
+
+@pytest.fixture(params=['caproto', 'epics-base'], scope='function')
+def ioc_factory(prefix, request):
+    'A fixture that runs more than one IOC: caproto, epics'
+    # Get a new prefix for each IOC type:
+    if request.param == 'caproto':
+        return functools.partial(caproto_ioc, prefix, request)
+    elif request.param == 'epics-base':
+        return functools.partial(epics_base_ioc, prefix, request)
 
 
 @pytest.fixture(params=['caproto', 'epics-base'], scope='function')
@@ -174,7 +189,6 @@ def ioc(prefix, request):
         ioc_ = caproto_ioc(prefix, request)
     elif request.param == 'epics-base':
         ioc_ = epics_base_ioc(prefix, request)
-    ioc_.type = request.param
     return ioc_
 
 
@@ -411,10 +425,19 @@ def server(request):
         async def run_server_and_client():
             try:
                 server_task = await curio.spawn(server_main)
-                if threaded_client:
-                    await threaded_in_curio_wrapper(client)()
+                # Give this a couple tries, akin to poll_readiness.
+                for _ in range(15):
+                    try:
+                        if threaded_client:
+                            await threaded_in_curio_wrapper(client)()
+                        else:
+                            await client()
+                    except TimeoutError:
+                        continue
+                    else:
+                        break
                 else:
-                    await client()
+                    raise TimeoutError(f"ioc failed to start")
             finally:
                 await server_task.cancel()
 
@@ -441,11 +464,18 @@ def server(request):
         async def run_server_and_client():
             async with trio.open_nursery() as test_nursery:
                 server_context = await test_nursery.start(trio_server_main)
-                if threaded_client:
-                    await trio.run_sync_in_worker_thread(client)
-                else:
-                    print('async client')
-                    await client(test_nursery, server_context)
+                # Give this a couple tries, akin to poll_readiness.
+                for _ in range(15):
+                    try:
+                        if threaded_client:
+                            await trio.run_sync_in_worker_thread(client)
+                        else:
+                            print('async client')
+                            await client(test_nursery, server_context)
+                    except TimeoutError:
+                        continue
+                    else:
+                        break
                 await server_context.stop()
                 # don't leave the server running:
                 test_nursery.cancel_scope.cancel()

@@ -287,7 +287,7 @@ class VirtualCircuit:
             # Update other Channel and Circuit state.
             if isinstance(command, AccessRightsResponse):
                 chan.access_rights = command.access_rights
-            if isinstance(command, CreateChanResponse):
+            elif isinstance(command, CreateChanResponse):
                 chan.sid = command.sid
                 self.channels_sid[chan.sid] = chan
             elif isinstance(command, ClearChannelResponse):
@@ -532,13 +532,13 @@ class ClientChannel(_BaseChannel):
         command = ClearChannelRequest(self.sid, self.cid)
         return command
 
-    def read(self, data_type=None, data_count=None):
+    def read(self, data_type=None, data_count=None, ioid=None):
         """
         Generate a valid :class:`ReadNotifyRequest`.
 
         Parameters
         ----------
-        data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
+        data_type : a ChannelType or corresponding integer ID, optional
             Requested Channel Access data type. Default is the channel's
             native data type, which can be checked in the Channel's attribute
             :attr:`native_data_type`.
@@ -552,18 +552,20 @@ class ClientChannel(_BaseChannel):
         ReadNotifyRequest
         """
         data_type, data_count = self._fill_defaults(data_type, data_count)
-        ioid = self.circuit.new_ioid()
+        if ioid is None:
+            ioid = self.circuit.new_ioid()
         command = ReadNotifyRequest(data_type, data_count, self.sid, ioid)
         return command
 
-    def write(self, data, data_type=None, data_count=None, metadata=None):
+    def write(self, data, data_type=None, data_count=None, metadata=None, ioid=None,
+              use_notify=True):
         """
         Generate a valid :class:`WriteNotifyRequest`.
 
         Parameters
         ----------
         data : tuple, ``numpy.ndarray``, ``array.array``, or bytes
-        data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
+        data_type : a ChannelType or corresponding integer ID, optional
             Requested Channel Access data type. Default is the channel's
             native data type, which can be checked in the Channel's attribute
             :attr:`native_data_type`.
@@ -581,19 +583,27 @@ class ClientChannel(_BaseChannel):
         data_type, data_count = self._fill_defaults(data_type, data_count)
         if data_count == 0:
             data_count = len(data)
-        ioid = self.circuit.new_ioid()
-        command = WriteNotifyRequest(data, data_type, data_count, self.sid,
-                                     ioid, metadata=metadata)
+        if ioid is None:
+            ioid = self.circuit.new_ioid()
+
+        # TODO: change use_notify default value; may break tests
+        if use_notify:
+            command = WriteNotifyRequest(data, data_type, data_count, self.sid,
+                                         ioid, metadata=metadata)
+        else:
+            command = WriteRequest(data, data_type, data_count, self.sid, ioid,
+                                   metadata=metadata)
         return command
 
-    def subscribe(self, data_type=None, data_count=None, low=0.0, high=0.0,
-                  to=0.0, mask=None):
+    def subscribe(self, data_type=None, data_count=None,
+                  subscriptionid=None,
+                  low=0.0, high=0.0, to=0.0, mask=None):
         """
         Generate a valid :class:`EventAddRequest`.
 
         Parameters
         ----------
-        data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
+        data_type : a ChannelType or corresponding integer ID, optional
             Requested Channel Access data type. Default is the channel's
             native data type, which can be checked in the Channel's attribute
             :attr:`native_data_type`.
@@ -601,6 +611,7 @@ class ClientChannel(_BaseChannel):
             Requested number of values. Default is the channel's native data
             count, which can be checked in the Channel's attribute
             :attr:`native_data_count`.
+        subscriptionid : integer, optional
         low : number
             Default is 0.
         high : number
@@ -622,7 +633,8 @@ class ClientChannel(_BaseChannel):
             mask = (SubscriptionType.DBE_VALUE |
                     SubscriptionType.DBE_ALARM |
                     SubscriptionType.DBE_PROPERTY)
-        subscriptionid = self.circuit.new_subscriptionid()
+        if subscriptionid is None:
+            subscriptionid = self.circuit.new_subscriptionid()
         command = EventAddRequest(data_type, data_count, self.sid,
                                   subscriptionid, low, high, to, mask)
         return command
@@ -684,7 +696,7 @@ class ServerChannel(_BaseChannel):
 
         Parameters
         ----------
-        native_data_type : a :class:`DBR_TYPE` or its designation integer ID
+        native_data_type : a ChannelType or corresponding integer ID, optional
             Default Channel Access data type.
         native_data_count : integer
             Default number of values
@@ -719,7 +731,7 @@ class ServerChannel(_BaseChannel):
         ----------
         data : tuple, ``numpy.ndarray``, ``array.array``, or bytes
         ioid : integer
-        data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
+        data_type : a ChannelType or corresponding integer ID, optional
             Requested Channel Access data type. Default is the channel's
             native data type, which can be checked in the Channel's attribute
             :attr:`native_data_type`.
@@ -748,7 +760,7 @@ class ServerChannel(_BaseChannel):
         Parameters
         ----------
         ioid : integer
-        data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
+        data_type : a ChannelType or corresponding integer ID, optional
             Requested Channel Access data type. Default is the channel's
             native data type, which can be checked in the Channel's attribute
             :attr:`native_data_type`.
@@ -776,7 +788,7 @@ class ServerChannel(_BaseChannel):
         ----------
         data : tuple, ``numpy.ndarray``, ``array.array``, or bytes
         subscriptionid : integer
-        data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
+        data_type : a ChannelType or corresponding integer ID, optional
             Requested Channel Access data type. Default is the channel's
             native data type, which can be checked in the Channel's attribute
             :attr:`native_data_type`.
@@ -806,7 +818,7 @@ class ServerChannel(_BaseChannel):
         Parameters
         ----------
         subscriptionid : integer
-        data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
+        data_type : a ChannelType or corresponding integer ID, optional
             Requested Channel Access data type. Default is the channel's
             native data type, which can be checked in the Channel's attribute
             :attr:`native_data_type`.

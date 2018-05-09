@@ -20,6 +20,26 @@ __all__ = ['PV', 'get_pv', 'caget', 'caput']
 logger = logging.getLogger(__name__)
 
 
+class AccessRightsException(ca.CaprotoError):
+    ...
+
+
+def _args_lock(func):
+    """
+    Apply to a lock during an instance method's execution.
+
+    This expects the instance to have an attribute named `master_lock`.
+    """
+    counter = itertools.count()
+
+    def inner(self, *args, **kwargs):
+        next(counter)
+        with self._args_lock:
+            ret = func(self, *args, **kwargs)
+            return ret
+    return inner
+
+
 def ensure_connection(func):
     # TODO get timeout default from func signature
     @functools.wraps(func)
@@ -76,7 +96,8 @@ def _read_response_to_pyepics(full_type, command):
     info = _parse_dbr_metadata(command.metadata)
 
     value = command.data
-    info['value'] = value
+    info['raw_value'] = value
+    info['value'] = _scalarify(value, command.data_type, command.data_count)
 
     if full_type in ca.char_types:
         value = value.tobytes().partition(b'\x00')[0].decode(STR_ENC)
@@ -90,6 +111,12 @@ def _read_response_to_pyepics(full_type, command):
         info['char_value'] = None
 
     return info
+
+
+def _scalarify(data, ntype, count):
+    if count == 1 and ntype not in (ChannelType.CHAR, ChannelType.STRING):
+        return data[0]
+    return data
 
 
 def _pyepics_get_value(value, string_value, full_type, native_count, *,
@@ -113,7 +140,7 @@ def _pyepics_get_value(value, string_value, full_type, native_count, *,
 
     elif native_count == 1 and len(value) == 1:
         if requested_count is None:
-            return value[0]
+            return value.tolist()[0]
         else:
             return value
 
@@ -158,9 +185,10 @@ class PV:
     _default_context = Context(SharedBroadcaster())
 
     def __init__(self, pvname, callback=None, form='time',
-                 verbose=False, auto_monitor=False, count=None,
+                 verbose=False, auto_monitor=None, count=None,
                  connection_callback=None,
-                 connection_timeout=None, *, context=None):
+                 connection_timeout=None, access_callback=None, *,
+                 context=None):
 
         if context is None:
             context = self._default_context
@@ -174,10 +202,10 @@ class PV:
         self.ftype = None
         self._connect_event = threading.Event()
         self._state_lock = threading.RLock()
+        self._args_lock = threading.RLock()
         self.connection_timeout = connection_timeout
         self.default_count = count
         self._auto_monitor_sub = None
-        self._connected = False
 
         if self.connection_timeout is None:
             self.connection_timeout = 1
@@ -195,6 +223,11 @@ class PV:
         if connection_callback is not None:
             self.connection_callbacks = [connection_callback]
 
+        self.access_callbacks = []
+        if access_callback is not None:
+            logger.debug('%s registered callback!', self.pvname)
+            self.access_callbacks.append(access_callback)
+
         self.callbacks = {}
         self._conn_started = False
 
@@ -208,16 +241,19 @@ class PV:
 
         self._caproto_pv, = self._context.get_pvs(
             self.pvname,
-            connection_state_callback=self._connection_state_changed)
-        if self._caproto_pv.connected and not self._connected:
+            connection_state_callback=self._connection_state_changed,
+            access_rights_callback=self._access_rights_changed,
+        )
+
+        if self._caproto_pv.connected:
             # connection state callback was already called
             logger.debug('%s already connected', self.pvname)
-            self._connection_established()
+            self._connection_established(self._caproto_pv)
 
     @property
     def connected(self):
         'Connection state'
-        return self._connected
+        return self._caproto_pv.connected
 
     def force_connect(self, pvname=None, chid=None, conn=True, **kws):
         # not quite sure what this is for in pyepics
@@ -258,10 +294,12 @@ class PV:
         logger.debug('%r disconnected', self)
         self._connected = False
 
-    def _connection_established(self):
+    def _connection_established(self, caproto_pv):
         'Callback when connection is initially established'
+        # Take in caproto_pv as an argument because this might be called
+        # before self._caproto_pv is set.
         logger.debug('%r connected', self)
-        ch = self._caproto_pv.channel
+        ch = caproto_pv.channel
         form = self.form
         count = self.default_count
 
@@ -270,29 +308,25 @@ class PV:
             logger.error('Connected = %r', self._connected)
             return
 
-        self._args['type'] = ch.native_data_type
+        with self._args_lock:
+            self._args['type'] = ch.native_data_type
 
-        type_key = 'control' if form == 'ctrl' else form
-        self._args['typefull'] = field_types[type_key][ch.native_data_type]
-        self._args['nelm'] = ch.native_data_count
-        self._args['count'] = ch.native_data_count
+            type_key = 'control' if form == 'ctrl' else form
+            self._args['typefull'] = field_types[type_key][ch.native_data_type]
+            self._args['nelm'] = ch.native_data_count
+            self._args['count'] = ch.native_data_count
+            self._access_rights_changed(ch.access_rights)
 
-        self._args['write_access'] = AccessRights.WRITE in ch.access_rights
-        self._args['read_access'] = AccessRights.READ in ch.access_rights
-
-        access_strs = ('no access', 'read-only', 'write-only', 'read/write')
-        self._args['access'] = access_strs[ch.access_rights]
-
-        if self.auto_monitor is None:
-            mcount = count if count is not None else self._args['count']
-            self.auto_monitor = mcount < AUTOMONITOR_MAXLENGTH
+            if self.auto_monitor is None:
+                mcount = count if count is not None else self._args['count']
+                self.auto_monitor = mcount < AUTOMONITOR_MAXLENGTH
 
         self._check_auto_monitor_sub()
         self._connected = True
 
     def _check_auto_monitor_sub(self, count=None):
         'Ensure auto-monitor subscription is running'
-        if ((self.auto_monitor or self.callbacks) and
+        if ((self.auto_monitor and self.callbacks) and
                 not self._auto_monitor_sub):
             if count is None:
                 count = self.default_count
@@ -307,13 +341,7 @@ class PV:
         with self._state_lock:
             try:
                 if connected:
-                    self._connection_established()
-                else:
-                    ...
-                    # TODO type can change if reconnected
-                    # if not self.connected or self._args['type'] is not None:
-                    #     return
-                    self._connection_closed()
+                    self._connection_established(caproto_pv)
             except Exception as ex:
                 logger.exception('Connection state callback failed!')
                 raise
@@ -387,32 +415,34 @@ class PV:
             # TODO if you want char arrays not as_string
             # force no-monitor rather than
             use_monitor = False
+        with self._args_lock:
+            # trigger going out to got data from network
+            if ((not use_monitor) or
+                (self._auto_monitor_sub is None) or
+                (self._args['value'] is None) or
+                (count is not None and
+                 count > len(self._args['value']))):
 
-        # trigger going out to got data from network
-        if ((not use_monitor) or
-            (self._auto_monitor_sub is None) or
-            (self._args['value'] is None) or
-            (count is not None and
-             count > len(self._args['value']))):
-            command = self._caproto_pv.read(data_type=dt,
-                                            data_count=count)
-            info = _read_response_to_pyepics(self.typefull, command)
-            self._args.update(**info)
+                command = self._caproto_pv.read(data_type=dt,
+                                                data_count=count)
+                info = _read_response_to_pyepics(self.typefull, command)
+                self._args.update(**info)
 
-        info = self._args
+            info = self._args
 
-        if as_string and self.typefull in ca.enum_types:
-            enum_strs = self.enum_strs
-        else:
-            enum_strs = None
+            if as_string and self.typefull in ca.enum_types:
+                enum_strs = self.enum_strs
+            else:
+                enum_strs = None
 
-        return _pyepics_get_value(
-            value=info['value'], string_value=info['char_value'],
-            full_type=self.typefull, native_count=info['count'],
-            requested_count=count, enum_strings=enum_strs,
-            as_string=as_string, as_numpy=as_numpy)
+            return _pyepics_get_value(
+                value=info['raw_value'], string_value=info['char_value'],
+                full_type=self.typefull, native_count=info['count'],
+                requested_count=count, enum_strings=enum_strs,
+                as_string=as_string, as_numpy=as_numpy)
 
     @ensure_connection
+    @_args_lock
     def put(self, value, *, wait=False, timeout=30.0,
             use_complete=False, callback=None, callback_data=None):
         """set value for PV, optionally waiting until the processing is
@@ -421,6 +451,9 @@ class PV:
         """
         if callback_data is None:
             callback_data = ()
+        if not self._args['write_access']:
+            raise AccessRightsException('Cannot put to PV according to write access')
+
         if self._args['typefull'] in ca.enum_types:
             if isinstance(value, str):
                 try:
@@ -441,40 +474,86 @@ class PV:
         if isinstance(value[0], str):
             value = tuple(v.encode(STR_ENC) for v in value)
 
-        def run_callback(cmd):
-            self._args['put_complete'] = True
-            if callback is not None:
-                callback(*callback_data)
+        use_notify = any((use_complete, callback is not None, wait))
 
-        self._args['put_complete'] = False
-        self._caproto_pv.write(value, wait=wait, cb=run_callback,
-                               timeout=timeout)
+        if callback is None and not use_complete:
+            run_callback = None
+        else:
+            def run_callback(cmd):
+                if use_complete:
+                    self._args['put_complete'] = True
+                if callback is not None:
+                    callback(*callback_data)
+
+        # So, in pyepics, put_complete strictly refers to the functionality
+        # where we toggle 'put_complete' in the args after a
+        # WriteNotifyResponse.
+        if use_notify:
+            if use_complete:
+                self._args['put_complete'] = False
+        else:
+            wait = False
+
+        self._caproto_pv.write(value, wait=wait, callback=run_callback,
+                               timeout=timeout, use_notify=use_notify)
 
     @ensure_connection
+    @_args_lock
     def get_ctrlvars(self, timeout=5, warn=True):
         "get control values for variable"
         dtype = field_types['control'][self.type]
         command = self._caproto_pv.read(data_type=dtype, timeout=timeout)
         info = _parse_dbr_metadata(command.metadata)
-        info['value'] = command.data
+        value = command.data
+        info['raw_value'] = value
+        info['value'] = _scalarify(value, command.data_type, command.data_count)
         self._args.update(**info)
+        self.force_read_access_rights()
         return info
 
     @ensure_connection
+    @_args_lock
     def get_timevars(self, timeout=5, warn=True):
         "get time values for variable"
         dtype = field_types['time'][self.type]
         command = self._caproto_pv.read(data_type=dtype, timeout=timeout)
         info = _parse_dbr_metadata(command.metadata)
-        info['value'] = command.data
+        value = command.data
+        info['raw_value'] = value
+        info['value'] = _scalarify(value, command.data_type, command.data_count)
         self._args.update(**info)
 
+    @ensure_connection
+    def force_read_access_rights(self):
+        'Force a read of access rights, not relying on last event callback.'
+        self._access_rights_changed(self._caproto_pv.channel.access_rights)
+
+    def _access_rights_changed(self, access_rights):
+        with self._args_lock:
+            read_access = AccessRights.READ in access_rights
+            write_access = AccessRights.WRITE in access_rights
+            self._args['write_access'] = write_access
+            self._args['read_access'] = read_access
+
+            access_strs = ('no access', 'read-only', 'write-only', 'read/write')
+            self._args['access'] = access_strs[access_rights]
+
+        logger.debug('%r access rights updated', self)
+
+        for cb in self.access_callbacks:
+            try:
+                cb(read_access, write_access, pv=self)
+            except Exception:
+                logger.exception('Access rights callback failed')
+
+    @_args_lock
     def __on_changes(self, command):
         """internal callback function: do not overwrite!!
         To have user-defined code run when the PV value changes,
         use add_callback()
         """
         info = _read_response_to_pyepics(self.typefull, command)
+
         self._args.update(**info)
         self.run_callbacks()
 
@@ -566,11 +645,13 @@ class PV:
         return self._getarg('status')
 
     @property
+    @_args_lock
     def type(self):
         "pv type"
         return self._args['type']
 
     @property
+    @_args_lock
     def typefull(self):
         "pv type"
         return self._args['typefull']
@@ -699,6 +780,7 @@ class PV:
         "returns True if a put-with-wait has completed"
         return self._args['put_complete']
 
+    @_args_lock
     def _getinfo(self):
         "get information paragraph"
         self.get_ctrlvars()
@@ -772,6 +854,7 @@ class PV:
         out.append('=============================')
         return '\n'.join(out)
 
+    @_args_lock
     def _getarg(self, arg):
         "wrapper for property retrieval"
         if self._args['value'] is None:
@@ -803,16 +886,6 @@ class PV:
         "disconnect PV"
         if self.connected:
             self._caproto_pv.go_idle()
-
-    def __del__(self):
-        try:
-            pv = self._caproto_pv
-            if pv is None:
-                raise AttributeError()
-        except AttributeError:
-            ...
-        else:
-            pv.go_idle()
 
 
 def get_pv(pvname, *args, context=None, connect=False, timeout=5, **kwargs):
@@ -897,14 +970,12 @@ def caget_many(pvlist, as_string=False, count=None, as_numpy=True, timeout=5.0,
 
     pvs = context.get_pvs(*pvlist)
 
-    for pv in pvs:
-        pv.last_reading = None
-
+    readings = {}
     pending_pvs = list(pvs)
     while pending_pvs:
         for pv in list(pending_pvs):
             if pv.connected:
-                pv.read()
+                readings[pv] = pv.read()
                 pending_pvs.remove(pv)
         time.sleep(0.01)
 
@@ -917,8 +988,8 @@ def caget_many(pvlist, as_string=False, count=None, as_numpy=True, timeout=5.0,
     def final_get(pv):
         full_type = pv.channel.native_data_type
         info = _read_response_to_pyepics(full_type=full_type,
-                                         command=pv.last_reading)
-        return _pyepics_get_value(value=info['value'],
+                                         command=readings[pv])
+        return _pyepics_get_value(value=info['raw_value'],
                                   string_value=info['char_value'],
                                   full_type=pv.channel.native_data_type,
                                   native_count=pv.channel.native_data_count,
@@ -948,6 +1019,9 @@ def caput_many(pvlist, values, wait=False, connection_timeout=None,
     """
     if len(pvlist) != len(values):
         raise ValueError("List of PV names must be equal to list of values.")
+
+    # context = PV._default_context
+    # TODO: context.get_pvs(...)
 
     out = []
     pvs = [PV(name, auto_monitor=False, connection_timeout=connection_timeout)
