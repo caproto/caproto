@@ -10,7 +10,6 @@ import time
 import socket
 import getpass
 import threading
-import concurrent.futures
 
 from caproto.threading.client import (Context, SharedBroadcaster,
                                       ContextDisconnectedError)
@@ -516,6 +515,7 @@ def test_multithreaded_many_subscribe(ioc, context, thread_count,
             return [initial_value, 1, 2, 3]
 
         values[thread_id] = []
+
         def callback(command):
             print(thread_id, command)
             values[thread_id].append(command.data.tolist()[0])
