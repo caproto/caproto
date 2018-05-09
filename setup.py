@@ -22,4 +22,5 @@ setup(name='caproto',
                 'caproto.trio',
                 ],
       scripts=glob.glob('scripts/*'),
+      python_requires='>=3.6',
       )
