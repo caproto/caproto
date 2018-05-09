@@ -185,7 +185,7 @@ class PV:
     _default_context = Context(SharedBroadcaster())
 
     def __init__(self, pvname, callback=None, form='time',
-                 verbose=False, auto_monitor=False, count=None,
+                 verbose=False, auto_monitor=None, count=None,
                  connection_callback=None,
                  connection_timeout=None, access_callback=None, *,
                  context=None):
