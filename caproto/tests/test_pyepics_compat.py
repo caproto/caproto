@@ -930,6 +930,10 @@ def access_security_softioc(request, prefix):
                           macros={'P': prefix},
                           )
 
+    shared_broadcaster = SharedBroadcaster(log_level='DEBUG')
+    PV._default_context = Context(broadcaster=shared_broadcaster,
+                                  log_level='DEBUG')
+
     process = handler.processes[-1]
     pvs = {pv[len(prefix) + 1:]: PV(pv)
            for pv, rtype in access_rights_db
@@ -940,6 +944,16 @@ def access_security_softioc(request, prefix):
 
     for pv in pvs.values():
         pv.wait_for_connection()
+
+    def finalize_context():
+        print('Cleaning up PV context')
+        broadcaster = PV._default_context.broadcaster
+        broadcaster.disconnect()
+
+        PV._default_context.disconnect()
+        PV._default_context = None
+        print('Done cleaning up PV context')
+    request.addfinalizer(finalize_context)
 
     return SimpleNamespace(process=process, prefix=prefix,
                            name='access_rights', pvs=pvs, type='epics-base')
