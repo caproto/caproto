@@ -127,6 +127,36 @@ class ImageMonitorThreaded(ImageMonitor):
         self.stop_event.wait()
 
 
+class ImageMonitorPyepics(ImageMonitor):
+    def _run(self):
+        from epics import PV
+        self.pvs = {key: PV(pv, auto_monitor=True)
+                    for key, pv in self.pvs.items()}
+        for pv in self.pvs.values():
+            pv.wait_for_connection()
+
+        self.pvs['enabled'].put(1)
+        self.pvs['image_mode'].put('Continuous', wait=True)
+        self.pvs['acquire'].put('Acquire')
+
+        width = self.pvs['array_size0'].get()
+        height = self.pvs['array_size1'].get()
+
+        color_mode = self.pvs['color_mode'].get(as_string=True)
+        self.new_image_size.emit(width, height, color_mode)
+
+        def update(value=None, **kw):
+            if self.stop_event.is_set():
+                self.pvs['array_data'].remove_callback(self.sub)
+                return
+
+            self.new_image.emit(width, height, color_mode, value)
+
+        time.sleep(0.5)
+        self.sub = self.pvs['array_data'].add_callback(update)
+        self.stop_event.wait()
+
+
 def show_statistics(image_times, *, plot_times=False):
     total_images = len(image_times)
 
@@ -183,6 +213,8 @@ class ImageViewer(QWidget):
             self.monitor = ImageMonitorSync(prefix)
         elif backend == 'threaded':
             self.monitor = ImageMonitorThreaded(prefix)
+        elif backend == 'pyepics':
+            self.monitor = ImageMonitorPyepics(prefix)
         else:
             raise ValueError('Unknown backend')
 
