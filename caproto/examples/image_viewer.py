@@ -1,5 +1,6 @@
 import sys
 import time
+import threading
 
 import caproto as ca
 import numpy as np
@@ -7,7 +8,8 @@ import matplotlib
 matplotlib.use('Qt5Agg')  # noqa
 import matplotlib.pyplot as plt
 
-from PyQt5.QtWidgets import QApplication, QLabel
+from PyQt5.QtWidgets import (QApplication, QWidget, QLabel,
+                             QVBoxLayout)
 from PyQt5 import QtGui
 from PyQt5.QtCore import QThread, pyqtSlot, pyqtSignal
 
@@ -28,22 +30,29 @@ pv_suffixes = {
 
 
 class ImageMonitor(QThread):
-    new_image_size = pyqtSignal(int, int)
+    new_image_size = pyqtSignal(int, int, str)
     new_image = pyqtSignal(int, int, str, object)
+    errored = pyqtSignal(Exception)
 
     def __init__(self, prefix):
         super().__init__()
         self.pvs = {key: f'{prefix}{suffix}'
                     for key, suffix in pv_suffixes.items()}
         print('PVs:', self.pvs)
-        self.running = True
+        self.stop_event = threading.Event()
 
     def stop(self):
-        self.running = False
+        self.stop_event.set()
+
+    def run(self):
+        try:
+            self._run()
+        except Exception as ex:
+            self.errored.emit(ex)
 
 
 class ImageMonitorSync(ImageMonitor):
-    def run(self):
+    def _run(self):
         from caproto.sync.client import (get as caget,
                                          put as caput,
                                          monitor as camonitor)
@@ -60,25 +69,22 @@ class ImageMonitorSync(ImageMonitor):
         height = caget(self.pvs['array_size1']).data[0]
         color_mode = caget(self.pvs['color_mode']).data[0].decode('ascii')
 
-        self.new_image_size.emit(width, height)
+        self.new_image_size.emit(width, height, color_mode)
 
         print(f'width: {width} height: {height} color_mode: {color_mode}')
 
         def update(pv_name, response):
-            if not self.running:
+            if self.stop_event.is_set():
                 raise KeyboardInterrupt
 
             self.new_image.emit(width, height, color_mode, response.data)
 
-        try:
-            camonitor(self.pvs['array_data'], callback=update)
-        except Exception as ex:
-            print('Failed', ex)
-            raise
+        camonitor(self.pvs['array_data'], callback=update)
+        self.stop_event.wait()
 
 
 class ImageMonitorThreaded(ImageMonitor):
-    def run(self):
+    def _run(self):
         from caproto.threading.client import Context, SharedBroadcaster
 
         broadcaster = SharedBroadcaster(log_level='INFO')
@@ -97,26 +103,28 @@ class ImageMonitorThreaded(ImageMonitor):
         width = self.pvs['array_size0'].read().data[0]
         height = self.pvs['array_size1'].read().data[0]
 
-        # TODO: ew...
         color_mode = self.pvs['color_mode'].read(
             data_type=ca.ChannelType.STRING)
-        color_mode = color_mode.data[0].split(b'\x00', 1)[0].decode('ascii')
+        color_mode = color_mode.data[0].decode('ascii')
 
-        self.new_image_size.emit(width, height)
+        self.new_image_size.emit(width, height, color_mode)
 
         print(f'width: {width} height: {height} color_mode: {color_mode}')
 
         def update(response):
-            if not self.running:
-                if self.sub:
-                    self.sub.unsubscribe()
+            if self.stop_event.is_set():
+                if self.sub is not None:
+                    self.sub.clear()
                     self.sub = None
                 return
 
             self.new_image.emit(width, height, color_mode, response.data)
 
         self.sub = self.pvs['array_data'].subscribe()
+        # NOTE: threading client requires that the callback function stays in
+        # scope, as it uses a weak reference.
         self.sub.add_callback(update)
+        self.stop_event.wait()
 
 
 def show_statistics(image_times, *, plot_times=False):
@@ -150,21 +158,37 @@ def show_statistics(image_times, *, plot_times=False):
     plt.show()
 
 
-class ImageViewer(QLabel):
-    def __init__(self, prefix, parent=None):
+class ImageViewer(QWidget):
+    def __init__(self, prefix, backend, parent=None):
         super().__init__(parent=parent)
+
+        self.layout = QVBoxLayout()
+        self.status_label = QLabel('Status')
+        self.layout.addWidget(self.status_label)
+
+        self.image_label = QLabel()
+        self.layout.addWidget(self.image_label)
+
+        self.setLayout(self.layout)
 
         self.image = None
         self.pixmap = None
         self.image_times = []
         self.image_formats = {
             'Mono': QtGui.QImage.Format_Grayscale8,
+            # TODO: others could be implemented
         }
 
-        # self.monitor = ImageMonitorSync(prefix)
-        self.monitor = ImageMonitorThreaded(prefix)
+        if backend == 'sync':
+            self.monitor = ImageMonitorSync(prefix)
+        elif backend == 'threaded':
+            self.monitor = ImageMonitorThreaded(prefix)
+        else:
+            raise ValueError('Unknown backend')
+
         self.monitor.new_image_size.connect(self.image_resized)
         self.monitor.new_image.connect(self.display_image)
+        self.monitor.errored.connect(self.monitor_errored)
         self.monitor.start()
 
     def closeEvent(self, event):
@@ -173,9 +197,15 @@ class ImageViewer(QLabel):
         if self.image_times:
             show_statistics(self.image_times)
 
-    @pyqtSlot(int, int)
-    def image_resized(self, width, height):
+    @pyqtSlot(Exception)
+    def monitor_errored(self, ex):
+        self.status_label.setText(f'{ex.__class__.__name__}: {ex}')
+        print(repr(ex))
+
+    @pyqtSlot(int, int, str)
+    def image_resized(self, width, height, color_mode):
         self.resize(width, height)
+        self.status_label.setText(f'Image: {width}x{height} ({color_mode})')
 
     @pyqtSlot(int, int, str, object)
     def display_image(self, width, height, color_mode, array_data):
@@ -186,7 +216,7 @@ class ImageViewer(QLabel):
                                   self.image_formats[color_mode],
                                   )
         self.pixmap = QtGui.QPixmap.fromImage(self.image)
-        self.setPixmap(self.pixmap)
+        self.image_label.setPixmap(self.pixmap)
         self.image_times.append((time.monotonic(), array_data.size))
 
 
@@ -196,8 +226,14 @@ if __name__ == '__main__':
     except IndexError:
         prefix = '13SIM1:'
 
+    try:
+        backend = sys.argv[2]
+    except IndexError:
+        backend = 'threaded'
+
+    print(f'Prefix: {prefix} Backend: {backend}')
     app = QApplication(sys.argv)
 
-    viewer = ImageViewer(prefix)
+    viewer = ImageViewer(prefix, backend)
     viewer.show()
     sys.exit(app.exec_())
