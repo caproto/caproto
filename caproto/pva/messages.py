@@ -217,6 +217,7 @@ class MessageBase:
     def deserialize(cls, buf, *, our_cache, user_types=None, interfaces=None):
         if user_types is None:
             user_types = basic_types
+
         base_size = ctypes.sizeof(cls)
         buflen = len(buf) - base_size
         buf = memoryview(buf)
@@ -330,6 +331,8 @@ def _make_endian(cls, endian):
     if hasattr(endian_cls, '_additional_fields_'):
         for field_info in endian_cls._additional_fields_:
             setattr(endian_cls, field_info.name, None)
+
+    cls._ENDIAN = None
     endian_cls._ENDIAN = (LITTLE_ENDIAN
                           if endian_base is ctypes.LittleEndianStructure
                           else BIG_ENDIAN)
@@ -842,11 +845,13 @@ def read_datagram(data, address, role, *, fixed_byte_order=None):
         header, buf, off = MessageHeaderLE.deserialize(buf, our_cache={})
         offset += off
 
-        msg_class = header.get_message(direction_flag,
-            use_fixed_byte_order=fixed_byte_order)
+        msg_class = header.get_message(
+            direction_flag, use_fixed_byte_order=fixed_byte_order)
         msg, buf, off = msg_class.deserialize(buf, our_cache={})
-        commands.append(msg)
         offset += off
+
+        commands.append(msg)
+
     return commands
 
 
@@ -857,11 +862,13 @@ def header_from_wire(data, byte_order):
                       if byte_order == LITTLE_ENDIAN
                       else MessageHeaderBE)
         header = header_cls.from_buffer(data)
-    else:
-        # Guess little-endian, but fallback to big-endian if wrong.
-        header = MessageHeaderLE.from_buffer(data)
-        if header.byte_order != EndianFlag.LITTLE_ENDIAN:
-            header = MessageHeaderBE.from_buffer(data)
+        assert header.valid
+        return header
+
+    # Guess little-endian, but fall back to big-endian if wrong.
+    header = MessageHeaderLE.from_buffer(data)
+    if header.byte_order != LITTLE_ENDIAN:
+        header = MessageHeaderBE.from_buffer(data)
 
     assert header.valid
     return header
@@ -888,15 +895,14 @@ def bytes_needed_for_command(data, direction, cache, *, byte_order=None):
     header = header_from_wire(data, byte_order)
     command = header.get_message(direction=direction,
                                  use_fixed_byte_order=byte_order)
-
-    if isinstance(command, (SetByteOrder, SetMarker, AcknowledgeMarker)):
+    if issubclass(command, (SetByteOrder, )):
+        # SetByteOrder uses the payload in a custom way
         return header, 0, SegmentFlag.UNSEGMENTED
 
     total_size = _MessageHeaderSize + header.payload_size
     if header.segment != SegmentFlag.UNSEGMENTED:
         # At the very least, we need more than one header...
-        total_size += _MessageHeaderSize
-        raise RuntimeError('TODO')
+        raise NotImplementedError('TODO')  # see simple_client.py
     else:
         # Do we have all the bytes in the payload?
         if data_len < total_size:
@@ -939,12 +945,23 @@ def read_from_bytestream(data, role, cache, *, byte_order=None,
     msg_class = header.get_message(direction=direction,
                                    use_fixed_byte_order=byte_order)
 
-    total_size = _MessageHeaderSize + header.payload_size
+    if issubclass(msg_class, (SetByteOrder, )):
+        total_size = _MessageHeaderSize
+        offset = _MessageHeaderSize
+        data = memoryview(data)
+        next_data = data[offset:]
+        return bytearray(next_data), msg_class.from_buffer(data), offset, 0
 
     # Receive the buffer (zero-copy).
-    cmd, data, offset = msg_class.deserialize(memoryview(data),
-                                              our_cache=cache.ours,
-                                              interfaces=interfaces)
+    data = bytearray(data)
+    offset = _MessageHeaderSize
 
+    cmd, data, off = msg_class.deserialize(memoryview(data)[offset:],
+                                           our_cache=cache.ours,
+                                           interfaces=interfaces)
+
+    offset += off
+
+    cmd.header = header
     # Buffer is advanced automatically by deserialize()
-    return data, cmd, offset, 0
+    return bytearray(data), cmd, offset, 0

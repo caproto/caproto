@@ -10,6 +10,7 @@ import selectors
 import logging
 import socket
 import subprocess
+import collections
 import sys
 
 # from .._dbr import (field_types, ChannelType, native_type, SubscriptionType)
@@ -22,10 +23,10 @@ import random
 from caproto import pva
 from caproto import (get_netifaces_addresses, bcast_socket)
 from caproto.pva import (CLIENT, SERVER, Broadcaster, MessageTypeFlag,
-                         ErrorResponseReceived, CaprotoError,
-                         SearchResponse,
-                         VirtualCircuit,
-                         ClientChannel)
+                         ErrorResponseReceived, CaprotoError, SearchResponse,
+                         VirtualCircuit, ClientChannel,
+                         NEED_DATA,
+                         ConnectionValidationRequest)
 
 # __all__ = ['get', 'put', 'monitor']
 
@@ -47,11 +48,15 @@ def send(circuit, command):
 
 
 def recv(circuit):
+    commands = collections.deque()
     bytes_received = sockets[circuit].recv(4096)
-    commands, _ = circuit.recv(bytes_received)
-    for c in commands:
-        print(c)
+    for c, remaining in circuit.recv(bytes_received):
+        if type(c) is NEED_DATA:
+            # TODO isn't this wrong?
+            break
         circuit.process_command(c)
+        commands.append(c)
+
     return commands
 
 
@@ -177,20 +182,26 @@ def make_channel(pv_name, logger, udp_sock, udp_port, timeout):
     circuit.log.setLevel(logger.level)
 
     chan = ClientChannel(pv_name, circuit)
-    sockets[chan.circuit] = socket.create_connection(chan.circuit.address,
-                                                     timeout)
+    sockets[circuit] = socket.create_connection(circuit.address, timeout)
 
     try:
-        # Wait for endian settings from server to initialize the circuit
         t = time.monotonic()
         while True:
             try:
-                recv(circuit)
+                commands = recv(circuit)
                 if time.monotonic() - t > timeout:
                     raise socket.timeout
             except socket.timeout:
                 raise TimeoutError("Timeout while awaiting channel creation.")
 
+            for command in commands:
+                if isinstance(command, ConnectionValidationRequest):
+                    response = circuit.validate_connection(
+                        client_buffer_size=command.server_buffer_size,
+                        client_registry_size=command.server_registry_size,
+                        connection_qos=0,
+                        auth_nz='')
+                    send(circuit, response)
             # if chan.states[CLIENT] is CONNECTED:
             #     break
 

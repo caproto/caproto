@@ -3,14 +3,14 @@
 
 import itertools
 import logging
-import collections
 
 from .const import SYS_ENDIAN, LITTLE_ENDIAN, BIG_ENDIAN
 from .messages import (DirectionFlag, ApplicationCommands, ControlCommands,
                        AcknowledgeMarker, SetByteOrder, SetMarker,
-                       EndianSetting,
-                       read_from_bytestream,
-                       messages_grouped)
+                       EndianSetting, read_from_bytestream, messages_grouped,
+                       MessageHeaderBE, MessageHeaderLE, MessageTypeFlag,
+                       EndianFlag,
+                       )
 from .state import (ChannelState, CircuitState, get_exception)
 from .utils import (CLIENT, SERVER, NEED_DATA, DISCONNECTED,
                     CaprotoKeyError, CaprotoValueError, CaprotoRuntimeError,
@@ -92,9 +92,8 @@ class VirtualCircuit:
         """
         return AcknowledgeMarker()
 
-    def connection_validation_response(self, client_buffer_size,
-                                       client_registry_size, connection_qos,
-                                       auth_nz=''):
+    def validate_connection(self, client_buffer_size, client_registry_size,
+                            connection_qos, auth_nz=''):
         """
         Generate a valid :class:`_ConnectionValidationResponse`.
 
@@ -114,8 +113,10 @@ class VirtualCircuit:
         AuthorizationResponse
         """
         cls = self.messages[ApplicationCommands.CONNECTION_VALIDATION]
-        return cls(client_buffer_size, client_registry_size, connection_qos,
-                   auth_nz)
+        return cls(client_buffer_size=client_buffer_size,
+                   client_registry_size=client_registry_size,
+                   connection_qos=connection_qos,
+                   auth_nz=auth_nz)
 
     @property
     def host(self):
@@ -157,8 +158,28 @@ class VirtualCircuit:
         for command in commands:
             self._process_command(self.our_role, command)
             self.log.debug("Serializing %r", command)
-            buffers_to_send.append(memoryview(command.header))
-            buffers_to_send.extend(command.buffers)
+
+            if isinstance(command, (SetByteOrder, SetMarker, AcknowledgeMarker)):
+                buffers_to_send.append(memoryview(command))
+            else:
+                header_cls = (MessageHeaderLE
+                              if command._ENDIAN == LITTLE_ENDIAN
+                              else MessageHeaderBE)
+
+                payload = memoryview(command.serialize())
+                header = header_cls(message_type=MessageTypeFlag.APP_MESSAGE,
+                                    direction=DirectionFlag.FROM_CLIENT,
+                                    endian=command._ENDIAN,
+                                    command=command.ID,
+                                    payload_size=len(payload)
+                                    )
+
+                command.header = header
+
+                buffers_to_send.append(memoryview(header))
+                buffers_to_send.append(payload)
+
+        print(buffers_to_send)
         return buffers_to_send
 
     def recv(self, *buffers):
@@ -179,11 +200,10 @@ class VirtualCircuit:
         ``(commands, num_bytes_needed)``
         """
         total_received = sum(len(byteslike) for byteslike in buffers)
-        commands = collections.deque()
         if total_received == 0:
             self.log.debug('Zero-length recv; sending disconnect notification')
-            commands.append(DISCONNECTED)
-            return commands, 0
+            yield DISCONNECTED, None
+            return
 
         self.log.debug("Received %d bytes.", total_received)
         self._data += b''.join(buffers)
@@ -196,12 +216,11 @@ class VirtualCircuit:
             len_data = len(self._data)  # just for logging
             if type(command) is not NEED_DATA:
                 self.log.debug("%d bytes -> %r", bytes_consumed, command)
-                commands.append(command)
+                yield command, None
             else:
                 self.log.debug("%d bytes are cached. Need more bytes to parse "
                                "next command.", len_data)
-                break
-        return commands, num_bytes_needed
+                yield command, num_bytes_needed
 
     def process_command(self, command):
         """

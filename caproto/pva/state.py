@@ -15,7 +15,8 @@ from .utils import (CLIENT, SERVER,
 
 from .._state import (CircuitState as _CircuitState,
                       ChannelState as _ChannelState)
-from .messages import (DirectionFlag,
+from .messages import (ApplicationCommands,
+                       DirectionFlag,
                        Status,  # ExtendedMessageBase
                        BeaconMessage,  # ExtendedMessageBase
                        SetMarker,  # MessageHeaderLE
@@ -40,9 +41,13 @@ from .messages import (DirectionFlag,
 COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
     CLIENT: {
         INIT: {
+            # ConnectionValidationRequest: INIT,
             SetByteOrder: CONNECTED,
         },
         CONNECTED: {
+            ConnectionValidationRequest: CONNECTED,
+            ConnectionValidationResponse: CONNECTED,
+            ConnectionValidatedResponse: CONNECTED,
         },
         RESPONSIVE: {
         },
@@ -57,6 +62,9 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
             SetByteOrder: CONNECTED,
         },
         CONNECTED: {
+            ConnectionValidationRequest: CONNECTED,
+            ConnectionValidationResponse: CONNECTED,
+            ConnectionValidatedResponse: CONNECTED,
         },
         RESPONSIVE: {
         },
@@ -122,6 +130,13 @@ class CircuitState(_CircuitState):
     # MERGE
     def _fire_command_triggered_transitions(self, role, command):
         command_type = type(command)
+        if command_type._ENDIAN is not None:
+            if command_type.ID in ApplicationCommands:
+                command_type = command_type.__bases__[0]
+                # TODO: HACK! Horrible, horrible hack...
+                # This side-steps putting big- and little-endian messages in
+                # the state transition dictionary. This should be redone.
+
         current_state = self.states[role]
         allowed_transitions = self.TRANSITIONS[role][current_state]
         try:
@@ -149,11 +164,15 @@ def get_exception(our_role, command):
     command : Message instance or class
         We will test whether it is a ``REQUEST`` or ``RESPONSE``.
     """
-    # TO DO Give commands an attribute so we can easily check whether one
-    # is a Request or a Response
-    if command.direction == DirectionFlag.FROM_CLIENT:
+    if not hasattr(command, 'direction') and hasattr(command, 'header'):
+        # TODO
+        direction = command.header.direction
+    else:
+        direction = command.direction
+
+    if direction == DirectionFlag.FROM_CLIENT:
         party_at_fault = CLIENT
-    elif command.direction == DirectionFlag.FROM_SERVER:
+    elif direction == DirectionFlag.FROM_SERVER:
         party_at_fault = SERVER
 
     if our_role is party_at_fault:
