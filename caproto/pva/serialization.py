@@ -20,7 +20,6 @@ from .introspection import (walk_field_description_with_values,
 
 logger = logging.getLogger(__name__)
 
-
 IdCache = namedtuple('IdCache', 'ours theirs')
 FieldDescCache = namedtuple('FdCache', 'user_types')
 
@@ -665,6 +664,7 @@ def deserialize_message_field(buf, type_name, field_name,
     fd = definition_line_to_info(declaration, nested_types=nested_types,
                                  user_types=cache.user_types, has_fields=False)
     return deserialize_data(fd, buf, cache=cache, endian=endian)
+
 
 # TODO: inconsistently semi-private serialization functions
 

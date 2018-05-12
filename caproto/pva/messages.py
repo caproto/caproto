@@ -12,7 +12,8 @@ from .serialization import (serialize_message_field, deserialize_message_field,
 from .types import (c_byte, c_ubyte, c_short, c_ushort, c_int, c_uint)
 from .pvrequest import pvrequest_string_to_structure
 from . import introspection as intro
-from .utils import (ip_to_ubyte_array, ubyte_array_to_ip, CLIENT, SERVER)
+from .utils import (ip_to_ubyte_array, ubyte_array_to_ip, CLIENT, SERVER,
+                    NEED_DATA)
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +78,7 @@ class ApplicationCommands(enum.IntEnum):
     ORIGIN_TAG = 22
 
 
-class ControlCommands(enum.IntEnum):
+class ControlCommands(enum.Enum):
     SET_MARKER = 0
     ACK_MARKER = 1
     SET_ENDIANESS = 2
@@ -412,19 +413,29 @@ class MessageHeader(MessageBase):
         byte_order = (use_fixed_byte_order
                       if use_fixed_byte_order is not None
                       else self.byte_order)
-        command = ApplicationCommands(self.message_command)
+        message_type = self.message_type
+
+        if message_type == MessageTypeFlag.APP_MESSAGE:
+            command = ApplicationCommands(self.message_command)
+        else:
+            command = ControlCommands(self.message_command)
+
+        key = (byte_order, direction, command)
+
         try:
-            return messages[(byte_order, direction, command)]
+            return messages[key]
         except KeyError as ex:
             direction = DirectionFlag(direction).name
             raise KeyError(
-                f'{ex} where byte order={byte_order} '
-                f'direction={direction} command={command!r}'
+                f'{ex} where message_type={message_type} '
+                f'byte order={byte_order} direction={direction} '
+                f'command={command!r}'
             ) from None
 
 
 MessageHeaderLE = _make_endian(MessageHeader, LITTLE_ENDIAN)
 MessageHeaderBE = _make_endian(MessageHeader, BIG_ENDIAN)
+_MessageHeaderSize = ctypes.sizeof(MessageHeaderLE)
 
 
 class Status(ExtendedMessageBase):
@@ -475,6 +486,12 @@ class AcknowledgeMarker(MessageHeaderLE):
 class SetByteOrder(MessageHeaderLE):
     ID = ControlCommands.SET_ENDIANESS
     # uses EndianSetting in header payload size
+
+    def __init__(self, endian_setting):
+        assert endian_setting in (EndianSetting.use_message_byte_order,
+                                  EndianSetting.use_server_byte_order)
+        self.message_type = 0
+        self.payload_size = endian_setting
 
     @property
     def byte_order_setting(self):
@@ -714,6 +731,7 @@ class ChannelFieldInfoResponse(ExtendedMessageBase):
 
 
 AppCmd = ApplicationCommands
+CtrlCmd = ControlCommands
 
 BE, LE = BIG_ENDIAN, LITTLE_ENDIAN  # removed below
 StatusLE = _make_endian(Status, LE)
@@ -752,6 +770,8 @@ ChannelFieldInfoRequestBE = _make_endian(ChannelFieldInfoRequest, BE)
 FROM_CLIENT, FROM_SERVER = DirectionFlag.FROM_CLIENT, DirectionFlag.FROM_SERVER
 
 messages = {
+    (LE, FROM_SERVER, CtrlCmd.SET_ENDIANESS): SetByteOrder,
+    (LE, FROM_SERVER, AppCmd.BEACON): BeaconMessageLE,
     (LE, FROM_SERVER, AppCmd.BEACON): BeaconMessageLE,
     (LE, FROM_SERVER, AppCmd.CONNECTION_VALIDATION): ConnectionValidationRequestLE,
     (LE, FROM_SERVER, AppCmd.ECHO): EchoLE,
@@ -760,6 +780,7 @@ messages = {
     (LE, FROM_SERVER, AppCmd.CREATE_CHANNEL): CreateChannelResponseLE,
     (LE, FROM_SERVER, AppCmd.GET): ChannelGetResponseLE,
     (LE, FROM_SERVER, AppCmd.GET_FIELD): ChannelFieldInfoResponseLE,
+
     (LE, FROM_CLIENT, AppCmd.BEACON): BeaconMessageLE,
     (LE, FROM_CLIENT, AppCmd.CONNECTION_VALIDATION): ConnectionValidationResponseLE,
     (LE, FROM_CLIENT, AppCmd.ECHO): EchoLE,
@@ -768,6 +789,7 @@ messages = {
     (LE, FROM_CLIENT, AppCmd.GET): ChannelGetRequestLE,
     (LE, FROM_CLIENT, AppCmd.GET_FIELD): ChannelFieldInfoRequestLE,
 
+    (BE, FROM_SERVER, CtrlCmd.SET_ENDIANESS): SetByteOrder,
     (BE, FROM_SERVER, AppCmd.BEACON): BeaconMessageBE,
     (BE, FROM_SERVER, AppCmd.CONNECTION_VALIDATION): ConnectionValidationRequestBE,
     (BE, FROM_SERVER, AppCmd.ECHO): EchoBE,
@@ -776,6 +798,7 @@ messages = {
     (BE, FROM_SERVER, AppCmd.CREATE_CHANNEL): CreateChannelResponseBE,
     (BE, FROM_SERVER, AppCmd.GET): ChannelGetResponseBE,
     (BE, FROM_SERVER, AppCmd.GET_FIELD): ChannelFieldInfoResponseBE,
+
     (BE, FROM_CLIENT, AppCmd.BEACON): BeaconMessageBE,
     (BE, FROM_CLIENT, AppCmd.CONNECTION_VALIDATION): ConnectionValidationResponseBE,
     (BE, FROM_CLIENT, AppCmd.ECHO): EchoBE,
@@ -785,7 +808,23 @@ messages = {
     (BE, FROM_CLIENT, AppCmd.GET_FIELD): ChannelFieldInfoRequestBE,
 }
 
+
+def _get_grouped(start_key):
+    return {key[-1]: cls
+            for key, cls in messages.items()
+            if key[:len(start_key)] == start_key
+            }
+
+
+messages_grouped = {
+    (LE, FROM_CLIENT): _get_grouped((LE, FROM_CLIENT)),
+    (BE, FROM_CLIENT): _get_grouped((BE, FROM_CLIENT)),
+    (LE, FROM_SERVER): _get_grouped((LE, FROM_SERVER)),
+    (BE, FROM_SERVER): _get_grouped((BE, FROM_SERVER)),
+}
+
 del AppCmd
+del CtrlCmd
 del LE
 del BE
 
@@ -809,3 +848,103 @@ def read_datagram(data, address, role, *, fixed_byte_order=None):
         commands.append(msg)
         offset += off
     return commands
+
+
+def header_from_wire(data, byte_order):
+    if byte_order is not None:
+        # Use a fixed byte order, ignoring header flags
+        header_cls = (MessageHeaderLE
+                      if byte_order == LITTLE_ENDIAN
+                      else MessageHeaderBE)
+        header = header_cls.from_buffer(data)
+    else:
+        # Guess little-endian, but fallback to big-endian if wrong.
+        header = MessageHeaderLE.from_buffer(data)
+        if header.byte_order != EndianFlag.LITTLE_ENDIAN:
+            header = MessageHeaderBE.from_buffer(data)
+
+    assert header.valid
+    return header
+
+
+def bytes_needed_for_command(data, direction, cache, *, byte_order=None):
+    '''
+    Parameters
+    ----------
+    data
+    direction
+
+    Returns
+    -------
+    (header, num_bytes_needed, segmented)
+    '''
+
+    data_len = len(data)
+
+    # We need at least one header's worth of bytes to interpret anything.
+    if data_len < _MessageHeaderSize:
+        return None, _MessageHeaderSize - data_len, None
+
+    header = header_from_wire(data, byte_order)
+    command = header.get_message(direction=direction,
+                                 use_fixed_byte_order=byte_order)
+
+    if isinstance(command, (SetByteOrder, SetMarker, AcknowledgeMarker)):
+        return header, 0, SegmentFlag.UNSEGMENTED
+
+    total_size = _MessageHeaderSize + header.payload_size
+    if header.segment != SegmentFlag.UNSEGMENTED:
+        # At the very least, we need more than one header...
+        total_size += _MessageHeaderSize
+        raise RuntimeError('TODO')
+    else:
+        # Do we have all the bytes in the payload?
+        if data_len < total_size:
+            return header, total_size - data_len, SegmentFlag.UNSEGMENTED
+        return header, 0, SegmentFlag.UNSEGMENTED
+
+
+def read_from_bytestream(data, role, cache, *, byte_order=None,
+                         interfaces=None):
+    '''
+    Parameters
+    ----------
+    data
+    role
+        Their role
+    cache : dict
+        Serialization cache
+    byte_order : LITTLE_ENDIAN or BIG_ENDIAN, optional
+        Fixed byte order if server message endianness is to be interpreted on a
+        message-by-message basis.
+    interfaces : optional
+        (Deserialization parameter)
+
+    Returns
+    -------
+    (remaining_data, command, consumed, num_bytes_needed)
+        if more data is required, NEED_DATA will be returned in place of
+        `command`
+    '''
+    direction = (DirectionFlag.FROM_SERVER
+                 if role == SERVER
+                 else DirectionFlag.FROM_CLIENT)
+
+    header, num_bytes_needed, segmented = bytes_needed_for_command(
+        data, direction, cache=cache, byte_order=byte_order)
+
+    if num_bytes_needed > 0:
+        return data, NEED_DATA, 0, num_bytes_needed
+
+    msg_class = header.get_message(direction=direction,
+                                   use_fixed_byte_order=byte_order)
+
+    total_size = _MessageHeaderSize + header.payload_size
+
+    # Receive the buffer (zero-copy).
+    cmd, data, offset = msg_class.deserialize(memoryview(data),
+                                              our_cache=cache.ours,
+                                              interfaces=interfaces)
+
+    # Buffer is advanced automatically by deserialize()
+    return data, cmd, offset, 0

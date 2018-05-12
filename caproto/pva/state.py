@@ -96,13 +96,43 @@ class ChannelState(_ChannelState):
                        SERVER: NEVER_CONNECTED}
         self.circuit_state = circuit_state
 
+    # MERGE
+    def _fire_command_triggered_transitions(self, role, command):
+        command_type = type(command)
+        current_state = self.states[role]
+        allowed_transitions = self.TRANSITIONS[role][current_state]
+        try:
+            new_state = allowed_transitions[command_type]
+        except KeyError:
+            err_cls = get_exception(role, command)
+            err = err_cls(f"{self} cannot handle command type "
+                          f"{command_type.__name__} when role={role} and "
+                          f"state={self.states[role]}")
+            raise err from None
+        self.states[role] = new_state
+
 
 class CircuitState(_CircuitState):
     TRANSITIONS = COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS
 
     def __init__(self, channels):
-        self.states = {CLIENT: CONNECTED, SERVER: CONNECTED}
+        self.states = {CLIENT: INIT, SERVER: INIT}
         self.channels = channels
+
+    # MERGE
+    def _fire_command_triggered_transitions(self, role, command):
+        command_type = type(command)
+        current_state = self.states[role]
+        allowed_transitions = self.TRANSITIONS[role][current_state]
+        try:
+            new_state = allowed_transitions[command_type]
+        except KeyError:
+            err_cls = get_exception(role, command)
+            err = err_cls(f"{self} cannot handle command type "
+                          f"{command_type.__name__} when role={role} and "
+                          f"state={self.states[role]}")
+            raise err from None
+        self.states[role] = new_state
 
 
 # MERGE

@@ -187,11 +187,11 @@ def main(host, server_port, pv):
     server_byte_order = msg.byte_order
     client_byte_order = server_byte_order
 
-    def cli_message(msg):
-        return pva.messages[(client_byte_order, pva.DirectionFlag.FROM_CLIENT,
-                             msg)]
+    cli_messages = pva.messages_grouped[(client_byte_order,
+                                         pva.DirectionFlag.FROM_CLIENT)]
 
-    # srv_msgs = pva.messages[server_byte_order][pva.DirectionFlag.FROM_SERVER]
+    # srv_msgs = pva.messages_grouped[(server_byte_order,
+    #                                  pva.DirectionFlag.FROM_SERVER)]
 
     if msg.byte_order_setting == pva.EndianSetting.use_server_byte_order:
         fixed_byte_order = server_byte_order
@@ -218,7 +218,7 @@ def main(host, server_port, pv):
     print()
     print('- 3. Connection validation response')
 
-    auth_cls = cli_message(pva.ApplicationCommands.CONNECTION_VALIDATION)
+    auth_cls = cli_messages[pva.ApplicationCommands.CONNECTION_VALIDATION]
     auth_resp = auth_cls(
         client_buffer_size=auth_request.server_buffer_size,
         client_registry_size=auth_request.server_registry_size,
@@ -232,7 +232,7 @@ def main(host, server_port, pv):
     # (4)
     print()
     print('- 4. Create channel request')
-    create_cls = cli_message(pva.ApplicationCommands.CREATE_CHANNEL)
+    create_cls = cli_messages[pva.ApplicationCommands.CREATE_CHANNEL]
     create_req = create_cls(count=1, channels={'id': 0x01, 'channel_name': pv})
     send(create_req)
 
@@ -246,7 +246,7 @@ def main(host, server_port, pv):
     # (5)
     print()
     print('- 5. Get field interface request')
-    if_cls = cli_message(pva.ApplicationCommands.GET_FIELD)
+    if_cls = cli_messages[pva.ApplicationCommands.GET_FIELD]
     if_req = if_cls(server_chid=server_chid, ioid=1, sub_field_name='')
     send(if_req)
 
@@ -274,7 +274,7 @@ def main(host, server_port, pv):
     # (6)
     print()
     print('- 6. Initialize the channel get request')
-    get_cls = cli_message(pva.ApplicationCommands.GET)
+    get_cls = cli_messages[pva.ApplicationCommands.GET]
     get_init_req = get_cls(server_chid=server_chid, ioid=2,
                            subcommand=pva.GetSubcommands.INIT,
                            pv_request_if='field(value)',
@@ -292,7 +292,7 @@ def main(host, server_port, pv):
     # (7)
     print()
     print('- 7. Perform an actual get request')
-    get_cls = cli_message(pva.ApplicationCommands.GET)
+    get_cls = cli_messages[pva.ApplicationCommands.GET]
     get_req = get_cls(server_chid=server_chid, ioid=2,  # <-- note same ioid
                       subcommand=pva.GetSubcommands.GET,
                       )

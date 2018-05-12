@@ -23,7 +23,9 @@ from caproto import pva
 from caproto import (get_netifaces_addresses, bcast_socket)
 from caproto.pva import (CLIENT, SERVER, Broadcaster, MessageTypeFlag,
                          ErrorResponseReceived, CaprotoError,
-                         SearchResponse)
+                         SearchResponse,
+                         VirtualCircuit,
+                         ClientChannel)
 
 # __all__ = ['get', 'put', 'monitor']
 
@@ -48,6 +50,7 @@ def recv(circuit):
     bytes_received = sockets[circuit].recv(4096)
     commands, _ = circuit.recv(bytes_received)
     for c in commands:
+        print(c)
         circuit.process_command(c)
     return commands
 
@@ -130,28 +133,23 @@ def search(pv, logger, udp_sock, udp_port, timeout, max_retries=2):
 
             commands = b.recv(bytes_received, address)
             b.process_commands(commands)
-            for command in commands:
-                print('command saw', command)
-                if isinstance(command, SearchResponse):
-                    for cid in command.search_instance_ids:
-                        response_pv = cid_to_pv.get(cid, None)
-                        if response_pv is not None:
-                            if command.found:
-                                host_port = (command.server_address,
-                                             command.server_port)
-                                logger.debug('Found %r at %r.', response_pv,
-                                             host_port)
-                                return host_port
-                            else:
-                                logger.debug('Server responded: not found %r.',
-                                             response_pv)
-                            return
-                    return
-                    # return command.
-            else:
-                # None of the commands we have seen are a reply to our request.
-                # Receive more data.
-                continue
+            response_commands = [command for command in commands
+                                 if isinstance(command, SearchResponse)]
+            for command in response_commands:
+                response_pvs = [cid_to_pv.get(cid, None)
+                                for cid in command.search_instance_ids]
+                if not any(response_pvs):
+                    continue
+
+                if command.found:
+                    host_port = (command.server_address,
+                                 command.server_port)
+                    logger.debug('Found %r at %r.', response_pvs,
+                                 host_port)
+                    return host_port
+                else:
+                    logger.debug('Server responded: not found %r.',
+                                 response_pvs)
     finally:
         udp_sock.settimeout(orig_timeout)
 
@@ -177,26 +175,24 @@ def make_channel(pv_name, logger, udp_sock, udp_port, timeout):
                                 )
     # Set circuit log level to match our logger.
     circuit.log.setLevel(logger.level)
+
     chan = ClientChannel(pv_name, circuit)
     sockets[chan.circuit] = socket.create_connection(chan.circuit.address,
                                                      timeout)
 
     try:
-        # Initialize our new TCP-based CA connection with a VersionRequest.
-        send(chan.circuit, VersionRequest(priority=priority, version=13))
-        send(chan.circuit, chan.host_name(socket.gethostname()))
-        send(chan.circuit, chan.client_name(getpass.getuser()))
-        send(chan.circuit, chan.create())
+        # Wait for endian settings from server to initialize the circuit
         t = time.monotonic()
         while True:
             try:
-                recv(chan.circuit)
+                recv(circuit)
                 if time.monotonic() - t > timeout:
                     raise socket.timeout
             except socket.timeout:
                 raise TimeoutError("Timeout while awaiting channel creation.")
-            if chan.states[CLIENT] is CONNECTED:
-                break
+
+            # if chan.states[CLIENT] is CONNECTED:
+            #     break
 
         logger.debug('Channel created.')
     except BaseException:
