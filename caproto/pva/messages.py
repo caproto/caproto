@@ -423,6 +423,10 @@ class MessageHeader(MessageBase):
             ) from None
 
 
+MessageHeaderLE = _make_endian(MessageHeader, LITTLE_ENDIAN)
+MessageHeaderBE = _make_endian(MessageHeader, BIG_ENDIAN)
+
+
 class Status(ExtendedMessageBase):
     _fields_ = [('status_type', c_byte)]
     _additional_fields_ = [
@@ -456,15 +460,19 @@ class BeaconMessage(ExtendedMessageBase):
     ]
 
 
-class SetMarker(MessageHeader):
+# NOTE: the following control messages do not have any elements quick require
+# an endian setting. They are arbitrarily set to little-endian here for all
+# platforms.
+
+class SetMarker(MessageHeaderLE):
     ID = ControlCommands.SET_MARKER
 
 
-class AcknowledgeMarker(MessageHeader):
+class AcknowledgeMarker(MessageHeaderLE):
     ID = ControlCommands.ACK_MARKER
 
 
-class SetByteOrder(MessageHeader):
+class SetByteOrder(MessageHeaderLE):
     ID = ControlCommands.SET_ENDIANESS
     # uses EndianSetting in header payload size
 
@@ -710,8 +718,6 @@ AppCmd = ApplicationCommands
 BE, LE = BIG_ENDIAN, LITTLE_ENDIAN  # removed below
 StatusLE = _make_endian(Status, LE)
 StatusBE = _make_endian(Status, BE)
-MessageHeaderLE = _make_endian(MessageHeader, LE)
-MessageHeaderBE = _make_endian(MessageHeader, BE)
 BeaconMessageLE = _make_endian(BeaconMessage, LE)
 BeaconMessageBE = _make_endian(BeaconMessage, BE)
 ConnectionValidationRequestLE = _make_endian(ConnectionValidationRequest, LE)
