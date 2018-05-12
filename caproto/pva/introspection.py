@@ -372,7 +372,7 @@ def walk_field_description_with_values(fd, values, user_types, *, keys=None,
         if type_name == 'any':
             if values is None:
                 if not allow_none:
-                    raise ValueError('Variant {} must have a value'
+                    raise ValueError('Variant {!r} must have a value'
                                      ''.format(fd['name']))
             else:
                 values = VariantValue(
@@ -422,7 +422,7 @@ def walk_field_description_with_values(fd, values, user_types, *, keys=None,
                     value = values[field_name]
                 else:
                     if not allow_none:
-                        raise ValueError('Field {} must have a value'
+                        raise ValueError('Field {!r} must have a value'
                                          ''.format(field_name))
                     value = None
 

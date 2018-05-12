@@ -4,13 +4,24 @@
 import itertools
 import logging
 
+from .introspection import summarize_field_info
 from .const import SYS_ENDIAN, LITTLE_ENDIAN, BIG_ENDIAN
 from .messages import (DirectionFlag, ApplicationCommands, ControlCommands,
-                       AcknowledgeMarker, SetByteOrder, SetMarker,
                        EndianSetting, read_from_bytestream, messages_grouped,
                        MessageHeaderBE, MessageHeaderLE, MessageTypeFlag,
-                       EndianFlag,
+                       EndianFlag, StatusType,
+                       GetSubcommands,
                        )
+from .messages import (Status, BeaconMessage, SetMarker, AcknowledgeMarker,
+                       SetByteOrder, ConnectionValidationRequest,
+                       ConnectionValidationResponse, Echo,
+                       ConnectionValidatedResponse, SearchRequest,
+                       SearchResponse, CreateChannelRequest,
+                       CreateChannelResponse, ChannelGetRequest,
+                       ChannelGetResponse, ChannelFieldInfoRequest,
+                       ChannelFieldInfoResponse, ChannelDestroyRequest,
+                       ChannelDestroyResponse)
+
 from .state import (ChannelState, CircuitState, get_exception)
 from .utils import (CLIENT, SERVER, NEED_DATA, DISCONNECTED,
                     CaprotoKeyError, CaprotoValueError, CaprotoRuntimeError,
@@ -179,7 +190,6 @@ class VirtualCircuit:
                 buffers_to_send.append(memoryview(header))
                 buffers_to_send.append(payload)
 
-        print(buffers_to_send)
         return buffers_to_send
 
     def recv(self, *buffers):
@@ -246,15 +256,48 @@ class VirtualCircuit:
 
         # Filter for Commands that are pertinent to a specific Channel, as
         # opposed to the Circuit as a whole:
-        if False:
-            # channel message placeholder
-            chan = None
+        if isinstance(command, (CreateChannelRequest, CreateChannelResponse,
+                                ChannelFieldInfoRequest, ChannelFieldInfoResponse,
+                                ChannelDestroyRequest, ChannelDestroyResponse)):
+            if isinstance(command, CreateChannelRequest):
+                print(command.channels)
+                for info in [command.channels]:
+                    cid = info['id']
+                    chan = self.channels[cid]
+                    # TODO: only one supported now - also by C++ server, AFAIR
+                    break
+            else:
+                if hasattr(command, 'client_chid'):
+                    cid = command.client_chid
+                    chan = self.channels[cid]
+                elif hasattr(command, 'server_chid'):
+                    chan = self.channels_sid[command.server_chid]
+                else:
+                    ioid = command.ioid
+                    chan = self._ioids[ioid]
 
             # Update the state machine of the pertinent Channel.
             # If this is not a valid command, the state machine will raise
             # here. Stash the state transitions in a local var and run the
             # callbacks at the end.
             transitions = chan.process_command(command)
+
+            if isinstance(command, CreateChannelResponse):
+                self.channels_sid[command.server_chid] = chan
+            elif isinstance(command, ChannelFieldInfoRequest):
+                self._ioids[command.ioid] = chan
+            elif isinstance(command, ChannelFieldInfoResponse):
+                self._ioids.pop(command.ioid)
+            elif isinstance(command, ChannelGetRequest):
+                self._ioids[command.ioid] = chan
+            elif isinstance(command, ChannelGetResponse):
+                ioid = command.ioid
+                if command.subcommand == GetSubcommands.INIT:
+                    ...
+                elif command.subcommand == GetSubcommands.GET:
+                    ...
+                elif command.subcommand == GetSubcommands.DESTROY:
+                    self._ioids.pop(ioid)
 
             # We are done. Run the Channel state change callbacks.
             for transition in transitions:
@@ -282,6 +325,22 @@ class VirtualCircuit:
                         self.log.debug('Using byte order from individual messages.')
                     self.messages = messages_grouped[
                         (self.our_order, DirectionFlag.FROM_CLIENT)]
+            elif isinstance(command, ConnectionValidationRequest):
+                ...
+            elif isinstance(command, ConnectionValidationResponse):
+                ...
+            elif isinstance(command, ConnectionValidatedResponse):
+                ...
+
+            if isinstance(command, Status):
+                status = StatusType(command.status_type)
+                if status == StatusType.OK:
+                    ...
+                else:
+                    self.log.debug('Command status returned %s (message=%s) '
+                                   '(call tree=%s)',
+                                   status.name, command.message,
+                                   command.call_tree)
 
             # Run the circuit's state machine.
             self.states.process_command_type(self.our_role, command)
@@ -340,8 +399,7 @@ class _BaseChannel:
         self.circuit.channels[self.cid] = self
         self.states = ChannelState(self.circuit.states)
         # These will be set when the circuit processes CreateChanResponse.
-        self.native_data_type = None
-        self.native_data_count = None
+        self.interface = None
         self.sid = None
         self.access_rights = None
 
@@ -353,29 +411,25 @@ class _BaseChannel:
         return {k: v for k, v in self.circuit.event_add_commands.items()
                 if v.sid == self.sid}
 
-    def _fill_defaults(self, data_type, data_count):
-        # Boilerplate used in many convenience methods:
-        # Replace `None` default arg with actual default value.
-        if data_type is None:
-            data_type = self.native_data_type
-        if data_count is None:
-            data_count = 0
-        return data_type, data_count
-
     def state_changed(self, role, old_state, new_state, command):
         '''State changed callback for subclass usage'''
         pass
 
     def process_command(self, command):
-        if isinstance(command, CreateChanResponse):
-            self.native_data_type = command.data_type
-            self.native_data_count = command.data_count
-
+        if isinstance(command, CreateChannelResponse):
+            self.sid = command.server_chid
+        elif isinstance(command, ChannelFieldInfoResponse):
+            self.field_info = command.field_if
+            for depth, info in summarize_field_info(
+                    self.field_info, user_types=self.circuit.cache.user_types,
+                    values=None):
+                self.circuit.log.debug('[%s]%s%s', self.name, '    ' * depth,
+                                       info)
         transitions = []
         for role in (self.circuit.our_role, self.circuit.their_role):
             initial_state = self.states[role]
             try:
-                self.states.process_command_type(role, type(command))
+                self.states.process_command_type(role, command)
             except CaprotoError as ex:
                 ex.channel = self
                 raise
@@ -418,9 +472,9 @@ class ClientChannel(_BaseChannel):
         -------
         CreateChanRequest
         """
-        command = CreateChanRequest(self.name, self.cid,
-                                    self.protocol_version)
-        return command
+        create_cls = self.circuit.messages[ApplicationCommands.CREATE_CHANNEL]
+        return create_cls(count=1, channels={'id': self.cid,
+                                             'channel_name': self.name})
 
     def disconnect(self):
         """
@@ -430,32 +484,74 @@ class ClientChannel(_BaseChannel):
         -------
         ClearChannelRequest
         """
-        command = ClearChannelRequest(self.sid, self.cid)
-        return command
+        if self.sid is None:
+            return
+        cls = self.circuit.messages[ApplicationCommands.DESTROY_CHANNEL]
+        return cls(client_chid=self.cid, server_chid=self.sid)
 
-    def read(self, data_type=None, data_count=None):
+    def read_interface(self, *, ioid=None, sub_field_name=''):
         """
-        Generate a valid :class:`ReadNotifyRequest`.
+        Generate a valid :class:`ChannelFieldInfoRequest`.
+        """
+
+        if ioid is None:
+            ioid = self.circuit.new_ioid()
+        cls = self.circuit.messages[ApplicationCommands.GET_FIELD]
+        return cls(server_chid=self.sid,
+                   ioid=ioid,
+                   sub_field_name=sub_field_name,
+                   )
+
+    def read_init(self, *, ioid=None, pvrequest_if=None, pvrequest=None):
+        """
+        Generate a valid :class:`ChannelGetRequest`.
 
         Parameters
         ----------
-        data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
-            Requested Channel Access data type. Default is the channel's
-            native data type, which can be checked in the Channel's attribute
-            :attr:`native_data_type`.
-        data_count : integer, optional
-            Requested number of values. Default is the channel's native data
-            count, which can be checked in the Channel's attribute
-            :attr:`native_data_count`.
+        ioid
+        pvrequest_if
+        pvrequest
 
         Returns
         -------
-        ReadNotifyRequest
+        ChannelGetRequest
         """
-        data_type, data_count = self._fill_defaults(data_type, data_count)
-        ioid = self.circuit.new_ioid()
-        command = ReadNotifyRequest(data_type, data_count, self.sid, ioid)
-        return command
+        # if pvrequest_if is None:
+        # TODO
+        pvrequest_if = 'field(value)'
+        pvrequest = dict(field=dict(value=None))
+
+        if ioid is None:
+            ioid = self.circuit.new_ioid()
+
+        cls = self.circuit.messages[ApplicationCommands.GET]
+        return cls(server_chid=self.sid,
+                   ioid=ioid,
+                   subcommand=GetSubcommands.INIT,
+                   pv_request_if=pvrequest_if,
+                   pv_request=pvrequest,
+                   )
+
+    def read(self, ioid, interface):
+        """
+        Generate a valid :class:`ChannelGetRequest`.
+
+        Parameters
+        ----------
+        ioid
+
+        Returns
+        -------
+        ChannelGetRequest
+        """
+        # TODO state machine for get requests
+        cls = self.circuit.messages[ApplicationCommands.GET]
+        self.circuit.cache.ours[ioid] = dict(interface=interface)
+        return cls(server_chid=self.sid,
+                   ioid=ioid,
+                   subcommand=GetSubcommands.GET,
+                   interface=dict(pv_data=interface),
+                   )
 
     def write(self, data, data_type=None, data_count=None, metadata=None):
         """
@@ -464,14 +560,6 @@ class ClientChannel(_BaseChannel):
         Parameters
         ----------
         data : tuple, ``numpy.ndarray``, ``array.array``, or bytes
-        data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
-            Requested Channel Access data type. Default is the channel's
-            native data type, which can be checked in the Channel's attribute
-            :attr:`native_data_type`.
-        data_count : integer, optional
-            Requested number of values. Default is the channel's native data
-            count, which can be checked in the Channel's attribute
-            :attr:`native_data_count`.
         metadata : ``ctypes.BigEndianStructure`` or tuple
             Status and control metadata for the values
 
@@ -479,13 +567,6 @@ class ClientChannel(_BaseChannel):
         -------
         WriteNotifyRequest
         """
-        data_type, data_count = self._fill_defaults(data_type, data_count)
-        if data_count == 0:
-            data_count = len(data)
-        ioid = self.circuit.new_ioid()
-        command = WriteNotifyRequest(data, data_type, data_count, self.sid,
-                                     ioid, metadata=metadata)
-        return command
 
 
 class ServerChannel(_BaseChannel):
@@ -501,16 +582,6 @@ class ServerChannel(_BaseChannel):
     protocol_version : integer, optional
         Default is ``DEFAULT_PROTOCOL_VERSION``.
     """
-    def version(self):
-        """
-        Generate a valid :class:`VersionResponse`.
-
-        Returns
-        -------
-        VersionResponse
-        """
-        command = VersionResponse(self.protocol_version)
-        return command
 
     def create(self, native_data_type, native_data_count, sid):
         """

@@ -246,10 +246,20 @@ class MessageBase:
 
             if field_info.type == 'PVField':
                 try:
-                    interface = interfaces[field_info.name]
-                except (TypeError, KeyError):
-                    raise ValueError('Interface unspecified for PVField key {}'
-                                     ''.format(field_info.name))
+                    ioid = msg.ioid
+                except AttributeError:
+                    ...
+                else:
+                    interface = our_cache[ioid]['interface']
+                    # TODO how the heck was the cache supposed to work again?
+
+                if interface is None:
+                    try:
+                        interface = interfaces[field_info.name]
+                    except (TypeError, KeyError):
+                        raise ValueError(
+                            f'Interface unspecified for PVField key '
+                            f'{field_info.name!r}') from None
 
             is_nonstandard_array = isinstance(field_info,
                                               NonstandardArrayField)
@@ -297,8 +307,11 @@ class ExtendedMessageBase(MessageBase):
         if not self._additional_fields_:
             return '{}({})'.format(type(self).__name__, info)
 
-        info += ', ' + ', '.join('{}={!r}'.format(*name_and_value(fi.name))
-                                 for fi in self._additional_fields_)
+        if info:
+            info += ', '
+
+        info += ', '.join('{}={!r}'.format(*name_and_value(fi.name))
+                          for fi in self._additional_fields_)
         return '{}({})'.format(type(self).__name__, info)
 
 
@@ -647,6 +660,24 @@ class CreateChannelResponse(ExtendedMessageBase):
     ]
 
 
+class ChannelDestroyRequest(MessageBase):
+    ID = ApplicationCommands.DESTROY_CHANNEL
+    _fields_ = [('client_chid', c_int),
+                ('server_chid', c_int),
+                ]
+
+
+class ChannelDestroyResponse(ExtendedMessageBase):
+    ID = ApplicationCommands.DESTROY_CHANNEL
+
+    _fields_ = [('client_chid', c_int),
+                ('server_chid', c_int),
+                ('status_type', c_byte),
+                ]
+
+    _additional_fields_ = Status._additional_fields_
+
+
 def _is_get_init_condition(msg, buf):
     return msg.subcommand == GetSubcommands.INIT
 
@@ -684,7 +715,7 @@ def _get_response_get_cond(msg, buf):
 class ChannelGetResponse(ExtendedMessageBase):
     ID = ApplicationCommands.GET
 
-    _fields_ = [('request_id', c_int),
+    _fields_ = [('ioid', c_int),
                 ('subcommand', c_byte),
                 ('status_type', c_byte),
                 ]
@@ -767,14 +798,18 @@ CreateChannelRequestLE = _make_endian(CreateChannelRequest, LE)
 CreateChannelRequestBE = _make_endian(CreateChannelRequest, BE)
 ChannelGetRequestLE = _make_endian(ChannelGetRequest, LE)
 ChannelGetRequestBE = _make_endian(ChannelGetRequest, BE)
+ChannelDestroyRequestLE = _make_endian(ChannelDestroyRequest, LE)
+ChannelDestroyRequestBE = _make_endian(ChannelDestroyRequest, BE)
+ChannelDestroyResponseLE = _make_endian(ChannelDestroyResponse, LE)
+ChannelDestroyResponseBE = _make_endian(ChannelDestroyResponse, BE)
 ChannelFieldInfoRequestLE = _make_endian(ChannelFieldInfoRequest, LE)
 ChannelFieldInfoRequestBE = _make_endian(ChannelFieldInfoRequest, BE)
 
 FROM_CLIENT, FROM_SERVER = DirectionFlag.FROM_CLIENT, DirectionFlag.FROM_SERVER
 
 messages = {
+    # LITTLE ENDIAN, SERVER -> CLIENT
     (LE, FROM_SERVER, CtrlCmd.SET_ENDIANESS): SetByteOrder,
-    (LE, FROM_SERVER, AppCmd.BEACON): BeaconMessageLE,
     (LE, FROM_SERVER, AppCmd.BEACON): BeaconMessageLE,
     (LE, FROM_SERVER, AppCmd.CONNECTION_VALIDATION): ConnectionValidationRequestLE,
     (LE, FROM_SERVER, AppCmd.ECHO): EchoLE,
@@ -783,7 +818,9 @@ messages = {
     (LE, FROM_SERVER, AppCmd.CREATE_CHANNEL): CreateChannelResponseLE,
     (LE, FROM_SERVER, AppCmd.GET): ChannelGetResponseLE,
     (LE, FROM_SERVER, AppCmd.GET_FIELD): ChannelFieldInfoResponseLE,
+    (LE, FROM_SERVER, AppCmd.DESTROY_CHANNEL): ChannelDestroyResponseLE,
 
+    # LITTLE ENDIAN, CLIENT -> SERVER
     (LE, FROM_CLIENT, AppCmd.BEACON): BeaconMessageLE,
     (LE, FROM_CLIENT, AppCmd.CONNECTION_VALIDATION): ConnectionValidationResponseLE,
     (LE, FROM_CLIENT, AppCmd.ECHO): EchoLE,
@@ -791,7 +828,9 @@ messages = {
     (LE, FROM_CLIENT, AppCmd.CREATE_CHANNEL): CreateChannelRequestLE,
     (LE, FROM_CLIENT, AppCmd.GET): ChannelGetRequestLE,
     (LE, FROM_CLIENT, AppCmd.GET_FIELD): ChannelFieldInfoRequestLE,
+    (LE, FROM_CLIENT, AppCmd.DESTROY_CHANNEL): ChannelDestroyRequestLE,
 
+    # BIG ENDIAN, SERVER -> CLIENT
     (BE, FROM_SERVER, CtrlCmd.SET_ENDIANESS): SetByteOrder,
     (BE, FROM_SERVER, AppCmd.BEACON): BeaconMessageBE,
     (BE, FROM_SERVER, AppCmd.CONNECTION_VALIDATION): ConnectionValidationRequestBE,
@@ -801,7 +840,9 @@ messages = {
     (BE, FROM_SERVER, AppCmd.CREATE_CHANNEL): CreateChannelResponseBE,
     (BE, FROM_SERVER, AppCmd.GET): ChannelGetResponseBE,
     (BE, FROM_SERVER, AppCmd.GET_FIELD): ChannelFieldInfoResponseBE,
+    (BE, FROM_SERVER, AppCmd.DESTROY_CHANNEL): ChannelDestroyResponseBE,
 
+    # BIG ENDIAN, CLIENT -> SERVER
     (BE, FROM_CLIENT, AppCmd.BEACON): BeaconMessageBE,
     (BE, FROM_CLIENT, AppCmd.CONNECTION_VALIDATION): ConnectionValidationResponseBE,
     (BE, FROM_CLIENT, AppCmd.ECHO): EchoBE,
@@ -809,6 +850,7 @@ messages = {
     (BE, FROM_CLIENT, AppCmd.CREATE_CHANNEL): CreateChannelRequestBE,
     (BE, FROM_CLIENT, AppCmd.GET): ChannelGetRequestBE,
     (BE, FROM_CLIENT, AppCmd.GET_FIELD): ChannelFieldInfoRequestBE,
+    (BE, FROM_CLIENT, AppCmd.DESTROY_CHANNEL): ChannelDestroyRequestBE,
 }
 
 

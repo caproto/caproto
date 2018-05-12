@@ -22,11 +22,13 @@ import random
 
 from caproto import pva
 from caproto import (get_netifaces_addresses, bcast_socket)
-from caproto.pva import (CLIENT, SERVER, Broadcaster, MessageTypeFlag,
-                         ErrorResponseReceived, CaprotoError, SearchResponse,
-                         VirtualCircuit, ClientChannel,
-                         NEED_DATA,
-                         ConnectionValidationRequest)
+from caproto.pva import (CLIENT, SERVER, CONNECTED, NEED_DATA, DISCONNECTED,
+                         Broadcaster, MessageTypeFlag, ErrorResponseReceived,
+                         CaprotoError, SearchResponse, VirtualCircuit,
+                         ClientChannel, ConnectionValidationRequest,
+                         ConnectionValidatedResponse, CreateChannelResponse,
+                         ChannelFieldInfoResponse, ChannelGetResponse,
+                         GetSubcommands)
 
 # __all__ = ['get', 'put', 'monitor']
 
@@ -158,26 +160,11 @@ def search(pv, logger, udp_sock, udp_port, timeout, max_retries=2):
     finally:
         udp_sock.settimeout(orig_timeout)
 
-    return
-
-    if msg.found:
-        id_to_pv = {id_: pv for pv, id_ in search_ids.items()}
-        found_pv = id_to_pv[msg.search_instance_ids[0]]
-        print('Found {} on {}:{}!'
-              ''.format(found_pv, msg.server_address, msg.server_port))
-        return (msg.server_address, msg.server_port)
-    else:
-        # TODO as a simple client, this only grabs the first response from
-        # the quickest server, which is clearly not the right way to do it
-        raise ValueError('PVs {} not found in brief search'
-                         ''.format(pvs))
-
 
 def make_channel(pv_name, logger, udp_sock, udp_port, timeout):
     address = search([pv_name], logger, udp_sock, udp_port, timeout)
-    circuit = VirtualCircuit(our_role=CLIENT,
-                                address=address,
-                                )
+    circuit = VirtualCircuit(our_role=CLIENT, address=address)
+
     # Set circuit log level to match our logger.
     circuit.log.setLevel(logger.level)
 
@@ -202,19 +189,32 @@ def make_channel(pv_name, logger, udp_sock, udp_port, timeout):
                         connection_qos=0,
                         auth_nz='')
                     send(circuit, response)
+                elif isinstance(command, ConnectionValidatedResponse):
+                    logger.debug('Connection validated! Creating channel.')
+                    create_chan = chan.create()
+                    send(circuit, create_chan)
+                elif isinstance(command, CreateChannelResponse):
+                    logger.debug('Channel created.')
+                    return chan
+
             # if chan.states[CLIENT] is CONNECTED:
             #     break
 
         logger.debug('Channel created.')
-    except BaseException:
+    except Exception:
         sockets[chan.circuit].close()
         raise
-    return chan
 
 
-def read(chan, timeout, data_type):
-    req = chan.read(data_type=data_type)
-    send(chan.circuit, req)
+def read(chan, timeout, pvrequest):
+    interface_req = chan.read_interface()
+    send(chan.circuit, interface_req)
+
+    init_req = chan.read_init(pvrequest_if=pvrequest)
+    ioid = init_req.ioid
+
+    send(chan.circuit, init_req)
+
     t = time.monotonic()
     while True:
         try:
@@ -223,20 +223,23 @@ def read(chan, timeout, data_type):
                 raise socket.timeout
         except socket.timeout:
             raise TimeoutError("Timeout while awaiting reading.")
+
         for command in commands:
-            if (isinstance(command, ReadNotifyResponse) and
-                    command.ioid == req.ioid):
-                response = command
-                break
-            elif isinstance(command, ErrorResponse):
-                raise ErrorResponseReceived(command)
+            if isinstance(command, ChannelFieldInfoResponse):
+                # interface = command.field_if
+                ...
+            elif isinstance(command, ChannelGetResponse):
+                if command.subcommand == GetSubcommands.INIT:
+                    interface = command.pv_structure_if
+                    read_req = chan.read(ioid, interface=interface)
+                    send(chan.circuit, read_req)
+                elif command.subcommand == GetSubcommands.GET:
+                    return interface, command
+
+                # raise ErrorResponseReceived(command)
             elif command is DISCONNECTED:
                 raise CaprotoError('Disconnected while waiting for '
                                    'read response')
-        else:
-            continue
-        break
-    return response
 
 
 def get_cli():
@@ -245,29 +248,8 @@ def get_cli():
     fmt_group = parser.add_mutually_exclusive_group()
     parser.add_argument('pv_names', type=str, nargs='+',
                         help="PV (channel) name(s) separated by spaces")
-    parser.add_argument('-d', type=str, default=None, metavar="DATA_TYPE",
-                        help=("Request a certain data type. Accepts numeric "
-                              "code ('3') or case-insensitive string ('enum')"
-                              ". See --list-types"))
-    fmt_group.add_argument('--format', type=str,
-                           help=("Python format string. Available tokens are "
-                                 "{pv_name} and {response}. Additionally, if "
-                                 "this data type includes time, {timestamp} "
-                                 "and usages like "
-                                 "{timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are "
-                                 "supported."))
-    # parser.add_argument('--list-types', action='list_types',
-    #                     default=argparse.SUPPRESS,
-    #                     help="List allowed values for -d and exit.")
-    parser.add_argument('-n', action='store_true',
-                        help=("Retrieve enums as integers (default is "
-                              "strings)."))
-    parser.add_argument('--no-repeater', action='store_true',
-                        help=("Do not spawn a Channel Access repeater daemon "
-                              "process."))
-    # parser.add_argument('--priority', '-p', type=int, default=0,
-    #                     help="Channel Access Virtual Circuit priority. "
-                             # "Lowest is 0; highest is 99.")
+    parser.add_argument('--pvrequest', type=str, default='field(value)',
+                        help=("PVRequest"))
     fmt_group.add_argument('--terse', '-t', action='store_true',
                            help=("Display data only. Unpack scalars: "
                                  "[3.] -> 3."))
@@ -277,27 +259,18 @@ def get_cli():
     parser.add_argument('--verbose', '-v', action='store_true',
                         help="Show DEBUG log messages.")
     args = parser.parse_args()
-    # data_type = parse_data_type(args.d)
-    data_type = None
     try:
         for pv_name in args.pv_names:
-            response = get(pv_name=pv_name, data_type=data_type,
-                           verbose=args.verbose, timeout=args.timeout,
-                           force_int_enums=args.n)
-            if args.format is None:
-                format_str = '{pv_name: <40}  {response.data}'
-            else:
-                format_str = args.format
+            interface, response = get(pv_name=pv_name,
+                                      pvrequest=args.pvrequest,
+                                      verbose=args.verbose,
+                                      timeout=args.timeout)
             if args.terse:
-                if len(response.data) == 1:
-                    format_str = '{response.data[0]}'
-                else:
-                    format_str = '{response.data}'
-            tokens = dict(pv_name=pv_name, response=response)
-            if hasattr(response.metadata, 'timestamp'):
-                dt = datetime.fromtimestamp(response.metadata.timestamp)
-                tokens['timestamp'] = dt
-            print(format_str.format(**tokens))
+                ...
+
+            pva.print_field_info(interface, user_types={},
+                                 values={'': response.pv_data})
+
 
     except BaseException as exc:
         if args.verbose:
@@ -308,7 +281,7 @@ def get_cli():
             print(exc)
 
 
-def get(pv_name, *, data_type=None, verbose=False, timeout=1,
+def get(pv_name, *, pvrequest, verbose=False, timeout=1,
         force_int_enums=False):
     """
     Read a Channel.
@@ -355,53 +328,18 @@ def get(pv_name, *, data_type=None, verbose=False, timeout=1,
         chan = make_channel(pv_name, logger, udp_sock, udp_port, timeout)
     finally:
         udp_sock.close()
-    # try:
-    #     logger.debug("Detected native data_type %r.", chan.native_data_type)
-    #     ntype = native_type(chan.native_data_type)  # abundance of caution
-    #     if ((ntype is ChannelType.ENUM) and
-    #             (data_type is None) and (not force_int_enums)):
-    #         logger.debug("Changing requested data_type to STRING.")
-    #         data_type = ChannelType.STRING
-    #     return read(chan, timeout, data_type=data_type)
-    # finally:
-    #     try:
-    #         if chan.states[CLIENT] is CONNECTED:
-    #             send(chan.circuit, chan.disconnect())
-    #     finally:
-    #         sockets[chan.circuit].close()
+
+    try:
+        return read(chan, timeout, pvrequest=pvrequest)
+    finally:
+        try:
+            if chan.states[CLIENT] is CONNECTED:
+                send(chan.circuit, chan.disconnect())
+        finally:
+            sockets[chan.circuit].close()
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-def send_message(sock, client_byte_order, server_byte_order, msg):
-    print('->', msg)
-    header_cls = (pva.MessageHeaderLE
-                  if server_byte_order == pva.LITTLE_ENDIAN
-                  else pva.MessageHeaderBE)
-
-    payload = msg.serialize()
-    header = header_cls(message_type=pva.MessageTypeFlag.APP_MESSAGE,
-                        direction=pva.DirectionFlag.FROM_CLIENT,
-                        endian=client_byte_order,
-                        command=msg.ID,
-                        payload_size=len(payload)
-                        )
-
-    to_send = b''.join((header.serialize(), payload))
-    print('-b>', to_send)
-    sock.sendall(to_send)
-    return header, payload
-
+# TODO TODO TODO segmentation in sync client
 
 def recv_message(sock, fixed_byte_order, server_byte_order, cache, buf,
                  **deserialize_kw):
@@ -455,145 +393,6 @@ def recv_message(sock, fixed_byte_order, server_byte_order, cache, buf,
 
     assert len(buf) >= header.payload_size
     return msg_class.deserialize(buf, our_cache=cache.ours, **deserialize_kw)
-
-
-def main(host, server_port, pv):
-    'Directly connect to a host that has a PV'
-    # cache of types from server
-    our_cache = {}
-    # local copy of types cached on server
-    their_cache = {}
-    # locally-defined types
-    user_types = {}
-    cache = pva.SerializeCache(ours=our_cache,
-                               theirs=their_cache,
-                               user_types=user_types)
-
-    sock = socket.create_connection((host, server_port))
-    buf = bytearray(sock.recv(4096))
-
-    # (1)
-    print()
-    print('- 1. initialization: byte order setting')
-    msg, buf, offset = pva.SetByteOrder.deserialize(buf, our_cache=cache.ours)
-    print('<-', msg, msg.byte_order_setting, msg.byte_order)
-
-    server_byte_order = msg.byte_order
-    client_byte_order = server_byte_order
-    cli_msgs = pva.messages[client_byte_order][pva.DirectionFlag.FROM_CLIENT]
-    srv_msgs = pva.messages[server_byte_order][pva.DirectionFlag.FROM_SERVER]
-
-    if msg.byte_order_setting == pva.EndianSetting.use_server_byte_order:
-        fixed_byte_order = server_byte_order
-        print('\n* Using fixed byte order:', server_byte_order)
-    else:
-        fixed_byte_order = None
-        print('\n* Using byte order from individual messages.')
-
-    # convenience functions:
-    def send(msg):
-        return send_message(sock, client_byte_order, server_byte_order, msg)
-
-    def recv(buf, **kw):
-        return recv_message(sock, fixed_byte_order, server_byte_order, cache,
-                            buf, **kw)
-
-    # (2)
-    print()
-    print('- 2. Connection validation request from server')
-
-    auth_request, buf, off = recv(buf)
-
-    # (3)
-    print()
-    print('- 3. Connection validation response')
-
-    auth_cls = cli_msgs[pva.ApplicationCommands.CONNECTION_VALIDATION]
-    auth_resp = auth_cls(
-        client_buffer_size=auth_request.server_buffer_size,
-        client_registry_size=auth_request.server_registry_size,
-        connection_qos=auth_request.server_registry_size,
-        auth_nz='',
-    )
-
-    send(auth_resp)
-    auth_ack, buf, off = recv(buf)
-
-    # (4)
-    print()
-    print('- 4. Create channel request')
-    create_cls = cli_msgs[pva.ApplicationCommands.CREATE_CHANNEL]
-    create_req = create_cls(count=1, channels={'id': 0x01, 'channel_name': pv})
-    send(create_req)
-
-    create_reply, buf, off = recv(buf)
-    print('\n<-', create_reply)
-
-    assert create_reply.status_type == pva.StatusType.OK
-
-    server_chid = create_reply.server_chid
-
-    # (5)
-    print()
-    print('- 5. Get field interface request')
-    if_cls = cli_msgs[pva.ApplicationCommands.GET_FIELD]
-    if_req = if_cls(server_chid=server_chid, ioid=1, sub_field_name='')
-    send(if_req)
-
-    if_reply, buf, off = recv(buf)
-    pva.print_field_info(if_reply.field_if, user_types)
-
-    pv_interface = if_reply.field_if
-
-    struct_name = pv_interface['struct_name']
-    print('Structure name is', struct_name)
-
-    print()
-    print('PV interface cache now contains:')
-    # for i, (key, intf) in enumerate(cache.ours.items()):
-    #     print('{}).'.format(i), key, intf)
-
-    print(', '.join('{} ({})'.format(intf.get('struct_name', ''), key)
-                    for key, intf in cache.ours.items()))
-
-    reverse_cache = dict((v['struct_name'], k) for k, v in cache.ours.items()
-                         if v.get('struct_name'))
-    print('id for structure {} is {}'.format(struct_name,
-                                             reverse_cache[struct_name]))
-
-    # (6)
-    print()
-    print('- 6. Initialize the channel get request')
-    get_cls = cli_msgs[pva.ApplicationCommands.GET]
-    get_init_req = get_cls(server_chid=server_chid, ioid=2,
-                           subcommand=pva.GetSubcommands.INIT,
-                           pv_request_if='field(value)',
-                           pv_request=dict(field=dict(value=None)),
-                           # or if field() then pv_request ignored
-                           )
-    send(get_init_req)
-    get_init_reply, buf, off = recv(buf)
-    print('init reply', repr(get_init_reply)[:80], '...')
-    interface = get_init_reply.pv_structure_if
-    print()
-    print('Field info according to init:')
-    pva.print_field_info(interface, user_types)
-
-    # (7)
-    print()
-    print('- 7. Perform an actual get request')
-    get_cls = cli_msgs[pva.ApplicationCommands.GET]
-    get_req = get_cls(server_chid=server_chid, ioid=2,  # <-- note same ioid
-                      subcommand=pva.GetSubcommands.GET,
-                      )
-    send(get_req)
-    get_reply, buf, off = recv(buf, interfaces=dict(pv_data=interface))
-    get_data = get_reply.pv_data
-    pva.print_field_info(interface, user_types,
-                         values={'': get_data})
-
-    assert len(buf) == 0
-    return get_data
 
 
 if __name__ == '__main__':

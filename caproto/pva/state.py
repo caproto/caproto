@@ -2,7 +2,8 @@ from .utils import (CLIENT, SERVER,
                     LocalProtocolError, RemoteProtocolError,
 
                     # Connection state
-                    CONNECTED, RESPONSIVE, UNRESPONSIVE, DISCONNECTED,
+                    CONNECTED, RESPONSIVE, UNRESPONSIVE,
+                    DISCONNECTED,
 
                     # Channel life-cycle
                     NEVER_CONNECTED, DESTROYED, NEED_DATA,
@@ -15,41 +16,37 @@ from .utils import (CLIENT, SERVER,
 
 from .._state import (CircuitState as _CircuitState,
                       ChannelState as _ChannelState)
-from .messages import (ApplicationCommands,
-                       DirectionFlag,
-                       Status,  # ExtendedMessageBase
-                       BeaconMessage,  # ExtendedMessageBase
-                       SetMarker,  # MessageHeaderLE
-                       AcknowledgeMarker,  # MessageHeaderLE
-                       SetByteOrder,  # MessageHeaderLE
-                       ConnectionValidationRequest,  # ExtendedMessageBase
-                       ConnectionValidationResponse,  # ExtendedMessageBase
-                       Echo,  # ExtendedMessageBase
-                       ConnectionValidatedResponse,  # _Status
-                       SearchRequest,  # ExtendedMessageBase
-                       SearchResponse,  # ExtendedMessageBase
-                       CreateChannelRequest,  # ExtendedMessageBase
-                       CreateChannelResponse,  # ExtendedMessageBase
-                       ChannelGetRequest,  # ExtendedMessageBase
-                       ChannelGetResponse,  # ExtendedMessageBase
-                       ChannelFieldInfoRequest,  # ExtendedMessageBase
-                       ChannelFieldInfoResponse,  # ExtendedMessageBase
-                       )
+from .messages import (
+    ApplicationCommands, DirectionFlag, Status, BeaconMessage, SetMarker,
+    AcknowledgeMarker, SetByteOrder, ConnectionValidationRequest,
+    ConnectionValidationResponse, Echo, ConnectionValidatedResponse,
+    SearchRequest, SearchResponse, CreateChannelRequest, CreateChannelResponse,
+    ChannelGetRequest, ChannelGetResponse, ChannelFieldInfoRequest,
+    ChannelFieldInfoResponse, ChannelDestroyRequest,
+    ChannelDestroyResponse
+)
 
 
 
 COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
     CLIENT: {
         INIT: {
-            # ConnectionValidationRequest: INIT,
             SetByteOrder: CONNECTED,
         },
         CONNECTED: {
             ConnectionValidationRequest: CONNECTED,
             ConnectionValidationResponse: CONNECTED,
-            ConnectionValidatedResponse: CONNECTED,
+            ConnectionValidatedResponse: RESPONSIVE,
         },
         RESPONSIVE: {
+            CreateChannelRequest: RESPONSIVE,
+            CreateChannelResponse: RESPONSIVE,
+            ChannelFieldInfoRequest: RESPONSIVE,
+            ChannelFieldInfoResponse: RESPONSIVE,
+            ChannelGetRequest: RESPONSIVE,
+            ChannelGetResponse: RESPONSIVE,
+            ChannelDestroyRequest: RESPONSIVE,
+            ChannelDestroyResponse: RESPONSIVE,
         },
         UNRESPONSIVE: {
         },
@@ -64,9 +61,17 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
         CONNECTED: {
             ConnectionValidationRequest: CONNECTED,
             ConnectionValidationResponse: CONNECTED,
-            ConnectionValidatedResponse: CONNECTED,
+            ConnectionValidatedResponse: RESPONSIVE,
         },
         RESPONSIVE: {
+            CreateChannelRequest: RESPONSIVE,
+            CreateChannelResponse: RESPONSIVE,
+            ChannelFieldInfoRequest: RESPONSIVE,
+            ChannelFieldInfoResponse: RESPONSIVE,
+            ChannelGetRequest: RESPONSIVE,
+            ChannelGetResponse: RESPONSIVE,
+            ChannelDestroyRequest: RESPONSIVE,
+            ChannelDestroyResponse: RESPONSIVE,
         },
         UNRESPONSIVE: {
         },
@@ -79,8 +84,36 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
 
 COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
     CLIENT: {
+        NEVER_CONNECTED: {
+            CreateChannelRequest: NEVER_CONNECTED,
+            CreateChannelResponse: CONNECTED,
+        },
+        CONNECTED: {
+            ChannelFieldInfoRequest: CONNECTED,
+            ChannelFieldInfoResponse: CONNECTED,
+            ChannelGetRequest: CONNECTED,
+            ChannelGetResponse: CONNECTED,
+            ChannelDestroyRequest: CONNECTED,
+            ChannelDestroyResponse: DISCONNECTED,
+        },
+        DISCONNECTED: {
+        },
     },
     SERVER: {
+        NEVER_CONNECTED: {
+            CreateChannelRequest: NEVER_CONNECTED,
+            CreateChannelResponse: CONNECTED,
+        },
+        CONNECTED: {
+            ChannelFieldInfoRequest: CONNECTED,
+            ChannelFieldInfoResponse: CONNECTED,
+            ChannelGetRequest: CONNECTED,
+            ChannelGetResponse: CONNECTED,
+            ChannelDestroyRequest: CONNECTED,
+            ChannelDestroyResponse: DISCONNECTED,
+        },
+        DISCONNECTED: {
+        },
     },
 }
 
@@ -107,6 +140,13 @@ class ChannelState(_ChannelState):
     # MERGE
     def _fire_command_triggered_transitions(self, role, command):
         command_type = type(command)
+        if command_type._ENDIAN is not None:
+            if command_type.ID in ApplicationCommands:
+                command_type = command_type.__bases__[0]
+                # TODO: HACK! Horrible, horrible hack...
+                # This side-steps putting big- and little-endian messages in
+                # the state transition dictionary. This should be redone.
+
         current_state = self.states[role]
         allowed_transitions = self.TRANSITIONS[role][current_state]
         try:
@@ -168,7 +208,11 @@ def get_exception(our_role, command):
         # TODO
         direction = command.header.direction
     else:
-        direction = command.direction
+        try:
+            direction = command.direction
+        except AttributeError:
+            print('bug', type(command))
+            direction = DirectionFlag.FROM_CLIENT
 
     if direction == DirectionFlag.FROM_CLIENT:
         party_at_fault = CLIENT
