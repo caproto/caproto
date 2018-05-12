@@ -5,6 +5,7 @@ import copy
 
 from collections import (OrderedDict, namedtuple)
 
+from caproto import CaprotoError
 from .types import (FieldType, ComplexType, FieldDesc, FieldArrayType,
                     TypeCode)
 from .types import (type_to_array_code, _type_code_byte_size, Decoded,
@@ -25,6 +26,10 @@ FieldDescCache = namedtuple('FdCache', 'user_types')
 
 SerializeCache = namedtuple('SerializeCache',
                             IdCache._fields + FieldDescCache._fields)
+
+
+class SerializationFailure(CaprotoError):
+    ...
 
 
 def _serialize_field_data(desc, fd_byte, value, *,
@@ -190,9 +195,14 @@ def serialize_data(desc, values, *, endian, cache, nested_types=None):
         if meta is not None:
             serialized.append(meta)
 
-        field_bytes = _serialize_field_data(fd, info.fd_byte, value,
-                                            endian=endian, cache=cache,
-                                            nested_types=nested_types)
+        try:
+            field_bytes = _serialize_field_data(fd, info.fd_byte, value,
+                                                endian=endian, cache=cache,
+                                                nested_types=nested_types)
+        except Exception as ex:
+            raise SerializationFailure(
+                f'Serializing {value!r} to {info.fd_byte}') from ex
+
         serialized.extend(field_bytes)
 
     return b''.join(serialized)

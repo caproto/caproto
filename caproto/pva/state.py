@@ -1,48 +1,47 @@
-from .._utils import (CLIENT, SERVER, make_sentinel,
-                      LocalProtocolError, RemoteProtocolError)
+from .utils import (CLIENT, SERVER,
+                    LocalProtocolError, RemoteProtocolError,
+
+                    # Connection state
+                    CONNECTED, RESPONSIVE, UNRESPONSIVE, DISCONNECTED,
+
+                    # Channel life-cycle
+                    NEVER_CONNECTED, DESTROYED, NEED_DATA,
+                    # also: CONNECTED, DISCONNECTED
+
+                    # Channel request
+                    INIT, READY, IN_PROGRESS,
+                    # also: DISCONNECTED, DESTROYED
+                    )
+
 from .._state import (CircuitState as _CircuitState,
                       ChannelState as _ChannelState)
 from .messages import (DirectionFlag,
-                       _Status,  # ExtendedMessageBase
-                       _BeaconMessage,  # ExtendedMessageBase
+                       Status,  # ExtendedMessageBase
+                       BeaconMessage,  # ExtendedMessageBase
                        SetMarker,  # MessageHeaderLE
                        AcknowledgeMarker,  # MessageHeaderLE
                        SetByteOrder,  # MessageHeaderLE
-                       _ConnectionValidationRequest,  # ExtendedMessageBase
-                       _ConnectionValidationResponse,  # ExtendedMessageBase
-                       _Echo,  # ExtendedMessageBase
-                       _ConnectionValidatedResponse,  # _Status
-                       _SearchRequest,  # ExtendedMessageBase
-                       _SearchResponse,  # ExtendedMessageBase
-                       _CreateChannelRequest,  # ExtendedMessageBase
-                       _CreateChannelResponse,  # ExtendedMessageBase
-                       _ChannelGetRequest,  # ExtendedMessageBase
-                       _ChannelGetResponse,  # ExtendedMessageBase
-                       _ChannelFieldInfoRequest,  # ExtendedMessageBase
-                       _ChannelFieldInfoResponse,  # ExtendedMessageBase
+                       ConnectionValidationRequest,  # ExtendedMessageBase
+                       ConnectionValidationResponse,  # ExtendedMessageBase
+                       Echo,  # ExtendedMessageBase
+                       ConnectionValidatedResponse,  # _Status
+                       SearchRequest,  # ExtendedMessageBase
+                       SearchResponse,  # ExtendedMessageBase
+                       CreateChannelRequest,  # ExtendedMessageBase
+                       CreateChannelResponse,  # ExtendedMessageBase
+                       ChannelGetRequest,  # ExtendedMessageBase
+                       ChannelGetResponse,  # ExtendedMessageBase
+                       ChannelFieldInfoRequest,  # ExtendedMessageBase
+                       ChannelFieldInfoResponse,  # ExtendedMessageBase
                        )
 
-
-# Connection state
-CONNECTED = make_sentinel('CONNECTED')
-RESPONSIVE = make_sentinel('RESPONSIVE')
-UNRESPONSIVE = make_sentinel('UNRESPONSIVE')
-DISCONNECTED = make_sentinel('DISCONNECTED')
-
-# Channel life-cycle
-NEVER_CONNECTED = make_sentinel('NEVER_CONNECTED')
-# also: CONNECTED, DISCONNECTED
-DESTROYED = make_sentinel('DESTROYED')
-
-# Channel request
-INIT = make_sentinel('INIT')
-READY = make_sentinel('READY')
-IN_PROGRESS = make_sentinel('IN_PROGRESS')
-# also: DISCONNECTED, DESTROYED
 
 
 COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
     CLIENT: {
+        INIT: {
+            SetByteOrder: CONNECTED,
+        },
         CONNECTED: {
         },
         RESPONSIVE: {
@@ -54,6 +53,9 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
         },
     },
     SERVER: {
+        INIT: {
+            SetByteOrder: CONNECTED,
+        },
         CONNECTED: {
         },
         RESPONSIVE: {

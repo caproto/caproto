@@ -2,7 +2,6 @@ import enum
 import ctypes
 import logging
 import inspect
-import ipaddress
 
 from collections import namedtuple
 
@@ -10,10 +9,10 @@ from .const import (LITTLE_ENDIAN, BIG_ENDIAN)
 from .types import (TypeCode, Decoded)
 from .serialization import (serialize_message_field, deserialize_message_field,
                             SerializeCache)
-from . import (introspection as intro)
 from .types import (c_byte, c_ubyte, c_short, c_ushort, c_int, c_uint)
 from .pvrequest import pvrequest_string_to_structure
-
+from . import introspection as intro
+from .utils import (ip_to_ubyte_array, ubyte_array_to_ip, CLIENT, SERVER)
 
 logger = logging.getLogger(__name__)
 
@@ -147,35 +146,16 @@ class OptionalStopMarker(enum.IntEnum):
     continue_ = False
 
 
-success_status_types = (StatusType.OK, StatusType.OK_VERBOSE,
-                        StatusType.WARNING)
+success_status_types = {StatusType.OK,
+                        StatusType.OK_VERBOSE,
+                        StatusType.WARNING
+                        }
 
 default_pvrequest = 'record[]field()'
 
 
 def _success_condition(msg, buf):
     return (msg.status_type in success_status_types)
-
-
-def _ip_to_ubyte_array(ip):
-    'Convert an IPv4 or IPv6 to a c_ubyte*16 array'
-    addr = ipaddress.ip_address(ip)
-    packed = addr.packed
-    if len(packed) == 4:
-        # case of IPv4
-        packed = [0] * 10 + [0xff, 0xff] + list(packed)
-
-    return (ctypes.c_ubyte * 16)(*packed)
-
-
-def _ubyte_array_to_ip(arr):
-    'Convert an address encoded as a c_ubyte array to a string'
-    addr = ipaddress.ip_address(bytes(arr))
-    ipv4 = addr.ipv4_mapped
-    if ipv4:
-        return str(ipv4)
-    else:
-        return str(addr)
 
 
 class MessageBase:
@@ -328,35 +308,34 @@ OptionalInterfaceField = namedtuple('OptionalInterfaceField',
                                     'name type stop condition data_field')
 
 
-def _dual_endian_decorator(cls):
-    '''Creates both big- and little-endian versions of a Structure
+def _make_endian(cls, endian):
+    '''Creates big- or little-endian versions of a Structure
 
     Checks for _additional_fields from ExtendedMessageBase
     Adds _ENDIAN attr for easy struct.unpacking = big (>) or little (<)
     '''
-    for endian_base, suffix in ((ctypes.BigEndianStructure, 'BE'),
-                                (ctypes.LittleEndianStructure, 'LE')):
-        name = cls.__name__.lstrip('_') + suffix
-        endian_cls = type(name, (cls, endian_base),
-                          {'_fields_': cls._fields_})
 
-        if hasattr(endian_cls, '_additional_fields_'):
-            for field_info in endian_cls._additional_fields_:
-                setattr(endian_cls, field_info.name, None)
-        endian_cls._ENDIAN = (LITTLE_ENDIAN
-                              if endian_base is ctypes.LittleEndianStructure
-                              else BIG_ENDIAN)
-        globals()[name] = endian_cls
+    if endian == LITTLE_ENDIAN:
+        endian_base = ctypes.LittleEndianStructure
+        suffix = 'LE'
+    else:
+        endian_base = ctypes.BigEndianStructure
+        suffix = 'BE'
 
-    return cls
+    name = cls.__name__.lstrip('_') + suffix
+    endian_cls = type(name, (cls, endian_base),
+                      {'_fields_': cls._fields_})
+
+    if hasattr(endian_cls, '_additional_fields_'):
+        for field_info in endian_cls._additional_fields_:
+            setattr(endian_cls, field_info.name, None)
+    endian_cls._ENDIAN = (LITTLE_ENDIAN
+                          if endian_base is ctypes.LittleEndianStructure
+                          else BIG_ENDIAN)
+    return endian_cls
 
 
-MessageHeaderLE = None  # linter hint
-MessageHeaderBE = None  # linter hint
-
-
-@_dual_endian_decorator
-class _MessageHeader(MessageBase):
+class MessageHeader(MessageBase):
     _fields_ = [
         ('magic', c_ubyte),
         ('version', c_ubyte),
@@ -370,8 +349,8 @@ class _MessageHeader(MessageBase):
         self.magic = 0xca
         self.version = 1
 
-        self.flags = _MessageHeader.flag_from_enums(message_type, direction,
-                                                    endian, segment)
+        self.flags = MessageHeader.flag_from_enums(message_type, direction,
+                                                   endian, segment)
         self.message_command = command
         self.payload_size = payload_size
 
@@ -429,21 +408,22 @@ class _MessageHeader(MessageBase):
         return (LITTLE_ENDIAN if flag == EndianFlag.LITTLE_ENDIAN
                 else BIG_ENDIAN)
 
-    def get_message(self, direction, use_fixed_byte_order=None):
+    def get_message(self, direction, *, use_fixed_byte_order=None):
         byte_order = (use_fixed_byte_order
                       if use_fixed_byte_order is not None
                       else self.byte_order)
         command = ApplicationCommands(self.message_command)
         try:
-            return messages[byte_order][direction][command]
+            return messages[(byte_order, direction, command)]
         except KeyError as ex:
-            raise KeyError('{} where byte order={} direction={!r} command={!r}'
-                           ''.format(ex, byte_order,
-                                     DirectionFlag(direction), command))
+            direction = DirectionFlag(direction).name
+            raise KeyError(
+                f'{ex} where byte order={byte_order} '
+                f'direction={direction} command={command!r}'
+            ) from None
 
 
-@_dual_endian_decorator
-class _Status(ExtendedMessageBase):
+class Status(ExtendedMessageBase):
     _fields_ = [('status_type', c_byte)]
     _additional_fields_ = [
         OptionalField('message', 'string', OptionalStopMarker.continue_,
@@ -453,8 +433,7 @@ class _Status(ExtendedMessageBase):
     ]
 
 
-@_dual_endian_decorator
-class _BeaconMessage(ExtendedMessageBase):
+class BeaconMessage(ExtendedMessageBase):
     ID = ApplicationCommands.BEACON
     # FieldDesc serverStatusIF;
     # [if serverStatusIF != NULL_TYPE_CODE] PVField serverStatus;
@@ -462,7 +441,7 @@ class _BeaconMessage(ExtendedMessageBase):
         ('guid', c_ubyte * 12),
         ('flags', c_ubyte),
         ('beacon_sequence_id', c_ubyte),
-        ('change_count', c_ushort),  # TODO: docs
+        ('change_count', c_ushort),  # TODO_DOCS
         ('server_address', c_ubyte * 16),
         ('server_port', c_ushort),
     ]
@@ -477,15 +456,15 @@ class _BeaconMessage(ExtendedMessageBase):
     ]
 
 
-class SetMarker(MessageHeaderLE):
+class SetMarker(MessageHeader):
     ID = ControlCommands.SET_MARKER
 
 
-class AcknowledgeMarker(MessageHeaderLE):
+class AcknowledgeMarker(MessageHeader):
     ID = ControlCommands.ACK_MARKER
 
 
-class SetByteOrder(MessageHeaderLE):
+class SetByteOrder(MessageHeader):
     ID = ControlCommands.SET_ENDIANESS
     # uses EndianSetting in header payload size
 
@@ -494,8 +473,7 @@ class SetByteOrder(MessageHeaderLE):
         return EndianSetting(self.payload_size)
 
 
-@_dual_endian_decorator
-class _ConnectionValidationRequest(ExtendedMessageBase):
+class ConnectionValidationRequest(ExtendedMessageBase):
     ID = ApplicationCommands.CONNECTION_VALIDATION
 
     _fields_ = [
@@ -508,8 +486,7 @@ class _ConnectionValidationRequest(ExtendedMessageBase):
     ]
 
 
-@_dual_endian_decorator
-class _ConnectionValidationResponse(ExtendedMessageBase):
+class ConnectionValidationResponse(ExtendedMessageBase):
     ID = ApplicationCommands.CONNECTION_VALIDATION
 
     _fields_ = [
@@ -523,21 +500,18 @@ class _ConnectionValidationResponse(ExtendedMessageBase):
     ]
 
 
-@_dual_endian_decorator
-class _Echo(ExtendedMessageBase):
+class Echo(ExtendedMessageBase):
     ID = ApplicationCommands.ECHO
     _additional_fields_ = [
         RequiredField('payload', 'byte[]'),
     ]
 
 
-@_dual_endian_decorator
-class _ConnectionValidatedResponse(_Status):
+class ConnectionValidatedResponse(Status):
     ID = ApplicationCommands.CONNECTION_VALIDATED
 
 
-@_dual_endian_decorator
-class _SearchRequest(ExtendedMessageBase):
+class SearchRequest(ExtendedMessageBase):
     ID = ApplicationCommands.SEARCH_REQUEST
 
     _fields_ = [
@@ -562,11 +536,11 @@ class _SearchRequest(ExtendedMessageBase):
 
     @property
     def response_address(self):
-        return _ubyte_array_to_ip(self._response_address)
+        return ubyte_array_to_ip(self._response_address)
 
     @response_address.setter
     def response_address(self, value):
-        self._response_address = _ip_to_ubyte_array(value)
+        self._response_address = ip_to_ubyte_array(value)
 
     def serialize(self, *args, **kwargs):
         self.channel_count = len(self.channels)
@@ -585,8 +559,7 @@ def _array_property(name, doc):
     return property(fget, fset, doc=doc)
 
 
-@_dual_endian_decorator
-class _SearchResponse(ExtendedMessageBase):
+class SearchResponse(ExtendedMessageBase):
     ID = ApplicationCommands.SEARCH_RESPONSE
 
     _fields_ = [
@@ -612,15 +585,14 @@ class _SearchResponse(ExtendedMessageBase):
 
     @property
     def server_address(self):
-        return _ubyte_array_to_ip(self._server_address)
+        return ubyte_array_to_ip(self._server_address)
 
     @server_address.setter
     def server_address(self, value):
-        self._server_address = _ip_to_ubyte_array(value)
+        self._server_address = ip_to_ubyte_array(value)
 
 
-@_dual_endian_decorator
-class _CreateChannelRequest(ExtendedMessageBase):
+class CreateChannelRequest(ExtendedMessageBase):
     ID = ApplicationCommands.CREATE_CHANNEL
 
     _additional_fields_ = [
@@ -632,15 +604,14 @@ class _CreateChannelRequest(ExtendedMessageBase):
     ]
 
 
-@_dual_endian_decorator
-class _CreateChannelResponse(ExtendedMessageBase):
+class CreateChannelResponse(ExtendedMessageBase):
     ID = ApplicationCommands.CREATE_CHANNEL
 
     _fields_ = [('client_chid', c_int),
                 ('server_chid', c_int),
                 ('status_type', c_byte),
                 ]
-    _additional_fields_ = _Status._additional_fields_ + [
+    _additional_fields_ = Status._additional_fields_ + [
         # TODO access rights aren't sent, even if status_type is OK
         OptionalField('access_rights', 'short', OptionalStopMarker.stop,
                       _success_condition
@@ -652,8 +623,7 @@ def _is_get_init_condition(msg, buf):
     return msg.subcommand == GetSubcommands.INIT
 
 
-@_dual_endian_decorator
-class _ChannelGetRequest(ExtendedMessageBase):
+class ChannelGetRequest(ExtendedMessageBase):
     ID = ApplicationCommands.GET
 
     _fields_ = [('server_chid', c_int),
@@ -683,8 +653,7 @@ def _get_response_get_cond(msg, buf):
             msg.subcommand == GetSubcommands.GET)
 
 
-@_dual_endian_decorator
-class _ChannelGetResponse(ExtendedMessageBase):
+class ChannelGetResponse(ExtendedMessageBase):
     ID = ApplicationCommands.GET
 
     _fields_ = [('request_id', c_int),
@@ -692,7 +661,7 @@ class _ChannelGetResponse(ExtendedMessageBase):
                 ('status_type', c_byte),
                 ]
 
-    _additional_fields_ = _Status._additional_fields_ + [
+    _additional_fields_ = Status._additional_fields_ + [
         # TODO some structure to break up subcommands into separate responses
         # for now, this is handled by the optional.conditions
 
@@ -712,8 +681,7 @@ class _ChannelGetResponse(ExtendedMessageBase):
     ]
 
 
-@_dual_endian_decorator
-class _ChannelFieldInfoRequest(ExtendedMessageBase):
+class ChannelFieldInfoRequest(ExtendedMessageBase):
     ID = ApplicationCommands.GET_FIELD
 
     _fields_ = [('server_chid', c_int),
@@ -724,77 +692,114 @@ class _ChannelFieldInfoRequest(ExtendedMessageBase):
     ]
 
 
-@_dual_endian_decorator
-class _ChannelFieldInfoResponse(ExtendedMessageBase):
+class ChannelFieldInfoResponse(ExtendedMessageBase):
     ID = ApplicationCommands.GET_FIELD
 
     _fields_ = [('ioid', c_int),
                 ('status_type', c_byte),
                 ]
-    _additional_fields_ = _Status._additional_fields_ + [
+    _additional_fields_ = Status._additional_fields_ + [
         OptionalField('field_if', 'FieldDesc', OptionalStopMarker.stop,
                       _success_condition
                       ),
     ]
 
 
-# List of entries where the server is requesting information and the client is
-# replying:
-_server_requests = (ApplicationCommands.CONNECTION_VALIDATION, )
+AppCmd = ApplicationCommands
+
+BE, LE = BIG_ENDIAN, LITTLE_ENDIAN  # removed below
+StatusLE = _make_endian(Status, LE)
+StatusBE = _make_endian(Status, BE)
+MessageHeaderLE = _make_endian(MessageHeader, LE)
+MessageHeaderBE = _make_endian(MessageHeader, BE)
+BeaconMessageLE = _make_endian(BeaconMessage, LE)
+BeaconMessageBE = _make_endian(BeaconMessage, BE)
+ConnectionValidationRequestLE = _make_endian(ConnectionValidationRequest, LE)
+ConnectionValidationRequestBE = _make_endian(ConnectionValidationRequest, BE)
+EchoLE = _make_endian(Echo, LE)
+EchoBE = _make_endian(Echo, BE)
+ConnectionValidatedResponseLE = _make_endian(ConnectionValidatedResponse, LE)
+ConnectionValidatedResponseBE = _make_endian(ConnectionValidatedResponse, BE)
+SearchResponseLE = _make_endian(SearchResponse, LE)
+SearchResponseBE = _make_endian(SearchResponse, BE)
+CreateChannelResponseLE = _make_endian(CreateChannelResponse, LE)
+CreateChannelResponseBE = _make_endian(CreateChannelResponse, BE)
+ChannelGetResponseLE = _make_endian(ChannelGetResponse, LE)
+ChannelGetResponseBE = _make_endian(ChannelGetResponse, BE)
+ChannelFieldInfoResponseLE = _make_endian(ChannelFieldInfoResponse, LE)
+ChannelFieldInfoResponseBE = _make_endian(ChannelFieldInfoResponse, BE)
+BeaconMessageLE = _make_endian(BeaconMessage, LE)
+BeaconMessageBE = _make_endian(BeaconMessage, BE)
+ConnectionValidationResponseLE = _make_endian(ConnectionValidationResponse, LE)
+ConnectionValidationResponseBE = _make_endian(ConnectionValidationResponse, BE)
+EchoLE = _make_endian(Echo, LE)
+EchoBE = _make_endian(Echo, BE)
+SearchRequestLE = _make_endian(SearchRequest, LE)
+SearchRequestBE = _make_endian(SearchRequest, BE)
+CreateChannelRequestLE = _make_endian(CreateChannelRequest, LE)
+CreateChannelRequestBE = _make_endian(CreateChannelRequest, BE)
+ChannelGetRequestLE = _make_endian(ChannelGetRequest, LE)
+ChannelGetRequestBE = _make_endian(ChannelGetRequest, BE)
+ChannelFieldInfoRequestLE = _make_endian(ChannelFieldInfoRequest, LE)
+ChannelFieldInfoRequestBE = _make_endian(ChannelFieldInfoRequest, BE)
+
+FROM_CLIENT, FROM_SERVER = DirectionFlag.FROM_CLIENT, DirectionFlag.FROM_SERVER
+
+messages = {
+    (LE, FROM_SERVER, AppCmd.BEACON): BeaconMessageLE,
+    (LE, FROM_SERVER, AppCmd.CONNECTION_VALIDATION): ConnectionValidationRequestLE,
+    (LE, FROM_SERVER, AppCmd.ECHO): EchoLE,
+    (LE, FROM_SERVER, AppCmd.CONNECTION_VALIDATED): ConnectionValidatedResponseLE,
+    (LE, FROM_SERVER, AppCmd.SEARCH_RESPONSE): SearchResponseLE,
+    (LE, FROM_SERVER, AppCmd.CREATE_CHANNEL): CreateChannelResponseLE,
+    (LE, FROM_SERVER, AppCmd.GET): ChannelGetResponseLE,
+    (LE, FROM_SERVER, AppCmd.GET_FIELD): ChannelFieldInfoResponseLE,
+    (LE, FROM_CLIENT, AppCmd.BEACON): BeaconMessageLE,
+    (LE, FROM_CLIENT, AppCmd.CONNECTION_VALIDATION): ConnectionValidationResponseLE,
+    (LE, FROM_CLIENT, AppCmd.ECHO): EchoLE,
+    (LE, FROM_CLIENT, AppCmd.SEARCH_REQUEST): SearchRequestLE,
+    (LE, FROM_CLIENT, AppCmd.CREATE_CHANNEL): CreateChannelRequestLE,
+    (LE, FROM_CLIENT, AppCmd.GET): ChannelGetRequestLE,
+    (LE, FROM_CLIENT, AppCmd.GET_FIELD): ChannelFieldInfoRequestLE,
+
+    (BE, FROM_SERVER, AppCmd.BEACON): BeaconMessageBE,
+    (BE, FROM_SERVER, AppCmd.CONNECTION_VALIDATION): ConnectionValidationRequestBE,
+    (BE, FROM_SERVER, AppCmd.ECHO): EchoBE,
+    (BE, FROM_SERVER, AppCmd.CONNECTION_VALIDATED): ConnectionValidatedResponseBE,
+    (BE, FROM_SERVER, AppCmd.SEARCH_RESPONSE): SearchResponseBE,
+    (BE, FROM_SERVER, AppCmd.CREATE_CHANNEL): CreateChannelResponseBE,
+    (BE, FROM_SERVER, AppCmd.GET): ChannelGetResponseBE,
+    (BE, FROM_SERVER, AppCmd.GET_FIELD): ChannelFieldInfoResponseBE,
+    (BE, FROM_CLIENT, AppCmd.BEACON): BeaconMessageBE,
+    (BE, FROM_CLIENT, AppCmd.CONNECTION_VALIDATION): ConnectionValidationResponseBE,
+    (BE, FROM_CLIENT, AppCmd.ECHO): EchoBE,
+    (BE, FROM_CLIENT, AppCmd.SEARCH_REQUEST): SearchRequestBE,
+    (BE, FROM_CLIENT, AppCmd.CREATE_CHANNEL): CreateChannelRequestBE,
+    (BE, FROM_CLIENT, AppCmd.GET): ChannelGetRequestBE,
+    (BE, FROM_CLIENT, AppCmd.GET_FIELD): ChannelFieldInfoRequestBE,
+}
+
+del AppCmd
+del LE
+del BE
 
 
-def _build_message_dict():
-    d = {LITTLE_ENDIAN: {DirectionFlag.FROM_SERVER: {},
-                         DirectionFlag.FROM_CLIENT: {}},
-         BIG_ENDIAN: {DirectionFlag.FROM_SERVER: {},
-                      DirectionFlag.FROM_CLIENT: {}},
-         }
+def read_datagram(data, address, role, *, fixed_byte_order=None):
+    "Parse bytes from one datagram into one or more commands."
+    buf = bytearray(data)
+    commands = []
+    offset = 0
+    direction_flag = (DirectionFlag.FROM_SERVER
+                      if role == SERVER
+                      else DirectionFlag.FROM_CLIENT)
 
-    skip_classes = ['MessageBase',
-                    'ExtendedMessageBase',
-                    'MessageHeaderBE',
-                    'MessageHeaderLE',
-                    'StatusBE',
-                    'StatusLE',
-                    ]
+    while buf:
+        header, buf, off = MessageHeaderLE.deserialize(buf, our_cache={})
+        offset += off
 
-    for name, cls in globals().items():
-        if name.startswith('_'):
-            continue
-
-        if inspect.isclass(cls) and issubclass(cls, MessageBase):
-            if any(cls.__name__ == clsname for clsname in skip_classes):
-                continue
-            elif isinstance(cls.ID, ControlCommands):
-                # Control commands have overlapping IDs
-                continue
-
-            if hasattr(cls, '_ENDIAN'):
-                endian = [cls._ENDIAN]
-            else:
-                endian = [LITTLE_ENDIAN, BIG_ENDIAN]
-
-            is_request = (name.endswith('RequestBE') or
-                          name.endswith('RequestLE'))
-            is_response = (name.endswith('ResponseBE') or
-                           name.endswith('ResponseLE'))
-            if not (is_request or is_response):
-                # No indication of Request/Response means it's bidirectional
-                is_request = is_response = True
-            elif cls.ID in _server_requests:
-                is_request, is_response = is_response, is_request
-
-            direction_keys = []
-            if is_request:
-                direction_keys.append(DirectionFlag.FROM_CLIENT)
-            if is_response:
-                direction_keys.append(DirectionFlag.FROM_SERVER)
-
-            for end in endian:
-                for direct in direction_keys:
-                    d[end][direct][cls.ID] = cls
-
-    return d
-
-
-messages = _build_message_dict()
+        msg_class = header.get_message(direction_flag,
+            use_fixed_byte_order=fixed_byte_order)
+        msg, buf, off = msg_class.deserialize(buf, our_cache={})
+        commands.append(msg)
+        offset += off
+    return commands
