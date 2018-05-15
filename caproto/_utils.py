@@ -9,6 +9,7 @@ import enum
 import json
 import threading
 from collections import namedtuple
+from warnings import warn
 
 try:
     import netifaces
@@ -126,12 +127,19 @@ def get_environment_variables():
                     EPICS_CAS_IGNORE_ADDR_LIST='',
                     )
 
-    def get_value(env_var):
-        default = defaults[env_var]
-        value = os.environ.get(env_var, default)
-        return type(default)(value)
-
-    return dict((env_var, get_value(env_var)) for env_var in defaults.keys())
+    result = dict(os.environ)
+    # Handled coupled items.
+    if (result.get('EPICS_CA_ADDR_LIST') and
+            result.get('EPICS_CA_AUTO_ADDR_LIST', '').upper() != 'NO'):
+        warn("EPICS_CA_ADDR_LIST is set but will be ignored because "
+             "EPICS_CA_AUTO_AUTO_ADDR_LIST is not set to 'no'.")
+    if (result.get('EPICS_CAS_BEACON_ADDR_LIST') and
+            result.get('EPICS_CAS_AUTO_BEACON_ADDR_LIST', '').upper() != 'NO'):
+        warn("EPICS_CAS_BEACON_ADDR_LIST is set but will be ignored because "
+             "EPICS_CAS_AUTO_BEACON_ADDR_LIST is not set to 'no'.")
+    for k, v in defaults.items():
+        result.setdefault(k, v)
+    return result
 
 
 def get_address_list():
