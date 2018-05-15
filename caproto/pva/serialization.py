@@ -6,9 +6,10 @@ import copy
 from collections import (OrderedDict, namedtuple)
 
 from caproto import CaprotoError
+from .helpers import FrozenDict
 from .types import (FieldType, ComplexType, FieldDesc, FieldArrayType,
-                    TypeCode)
-from .types import (type_to_array_code, _type_code_byte_size, Decoded,
+                    TypeCode,
+                    type_to_array_code, _type_code_byte_size, Decoded,
                     type_name_to_type)
 from .const import (MAX_INT32, SYS_ENDIAN)
 from .introspection import (walk_field_description_with_values,
@@ -24,7 +25,12 @@ IdCache = namedtuple('IdCache', 'ours theirs')
 FieldDescCache = namedtuple('FdCache', 'user_types')
 
 SerializeCache = namedtuple('SerializeCache',
-                            IdCache._fields + FieldDescCache._fields)
+                            'ours theirs user_types ioid_interfaces')
+NullCache = SerializeCache(ours=FrozenDict(),
+                           theirs=FrozenDict(),
+                           user_types=FrozenDict(),
+                           ioid_interfaces=FrozenDict(),
+                           )
 
 
 class SerializationFailure(CaprotoError):
@@ -523,6 +529,9 @@ def _deserialize_data_from_field_desc(fd, buf,
 
 def deserialize_data(fd, buf, *, endian, cache, nested_types=None):
     'Deserialize data associated with a field description'
+    if fd is None or not fd:
+        raise ValueError('Must specify field description')
+
     buf = memoryview(buf)
 
     if nested_types is None:
@@ -532,10 +541,13 @@ def deserialize_data(fd, buf, *, endian, cache, nested_types=None):
 
     if 'fields' not in fd:
         # A single value - don't make it into a dictionary
+        # TODO investigate recursion here when struct name is not found
+        # TODO simple test is to undefined 'channel_with_id'
         return _deserialize_data_from_field_desc(
             fd, buf, endian=endian, cache=cache, nested_types=nested_types)
 
-    debug_logging = logger.isEnabledFor(logging.DEBUG)
+    # debug_logging = logger.isEnabledFor(logging.DEBUG)
+    debug_logging = True
     ret = OrderedDict()
     offset = 0
 

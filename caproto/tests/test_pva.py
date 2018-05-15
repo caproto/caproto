@@ -43,17 +43,17 @@ def test_status_example():
     buf = bytearray(status_example)
 
     print('\n- status 1')
-    status, buf, consumed = StatusBE.deserialize(buf, our_cache={})
+    status, buf, consumed = StatusBE.deserialize(buf)
     assert StatusType(status.status_type) == StatusType.OK
     assert consumed == 1
 
     print('\n- status 2')
-    status, buf, consumed = StatusBE.deserialize(buf, our_cache={})
+    status, buf, consumed = StatusBE.deserialize(buf)
     assert StatusType(status.status_type) == StatusType.WARNING
     assert consumed == 13
 
     print('\n- status 3')
-    status, buf, consumed = StatusBE.deserialize(buf, our_cache={})
+    status, buf, consumed = StatusBE.deserialize(buf)
     assert StatusType(status.status_type) == StatusType.ERROR
     assert consumed == 264
 
@@ -289,7 +289,7 @@ introspection_examples = [
                           ('fielddesc example 2 - exampleStructure', 1),
                           ])
 def test_fielddesc_examples(example_name, data_idx):
-    cache = SerializeCache({}, {}, {})
+    cache = SerializeCache({}, {}, {}, {})
     data, expected_info = introspection_examples[data_idx]
     info, buf, offset = deserialize_introspection_data(
         data, endian='<', cache=cache)
@@ -449,7 +449,7 @@ def test_serialize_from_repr(repr_text, expected_serialized, endian):
     expected_value_dict = scrub_union_values(copy.deepcopy(full_value_dict))
     print('expected', expected_value_dict)
 
-    cache = SerializeCache({}, {}, {})
+    cache = SerializeCache({}, {}, {}, {})
     serialized = pva.serialize_data(generated, full_value_dict,
                                     endian=endian, cache=cache)
     assert serialized == expected_serialized
@@ -533,8 +533,8 @@ def test_field_desc_to_value_dict():
     print(fd['nested_types'])
     pva.print_field_info(fd, user_types=pva.basic_types)
 
-    value_dict_out = pva.field_description_to_value_dict(fd,
-                                                         user_types=pva.basic_types)
+    value_dict_out = pva.field_description_to_value_dict(
+        fd, user_types=pva.basic_types)
 
     pprint(value_dict_out)
     assert value_dict_out == value_dict_expected
@@ -562,7 +562,7 @@ def test_variant_types_and_serialization(type_name, value, array_type):
     assert fd['array_type'] == array_type
     assert fd['name'] == name
 
-    cache = SerializeCache({}, {}, {})
+    cache = SerializeCache({}, {}, {}, {})
     for endian in (pva.LITTLE_ENDIAN, pva.BIG_ENDIAN):
         serialized = pva.serialize_data(fd, value, cache=cache, endian=endian)
         print(type_name, name, value, '->', serialized)
@@ -716,7 +716,7 @@ def test_pvrequests(request):
     pva.print_field_info(struct, user_types={})
 
     if expected_serialized is not None:
-        cache = SerializeCache({}, {}, {})
+        cache = SerializeCache({}, {}, {}, {})
         info, buf, consumed = deserialize_introspection_data(
             expected_serialized, endian='<', cache=cache,
             nested_types=dict(getField={},
@@ -816,8 +816,11 @@ def test_search():
                           b'\x01\x03tcp\x01\x00\x01\x00\x00\x00'
                           b'\x10TST:image1:Array')
 
+    cache = SerializeCache(ours={}, theirs={},
+                           user_types=pva.basic_types,
+                           ioid_interfaces={})
     deserialized, buf, consumed = SearchRequestLE.deserialize(
-        bytearray(serialized), our_cache={})
+        bytearray(serialized), cache=cache)
     assert consumed == len(serialized)
     assert deserialized.channel_count == 1
     assert deserialized.channels == [channel1]
@@ -839,7 +842,7 @@ def test_search():
                           )
 
     deserialized, buf, consumed = SearchRequestLE.deserialize(
-        bytearray(serialized), our_cache={})
+        bytearray(serialized), cache=cache)
     assert consumed == len(serialized)
     assert deserialized.channel_count == 2
     assert deserialized.channels == [channel1, channel2]
@@ -910,7 +913,7 @@ def test_helper_basics(repr_text, expected_serialized, endian):
     print('Values is', value)
 
     # Round trip (1): serialize values as set above
-    cache = SerializeCache({}, {}, {})
+    cache = SerializeCache({}, {}, {}, {})
     assert value.serialize(endian=endian, cache=cache) == expected_serialized
     print()
 

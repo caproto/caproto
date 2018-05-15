@@ -6,7 +6,7 @@ import logging
 
 from .introspection import summarize_field_info
 from .const import SYS_ENDIAN, LITTLE_ENDIAN, BIG_ENDIAN
-from .messages import (DirectionFlag, ApplicationCommands, ControlCommands,
+from .messages import (basic_types, DirectionFlag, ApplicationCommands, ControlCommands,
                        EndianSetting, read_from_bytestream, messages_grouped,
                        MessageHeaderBE, MessageHeaderLE, MessageTypeFlag,
                        EndianFlag, StatusType,
@@ -75,7 +75,8 @@ class VirtualCircuit:
         self.fixed_recv_order = None
         self.messages = None
         self.cache = SerializeCache(ours={}, theirs={},
-                                    user_types={})
+                                    user_types=basic_types.copy(),  # TODO
+                                    ioid_interfaces={})
 
     def set_byte_order(self):
         """
@@ -402,6 +403,7 @@ class _BaseChannel:
         self.interface = None
         self.sid = None
         self.access_rights = None
+        self.ioid_interfaces = {}
 
     @property
     def subscriptions(self):
@@ -546,7 +548,7 @@ class ClientChannel(_BaseChannel):
         """
         # TODO state machine for get requests
         cls = self.circuit.messages[ApplicationCommands.GET]
-        self.circuit.cache.ours[ioid] = dict(interface=interface)
+        self.circuit.cache.ioid_interfaces[ioid] = interface
         return cls(server_chid=self.sid,
                    ioid=ioid,
                    subcommand=GetSubcommands.GET,

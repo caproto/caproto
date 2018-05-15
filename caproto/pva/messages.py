@@ -1,19 +1,19 @@
 import enum
 import ctypes
 import logging
-import inspect
 
 from collections import namedtuple
 
 from .const import (LITTLE_ENDIAN, BIG_ENDIAN)
 from .types import (TypeCode, Decoded)
 from .serialization import (serialize_message_field, deserialize_message_field,
-                            SerializeCache)
+                            SerializeCache, NullCache)
 from .types import (c_byte, c_ubyte, c_short, c_ushort, c_int, c_uint)
 from .pvrequest import pvrequest_string_to_structure
 from . import introspection as intro
 from .utils import (ip_to_ubyte_array, ubyte_array_to_ip, CLIENT, SERVER,
                     NEED_DATA)
+
 
 logger = logging.getLogger(__name__)
 
@@ -179,7 +179,7 @@ class MessageBase:
         interfaces = {}
         endian = self._ENDIAN
         cache = SerializeCache(ours=our_cache, theirs=their_cache,
-                               user_types=basic_types)
+                               user_types=basic_types, ioid_interfaces={})
 
         for field_info in self._additional_fields_:
             if isinstance(field_info, (OptionalField, OptionalInterfaceField)):
@@ -214,10 +214,7 @@ class MessageBase:
         return b''.join(buf)
 
     @classmethod
-    def deserialize(cls, buf, *, our_cache, user_types=None, interfaces=None):
-        if user_types is None:
-            user_types = basic_types
-
+    def deserialize(cls, buf, *, cache=NullCache):
         base_size = ctypes.sizeof(cls)
         buflen = len(buf) - base_size
         buf = memoryview(buf)
@@ -229,8 +226,6 @@ class MessageBase:
         if not hasattr(cls, '_additional_fields_'):
             return Decoded(data=msg, buffer=buf, offset=offset)
 
-        cache = SerializeCache(ours=our_cache, theirs=None,
-                               user_types=user_types)
         for field_info in cls._additional_fields_:
             if isinstance(field_info, (OptionalField, OptionalInterfaceField)):
                 if not buflen:
@@ -246,20 +241,15 @@ class MessageBase:
 
             if field_info.type == 'PVField':
                 try:
-                    ioid = msg.ioid
+                    interface = cache.ioid_interfaces[msg.ioid]
                 except AttributeError:
-                    ...
-                else:
-                    interface = our_cache[ioid]['interface']
-                    # TODO how the heck was the cache supposed to work again?
-
-                if interface is None:
-                    try:
-                        interface = interfaces[field_info.name]
-                    except (TypeError, KeyError):
-                        raise ValueError(
-                            f'Interface unspecified for PVField key '
-                            f'{field_info.name!r}') from None
+                    raise RuntimeError(
+                        f'Think through the caching more, @klauer '
+                        f'{field_info.name!r}') from None
+                except KeyError:
+                    raise ValueError(
+                        f'Interface unspecified for PVField key '
+                        f'{field_info.name!r}') from None
 
             is_nonstandard_array = isinstance(field_info,
                                               NonstandardArrayField)
@@ -874,7 +864,8 @@ del LE
 del BE
 
 
-def read_datagram(data, address, role, *, fixed_byte_order=None):
+def read_datagram(data, address, role, *, fixed_byte_order=None,
+                  cache=NullCache):
     "Parse bytes from one datagram into one or more commands."
     buf = bytearray(data)
     commands = []
@@ -884,12 +875,12 @@ def read_datagram(data, address, role, *, fixed_byte_order=None):
                       else DirectionFlag.FROM_CLIENT)
 
     while buf:
-        header, buf, off = MessageHeaderLE.deserialize(buf, our_cache={})
+        header, buf, off = MessageHeaderLE.deserialize(buf, cache=cache)
         offset += off
 
         msg_class = header.get_message(
             direction_flag, use_fixed_byte_order=fixed_byte_order)
-        msg, buf, off = msg_class.deserialize(buf, our_cache={})
+        msg, buf, off = msg_class.deserialize(buf, cache=cache)
         offset += off
 
         commands.append(msg)
@@ -952,8 +943,7 @@ def bytes_needed_for_command(data, direction, cache, *, byte_order=None):
         return header, 0, SegmentFlag.UNSEGMENTED
 
 
-def read_from_bytestream(data, role, cache, *, byte_order=None,
-                         interfaces=None):
+def read_from_bytestream(data, role, cache, *, byte_order=None):
     '''
     Parameters
     ----------
@@ -965,8 +955,6 @@ def read_from_bytestream(data, role, cache, *, byte_order=None,
     byte_order : LITTLE_ENDIAN or BIG_ENDIAN, optional
         Fixed byte order if server message endianness is to be interpreted on a
         message-by-message basis.
-    interfaces : optional
-        (Deserialization parameter)
 
     Returns
     -------
@@ -999,8 +987,7 @@ def read_from_bytestream(data, role, cache, *, byte_order=None,
     offset = _MessageHeaderSize
 
     cmd, data, off = msg_class.deserialize(memoryview(data)[offset:],
-                                           our_cache=cache.ours,
-                                           interfaces=interfaces)
+                                           cache=cache)
 
     offset += off
 

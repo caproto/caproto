@@ -355,7 +355,7 @@ def recv_message(sock, fixed_byte_order, server_byte_order, cache, buf,
     assert header.valid
 
     if header.segment == pva.SegmentFlag.UNSEGMENTED:
-        header, buf, offset = header_cls.deserialize(buf, our_cache=cache.ours)
+        header, buf, offset = header_cls.deserialize(buf, cache=cache)
     else:
         header_size = ctypes.sizeof(header_cls)
 
@@ -392,7 +392,7 @@ def recv_message(sock, fixed_byte_order, server_byte_order, cache, buf,
     print('<-', header)
 
     assert len(buf) >= header.payload_size
-    return msg_class.deserialize(buf, our_cache=cache.ours, **deserialize_kw)
+    return msg_class.deserialize(buf, cache=cache)
 
 
 if __name__ == '__main__':

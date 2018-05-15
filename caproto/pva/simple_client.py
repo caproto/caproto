@@ -27,8 +27,7 @@ def send_message(sock, client_byte_order, server_byte_order, msg):
     return header, payload
 
 
-def recv_message(sock, fixed_byte_order, server_byte_order, cache, buf,
-                 **deserialize_kw):
+def recv_message(sock, fixed_byte_order, server_byte_order, cache, buf):
     if not len(buf):
         buf = bytearray(sock.recv(4096))
         print('<-', buf)
@@ -41,7 +40,7 @@ def recv_message(sock, fixed_byte_order, server_byte_order, cache, buf,
     assert header.valid
 
     if header.segment == pva.SegmentFlag.UNSEGMENTED:
-        header, buf, offset = header_cls.deserialize(buf, our_cache=cache.ours)
+        header, buf, offset = header_cls.deserialize(buf, cache=cache)
     else:
         header_size = ctypes.sizeof(header_cls)
 
@@ -78,7 +77,7 @@ def recv_message(sock, fixed_byte_order, server_byte_order, cache, buf,
     print('<-', header)
 
     assert len(buf) >= header.payload_size
-    return msg_class.deserialize(buf, our_cache=cache.ours, **deserialize_kw)
+    return msg_class.deserialize(buf, cache=cache)
 
 
 def search(*pvs):
@@ -135,7 +134,7 @@ def search(*pvs):
     print('Received from', addr, ':', response_data)
 
     response_header, buf, offset = pva.MessageHeaderLE.deserialize(
-        response_data, our_cache={})
+        response_data, cache=pva.NullCache)
     assert response_header.valid
 
     msg_class = response_header.get_message(
@@ -144,7 +143,7 @@ def search(*pvs):
     print('Response header:', response_header)
     print('Response msg class:', msg_class)
 
-    msg, buf, off = msg_class.deserialize(buf, our_cache={})
+    msg, buf, off = msg_class.deserialize(buf, cache=pva.NullCache)
     offset += off
 
     print('Response message:', msg)
@@ -170,10 +169,11 @@ def main(host, server_port, pv):
     # local copy of types cached on server
     their_cache = {}
     # locally-defined types
-    user_types = {}
+    user_types = pva.basic_types.copy()
     cache = pva.SerializeCache(ours=our_cache,
                                theirs=their_cache,
-                               user_types=user_types)
+                               user_types=user_types,
+                               ioid_interfaces={})
 
     sock = socket.create_connection((host, server_port))
     buf = bytearray(sock.recv(4096))
@@ -181,7 +181,7 @@ def main(host, server_port, pv):
     # (1)
     print()
     print('- 1. initialization: byte order setting')
-    msg, buf, offset = pva.SetByteOrder.deserialize(buf, our_cache=cache.ours)
+    msg, buf, offset = pva.SetByteOrder.deserialize(buf, cache=cache)
     print('<-', msg, msg.byte_order_setting, msg.byte_order)
 
     server_byte_order = msg.byte_order
@@ -274,8 +274,9 @@ def main(host, server_port, pv):
     # (6)
     print()
     print('- 6. Initialize the channel get request')
+    get_ioid = 2
     get_cls = cli_messages[pva.ApplicationCommands.GET]
-    get_init_req = get_cls(server_chid=server_chid, ioid=2,
+    get_init_req = get_cls(server_chid=server_chid, ioid=get_ioid,
                            subcommand=pva.GetSubcommands.INIT,
                            pv_request_if='field(value)',
                            pv_request=dict(field=dict(value=None)),
@@ -284,7 +285,9 @@ def main(host, server_port, pv):
     send(get_init_req)
     get_init_reply, buf, off = recv(buf)
     print('init reply', repr(get_init_reply)[:80], '...')
+
     interface = get_init_reply.pv_structure_if
+    cache.ioid_interfaces[get_ioid] = get_init_reply.pv_structure_if
     print()
     print('Field info according to init:')
     pva.print_field_info(interface, user_types)
@@ -293,11 +296,11 @@ def main(host, server_port, pv):
     print()
     print('- 7. Perform an actual get request')
     get_cls = cli_messages[pva.ApplicationCommands.GET]
-    get_req = get_cls(server_chid=server_chid, ioid=2,  # <-- note same ioid
+    get_req = get_cls(server_chid=server_chid, ioid=get_ioid,  # <-- note same ioid
                       subcommand=pva.GetSubcommands.GET,
                       )
     send(get_req)
-    get_reply, buf, off = recv(buf, interfaces=dict(pv_data=interface))
+    get_reply, buf, off = recv(buf)
     get_data = get_reply.pv_data
     pva.print_field_info(interface, user_types,
                          values={'': get_data})
