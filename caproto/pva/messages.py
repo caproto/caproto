@@ -168,18 +168,17 @@ class MessageBase:
         return '{}({})'.format(type(self).__name__, info)
 
     def serialize(self, *, default_pvrequest=default_pvrequest,
-                  our_cache=None, their_cache=None, user_types=None):
+                  cache=NullCache):
         if not hasattr(self, '_additional_fields_'):
             return bytes(self)
-        if user_types is None:
-            user_types = basic_types
+        # TODO
+        # if user_types is None:
+        #     user_types = basic_types
 
         buf = [bytes(self)]
 
         interfaces = {}
         endian = self._ENDIAN
-        cache = SerializeCache(ours=our_cache, theirs=their_cache,
-                               user_types=basic_types, ioid_interfaces={})
 
         for field_info in self._additional_fields_:
             if isinstance(field_info, (OptionalField, OptionalInterfaceField)):

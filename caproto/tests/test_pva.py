@@ -806,7 +806,11 @@ def test_search():
         response_port=8080, protocols=['tcp'],
         channels=[channel1],)
 
-    serialized = req.serialize()
+    # NOTE: cache needed here to give interface for channels
+    cache = SerializeCache(ours={}, theirs={},
+                           user_types=pva.basic_types,
+                           ioid_interfaces={})
+    serialized = req.serialize(cache=cache)
 
     assert req.response_address == addr
     assert req.channel_count == 1
@@ -816,9 +820,6 @@ def test_search():
                           b'\x01\x03tcp\x01\x00\x01\x00\x00\x00'
                           b'\x10TST:image1:Array')
 
-    cache = SerializeCache(ours={}, theirs={},
-                           user_types=pva.basic_types,
-                           ioid_interfaces={})
     deserialized, buf, consumed = SearchRequestLE.deserialize(
         bytearray(serialized), cache=cache)
     assert consumed == len(serialized)
@@ -828,7 +829,7 @@ def test_search():
 
     channel2 = {'id': 0x02, 'channel_name': pv + '2'}
     req.channels = [channel1, channel2]
-    serialized = req.serialize()
+    serialized = req.serialize(cache=cache)
     assert req.channel_count == 2
     assert serialized == (b'\x01\x00\x00\x00\x81\x00\x00\x00'
                           b'\x00\x00\x00\x00\x00\x00\x00\x00\x00'

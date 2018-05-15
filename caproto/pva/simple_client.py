@@ -7,13 +7,13 @@ from caproto import pva
 from caproto import (get_netifaces_addresses, bcast_socket)
 
 
-def send_message(sock, client_byte_order, server_byte_order, msg):
+def send_message(sock, client_byte_order, server_byte_order, msg, cache):
     print('->', msg)
     header_cls = (pva.MessageHeaderLE
                   if server_byte_order == pva.LITTLE_ENDIAN
                   else pva.MessageHeaderBE)
 
-    payload = msg.serialize()
+    payload = msg.serialize(cache=cache)
     header = header_cls(message_type=pva.MessageTypeFlag.APP_MESSAGE,
                         direction=pva.DirectionFlag.FROM_CLIENT,
                         endian=client_byte_order,
@@ -100,7 +100,7 @@ def search(*pvs):
     search_ids = {pv: random.randint(1, 2 ** 31)
                   for pv in pvs}
 
-    create_req = pva.SearchRequestLE(
+    search_req = pva.SearchRequestLE(
         sequence_id=seq_id,
         flags=(pva.SearchFlags.reply_required | pva.SearchFlags.broadcast),
         response_address='127.0.0.1',   # TODO host ip
@@ -110,19 +110,22 @@ def search(*pvs):
                   for pv in pvs]
     )
 
-    payload = create_req.serialize()
+    # NOTE: cache needed here to give interface for channels
+    cache = pva.SerializeCache(ours={}, theirs={}, user_types=pva.basic_types,
+                               ioid_interfaces={})
+    payload = search_req.serialize(cache=cache)
 
     header = pva.MessageHeaderLE(
         message_type=pva.MessageTypeFlag.APP_MESSAGE,
         direction=pva.DirectionFlag.FROM_CLIENT,
         endian=pva.LITTLE_ENDIAN,
-        command=create_req.ID,
+        command=search_req.ID,
         payload_size=len(payload)
     )
 
     for addr, bcast_addr in get_netifaces_addresses():
-        create_req.response_address = addr
-        bytes_to_send = bytes(header) + create_req.serialize()
+        search_req.response_address = addr
+        bytes_to_send = bytes(header) + search_req.serialize(cache=cache)
 
         dest = (addr, pva.PVA_BROADCAST_PORT)
         print('Sending SearchRequest to', bcast_addr,
@@ -170,6 +173,7 @@ def main(host, server_port, pv):
     their_cache = {}
     # locally-defined types
     user_types = pva.basic_types.copy()
+
     cache = pva.SerializeCache(ours=our_cache,
                                theirs=their_cache,
                                user_types=user_types,
@@ -202,7 +206,8 @@ def main(host, server_port, pv):
 
     # convenience functions:
     def send(msg):
-        return send_message(sock, client_byte_order, server_byte_order, msg)
+        return send_message(sock, client_byte_order, server_byte_order, msg,
+                            cache)
 
     def recv(buf, **kw):
         return recv_message(sock, fixed_byte_order, server_byte_order, cache,
