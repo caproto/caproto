@@ -506,8 +506,14 @@ class Context:
             beacon = ca.RsrvIsUpResponse(13, self.port, self.beacon_count,
                                          self.host)
             bytes_to_send = self.broadcaster.send(beacon)
+            fail = []
             for addr_port in addresses:
-                await self.udp_sock.sendto(bytes_to_send, addr_port)
+                try:
+                    await self.udp_sock.sendto(bytes_to_send, addr_port)
+                except OSError:
+                    fail.append(addr_port)
+            for adr in fail:
+                addresses.remove(adr)
             self.beacon_count += 1
             await curio.sleep(beacon_period)
 
