@@ -169,4 +169,9 @@ def test_auto_addr_list_warnings():
             assert not record
 
     finally:
+        # Restore env as it was.
+        os.environ.pop('EPICS_CA_AUTO_ADDR_LIST', None)
+        os.environ.pop('EPICS_CA_ADDR_LIST', None)
+        os.environ.pop('EPICS_CAS_AUTO_BEACON_ADDR_LIST', None)
+        os.environ.pop('EPICS_CAS_BEACON_ADDR_LIST', None)
         os.environ.update(orig)
