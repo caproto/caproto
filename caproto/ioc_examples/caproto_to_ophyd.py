@@ -3,12 +3,12 @@ import sys
 import logging
 import random
 
-import curio
+import trio
 import ophyd
 from ophyd import Component as Cpt, EpicsSignal, EpicsSignalRO
 
 from caproto.benchmarking import set_logging_level
-from caproto.curio.server import start_server
+from caproto.trio.server import start_server
 from caproto.server import (pvproperty, PVGroup, pvfunction)
 from caproto.server.conversion import group_to_device
 
@@ -111,7 +111,7 @@ if __name__ == '__main__':
 
     logger.info('Starting up: prefix=%r', prefix)
 
-    curio.run(start_server, ioc.pvdb)
+    trio.run(start_server, ioc.pvdb)
 
     # Step 3b:
     # NOTE: run separately: caproto.ioc_examples.caproto_to_typhon

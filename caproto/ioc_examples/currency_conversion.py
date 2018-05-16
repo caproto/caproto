@@ -2,12 +2,12 @@
 import re
 import logging
 
-import asks  # for http requests through curio
+import asks  # for http requests through trio
 
 import urllib.request
 import urllib.parse
 from caproto.benchmarking import set_logging_level
-from caproto.curio.server import start_server
+from caproto.trio.server import start_server
 from caproto.server import pvproperty, PVGroup
 
 
@@ -35,7 +35,7 @@ class CurrencyConversionIOC(PVGroup):
 
 if __name__ == '__main__':
     # usage: currency_conversion.py [PREFIX]
-    import curio
+    import trio
     import sys
 
     try:
@@ -44,7 +44,7 @@ if __name__ == '__main__':
         prefix = 'currency_conversion:'
 
     set_logging_level(logging.DEBUG)
-    asks.init('curio')
+    asks.init('trio')
     ioc = CurrencyConversionIOC(prefix=prefix)
     print('PVs:', list(ioc.pvdb))
-    curio.run(start_server, ioc.pvdb)
+    trio.run(start_server, ioc.pvdb)

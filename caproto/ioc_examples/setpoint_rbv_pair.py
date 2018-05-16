@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 import sys
-import curio
+import trio
 
-from caproto.curio.server import start_server
+from caproto.trio.server import start_server
 from caproto.server import (PVGroup, get_pv_pair_wrapper)
 
 
@@ -48,4 +48,4 @@ if __name__ == '__main__':
     from pprint import pprint
     pprint(ioc.pvdb)
 
-    curio.run(start_server, ioc.pvdb)
+    trio.run(start_server, ioc.pvdb)

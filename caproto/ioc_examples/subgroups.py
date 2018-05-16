@@ -4,7 +4,7 @@ import random
 import logging
 
 from caproto.benchmarking import set_logging_level
-from caproto.curio.server import start_server
+from caproto.trio.server import start_server
 from caproto.server import (pvproperty, PVGroup, SubGroup)
 
 
@@ -85,7 +85,7 @@ if __name__ == '__main__':
     except IndexError:
         prefix = 'subgroups:'
 
-    import curio
+    import trio
     from pprint import pprint
 
     macros = {}
@@ -120,4 +120,4 @@ if __name__ == '__main__':
                  ioc.group4.subgroup4.random]:
         print(f'Class: {item.__class__.__name__:30s} Log name: {item.log.name}')
 
-    curio.run(start_server, ioc.pvdb)
+    trio.run(start_server, ioc.pvdb)

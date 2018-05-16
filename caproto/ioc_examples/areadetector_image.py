@@ -3,11 +3,11 @@ import logging
 import sys
 import numpy as np
 
-import curio
+import trio
 
 import ophyd
 
-from caproto.curio.server import start_server
+from caproto.trio.server import start_server
 from caproto.server import (PVGroup, pvproperty, SubGroup, get_pv_pair_wrapper)
 from caproto.server.conversion import ophyd_device_to_caproto_ioc
 
@@ -328,4 +328,4 @@ if __name__ == '__main__':
     print('The whole Detector pvdb:')
     pprint(detector_ioc.pvdb)
 
-    curio.run(start_server, detector_ioc.pvdb)
+    trio.run(start_server, detector_ioc.pvdb)

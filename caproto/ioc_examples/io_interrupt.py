@@ -7,10 +7,10 @@ import logging
 import threading
 import atexit
 
-import curio
+import trio
 
 from caproto.benchmarking import set_logging_level
-from caproto.curio.server import start_server
+from caproto.trio.server import start_server
 from caproto.server import pvproperty, PVGroup
 
 
@@ -99,4 +99,4 @@ if __name__ == '__main__':
     print(f'IO interrupt prefix is {prefix}')
     set_logging_level(logging.DEBUG)
     ioc = IOInterruptIOC(prefix=prefix, macros={})
-    curio.run(start_server, ioc.pvdb)
+    trio.run(start_server, ioc.pvdb)

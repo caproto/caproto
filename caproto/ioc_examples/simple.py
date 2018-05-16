@@ -11,9 +11,9 @@ class SimpleIOC(PVGroup):
 if __name__ == '__main__':
     # usage: simple.py [PREFIX]
     import sys
-    import curio
+    import trio
     import logging
-    from caproto.curio.server import start_server
+    from caproto.trio.server import start_server
 
     try:
         prefix = sys.argv[1]
@@ -28,5 +28,5 @@ if __name__ == '__main__':
     logging.basicConfig()
     ioc.log.setLevel('DEBUG')
 
-    # Run IOC using curio.
-    curio.run(start_server(ioc.pvdb))
+    # Run IOC using trio.
+    trio.run(start_server, ioc.pvdb)

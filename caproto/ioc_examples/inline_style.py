@@ -27,8 +27,8 @@ class InlineStyleIOC(PVGroup):
 if __name__ == '__main__':
     # usage: inline_style.py <PREFIX>
     import sys
-    import curio
-    from caproto.curio.server import start_server
+    import trio
+    from caproto.trio.server import start_server
 
     try:
         prefix = sys.argv[1]
@@ -39,5 +39,5 @@ if __name__ == '__main__':
     ioc = InlineStyleIOC(prefix=prefix)
     print('PVs:', list(ioc.pvdb))
 
-    # Run IOC using curio.
-    curio.run(start_server(ioc.pvdb))
+    # Run IOC using trio.
+    trio.run(start_server, ioc.pvdb)

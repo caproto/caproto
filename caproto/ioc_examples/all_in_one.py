@@ -2,7 +2,7 @@
 import logging
 
 from caproto.benchmarking import set_logging_level
-from caproto.curio.server import start_server
+from caproto.trio.server import start_server
 from caproto.server import (pvproperty, PVGroup)
 
 
@@ -63,7 +63,7 @@ class MyPVGroup(PVGroup):
 
 if __name__ == '__main__':
     # usage: all_in_one.py [PREFIX] [MACRO]
-    import curio
+    import trio
     from pprint import pprint
     import sys
 
@@ -92,4 +92,4 @@ if __name__ == '__main__':
     # here is the auto-generated pvdb:
     pprint(ioc.pvdb)
 
-    curio.run(start_server, ioc.pvdb)
+    trio.run(start_server, ioc.pvdb)
