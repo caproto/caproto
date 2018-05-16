@@ -513,7 +513,15 @@ class Context:
                                          self.host)
             bytes_to_send = self.broadcaster.send(beacon)
             for addr_port in addresses:
-                await self.udp_sock.sendto(bytes_to_send, addr_port)
+                try:
+                    await self.udp_sock.sendto(bytes_to_send, addr_port)
+                except IOError:
+                    logger.exception("Failed to send beacon to %r. Try "
+                                     "setting "
+                                     "EPICS_CAS_BEACON_AUTO_ADDR_LIST=no and "
+                                     "EPICS_CAS_BEACON_ADDR_LIST=<addresses>.",
+                                     addr_port)
+                    raise
             self.beacon_count += 1
             await trio.sleep(beacon_period)
 
