@@ -215,7 +215,7 @@ def read(chan, timeout, pvrequest):
     interface_req = chan.read_interface()
     send(chan.circuit, interface_req)
 
-    init_req = chan.read_init(pvrequest_if=pvrequest)
+    init_req = chan.read_init(pvrequest=pvrequest)
     ioid = init_req.ioid
 
     send(chan.circuit, init_req)

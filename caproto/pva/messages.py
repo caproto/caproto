@@ -200,7 +200,11 @@ class MessageBase:
             if field_info.type == 'PVRequest':
                 if not value:
                     value = default_pvrequest
-                struct = pvrequest_string_to_structure(value)
+
+                if isinstance(value, str):
+                    struct = pvrequest_string_to_structure(value)
+                else:
+                    struct = value
                 interfaces[field_info.data_field] = struct
             elif field_info.type == 'PVField':
                 interface = interfaces[field_info.name]

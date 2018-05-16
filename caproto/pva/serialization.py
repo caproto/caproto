@@ -578,11 +578,14 @@ def serialize_pvrequest(req, instruct_to_cache=True,
                         *, endian, cache):
     'Serialize a PVRequest - string or structure'
     from .pvrequest import (pvrequest_string_to_structure,
-                            pvrequest_to_structure)
+                            pvrequest_to_structure, PVRequest)
     if isinstance(req, str):
         desc = pvrequest_string_to_structure(req)
-    else:
+    elif isinstance(req, PVRequest):
         desc = pvrequest_to_structure(req)
+    else:
+        assert isinstance(req, dict)
+        desc = req
     return serialize_introspection_data(
         desc, instruct_to_cache=instruct_to_cache, endian=endian, cache=cache)
 

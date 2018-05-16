@@ -4,7 +4,7 @@
 import itertools
 import logging
 
-from .introspection import summarize_field_info
+from .introspection import summarize_field_info, field_description_to_value_dict
 from .const import SYS_ENDIAN, LITTLE_ENDIAN, BIG_ENDIAN
 from .messages import (basic_types, DirectionFlag, ApplicationCommands, ControlCommands,
                        EndianSetting, read_from_bytestream, messages_grouped,
@@ -29,6 +29,7 @@ from .utils import (CLIENT, SERVER, NEED_DATA, DISCONNECTED,
                     )
 from .serialization import SerializeCache
 from .._utils import ThreadsafeCounter
+from .pvrequest import (pvrequest_string_to_structure, pvrequest_to_structure)
 
 
 class VirtualCircuit:
@@ -508,7 +509,7 @@ class ClientChannel(_BaseChannel):
                    sub_field_name=sub_field_name,
                    )
 
-    def read_init(self, *, ioid=None, pvrequest_if=None, pvrequest=None):
+    def read_init(self, *, ioid=None, pvrequest=None):
         """
         Generate a valid :class:`ChannelGetRequest`.
 
@@ -522,10 +523,20 @@ class ClientChannel(_BaseChannel):
         -------
         ChannelGetRequest
         """
-        # if pvrequest_if is None:
-        # TODO
-        pvrequest_if = 'field(value)'
-        pvrequest = dict(field=dict(value=None))
+        if pvrequest is None:
+            pvrequest = 'field(value)'
+
+        # TODO pvrequest handling is, overall, rather awkward
+        if isinstance(pvrequest, str):
+            pvrequest_if = pvrequest_string_to_structure(pvrequest)
+        else:
+            pvrequest_if = pvrequest_to_structure(pvrequest)
+
+        pvrequest_data = field_description_to_value_dict(
+            pvrequest_if, user_types={})
+        print()
+        print(pvrequest, pvrequest_if)
+        print(pvrequest_data)
 
         if ioid is None:
             ioid = self.circuit.new_ioid()
@@ -535,7 +546,7 @@ class ClientChannel(_BaseChannel):
                    ioid=ioid,
                    subcommand=GetSubcommands.INIT,
                    pv_request_if=pvrequest_if,
-                   pv_request=pvrequest,
+                   pv_request=pvrequest_data,
                    )
 
     def read(self, ioid, interface):
@@ -594,20 +605,10 @@ class ServerChannel(_BaseChannel):
 
         Parameters
         ----------
-        native_data_type : a :class:`DBR_TYPE` or its designation integer ID
-            Default Channel Access data type.
-        native_data_count : integer
-            Default number of values
-        sid : integer
-            server-allocated sid
 
         Returns
         -------
-        CreateChanResponse
         """
-        command = CreateChanResponse(native_data_type, native_data_count,
-                                     self.cid, sid)
-        return command
 
     def create_fail(self):
         """
@@ -617,8 +618,6 @@ class ServerChannel(_BaseChannel):
         -------
         CreateChFailResponse
         """
-        command = CreateChFailResponse(self.cid)
-        return command
 
     def read(self, data, ioid, data_type=None, data_count=None, status=1, *,
              metadata=None):
@@ -629,27 +628,10 @@ class ServerChannel(_BaseChannel):
         ----------
         data : tuple, ``numpy.ndarray``, ``array.array``, or bytes
         ioid : integer
-        data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
-            Requested Channel Access data type. Default is the channel's
-            native data type, which can be checked in the Channel's attribute
-            :attr:`native_data_type`.
-        data_count : integer, optional
-            Requested number of values. Default is the channel's native data
-            count, which can be checked in the Channel's attribute
-            :attr:`native_data_count`.
-        status : integer, optional
-            Default is 1 (success).
-        metadata : ``ctypes.BigEndianStructure`` or tuple
-            Status and control metadata for the values
 
         Returns
         -------
-        ReadNotifyResponse
         """
-        data_type, data_count = self._fill_defaults(data_type, data_count)
-        command = ReadNotifyResponse(data, data_type, data_count, status,
-                                     ioid, metadata=metadata)
-        return command
 
     def write(self, ioid, data_type=None, data_count=None, status=1):
         """
@@ -658,24 +640,10 @@ class ServerChannel(_BaseChannel):
         Parameters
         ----------
         ioid : integer
-        data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
-            Requested Channel Access data type. Default is the channel's
-            native data type, which can be checked in the Channel's attribute
-            :attr:`native_data_type`.
-        data_count : integer, optional
-            Requested number of values. Default is the channel's native data
-            count, which can be checked in the Channel's attribute
-            :attr:`native_data_count`.
-        status : integer, optional
-            Default is 1 (success).
 
         Returns
         -------
-        WriteNotifyResponse
         """
-        data_type, data_count = self._fill_defaults(data_type, data_count)
-        command = WriteNotifyResponse(data_type, data_count, status, ioid)
-        return command
 
     def subscribe(self, data, subscriptionid, data_type=None,
                   data_count=None, status_code=32, metadata=None):
@@ -684,30 +652,10 @@ class ServerChannel(_BaseChannel):
 
         Parameters
         ----------
-        data : tuple, ``numpy.ndarray``, ``array.array``, or bytes
-        subscriptionid : integer
-        data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
-            Requested Channel Access data type. Default is the channel's
-            native data type, which can be checked in the Channel's attribute
-            :attr:`native_data_type`.
-        data_count : integer, optional
-            Requested number of values. Default is the channel's native data
-            count, which can be checked in the Channel's attribute
-            :attr:`native_data_count`.
-        status_code : integer, optional
-            Default is 32 (???).
-        metadata : ``ctypes.BigEndianStructure`` or tuple
-            Status and control metadata for the values
 
         Returns
         -------
-        EventAddResponse
         """
-        # TODO It's unclear what the status_code means here.
-        data_type, data_count = self._fill_defaults(data_type, data_count)
-        command = EventAddResponse(data, data_type, data_count, status_code,
-                                   subscriptionid, metadata=metadata)
-        return command
 
     def unsubscribe(self, subscriptionid, data_type=None):
         """
@@ -715,19 +663,10 @@ class ServerChannel(_BaseChannel):
 
         Parameters
         ----------
-        subscriptionid : integer
-        data_type : a :class:`DBR_TYPE` or its designation integer ID, optional
-            Requested Channel Access data type. Default is the channel's
-            native data type, which can be checked in the Channel's attribute
-            :attr:`native_data_type`.
 
         Returns
         -------
-        EventCancelResponse
         """
-        data_type, _ = self._fill_defaults(data_type, None)
-        command = EventCancelResponse(data_type, self.sid, subscriptionid)
-        return command
 
     def disconnect(self):
         """
@@ -737,5 +676,3 @@ class ServerChannel(_BaseChannel):
         -------
         ServerDisconnResponse
         """
-        command = ServerDisconnResponse(self.cid)
-        return command
