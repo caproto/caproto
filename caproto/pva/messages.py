@@ -7,12 +7,11 @@ from collections import namedtuple
 from .const import (LITTLE_ENDIAN, BIG_ENDIAN)
 from .types import (TypeCode, Decoded)
 from .serialization import (serialize_message_field, deserialize_message_field,
-                            SerializeCache, NullCache)
+                            NullCache)
 from .types import (c_byte, c_ubyte, c_short, c_ushort, c_int, c_uint)
 from .pvrequest import pvrequest_string_to_structure
 from . import introspection as intro
-from .utils import (ip_to_ubyte_array, ubyte_array_to_ip, CLIENT, SERVER,
-                    NEED_DATA)
+from .utils import (ip_to_ubyte_array, ubyte_array_to_ip, SERVER, NEED_DATA)
 
 
 logger = logging.getLogger(__name__)
@@ -121,8 +120,9 @@ class DirectionFlag(enum.IntEnum):
 
 
 class EndianFlag(enum.IntFlag):
-    LITTLE_ENDIAN = 0
-    BIG_ENDIAN = 1
+    # MSG_* prefix added to reduce confusion with pva.const.*_ENDIAN
+    MSG_LITTLE_ENDIAN = 0
+    MSG_BIG_ENDIAN = 1
 
 
 _flag_masks = {
@@ -161,6 +161,7 @@ def _success_condition(msg, buf):
 
 class MessageBase:
     _pack_ = 1
+    _additional_fields_ = []
 
     def __repr__(self):
         info = ', '.join('{}={!r}'.format(field, getattr(self, field))
@@ -169,17 +170,25 @@ class MessageBase:
 
     def serialize(self, *, default_pvrequest=default_pvrequest,
                   cache=NullCache):
-        if not hasattr(self, '_additional_fields_'):
+        if self._additional_fields_ is None:
+            # Without additional fields, this is just a ctypes.Structure
             return bytes(self)
+
         # TODO
         # if user_types is None:
         #     user_types = basic_types
 
-        buf = [bytes(self)]
-
-        interfaces = {}
         endian = self._ENDIAN
 
+        # (1) serialize the ctypes.Structure _fields_ first
+        buf = [bytes(self)]
+
+        # interfaces holds any field description interfaces that are defined
+        # directly in this message
+        interfaces = {}
+
+        # (2) move onto the "additional fields" which are not as easily
+        # serializable:
         for field_info in self._additional_fields_:
             if isinstance(field_info, (OptionalField, OptionalInterfaceField)):
                 if field_info.condition is not None:
@@ -210,6 +219,7 @@ class MessageBase:
                 for v in value:
                     buf.extend(_serialize(v))
 
+        # (3) end result is the sum of all buffers
         return b''.join(buf)
 
     @classmethod
@@ -228,6 +238,8 @@ class MessageBase:
         for field_info in cls._additional_fields_:
             if isinstance(field_info, (OptionalField, OptionalInterfaceField)):
                 if not buflen:
+                    # No bytes remaining, and any additional fields are
+                    # optional.
                     break
                 if field_info.condition is not None:
                     if not field_info.condition(msg, buf):
@@ -330,7 +342,7 @@ def _make_endian(cls, endian):
     endian_cls = type(name, (cls, endian_base),
                       {'_fields_': cls._fields_})
 
-    if hasattr(endian_cls, '_additional_fields_'):
+    if endian_cls._additional_fields_:
         for field_info in endian_cls._additional_fields_:
             setattr(endian_cls, field_info.name, None)
 
@@ -364,9 +376,9 @@ class MessageHeader(MessageBase):
     def flag_from_enums(message_type, direction, endian, segment):
         # be a bit lax on these for now...
         if endian == LITTLE_ENDIAN:
-            endian = EndianFlag.LITTLE_ENDIAN
+            endian = EndianFlag.MSG_LITTLE_ENDIAN
         elif endian == BIG_ENDIAN:
-            endian = EndianFlag.BIG_ENDIAN
+            endian = EndianFlag.MSG_BIG_ENDIAN
 
         values = [(MessageTypeFlag, message_type),
                   (DirectionFlag, direction),
@@ -411,7 +423,7 @@ class MessageHeader(MessageBase):
         'Byte order/endianness of message'
         rshift, mask = _flag_masks[EndianFlag]
         flag = EndianFlag((self.flags >> rshift) & mask)
-        return (LITTLE_ENDIAN if flag == EndianFlag.LITTLE_ENDIAN
+        return (LITTLE_ENDIAN if flag == EndianFlag.MSG_LITTLE_ENDIAN
                 else BIG_ENDIAN)
 
     def get_message(self, direction, *, use_fixed_byte_order=None):
@@ -975,7 +987,6 @@ def read_from_bytestream(data, role, cache, *, byte_order=None):
                                    use_fixed_byte_order=byte_order)
 
     if issubclass(msg_class, (SetByteOrder, )):
-        total_size = _MessageHeaderSize
         offset = _MessageHeaderSize
         data = memoryview(data)
         next_data = data[offset:]
