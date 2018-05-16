@@ -28,7 +28,7 @@ from caproto.pva import (CLIENT, SERVER, CONNECTED, NEED_DATA, DISCONNECTED,
                          ClientChannel, ConnectionValidationRequest,
                          ConnectionValidatedResponse, CreateChannelResponse,
                          ChannelFieldInfoResponse, ChannelGetResponse,
-                         GetSubcommands)
+                         GetSubcommands, basic_types)
 
 # __all__ = ['get', 'put', 'monitor']
 
@@ -89,8 +89,13 @@ def search(pv, logger, udp_sock, udp_port, timeout, max_retries=2):
     # TODO: host address
     b.log.setLevel(logger.level)
 
+    cache = pva.SerializeCache(ours={},
+                               theirs={},
+                               user_types=basic_types,
+                               ioid_interfaces={})
+
     def send_search(message):
-        payload = message.serialize()
+        payload = message.serialize(cache=cache)
         header = pva.MessageHeaderLE(
             message_type=MessageTypeFlag.APP_MESSAGE,
             direction=pva.DirectionFlag.FROM_CLIENT,

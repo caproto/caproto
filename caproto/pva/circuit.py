@@ -178,7 +178,7 @@ class VirtualCircuit:
                               if command._ENDIAN == LITTLE_ENDIAN
                               else MessageHeaderBE)
 
-                payload = memoryview(command.serialize())
+                payload = memoryview(command.serialize(cache=self.cache))
                 header = header_cls(message_type=MessageTypeFlag.APP_MESSAGE,
                                     direction=DirectionFlag.FROM_CLIENT,
                                     endian=command._ENDIAN,
@@ -259,7 +259,8 @@ class VirtualCircuit:
         # opposed to the Circuit as a whole:
         if isinstance(command, (CreateChannelRequest, CreateChannelResponse,
                                 ChannelFieldInfoRequest, ChannelFieldInfoResponse,
-                                ChannelDestroyRequest, ChannelDestroyResponse)):
+                                ChannelDestroyRequest, ChannelDestroyResponse,
+                                ChannelGetRequest, ChannelGetResponse)):
             if isinstance(command, CreateChannelRequest):
                 print(command.channels)
                 for info in [command.channels]:
@@ -290,15 +291,18 @@ class VirtualCircuit:
             elif isinstance(command, ChannelFieldInfoResponse):
                 self._ioids.pop(command.ioid)
             elif isinstance(command, ChannelGetRequest):
+                ioid = command.ioid
                 self._ioids[command.ioid] = chan
             elif isinstance(command, ChannelGetResponse):
                 ioid = command.ioid
                 if command.subcommand == GetSubcommands.INIT:
-                    ...
+                    interface = command.pv_structure_if
+                    self.cache.ioid_interfaces[ioid] = interface
                 elif command.subcommand == GetSubcommands.GET:
                     ...
                 elif command.subcommand == GetSubcommands.DESTROY:
                     self._ioids.pop(ioid)
+                    self.cache.ioid_interfaces.pop(ioid)
 
             # We are done. Run the Channel state change callbacks.
             for transition in transitions:
@@ -546,9 +550,8 @@ class ClientChannel(_BaseChannel):
         -------
         ChannelGetRequest
         """
-        # TODO state machine for get requests
+        # TODO state machine for get requests?
         cls = self.circuit.messages[ApplicationCommands.GET]
-        self.circuit.cache.ioid_interfaces[ioid] = interface
         return cls(server_chid=self.sid,
                    ioid=ioid,
                    subcommand=GetSubcommands.GET,
