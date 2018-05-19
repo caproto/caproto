@@ -31,11 +31,12 @@ pv_suffixes = {
 
 class ImageMonitor(QThread):
     new_image_size = pyqtSignal(int, int, str)
-    new_image = pyqtSignal(int, int, str, object)
+    new_image = pyqtSignal(float, int, int, str, object)
     errored = pyqtSignal(Exception)
 
-    def __init__(self, prefix):
+    def __init__(self, prefix, *, barrier=None):
         super().__init__()
+        self.barrier = barrier
         self.pvs = {key: f'{prefix}{suffix}'
                     for key, suffix in pv_suffixes.items()}
         print('PVs:', self.pvs)
@@ -79,14 +80,18 @@ class ImageMonitorSync(ImageMonitor):
 
             self.new_image.emit(width, height, color_mode, response.data)
 
+        if self.barrier is not None:
+            # Synchronize with image viewer widget, if necessary
+            self.barrier.wait()
+
         camonitor(self.pvs['array_data'], callback=update)
+
         self.stop_event.wait()
 
 
 class ImageMonitorThreaded(ImageMonitor):
     def _run(self):
         from caproto.threading.client import Context, SharedBroadcaster
-
         broadcaster = SharedBroadcaster(log_level='INFO')
         context = Context(broadcaster, log_level='INFO')
 
@@ -118,13 +123,71 @@ class ImageMonitorThreaded(ImageMonitor):
                     self.sub = None
                 return
 
-            self.new_image.emit(width, height, color_mode, response.data)
+            self.new_image.emit(response.metadata.timestamp, width, height,
+                                color_mode, response.data)
 
-        self.sub = self.pvs['array_data'].subscribe()
+        array_data = self.pvs['array_data']
+        dtype = ca.field_types['time'][array_data.channel.native_data_type]
+
+        if self.barrier is not None:
+            # Synchronize with image viewer widget, if necessary
+            self.barrier.wait()
+
+        self.sub = self.pvs['array_data'].subscribe(data_type=dtype)
         # NOTE: threading client requires that the callback function stays in
         # scope, as it uses a weak reference.
         self.sub.add_callback(update)
+        print('Monitor has begun')
         self.stop_event.wait()
+
+
+def show_statistics(image_times, *, plot_times=True):
+    total_images = len(image_times)
+
+    image_times = np.array(image_times)
+    frame_times = image_times[:, 0]
+    display_times = image_times[:, 1]
+    sizes = image_times[:, 2]
+
+    time_base = frame_times[0]
+    frame_times -= time_base
+    display_times -= time_base
+
+    frame_times = frame_times[:len(display_times)]
+
+    if not len(frame_times):
+        return
+
+    avg_frame = np.average(np.diff(frame_times))
+
+    total_size = np.sum(sizes)
+    title = (f'Displayed {total_images} images ({total_size // 1e6} MB) '
+             f'in {display_times[-1]:.1f} sec\n'
+             f'Frame time average from server timestamps is '
+             f'{int(avg_frame * 1000)} ms')
+    print()
+    print(title)
+
+    fig, ax1 = plt.subplots(1, 1)
+
+    max_range = avg_frame * 15
+    bins = int(max_range / 0.002)  # 2ms bins
+
+    ax1.hist((display_times - frame_times), label='IOC to screen latency', alpha=0.5,
+             range=(0.0, max_range),
+             bins=bins,
+             )
+    ax1.hist(np.diff(display_times), label='Frame-to-frame', alpha=0.5,
+             range=(0.0, max_range),
+             bins=bins,
+             )
+    ax1.set_xlabel('Time [sec]')
+    ax1.set_ylabel('Count')
+    plt.legend()
+
+    plt.suptitle(title)
+    plt.savefig('display_statistics.pdf')
+    plt.show()
 
 
 class ImageMonitorPyepics(ImageMonitor):
@@ -155,37 +218,6 @@ class ImageMonitorPyepics(ImageMonitor):
         time.sleep(0.5)
         self.sub = self.pvs['array_data'].add_callback(update)
         self.stop_event.wait()
-
-
-def show_statistics(image_times, *, plot_times=False):
-    total_images = len(image_times)
-
-    image_times = np.array(image_times)
-    times = image_times[:, 0]
-    sizes = image_times[:, 1]
-    times -= times[0]
-
-    total_size = np.sum(sizes)
-    title = (f'Displayed {total_images} images ({total_size // 1e6} MB) in '
-             f'{times[-1]:.2f} seconds')
-    print(title)
-
-    if plot_times:
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 8))
-
-        ax2.plot(times, sizes, 'o', markersize=0.25)
-        ax2.set_xlabel('Elapsed time [sec]')
-        ax2.set_ylabel('Image size [bytes]')
-    else:
-        fig, ax1 = plt.subplots(1, 1, figsize=(8, 8))
-
-    ax1.hist(np.diff(times), )
-    ax1.set_xlabel('Delta time [sec]')
-    ax1.set_ylabel('Count')
-
-    plt.suptitle(title)
-    plt.savefig('display_statistics.pdf')
-    plt.show()
 
 
 class ImageViewer(QWidget):
@@ -239,10 +271,10 @@ class ImageViewer(QWidget):
         self.resize(width, height)
         self.status_label.setText(f'Image: {width}x{height} ({color_mode})')
 
-    @pyqtSlot(int, int, str, object)
-    def display_image(self, width, height, color_mode, array_data):
-        print(width, height, color_mode, len(array_data), array_data[:5],
-              array_data.dtype)
+    @pyqtSlot(float, int, int, str, object)
+    def display_image(self, timestamp, width, height, color_mode, array_data):
+        print(timestamp, width, height, color_mode, len(array_data),
+              array_data[:5], array_data.dtype)
 
         self.image = QtGui.QImage(array_data, width, height,
                                   self.image_formats[color_mode],
@@ -250,6 +282,10 @@ class ImageViewer(QWidget):
         self.pixmap = QtGui.QPixmap.fromImage(self.image)
         self.image_label.setPixmap(self.pixmap)
         self.image_times.append((time.monotonic(), array_data.size))
+
+    def keyPressEvent(self, event):
+        if event.key() == QtCore.Qt.Key_Escape:
+            self.close()
 
 
 if __name__ == '__main__':
