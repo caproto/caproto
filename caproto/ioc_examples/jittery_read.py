@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-from caproto.server import pvproperty, PVGroup
+from caproto.server import (pvproperty, PVGroup, SubGroup)
 import numpy as np
 import time
 import functools
 import math
+
 
 def _arrayify(func):
     @functools.wraps(func)
@@ -12,14 +13,26 @@ def _arrayify(func):
     return inner
 
 
-class JitterRead(PVGroup):
-    """
-    When a PV is read add some noise.
-    """
+class _JitterDetector(PVGroup):
 
-    N_per_I_per_s = 200
+    async def read(self, instance):
+        await self._read(instance)
 
-    async def pin_hole_read(self, instance):
+    async def clip_write(self, instance, value):
+        value = np.clip(value, a_min=0, a_max=None)
+        return value
+
+    det = pvproperty(get=read, value=[0],
+                     dtype=float,
+                     read_only=True)
+    mtr = pvproperty(value=[0], dtype=float)
+
+    exp = pvproperty(put=clip_write, value=[1], dtype=float)
+
+
+class PinHole(_JitterDetector):
+
+    async def _read(self, instance):
 
         sigma = 5
         center = 0
@@ -27,26 +40,17 @@ class JitterRead(PVGroup):
 
         @_arrayify
         def jitter_read(m, e, I):
-            N = (self.N_per_I_per_s * I * e *
+            N = (self.parent.N_per_I_per_s * I * e *
                  np.exp(c * (m - center)**2))
             return np.random.poisson(N)
 
-        return jitter_read(self.ph_mtr.value,
-                           self.ph_exp.value,
-                           self.current.value)
+        return jitter_read(self.mtr.value,
+                           self.exp.value,
+                           self.parent.current.value)
 
-    async def clip_write(self, instance, value):
-        value = np.clip(value, a_min=0, a_max=None)
-        return value
 
-    ph_det = pvproperty(get=pin_hole_read, value=[0],
-                        dtype=float,
-                        read_only=True)
-    ph_mtr = pvproperty(value=[0], dtype=float)
-
-    ph_exp = pvproperty(put=clip_write, value=[1], dtype=float)
-
-    async def edge_read(self, instance):
+class Edge(_JitterDetector):
+    async def _read(self, instance):
 
         sigma = 2.5
         center = 5
@@ -55,23 +59,39 @@ class JitterRead(PVGroup):
         @_arrayify
         def jitter_read(m, e, I):
             s = math.erfc(c * (-m[0] + center)) / 2
-            N = (self.N_per_I_per_s * I * e * s)
+            N = (self.parent.N_per_I_per_s * I * e * s)
             return np.random.poisson(N)
 
         return jitter_read(self.edge_mtr.value,
                            self.edge_exp.value,
-                           self.current.value)
+                           self.parent.current.value)
 
-    async def clip_write(self, instance, value):
-        value = np.clip(value, a_min=0, a_max=None)
-        return value
 
-    edge_det = pvproperty(get=edge_read, value=[0],
-                          dtype=float,
-                          read_only=True)
-    edge_mtr = pvproperty(value=[0], dtype=float)
+class Slit(_JitterDetector):
+    async def _read(self, instance):
 
-    edge_exp = pvproperty(put=clip_write, value=[1], dtype=float)
+        sigma = 2.5
+        center = 5
+        c = 1 / sigma
+
+        @_arrayify
+        def jitter_read(m, e, I):
+            s = (math.erfc(c * (-m[0] + center)) / 2 +
+                 math.erfc(c * (-m[0] - center)) / 2)
+            N = (self.parent.N_per_I_per_s * I * e * s)
+            return np.random.poisson(N)
+
+        return jitter_read(self.edge_mtr.value,
+                           self.edge_exp.value,
+                           self.parent.current.value)
+
+
+class JitterRead(PVGroup):
+    """
+    When a PV is read add some noise.
+    """
+
+    N_per_I_per_s = 200
 
     current = pvproperty(value=[500], dtype=float, read_only=True)
 
@@ -82,6 +102,10 @@ class JitterRead(PVGroup):
             t = time.monotonic()
             await instance.write(value=[500 + 25*np.sin(t * f)])
             await async_lib.library.sleep(.05)
+
+    ph = SubGroup(PinHole)
+    edge = SubGroup(Edge)
+    slit = SubGroup(Slit)
 
 
 if __name__ == '__main__':
