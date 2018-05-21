@@ -16,7 +16,7 @@ def _arrayify(func):
 class _JitterDetector(PVGroup):
 
     async def read(self, instance):
-        await self._read(instance)
+        return (await self._read(instance))
 
     async def clip_write(self, instance, value):
         value = np.clip(value, a_min=0, a_max=None)
@@ -62,8 +62,8 @@ class Edge(_JitterDetector):
             N = (self.parent.N_per_I_per_s * I * e * s)
             return np.random.poisson(N)
 
-        return jitter_read(self.edge_mtr.value,
-                           self.edge_exp.value,
+        return jitter_read(self.mtr.value,
+                           self.exp.value,
                            self.parent.current.value)
 
 
@@ -71,18 +71,19 @@ class Slit(_JitterDetector):
     async def _read(self, instance):
 
         sigma = 2.5
-        center = 5
+        center = 7.5
         c = 1 / sigma
 
         @_arrayify
         def jitter_read(m, e, I):
-            s = (math.erfc(c * (-m[0] + center)) / 2 +
-                 math.erfc(c * (-m[0] - center)) / 2)
+            s = (math.erfc(c * (m[0] - center)) -
+                 math.erfc(c * (m[0] + center))) / 2
+
             N = (self.parent.N_per_I_per_s * I * e * s)
             return np.random.poisson(N)
 
-        return jitter_read(self.edge_mtr.value,
-                           self.edge_exp.value,
+        return jitter_read(self.mtr.value,
+                           self.exp.value,
                            self.parent.current.value)
 
 
