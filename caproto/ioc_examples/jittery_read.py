@@ -87,6 +87,53 @@ class Slit(_JitterDetector):
                            self.parent.current.value)
 
 
+class MovingDot(PVGroup):
+    N = 480
+    M = 640
+
+    sigmax = 50
+    sigmay = 25
+
+    background = 1000
+
+    Xcen = Ycen = 0
+
+    async def read(self, instance):
+        N = self.N
+        M = self.M
+        back = np.random.poisson(self.background, (N, M))
+        x = self.mtrx.value[0]
+        y = self.mtry.value[0]
+
+        Y, X = np.ogrid[:N, :M]
+
+        X = X - M/2 + x
+        Y = Y - N/2 + y
+
+        X /= self.sigmax
+        Y /= self.sigmay
+
+        dot = np.exp(-(X**2 + Y**2)/2)
+
+        I = self.parent.current.value
+        e = self.exp.value
+        measured = (self.parent.N_per_I_per_s * dot * e * I)
+
+        return (back + np.random.poisson(measured)).ravel()
+
+    det = pvproperty(get=read, value=[0]*N*M,
+                     dtype=float,
+                     read_only=True)
+    mtrx = pvproperty(value=[0], dtype=float)
+    mtry = pvproperty(value=[0], dtype=float)
+
+    async def clip_write(self, instance, value):
+        value = np.clip(value, a_min=0, a_max=None)
+        return value
+
+    exp = pvproperty(put=clip_write, value=[1], dtype=float)
+
+
 class JitterRead(PVGroup):
     """
     When a PV is read add some noise.
@@ -108,6 +155,7 @@ class JitterRead(PVGroup):
     edge = SubGroup(Edge)
     slit = SubGroup(Slit)
 
+    dot = SubGroup(MovingDot)
 
 if __name__ == '__main__':
     # usage: jitter_read.py [PREFIX]
