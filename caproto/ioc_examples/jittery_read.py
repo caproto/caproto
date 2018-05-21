@@ -102,6 +102,8 @@ class MovingDot(PVGroup):
         N = self.N
         M = self.M
         back = np.random.poisson(self.background, (N, M))
+        if not self.shutter_open.value:
+            return back.ravel()
         x = self.mtrx.value[0]
         y = self.mtry.value[0]
 
@@ -132,6 +134,7 @@ class MovingDot(PVGroup):
         return value
 
     exp = pvproperty(put=clip_write, value=[1], dtype=float)
+    shutter_open = pvproperty(value=[1], dtype=int)
 
 
 class JitterRead(PVGroup):
