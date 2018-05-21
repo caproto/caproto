@@ -136,11 +136,11 @@ class MovingDot(PVGroup):
     exp = pvproperty(put=clip_write, value=[1], dtype=float)
     shutter_open = pvproperty(value=[1], dtype=int)
 
-    ArraySizeY_RBV = pvproperty(value=[N], dtype=float,
+    ArraySizeY_RBV = pvproperty(value=[N], dtype=int,
                                 read_only=True)
-    ArraySizeX_RBV = pvproperty(value=[M], dtype=float,
+    ArraySizeX_RBV = pvproperty(value=[M], dtype=int,
                                 read_only=True)
-    ArraySize_RBV = pvproperty(value=[N, M], dtype=float,
+    ArraySize_RBV = pvproperty(value=[N, M], dtype=int,
                                read_only=True)
 
 
