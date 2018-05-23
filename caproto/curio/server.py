@@ -512,7 +512,7 @@ class Context:
                 except IOError:
                     logger.exception("Failed to send beacon to %r. Try "
                                      "setting "
-                                     "EPICS_CAS_BEACON_AUTO_ADDR_LIST=no and "
+                                     "EPICS_CAS_AUTO_BEACON_ADDR_LIST=no and "
                                      "EPICS_CAS_BEACON_ADDR_LIST=<addresses>.",
                                      addr_port)
                     raise
