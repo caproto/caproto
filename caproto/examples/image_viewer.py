@@ -10,8 +10,9 @@ import matplotlib.pyplot as plt
 
 from PyQt5.QtWidgets import (QApplication, QWidget, QLabel,
                              QVBoxLayout)
-from PyQt5 import QtGui
+from PyQt5 import QtGui, QtCore
 from PyQt5.QtCore import QThread, pyqtSlot, pyqtSignal
+from caproto import ChannelType
 
 
 pv_suffixes = {
@@ -25,13 +26,45 @@ pv_suffixes = {
     'array_size0': 'image1:ArraySize0_RBV',
     'array_size1': 'image1:ArraySize1_RBV',
     'array_size2': 'image1:ArraySize2_RBV',
-    'color_mode': 'image1:ColorMode_RBV'
+    'color_mode': 'image1:ColorMode_RBV',
+    'bayer_pattern': 'image1:BayerPattern_RBV',
 }
 
 
+def get_image_size(width, height, depth, color_mode):
+    # TODO all wrong
+    if color_mode == 'Mono':
+        return (width, height)
+    elif color_mode == 'RGB1':
+        return (height, depth)
+    elif color_mode == 'RGB2':
+        return (width, depth)
+    elif color_mode == 'RGB3':
+        return (width, height)
+
+
+def get_array_dimensions(width, height, depth, color_mode):
+    width, height, depth = (sz if sz else 1
+                            for sz in (width, height, depth))
+
+    if color_mode == 'Mono':
+        return (width, height, depth)
+    elif color_mode == 'RGB1':
+        return (width, height, depth)
+    elif color_mode == 'RGB2':
+        return (width, 3, depth)
+    elif color_mode == 'RGB3':
+        return (width, height, 3)
+
+
 class ImageMonitor(QThread):
-    new_image_size = pyqtSignal(int, int, str)
-    new_image = pyqtSignal(float, int, int, str, object)
+    # new_image_size: width, height, depth, color_mode, bayer_pattern
+    new_image_size = pyqtSignal(int, int, int, str, str)
+
+    # new_image: timestamp, width, height, depth, color_mode, bayer_pattern,
+    #            ChannelType, array_data
+    new_image = pyqtSignal(float, int, int, int, str, str, object, object)
+
     errored = pyqtSignal(Exception)
 
     def __init__(self, prefix, *, barrier=None):
@@ -68,24 +101,31 @@ class ImageMonitorSync(ImageMonitor):
 
         width = caget(self.pvs['array_size0']).data[0]
         height = caget(self.pvs['array_size1']).data[0]
+        depth = caget(self.pvs['array_size2']).data[0]
         color_mode = caget(self.pvs['color_mode']).data[0].decode('ascii')
+        bayer_pattern = caget(self.pvs['bayer_pattern'])
+        bayer_pattern = bayer_pattern.data[0].decode('ascii')
 
-        self.new_image_size.emit(width, height, color_mode)
+        self.new_image_size.emit(width, height, depth, color_mode,
+                                 bayer_pattern)
 
-        print(f'width: {width} height: {height} color_mode: {color_mode}')
+        print(f'width: {width} height: {height} depth: {depth} '
+              f'color_mode: {color_mode}')
 
         def update(pv_name, response):
             if self.stop_event.is_set():
                 raise KeyboardInterrupt
 
-            self.new_image.emit(width, height, color_mode, response.data)
+            native_type = ca.field_types['native'][response.data_type]
+            # TODO server timestamps
+            self.new_image.emit(time.time(), width, height, depth, color_mode,
+                                bayer_pattern, native_type, response.data)
 
         if self.barrier is not None:
             # Synchronize with image viewer widget, if necessary
             self.barrier.wait()
 
         camonitor(self.pvs['array_data'], callback=update)
-
         self.stop_event.wait()
 
 
@@ -107,14 +147,21 @@ class ImageMonitorThreaded(ImageMonitor):
 
         width = self.pvs['array_size0'].read().data[0]
         height = self.pvs['array_size1'].read().data[0]
+        depth = self.pvs['array_size2'].read().data[0]
 
         color_mode = self.pvs['color_mode'].read(
             data_type=ca.ChannelType.STRING)
         color_mode = color_mode.data[0].decode('ascii')
 
-        self.new_image_size.emit(width, height, color_mode)
+        bayer_pattern = self.pvs['bayer_pattern'].read(
+            data_type=ca.ChannelType.STRING)
+        bayer_pattern = bayer_pattern.data[0].decode('ascii')
 
-        print(f'width: {width} height: {height} color_mode: {color_mode}')
+        self.new_image_size.emit(width, height, depth, color_mode,
+                                 bayer_pattern)
+
+        print(f'width: {width} height: {height} depth: {depth} '
+              f'color_mode: {color_mode}')
 
         def update(response):
             if self.stop_event.is_set():
@@ -123,8 +170,10 @@ class ImageMonitorThreaded(ImageMonitor):
                     self.sub = None
                 return
 
+            native_type = ca.field_types['native'][response.data_type]
             self.new_image.emit(response.metadata.timestamp, width, height,
-                                color_mode, response.data)
+                                depth, color_mode, bayer_pattern,
+                                native_type, response.data)
 
         array_data = self.pvs['array_data']
         dtype = ca.field_types['time'][array_data.channel.native_data_type]
@@ -192,8 +241,11 @@ def show_statistics(image_times, *, plot_times=True):
 
 class ImageMonitorPyepics(ImageMonitor):
     def _run(self):
-        from epics import PV
-        self.pvs = {key: PV(pv, auto_monitor=True)
+        import epics
+
+        self.epics = epics
+        epics.ca.use_initial_context()
+        self.pvs = {key: epics.PV(pv, auto_monitor=True)
                     for key, pv in self.pvs.items()}
         for pv in self.pvs.values():
             pv.wait_for_connection()
@@ -204,18 +256,31 @@ class ImageMonitorPyepics(ImageMonitor):
 
         width = self.pvs['array_size0'].get()
         height = self.pvs['array_size1'].get()
+        depth = self.pvs['array_size2'].get()
 
         color_mode = self.pvs['color_mode'].get(as_string=True)
-        self.new_image_size.emit(width, height, color_mode)
+        bayer_pattern = self.pvs['bayer_pattern'].get(as_string=True)
+
+        self.new_image_size.emit(width, height, depth, color_mode,
+                                 bayer_pattern)
+
+        native_type = self.epics.ca.native_type
 
         def update(value=None, **kw):
             if self.stop_event.is_set():
                 self.pvs['array_data'].remove_callback(self.sub)
                 return
 
-            self.new_image.emit(width, height, color_mode, value)
+            field_type = self.pvs['array_data']._args['ftype']
+            self.new_image.emit(time.time(), width, height, depth, color_mode,
+                                bayer_pattern,
+                                ChannelType(native_type(field_type)),
+                                value)
 
-        time.sleep(0.5)
+        if self.barrier is not None:
+            # Synchronize with image viewer widget, if necessary
+            self.barrier.wait()
+
         self.sub = self.pvs['array_data'].add_callback(update)
         self.stop_event.wait()
 
@@ -237,7 +302,7 @@ class ImageViewer(QWidget):
         self.pixmap = None
         self.image_times = []
         self.image_formats = {
-            'Mono': QtGui.QImage.Format_Grayscale8,
+            ('Mono', ChannelType.CHAR): QtGui.QImage.Format_Grayscale8,
             # TODO: others could be implemented
         }
 
@@ -266,22 +331,22 @@ class ImageViewer(QWidget):
         self.status_label.setText(f'{ex.__class__.__name__}: {ex}')
         print(repr(ex))
 
-    @pyqtSlot(int, int, str)
-    def image_resized(self, width, height, color_mode):
+    @pyqtSlot(int, int, int, str, str)
+    def image_resized(self, width, height, depth, color_mode, bayer_pattern):
         self.resize(width, height)
         self.status_label.setText(f'Image: {width}x{height} ({color_mode})')
 
-    @pyqtSlot(float, int, int, str, object)
-    def display_image(self, timestamp, width, height, color_mode, array_data):
+    @pyqtSlot(float, int, int, int, str, str, object, object)
+    def display_image(self, timestamp, width, height, depth, color_mode,
+                      bayer_pattern, data_type, array_data):
         print(timestamp, width, height, color_mode, len(array_data),
               array_data[:5], array_data.dtype)
 
-        self.image = QtGui.QImage(array_data, width, height,
-                                  self.image_formats[color_mode],
-                                  )
+        image_format = self.image_formats[(color_mode, data_type)]
+        self.image = QtGui.QImage(array_data, width, height, image_format)
         self.pixmap = QtGui.QPixmap.fromImage(self.image)
         self.image_label.setPixmap(self.pixmap)
-        self.image_times.append((time.monotonic(), array_data.size))
+        self.image_times.append((timestamp, time.time(), array_data.nbytes))
 
     def keyPressEvent(self, event):
         if event.key() == QtCore.Qt.Key_Escape:

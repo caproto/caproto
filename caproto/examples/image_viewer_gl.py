@@ -13,7 +13,11 @@ import threading
 
 from PyQt5.QtCore import pyqtSlot
 from caproto.examples.image_viewer import (ImageMonitorThreaded,
-                                           show_statistics)
+                                           show_statistics,
+                                           get_image_size,
+                                           get_array_dimensions)
+
+from caproto import ChannelType
 
 
 def setup_vertex_buffer(gl, data, shader, shader_variable):
@@ -82,8 +86,58 @@ def bind(*objs, args=None):
 
 class ImageViewerWidget(QOpenGLWidget):
     image_formats = {
-        'Mono': ('GL_RED', 'GL_UNSIGNED_BYTE'),
-        # TODO: others could be implemented
+        # Monochromatic image
+        ('Mono', ChannelType.CHAR): ('GL_RED', 'GL_UNSIGNED_BYTE'),
+        ('Mono', ChannelType.INT): ('GL_RED', 'GL_UNSIGNED_SHORT'),
+        ('Mono', ChannelType.LONG): ('GL_RED', 'GL_UNSIGNED_INT'),
+        ('Mono', ChannelType.FLOAT): ('GL_RED', 'GL_FLOAT'),
+        ('Mono', ChannelType.DOUBLE): ('GL_RED', 'GL_DOUBLE'),
+
+        # RGB image with pixel color interleave, data array is [3, NX, NY]
+        ('RGB1', ChannelType.CHAR): ('GL_RGB', 'GL_UNSIGNED_BYTE'),
+        ('RGB1', ChannelType.INT): ('GL_RGB', 'GL_UNSIGNED_SHORT'),
+        ('RGB1', ChannelType.LONG): ('GL_RGB', 'GL_UNSIGNED_INT'),
+        ('RGB1', ChannelType.FLOAT): ('GL_RGB', 'GL_FLOAT'),
+        ('RGB1', ChannelType.DOUBLE): ('GL_RGB', 'GL_DOUBLE'),
+
+        # RGB image with line/row color interleave, data array is [NX, 3, NY]
+        ('RGB2', ChannelType.CHAR): ('GL_RGB', 'GL_UNSIGNED_BYTE'),
+        ('RGB2', ChannelType.INT): ('GL_RGB', 'GL_UNSIGNED_SHORT'),
+        ('RGB2', ChannelType.LONG): ('GL_RGB', 'GL_UNSIGNED_INT'),
+        ('RGB2', ChannelType.FLOAT): ('GL_RGB', 'GL_FLOAT'),
+        ('RGB2', ChannelType.DOUBLE): ('GL_RGB', 'GL_DOUBLE'),
+
+        # # RGB image with plane color interleave, data array is [NX, NY, 3]
+        ('RGB3', ChannelType.CHAR): ('GL_RGB', 'GL_UNSIGNED_BYTE'),
+        ('RGB3', ChannelType.INT): ('GL_RGB', 'GL_UNSIGNED_SHORT'),
+        ('RGB3', ChannelType.LONG): ('GL_RGB', 'GL_UNSIGNED_INT'),
+        ('RGB3', ChannelType.FLOAT): ('GL_RGB', 'GL_FLOAT'),
+        ('RGB3', ChannelType.DOUBLE): ('GL_RGB', 'GL_DOUBLE'),
+
+        # TODO need a shader to support Bayer and YUV formats.
+
+        # # Bayer pattern image, 1 value per pixel, with color filter on detector
+        # 'Bayer': (np.uint8, 'GL_RED', 'GL_UNSIGNED_BYTE'),
+
+        # # YUV image, 3 bytes encodes 1 RGB pixel
+        # 'YUV444': (np., 'GL_RED', 'GL_UNSIGNED_BYTE'),
+
+        # # YUV image, 4 bytes encodes 2 RGB pixel
+        # 'YUV422': (np., 'GL_RED', 'GL_UNSIGNED_BYTE'),
+
+        # # YUV image, 6 bytes encodes 4 RGB pixels
+        # 'YUV421': (np., 'GL_RED', 'GL_UNSIGNED_BYTE'),
+    }
+
+    bayer_patterns = {
+        # First line RGRG, second line GBGB...
+        "RGGB": '',
+        # First line GBGB, second line RGRG...
+        "GBRG": '',
+        # First line GRGR, second line BGBG...
+        "GRBG": '',
+        # First line BGBG, second line GRGR...
+        "BGGR": '',
     }
 
     vertex_src = """\
@@ -212,19 +266,22 @@ class ImageViewerWidget(QOpenGLWidget):
     def monitor_errored(self, ex):
         self.title = repr(ex)
 
-    @pyqtSlot(int, int, str)
-    def image_resized(self, width, height, color_mode):
+    @pyqtSlot(int, int, int, str, str)
+    def image_resized(self, width, height, depth, color_mode, bayer_pattern):
+        width, height = get_image_size(width, height, depth, color_mode)
         self.resize(width, height)
 
-    @pyqtSlot(float, int, int, str, object)
-    def display_image(self, frame_timestamp, width, height, color_mode,
-                      array_data):
-
+    @pyqtSlot(float, int, int, int, str, str, object, object)
+    def display_image(self, frame_timestamp, width, height, depth, color_mode,
+                      bayer_pattern, dtype, array_data):
         if not self.gl_initialized:
             return
 
-        depth = 1
-        array_data = array_data.reshape((width, height, depth))  # .astype(np.uint8)
+        format, type_ = self.image_formats[(color_mode, dtype)]
+
+        width, height, depth = get_array_dimensions(width, height, depth,
+                                                    color_mode)
+        array_data = array_data.reshape((width, height, depth))
 
         self.makeCurrent()
         self.mapped_image = initialize_pbo(self.image_pbo, array_data,
@@ -232,15 +289,15 @@ class ImageViewerWidget(QOpenGLWidget):
         update_pbo_texture(self.gl, self.image_pbo, self.image_texture,
                            array_data=array_data,
                            texture_format=self.gl.GL_RGB32F,
-                           source_format=self.gl.GL_RED,
-                           source_type=self.gl.GL_UNSIGNED_BYTE)
+                           source_format=format,
+                           source_type=type_)
         self.update()
 
         if not len(self.image_times) and (time.time() - frame_timestamp > 1):
             print('(TODO) Ignoring old frame for statistics')
             return
 
-        self.image_times.append((frame_timestamp, time.time(), array_data.size))
+        self.image_times.append((frame_timestamp, time.time(), array_data.nbytes))
 
     def initializeGL(self):
         self.gl = self.context().versionFunctions(self.version_profile)
@@ -376,7 +433,13 @@ class ImageViewerWidget(QOpenGLWidget):
 
 
 if __name__ == '__main__':
+    try:
+        prefix = sys.argv[1]
+    except IndexError:
+        prefix = '13SIM1:'
+
+    print(f'Prefix: {prefix} Backend: Threaded/GL')
     app = QtWidgets.QApplication(sys.argv)
-    win = ImageViewerWidget(prefix='13SIM1:')
+    win = ImageViewerWidget(prefix=prefix)
     win.show()
     app.exec_()
