@@ -550,7 +550,8 @@ class SharedBroadcaster:
                 elif isinstance(command, ca.SearchResponse):
                     cid = command.cid
                     try:
-                        name, queue = unanswered_searches.pop(cid)
+                        with self._search_lock:
+                            name, queue = unanswered_searches.pop(cid)
                     except KeyError:
                         # This is a redundant response, which the EPICS
                         # spec tells us to ignore. (The first responder
@@ -596,7 +597,8 @@ class SharedBroadcaster:
             t = time.monotonic()
             # Listify just so we can count the number of items and print a more
             # informative debug message.
-            items = list(self.unanswered_searches.items())
+            with self._search_lock:
+                items = list(self.unanswered_searches.items())
             requests = (ca.SearchRequest(name, search_id, 13)
                         for search_id, (name, _) in items)
 
