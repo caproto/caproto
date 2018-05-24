@@ -3,7 +3,7 @@
 import curio
 from collections import defaultdict
 import caproto.curio.server as ccs
-from caproto import ChannelData, ChannelString
+from caproto import ChannelData, ChannelString, ChannelEnum
 import re
 
 PLUGIN_TYPE_PVS = [
@@ -14,7 +14,6 @@ PLUGIN_TYPE_PVS = [
     (re.compile('Over\\d:'), 'NDPluginOverlay'),
     (re.compile('ROI\\d:'), 'NDPluginROI'),
     (re.compile('Trans\\d:'), 'NDPluginTransform'),
-    (re.compile('Trans\\d:'), 'NDPluginTransform'),
     (re.compile('netCDF\\d:'), 'NDFileNetCDF'),
     (re.compile('TIFF\\d:'), 'NDFileTIFF'),
     (re.compile('JPEG\\d:'), 'NDFileJPEG'),
@@ -22,12 +21,10 @@ PLUGIN_TYPE_PVS = [
     (re.compile('HDF\\d:'), 'NDFileHDF5'),
     (re.compile('Magick\\d:'), 'NDFileMagick'),
     (re.compile('TIFF\\d:'), 'NDFileTIFF'),
-    (re.compile('TIFF\\d:'), 'NDFileTIFF'),
-    (re.compile('TIFF\\d:'), 'NDFileTIFF'),
     (re.compile('HDF\\d:'), 'NDFileHDF5'),
-    (re.compile('HDF\\d:'), 'NDFileHDF5'),
-    (re.compile('HDF\\d:'), 'NDFileHDF5'),
-    (re.compile('HDF\\d:'), 'NDFileHDF5')]
+    (re.compile('Current\\d:'), 'NDPluginStats'),
+    (re.compile('SumAll'), 'NDPluginStats'),
+]
 
 
 class ReallyDefaultDict(defaultdict):
@@ -49,6 +46,12 @@ def fabricate_channel(key):
         for pattern, val in PLUGIN_TYPE_PVS:
             if pattern.search(key):
                 return ChannelString(value=val)
+    elif 'ArrayPort' in key:
+        return ChannelString(value=key)
+    elif 'EnableCallbacks' in key:
+        return ChannelEnum(value=0, enum_strings=['Disabled', 'Enabled'])
+    elif 'BlockingCallbacks' in key:
+        return ChannelEnum(value=0, enum_strings=['No', 'Yes'])
     return ChannelData(value=0)
 
 
