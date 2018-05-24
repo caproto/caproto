@@ -52,7 +52,7 @@ def send(circuit, command):
 
 
 def recv(circuit):
-    bytes_received = sockets[circuit].recv(4096)
+    bytes_received = sockets[circuit].recv(16384)
     commands, _ = circuit.recv(bytes_received)
     for c in commands:
         circuit.process_command(c)
