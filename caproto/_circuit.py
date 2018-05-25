@@ -324,9 +324,14 @@ class VirtualCircuit:
                 raise err("priority {} does not match previously set priority "
                           "of {} for this circuit".format(command.priority,
                                                           self.priority))
+            protocol_version = min(self.protocol_version, command.version)
+            self.protocol_version = protocol_version
+            for cid, chan in self.channels.items():
+                chan.protocol_version = protocol_version
 
         if isinstance(command, VersionResponse):
-            protocol_version = self.protocol_version = command.version
+            protocol_version = min(self.protocol_version, command.version)
+            self.protocol_version = protocol_version
             for cid, chan in self.channels.items():
                 chan.protocol_version = protocol_version
 
