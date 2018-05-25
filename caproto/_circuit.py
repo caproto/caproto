@@ -408,7 +408,10 @@ class _BaseChannel:
         if data_type is None:
             data_type = self.native_data_type
         if data_count is None:
-            data_count = 0
+            if self.protocol_version >= 13:
+                data_count = 0
+            else:
+                data_count = self.native_data_count
         return data_type, data_count
 
     def state_changed(self, role, old_state, new_state, command):
