@@ -286,6 +286,9 @@ class SelectorThread:
                     continue
 
                 # Let objects handle disconnection by returning a failure here
+                if sys.platform == 'win32':
+                    logger.debug('%r from %s <- %s', obj, address, bytes_recv)
+
                 if obj.received(bytes_recv, address) is ca.DISCONNECTED:
                     # self.log.debug('Removing %s = %s due to receive failure',
                     #              sock, obj)
