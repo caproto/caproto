@@ -18,6 +18,7 @@ import logging
 import os
 import selectors
 import socket
+import sys
 import threading
 import time
 import weakref
@@ -162,6 +163,11 @@ class SelectorThread:
         self.thread = None  # set by the `start` method
         self._close_event = threading.Event()
         self.selector = selectors.DefaultSelector()
+
+        if sys.platform == 'win32':
+            # Empty select() list is problematic for windows
+            dummy_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.selector.register(dummy_socket, selectors.EVENT_READ)
 
         self._socket_map_lock = threading.RLock()
         self.objects = weakref.WeakValueDictionary()

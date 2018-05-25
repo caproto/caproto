@@ -16,6 +16,9 @@ build_script:
   - "pip install ."
   - "pip install -Ur test-requirements.txt"
   - "pip install codecov"
+  - "ipconfig /all"
+  - "SET EPICS_CA_AUTO_ADDR_LIST=NO"
+  - "SET EPICS_CA_ADDR_LIST=192.168.1.255"
 
 test_script:
   - "mkdir empty"
