@@ -50,7 +50,9 @@ else:
         return selector
 
     @functools.wraps(curio.run)
-    def curio_run(*args, selector=windows_selector, **kwargs):
+    def curio_run(*args, selector=None, **kwargs):
+        if selector is None:
+            selector = windows_selector()
         return _curio_core_run(*args, selector=selector, **kwargs)
 
     _curio_core_run = curio.run
