@@ -1,6 +1,7 @@
 # This module includes all exceptions raised by caproto, sentinel objects used
 # throughout the package (see detailed comment below), various network-related
 # helper functions, and other miscellaneous utilities.
+import array
 import collections
 import os
 import socket
@@ -10,6 +11,15 @@ import json
 import threading
 from collections import namedtuple
 from warnings import warn
+
+try:
+    import fcntl
+    import termios
+except ImportError:
+    fcntl = None
+    termios = None
+    # fcntl is unavailale on windows
+
 
 try:
     import netifaces
@@ -602,3 +612,42 @@ class ThreadsafeCounter:
 
                 self.value = value
                 return value
+
+
+def socket_bytes_available(sock, *, default_buffer_size=4096,
+                           available_buffer=None):
+    '''Return bytes available to receive on socket
+
+    Parameters
+    ----------
+    sock : socket.socket
+    default_buffer_size : int, optional
+        Default recv buffer size, should the platform not support the call or
+        the call fails for unknown reasons
+    available_buffer : array.array, optional
+        Array used for call to fcntl; can be specified to avoid reallocating
+        many times
+    '''
+    if available_buffer is None:
+        available_buffer = array.array('i', [0])
+
+    ok = fcntl.ioctl(sock, termios.FIONREAD, available_buffer) >= 0
+    return (max((available_buffer[0], default_buffer_size))
+            if ok else default_buffer_size)
+
+
+if sys.platform == 'win32' or fcntl is None:
+    def socket_bytes_available(sock, *, default_buffer_size=4096,  # noqa
+                               available_buffer=None):
+        return default_buffer_size
+
+
+if sys.platform == 'win32' or not hasattr(socket.socket, 'sendmsg'):
+    def _sendmsg(self, buffers, ancdata=None, flags=None, address=None):
+        sent = 0
+        for buf in buffers:
+            self.sendall(buf)
+            sent += len(buf)
+        return sent
+
+    socket.socket.sendmsg = _sendmsg

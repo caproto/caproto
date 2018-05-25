@@ -215,6 +215,9 @@ def ioc(prefix, request):
     if request.param == 'caproto':
         ioc_ = caproto_ioc(prefix, request)
     elif request.param == 'epics-base':
+        if sys.platform == 'win32':
+            pytest.skip('win32 epics-base IOCs TODO')
+
         ioc_ = epics_base_ioc(prefix, request)
     return ioc_
 
