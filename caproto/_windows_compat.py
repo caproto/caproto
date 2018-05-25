@@ -28,6 +28,7 @@ def _sendmsg(self, buffers, ancdata=None, flags=None, address=None):
     return sent
 
 
+# TODO: i know this is evil
 socket.socket.sendmsg = _sendmsg
 
 

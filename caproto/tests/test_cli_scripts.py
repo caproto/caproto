@@ -84,6 +84,8 @@ def test_cli(command, args, ioc):
     assert p.poll() == 0
 
 
+@pytest.mark.skipif(sys.platform == 'win32',
+                    reason='SIGINT on windows (TODO)')
 @pytest.mark.parametrize('args',
                          [('float', '--format', fmt1),
                           ('float', '--format', fmt2),
@@ -109,8 +111,10 @@ def test_monitor(args, ioc):
     print(line)
     # Process should run forever, therefore should still be running now.
     assert p.poll() is None
+
     # Send SIGINT. If the CLI is otherwise happy, it should still exit code 0.
     os.kill(p.pid, signal.SIGINT)
+
     p.wait()
     print(p.communicate())
     assert p.poll() == 0

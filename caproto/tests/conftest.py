@@ -83,9 +83,11 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
 
     def stop_ioc():
         if p.poll() is None:
-            logger.debug('Sending Ctrl-C to the example IOC')
-            p.send_signal(signal.SIGINT)
-            logger.debug('Waiting on process...')
+            if sys.platform != 'win32':
+                logger.debug('Sending Ctrl-C to the example IOC')
+                p.send_signal(signal.SIGINT)
+                logger.debug('Waiting on process...')
+
             try:
                 p.wait(timeout=1)
             except subprocess.TimeoutExpired:
@@ -241,7 +243,10 @@ def stop_repeater():
         return
 
     logger.info('[Repeater] Sending Ctrl-C to the repeater')
-    _repeater_process.send_signal(signal.SIGINT)
+    if sys.platform == 'win32':
+        _repeater_process.terminate()
+    else:
+        _repeater_process.send_signal(signal.SIGINT)
     _repeater_process.wait()
     _repeater_process = None
     logger.info('[Repeater] Repeater exited')
