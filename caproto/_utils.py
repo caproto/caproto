@@ -637,17 +637,4 @@ def socket_bytes_available(sock, *, default_buffer_size=4096,
 
 
 if sys.platform == 'win32' or fcntl is None:
-    def socket_bytes_available(sock, *, default_buffer_size=4096,  # noqa
-                               available_buffer=None):
-        return default_buffer_size
-
-
-if sys.platform == 'win32' or not hasattr(socket.socket, 'sendmsg'):
-    def _sendmsg(self, buffers, ancdata=None, flags=None, address=None):
-        sent = 0
-        for buf in buffers:
-            self.sendall(buf)
-            sent += len(buf)
-        return sent
-
-    socket.socket.sendmsg = _sendmsg
+    from ._windows_compat import *  # noqa
