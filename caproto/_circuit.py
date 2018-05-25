@@ -71,6 +71,7 @@ class VirtualCircuit:
             raise CaprotoRuntimeError("Client-side VirtualCircuit requires a "
                                       "non-None priority at initialization "
                                       "time.")
+        self.protocol_version = DEFAULT_PROTOCOL_VERSION
 
     @property
     def host(self):
@@ -289,6 +290,7 @@ class VirtualCircuit:
                 chan.access_rights = command.access_rights
             elif isinstance(command, CreateChanResponse):
                 chan.sid = command.sid
+                chan.protocol_version = self.protocol_version
                 self.channels_sid[chan.sid] = chan
             elif isinstance(command, ClearChannelResponse):
                 self.channels_sid.pop(chan.sid)
@@ -322,6 +324,11 @@ class VirtualCircuit:
                 raise err("priority {} does not match previously set priority "
                           "of {} for this circuit".format(command.priority,
                                                           self.priority))
+
+        if isinstance(command, VersionResponse):
+            protocol_version = self.protocol_version = command.version
+            for cid, chan in self.channels.items():
+                chan.protocol_version = protocol_version
 
     def disconnect(self):
         """
@@ -378,9 +385,8 @@ class _BaseChannel:
     # Base class for ClientChannel and ServerChannel, which add convenience
     # methods for composing requests and repsponses, respectively. All of the
     # important code is here in the base class.
-    def __init__(self, name, circuit, cid=None,
-                 protocol_version=DEFAULT_PROTOCOL_VERSION):
-        self.protocol_version = protocol_version
+    def __init__(self, name, circuit, cid=None):
+        self.protocol_version = circuit.protocol_version
         self.name = name
         self.circuit = circuit
         if cid is None:
