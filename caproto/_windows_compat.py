@@ -1,5 +1,6 @@
 # Functions here are imported into _utils.py only on win32
 
+import os
 import sys
 import socket
 import selectors
@@ -21,14 +22,14 @@ def socket_bytes_available(sock, *, default_buffer_size=4096,  # noqa
 
 def _sendmsg(self, buffers, ancdata=None, flags=None, address=None):
     # No support for sendmsg on win32
-    sent = 0
-    for buf in buffers:
-        self.sendall(buf)
-        sent += len(buf)
-    return sent
+    # Additionally, sending individual buffers leads to failures, so here we
+    # combine all of them (TODO performance)
+    to_send = b''.join(buffers)
+    self.sendall(to_send)
+    return len(to_send)
 
 
-# TODO: i know this is evil
+# EVIL_WIN32_TODO: i know this is evil
 socket.socket.sendmsg = _sendmsg
 
 
@@ -57,3 +58,6 @@ else:
 
     _curio_core_run = curio.run
     curio.run = curio_run
+
+    # EVIL_WIN32_TODO_HACK: curio set_blocking monkeypatch
+    os.set_blocking = lambda file_no, blocking: None

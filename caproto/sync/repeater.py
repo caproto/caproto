@@ -173,6 +173,10 @@ def check_for_running_repeater(addr):
     except OSError as ex:
         if 'Address already in use' in str(ex):
             raise RepeaterAlreadyRunning(str(ex))
+        elif 'WinError 10048' in str(ex):
+            # [WinError 10048] Only one usage of each socket address
+            # (protocol/network address/port) is normally permitted
+            raise RepeaterAlreadyRunning(str(ex))
         else:
             raise
     return sock

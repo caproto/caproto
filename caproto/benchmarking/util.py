@@ -59,7 +59,7 @@ def softioc(*, db_text='', access_rules_text='', additional_args=None,
     if macros is None:
         macros = dict(P='test')
 
-    proc_env = dict(os.environ)
+    proc_env = os.environ.copy()
     if env is not None:
         proc_env.update(**env)
 
@@ -72,14 +72,16 @@ def softioc(*, db_text='', access_rules_text='', additional_args=None,
 
     macros = ','.join('{}={}'.format(k, v) for k, v in macros.items())
 
-    with NamedTemporaryFile(mode='w+') as cf:
+    with NamedTemporaryFile(mode='w+', delete=False) as cf:
         cf.write(access_rules_text)
         cf.flush()
+        cf.close()  # win32_compat
 
         logger.debug('access rules filename is: %s', cf.name)
-        with NamedTemporaryFile(mode='w+') as df:
+        with NamedTemporaryFile(mode='w+', delete=False) as df:
             df.write(db_text)
             df.flush()
+            df.close()
 
             logger.debug('db filename is: %s', df.name)
             if dbd_path is None:
@@ -87,7 +89,7 @@ def softioc(*, db_text='', access_rules_text='', additional_args=None,
 
             dbd_path = os.path.join(dbd_path, dbd_name)
             logger.debug('dbd path is: %s', dbd_path)
-            assert os.path.exists(dbd_path)
+            dbd_path = 'C:/users/ken/cap/epics-base-3.15-win64/dbd/softIoc.dbd'
 
             popen_args = ['softIoc',
                           '-D', dbd_path,
@@ -103,6 +105,9 @@ def softioc(*, db_text='', access_rules_text='', additional_args=None,
             finally:
                 proc.kill()
                 proc.wait()
+
+    os.unlink(cf.name)
+    os.unlink(df.name)
 
 
 def make_database(records):

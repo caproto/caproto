@@ -143,13 +143,16 @@ def make_channel(pv_name, logger, udp_sock, priority, timeout):
         t = time.monotonic()
         while True:
             try:
-                recv(chan.circuit)
+                commands = recv(chan.circuit)
                 if time.monotonic() - t > timeout:
                     raise socket.timeout
             except socket.timeout:
                 raise TimeoutError("Timeout while awaiting channel creation.")
             if chan.states[ca.CLIENT] is ca.CONNECTED:
                 break
+            for command in commands:
+                if command is ca.DISCONNECTED:
+                    raise CaprotoError('Disconnected during initialization')
 
         logger.debug('Channel created.')
     except BaseException:

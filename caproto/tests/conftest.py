@@ -113,7 +113,8 @@ def poll_readiness(pv_to_check, attempts=15):
     start_repeater()
     for attempt in range(attempts):
         try:
-            get(pv_to_check, timeout=1, repeater=False)
+            get(pv_to_check, timeout=1, repeater=False,
+                verbose=True)
         except TimeoutError:
             continue
         else:
@@ -217,9 +218,6 @@ def ioc(prefix, request):
     if request.param == 'caproto':
         ioc_ = caproto_ioc(prefix, request)
     elif request.param == 'epics-base':
-        if sys.platform == 'win32':
-            pytest.skip('win32 epics-base IOCs TODO')
-
         ioc_ = epics_base_ioc(prefix, request)
     return ioc_
 

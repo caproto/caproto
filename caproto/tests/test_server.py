@@ -51,7 +51,7 @@ def test_with_caget(backends, prefix, pvdb_from_server_example, server, pv,
     async def client(*client_args):
         # args are ignored for curio and trio servers.
         print('* client caget test: pv={} dbr_type={}'.format(pv, dbr_type))
-        print('(client args: %s)'.format(client_args))
+        print(f'(client args: {client_args})')
 
         db_entry = caget_pvdb[pv]
         # native type as in the ChannelData database

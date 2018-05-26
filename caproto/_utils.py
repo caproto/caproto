@@ -314,18 +314,28 @@ def bcast_socket(socket_module=socket):
         Default is the built-in :mod:`socket` module, but anything with the
         same interface may be used, such as :mod:`curio.socket`.
     """
-    socket = socket_module
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    sock = socket_module.socket(socket_module.AF_INET, socket_module.SOCK_DGRAM)
+    try:
+        sock.setsockopt(socket_module.SOL_SOCKET, socket_module.SO_REUSEADDR, 1)
+    except AttributeError:
+        if sys.platform != 'win32':
+            raise
+        # WIN32_TODO: trio compatibility
+        import socket as system_socket
+        sock.setsockopt(socket_module.SOL_SOCKET,
+                        system_socket.SO_REUSEADDR, 1)
+        # sock.setsockopt(socket_module.SOL_SOCKET,
+        #                 system_socket.SO_EXCLUSIVEADDRUSE, 1)
+
+    sock.setsockopt(socket_module.SOL_SOCKET, socket_module.SO_BROADCAST, 1)
 
     # for BSD/Darwin only
     try:
-        socket.SO_REUSEPORT
+        socket_module.SO_REUSEPORT
     except AttributeError:
         ...
     else:
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        sock.setsockopt(socket_module.SOL_SOCKET, socket_module.SO_REUSEPORT, 1)
     return sock
 
 

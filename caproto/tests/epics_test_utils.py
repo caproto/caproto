@@ -4,7 +4,9 @@ Helper functions for dealing with EPICS base binaries (caget, caput, catest)
 
 import os
 import datetime
+import subprocess
 
+import asyncio
 import curio
 import curio.subprocess
 
@@ -21,35 +23,42 @@ async def run_epics_base_binary(backend, *args):
     stdout, stderr
         Decoded standard output and standard error text
     '''
-    args = ['/usr/bin/env'] + list(args)
+
+    import sys
+    if sys.platform == 'win32':
+        args = list(args)
+    else:
+        args = ['/usr/bin/env'] + list(args)
 
     print()
     print('* Executing', args)
 
     epics_env = ca.get_environment_variables()
-    env = dict(PATH=os.environ['PATH'],
+    env = os.environ.copy()
+    env.update(PATH=os.environ['PATH'],
                EPICS_CA_AUTO_ADDR_LIST=epics_env['EPICS_CA_AUTO_ADDR_LIST'],
                EPICS_CA_ADDR_LIST=epics_env['EPICS_CA_ADDR_LIST'])
 
-    if backend == 'curio':
-        p = curio.subprocess.Popen(args, env=env,
-                                   stdout=curio.subprocess.PIPE,
-                                   stderr=curio.subprocess.PIPE)
-        await p.wait()
-        raw_stdout = await p.stdout.read()
-        raw_stderr = await p.stderr.read()
-    elif backend == 'trio':
-        def trio_subprocess():
-            import subprocess
-            pipes = subprocess.Popen(args, env=env, stdout=subprocess.PIPE,
-                                     stderr=subprocess.PIPE)
-            return pipes.communicate()
+    def runner():
+        e = os.environ.copy()
+        e.update(env)
+        pipes = subprocess.Popen(args, env=e, stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE)
+        return pipes.communicate()
 
-        raw_stdout, raw_stderr = await trio.run_sync_in_worker_thread(
-            trio_subprocess)
+    if backend == 'curio':
+        if sys.platform == 'win32':
+            raw_stdout, raw_stderr = await curio.run_in_thread(runner)
+        else:
+            p = curio.subprocess.Popen(args, env=env,
+                                       stdout=curio.subprocess.PIPE,
+                                       stderr=curio.subprocess.PIPE)
+            await p.wait()
+            raw_stdout = await p.stdout.read()
+            raw_stderr = await p.stderr.read()
+    elif backend == 'trio':
+        raw_stdout, raw_stderr = await trio.run_sync_in_worker_thread(runner)
     elif backend == 'asyncio':
-        import asyncio
-        import subprocess
         loop = asyncio.get_event_loop()
         print('about to run subprocess')
         process = await asyncio.create_subprocess_exec(
