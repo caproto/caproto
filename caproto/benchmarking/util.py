@@ -81,7 +81,7 @@ def softioc(*, db_text='', access_rules_text='', additional_args=None,
         with NamedTemporaryFile(mode='w+', delete=False) as df:
             df.write(db_text)
             df.flush()
-            df.close()
+            df.close()  # win32_compat
 
             logger.debug('db filename is: %s', df.name)
             if dbd_path is None:
@@ -89,7 +89,6 @@ def softioc(*, db_text='', access_rules_text='', additional_args=None,
 
             dbd_path = os.path.join(dbd_path, dbd_name)
             logger.debug('dbd path is: %s', dbd_path)
-            dbd_path = 'C:/users/ken/cap/epics-base-3.15-win64/dbd/softIoc.dbd'
 
             popen_args = ['softIoc',
                           '-D', dbd_path,
@@ -106,7 +105,7 @@ def softioc(*, db_text='', access_rules_text='', additional_args=None,
                 proc.kill()
                 proc.wait()
 
-    os.unlink(cf.name)
+    os.unlink(cf.name)  # TODO try/finally
     os.unlink(df.name)
 
 
