@@ -303,7 +303,13 @@ class Context:
 
     async def _core_broadcaster_loop(self):
         while True:
-            bytes_received, address = await self.udp_sock.recvfrom(4096)
+            try:
+                bytes_received, address = await self.udp_sock.recvfrom(4096)
+            except ConnectionResetError:
+                self.logger.exception('UDP server connection reset')
+                await self.async_layer.library.sleep(0.1)
+                continue
+
             if bytes_received:
                 commands = self.broadcaster.recv(bytes_received, address)
                 await self.command_bundle_queue.put((address, commands))
