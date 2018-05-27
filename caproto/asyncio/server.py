@@ -67,27 +67,35 @@ class Context(_Context):
             raise
         await self._core_broadcaster_loop()
 
+    async def server_accept_loop(self, addr, port):
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+        logger.debug('Listening on %s:%d', addr, port)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.setblocking(False)
+        s.bind((addr, port))
+        s.listen()
+
+        while True:
+            client_sock, addr = await self.loop.sock_accept(s)
+            self.loop.create_task(self.tcp_handler(client_sock, addr))
+
     async def run(self):
         'Start the server'
+
         for addr, port in ca.get_server_address_list(self.port):
             logger.debug('Listening on %s:%d', addr, port)
+            self.loop.create_task(self.server_accept_loop(addr, port))
             # self.loop.create_task(tcp_server,
             #                       addr, port, self.tcp_handler)
-        self.loop.create_task(self.broadcaster_udp_server_loop)
-        self.loop.create_task(self.broadcaster_queue_loop)
-        self.loop.create_task(self.subscription_queue_loop)
-        self.loop.create_task(self.broadcast_beacon_loop)
+        self.loop.create_task(self.broadcaster_udp_server_loop())
+        self.loop.create_task(self.broadcaster_queue_loop())
+        self.loop.create_task(self.subscription_queue_loop())
+        self.loop.create_task(self.broadcast_beacon_loop())
 
         async_lib = AsyncioAsyncLayer()
         for method in self.startup_methods:
             logger.debug('Calling startup method %r', method)
-            self.loop.create_task(method, async_lib)
-
-        try:
-            self.loop.run_forever()
-        except self.TaskCancelled as ex:
-            logger.info('Server task cancelled; exiting')
-            raise ServerExit() from ex
+            self.loop.create_task(method(async_lib))
 
 
 async def start_server(pvdb, log_level='DEBUG', *, bind_addr='0.0.0.0'):
