@@ -55,9 +55,16 @@ test_script:
   # Not sure why this setting isn't working above
   # - "set EPICS_CA_AUTO_ADDR_LIST=NO"
 
-  - "%RUN_TEST% caproto/tests/test_serialization.py caproto/tests/test_core.py caproto/tests/test_dbr_types.py caproto/tests/test_utils.py caproto/tests/test_nonet.py caproto/tests/test_status.py"
-
-  - "%RUN_TEST% caproto/tests/test_server.py"
-  - "%RUN_TEST% caproto/tests/test_threading_client.py"
+  
+  - "%RUN_TEST% caproto/tests/test_core.py
+    caproto/tests/test_create_many_channels.py
+    caproto/tests/test_data_conversion.py caproto/tests/test_dbr_types.py
+    caproto/tests/test_examples.py caproto/tests/test_fixtures.py
+    caproto/tests/test_nonet.py caproto/tests/test_pyepics_compat.py
+    caproto/tests/test_repeater.py caproto/tests/test_serialization.py
+    caproto/tests/test_server.py caproto/tests/test_status.py
+    caproto/tests/test_threading_client.py caproto/tests/test_utils.py"
+  - "%RUN_TEST% caproto/tests/test_cli_scripts.py"
+  - "%RUN_TEST% caproto/tests/test_cli_bench.py"
   - "coverage combine"
   - "coverage report -m"
