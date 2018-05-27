@@ -43,8 +43,6 @@ class VirtualCircuit(_VirtualCircuit):
         self.command_queue = asyncio.Queue()
         self.new_command_condition = asyncio.Condition()
 
-        self._loops = []
-
     async def send(self, *commands):
         if self.connected:
             buffers_to_send = self.circuit.send(*commands)
@@ -52,7 +50,7 @@ class VirtualCircuit(_VirtualCircuit):
                                          b''.join(buffers_to_send))
 
     async def run(self):
-        self._loops.append(self.loop.create_task(self.command_queue_loop()))
+        (self.loop.create_task(self.command_queue_loop()))
 
     async def _start_write_task(self, handle_write):
         self.loop.create_task(handle_write())
@@ -77,7 +75,6 @@ class Context(_Context):
             loop = asyncio.get_event_loop()
         self.loop = loop
         self.udp_sock = None
-        self._loops = []
 
     async def server_accept_loop(self, addr, port):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
@@ -89,14 +86,14 @@ class Context(_Context):
 
         while True:
             client_sock, addr = await self.loop.sock_accept(s)
-            self._loops.append(self.loop.create_task(self.tcp_handler(client_sock, addr)))
+            self.loop.create_task(self.tcp_handler(client_sock, addr))
 
     async def run(self):
         'Start the server'
-
+        tasks = []
         for addr, port in ca.get_server_address_list(self.port):
             logger.debug('Listening on %s:%d', addr, port)
-            self.loop.create_task(self.server_accept_loop(addr, port))
+            tasks.append(self.loop.create_task(self.server_accept_loop(addr, port)))
             # self.loop.create_task(tcp_server,
             #                       addr, port, self.tcp_handler)
 
@@ -125,16 +122,16 @@ class Context(_Context):
 
         self.udp_sock = TransportWrapper(transport)
 
-        self._loops.append(self.loop.create_task(self.broadcaster_queue_loop()))
-        self._loops.append(self.loop.create_task(self.subscription_queue_loop()))
-        self._loops.append(self.loop.create_task(self.broadcast_beacon_loop()))
-        for addr, port in ca.get_server_address_list(self.port):
-            self._loops.append(self.loop.create_task(self.server_accept_loop(addr, port)))
+        tasks.append(self.loop.create_task(self.broadcaster_queue_loop()))
+        tasks.append(self.loop.create_task(self.subscription_queue_loop()))
+        tasks.append(self.loop.create_task(self.broadcast_beacon_loop()))
 
         async_lib = AsyncioAsyncLayer()
         for method in self.startup_methods:
             logger.debug('Calling startup method %r', method)
-            self.loop.create_task(method(async_lib))
+            tasks.append(self.loop.create_task(method(async_lib)))
+
+        await asyncio.gather(*tasks)
 
 
 async def start_server(pvdb, log_level='DEBUG', *, bind_addr='0.0.0.0'):
