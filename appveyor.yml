@@ -11,6 +11,9 @@ platform:
   - x86
   - x64
 
+cache:
+  - C:\projects\epics-base-3.15
+
 environment:
   # 192.168.0.0/21 -> 192.168.7.255 broadcast
   # EPICS_CA_AUTO_ADDR_LIST: NO
@@ -34,37 +37,49 @@ init:
 
 build_script:
   - cmd: git --no-pager log -n2
-  - cmd: git clone --single-branch --branch=%EPICS_VER% --depth=2 https://github.com/epics-base/epics-base
-  - cmd: cd epics-base
-  - cmd: set EPICS_BASE=%cd%
-  - cmd: ci/appveyor-prepare.bat
-  - cmd: ci/appveyor-make.bat
-  - cmd: cd ..
+
+  # Build epics-base in C:\projects\epics-base-VER
+  - cmd: set EPICS_BASE=C:\Projects\epics-base-%EPICS_VER%
+  - ps: |
+      $epics_base="C:\projects\epics-base-3.15\"
+      $release_path="$epics_base\configure\RELEASE"
+      if (!(Test-Path -Path $release_path)) {
+        git clone --single-branch --branch=3.15 --depth=2 https://github.com/epics-base/epics-base $epics_base
+        Push-Location $epics_base
+        ci/appveyor-prepare.bat
+        ci/appveyor-make.bat
+        Pop-Location
+      }
   - cmd: dir /s /b %EPICS_BASE%\dbd %EPICS_BASE%\bin 
 
-  - "echo %APPVEYOR_REPO_COMMIT%"
-  - "SET PATH=%EPICS_BASE%\\bin\\win32-x86-static;%EPICS_BASE%\\bin\\windows-x64-static;%PYTHON%;%PYTHON%\\Scripts;;%PATH%"
-  - "python --version"
-  - "python -c \"import struct; print(struct.calcsize('P') * 8)\""
-  - "pip install ."
-  - "pip install -Ur test-requirements.txt"
-  - "pip install codecov"
-  - "ipconfig /all"
+  - cmd: echo %APPVEYOR_REPO_COMMIT%
+  - cmd: SET PATH=%EPICS_BASE%\bin\win32-x86-static;%EPICS_BASE%\bin\windows-x64-static;%PYTHON%;%PYTHON%\Scripts;;%PATH%
+  - cmd: python --version"
+  - cmd: python -c "import struct; print(struct.calcsize('P') * 8)"
+  - cmd: pip install .
+  - cmd: pip install -Ur test-requirements.txt
+  - cmd: pip install codecov
+  - cmd: ipconfig /all
 
 test_script:
   # Not sure why this setting isn't working above
-  # - "set EPICS_CA_AUTO_ADDR_LIST=NO"
-
+  # - cmd: set EPICS_CA_AUTO_ADDR_LIST=NO
   
-  - "%RUN_TEST% caproto/tests/test_core.py
-    caproto/tests/test_create_many_channels.py
-    caproto/tests/test_data_conversion.py caproto/tests/test_dbr_types.py
-    caproto/tests/test_examples.py caproto/tests/test_fixtures.py
-    caproto/tests/test_nonet.py caproto/tests/test_pyepics_compat.py
-    caproto/tests/test_repeater.py caproto/tests/test_serialization.py
-    caproto/tests/test_server.py caproto/tests/test_status.py
-    caproto/tests/test_threading_client.py caproto/tests/test_utils.py"
-  - "%RUN_TEST% caproto/tests/test_cli_scripts.py"
-  - "%RUN_TEST% caproto/tests/test_cli_bench.py"
-  - "coverage combine"
-  - "coverage report -m"
+  # - cmd: %RUN_TEST% caproto/tests/test_bench.py
+  - cmd: "%RUN_TEST% caproto/tests/test_cli_scripts.py"
+  - cmd: "%RUN_TEST% caproto/tests/test_core.py"
+  - cmd: "%RUN_TEST% caproto/tests/test_create_many_channels.py"
+  - cmd: "%RUN_TEST% caproto/tests/test_data_conversion.py"
+  - cmd: "%RUN_TEST% caproto/tests/test_dbr_types.py"
+  - cmd: "%RUN_TEST% caproto/tests/test_examples.py"
+  - cmd: "%RUN_TEST% caproto/tests/test_fixtures.py"
+  - cmd: "%RUN_TEST% caproto/tests/test_nonet.py"
+  - cmd: "%RUN_TEST% caproto/tests/test_pyepics_compat.py"
+  - cmd: "%RUN_TEST% caproto/tests/test_repeater.py"
+  - cmd: "%RUN_TEST% caproto/tests/test_serialization.py"
+  - cmd: "%RUN_TEST% caproto/tests/test_server.py"
+  - cmd: "%RUN_TEST% caproto/tests/test_status.py"
+  - cmd: "%RUN_TEST% caproto/tests/test_threading_client.py"
+  - cmd: "%RUN_TEST% caproto/tests/test_utils.py"
+  - cmd: coverage combine
+  - cmd: coverage report -m
