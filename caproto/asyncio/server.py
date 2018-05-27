@@ -26,12 +26,23 @@ class VirtualCircuit(_VirtualCircuit):
     logger = logger
 
     def __init__(self, circuit, client, context, *, loop=None):
-        super().__init__(circuit, client, context)
-        self.command_queue = asyncio.Queue()
-        self.new_command_condition = asyncio.Condition()
         if loop is None:
             loop = asyncio.get_event_loop()
         self.loop = loop
+
+        class SockWrapper:
+            def __init__(self, loop, client):
+                self.loop = loop
+                self.client = client
+
+            async def recv(self, nbytes):
+                return (await self.loop.sock_recv(self.client, 4096))
+
+        self._raw_client = client
+        super().__init__(circuit, SockWrapper(loop, client), context)
+        self.command_queue = asyncio.Queue()
+        self.new_command_condition = asyncio.Condition()
+
         self._loops = []
 
     async def run(self):
