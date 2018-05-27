@@ -32,12 +32,13 @@ class VirtualCircuit(_VirtualCircuit):
         if loop is None:
             loop = asyncio.get_event_loop()
         self.loop = loop
+        self._loops = []
 
     async def run(self):
-        await self.loop.create_task(self.command_queue_loop())
+        self._loops.append(self.loop.create_task(self.command_queue_loop()))
 
     async def _start_write_task(self, handle_write):
-        await self.loop.create_task(handle_write())
+        self.loop.create_task(handle_write())
 
     async def _wake_new_command(self):
         async with self.new_command_condition:
@@ -49,6 +50,7 @@ class Context(_Context):
     async_layer = AsyncioAsyncLayer
     ServerExit = ServerExit
     TaskCancelled = asyncio.CancelledError
+    logger = logger
 
     def __init__(self, host, port, pvdb, *, log_level='ERROR', loop=None):
         super().__init__(host, port, pvdb, log_level=log_level)
@@ -57,15 +59,8 @@ class Context(_Context):
         if loop is None:
             loop = asyncio.get_event_loop()
         self.loop = loop
-
-    async def broadcaster_udp_server_loop(self):
-        self.udp_sock = ca.bcast_socket(socket)
-        try:
-            self.udp_sock.bind((self.host, ca.EPICS_CA1_PORT))
-        except Exception:
-            logger.exception('[server] udp bind failure!')
-            raise
-        await self._core_broadcaster_loop()
+        self.udp_sock = None
+        self._loops = []
 
     async def server_accept_loop(self, addr, port):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
@@ -77,7 +72,7 @@ class Context(_Context):
 
         while True:
             client_sock, addr = await self.loop.sock_accept(s)
-            self.loop.create_task(self.tcp_handler(client_sock, addr))
+            self._loops.append(self.loop.create_task(self.tcp_handler(client_sock, addr)))
 
     async def run(self):
         'Start the server'
@@ -87,10 +82,37 @@ class Context(_Context):
             self.loop.create_task(self.server_accept_loop(addr, port))
             # self.loop.create_task(tcp_server,
             #                       addr, port, self.tcp_handler)
-        self.loop.create_task(self.broadcaster_udp_server_loop())
-        self.loop.create_task(self.broadcaster_queue_loop())
-        self.loop.create_task(self.subscription_queue_loop())
-        self.loop.create_task(self.broadcast_beacon_loop())
+
+        class BcastLoop(asyncio.Protocol):
+            parent = self
+            loop = self.loop
+
+            def connection_made(self, transport):
+                self.transport = transport
+
+            def datagram_received(self, data, addr):
+                print('data gram in')
+                self.loop.create_task(self.parent._broadcaster_recv_datagram(
+                                      data, addr))
+
+        class TransportWrapper:
+            def __init__(self, transport):
+                self.transport = transport
+
+            async def sendto(self, bytes_to_send, addr_port):
+                self.transport.sendto(bytes_to_send, addr_port)
+
+        transport, self.p = await self.loop.create_datagram_endpoint(
+            BcastLoop, (self.host, ca.EPICS_CA1_PORT),
+            reuse_address=True, allow_broadcast=True, reuse_port=True)
+
+        self.udp_sock = TransportWrapper(transport)
+
+        self._loops.append(self.loop.create_task(self.broadcaster_queue_loop()))
+        self._loops.append(self.loop.create_task(self.subscription_queue_loop()))
+        self._loops.append(self.loop.create_task(self.broadcast_beacon_loop()))
+        for addr, port in ca.get_server_address_list(self.port):
+            self._loops.append(self.loop.create_task(self.server_accept_loop(addr, port)))
 
         async_lib = AsyncioAsyncLayer()
         for method in self.startup_methods:
