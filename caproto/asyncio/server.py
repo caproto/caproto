@@ -45,6 +45,12 @@ class VirtualCircuit(_VirtualCircuit):
 
         self._loops = []
 
+    async def send(self, *commands):
+        if self.connected:
+            buffers_to_send = self.circuit.send(*commands)
+            await self.loop.sock_sendall(self._raw_client,
+                                         b''.join(buffers_to_send))
+
     async def run(self):
         self._loops.append(self.loop.create_task(self.command_queue_loop()))
 
