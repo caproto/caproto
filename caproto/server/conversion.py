@@ -1,6 +1,4 @@
 import inspect
-import numpy as np
-import ophyd
 
 from .server import pvfunction, PVGroup
 from .._data import (ChannelDouble, ChannelEnum, ChannelChar,
@@ -22,6 +20,8 @@ def underscore_to_camel_case(s):
 
 
 def ophyd_component_to_caproto(attr, component, *, depth=0, dev=None):
+    import ophyd
+
     indent = '    ' * depth
     sig = getattr(dev, attr) if dev is not None else None
 
@@ -66,9 +66,17 @@ def ophyd_component_to_caproto(attr, component, *, depth=0, dev=None):
     if sig and sig.connected:
         value = sig.get()
 
-        if isinstance(value, np.ndarray):
+        def array_checker(value):
+            try:
+                import numpy as np
+                return isinstance(value, np.ndarray)
+            except ImportError:
+                return False
+
+        if array_checker(value):
             # hack, as value can be a zero-length array
             # FUTURE_TODO: support numpy types directly in pvproperty type map
+            import numpy as np
             value = np.zeros(1, dtype=value.dtype).tolist()[0]
         else:
             try:
@@ -106,6 +114,8 @@ def ophyd_component_to_caproto(attr, component, *, depth=0, dev=None):
 
 
 def ophyd_device_to_caproto_ioc(dev, *, depth=0):
+    import ophyd
+
     if isinstance(dev, ophyd.DynamicDeviceComponent):
         # DynamicDeviceComponent: attr: (sig_cls, prefix, kwargs)
         # NOTE: cannot inspect types without an instance of the dynamic Device

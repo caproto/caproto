@@ -47,6 +47,18 @@ async def run_epics_base_binary(backend, *args):
 
         raw_stdout, raw_stderr = await trio.run_sync_in_worker_thread(
             trio_subprocess)
+    elif backend == 'asyncio':
+        import asyncio
+        import subprocess
+        loop = asyncio.get_event_loop()
+        print('about to run subprocess')
+        process = await asyncio.create_subprocess_exec(
+            *args, env=env, loop=loop,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE)
+        print('about to wait on subprocess')
+        raw_stdout, raw_stderr = await process.communicate()
+        print('subprocess done')
     else:
         raise NotImplementedError('Unsupported async backend')
 
