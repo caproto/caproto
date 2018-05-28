@@ -1,5 +1,4 @@
 import inspect
-import numpy as np
 import ophyd
 
 from .server import pvfunction, PVGroup
@@ -66,9 +65,17 @@ def ophyd_component_to_caproto(attr, component, *, depth=0, dev=None):
     if sig and sig.connected:
         value = sig.get()
 
-        if isinstance(value, np.ndarray):
+        def array_checker(value):
+            try:
+                import numpy as np
+                return isinstance(value, np.ndarray)
+            except ImportError:
+                return False
+
+        if array_checker(value):
             # hack, as value can be a zero-length array
             # FUTURE_TODO: support numpy types directly in pvproperty type map
+            import numpy as np
             value = np.zeros(1, dtype=value.dtype).tolist()[0]
         else:
             try:
