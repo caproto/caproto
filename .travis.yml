@@ -61,12 +61,12 @@ script:
 
   - pip install -r test-requirements.txt
   - coverage run run_tests.py -v --benchmark-disable --timeout=50
-  - coverage combine
-  - coverage report -m
+  - coverage combine --append
 
   - export ASV_ENV_NAME=${TRAVIS_PYTHON_VERSION}_${BASE}
   - coverage run run_tests.py -v --benchmark-only --benchmark-json=pytest_bench.json --benchmark-columns=mean,median,rounds,iterations -k bench --timeout=50
-  - coverage combine
+  - coverage combine --append
+  - coverage report -m
 
   - set -e
   # Install deps for building the docs.
