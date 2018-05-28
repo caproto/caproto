@@ -92,11 +92,16 @@ class Context(_Context):
         s.bind((addr, port))
         s.listen()
 
-        while True:
-            client_sock, addr = await self.loop.sock_accept(s)
-            tsk = self.loop.create_task(self.tcp_handler(client_sock,
-                                                         addr))
-            self._server_tasks.append(tsk)
+        try:
+            while True:
+                client_sock, addr = await self.loop.sock_accept(s)
+                tsk = self.loop.create_task(self.tcp_handler(client_sock,
+                                                             addr))
+                self._server_tasks.append(tsk)
+        finally:
+            s.shutdown()
+            s.close()
+            s = None
 
     async def run(self):
         'Start the server'
