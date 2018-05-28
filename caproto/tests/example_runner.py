@@ -16,17 +16,22 @@ if __name__ == '__main__':
 
     if example_module == '--script':
         script = sys.argv[2]
-        script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                   '..', '..', 'scripts', script)
+        from caproto.sync.client import (get_cli, put_cli, monitor_cli,
+                                         repeater_cli)
+        entry_point = {'caproto-get': get_cli,
+                       'caproto-put': put_cli,
+                       'caproto-monitor': monitor_cli,
+                       'caproto-repeater': repeater_cli,
+                       }[script]
         print("--------------------------------------")
-        print(f"Running {script_path} with coverage")
+        print(f"Running {script} with coverage")
         sys.argv = sys.argv[2:]
         try:
-            runpy.run_path(script_path, run_name='__main__')
+            entry_point()
         except KeyboardInterrupt:
             print('KeyboardInterrupt received on example_runner; exiting')
         else:
-            print(f'{script_path} exited cleanly')
+            print(f'{script} exited cleanly')
     else:
         print("--------------------------------------")
         print(f"Running {example_module} with coverage")

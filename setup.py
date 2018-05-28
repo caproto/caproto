@@ -49,7 +49,6 @@ setup(name='caproto',
               'caproto-spoof-beamline = caproto.examples.spoof_beamline:main',
           ],
       },
-      scripts=glob.glob('scripts/*'),
       python_requires='>=3.6',
       classifiers=classifiers,
       extras_require=extras_require
