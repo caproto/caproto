@@ -115,7 +115,6 @@ class Context(_Context):
                 self.transport = transport
 
             def datagram_received(self, data, addr):
-                print('data gram in')
                 self.loop.create_task(self.parent._broadcaster_recv_datagram(
                                       data, addr))
 
@@ -144,7 +143,6 @@ class Context(_Context):
         try:
             await asyncio.gather(*tasks)
         finally:
-            print('CLEANING UP')
             for t in tasks + self._server_tasks:
                 t.cancel()
 
