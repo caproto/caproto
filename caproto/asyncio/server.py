@@ -125,6 +125,9 @@ class Context(_Context):
             async def sendto(self, bytes_to_send, addr_port):
                 self.transport.sendto(bytes_to_send, addr_port)
 
+            def close(self):
+                self.transport.close()
+
         transport, self.p = await self.loop.create_datagram_endpoint(
             BcastLoop, (self.host, ca.EPICS_CA1_PORT),
             reuse_address=True, allow_broadcast=True, reuse_port=True)
@@ -145,6 +148,7 @@ class Context(_Context):
         finally:
             for t in tasks + self._server_tasks:
                 t.cancel()
+            self.udp_sock.close()
 
 
 async def start_server(pvdb, log_level='DEBUG', *, bind_addr='0.0.0.0'):
