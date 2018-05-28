@@ -433,8 +433,8 @@ class Context:
         addresses = get_beacon_address_list()
 
         while True:
-            await self.async_layer.library.sleep(beacon_period)
             if self.udp_sock is None:
+                await self.async_layer.library.sleep(.1)
                 continue
             beacon = ca.RsrvIsUpResponse(13, self.port, self.beacon_count,
                                          self.host)
@@ -450,6 +450,7 @@ class Context:
                                           addr_port)
                     raise
             self.beacon_count += 1
+            await self.async_layer.library.sleep(beacon_period)
 
     async def circuit_disconnected(self, circuit):
         '''Notification from circuit that its connection has closed'''
