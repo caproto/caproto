@@ -51,7 +51,7 @@ class VirtualCircuit(_VirtualCircuit):
                                          b''.join(buffers_to_send))
 
     async def run(self):
-        self._cq_taks = self.loop.create_task(self.command_queue_loop())
+        self._cq_task = self.loop.create_task(self.command_queue_loop())
 
     async def _start_write_task(self, handle_write):
         self.loop.create_task(handle_write())
