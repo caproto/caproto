@@ -98,10 +98,11 @@ def softioc(*, db_text='', access_rules_text='', additional_args=None,
             proc = subprocess.Popen(popen_args + additional_args, env=proc_env,
                                     stdin=subprocess.PIPE,
                                     stdout=subprocess.PIPE)
-            yield proc
-
-            proc.kill()
-            proc.wait()
+            try:
+                yield proc
+            finally:
+                proc.kill()
+                proc.wait()
 
 
 def make_database(records):
