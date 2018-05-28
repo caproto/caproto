@@ -131,7 +131,12 @@ class Context(_Context):
             logger.debug('Calling startup method %r', method)
             tasks.append(self.loop.create_task(method(async_lib)))
 
-        await asyncio.gather(*tasks)
+        try:
+            await asyncio.gather(*tasks)
+        finally:
+            print('CLEANING UP')
+            for t in tasks:
+                t.cancel()
 
 
 async def start_server(pvdb, log_level='DEBUG', *, bind_addr='0.0.0.0'):
