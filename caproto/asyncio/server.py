@@ -42,6 +42,7 @@ class VirtualCircuit(_VirtualCircuit):
         super().__init__(circuit, SockWrapper(loop, client), context)
         self.command_queue = asyncio.Queue()
         self.new_command_condition = asyncio.Condition()
+        self._cq_task = None
 
     async def send(self, *commands):
         if self.connected:
@@ -50,7 +51,7 @@ class VirtualCircuit(_VirtualCircuit):
                                          b''.join(buffers_to_send))
 
     async def run(self):
-        (self.loop.create_task(self.command_queue_loop()))
+        self._cq_taks = self.loop.create_task(self.command_queue_loop())
 
     async def _start_write_task(self, handle_write):
         self.loop.create_task(handle_write())
@@ -58,6 +59,12 @@ class VirtualCircuit(_VirtualCircuit):
     async def _wake_new_command(self):
         async with self.new_command_condition:
             self.new_command_condition.notify_all()
+
+    async def _on_disconnect(self):
+        await super()._on_disconnect()
+        self._raw_client.close()
+        if self._cq_task is not None:
+            self._cq_task.cancel()
 
 
 class Context(_Context):
@@ -75,6 +82,7 @@ class Context(_Context):
             loop = asyncio.get_event_loop()
         self.loop = loop
         self.udp_sock = None
+        self._server_tasks = []
 
     async def server_accept_loop(self, addr, port):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
@@ -86,7 +94,9 @@ class Context(_Context):
 
         while True:
             client_sock, addr = await self.loop.sock_accept(s)
-            self.loop.create_task(self.tcp_handler(client_sock, addr))
+            tsk = self.loop.create_task(self.tcp_handler(client_sock,
+                                                         addr))
+            self._server_tasks.append(tsk)
 
     async def run(self):
         'Start the server'
@@ -135,7 +145,7 @@ class Context(_Context):
             await asyncio.gather(*tasks)
         finally:
             print('CLEANING UP')
-            for t in tasks:
+            for t in tasks + self._server_tasks:
                 t.cancel()
 
 
