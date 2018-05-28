@@ -60,7 +60,7 @@ script:
   - rm -f `which caRepeater`
 
   - pip install -r test-requirements.txt
-  - coverage run run_tests.py -v --benchmark-disable --timeout=50 --log-format="%(asctime)s %(levelname)s (%(threadName)s) %(message)s" --log-date-format="%H:%M:%S,%03d"
+  - coverage run run_tests.py -v --benchmark-disable --timeout=50
   - coverage combine
   - coverage report -m
 
