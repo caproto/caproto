@@ -67,7 +67,7 @@ script:
   - coverage run run_tests.py -v --benchmark-only --benchmark-json=pytest_bench.json --benchmark-columns=mean,median,rounds,iterations -k bench --timeout=50
   - coverage combine --append
   - coverage report -m
-
+  - codecov
   - set -e
   # Install deps for building the docs.
   - pip install --quiet --upgrade --global-option='--without-libyaml' pyyaml
@@ -86,6 +86,3 @@ script:
   - if [[ $TRAVIS_PULL_REQUEST == false && $TRAVIS_REPO_SLUG == 'NSLS-II/caproto' && $BUILD_DOCS == 1 && $TRAVIS_BRANCH == 'master' ]]; then
         doctr deploy --key-path=doc/github_deploy_key.enc .;
     fi
-
-after_success:
-  - codecov
