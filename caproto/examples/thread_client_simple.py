@@ -34,14 +34,14 @@ def main(pvname1='pi', pvname2='str',
     print(f'{pv2} read back: {pv2.read()}')
 
     # Test writing a couple values:
-    value1, value2 = reading.data + 1, reading.data
+    value1, value2 = [val + 1 for val in reading.data], reading.data
 
-    pv1.write((value1, ), timeout=5)
+    pv1.write(value1, timeout=5)
     reading = pv1.read()
     assert reading.data == value1
     print(f'wrote {value1} and read back: {reading}')
 
-    pv1.write((value2, ), timeout=5)
+    pv1.write(value2, timeout=5)
     reading = pv1.read()
     assert reading.data == value2
     print(f'wrote {value2} and read back: {reading}')

@@ -1,8 +1,8 @@
 import pytest
+np = pytest.importorskip('numpy')
 import time
 import logging
 import contextlib
-import numpy as np
 import curio
 
 import caproto as ca

@@ -296,8 +296,6 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
      ('caproto.ioc_examples.rpc_function', 'MyPVGroup', {}),
      ('caproto.ioc_examples.simple', 'SimpleIOC', {}),
      ('caproto.ioc_examples.subgroups', 'MyPVGroup', {}),
-     ('caproto.ioc_examples.caproto_to_ophyd', 'Group', {}),
-     ('caproto.ioc_examples.areadetector_image', 'DetectorGroup', {}),
      ('caproto.ioc_examples.setpoint_rbv_pair', 'Group', {}),
      ('caproto.ioc_examples.all_in_one', 'MyPVGroup',
       dict(macros={'macro': 'expanded'})),
@@ -305,6 +303,19 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
 )
 def test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
                       prefix):
+    return _test_ioc_examples(request, module_name, pvdb_class_name,
+                              class_kwargs, prefix)
+
+
+# These tests require numpy.
+@pytest.mark.parametrize(
+    'module_name, pvdb_class_name, class_kwargs',
+     [('caproto.ioc_examples.caproto_to_ophyd', 'Group', {}),
+      ('caproto.ioc_examples.areadetector_image', 'DetectorGroup', {}),
+      ])
+def test_special_ioc_examples(request, module_name, pvdb_class_name,
+                              class_kwargs, prefix):
+    pytest.importorskip('numpy')
     return _test_ioc_examples(request, module_name, pvdb_class_name,
                               class_kwargs, prefix)
 
@@ -327,6 +338,7 @@ def test_flaky_ioc_examples(request, module_name, pvdb_class_name,
 
 
 def test_areadetector_generate():
+    pytest.importorskip('numpy')
     from caproto.ioc_examples import areadetector_image
 
     # smoke-test the generation code
@@ -334,6 +346,7 @@ def test_areadetector_generate():
 
 
 def test_typhon_example(request, prefix):
+    pytest.importorskip('numpy')
     from .conftest import run_example_ioc
     run_example_ioc('caproto.ioc_examples.caproto_to_ophyd', request=request,
                     args=[prefix], pv_to_check=f'{prefix}random1')
@@ -357,28 +370,24 @@ def test_mocking_records(request, prefix):
     b_stat = f'{prefix}B.STAT'
     b_severity = f'{prefix}B.SEVR'
     put(b_val, 0)
-    assert get(b_val).data == [0]
-    assert get(b_stat).data == [b'NO_ALARM']
-    assert get(b_severity).data == [b'NO_ALARM']
+    assert list(get(b_val).data) == [0]
+    assert list(get(b_stat).data) == [b'NO_ALARM']
+    assert list(get(b_severity).data) == [b'NO_ALARM']
 
-    try:
-        # write a special value that causes it to fail
+    # write a special value that causes it to fail
+    with pytest.raises(ca.ErrorResponseReceived):
         put(b_val, 1)
-    except ca.ErrorResponseReceived:
-        ...
-    else:
-        raise RuntimeError('Should have failed')
 
     # status should be WRITE, MAJOR
-    assert get(b_val).data == [0]
-    assert get(b_stat).data == [b'WRITE']
-    assert get(b_severity).data == [b'MAJOR']
+    assert list(get(b_val).data) == [0]
+    assert list(get(b_stat).data) == [b'WRITE']
+    assert list(get(b_severity).data) == [b'MAJOR']
 
     # now a field that's linked back to the precision metadata:
     b_precision = f'{prefix}B.PREC'
-    assert get(b_precision).data == [3]
+    assert list(get(b_precision).data) == [3]
     assert put(b_precision, 4)
-    assert get(b_precision).data == [4]
+    assert list(get(b_precision).data) == [4]
 
     # does writing to .PREC update the ChannelData metadata?
     data = get(b, data_type=ca.ChannelType.CTRL_DOUBLE)
