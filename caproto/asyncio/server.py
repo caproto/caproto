@@ -16,7 +16,7 @@ class ServerExit(Exception):
 
 class AsyncioAsyncLayer(AsyncLibraryLayer):
     name = 'asyncio'
-    ThreadsafeQueue = asyncio.Queue
+    ThreadsafeQueue = None
     library = asyncio
 
 
