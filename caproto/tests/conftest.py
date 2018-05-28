@@ -19,6 +19,7 @@ from caproto.sync.client import get
 import caproto.curio  # noqa
 import caproto.threading  # noqa
 import caproto.trio  # noqa
+import caproto.asyncio  # noqa
 
 
 _repeater_process = None
@@ -404,7 +405,7 @@ def run_with_trio_context(func, *, log_level='DEBUG', **kwargs):
 
 
 @pytest.fixture(scope='function',
-                params=['curio', 'trio'])
+                params=['curio', 'trio', 'asyncio'])
 def server(request):
     def curio_runner(pvdb, client, *, threaded_client=False):
         async def server_main():
@@ -482,12 +483,49 @@ def server(request):
 
         trio.run(run_server_and_client)
 
+    def asyncio_runner(pvdb, client, *, threaded_client=False):
+        import asyncio
+
+        async def asyncio_server_main():
+            port = ca.find_available_tcp_port(host=SERVER_HOST)
+            print('Server will be on', (SERVER_HOST, port))
+            ctx = caproto.asyncio.server.Context(SERVER_HOST, port, pvdb,
+                                                 log_level='DEBUG')
+
+            try:
+                await ctx.run()
+            except Exception as ex:
+                print('Server failed', ex)
+                raise
+            finally:
+                print('Server exiting')
+
+        async def run_server_and_client(loop):
+            tsk = loop.create_task(asyncio_server_main())
+            # Give this a couple tries, akin to poll_readiness.
+            for _ in range(15):
+                try:
+                    if threaded_client:
+                        await loop.run_in_executor(client)
+                    else:
+                        await client()
+                except TimeoutError:
+                    continue
+                else:
+                    break
+            tsk.cancel()
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(run_server_and_client(loop))
+
     if request.param == 'curio':
         curio_runner.backend = 'curio'
         return curio_runner
     elif request.param == 'trio':
         trio_runner.backend = 'trio'
         return trio_runner
+    elif request.param == 'asyncio':
+        asyncio_runner.backend = 'asyncio'
+        return asyncio_runner
 
 
 def pytest_make_parametrize_id(config, val, argname):
