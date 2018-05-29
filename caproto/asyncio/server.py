@@ -99,7 +99,7 @@ class Context(_Context):
                                                              addr))
                 self._server_tasks.append(tsk)
         finally:
-            s.shutdown()
+            s.shutdown(socket.SHUT_WR)
             s.close()
             s = None
 
