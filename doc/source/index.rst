@@ -28,17 +28,17 @@ Try caproto in three lines
 
 .. code-block:: bash
 
-   python3 -m pip install caproto  # install
+   python3 -m pip install caproto[complete]  # install caproto (and its optional dependencies)
    python3 -m caproto.ioc_examples.simple &  # background a demo server
    caproto-put simple:A 42  # run a command-line client
 
-Why do this?
-============
+11 Reasons This Isn't As Crazy as It Sounds
+===========================================
 
 Most existing EPICS tools are built on a well-established C library, *libca*.
 Why rewrite it from scratch in Python instead of just wrapping C?
 
-1. **Effortlessly Portable**: No required dependencies — even numpy is
+1. **Effortlessly Portable**: No required dependencies —-- even numpy is
    optional. Caproto just needs Python itself.
 2. **Easy to Install and Use**: See "Try caproto in three lines," above.
 3. **Handy for Debugging**: Programmatic access to convenient Python objects
@@ -77,7 +77,7 @@ Why rewrite it from scratch in Python instead of just wrapping C?
 Vital Statistics
 ================
 
-* Requirements: Python 3.6+ and (optional) numpy
+* Requirements: Python 3.6+ (no other required dependencies!)
 * License: 3-clause BSD
 
 Acknowledgement
@@ -93,29 +93,31 @@ indispensable. See :doc:`references`.
 Contents
 ========
 
+In addition to its core "sans I/O" protocol library, caproto includes some
+ready-to-use client and server implementations exploring different API choices
+and networking libraries. They are organized into packages by how they handle
+concurrency. Some will be maintained long-term; others may be abandoned as
+learning exercises.
+
+.. toctree::
+   :maxdepth: 2
+   :caption: EPICS Clients and Servers
+
+   command-line-client
+   sync-client
+   threading-client
+   pyepics-compat-client
+   trio-client
+   curio-client
+   iocs
+   servers
+
 .. toctree::
    :maxdepth: 2
    :caption: Channel Access Sans I/O
 
    basics
-   iocs
    api
    Performance Benchmarks <https://nsls-ii.github.io/caproto/bench/#/summarylist>
    references
    release-notes
-
-In addition to its core "sans I/O" protocol library, caproto includes some
-ready-to-use client and server implementations exploring different API choices
-and networking libraries. They are organized into packages by how they handle
-network calls: :mod:`caproto.threading`, :mod:`caproto.curio`, and
-:mod:`caproto.sync`. Some of these may grow into robust packages; some may be
-abandoned as learning exercises. Their primary function is this time is testing
-and benchmarking the core protocol code.
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Clients and Servers
-
-   curio-client
-   curio-server
-   threading-client
