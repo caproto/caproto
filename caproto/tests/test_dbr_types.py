@@ -449,8 +449,8 @@ class DBR_STSACK_STRING(ctypes.BigEndianStructure):
 
 dbr_types = [(getattr(ca, attr), globals()[attr])
              for attr in sorted(globals())
-             if attr.startswith('DBR_')
-             and issubclass(globals()[attr], ctypes.BigEndianStructure)]
+             if attr.startswith('DBR_') and
+             issubclass(globals()[attr], ctypes.BigEndianStructure)]
 
 
 @pytest.mark.parametrize('dbr, expected_dbr', dbr_types)
@@ -499,13 +499,13 @@ def test_dict_parameters(dbr, expected_dbr):
     fields = get_all_fields(dbr)
     field_names = set(field for field, type_ in fields)
     valid_to_skip = {
-                     # RISC padding bytes
-                     'RISC_pad', 'RISC_pad0', 'RISC_pad1',
-                     # timestamp is a structure now, auto-converted to unix timestamp
-                     # in the field 'timestamp'
-                     'stamp',
-                     # enum strings come back as 'enum_strings' key, so count
-                     # of strings and the ctypes 'strs' are not useful
-                     'no_str', 'strs'}
+        # RISC padding bytes
+        'RISC_pad', 'RISC_pad0', 'RISC_pad1',
+        # timestamp is a structure now, auto-converted to unix timestamp
+        # in the field 'timestamp'
+        'stamp',
+        # enum strings come back as 'enum_strings' key, so count
+        # of strings and the ctypes 'strs' are not useful
+        'no_str', 'strs'}
     remaining = field_names - set(info_dict.keys()) - valid_to_skip
     assert len(remaining) == 0, 'fields not captured in info_keys'

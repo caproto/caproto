@@ -310,9 +310,9 @@ def test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
 # These tests require numpy.
 @pytest.mark.parametrize(
     'module_name, pvdb_class_name, class_kwargs',
-     [('caproto.ioc_examples.caproto_to_ophyd', 'Group', {}),
-      ('caproto.ioc_examples.areadetector_image', 'DetectorGroup', {}),
-      ])
+    [('caproto.ioc_examples.caproto_to_ophyd', 'Group', {}),
+     ('caproto.ioc_examples.areadetector_image', 'DetectorGroup', {}),
+     ])
 def test_special_ioc_examples(request, module_name, pvdb_class_name,
                               class_kwargs, prefix):
     pytest.importorskip('numpy')

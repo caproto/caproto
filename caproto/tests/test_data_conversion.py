@@ -6,8 +6,7 @@ import pytest
 from .._data import convert_values, ConversionDirection
 from .._dbr import ChannelType, DbrStringArray
 from .. import backend
-from .conftest import (array_types,
-                       assert_array_equal, assert_array_almost_equal)
+from .conftest import (array_types, assert_array_almost_equal)
 
 
 FROM_WIRE = ConversionDirection.FROM_WIRE

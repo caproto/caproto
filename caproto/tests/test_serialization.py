@@ -325,9 +325,9 @@ skip_ext_headers = [
 
 all_headers = [header_name
                for header_name in dir(ca._headers)
-               if header_name.endswith('Header')
-               and not header_name.startswith('_')
-               and header_name not in skip_ext_headers]
+               if header_name.endswith('Header') and
+               not header_name.startswith('_') and
+               header_name not in skip_ext_headers]
 
 
 @pytest.mark.parametrize('header_name', all_headers)
