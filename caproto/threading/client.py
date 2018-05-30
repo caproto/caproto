@@ -673,6 +673,13 @@ class Context:
             max_workers=MAX_USER_CALLBACK_WORKERS,
             thread_name_prefix='user-callback-executor')
 
+    def __repr__(self):
+        return (f"<Context "
+                f"searches_pending={len(self.broadcaster.unanswered_searches)} "
+                f"circuits={len(self.circuit_managers)} "
+                f"pvs={len(self.pvs)} "
+                f"idle={len([1 for pv in self.pvs.values() if pv._idle])}>")
+
     def get_pvs(self, *names, priority=0, connection_state_callback=None,
                 access_rights_callback=None):
         """
