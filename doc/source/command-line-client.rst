@@ -4,7 +4,7 @@ Command-Line Client
 
 
 Installing the caproto Python package places several executable command-line
-utilities next to whichever ``python`` binary was used to install caproto.
+utilities next to whichever ``python3`` binary was used to install caproto.
 They should be available on your ``PATH``.
 
 Type ``caproto-<TAB>`` to check:
