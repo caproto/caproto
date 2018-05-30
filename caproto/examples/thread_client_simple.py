@@ -38,20 +38,17 @@ def main(pvname1='pi', pvname2='str',
 
     pv1.write(value1, timeout=5)
     reading = pv1.read()
-    assert reading.data == value1
-    print(f'wrote {value1} and read back: {reading}')
+    print(f'wrote {value1} and read back: {reading.data}')
 
     pv1.write(value2, timeout=5)
     reading = pv1.read()
-    assert reading.data == value2
-    print(f'wrote {value2} and read back: {reading}')
+    print(f'wrote {value2} and read back: {reading.data}')
 
     # Clean up the subscription
     sub.clear()
 
     pv2.go_idle()
     pv1.go_idle()
-    assert called
 
     print('The subscription callback saw the following data:')
     for command in called:
