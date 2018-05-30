@@ -7,6 +7,9 @@ from caproto import find_available_tcp_port
 
 from ..server.common import (VirtualCircuit as _VirtualCircuit,
                              Context as _Context)
+from .._utils import bcast_socket
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -43,6 +46,7 @@ class VirtualCircuit(_VirtualCircuit):
         self.command_queue = asyncio.Queue()
         self.new_command_condition = asyncio.Condition()
         self._cq_task = None
+        self._write_tasks = ()
 
     async def send(self, *commands):
         if self.connected:
@@ -54,7 +58,9 @@ class VirtualCircuit(_VirtualCircuit):
         self._cq_task = self.loop.create_task(self.command_queue_loop())
 
     async def _start_write_task(self, handle_write):
-        self.loop.create_task(handle_write())
+        tsk = self.loop.create_task(handle_write())
+        self._write_tasks = tuple(t for t in self._write_tasks + (tsk,)
+                                  if not t.done())
 
     async def _wake_new_command(self):
         async with self.new_command_condition:
@@ -85,23 +91,18 @@ class Context(_Context):
         self._server_tasks = []
 
     async def server_accept_loop(self, addr, port):
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-        logger.debug('Listening on %s:%d', addr, port)
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.setblocking(False)
-        s.bind((addr, port))
-        s.listen()
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0) as s:
+            logger.debug('Listening on %s:%d', addr, port)
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s.setblocking(False)
+            s.bind((addr, port))
+            s.listen()
 
-        try:
             while True:
                 client_sock, addr = await self.loop.sock_accept(s)
                 tsk = self.loop.create_task(self.tcp_handler(client_sock,
                                                              addr))
                 self._server_tasks.append(tsk)
-        finally:
-            s.shutdown(socket.SHUT_WR)
-            s.close()
-            s = None
 
     async def run(self):
         'Start the server'
@@ -116,12 +117,18 @@ class Context(_Context):
             parent = self
             loop = self.loop
 
+            def __init__(self, *args, **kwargs):
+                self.transport = None
+                self._tasks = ()
+
             def connection_made(self, transport):
                 self.transport = transport
 
             def datagram_received(self, data, addr):
-                self.loop.create_task(self.parent._broadcaster_recv_datagram(
-                                      data, addr))
+                tsk = self.loop.create_task(self.parent._broadcaster_recv_datagram(
+                    data, addr))
+                self._tasks = tuple(t for t in self._tasks + (tsk,)
+                                    if not t.done())
 
         class TransportWrapper:
             def __init__(self, transport):
@@ -130,13 +137,15 @@ class Context(_Context):
             async def sendto(self, bytes_to_send, addr_port):
                 self.transport.sendto(bytes_to_send, addr_port)
 
-            def close(self):
-                self.transport.close()
+        udp_sock = bcast_socket()
+        try:
+            udp_sock.bind((self.host, ca.EPICS_CA1_PORT))
+        except Exception:
+            logger.exception('[server] udp bind failure!')
+            raise
 
         transport, self.p = await self.loop.create_datagram_endpoint(
-            BcastLoop, (self.host, ca.EPICS_CA1_PORT),
-            reuse_address=True, allow_broadcast=True, reuse_port=True)
-
+            BcastLoop, sock=udp_sock)
         self.udp_sock = TransportWrapper(transport)
 
         tasks.append(self.loop.create_task(self.broadcaster_queue_loop()))
@@ -150,10 +159,20 @@ class Context(_Context):
 
         try:
             await asyncio.gather(*tasks)
-        finally:
-            for t in tasks + self._server_tasks:
+        except asyncio.CancelledError:
+            udp_sock.close()
+            all_tasks = (tasks + self._server_tasks + [c._cq_task
+                                                       for c in self.circuits
+                                                       if c._cq_task is not None] +
+                         [t for c in self.circuits for t in c._write_tasks] +
+                         list(self.p._tasks))
+            for t in all_tasks:
                 t.cancel()
-            self.udp_sock.close()
+            await asyncio.wait(all_tasks)
+            return
+        except Exception as ex:
+            udp_sock.close()
+            raise
 
 
 async def start_server(pvdb, log_level='DEBUG', *, bind_addr='0.0.0.0'):
