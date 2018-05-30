@@ -14,6 +14,14 @@ classifiers = [
     'License :: OSI Approved :: BSD License'
 ]
 
+
+extras_require = {
+  'standard': ['netifaces', 'numpy'],
+  'async': ['asks', 'curio', 'trio'],
+}
+extras_require['complete'] = sorted(set(sum(extras_require.values(), [])))
+
+
 setup(name='caproto',
       version=versioneer.get_version(),
       cmdclass=versioneer.get_cmdclass(),
@@ -33,5 +41,6 @@ setup(name='caproto',
                 ],
       scripts=glob.glob('scripts/*'),
       python_requires='>=3.6',
-      classifiers=classifiers
+      classifiers=classifiers,
+      extras_require=extras_require
       )

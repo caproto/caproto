@@ -12,4 +12,4 @@ pytest-rerunfailures
 asv
 asks
 ophyd
-trio==0.4.0
+trio
