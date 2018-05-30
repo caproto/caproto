@@ -31,14 +31,14 @@ In a separate shell, start one of caproto's demo IOCs.
 .. code-block:: bash
 
     $ python3 -m caproto.ioc_examples.random_walk
-    PVs: ['random_walk:delta_t', 'random_walk:x']
+    PVs: ['random_walk:dt', 'random_walk:x']
 
 Now, in Python we will talk to it using caproto's synchronous client:
 
 .. ipython:: python
 
     from caproto.sync.client import get, put, monitor
-    res = get('random_walk:delta_t')
+    res = get('random_walk:dt')
     res
 
 This object is a human-friendly representation of the server's response. The
@@ -58,7 +58,7 @@ Let us set the value to ``1``.
 
 .. ipython:: python
 
-    before, after = put('random_walk:delta_t', 1)
+    before, after = put('random_walk:dt', 1)
     before.data
     after.data
 
@@ -73,7 +73,7 @@ sophisticated clients leave it up to the caller when and whether to request
 readings.
 
 Let us now monitor a channel. The server updates the ``random_walk:x`` channel
-periodically. (The period is set by ``random_walk:delta_t``.) We can subscribe
+periodically. (The period is set by ``random_walk:dt``.) We can subscribe
 to updates.
 
 .. ipython:: python

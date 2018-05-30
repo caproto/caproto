@@ -9,7 +9,7 @@ from caproto.server import pvproperty, PVGroup
 
 
 class RandomWalkIOC(PVGroup):
-    delta_t = pvproperty(value=[3.0])
+    dt = pvproperty(value=[3.0])
     x = pvproperty(value=[0.0])
 
     @x.startup
@@ -24,7 +24,7 @@ class RandomWalkIOC(PVGroup):
             await instance.write(value=[x])
 
             # Let the async library wait for the next iteration
-            await async_lib.library.sleep(self.delta_t.value[0])
+            await async_lib.library.sleep(self.dt.value[0])
 
 
 if __name__ == '__main__':
