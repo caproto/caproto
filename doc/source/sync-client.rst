@@ -48,7 +48,7 @@ raw bytes of that response are:
 
     bytes(res)
 
-Access particular fields in the response through attributes access on ``res``.
+Access particular fields in the response using attribute ("dot") access on ``res``.
 
 .. ipython:: python
 

@@ -9,3 +9,5 @@ doc/build
 .coverage.*
 .asv/
 pytest_bench.json
+build/
+dist/
