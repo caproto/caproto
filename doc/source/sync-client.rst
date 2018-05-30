@@ -2,6 +2,8 @@
 Synchronous Client
 ******************
 
+.. currentmodule:: caproto.sync.client
+
 .. ipython:: python
     :suppress:
     
@@ -110,7 +112,6 @@ they arrive. When we are satisfied, we can interrupted it with Ctrl+C.
 API Documentation
 =================
 
-.. currentmodule:: caproto.sync.client
 .. autofunction:: get
 .. autofunction:: put
 .. autofunction:: monitor
