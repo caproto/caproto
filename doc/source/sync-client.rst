@@ -56,6 +56,24 @@ Access particular fields in the response using attribute ("dot") access on ``res
 
     res.data
 
+.. note::
+
+    **Performance Note**
+
+    The underlying metadata and data are stored in efficient, contiguous-memory data
+    structures.
+
+    .. ipython:: python
+
+        res.header  # a ctypes.BigEndianStructure
+        res.buffers  # a collection of memoryview objects
+
+    They were received directly from the socket into these structure with no
+    intermediate copies. Accessing the ``res.data`` --- which returns a
+    ``numpy.ndarray`` or ``array.array`` --- provides a view onto that same
+    memory with no copying (if the data was received from the socket all at
+    once) or one copy (if the data bridged multiple receipts).
+
 Let us set the value to ``1``.
 
 .. ipython:: python

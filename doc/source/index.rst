@@ -107,8 +107,7 @@ learning exercises.
    sync-client
    threading-client
    pyepics-compat-client
-   trio-client
-   curio-client
+   async-clients
    iocs
    servers
 
@@ -118,6 +117,11 @@ learning exercises.
 
    basics
    api
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Appendix
+
    Performance Benchmarks <https://nsls-ii.github.io/caproto/bench/#/summarylist>
    references
    release-notes
