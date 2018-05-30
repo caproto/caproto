@@ -88,23 +88,18 @@ class Context(_Context):
         self._server_tasks = []
 
     async def server_accept_loop(self, addr, port):
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-        logger.debug('Listening on %s:%d', addr, port)
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.setblocking(False)
-        s.bind((addr, port))
-        s.listen()
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0) as s:
+            logger.debug('Listening on %s:%d', addr, port)
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s.setblocking(False)
+            s.bind((addr, port))
+            s.listen()
 
-        try:
             while True:
                 client_sock, addr = await self.loop.sock_accept(s)
                 tsk = self.loop.create_task(self.tcp_handler(client_sock,
                                                              addr))
                 self._server_tasks.append(tsk)
-        finally:
-            s.shutdown(socket.SHUT_WR)
-            s.close()
-            s = None
 
     async def run(self):
         'Start the server'
