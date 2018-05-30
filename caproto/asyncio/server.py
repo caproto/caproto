@@ -7,6 +7,9 @@ from caproto import find_available_tcp_port
 
 from ..server.common import (VirtualCircuit as _VirtualCircuit,
                              Context as _Context)
+from .._utils import bcast_socket
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -133,10 +136,15 @@ class Context(_Context):
             def close(self):
                 self.transport.close()
 
-        transport, self.p = await self.loop.create_datagram_endpoint(
-            BcastLoop, (self.host, ca.EPICS_CA1_PORT),
-            reuse_address=True, allow_broadcast=True, reuse_port=True)
+        udp_sock = bcast_socket()
+        try:
+            udp_sock.bind((self.host, ca.EPICS_CA1_PORT))
+        except Exception:
+            logger.exception('[server] udp bind failure!')
+            raise
 
+        transport, self.p = await self.loop.create_datagram_endpoint(
+            BcastLoop, sock=udp_sock)
         self.udp_sock = TransportWrapper(transport)
 
         tasks.append(self.loop.create_task(self.broadcaster_queue_loop()))
