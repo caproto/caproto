@@ -17,3 +17,9 @@ from ._log import set_log_coloring
 from ._version import get_versions
 __version__ = get_versions()['version']
 del get_versions
+
+import sys
+if sys.platform == 'win32':
+    # On Windows, there are some ugly compatibility hacks we need to make.
+    from . import _windows_compat  # noqa
+del sys

@@ -1,5 +1,3 @@
-# Functions here are imported into _utils.py only on win32
-
 import os
 import sys
 import socket
@@ -7,17 +5,11 @@ import selectors
 import functools
 
 
-__all__ = ['socket_bytes_available']
+__all__ = []
 
 
 if sys.platform != 'win32':
     raise ImportError('Do not import this outside of win32')
-
-
-def socket_bytes_available(sock, *, default_buffer_size=4096,  # noqa
-                           available_buffer=None):
-    # No support for fcntl/termios on win32
-    return default_buffer_size
 
 
 def _sendmsg(self, buffers, ancdata=None, flags=None, address=None):
@@ -30,7 +22,8 @@ def _sendmsg(self, buffers, ancdata=None, flags=None, address=None):
 
 
 # EVIL_WIN32_TODO: i know this is evil
-socket.socket.sendmsg = _sendmsg
+if not hasattr(socket.socket, 'sendmsg'):
+    socket.socket.sendmsg = _sendmsg
 
 
 try:
@@ -54,10 +47,12 @@ else:
     def curio_run(*args, selector=None, **kwargs):
         if selector is None:
             selector = windows_selector()
-        return _curio_core_run(*args, selector=selector, **kwargs)
+        return curio._pre_caproto_run(*args, selector=selector, **kwargs)
 
-    _curio_core_run = curio.run
-    curio.run = curio_run
+    if not hasattr(curio, '_pre_caproto_run'):
+        curio._pre_caproto_run = curio.run
+        curio.run = curio_run
 
-    # EVIL_WIN32_TODO_HACK: curio set_blocking monkeypatch
-    os.set_blocking = lambda file_no, blocking: None
+    if not hasattr(os, 'set_blocking'):
+        # EVIL_WIN32_TODO_HACK: curio set_blocking monkeypatch
+        os.set_blocking = lambda file_no, blocking: None

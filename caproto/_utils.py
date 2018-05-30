@@ -628,27 +628,29 @@ class ThreadsafeCounter:
                 return value
 
 
-def socket_bytes_available(sock, *, default_buffer_size=4096,
-                           available_buffer=None):
-    '''Return bytes available to receive on socket
-
-    Parameters
-    ----------
-    sock : socket.socket
-    default_buffer_size : int, optional
-        Default recv buffer size, should the platform not support the call or
-        the call fails for unknown reasons
-    available_buffer : array.array, optional
-        Array used for call to fcntl; can be specified to avoid reallocating
-        many times
-    '''
-    if available_buffer is None:
-        available_buffer = array.array('i', [0])
-
-    ok = fcntl.ioctl(sock, termios.FIONREAD, available_buffer) >= 0
-    return (max((available_buffer[0], default_buffer_size))
-            if ok else default_buffer_size)
-
-
 if sys.platform == 'win32' or fcntl is None:
-    from ._windows_compat import *  # noqa
+    def socket_bytes_available(sock, *, default_buffer_size=4096,  # noqa
+                               available_buffer=None):
+        # No support for fcntl/termios on win32
+        return default_buffer_size
+else:
+    def socket_bytes_available(sock, *, default_buffer_size=4096,
+                               available_buffer=None):
+        '''Return bytes available to receive on socket
+
+        Parameters
+        ----------
+        sock : socket.socket
+        default_buffer_size : int, optional
+            Default recv buffer size, should the platform not support the call or
+            the call fails for unknown reasons
+        available_buffer : array.array, optional
+            Array used for call to fcntl; can be specified to avoid reallocating
+            many times
+        '''
+        if available_buffer is None:
+            available_buffer = array.array('i', [0])
+
+        ok = fcntl.ioctl(sock, termios.FIONREAD, available_buffer) >= 0
+        return (max((available_buffer[0], default_buffer_size))
+                if ok else default_buffer_size)
