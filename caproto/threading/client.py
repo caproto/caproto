@@ -156,6 +156,9 @@ logger = logging.getLogger(__name__)
 
 
 class SelectorThread:
+    """
+    This is used internally by the Context and the VirtualCircuitManager.
+    """
     def __init__(self, *, parent=None):
         self.thread = None  # set by the `start` method
         self._close_event = threading.Event()
@@ -295,7 +298,7 @@ class SelectorThread:
 class SharedBroadcaster:
     def __init__(self, *, log_level='ERROR', registration_retry_time=10.0):
         '''
-        A broadcaster client which can be shared among multiple clients
+        A broadcaster client which can be shared among multiple Contexts
 
         Parameters
         ----------
@@ -303,7 +306,7 @@ class SharedBroadcaster:
             The log level to use
         registration_retry_time : float, optional
             The time, in seconds, between attempts made to register with the
-            repeater
+            repeater. Default is 10.
         '''
         self.log_level = log_level
         self.udp_sock = None
@@ -627,7 +630,18 @@ class SharedBroadcaster:
 
 
 class Context:
-    "Wraps Broadcaster and a cache of VirtualCircuits"
+    """
+    Encapsulates the state and connections of a client
+
+    Parameters
+    ----------
+    broadcaster : SharedBroadcaster
+    host_name : string, optional
+        uses value of ``socket.gethostname()`` by default
+    client_name : string, optional
+        uses value of ``getpass.getuser()`` by default
+    log_level : string or other sentinel
+    """
     def __init__(self, broadcaster, *,
                  host_name=None, client_name=None,
                  log_level='DEBUG'):
@@ -914,6 +928,13 @@ class Context:
 
 
 class VirtualCircuitManager:
+    """
+    Encapsulates a VirtualCircuit, a TCP socket, and additional state
+
+    This object should never be instantiated directly by user code. It is used
+    internally by the Context. Its methods may be touched by user code, but
+    this is rarely necessary.
+    """
     __slots__ = ('context', 'circuit', 'channels', 'ioids', '_ioid_counter',
                  'subscriptions', '_user_disconnected', '_ready',
                  'socket', 'selector', 'pvs', 'all_created_pvnames',
@@ -1147,7 +1168,16 @@ class VirtualCircuitManager:
 
 
 class PV:
-    """Wraps a VirtualCircuit and a caproto.ClientChannel."""
+    """
+    Represents one PV, specified by a name and priority.
+
+    This object may exist prior to connection and persists across any
+    subsequent re-connections.
+
+    This object should never be instantiated directly by user code; rather it
+    should be created by calling the ``get_pvs`` method on a ``Context``
+    object.
+    """
     __slots__ = ('name', 'priority', 'context', '_circuit_manager', '_channel',
                  'circuit_ready', 'channel_ready',
                  'access_rights_callback', 'subscriptions',
@@ -1519,6 +1549,15 @@ class CallbackHandler:
 
 
 class Subscription(CallbackHandler):
+    """
+    Represents one subscription, specified by a PV and configurational parameters
+
+    It may fan out to zero, one, or multiple user-registered callback
+    functions.
+
+    This object should never be instantiated directly by user code; rather
+    it should be made by calling the ``subscribe()`` method on a ``PV`` object.
+    """
     def __init__(self, pv, sub_args, sub_kwargs):
         super().__init__(pv)
         # Stash everything, but do not send any EPICS messages until the first
