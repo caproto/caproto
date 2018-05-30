@@ -146,7 +146,7 @@ After some time has passed, we will have accumulated some responses.
 .. ipython:: python
     :suppress:
 
-    import time; time.sleep(3)
+    import time; time.sleep(5)
 
 .. ipython:: python
 
