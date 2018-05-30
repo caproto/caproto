@@ -16,8 +16,8 @@ classifiers = [
 
 
 extras_require = {
-  'standard': ['netifaces', 'numpy'],
-  'async': ['asks', 'curio', 'trio'],
+    'standard': ['netifaces', 'numpy'],
+    'async': ['asks', 'curio', 'trio'],
 }
 extras_require['complete'] = sorted(set(sum(extras_require.values(), [])))
 
