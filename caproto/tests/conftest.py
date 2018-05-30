@@ -495,7 +495,7 @@ def server(request):
             try:
                 await ctx.run()
             except Exception as ex:
-                print('Server failed', ex)
+                print(f'Server failed: {type(ex)}, {ex}', ex)
                 raise
             finally:
                 print('Server exiting')
@@ -514,6 +514,8 @@ def server(request):
                 else:
                     break
             tsk.cancel()
+            await asyncio.wait((tsk, ))
+
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         loop.run_until_complete(run_server_and_client(loop))
