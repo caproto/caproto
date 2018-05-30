@@ -9,7 +9,7 @@ class RecordMockingIOC(PVGroup):
 
     @B.putter
     async def B(self, instance, value):
-        if value == 1:
+        if list(value) == [1]:
             # Mocked record will pick up the alarm status simply by use raising
             # an exception in the putter:
             raise ValueError('Invalid value!')

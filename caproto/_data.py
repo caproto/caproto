@@ -678,6 +678,13 @@ class ChannelData:
                    'lower_ctrl_limit'):
             value = locals()[kw]
             if value is not None and kw in data:
+                # Unpack scalars. This could be skipped for numpy.ndarray which
+                # does the right thing, but is essential for array.array to
+                # work.
+                try:
+                    value, = value
+                except (TypeError, ValueError):
+                    pass
                 data[kw] = value
 
         if any(alarm_val is not None

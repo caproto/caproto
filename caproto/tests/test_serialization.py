@@ -1,12 +1,11 @@
 import array
 import copy
 import ctypes
-from numpy.testing import assert_array_equal, assert_array_almost_equal
-import numpy
 
 import caproto as ca
 import inspect
 import pytest
+from .conftest import assert_array_equal, assert_array_almost_equal
 
 
 ip = '255.255.255.255'
@@ -135,23 +134,19 @@ payloads = [
     (ca.ChannelType.INT, 5, (7, 21, 2, 4, 5), None),
     (ca.ChannelType.INT, 5, int_arr, None),
     (ca.ChannelType.INT, 5, bytes(int_arr), None),
-    (ca.ChannelType.INT, 5, numpy.array([7, 21, 2, 4, 5], dtype='i2'), None),
 
     (ca.ChannelType.FLOAT, 1, (7,), None),
     (ca.ChannelType.FLOAT, 3, (7, 21.1, 3.1), None),
     (ca.ChannelType.FLOAT, 3, float_arr, None),
     (ca.ChannelType.FLOAT, 3, bytes(float_arr), None),
-    (ca.ChannelType.FLOAT, 3, numpy.array([7, 21.1, 3.1], dtype='f4'), None),
 
     (ca.ChannelType.LONG, 1, (7,), None),
     (ca.ChannelType.LONG, 2, (7, 21), None),
-    (ca.ChannelType.LONG, 5, numpy.array([7, 21, 2, 4, 5], dtype='i4'), None),
     (ca.ChannelType.LONG, 5, long_arr, None),
     (ca.ChannelType.LONG, 5, bytes(long_arr), None),
 
     (ca.ChannelType.DOUBLE, 1, (7,), None),
     (ca.ChannelType.DOUBLE, 6, (7, 21.1, 7, 7, 2.1, 1.1), None),
-    (ca.ChannelType.DOUBLE, 3, numpy.array([7, 21.1, 3.1], dtype='f8'), None),
     (ca.ChannelType.DOUBLE, 3, double_arr, None),
     (ca.ChannelType.DOUBLE, 3, bytes(double_arr), None),
 
@@ -162,11 +157,23 @@ payloads = [
 
     (ca.ChannelType.STRING, 1, b'abc'.ljust(40, b'\x00'), None),
     (ca.ChannelType.STRING, 3, 3 * b'abc'.ljust(40, b'\x00'), None),
-    (ca.ChannelType.STRING, 2, numpy.array(['abc', 'def'], '>S40'), None),
-    (ca.ChannelType.STRING, 2, numpy.array(['abc', 'def'], 'S40'), None),
     (ca.ChannelType.CHAR, 1, b'z', None),
     (ca.ChannelType.CHAR, 3, b'abc', None),
 ]
+
+try:
+    import numpy
+except ImportError:
+    pass
+else:
+    payloads += [
+        (ca.ChannelType.INT, 5, numpy.array([7, 21, 2, 4, 5], dtype='i2'), None),
+        (ca.ChannelType.FLOAT, 3, numpy.array([7, 21.1, 3.1], dtype='f4'), None),
+        (ca.ChannelType.LONG, 5, numpy.array([7, 21, 2, 4, 5], dtype='i4'), None),
+        (ca.ChannelType.DOUBLE, 3, numpy.array([7, 21.1, 3.1], dtype='f8'), None),
+        (ca.ChannelType.STRING, 2, numpy.array(['abc', 'def'], '>S40'), None),
+        (ca.ChannelType.STRING, 2, numpy.array(['abc', 'def'], 'S40'), None),
+    ]
 
 
 @pytest.mark.parametrize('data_type, data_count, data, metadata', payloads)
@@ -286,9 +293,16 @@ def test_bytelen():
     assert ca.bytelen(b'abc') == 3
     assert ca.bytelen(bytearray(b'abc')) == 3
     assert ca.bytelen(array.array('d', [1, 2, 3])) == 3 * 8
-    assert ca.bytelen(numpy.array([1, 2, 3], 'f8')) == 3 * 8
     assert ca.bytelen(memoryview(b'abc')) == 3
     assert ca.bytelen(ctypes.c_uint(1)) == 4
+
+    try:
+        import numpy
+    except ImportError:
+        pass
+        # skip this one assert
+    else:
+        assert ca.bytelen(numpy.array([1, 2, 3], 'f8')) == 3 * 8
 
 
 def test_overlong_strings():
@@ -311,9 +325,9 @@ skip_ext_headers = [
 
 all_headers = [header_name
                for header_name in dir(ca._headers)
-               if header_name.endswith('Header')
-               and not header_name.startswith('_')
-               and header_name not in skip_ext_headers]
+               if header_name.endswith('Header') and
+               not header_name.startswith('_') and
+               header_name not in skip_ext_headers]
 
 
 @pytest.mark.parametrize('header_name', all_headers)

@@ -87,9 +87,10 @@
 #
 # ------------------------------------------------
 
+import pytest
+numpy = pytest.importorskip("numpy")
 import time
 import os
-import numpy
 import threading
 from types import SimpleNamespace
 from contextlib import contextmanager
@@ -99,7 +100,6 @@ from caproto.threading.pyepics_compat import (PV, caput, caget, cainfo,
 from caproto.threading.client import Context, SharedBroadcaster
 
 from .conftest import default_setup_module, default_teardown_module
-import pytest
 
 
 def setup_module(module):

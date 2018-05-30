@@ -1,3 +1,4 @@
+import array
 import curio
 import functools
 import logging
@@ -28,6 +29,31 @@ REPEATER_PORT = 5065
 SERVER_HOST = '0.0.0.0'
 logger = logging.getLogger(__name__)
 logger.setLevel('DEBUG')
+
+
+array_types = (array.array,)
+try:
+    import numpy
+except ImportError:
+    pass
+else:
+    array_types = array_types + (numpy.ndarray,)
+
+
+# Don't import these from numpy because we do not assume that numpy is
+# installed.
+
+
+def assert_array_equal(arr1, arr2):
+    assert len(arr1) == len(arr2)
+    for i, j in zip(arr1, arr2):
+        assert i == j
+
+
+def assert_array_almost_equal(arr1, arr2):
+    assert len(arr1) == len(arr2)
+    for i, j in zip(arr1, arr2):
+        assert abs(i - j) < 1e-6
 
 
 def run_example_ioc(module_name, *, request, pv_to_check, args=None,

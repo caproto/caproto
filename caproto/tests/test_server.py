@@ -2,13 +2,14 @@ import ast
 import datetime
 import array
 
-import numpy as np
 import pytest
 
 import caproto as ca
 
 from caproto import ChannelType
 from .epics_test_utils import (run_caget, run_caput)
+from .conftest import array_types
+
 
 caget_checks = sum(
     ([(pv, dtype),
@@ -202,7 +203,13 @@ def test_with_caput(backends, prefix, pvdb_from_server_example, server, pv,
         elif isinstance(db_entry, ca.ChannelByte):
             if pv.endswith('bytearray'):
                 def clean_func(v):
-                    return np.frombuffer(v.encode('latin-1'), dtype=np.uint8)
+                    try:
+                        import numpy
+                    except ImportError:
+                        return numpy.frombuffer(
+                            v.encode('latin-1'), dtype=numpy.uint8)
+                    else:
+                        return array.array('I', v.encode('latin-1'))
             else:
                 def clean_func(v):
                     return chr(int(v)).encode('latin-1')
@@ -227,7 +234,7 @@ def test_with_caput(backends, prefix, pvdb_from_server_example, server, pv,
         print('old from caput', data['old'])
         print('new from caput', data['new'])
 
-        if isinstance(db_new, (array.array, np.ndarray)):
+        if isinstance(db_new, array_types):
             db_new = db_new.tolist()
 
         # check value from database compared to value from caput output

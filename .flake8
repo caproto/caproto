@@ -1,3 +1,4 @@
 [flake8]
-exclude = .git,__pycache__,doc/source/conf.py,build,dist,versioneer.py,caproto/_headers.py,caproto/tests/test_pyepics_compat.py
+ignore = E402
+exclude = .git,__pycache__,doc/source/conf.py,build,dist,versioneer.py,caproto/_headers.py,caproto/tests/test_pyepics_compat.py,caproto/_version.py
 max-line-length = 115

@@ -380,7 +380,7 @@ def send_all(buffers_to_send, send_func):
                     sent = send_func(buffers_to_send)
                     break
                 except OSError:
-                    buffers_to_send = buffers_to_send[:len(buffers_to_send)//2]
+                    buffers_to_send = buffers_to_send[:len(buffers_to_send) // 2]
 
         except SendAllRetry:
             continue
@@ -418,7 +418,7 @@ async def async_send_all(buffers_to_send, async_send_func):
                     sent = await async_send_func(buffers_to_send)
                     break
                 except OSError:
-                    buffers_to_send = buffers_to_send[:len(buffers_to_send)//2]
+                    buffers_to_send = buffers_to_send[:len(buffers_to_send) // 2]
         except SendAllRetry:
             continue
 

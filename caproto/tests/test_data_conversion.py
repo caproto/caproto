@@ -2,12 +2,11 @@ import array
 from inspect import isclass
 
 import pytest
-import numpy as np
-from numpy.testing import assert_array_almost_equal
 
 from .._data import convert_values, ConversionDirection
 from .._dbr import ChannelType, DbrStringArray
 from .. import backend
+from .conftest import (array_types, assert_array_almost_equal)
 
 
 FROM_WIRE = ConversionDirection.FROM_WIRE
@@ -75,7 +74,7 @@ def run_conversion_test(values, from_dtype, to_dtype, expected,
             print(f'array to list {returned} -> {returned.tolist()}'
                   f' ({returned.typecode})')
             returned = returned.tolist()
-        elif isinstance(returned, np.ndarray):
+        elif isinstance(returned, array_types):
             assert returned.dtype == backend.type_map[to_dtype]
             print(f'numpy to list {returned} -> {returned.tolist()}'
                   f' ({returned.dtype})')
