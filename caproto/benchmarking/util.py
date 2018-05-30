@@ -3,7 +3,8 @@ import subprocess
 import shutil
 import logging
 from contextlib import contextmanager
-from tempfile import NamedTemporaryFile
+
+from .._utils import named_temporary_file
 
 
 logger = logging.getLogger(__name__)
@@ -72,13 +73,13 @@ def softioc(*, db_text='', access_rules_text='', additional_args=None,
 
     macros = ','.join('{}={}'.format(k, v) for k, v in macros.items())
 
-    with NamedTemporaryFile(mode='w+', delete=False) as cf:
+    with named_temporary_file(mode='w+') as cf:
         cf.write(access_rules_text)
         cf.flush()
         cf.close()  # win32_compat
 
         logger.debug('access rules filename is: %s', cf.name)
-        with NamedTemporaryFile(mode='w+', delete=False) as df:
+        with named_temporary_file(mode='w+') as df:
             df.write(db_text)
             df.flush()
             df.close()  # win32_compat
@@ -104,9 +105,6 @@ def softioc(*, db_text='', access_rules_text='', additional_args=None,
             finally:
                 proc.kill()
                 proc.wait()
-
-    os.unlink(cf.name)  # TODO try/finally
-    os.unlink(df.name)
 
 
 def make_database(records):

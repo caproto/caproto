@@ -10,6 +10,7 @@ import enum
 import json
 import threading
 from collections import namedtuple
+from contextlib import contextmanager
 from warnings import warn
 
 try:
@@ -654,3 +655,17 @@ else:
         ok = fcntl.ioctl(sock, termios.FIONREAD, available_buffer) >= 0
         return (max((available_buffer[0], default_buffer_size))
                 if ok else default_buffer_size)
+
+
+@contextmanager
+def named_temporary_file(*args, delete=True, **kwargs):
+    '''NamedTemporaryFile wrapper that works around issues in windows'''
+    # See: https://bugs.python.org/issue14243
+
+    from tempfile import NamedTemporaryFile
+    with NamedTemporaryFile(*args, delete=False, **kwargs) as f:
+        try:
+            yield f
+        finally:
+            if delete:
+                os.unlink(f.name)
