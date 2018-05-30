@@ -158,10 +158,12 @@ class Context(_Context):
 
         try:
             await asyncio.gather(*tasks)
+        except Exception as ex:
+            self.udp_sock.close()
+            raise
         finally:
             for t in tasks + self._server_tasks:
                 t.cancel()
-            self.udp_sock.close()
 
 
 async def start_server(pvdb, log_level='DEBUG', *, bind_addr='0.0.0.0'):
