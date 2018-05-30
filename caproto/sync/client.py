@@ -302,6 +302,7 @@ def get(pv_name, *, data_type=None, verbose=False, timeout=1, priority=0,
     Examples
     --------
     Get the value of a Channel named 'cat'.
+
     >>> get('cat').data
     """
     logger = logging.getLogger('get')
@@ -451,8 +452,13 @@ def monitor(*pv_names, callback, mask=None, verbose=False, timeout=1,
 
     Examples
     --------
-    Get the value of a Channel named 'cat'.
-    >>> get('cat').data
+    Print the value of a Channel named 'cat' each time the server issues an
+    update.
+
+    >>> def f(name, response):
+    ...     print(response.data)
+    ...
+    >>> monitor('cat', f)  # blocks until interrupted (e.g. by Ctrl+C)
     """
     if mask is None:
         mask = SubscriptionType.DBE_VALUE | SubscriptionType.DBE_ALARM
@@ -631,6 +637,7 @@ def put(pv_name, data, *, data_type=None, metadata=None,
     Examples
     --------
     Write the value 5 to a Channel named 'cat'.
+
     >>> initial, final = put('cat', 5)
     """
     raw_data = data
