@@ -9,11 +9,8 @@ What is This?
 
 Caproto includes a client that is a drop-in replacement for pyepics. It is a
 thin shim on top of caproto's main :doc:`threading-client`. Caproto's
-pyepics-compatible client passes a representative sample of the pyepics test
-suite, which is vendored by caproto its own test suite.
-
-The authors of caproto are heavy pyepics users and occasional contributors.
-This module is intended as a friendly bridge to pyepics.
+pyepics-compatible client is tested against a representative sample of the
+pyepics test suite.
 
 Why would you ever want to use caproto's pyepics instead of actual pyepics?  It
 may be advantageous to run existing user code written for pyepics on top of
@@ -34,12 +31,14 @@ entire network stack, rather than calling out to libca, it can batch requests
 into UDP datagrams and TCP packets more efficiently, leading to ~100X speedup
 in connecting a large number of channels in bulk.
 
+The authors of caproto are heavy pyepics users and occasional contributors.
+This module is intended as a friendly bridge to pyepics.
+
 Demonstration
 =============
 
 For full documentation on pyepics usage, see the
-`pyepics doucmentation <http://cars9.uchicago.edu/software/python/pyepics3/>`.
-
+`pyepics doucmentation <http://cars9.uchicago.edu/software/python/pyepics3/>`_.
 This is a brief demonstration of caproto's pyepics-compat client.
 
 .. currentmodule:: caproto.threading.pyepics_compat
@@ -69,7 +68,6 @@ In a separate shell, start one of caproto's demo IOCs.
     PVs: ['random_walk:dt', 'random_walk:x']
 
 Now, in Python we will talk to it using caproto's pyepics-compatible client.
-
 Get and put to ``random_walk:dt``:
 
 .. ipython:: python
@@ -81,6 +79,7 @@ Get and put to ``random_walk:dt``:
     pv = epics.get_pv(pv_name)
     pv.get()
     pv.put(1)
+    pv.get()
 
 Subscribe a user-defined callback function to ``random_walk:x``:
 
@@ -99,7 +98,8 @@ Note that pyepics recommends using ``epics.get_pv(...)`` instead of
     import time; time.sleep(5)  # give some time for responses to come in
     x_pv.clear_callbacks()
 
-The underlying caproto PV and Context objects are accessible:
+The underlying caproto PV and Context objects from caproto's main
+:doc:`threading-client`. are accessible:
 
 .. ipython:: python
 
