@@ -353,7 +353,8 @@ def test_timeout(ioc, context):
     # This may or may not raise a TimeoutError depending on who wins the race.
     # The important thing is that the callback should _never_ be processed.
     try:
-        pv.write((2, ), timeout=0, callback=cb)
+        # TODO add custom monotonic_time function in caproto._utils
+        pv.write((2, ), timeout=-1, callback=cb)
     except TimeoutError:
         pass
     # Wait and make sure that the callback is not called.
