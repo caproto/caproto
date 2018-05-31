@@ -67,7 +67,7 @@ Access particular fields in the response using attribute ("dot") access on
     .. ipython:: python
 
         res.header  # a ctypes.BigEndianStructure
-        res.buffers  # a collection of memoryview objects
+        res.buffers  # a collection of one or more buffers
 
     They were received directly from the socket into these structure with no
     intermediate copies. Accessing the ``res.data`` --- which returns a

@@ -96,7 +96,7 @@ Access particular fields in the response using attribute ("dot") access on ``res
     .. ipython:: python
 
         res.header  # a ctypes.BigEndianStructure
-        res.buffers  # a collection of memoryview objects
+        res.buffers  # a collection of one or more buffers
 
     They were received directly from the socket into these structure with no
     intermediate copies. Accessing the ``res.data`` --- which returns a
@@ -185,8 +185,9 @@ re-initiates updates. All of this is transparent to the user.
 
         sub.add_callback(lambda response: print(response.data))
 
-    This can be surprising, but it is a standard approach for avoiding
-    the accidental costly accumulation of abandoned callbacks.
+    The lambda function will be promptly removed and garbage collected. This
+    can be surprising, but it is a standard approach for avoiding the
+    accidental costly accumulation of abandoned callbacks.
 
 Once created, PVs are cached for the lifetime of the :class:`Context` and
 returned again to the user if a PV with the same name and priority is
