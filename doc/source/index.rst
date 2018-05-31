@@ -37,7 +37,7 @@ Now on to caproto:
 
 .. code-block:: bash
 
-   python3 -m pip install caproto[complete]  # install caproto (and its optional dependencies)
+   python3 -m pip install "caproto[complete]"  # install caproto (and its optional dependencies)
    python3 -m caproto.ioc_examples.simple &  # background a demo server
    caproto-put simple:A 42  # run a command-line client
 
@@ -107,6 +107,11 @@ ready-to-use client and server implementations exploring different API choices
 and networking libraries. They are organized into packages by how they handle
 concurrency. Some will be maintained long-term; others may be abandoned as
 learning exercises.
+
+.. toctree::
+   :maxdepth: 2
+
+   install
 
 .. toctree::
    :maxdepth: 2
