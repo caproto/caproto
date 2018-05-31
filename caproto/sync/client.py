@@ -95,7 +95,9 @@ def search(pv_name, logger, udp_sock, timeout, *, max_retries=2):
 
         if time.monotonic() - t > timeout:
             raise TimeoutError(f"Timed out while awaiting a response "
-                               f"from the search for {pv_name!r}")
+                               f"from the search for {pv_name!r}. Search "
+                               f"requests were sent to this address list: "
+                               f"{ca.get_address_list()}.")
 
     # Initial search attempt
     send_search()
