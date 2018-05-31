@@ -486,3 +486,12 @@ VirtualCircuit and then send it over the socket. These are just easy ways to
 generate valid commands --- with auto-generated unique IDs filled in --- which
 you may or may not then choose to send. The state machines are not updated
 until (unless) the command is actually sent.
+
+.. ipython:: python
+    :suppress:
+
+    # Clean up IOC processes.
+    for p in processes:
+        p.terminate()
+    for p in processes:
+        p.wait()
