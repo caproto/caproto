@@ -369,8 +369,7 @@ def curio_server(prefix):
     async def _server(pvdb):
         port = ca.find_available_tcp_port(host=SERVER_HOST)
         logger.info('Server will be on %s', (SERVER_HOST, port))
-        ctx = caproto.curio.server.Context(SERVER_HOST, port, pvdb,
-                                           log_level='DEBUG')
+        ctx = caproto.curio.server.Context(SERVER_HOST, port, pvdb)
         try:
             await ctx.run()
         except caproto.curio.server.ServerExit:
@@ -397,27 +396,26 @@ def curio_server(prefix):
     return run_server, prefix, caget_pvdb
 
 
-async def get_curio_context(log_level='DEBUG'):
+async def get_curio_context():
     logger.debug('New curio broadcaster')
-    broadcaster = caproto.curio.client.SharedBroadcaster(log_level=log_level)
+    broadcaster = caproto.curio.client.SharedBroadcaster()
     logger.debug('Registering...')
     await broadcaster.register()
     logger.debug('Registered! Returning new context.')
-    return caproto.curio.client.Context(broadcaster, log_level=log_level)
+    return caproto.curio.client.Context(broadcaster)
 
 
-def run_with_trio_context(func, *, log_level='DEBUG', **kwargs):
+def run_with_trio_context(func, **kwargs):
     async def runner():
         async with trio.open_nursery() as nursery:
             logger.debug('New trio broadcaster')
             broadcaster = caproto.trio.client.SharedBroadcaster(
-                nursery=nursery, log_level=log_level)
+                nursery=nursery)
 
             logger.debug('Registering...')
             await broadcaster.register()
             logger.debug('Registered! Returning new context.')
-            context = caproto.trio.client.Context(broadcaster, nursery=nursery,
-                                                  log_level=log_level)
+            context = caproto.trio.client.Context(broadcaster, nursery=nursery)
             ret = await func(context=context, **kwargs)
 
             logger.debug('Shutting down the broadcaster')
@@ -437,8 +435,7 @@ def server(request):
         async def server_main():
             port = ca.find_available_tcp_port(host=SERVER_HOST)
             print('Server will be on', (SERVER_HOST, port))
-            ctx = caproto.curio.server.Context(SERVER_HOST, port, pvdb,
-                                               log_level='DEBUG')
+            ctx = caproto.curio.server.Context(SERVER_HOST, port, pvdb)
             try:
                 await ctx.run()
             except caproto.curio.server.ServerExit:
@@ -475,8 +472,7 @@ def server(request):
         async def trio_server_main(task_status):
             port = ca.find_available_tcp_port(host=SERVER_HOST)
             print('Server will be on', (SERVER_HOST, port))
-            ctx = caproto.trio.server.Context(SERVER_HOST, port, pvdb,
-                                              log_level='DEBUG')
+            ctx = caproto.trio.server.Context(SERVER_HOST, port, pvdb)
 
             task_status.started(ctx)
 
@@ -515,8 +511,7 @@ def server(request):
         async def asyncio_server_main():
             port = ca.find_available_tcp_port(host=SERVER_HOST)
             print('Server will be on', (SERVER_HOST, port))
-            ctx = caproto.asyncio.server.Context(SERVER_HOST, port, pvdb,
-                                                 log_level='DEBUG')
+            ctx = caproto.asyncio.server.Context(SERVER_HOST, port, pvdb)
 
             try:
                 await ctx.run()
