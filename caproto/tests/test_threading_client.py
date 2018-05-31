@@ -385,17 +385,20 @@ def _multithreaded_exec(test_func, thread_count, *, start_timeout=5,
     end_barrier = threading.Barrier(parties=thread_count + 1)
 
     def thread_wrapper(thread_id):
-        print(f'* thread {thread_id} entered *')
-        start_barrier.wait(timeout=start_timeout)
-
         try:
-            return_values[thread_id] = test_func(thread_id)
-        except Exception as ex:
-            print(f'* thread {thread_id} failed: {ex.__class__.__name__} {ex}')
-            return_values[thread_id] = ex
+            print(f'* thread {thread_id} entered *')
+            start_barrier.wait(timeout=start_timeout)
 
-        end_barrier.wait(timeout=end_timeout)
-        print(f'* thread {thread_id} exiting *')
+            try:
+                return_values[thread_id] = test_func(thread_id)
+            except Exception as ex:
+                print(f'* thread {thread_id} failed: {ex.__class__.__name__} {ex}')
+                return_values[thread_id] = ex
+
+            end_barrier.wait(timeout=end_timeout)
+            print(f'* thread {thread_id} exiting *')
+        except threading.BrokenBarrierError as ex:
+            return_values[thread_id] = ex
 
     for i in range(thread_count):
         threads[i] = threading.Thread(target=thread_wrapper,
@@ -417,9 +420,9 @@ def _multithreaded_exec(test_func, thread_count, *, start_timeout=5,
 
     ex = None
     for thread_id in range(thread_count):
+        threads[thread_id].join(timeout=0.1)
         ret_val = return_values[thread_id]
         print(f'Result {thread_id} {ret_val}')
-        threads[thread_id].join(timeout=0.1)
         if isinstance(ret_val, Exception):
             ex = ret_val
 
