@@ -7,10 +7,10 @@ Pyepics-Compatible Client
 What is This?
 =============
 
-Caproto includes a client that is a drop-in replacement for pyepics. It is a
-thin shim on top of caproto's main :doc:`threading-client`. Caproto's
-pyepics-compatible client is tested against a representative sample of the
-pyepics test suite.
+Caproto includes a client that is a drop-in replacement for pyepics. It is
+implemented as a shim on top of caproto's main :doc:`threading-client`.
+Caproto's pyepics-compatible client is tested against a representative sample
+of the pyepics test suite.
 
 Why would you ever want to use caproto's pyepics instead of actual pyepics?  It
 may be advantageous to run existing user code written for pyepics on top of
@@ -105,3 +105,6 @@ The underlying caproto PV and Context objects from caproto's main
 
     pv._caproto_pv
     pv._caproto_pv.context
+
+This brief demonstration has not exercised every aspect of the pyepics API, but
+caproto's test suite is more comprehensive.

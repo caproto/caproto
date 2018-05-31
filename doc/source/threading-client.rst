@@ -16,7 +16,7 @@ Threading Client
         processes.append(p)  # Clean this up at the end.
         time.sleep(1)  # Give it time to start up.
 
-The threading client is a high-performance client that uses Python built-in
+The threading client is a high-performance client that uses Python's built-in
 threading module to manage concurrency.
 
 Tutorial
@@ -191,14 +191,26 @@ re-initiates updates. All of this is transparent to the user.
 Once created, PVs are cached for the lifetime of the :class:`Context` and
 returned again to the user if a PV with the same name and priority is
 requested. In order to reduce the load on the network, a PV can be temporarily
-made "idle" (disconnected). It will silently automatically reconnect the next
+made "idle" (disconnected). It will silently, automatically reconnect the next
 time it is used.
 
 .. ipython:: python
 
-    pv.go_idle()
+    x
+    x.go_idle()
+    x
+    x.read()
+    x
 
-The ``go_idle()`` method is merely a *request*.
+Notice that when the PV was read it automatically reconnected, requiring no
+action from the user.
+
+The ``go_idle()`` method is merely a *request* and is not guaranteed to have
+any effect. If a PV has active subscriptions, it will ignore the request: it
+must stay active to continue servicing user callbacks. Therefore, it is safe
+call ``go_idle()`` on any PV at any time, knowing that the PV will decline to
+disconnect if it is being actively used and that, if it is currently unused, it
+will transparently reconnect the next time it is used.
 
 .. ipython:: python
     :suppress:
