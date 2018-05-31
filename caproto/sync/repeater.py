@@ -181,12 +181,12 @@ def check_for_running_repeater(addr):
 def run(host='0.0.0.0'):
     port = caproto.get_environment_variables()['EPICS_CA_REPEATER_PORT']
     addr = (host, port)
-    logger.debug('Checking for another repeater')
+    logger.debug('Checking for another repeater....')
 
     try:
         sock = check_for_running_repeater(addr)
     except RepeaterAlreadyRunning:
-        logger.info('Another repeater is already running; exiting')
+        logger.info('Another repeater is already running; exiting.')
         return
 
     try:

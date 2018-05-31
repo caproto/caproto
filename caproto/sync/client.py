@@ -56,7 +56,6 @@ def recv(circuit):
 def search(pv_name, logger, udp_sock, timeout, *, max_retries=2):
     # Set Broadcaster log level to match our logger.
     b = ca.Broadcaster(our_role=ca.CLIENT)
-    b.log.setLevel(logger.level)
 
     # Send registration request to the repeater
     logger.debug('Registering with the Channel Access repeater.')
@@ -131,8 +130,6 @@ def make_channel(pv_name, logger, udp_sock, priority, timeout):
     circuit = ca.VirtualCircuit(our_role=ca.CLIENT,
                                 address=address,
                                 priority=priority)
-    # Set circuit log level to match our logger.
-    circuit.log.setLevel(logger.level)
     chan = ca.ClientChannel(pv_name, circuit)
     sockets[chan.circuit] = socket.create_connection(chan.circuit.address,
                                                      timeout)
@@ -237,10 +234,14 @@ def get_cli():
                         help=("Timeout ('wait') in seconds for server "
                               "responses."))
     parser.add_argument('--verbose', '-v', action='store_true',
-                        help="Show DEBUG log messages.")
+                        help="Verbose mode. (Use -vvv for more.)")
+    parser.add_argument('-vvv', action='store_true',
+                        help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.verbose:
         logging.getLogger('caproto.get').setLevel('DEBUG')
+    if args.vvv:
+        logging.getLogger('caproto').setLevel('DEBUG')
     data_type = parse_data_type(args.d)
     try:
         for pv_name in args.pv_names:
@@ -361,9 +362,13 @@ def monitor_cli():
                               "responses."))
     parser.add_argument('--verbose', '-v', action='store_true',
                         help="Show DEBUG log messages.")
+    parser.add_argument('-vvv', action='store_true',
+                        help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.verbose:
         logging.getLogger('caproto.monitor').setLevel('DEBUG')
+    if args.vvv:
+        logging.getLogger('caproto').setLevel('DEBUG')
 
     mask = 0
     if 'v' in args.m:
@@ -547,9 +552,13 @@ def put_cli():
                               "responses."))
     parser.add_argument('--verbose', '-v', action='store_true',
                         help="Show DEBUG log messages.")
+    parser.add_argument('-vvv', action='store_true',
+                        help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.verbose:
         logging.getLogger('caproto.put').setLevel('DEBUG')
+    if args.vvv:
+        logging.getLogger('caproto').setLevel('DEBUG')
     try:
         initial, final = put(pv_name=args.pv_name, data=args.data,
                              verbose=args.verbose, timeout=args.timeout,
@@ -704,16 +713,20 @@ EPICS_CA_REPEATER_PORT. It defaults to the standard 5065. The current value is
                        help=("Suppress INFO log messages. "
                              "(Still show WARNING or higher.)"))
     group.add_argument('-v', '--verbose', action='store_true',
-                       help="Show DEBUG log messages.")
+                       help="Verbose mode. (Use -vvv for more.")
+    group.add_argument('-vvv', action='store_true',
+                       help=argparse.SUPPRESS)
     args = parser.parse_args()
-    if args.verbose:
-        level = 'DEBUG'
-    elif args.quiet:
-        level = 'WARNING'
+    if args.vvv:
+        logging.getLogger('caproto').setLevel('DEBUG')
     else:
-        level = 'INFO'
-    logger = logging.getLogger('caproto.repeater')
-    logger.setLevel(level)
+        if args.verbose:
+            level = 'DEBUG'
+        elif args.quiet:
+            level = 'WARNING'
+        else:
+            level = 'INFO'
+        logging.getLogger('caproto.repeater').setLevel(level)
     try:
         run_repeater()
     except BaseException as exc:
