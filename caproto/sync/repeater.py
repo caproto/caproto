@@ -27,7 +27,7 @@ import caproto
 from caproto._constants import MAX_UDP_RECV, SERVER_MIA_PRESUMED_DEAD
 
 
-logger = logging.getLogger('repeater')
+logger = logging.getLogger('caproto.repeater')
 
 
 class RepeaterAlreadyRunning(RuntimeError):
@@ -186,7 +186,7 @@ def run(host='0.0.0.0'):
     try:
         sock = check_for_running_repeater(addr)
     except RepeaterAlreadyRunning:
-        logger.error('Another repeater is already running; exiting')
+        logger.info('Another repeater is already running; exiting')
         return
 
     try:
