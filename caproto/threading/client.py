@@ -88,6 +88,7 @@ def ensure_connected(func):
                 if timeout is not None:
                     timeout = deadline - time.monotonic()
                     kwargs['timeout'] = timeout
+                self._idle = False
                 with pv.component_lock:
                     cm = pv.circuit_manager
                     try:
