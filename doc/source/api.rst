@@ -1,8 +1,8 @@
 .. currentmodule:: caproto
 
-*****************
-API Documentation
-*****************
+**********************
+Core API Documentation
+**********************
 
 .. contents::
 
