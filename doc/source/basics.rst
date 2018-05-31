@@ -36,7 +36,7 @@ but this same code could talk to any Channel Access server.
     :suppress:
 
     run_example('caproto.ioc_examples.random_walk')
-    !caproto-repeater
+    run_example('caproto.sync.repeater')
 
 In a separate shell, start one of caproto's demo IOCs.
 

@@ -192,4 +192,11 @@ def run(host='0.0.0.0'):
     try:
         _run_repeater(sock, addr)
     except KeyboardInterrupt:
-        logger.info('Keyboard interrupt; exiting')
+        logger.info('Keyboard interrupt; exiting.')
+
+
+if __name__ == '__main__':
+    # Support usage python -m caproto.sync.repeater
+    # HACK: This is a runtime circular import. Need organization of cli funcs.
+    from .client import repeater_cli
+    repeater_cli()
