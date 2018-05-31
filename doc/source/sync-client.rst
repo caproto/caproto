@@ -18,7 +18,7 @@ Synchronous Client
 
 The synchronous client optimizes for simplicity of implementation over
 performance. This has its uses, but for high-performance applications one of
-the other clients should be used.
+the other clients, such as the :doc:`threading-client`, should be used.
 
 Tutorial
 ========
@@ -50,7 +50,8 @@ raw bytes of that response are:
 
     bytes(res)
 
-Access particular fields in the response using attribute ("dot") access on ``res``.
+Access particular fields in the response using attribute ("dot") access on
+``res``.
 
 .. ipython:: python
 
@@ -60,8 +61,8 @@ Access particular fields in the response using attribute ("dot") access on ``res
 
     **Performance Note**
 
-    The underlying metadata and data are stored in efficient, contiguous-memory data
-    structures.
+    The underlying metadata and data are stored in efficient, contiguous-memory
+    data structures.
 
     .. ipython:: python
 

@@ -90,8 +90,8 @@ Access particular fields in the response using attribute ("dot") access on ``res
 
     **Performance Note**
 
-    The underlying metadata and data are stored in efficient, contiguous-memory data
-    structures.
+    The underlying metadata and data are stored in efficient, contiguous-memory
+    data structures.
 
     .. ipython:: python
 
@@ -187,6 +187,18 @@ re-initiates updates. All of this is transparent to the user.
 
     This can be surprising, but it is a standard approach for avoiding
     the accidental costly accumulation of abandoned callbacks.
+
+Once created, PVs are cached for the lifetime of the :class:`Context` and
+returned again to the user if a PV with the same name and priority is
+requested. In order to reduce the load on the network, a PV can be temporarily
+made "idle" (disconnected). It will silently automatically reconnect the next
+time it is used.
+
+.. ipython:: python
+
+    pv.go_idle()
+
+The ``go_idle()`` method is merely a *request*.
 
 .. ipython:: python
     :suppress:

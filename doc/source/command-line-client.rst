@@ -25,14 +25,16 @@ Start one of caproto's demo IOCs.
     $ python3 -m caproto.ioc_examples.random_walk
     PVs: ['random_walk:dt', 'random_walk:x']
 
-Now, in a separate shell, we will talk to it using caproto's command-line client:
+Now, in a separate shell, we will talk to it using caproto's command-line
+client:
 
 .. code-block:: bash
 
     $ caproto-get random_walk:dt
     random_walk:dt                       [3.]
 
-For complete information about the server's response, use ``--format``.
+By default, ``caproto-get`` displays the name and the current value.  For
+comprehensive access to the server's response, use ``--format``.
 
 .. code-block:: bash
 
@@ -68,8 +70,8 @@ requesting a richer data type.
     lower_warning_limit=0.0, lower_alarm_limit=0.0, upper_ctrl_limit=0.0,
     lower_ctrl_limit=0.0, precision=0, units=b'')
 
-The list of available data types is conveniently accessible. The ``-d``
-parameter used above accepts a data type's name or the numerical code.
+To view the list of data types, use ``-list-types``. The ``-d`` parameter used
+above accepts a data type's name or its numerical code.
 
 .. code-block:: bash
 
@@ -104,7 +106,7 @@ Query multiple PVs in one command and label the results.
     random_walk:dt [3.]
     random_walk:x [15.03687]
 
-For debugging, you can display all of the commands sent and received:
+For debugging purposes, display all of the commands sent and received:
 
 .. code-block:: bash
 
@@ -216,11 +218,11 @@ API Documentation
 =================
 
 These are intended to provide a superset of the API provided by their standard
-counterparts in epics-base, ``caget``, ``caput``, ``camonitor``, and ``caRepeater``
-so that they can be safely used as drop-in replacements. Some of ``caget``'s
-arguments related to string formatting are not yet implemented (`Code
-contributions welcome! <https://github.com/NSLS-II/caproto/issues/147>`_) but
-similar functionality is available via ``--format``.
+counterparts in epics-base, ``caget``, ``caput``, ``camonitor``, and
+``caRepeater`` so that they can be safely used as drop-in replacements. Some of
+``caget``'s arguments related to string formatting are not yet implemented
+(`Code contributions welcome!  <https://github.com/NSLS-II/caproto/issues/147>`_)
+but similar functionality is available via ``--format``.
 
 caproto-get
 -----------
