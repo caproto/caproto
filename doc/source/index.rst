@@ -26,6 +26,15 @@ The authors pronounce caproto "kah-proto" (not "C.A. proto"). It's fun to say.
 Try caproto in three lines
 ==========================
 
+First verify that you have Python 3.6+.
+
+.. code-block:: bash
+
+   python3 --version
+
+If necessary, install it by your method of choice (apt, Homebrew, conda, etc.).
+Now on to caproto:
+
 .. code-block:: bash
 
    python3 -m pip install caproto[complete]  # install caproto (and its optional dependencies)
