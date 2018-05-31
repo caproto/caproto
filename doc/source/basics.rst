@@ -51,14 +51,14 @@ this:
 .. code-block:: bash
 
     $ caproto-repeater
-    [repeater] Repeater is listening on 0.0.0.0:5065
+    [I 18:04:30.686 repeater:84] Repeater is listening on 0.0.0.0:5065
 
 or this:
 
 .. code-block:: bash
 
     $ caproto-repeater
-    [repeater] Another repeater is already running; exiting
+    [I 18:04:08.790 repeater:189] Another repeater is already running; exiting.
 
 Either is fine.
 
