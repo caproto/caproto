@@ -159,6 +159,7 @@ class Context(_Context):
         try:
             await asyncio.gather(*tasks)
         except asyncio.CancelledError:
+            self.log.info('Server task cancelled. Will shut down.')
             udp_sock.close()
             all_tasks = (tasks + self._server_tasks + [c._cq_task
                                                        for c in self.circuits
@@ -170,8 +171,11 @@ class Context(_Context):
             await asyncio.wait(all_tasks)
             return
         except Exception as ex:
+            self.log.exception('Server error. Will shut down', exc_info=ex)
             udp_sock.close()
             raise
+        finally:
+            self.log.info('Server exiting....')
 
 
 async def start_server(pvdb, *, bind_addr='0.0.0.0', log_pv_names=False):
@@ -179,9 +183,10 @@ async def start_server(pvdb, *, bind_addr='0.0.0.0', log_pv_names=False):
     ctx = Context(bind_addr, find_available_tcp_port(), pvdb)
     ctx.log.info('Server starting up on %s:%d', ctx.host, ctx.port)
     try:
-        return await ctx.run(log_pv_names=log_pv_names)
+        ret = await ctx.run(log_pv_names=log_pv_names)
     except ServerExit:
         ctx.log.info('ServerExit caught; exiting')
+    return ret
 
 
 def run(pvdb, *, bind_addr='0.0.0.0', log_pv_names=False):

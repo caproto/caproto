@@ -150,7 +150,9 @@ class Context(_Context):
                 if log_pv_names:
                     self.log.info('PVs available:\n%s', '\n'.join(self.pvdb))
         except trio.Cancelled:
-            self.log.info('Server task cancelled')
+            self.log.info('Server task cancelled. Will shut down.')
+        finally:
+            self.log.info('Server exiting....')
 
     async def stop(self):
         'Stop the server'
@@ -164,16 +166,19 @@ class Context(_Context):
 async def start_server(pvdb, *, bind_addr='0.0.0.0', log_pv_names=False):
     '''Start a trio server with a given PV database'''
     ctx = Context(bind_addr, find_available_tcp_port(), pvdb)
-    try:
-        return await ctx.run(log_pv_names=log_pv_names)
-    except ServerExit:
-        ctx.log.info('ServerExit caught; exiting....')
+    return (await ctx.run(log_pv_names=log_pv_names))
 
 
 def run(pvdb, *, bind_addr='0.0.0.0', log_pv_names=False):
-    return trio.run(
-        functools.partial(
-            start_server,
-            pvdb,
-            bind_addr=bind_addr,
-            log_pv_names=log_pv_names))
+    """
+    A synchronous function that runs server, catches KeyboardInterrupt at exit.
+    """
+    try:
+        return trio.run(
+            functools.partial(
+                start_server,
+                pvdb,
+                bind_addr=bind_addr,
+                log_pv_names=log_pv_names))
+    except KeyboardInterrupt:
+        return

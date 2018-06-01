@@ -106,8 +106,10 @@ class Context(_Context):
             for task in ex:
                 self.log.error('Task %s failed: %s', task, task.exception)
         except curio.TaskCancelled as ex:
-            self.log.info('Server task cancelled; exiting')
+            self.log.info('Server task cancelled. Must shut down.')
             raise ServerExit() from ex
+        finally:
+            self.log.info('Server exiting....')
 
 
 async def start_server(pvdb, *, bind_addr='0.0.0.0', log_pv_names=False):
@@ -116,13 +118,19 @@ async def start_server(pvdb, *, bind_addr='0.0.0.0', log_pv_names=False):
     try:
         return await ctx.run(log_pv_names=log_pv_names)
     except ServerExit:
-        ctx.log.info('ServerExit caught; exiting....')
+        pass
 
 
 def run(pvdb, *, bind_addr='0.0.0.0', log_pv_names=False):
-    return curio.run(
-        functools.partial(
-            start_server,
-            pvdb,
-            bind_addr=bind_addr,
-            log_pv_names=log_pv_names))
+    """
+    A synchronous function that runs server, catches KeyboardInterrupt at exit.
+    """
+    try:
+        return curio.run(
+            functools.partial(
+                start_server,
+                pvdb,
+                bind_addr=bind_addr,
+                log_pv_names=log_pv_names))
+    except KeyboardInterrupt:
+        return
