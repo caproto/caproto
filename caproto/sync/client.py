@@ -713,7 +713,7 @@ EPICS_CA_REPEATER_PORT. It defaults to the standard 5065. The current value is
                        help=("Suppress INFO log messages. "
                              "(Still show WARNING or higher.)"))
     group.add_argument('-v', '--verbose', action='store_true',
-                       help="Verbose mode. (Use -vvv for more.")
+                       help="Verbose mode. (Use -vvv for more.)")
     group.add_argument('-vvv', action='store_true',
                        help=argparse.SUPPRESS)
     args = parser.parse_args()

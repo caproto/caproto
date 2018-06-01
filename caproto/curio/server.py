@@ -1,3 +1,4 @@
+import functools
 from ..server import AsyncLibraryLayer
 import caproto as ca
 import curio
@@ -79,8 +80,9 @@ class Context(_Context):
             raise
         await self._core_broadcaster_loop()
 
-    async def run(self):
+    async def run(self, *, log_pv_names=False):
         'Start the server'
+        self.log.info('Server starting up...')
         try:
             async with curio.TaskGroup() as g:
                 for addr, port in ca.get_server_address_list(self.port):
@@ -93,9 +95,12 @@ class Context(_Context):
                 await g.spawn(self.broadcast_beacon_loop)
 
                 async_lib = CurioAsyncLayer()
-                for method in self.startup_methods:
-                    self.log.debug('Calling startup method %r', method)
+                for name, method in self.startup_methods.items():
+                    self.log.debug('Calling startup method %r', name)
                     await g.spawn(method, async_lib)
+                self.log.info('Server startup complete.')
+                if log_pv_names:
+                    self.log.info('PVs available:\n%s', '\n'.join(self.pvdb))
         except curio.TaskGroupError as ex:
             self.log.error('Curio server failed: %s', ex.errors)
             for task in ex:
@@ -105,10 +110,19 @@ class Context(_Context):
             raise ServerExit() from ex
 
 
-async def start_server(pvdb, *, bind_addr='0.0.0.0'):
+async def start_server(pvdb, *, bind_addr='0.0.0.0', log_pv_names=False):
     '''Start a curio server with a given PV database'''
     ctx = Context(bind_addr, find_available_tcp_port(), pvdb)
     try:
-        return await ctx.run()
+        return await ctx.run(log_pv_names=log_pv_names)
     except ServerExit:
-        print('ServerExit caught; exiting')
+        ctx.log.info('ServerExit caught; exiting....')
+
+
+def run(pvdb, *, bind_addr='0.0.0.0', log_pv_names=False):
+    return curio.run(
+        functools.partial(
+            start_server,
+            pvdb,
+            bind_addr=bind_addr,
+            log_pv_names=log_pv_names))

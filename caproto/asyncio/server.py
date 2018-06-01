@@ -1,6 +1,7 @@
 from ..server import AsyncLibraryLayer
 import caproto as ca
 import asyncio
+import functools
 import socket
 from caproto import find_available_tcp_port
 
@@ -98,8 +99,9 @@ class Context(_Context):
                                                              addr))
                 self._server_tasks.append(tsk)
 
-    async def run(self):
+    async def run(self, *, log_pv_names=False):
         'Start the server'
+        self.log.info('Server starting up...')
         tasks = []
         for addr, port in ca.get_server_address_list(self.port):
             self.log.debug('Listening on %s:%d', addr, port)
@@ -147,9 +149,12 @@ class Context(_Context):
         tasks.append(self.loop.create_task(self.broadcast_beacon_loop()))
 
         async_lib = AsyncioAsyncLayer()
-        for method in self.startup_methods:
-            self.log.debug('Calling startup method %r', method)
+        for name, method in self.startup_methods.items():
+            self.log.debug('Calling startup method %r', name)
             tasks.append(self.loop.create_task(method(async_lib)))
+        self.log.info('Server startup complete.')
+        if log_pv_names:
+            self.log.info('PVs available:\n%s', '\n'.join(self.pvdb))
 
         try:
             await asyncio.gather(*tasks)
@@ -169,11 +174,23 @@ class Context(_Context):
             raise
 
 
-async def start_server(pvdb, *, bind_addr='0.0.0.0'):
-    '''Start a curio server with a given PV database'''
+async def start_server(pvdb, *, bind_addr='0.0.0.0', log_pv_names=False):
+    '''Start an asyncio server with a given PV database'''
     ctx = Context(bind_addr, find_available_tcp_port(), pvdb)
     ctx.log.info('Server starting up on %s:%d', ctx.host, ctx.port)
     try:
-        return await ctx.run()
+        return await ctx.run(log_pv_names=log_pv_names)
     except ServerExit:
-        print('ServerExit caught; exiting')
+        ctx.log.info('ServerExit caught; exiting')
+
+
+def run(pvdb, *, bind_addr='0.0.0.0', log_pv_names=False):
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    task = loop.create_task(
+        functools.partial(
+            start_server,
+            pvdb,
+            bind_addr=bind_addr,
+            log_pv_names=log_pv_names))
+    loop.run_until_complete(task)

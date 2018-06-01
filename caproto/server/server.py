@@ -6,11 +6,12 @@ a single asyncio library.
 
 For an example server implementation, see caproto.curio.server
 '''
-
+import argparse
 import copy
 import logging
 import inspect
 from collections import (namedtuple, OrderedDict, defaultdict)
+import sys
 from types import MethodType
 
 from .. import (ChannelDouble, ChannelInteger, ChannelString,
@@ -31,6 +32,8 @@ __all__ = ['AsyncLibraryLayer',
            'PvpropertyEnum', 'PvpropertyEnumRO',
            'PvpropertyInteger', 'PvpropertyIntegerRO',
            'PvpropertyString', 'PvpropertyStringRO',
+
+           'ioc_arg_parser',
            ]
 
 
@@ -930,3 +933,45 @@ class PVGroup(metaclass=PVGroupMeta):
         'Generic write called for channels without `put` defined'
         self.log.debug('group write of %s = %s', instance.pvspec.attr, value)
         return value
+
+
+def ioc_arg_parser(*, desc, default_prefix, argv=None):
+    """
+    A reusable ArgumentParser for basic example IOCs.
+
+    Parameters
+    ----------
+    description : string
+        Human-friendly description of what that IOC does
+    default_prefix : string
+    args : list, optional
+        Defaults to sys.argv
+    """
+    if argv is None:
+        argv = sys.argv
+    parser = argparse.ArgumentParser(description=desc)
+    parser.add_argument('--prefix', type=str, default=default_prefix)
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('-q', '--quiet', action='store_true',
+                       help=("Suppress INFO log messages. "
+                             "(Still show WARNING or higher.)"))
+    group.add_argument('-v', '--verbose', action='store_true',
+                       help="Verbose mode. (Use -vvv for more.)")
+    group.add_argument('-vvv', action='store_true',
+                       help=argparse.SUPPRESS)
+    parser.add_argument('--list-pvs', action='store_true',
+                        help="At startup, log the list of PV names served.")
+    args = parser.parse_args()
+    if args.vvv:
+        logging.getLogger('caproto').setLevel('DEBUG')
+    else:
+        if args.verbose:
+            level = 'DEBUG'
+        elif args.quiet:
+            level = 'WARNING'
+        else:
+            level = 'INFO'
+        logging.getLogger('caproto.ctx').setLevel(level)
+    ioc_options = {'prefix': args.prefix, 'macros': {}}
+    run_options = {'log_pv_names': args.list_pvs}
+    return ioc_options, run_options

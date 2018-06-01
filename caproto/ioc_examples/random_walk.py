@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 import logging
-import sys
 import random
 
-from caproto.benchmarking import set_logging_level
-from caproto.curio.server import start_server
-from caproto.server import pvproperty, PVGroup
+from caproto.curio.server import run
+from caproto.server import pvproperty, PVGroup, ioc_arg_parser
 
 
 class RandomWalkIOC(PVGroup):
@@ -28,15 +26,8 @@ class RandomWalkIOC(PVGroup):
 
 
 if __name__ == '__main__':
-    # usage: random_walk.py [PREFIX]
-    import curio
-
-    try:
-        prefix = sys.argv[1]
-    except IndexError:
-        prefix = 'random_walk:'
-
-    set_logging_level(logging.DEBUG)
-    ioc = RandomWalkIOC(prefix=prefix, macros={})
-    print(list(ioc.pvdb))
-    curio.run(start_server, ioc.pvdb)
+    ioc_options, run_options = ioc_arg_parser(
+        default_prefix='random_walk:',
+        desc='Run an IOC with a random-walking value.')
+    ioc = RandomWalkIOC(**ioc_options)
+    run(ioc.pvdb, **run_options)

@@ -459,10 +459,10 @@ class Context:
     @property
     def startup_methods(self):
         'Notify all ChannelData instances of the server startup'
-        return [instance.server_startup
+        return {name: instance.server_startup
                 for name, instance in self.pvdb.items()
                 if hasattr(instance, 'server_startup') and
-                instance.server_startup is not None]
+                instance.server_startup is not None}
 
     async def tcp_handler(self, client, addr):
         '''Handler for each new TCP client to the server'''
