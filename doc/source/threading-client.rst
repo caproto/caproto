@@ -34,6 +34,9 @@ In a separate shell, start one of caproto's demo IOCs.
     $ python3 -m caproto.ioc_examples.random_walk
     PVs: ['random_walk:dt', 'random_walk:x']
 
+Connect
+-------
+
 Now, in Python we will talk to it using caproto's threading client. Start by
 creating a :class:`Context`.
 
@@ -65,6 +68,9 @@ The Context displays aggregate information about the state of all connections.
 .. ipython:: python
 
     ctx
+
+Read and Write
+--------------
 
 Now, to read a PV:
 
@@ -109,6 +115,9 @@ Let us set the value to ``1``.
 .. ipython:: python
 
     dt.write([1])
+
+Subscribe ("Monitor")
+---------------------
 
 Let us now monitor a channel. The server updates the ``random_walk:x`` channel
 periodically. (The period is set by ``random_walk:dt``.) We can subscribe to
@@ -189,6 +198,9 @@ re-initiates updates. All of this is transparent to the user.
     can be surprising, but it is a standard approach for avoiding the
     accidental costly accumulation of abandoned callbacks.
 
+Go Idle
+-------
+
 Once created, PVs are cached for the lifetime of the :class:`Context` and
 returned again to the user if a PV with the same name and priority is
 requested. In order to reduce the load on the network, a PV can be temporarily
@@ -212,6 +224,47 @@ must stay active to continue servicing user callbacks. Therefore, it is safe
 call ``go_idle()`` on any PV at any time, knowing that the PV will decline to
 disconnect if it is being actively used and that, if it is currently unused, it
 will transparently reconnect the next time it is used.
+
+Loggers for Debugging
+---------------------
+
+Various Python loggers are available. They inherit Python's default of
+silencing log messages below the WARNING level. To receive more information
+about a given PV, turn up the verbosity of the ``PV.log`` logger:
+
+.. code-block:: python
+
+    x.log.setLevel('DEBUG')
+
+To see the individual requests sent and responses received by the TCP
+connection support ``x`` (and any other PVs on that same Virtual Circuit) use
+the ``PV.circuit_manager.log`` logger:
+
+.. code-block:: python
+
+    x.circuit_manager.log.setLevel('DEBUG')
+
+For updates about the overall state of the Context (number of unanswered
+searches still await responses, etc.) use ``Context.log``:
+
+.. code-block:: python
+
+    ctx.log.setLevel('DEBUG')
+
+or, equivalently:
+
+.. code-block:: python
+
+    x.context.log.setLevel('DEBUG')
+
+Finally, to turn on *maximal* debugging, use:
+
+.. code-block:: python
+
+    import logging
+    logging.getLogger('caproto').setLevel('DEBUG')
+
+For more information see :ref:`loggers`.
 
 .. ipython:: python
     :suppress:

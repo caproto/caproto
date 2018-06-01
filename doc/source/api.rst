@@ -422,6 +422,8 @@ and :class:`RemoteProtocolError`. These inherit from
 .. autoclass:: LocalProtocolError
 .. autoclass:: RemoteProtocolError
 
+.. _loggers:
+
 Loggers
 =======
 
