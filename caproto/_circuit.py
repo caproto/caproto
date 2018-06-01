@@ -75,6 +75,8 @@ class VirtualCircuit:
 
     @priority.setter
     def priority(self, priority):
+        # A server-side circuit does not get to know its priority until after
+        # instantiation, so we need a setter.
         self._priority = priority
         # The logger_name includes the priority so we have to set it.
         logger_name = (f"caproto.circ."
