@@ -527,6 +527,7 @@ def test_multithreaded_many_subscribe(ioc, context, thread_count,
         init_barrier.wait(timeout=2)
         # Everybody here? On my signal... SUBSCRIBE!! Ahahahahaha!
         # Destruction!!
+        time.sleep(1)  # Wait for EventAddRequest to be sent and processed.
         sub_ended_barrier.wait(timeout=2)
 
         sub.clear()
