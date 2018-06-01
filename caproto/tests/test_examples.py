@@ -355,7 +355,7 @@ def test_typhon_example(request, prefix):
     pytest.importorskip('numpy')
     from .conftest import run_example_ioc
     run_example_ioc('caproto.ioc_examples.caproto_to_ophyd', request=request,
-                    args=[prefix], pv_to_check=f'{prefix}random1')
+                    args=['--prefix', prefix], pv_to_check=f'{prefix}random1')
 
     from caproto.ioc_examples import caproto_to_typhon
     caproto_to_typhon.pydm = None
@@ -366,7 +366,7 @@ def test_typhon_example(request, prefix):
 def test_mocking_records(request, prefix):
     from .conftest import run_example_ioc
     run_example_ioc('caproto.ioc_examples.mocking_records', request=request,
-                    args=[prefix], pv_to_check=f'{prefix}A')
+                    args=['--prefix', prefix], pv_to_check=f'{prefix}A')
 
     from caproto.sync.client import get, put
 

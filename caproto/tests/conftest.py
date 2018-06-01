@@ -193,7 +193,7 @@ def caproto_ioc(prefix, request):
     process = run_example_ioc('caproto.ioc_examples.type_varieties',
                               request=request,
                               pv_to_check=pvs['float'],
-                              args=(prefix,))
+                              args=('--prefix', prefix,))
     return SimpleNamespace(process=process, prefix=prefix, name=name, pvs=pvs,
                            type='caproto')
 
