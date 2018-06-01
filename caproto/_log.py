@@ -154,9 +154,32 @@ class LogFormatter(logging.Formatter):
         return formatted.replace("\n", "\n    ")
 
 
-log_format = "%(color)s[%(levelname)1.1s %(asctime)s.%(msecs)03d %(module)s:%(lineno)d]%(end_color)s %(message)s"
+plain_log_format = "[%(levelname)1.1s %(asctime)s.%(msecs)03d %(module)s:%(lineno)d] %(message)s"
+color_log_format = "%(color)s[%(levelname)1.1s %(asctime)s.%(msecs)03d %(module)s:%(lineno)d]%(end_color)s  %(message)s"
 log_date_format = "%H:%M:%S"
 logger = logging.getLogger('caproto')
-handler = logging.StreamHandler(sys.stdout)
-handler.setFormatter(LogFormatter(log_format, datefmt=log_date_format))
-logger.addHandler(handler)
+color_handler = logging.StreamHandler(sys.stdout)
+color_handler.setFormatter(
+    LogFormatter(color_log_format, datefmt=log_date_format))
+plain_handler = logging.StreamHandler(sys.stdout)
+plain_handler.setFormatter(
+    logging.Formatter(plain_log_format, datefmt=log_date_format))
+
+
+def set_log_coloring(val):
+    """
+    If True, add colorful logging handler and ensure plain one is removed.
+
+    If False, do the opposite.
+    """
+    if val:
+        to_remove, to_add = plain_handler, color_handler
+    else:
+        to_remove, to_add = color_handler, plain_handler
+    if to_remove in logger.handlers:
+        logger.removeHandler(to_remove)
+    if to_add not in logger.handlers:
+        logger.addHandler(to_add)
+
+
+set_log_coloring(True)
