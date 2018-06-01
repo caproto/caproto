@@ -4,7 +4,7 @@ import logging
 import random
 
 from caproto.benchmarking import set_logging_level
-from caproto.curio.server import start_server
+from caproto.trio.server import start_server
 from caproto.server import (pvproperty, PVGroup, pvfunction)
 
 
@@ -30,7 +30,7 @@ class MyPVGroup(PVGroup):
 
 
 if __name__ == '__main__':
-    import curio
+    import trio
     from pprint import pprint
 
     try:
@@ -57,4 +57,4 @@ if __name__ == '__main__':
     # here is the auto-generated pvdb:
     pprint(ioc.pvdb)
 
-    curio.run(start_server, ioc.pvdb)
+    trio.run(start_server, ioc.pvdb)

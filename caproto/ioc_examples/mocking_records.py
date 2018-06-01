@@ -18,8 +18,8 @@ class RecordMockingIOC(PVGroup):
 if __name__ == '__main__':
     # usage: simple.py [PREFIX]
     import sys
-    import curio
-    from caproto.curio.server import start_server
+    import trio
+    from caproto.trio.server import start_server
 
     try:
         prefix = sys.argv[1]
@@ -33,5 +33,5 @@ if __name__ == '__main__':
     # ... but what you don't see are all of the analog input record fields
     print('Fields of B:', list(ioc.B.fields.keys()))
 
-    # Run IOC using curio.
-    curio.run(start_server(ioc.pvdb))
+    # Run IOC using trio.
+    trio.run(start_server, ioc.pvdb)

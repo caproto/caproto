@@ -24,8 +24,8 @@ class CustomWrite(PVGroup):
 if __name__ == '__main__':
     # usage: custom_write.py [PREFIX]
     import sys
-    import curio
-    from caproto.curio.server import start_server
+    import trio
+    from caproto.trio.server import start_server
 
     try:
         prefix = sys.argv[1]
@@ -34,4 +34,4 @@ if __name__ == '__main__':
 
     ioc = CustomWrite(prefix=prefix)
     print('PVs:', list(ioc.pvdb))
-    curio.run(start_server(ioc.pvdb))
+    trio.run(start_server, ioc.pvdb)

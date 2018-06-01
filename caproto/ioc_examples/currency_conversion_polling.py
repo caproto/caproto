@@ -6,7 +6,7 @@ import logging
 import urllib.request
 import urllib.parse
 from caproto.benchmarking import set_logging_level
-from caproto.curio.server import start_server
+from caproto.trio.server import start_server
 from caproto.server import pvproperty, PVGroup
 
 
@@ -54,8 +54,8 @@ class CurrencyPollingIOC(PVGroup):
 
 if __name__ == '__main__':
     # usage: currency_conversion_polling.py [PREFIX]
-    import curio
-    import asks  # for http requests through curio
+    import trio
+    import asks  # for http requests through trio
 
     try:
         prefix = sys.argv[1]
@@ -63,6 +63,6 @@ if __name__ == '__main__':
         prefix = 'currency_polling:'
 
     set_logging_level(logging.DEBUG)
-    asks.init('curio')
+    asks.init('trio')
     ioc = CurrencyPollingIOC(prefix=prefix, macros={})
-    curio.run(start_server, ioc.pvdb)
+    trio.run(start_server, ioc.pvdb)

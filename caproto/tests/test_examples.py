@@ -36,8 +36,23 @@ def test_thread_client_example(curio_server):
 def test_curio_server_example(prefix):
     import caproto.curio.client as client
     from caproto.ioc_examples.type_varieties import (
-        pvdb, main as server_main)
-    from caproto.curio.server import ServerExit
+        pvdb)
+    from caproto.curio.server import ServerExit, Context
+
+    async def server_main():
+        "like caproto.ioc_examples.type_varieties.main but with curio not trio"
+        if prefix is not None:
+            pvdb = {prefix + key: value
+                    for key, value in pvdb.items()}
+        if port is None:
+            port = ca.find_available_tcp_port()
+        ctx = Context('0.0.0.0', port, pvdb, log_level='DEBUG')
+        logger.info('Server starting up on %s:%d', ctx.host, ctx.port)
+        logger.info("Available PVs: %s", ' '.join(pvdb))
+        try:
+            return await ctx.run()
+        except ServerExit:
+            print('ServerExit caught; exiting')
 
     commands = []
 

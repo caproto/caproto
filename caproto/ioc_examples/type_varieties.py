@@ -2,8 +2,8 @@
 import logging
 import sys
 
-import curio
-from caproto.curio.server import (Context, logger, ServerExit)
+import trio
+from caproto.trio.server import (Context, logger)
 import caproto as ca
 
 
@@ -69,10 +69,7 @@ async def main(pvdb, prefix=None, port=None):
     ctx = Context('0.0.0.0', port, pvdb, log_level='DEBUG')
     logger.info('Server starting up on %s:%d', ctx.host, ctx.port)
     logger.info("Available PVs: %s", ' '.join(pvdb))
-    try:
-        return await ctx.run()
-    except ServerExit:
-        print('ServerExit caught; exiting')
+    return await ctx.run()
 
 
 if __name__ == '__main__':
@@ -80,4 +77,4 @@ if __name__ == '__main__':
     logging.basicConfig()
     logger.setLevel('DEBUG')
     prefix = sys.argv[1] if len(sys.argv) > 1 else None
-    curio.run(main(pvdb, prefix=prefix))
+    trio.run(main, pvdb, prefix)
