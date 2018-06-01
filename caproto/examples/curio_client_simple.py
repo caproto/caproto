@@ -1,8 +1,6 @@
 import logging
-
 import curio
-from caproto.curio.client import (SharedBroadcaster, Context,
-                                  logger)
+from caproto.curio.client import SharedBroadcaster, Context
 
 
 async def main(pv1="XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL",

@@ -405,7 +405,7 @@ def monitor_cli():
     try:
         monitor(*args.pv_names,
                 callback=callback, mask=mask,
-                verbose=args.verbose, timeout=args.timeout,
+                timeout=args.timeout,
                 priority=args.priority,
                 force_int_enums=args.n,
                 repeater=not args.no_repeater)
@@ -561,7 +561,7 @@ def put_cli():
         logging.getLogger('caproto').setLevel('DEBUG')
     try:
         initial, final = put(pv_name=args.pv_name, data=args.data,
-                             verbose=args.verbose, timeout=args.timeout,
+                             timeout=args.timeout,
                              priority=args.priority,
                              repeater=not args.no_repeater)
         if args.format is None:

@@ -934,7 +934,7 @@ class VirtualCircuitManager:
     def __init__(self, context, circuit, selector, timeout=TIMEOUT):
         self.context = context
         self.circuit = circuit  # a caproto.VirtualCircuit
-        self.log = self.circuit.log
+        self.log = circuit.log
         self.channels = {}  # map cid to Channel
         self.pvs = {}  # map cid to PV
         self.ioids = {}  # map ioid to Channel and info dict

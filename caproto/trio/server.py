@@ -1,4 +1,3 @@
-import logging
 from ..server import AsyncLibraryLayer
 import caproto as ca
 import trio
@@ -7,7 +6,6 @@ from caproto import find_available_tcp_port
 
 from ..server.common import (VirtualCircuit as _VirtualCircuit,
                              Context as _Context)
-logger = logging.getLogger(__name__)
 
 
 class ServerExit(Exception):
@@ -48,7 +46,6 @@ class TrioAsyncLayer(AsyncLibraryLayer):
 class VirtualCircuit(_VirtualCircuit):
     "Wraps a caproto.VirtualCircuit with a trio client."
     TaskCancelled = trio.Cancelled
-    logger = logger
 
     def __init__(self, circuit, client, context):
         super().__init__(circuit, client, context)
@@ -83,8 +80,8 @@ class Context(_Context):
     ServerExit = ServerExit
     TaskCancelled = trio.Cancelled
 
-    def __init__(self, host, port, pvdb, *, log_level='ERROR'):
-        super().__init__(host, port, pvdb, log_level=log_level)
+    def __init__(self, host, port, pvdb):
+        super().__init__(host, port, pvdb)
         self.nursery = None
         self.command_bundle_queue = trio.Queue(1000)
         self.subscription_queue = trio.Queue(1000)
@@ -94,7 +91,7 @@ class Context(_Context):
         try:
             await self.udp_sock.bind((self.host, ca.EPICS_CA1_PORT))
         except Exception:
-            logger.exception('[server] udp bind failure!')
+            self.log.exception('[server] udp bind failure!')
             raise
 
         task_status.started()
@@ -115,7 +112,7 @@ class Context(_Context):
 
     async def server_accept_loop(self, addr, port, *, task_status):
         with trio.socket.socket() as listen_sock:
-            logger.debug('Listening on %s:%d', addr, port)
+            self.log.debug('Listening on %s:%d', addr, port)
             await listen_sock.bind((addr, port))
             listen_sock.listen()
 
@@ -139,7 +136,7 @@ class Context(_Context):
 
                 async_lib = TrioAsyncLayer()
                 for method in self.startup_methods:
-                    logger.debug('Calling startup method %r', method)
+                    self.log.debug('Calling startup method %r', method)
 
                     async def startup(task_status):
                         task_status.started()
@@ -147,7 +144,7 @@ class Context(_Context):
 
                     await self.nursery.start(startup)
         except trio.Cancelled:
-            logger.info('Server task cancelled')
+            self.log.info('Server task cancelled')
 
     async def stop(self):
         'Stop the server'
@@ -158,12 +155,9 @@ class Context(_Context):
         nursery.cancel_scope.cancel()
 
 
-async def start_server(pvdb, log_level='DEBUG', *, bind_addr='0.0.0.0'):
+async def start_server(pvdb, *, bind_addr='0.0.0.0'):
     '''Start a trio server with a given PV database'''
-    logger.setLevel(log_level)
-    ctx = Context(bind_addr, find_available_tcp_port(), pvdb,
-                  log_level=log_level)
-    logger.info('Server starting up on %s:%d', ctx.host, ctx.port)
+    ctx = Context(bind_addr, find_available_tcp_port(), pvdb)
     try:
         return await ctx.run()
     except ServerExit:

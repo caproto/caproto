@@ -3,7 +3,7 @@ import logging
 import sys
 
 import curio
-from caproto.curio.server import (Context, logger, ServerExit)
+from caproto.curio.server import (Context, ServerExit)
 import caproto as ca
 
 
@@ -66,9 +66,8 @@ async def main(pvdb, prefix=None, port=None):
                 for key, value in pvdb.items()}
     if port is None:
         port = ca.find_available_tcp_port()
-    ctx = Context('0.0.0.0', port, pvdb, log_level='DEBUG')
-    logger.info('Server starting up on %s:%d', ctx.host, ctx.port)
-    logger.info("Available PVs: %s", ' '.join(pvdb))
+    ctx = Context('0.0.0.0', port, pvdb)
+    ctx.log.info("Available PVs: %s", ' '.join(pvdb))
     try:
         return await ctx.run()
     except ServerExit:
@@ -77,7 +76,6 @@ async def main(pvdb, prefix=None, port=None):
 
 if __name__ == '__main__':
     # TODO Use new IOC code.
-    logging.basicConfig()
-    logger.setLevel('DEBUG')
+    logging.getLogger('caproto').setLevel('DEBUG')
     prefix = sys.argv[1] if len(sys.argv) > 1 else None
     curio.run(main(pvdb, prefix=prefix))

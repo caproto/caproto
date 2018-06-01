@@ -170,9 +170,8 @@ def pvnames(request, epics_base_ioc):
         def __repr__(self):
             return f'<PVNames prefix={epics_base_ioc.prefix}>'
 
-    shared_broadcaster = SharedBroadcaster(log_level='DEBUG')
-    PV._default_context = Context(broadcaster=shared_broadcaster,
-                                  log_level='DEBUG')
+    shared_broadcaster = SharedBroadcaster()
+    PV._default_context = Context(broadcaster=shared_broadcaster)
 
     def finalize_context():
         print('Cleaning up PV context')
@@ -844,8 +843,8 @@ def test_pyepics_pv():
         print('-- user callback', value)
         called.append(True)
 
-    shared_broadcaster = SharedBroadcaster(log_level='DEBUG')
-    ctx = Context(broadcaster=shared_broadcaster, log_level='DEBUG')
+    shared_broadcaster = SharedBroadcaster()
+    ctx = Context(broadcaster=shared_broadcaster)
     time_pv = PV(pv1, context=ctx, form='time')
     ctrl_pv = PV(pv1, context=ctx, form='ctrl')
 
@@ -930,9 +929,8 @@ def access_security_softioc(request, prefix):
                           macros={'P': prefix},
                           )
 
-    shared_broadcaster = SharedBroadcaster(log_level='DEBUG')
-    PV._default_context = Context(broadcaster=shared_broadcaster,
-                                  log_level='DEBUG')
+    shared_broadcaster = SharedBroadcaster()
+    PV._default_context = Context(broadcaster=shared_broadcaster)
 
     process = handler.processes[-1]
     pvs = {pv[len(prefix) + 1:]: PV(pv)

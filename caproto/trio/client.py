@@ -21,9 +21,6 @@ from .._utils import batch_requests, CaprotoError, ThreadsafeCounter
 from .._constants import (STALE_SEARCH_EXPIRATION, SEARCH_MAX_DATAGRAM_BYTES)
 
 
-logger = logging.getLogger(__name__)
-
-
 class TrioClientError(CaprotoError):
     ...
 
@@ -51,6 +48,7 @@ class VirtualCircuit:
     "Wraps a caproto.VirtualCircuit and adds transport."
     def __init__(self, circuit, *, nursery):
         self.circuit = circuit  # a caproto.VirtualCircuit
+        self.log = self.circuit.log
         self.nursery = nursery
         self.channels = {}  # map cid to Channel
         self.ioids = {}  # map ioid to Channel
@@ -95,12 +93,12 @@ class VirtualCircuit:
                 command = await self.command_queue.get()
                 self.circuit.process_command(command)
             except Exception as ex:
-                logger.error('Command queue evaluation failed: {!r}'
-                             ''.format(command), exc_info=ex)
+                self.log.error('Command queue evaluation failed: {!r}'
+                               ''.format(command), exc_info=ex)
                 continue
 
             if command is ca.DISCONNECTED:
-                logger.debug('Command queue loop exiting')
+                self.log.debug('Command queue loop exiting')
                 break
             elif isinstance(command, (ca.ReadNotifyResponse,
                                       ca.WriteNotifyResponse)):
@@ -183,7 +181,7 @@ class Channel:
             await self.wait_on_new_command()
 
         for sub_id, queue in self.circuit.subscriptionids.items():
-            logger.debug("Disconnecting subscription id %s", sub_id)
+            self.log.debug("Disconnecting subscription id %s", sub_id)
             await queue.put(ca.DISCONNECTED)
 
     async def read(self, *args, **kwargs):
@@ -251,11 +249,10 @@ class Channel:
 
 
 class SharedBroadcaster:
-    def __init__(self, *, nursery, log_level='ERROR'):
+    def __init__(self, *, nursery):
         self.nursery = nursery
-        self.log_level = log_level
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
-        self.broadcaster.log.setLevel(self.log_level)
+        self.log = self.broadcaster.log
         self.command_bundle_queue = trio.Queue(capacity=1000)
         self.broadcaster_command_condition = trio.Condition()
         self._cleanup_condition = trio.Condition()
@@ -286,11 +283,11 @@ class SharedBroadcaster:
         'Disconnect the broadcaster and stop listening'
         async with self._cleanup_condition:
             self._cleanup_event.set()
-            logger.debug('Broadcaster: Disconnecting the command queue loop')
+            self.log.debug('Broadcaster: Disconnecting the command queue loop')
             await self.command_bundle_queue.put(ca.DISCONNECTED)
-            logger.debug('Broadcaster: Closing the UDP socket')
+            self.log.debug('Broadcaster: Closing the UDP socket')
             self._cleanup_condition.notify_all()
-        logger.debug('Broadcaster disconnect complete')
+        self.log.debug('Broadcaster disconnect complete')
 
     async def register(self):
         "Register this client with the CA Repeater."
@@ -308,7 +305,7 @@ class SharedBroadcaster:
         while True:
             async with self._cleanup_condition:
                 if self._cleanup_event.is_set():
-                    logger.debug('Exiting broadcaster recv loop')
+                    self.log.debug('Exiting broadcaster recv loop')
                     break
 
             try:
@@ -335,8 +332,8 @@ class SharedBroadcaster:
                     break
                 self.broadcaster.process_commands(commands)
             except Exception as ex:
-                logger.error('Broadcaster command queue evaluation failed',
-                             exc_info=ex)
+                self.log.error('Broadcaster command queue evaluation failed',
+                               exc_info=ex)
                 continue
 
             for command in commands:
@@ -345,8 +342,8 @@ class SharedBroadcaster:
                 elif isinstance(command, ca.VersionResponse):
                     # Check that the server version is one we can talk to.
                     if command.version <= 11:
-                        logger.debug('Old client on version %s',
-                                     command.version)
+                        self.log.debug('Old client on version %s',
+                                       command.version)
                         continue
                 elif isinstance(command, ca.SearchResponse):
                     name = self.unanswered_searches.pop(command.cid, None)
@@ -415,7 +412,7 @@ class SharedBroadcaster:
         results = defaultdict(list)
 
         while needs_search:
-            logger.debug('Searching for %r PVs....', len(needs_search))
+            self.log.debug('Searching for %r PVs....', len(needs_search))
             requests = (ca.SearchRequest(name, search_id, 13)
                         for search_id, name in needs_search)
             for batch in batch_requests(requests, SEARCH_MAX_DATAGRAM_BYTES):
@@ -445,11 +442,11 @@ class SharedBroadcaster:
 
 class Context:
     "Wraps a caproto.Broadcaster, a UDP socket, and cache of VirtualCircuits."
-    def __init__(self, broadcaster, *, nursery, log_level='ERROR'):
+    def __init__(self, broadcaster, *, nursery):
         self.nursery = nursery
-        self.log_level = log_level
         self.circuits = []  # list of VirtualCircuits
         self.broadcaster = broadcaster
+        self.log = logging.getLogger(f'caproto.ctx.{id(self)}')
 
     async def get_circuit(self, address, priority):
         """
@@ -465,7 +462,6 @@ class Context:
         ca_circuit = ca.VirtualCircuit(our_role=ca.CLIENT, address=address,
                                        priority=priority)
         circuit = VirtualCircuit(ca_circuit, nursery=self.nursery)
-        circuit.circuit.log.setLevel(self.log_level)
         self.circuits.append(circuit)
         self.nursery.start_soon(circuit.connect)
         return circuit

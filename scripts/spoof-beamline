@@ -56,5 +56,4 @@ def fabricate_channel(key):
 
 
 curio.run(ccs.start_server(ReallyDefaultDict(fabricate_channel),
-                           log_level='DEBUG',
                            bind_addr='127.0.0.1'))

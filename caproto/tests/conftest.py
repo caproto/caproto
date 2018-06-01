@@ -226,7 +226,7 @@ def start_repeater():
 
     logger.info('Spawning repeater process')
     _repeater_process = run_example_ioc('--script',
-                                        args=['caproto-repeater', '--verbose'],
+                                        args=['caproto-repeater'],
                                         request=None,
                                         pv_to_check=None)
     time.sleep(1.0)

@@ -52,9 +52,9 @@ def test_curio_server_example(prefix):
             commands.append(command)
 
         pi_pv = prefix + 'pi'
-        broadcaster = client.SharedBroadcaster(log_level='DEBUG')
+        broadcaster = client.SharedBroadcaster()
         await broadcaster.register()
-        ctx = client.Context(broadcaster, log_level='DEBUG')
+        ctx = client.Context(broadcaster)
         await ctx.search(pi_pv)
         print('done searching')
         chan1 = await ctx.create_channel(pi_pv)
@@ -279,9 +279,9 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
             continue
 
         print(f'Writing {value} to {pv}')
-        put(pv, value, verbose=True)
+        put(pv, value)
 
-        value = get(pv, verbose=True)
+        value = get(pv)
         print(f'Read {pv} = {value}')
 
 

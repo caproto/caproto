@@ -1,4 +1,3 @@
-import logging
 from ..server import AsyncLibraryLayer
 import caproto as ca
 import curio
@@ -7,7 +6,6 @@ from caproto import find_available_tcp_port
 
 from ..server.common import (VirtualCircuit as _VirtualCircuit,
                              Context as _Context)
-logger = logging.getLogger(__name__)
 
 
 class ServerExit(curio.KernelExit):
@@ -37,7 +35,6 @@ class CurioAsyncLayer(AsyncLibraryLayer):
 class VirtualCircuit(_VirtualCircuit):
     "Wraps a caproto.VirtualCircuit with a curio client."
     TaskCancelled = curio.TaskCancelled
-    logger = logger
 
     def __init__(self, circuit, client, context):
         super().__init__(circuit, client, context)
@@ -68,8 +65,8 @@ class Context(_Context):
     ServerExit = ServerExit
     TaskCancelled = curio.TaskCancelled
 
-    def __init__(self, host, port, pvdb, *, log_level='ERROR'):
-        super().__init__(host, port, pvdb, log_level=log_level)
+    def __init__(self, host, port, pvdb):
+        super().__init__(host, port, pvdb)
         self.command_bundle_queue = curio.Queue()
         self.subscription_queue = curio.UniversalQueue()
 
@@ -78,7 +75,7 @@ class Context(_Context):
         try:
             self.udp_sock.bind((self.host, ca.EPICS_CA1_PORT))
         except Exception:
-            logger.exception('[server] udp bind failure!')
+            self.log.exception('[server] udp bind failure!')
             raise
         await self._core_broadcaster_loop()
 
@@ -87,7 +84,7 @@ class Context(_Context):
         try:
             async with curio.TaskGroup() as g:
                 for addr, port in ca.get_server_address_list(self.port):
-                    logger.debug('Listening on %s:%d', addr, port)
+                    self.log.debug('Listening on %s:%d', addr, port)
                     await g.spawn(curio.tcp_server,
                                   addr, port, self.tcp_handler)
                 await g.spawn(self.broadcaster_udp_server_loop)
@@ -97,23 +94,20 @@ class Context(_Context):
 
                 async_lib = CurioAsyncLayer()
                 for method in self.startup_methods:
-                    logger.debug('Calling startup method %r', method)
+                    self.log.debug('Calling startup method %r', method)
                     await g.spawn(method, async_lib)
         except curio.TaskGroupError as ex:
-            logger.error('Curio server failed: %s', ex.errors)
+            self.log.error('Curio server failed: %s', ex.errors)
             for task in ex:
-                logger.error('Task %s failed: %s', task, task.exception)
+                self.log.error('Task %s failed: %s', task, task.exception)
         except curio.TaskCancelled as ex:
-            logger.info('Server task cancelled; exiting')
+            self.log.info('Server task cancelled; exiting')
             raise ServerExit() from ex
 
 
-async def start_server(pvdb, log_level='DEBUG', *, bind_addr='0.0.0.0'):
+async def start_server(pvdb, *, bind_addr='0.0.0.0'):
     '''Start a curio server with a given PV database'''
-    logger.setLevel(log_level)
-    ctx = Context(bind_addr, find_available_tcp_port(), pvdb,
-                  log_level=log_level)
-    logger.info('Server starting up on %s:%d', ctx.host, ctx.port)
+    ctx = Context(bind_addr, find_available_tcp_port(), pvdb)
     try:
         return await ctx.run()
     except ServerExit:

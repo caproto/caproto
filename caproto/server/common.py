@@ -1,4 +1,5 @@
 from collections import defaultdict, deque, namedtuple
+import logging
 import os
 import caproto as ca
 from caproto import get_beacon_address_list, get_environment_variables
@@ -22,6 +23,7 @@ class VirtualCircuit:
     def __init__(self, circuit, client, context):
         self.connected = True
         self.circuit = circuit  # a caproto.VirtualCircuit
+        self.log = circuit.log
         self.client = client
         self.context = context
         self.client_hostname = None
@@ -100,14 +102,14 @@ class VirtualCircuit:
                     try:
                         await self.send(ca.ServerDisconnResponse(cid=cid))
                     except Exception:
-                        self.logger.error(
+                        self.log.error(
                             "Client broke the protocol in a recoverable "
                             "way, but channel disconnection of cid=%d sid=%d "
                             "failed.", cid, sid,
                             exc_info=ex)
                         break
                     else:
-                        self.logger.error(
+                        self.log.error(
                             "Client broke the protocol in a recoverable "
                             "way. Disconnected channel cid=%d sid=%d "
                             "but keeping the circuit alive.", cid, sid,
@@ -116,13 +118,13 @@ class VirtualCircuit:
                     await self._wake_new_command()
                     continue
                 else:
-                    self.logger.error("Client broke the protocol in an "
-                                      "unrecoverable way.", exc_info=ex)
+                    self.log.error("Client broke the protocol in an "
+                                   "unrecoverable way.", exc_info=ex)
                     # TODO: Kill the circuit.
                     break
             except Exception as ex:
-                self.logger.error('Circuit command queue evaluation failed',
-                                  exc_info=ex)
+                self.log.error('Circuit command queue evaluation failed',
+                               exc_info=ex)
                 continue
 
             try:
@@ -137,12 +139,12 @@ class VirtualCircuit:
             except Exception as ex:
                 if not self.connected:
                     if not isinstance(command, ca.ClearChannelRequest):
-                        self.logger.error('Server error after client '
-                                          'disconnection: %s', command)
+                        self.log.error('Server error after client '
+                                       'disconnection: %s', command)
                     break
 
-                self.logger.error('Server failed to process command: %s',
-                                  command, exc_info=ex)
+                self.log.error('Server failed to process command: %s',
+                               command, exc_info=ex)
 
                 if hasattr(command, 'sid'):
                     cid = self.circuit.channels_sid[command.sid].cid
@@ -227,9 +229,9 @@ class VirtualCircuit:
                         command.data, command.data_type, command.metadata,
                         user_address=self.circuit.address)
                 except Exception as ex:
-                    self.logger.exception('Invalid write request by %s (%s): %r',
-                                          self.client_username,
-                                          self.client_hostname, command)
+                    self.log.exception('Invalid write request by %s (%s): %r',
+                                       self.client_username,
+                                       self.client_hostname, command)
                     cid = self.circuit.channels_sid[command.sid].cid
                     response_command = ca.ErrorResponse(
                         command, cid,
@@ -284,15 +286,14 @@ class VirtualCircuit:
 
 
 class Context:
-    def __init__(self, host, port, pvdb, *, log_level='ERROR'):
+    def __init__(self, host, port, pvdb):
         self.host = host
         self.port = port
         self.pvdb = pvdb
+        self.log = logging.getLogger(f'caproto.ctx.{id(self)}')
 
         self.circuits = set()
-        self.log_level = log_level
         self.broadcaster = ca.Broadcaster(our_role=ca.SERVER)
-        self.broadcaster.log.setLevel(self.log_level)
 
         self.subscriptions = defaultdict(deque)
         self.beacon_count = 0
@@ -306,7 +307,7 @@ class Context:
             try:
                 bytes_received, address = await self.udp_sock.recvfrom(4096)
             except ConnectionResetError:
-                self.logger.exception('UDP server connection reset')
+                self.log.exception('UDP server connection reset')
                 await self.async_layer.library.sleep(0.1)
                 continue
 
@@ -327,8 +328,8 @@ class Context:
             except self.TaskCancelled:
                 break
             except Exception as ex:
-                self.logger.exception('Broadcaster command queue evaluation failed',
-                                      exc_info=ex)
+                self.log.exception('Broadcaster command queue evaluation failed',
+                                   exc_info=ex)
                 continue
 
     def __iter__(self):
@@ -443,11 +444,10 @@ class Context:
                 try:
                     await self.udp_sock.sendto(bytes_to_send, addr_port)
                 except IOError:
-                    self.logger.exception("Failed to send beacon to %r. Try "
-                                          "setting "
-                                          "EPICS_CAS_AUTO_BEACON_ADDR_LIST=no and "
-                                          "EPICS_CAS_BEACON_ADDR_LIST=<addresses>.",
-                                          addr_port)
+                    self.log.exception(
+                        "Failed to send beacon to %r. Try setting "
+                        "EPICS_CAS_AUTO_BEACON_ADDR_LIST=no and "
+                        "EPICS_CAS_BEACON_ADDR_LIST=<addresses>.", addr_port)
                     raise
             self.beacon_count += 1
             await self.async_layer.library.sleep(beacon_period)
@@ -470,8 +470,6 @@ class Context:
         circuit = self.CircuitClass(cavc, client, self)
         self.circuits.add(circuit)
 
-        circuit.circuit.log.setLevel(self.log_level)
-
         await circuit.run()
 
         try:
@@ -481,5 +479,5 @@ class Context:
                 except DisconnectedCircuit:
                     break
         except KeyboardInterrupt as ex:
-            self.logger.debug('TCP handler received KeyboardInterrupt')
+            self.log.debug('TCP handler received KeyboardInterrupt')
             raise self.ServerExit() from ex
