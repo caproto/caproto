@@ -1,19 +1,10 @@
 #!/usr/bin/env python3
-import sys
-import random
 import logging
-
-from caproto.benchmarking import set_logging_level
-from caproto.curio.server import start_server
-from caproto.server import (pvproperty, PVGroup, SubGroup)
+import random
+from caproto.server import (pvproperty, PVGroup, SubGroup, ioc_arg_parser, run)
 
 
-logger = logging.getLogger(__name__)
-
-if __name__ == '__main__':
-    set_logging_level(logging.DEBUG)
-    logger.setLevel(logging.DEBUG)
-    logging.basicConfig()
+logger = logging.getLogger('caproto')
 
 
 class RecordLike(PVGroup):
@@ -35,7 +26,6 @@ class MySubGroup(PVGroup):
     # PV: {prefix}random - defaults to dtype of int
     @pvproperty
     async def random(self, instance):
-        logger.debug('read random from %s', type(self).__name__)
         return random.randint(1, 100)
 
 
@@ -79,18 +69,10 @@ class MyPVGroup(PVGroup):
 
 
 if __name__ == '__main__':
-    # usage: subgroups.py [PREFIX] [MACRO]
-    try:
-        prefix = sys.argv[1]
-    except IndexError:
-        prefix = 'subgroups:'
-
-    import curio
-    from pprint import pprint
-
-    macros = {}
-    logger.info('Starting up: prefix=%r macros=%r', prefix, macros)
-    ioc = MyPVGroup(prefix=prefix, macros=macros)
+    ioc_options, run_options = ioc_arg_parser(
+        default_prefix='subgroups:',
+        desc='Run an IOC with groups of groups of PVs.')
+    ioc = MyPVGroup(**ioc_options)
 
     # here's what accessing a pvproperty descriptor looks like:
     print('random using the descriptor getter is:', ioc.random)
@@ -99,25 +81,4 @@ if __name__ == '__main__':
     print('subgroup4 is:', ioc.group4.subgroup4)
     print('subgroup4.random is:', ioc.group4.subgroup4.random)
 
-    # here is the auto-generated pvdb:
-    pprint(ioc.pvdb)
-
-    # Print out some information when clients access
-    logging.basicConfig()
-    ioc.log.setLevel('DEBUG')
-
-    # And look in wonder (cough) at the layers of logging we can use:
-    for item in [ioc,
-                 ioc.random,
-                 ioc.recordlike1,
-                 ioc.recordlike2,
-                 ioc.group1,
-                 ioc.group2,
-                 ioc.group3,
-                 ioc.group3.random,
-                 ioc.group4,
-                 ioc.group4.subgroup4,
-                 ioc.group4.subgroup4.random]:
-        print(f'Class: {item.__class__.__name__:30s} Log name: {item.log.name}')
-
-    curio.run(start_server, ioc.pvdb)
+    run(ioc.pvdb, **run_options)

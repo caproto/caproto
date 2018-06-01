@@ -1,7 +1,6 @@
 from ..server import AsyncLibraryLayer
 import caproto as ca
 import asyncio
-import functools
 import socket
 from caproto import find_available_tcp_port
 

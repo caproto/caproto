@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from caproto.server import pvproperty, PVGroup
+from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
 import random
 
 
@@ -25,19 +25,8 @@ class InlineStyleIOC(PVGroup):
 
 
 if __name__ == '__main__':
-    # usage: inline_style.py <PREFIX>
-    import sys
-    import curio
-    from caproto.curio.server import start_server
-
-    try:
-        prefix = sys.argv[1]
-    except IndexError:
-        prefix = 'inline_style:'
-
-    # Instantiate the IOC, assigning a prefix for the PV names.
-    ioc = InlineStyleIOC(prefix=prefix)
-    print('PVs:', list(ioc.pvdb))
-
-    # Run IOC using curio.
-    curio.run(start_server(ioc.pvdb))
+    ioc_options, run_options = ioc_arg_parser(
+        default_prefix='inline_style:',
+        desc='Run an IOC PVs having custom update behavior, defined "inline".')
+    ioc = InlineStyleIOC(**ioc_options)
+    run(ioc.pvdb, **run_options)

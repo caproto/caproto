@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from caproto.server import pvproperty, PVGroup
+from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
 
 
 class RecordMockingIOC(PVGroup):
@@ -16,22 +16,16 @@ class RecordMockingIOC(PVGroup):
 
 
 if __name__ == '__main__':
-    # usage: simple.py [PREFIX]
-    import sys
-    import curio
-    from caproto.curio.server import start_server
-
-    try:
-        prefix = sys.argv[1]
-    except IndexError:
-        prefix = 'mock:'
+    ioc_options, run_options = ioc_arg_parser(
+        default_prefix='mock:',
+        desc='Run an IOC that mocks at ai record.')
 
     # Instantiate the IOC, assigning a prefix for the PV names.
-    ioc = RecordMockingIOC(prefix=prefix)
+    ioc = RecordMockingIOC(**ioc_options)
     print('PVs:', list(ioc.pvdb))
 
     # ... but what you don't see are all of the analog input record fields
     print('Fields of B:', list(ioc.B.fields.keys()))
 
-    # Run IOC using curio.
-    curio.run(start_server(ioc.pvdb))
+    # Run IOC.
+    run(ioc.pvdb, **run_options)

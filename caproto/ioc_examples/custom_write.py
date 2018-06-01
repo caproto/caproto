@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from caproto.server import pvproperty, PVGroup
+from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
 import pathlib
 
 
@@ -22,16 +22,8 @@ class CustomWrite(PVGroup):
 
 
 if __name__ == '__main__':
-    # usage: custom_write.py [PREFIX]
-    import sys
-    import curio
-    from caproto.curio.server import start_server
-
-    try:
-        prefix = sys.argv[1]
-    except IndexError:
-        prefix = 'custom_write:'
-
-    ioc = CustomWrite(prefix=prefix)
-    print('PVs:', list(ioc.pvdb))
-    curio.run(start_server(ioc.pvdb))
+    ioc_options, run_options = ioc_arg_parser(
+        default_prefix='custom_write:',
+        desc='Run an IOC with PVs that, when written to, update a file.')
+    ioc = CustomWrite(**ioc_options)
+    run(ioc.pvdb, **run_options)

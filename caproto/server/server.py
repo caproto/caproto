@@ -935,7 +935,7 @@ class PVGroup(metaclass=PVGroupMeta):
         return value
 
 
-def ioc_arg_parser(*, desc, default_prefix, argv=None):
+def ioc_arg_parser(*, desc, default_prefix, argv=None, macros=None):
     """
     A reusable ArgumentParser for basic example IOCs.
 
@@ -946,9 +946,14 @@ def ioc_arg_parser(*, desc, default_prefix, argv=None):
     default_prefix : string
     args : list, optional
         Defaults to sys.argv
+    macros : dict, optional
+        Maps macro names to default value (string) or None (indicating that
+        this macro parameter is required).
     """
     if argv is None:
         argv = sys.argv
+    if macros is None:
+        macros = {}
     parser = argparse.ArgumentParser(description=desc)
     parser.add_argument('--prefix', type=str, default=default_prefix)
     group = parser.add_mutually_exclusive_group()
@@ -964,6 +969,13 @@ def ioc_arg_parser(*, desc, default_prefix, argv=None):
     parser.add_argument('--async-lib', default='curio',
                         choices=('asyncio', 'curio', 'trio'),
                         help="Which asynchronous library to use.")
+    for name, default_value in macros.items():
+        if default_value is None:
+            parser.add_argument(f'--{name}', type=str, required=True,
+                                help="Macro substitution required by this IOC")
+        else:
+            parser.add_argument(f'--{name}', type=str, default=default_value,
+                                help="Macro substitution, optional")
     args = parser.parse_args()
     if args.vvv:
         logging.getLogger('caproto').setLevel('DEBUG')
@@ -975,7 +987,8 @@ def ioc_arg_parser(*, desc, default_prefix, argv=None):
         else:
             level = 'INFO'
         logging.getLogger('caproto.ctx').setLevel(level)
-    ioc_options = {'prefix': args.prefix, 'macros': {}}
+    ioc_options = {'prefix': args.prefix,
+                   'macros': {key: getattr(args, key) for key in macros}}
     run_options = {'module_name': f'caproto.{args.async_lib}.server',
                    'log_pv_names': args.list_pvs}
     return ioc_options, run_options

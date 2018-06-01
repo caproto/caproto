@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from caproto.server import pvproperty, PVGroup
+from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
 
 
 class MacroifiedNames(PVGroup):
@@ -11,27 +11,11 @@ class MacroifiedNames(PVGroup):
 
 
 if __name__ == '__main__':
-    # usage: macros.py <PREFIX> <BEAMLINE> <THING>
-    import sys
-    import curio
-    from caproto.curio.server import start_server
-
-    try:
-        prefix = sys.argv[1]
-    except IndexError:
-        prefix = 'prefix:'
-
-    try:
-        beamline = sys.argv[2]
-    except IndexError:
-        beamline = 'my_beamline'
-
-    try:
-        thing = sys.argv[3]
-    except IndexError:
-        thing = 'thing'
-
-    macros = {'beamline': beamline, 'thing': thing}
-    ioc = MacroifiedNames(prefix=prefix, macros=macros)
-    print('PVs:', list(ioc.pvdb))
-    curio.run(start_server(ioc.pvdb))
+    ioc_options, run_options = ioc_arg_parser(
+        default_prefix='macros:',
+        desc='Run an IOC with PVs that have macro-ified names.',
+        # Provide default values for macros.
+        # Passing None as a default value makes a parameter required.
+        macros=dict(beamline='my_beamline', thing='thing'))
+    ioc = MacroifiedNames(**ioc_options)
+    run(ioc.pvdb, **run_options)

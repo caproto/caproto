@@ -244,7 +244,7 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
 
     print('stdin=', stdin)
     run_example_ioc(module_name, request=request,
-                    args=[prefix],
+                    args=['--prefix', prefix],
                     pv_to_check=pv_to_check,
                     stdin=stdin)
 

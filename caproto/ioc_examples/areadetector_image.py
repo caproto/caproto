@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
-import logging
-import sys
 import numpy as np
-
-import curio
-
 import ophyd
 
-from caproto.curio.server import start_server
-from caproto.server import (PVGroup, pvproperty, SubGroup, get_pv_pair_wrapper)
+from caproto.server import (PVGroup, pvproperty, SubGroup, get_pv_pair_wrapper,
+                            ioc_arg_parser, run)
 from caproto.server.conversion import ophyd_device_to_caproto_ioc
 
 
@@ -312,20 +307,11 @@ def generate_detector_code(prefix='13SIM1:'):
 
 
 if __name__ == '__main__':
-    logging.basicConfig()
+    ioc_options, run_options = ioc_arg_parser(
+        default_prefix='adimage:',
+        desc='Simulate an Area Detector IOC.')
+    ioc = DetectorGroup(**ioc_options)
+    generate_detector_code()
 
-    try:
-        prefix = sys.argv[1]
-    except IndexError:
-        prefix = 'adimage:'
-        generate_detector_code()
-
-    from pprint import pprint
-    detector_ioc = DetectorGroup(prefix)
-    detector_ioc.log.setLevel('DEBUG')
-    print(detector_ioc.log.name)
-
-    print('The whole Detector pvdb:')
-    pprint(detector_ioc.pvdb)
-
-    curio.run(start_server, detector_ioc.pvdb)
+    detector_ioc = DetectorGroup(ioc_options['prefix'])
+    run(ioc.pvdb, **run_options)

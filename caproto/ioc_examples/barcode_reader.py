@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-import logging
-from caproto.benchmarking import set_logging_level
-from caproto.asyncio.server import start_server
-from caproto.server import pvproperty, PVGroup
+"""
+This example requires a barcode reader and the Python library evdev.
+"""
+from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
 from evdev import InputDevice, categorize
 
 
@@ -36,19 +36,8 @@ class BarcodeIOC(PVGroup):
 
 
 if __name__ == '__main__':
-    # usage: currency_conversion.py [PREFIX]
-    import sys
-    from asyncio import get_event_loop
-
-    try:
-        prefix = sys.argv[1]
-    except IndexError:
-        prefix = 'bc:'
-
-    set_logging_level(logging.DEBUG)
-    ioc = BarcodeIOC(prefix=prefix,
-                     event_path='/dev/input/event25')
-    print('PVs:', list(ioc.pvdb))
-
-    loop = get_event_loop()
-    loop.run_until_complete(start_server(ioc.pvdb))
+    ioc_options, run_options = ioc_arg_parser(
+        default_prefix='bc:',
+        desc='Run an IOC that updates when a barcode is read.')
+    ioc = BarcodeIOC(event_path='/dev/input/event25', **ioc_options)
+    run(ioc.pvdb, **run_options)

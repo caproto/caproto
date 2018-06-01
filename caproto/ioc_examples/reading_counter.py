@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from caproto.server import pvproperty, PVGroup
+from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
 import collections
 
 
@@ -15,6 +15,8 @@ class ReadingCounter(PVGroup):
         pv_name = instance.pvspec.attr
         self.tallies.update({pv_name: 1})
         print('tallies:', self.tallies)
+        # The act of reading this PV changes its value!
+        # Weird but sort of interesting.
         await instance.write(self.tallies[pv_name])
         return instance.value
 
@@ -23,16 +25,8 @@ class ReadingCounter(PVGroup):
 
 
 if __name__ == '__main__':
-    # usage: reading_counter.py <PREFIX>
-    import sys
-    import curio
-    from caproto.curio.server import start_server
-
-    try:
-        prefix = sys.argv[1]
-    except IndexError:
-        prefix = 'reading_counter:'
-
-    ioc = ReadingCounter(prefix=prefix)
-    print('PVs:', list(ioc.pvdb))
-    curio.run(start_server(ioc.pvdb))
+    ioc_options, run_options = ioc_arg_parser(
+        default_prefix='reading_counter:',
+        desc="PVs whose value equals the number of times they've been read.")
+    ioc = ReadingCounter(**ioc_options)
+    run(ioc.pvdb, **run_options)
