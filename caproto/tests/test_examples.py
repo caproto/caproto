@@ -220,7 +220,7 @@ def test_curio_server_example(prefix):
 
 # See test_ioc_example and test_flaky_ioc_examples, below.
 def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
-                       prefix):
+                       prefix, async_lib='curio'):
     from .conftest import run_example_ioc
     from caproto.sync.client import get, put
     from caproto.server import PvpropertyReadOnlyData
@@ -244,7 +244,7 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
 
     print('stdin=', stdin)
     run_example_ioc(module_name, request=request,
-                    args=['--prefix', prefix],
+                    args=['--prefix', prefix, '--async-lib', async_lib],
                     pv_to_check=pv_to_check,
                     stdin=stdin)
 
@@ -302,10 +302,15 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
       dict(macros={'macro': 'expanded'})),
      ]
 )
+@pytest.mark.parametrize('async_lib', ['curio', 'trio', 'asyncio'])
 def test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
-                      prefix):
+                      prefix, async_lib):
+    if (module_name == 'caproto.ioc_examples.io_interrupt' and
+            async_lib == 'asyncio'):
+        # TODO FIX ME
+        raise pytest.xfail(reason='known not to work on asyncio')
     return _test_ioc_examples(request, module_name, pvdb_class_name,
-                              class_kwargs, prefix)
+                              class_kwargs, prefix, async_lib)
 
 
 # These tests require numpy.
