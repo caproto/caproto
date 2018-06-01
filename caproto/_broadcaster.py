@@ -45,7 +45,7 @@ class Broadcaster:
         self._registered = False
         self._attempted_registration = False
         self._search_id_counter = itertools.count(0)
-        self.log = logging.getLogger(f"caproto.bcast.{our_role}")
+        self.log = logging.getLogger(f"caproto.bcast")
 
     def send(self, *commands):
         """

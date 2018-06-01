@@ -78,7 +78,6 @@ class VirtualCircuit:
         self._priority = priority
         # The logger_name includes the priority so we have to set it.
         logger_name = (f"caproto.circ."
-                       f"{repr(self.our_role)}."
                        f"{self.address[0]}:{self.address[1]}."
                        f"{priority}")
         self.log = logging.getLogger(logger_name)
