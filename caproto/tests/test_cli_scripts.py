@@ -27,8 +27,7 @@ def test_timeout(func, args, kwargs):
 
 
 @pytest.mark.parametrize('more_kwargs,',
-                         [{'verbose': True},
-                          {'repeater': False},
+                         [{'repeater': False},
                           {'timeout': 3},
                           ]
                          )
