@@ -961,6 +961,9 @@ def ioc_arg_parser(*, desc, default_prefix, argv=None):
                        help=argparse.SUPPRESS)
     parser.add_argument('--list-pvs', action='store_true',
                         help="At startup, log the list of PV names served.")
+    parser.add_argument('--async-lib', default='curio',
+                        choices=('asyncio', 'curio', 'trio'),
+                        help="Which asynchronous library to use.")
     args = parser.parse_args()
     if args.vvv:
         logging.getLogger('caproto').setLevel('DEBUG')
@@ -973,5 +976,6 @@ def ioc_arg_parser(*, desc, default_prefix, argv=None):
             level = 'INFO'
         logging.getLogger('caproto.ctx').setLevel(level)
     ioc_options = {'prefix': args.prefix, 'macros': {}}
-    run_options = {'log_pv_names': args.list_pvs}
+    run_options = {'module_name': f'caproto.{args.async_lib}.server',
+                   'log_pv_names': args.list_pvs}
     return ioc_options, run_options

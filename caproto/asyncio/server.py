@@ -185,12 +185,12 @@ async def start_server(pvdb, *, bind_addr='0.0.0.0', log_pv_names=False):
 
 
 def run(pvdb, *, bind_addr='0.0.0.0', log_pv_names=False):
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    task = loop.create_task(
-        functools.partial(
-            start_server,
-            pvdb,
-            bind_addr=bind_addr,
-            log_pv_names=log_pv_names))
-    loop.run_until_complete(task)
+    """
+    A synchronous function that wraps start_server and exits cleanly.
+    """
+    loop = asyncio.get_event_loop()
+    try:
+        loop.run_until_complete(
+            start_server(pvdb, bind_addr=bind_addr, log_pv_names=log_pv_names))
+    except KeyboardInterrupt:
+        return
