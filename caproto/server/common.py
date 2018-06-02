@@ -378,10 +378,11 @@ class Context:
         return inst.filtered(mods)
 
     async def _broadcaster_evaluate(self, addr, commands):
-        responses = []
+        search_replies = []
+        version_requested = False
         for command in commands:
             if isinstance(command, ca.VersionRequest):
-                responses.append(ca.VersionResponse(13))
+                version_requested = True
             if isinstance(command, ca.SearchRequest):
                 pv_name = command.name.decode(STR_ENC)
                 try:
@@ -389,17 +390,28 @@ class Context:
                 except KeyError:
                     known_pv = False
 
-                if (not known_pv) and command.reply == ca.NO_REPLY:
-                    responses.clear()
-                    break  # Do not send any repsonse to this datagram.
+                if known_pv:
+                    # responding with an IP of `None` tells client to get IP
+                    # address from packet
+                    search_replies.append(
+                        ca.SearchResponse(self.port, None, command.cid, 13)
+                    )
+                else:
+                    if command.reply == ca.DO_REPLY:
+                        search_replies.append(
+                            ca.NotFoundResponse(version=13, cid=command.cid)
+                        )
+                    else:
+                        # Not a known PV and no reply required
+                        ...
 
-                # responding with an IP of `None` tells client to get IP
-                # address from packet
-                responses.append(
-                    ca.SearchResponse(self.port, None, command.cid, 13)
-                )
-        if responses:
-            bytes_to_send = self.broadcaster.send(*responses)
+        if search_replies:
+            if version_requested:
+                bytes_to_send = self.broadcaster.send(ca.VersionResponse(13),
+                                                      *search_replies)
+            else:
+                bytes_to_send = self.broadcaster.send(*search_replies)
+
             await self.udp_sock.sendto(bytes_to_send, addr)
 
     async def subscription_queue_loop(self):
