@@ -3,6 +3,7 @@ Helper functions for dealing with EPICS base binaries (caget, caput, catest)
 '''
 
 import os
+import sys
 import datetime
 import subprocess
 
@@ -60,14 +61,14 @@ async def run_epics_base_binary(backend, *args):
         raw_stdout, raw_stderr = await trio.run_sync_in_worker_thread(runner)
     elif backend == 'asyncio':
         loop = asyncio.get_event_loop()
-        print('about to run subprocess')
-        process = await asyncio.create_subprocess_exec(
-            *args, env=env, loop=loop,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
-        print('about to wait on subprocess')
-        raw_stdout, raw_stderr = await process.communicate()
-        print('subprocess done')
+        if sys.platform == 'win32':
+            raw_stdout, raw_stderr = await loop.run_in_executor(None, runner)
+        else:
+            process = await asyncio.create_subprocess_exec(
+                *args, env=env, loop=loop,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE)
+            raw_stdout, raw_stderr = await process.communicate()
     else:
         raise NotImplementedError('Unsupported async backend')
 
@@ -87,7 +88,10 @@ async def run_caget(backend, pv, *, dbr_type=None):
         Specific dbr_type to request
     '''
     sep = '@'
-    args = ['caget', '-w', '0.2', '-F', sep]
+    args = ['caget', '-F', sep,
+            '-w', '1.0' if sys.platform == 'win32' else '0.3',
+            ]
+
     if dbr_type is None:
         args += ['-a']
         wide_mode = True
@@ -215,7 +219,7 @@ async def run_caput(backend, pv, value, *, async_put=True, as_string=False):
             '-' + (('c' if async_put else '') +
                    ('S' if as_string else '') +
                    'w'),
-            '0.2',
+            '1.0' if sys.platform == 'win32' else '0.3',
             pv]
 
     if isinstance(value, (list, tuple)):

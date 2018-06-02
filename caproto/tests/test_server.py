@@ -1,6 +1,7 @@
+import array
 import ast
 import datetime
-import array
+import sys
 
 import pytest
 
@@ -48,7 +49,11 @@ def test_with_caget(backends, prefix, pvdb_from_server_example, server, pv,
                  'upper_warning_limit', 'lower_ctrl_limit',
                  'upper_ctrl_limit', 'precision')
 
+    test_completed = False
+
     async def client(*client_args):
+        nonlocal test_completed
+
         # args are ignored for curio and trio servers.
         print('* client caget test: pv={} dbr_type={}'.format(pv, dbr_type))
         print(f'(client args: {client_args})')
@@ -152,7 +157,17 @@ def test_with_caget(backends, prefix, pvdb_from_server_example, server, pv,
                 ack_severity = getattr(ca._dbr.AlarmSeverity, ack_severity)
                 assert ack_severity == db_entry.alarm.severity_to_acknowledge
 
-    server(pvdb=caget_pvdb, client=client)
+        test_completed = True
+
+    try:
+        server(pvdb=caget_pvdb, client=client)
+    except OSError:
+        if sys.platform == 'win32' and test_completed:
+            # WIN32_TODO: windows asyncio stuff is still buggy...
+            ...
+        else:
+            raise
+
     print('done')
 
 
@@ -177,8 +192,11 @@ def test_with_caput(backends, prefix, pvdb_from_server_example, server, pv,
                   for pv_, value in pvdb_from_server_example.items()
                   }
     pv = prefix + pv
+    test_completed = False
 
     async def client(*client_args):
+        nonlocal test_completed
+
         # args are ignored for curio and trio servers.
         print('* client put test: {} put value: {} check value: {}'
               ''.format(pv, put_value, check_value))
@@ -242,5 +260,15 @@ def test_with_caput(backends, prefix, pvdb_from_server_example, server, pv,
         # check value from database compared to value the test expects
         assert db_new == check_value, 'left = database/right = test expected'
 
-    server(pvdb=caget_pvdb, client=client)
+        test_completed = True
+
+    try:
+        server(pvdb=caget_pvdb, client=client)
+    except OSError:
+        if sys.platform == 'win32' and test_completed:
+            # WIN32_TODO: windows asyncio stuff is still buggy...
+            ...
+        else:
+            raise
+
     print('done')
