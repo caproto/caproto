@@ -1,20 +1,29 @@
 import pytest
 np = pytest.importorskip('numpy')
 import time
+import logging
 import contextlib
 import curio
 
 import caproto as ca
 from .conftest import default_setup_module, default_teardown_module
 from .conftest import get_curio_context, run_with_trio_context
+from . import _asv_shim
 
 
 ioc_handler = None
+logger = logging.getLogger('caproto')
 
 
 def setup_module(module):
     default_setup_module(module)
     global ioc_handler
+
+    logging.basicConfig()
+    logger.setLevel('DEBUG')
+    _asv_shim.logger.setLevel('DEBUG')
+    logging.getLogger('benchmarks.util').setLevel('DEBUG')
+    logging.getLogger('caproto').setLevel('INFO')
 
     waveform_db = {
         ('wfioc:wf{}'.format(sz), 'waveform'): dict(FTVL='LONG', NELM=sz)
@@ -32,7 +41,7 @@ def setup_module(module):
 
     db_text = ca.benchmarking.make_database(full_db)
 
-    ioc_handler = ca.benchmarking.IocHandler()
+    ioc_handler = ca.benchmarking.IocHandler(logger=logger)
     ioc_handler.setup_ioc(db_text=db_text, max_array_bytes='10000000')
     # give time for the server to startup
     time.sleep(1.0)
@@ -55,7 +64,7 @@ def temporary_pyepics_access(pvname, **kwargs):
 
 
 @contextlib.contextmanager
-def bench_pyepics_get_speed(pvname, *, initial_value=None):
+def bench_pyepics_get_speed(pvname, *, initial_value=None, log_level='DEBUG'):
     with temporary_pyepics_access(pvname, auto_monitor=False) as pv:
         def pyepics():
             value = pv.get(use_monitor=False)
@@ -65,19 +74,22 @@ def bench_pyepics_get_speed(pvname, *, initial_value=None):
         if initial_value is not None:
             pv.put(initial_value, wait=True)
         yield pyepics
+        logger.debug('Disconnecting pyepics pv %s', pv)
         pv.disconnect()
 
 
-def _setup_threading_client():
+def _setup_threading_client(log_level):
     from caproto.threading.client import (PV, SharedBroadcaster, Context)
+    logging.getLogger('caproto').setLevel(log_level)
     shared_broadcaster = SharedBroadcaster()
     context = Context(broadcaster=shared_broadcaster)
     return shared_broadcaster, context, PV
 
 
 @contextlib.contextmanager
-def bench_threading_get_speed(pvname, *, initial_value=None):
-    shared_broadcaster, context, PV = _setup_threading_client()
+def bench_threading_get_speed(pvname, *, initial_value=None,
+                              log_level='ERROR'):
+    shared_broadcaster, context, PV = _setup_threading_client(log_level)
 
     def threading():
         value = pv.read().data
@@ -94,18 +106,25 @@ def bench_threading_get_speed(pvname, *, initial_value=None):
 
 
 @contextlib.contextmanager
-def bench_curio_get_speed(pvname, *, initial_value=None):
+def bench_curio_get_speed(pvname, *, initial_value=None, log_level='DEBUG'):
+    logging.getLogger('caproto').setLevel(log_level)
     kernel = curio.Kernel()
 
     async def curio_setup():
         ctx = await get_curio_context()
 
+        logger.debug('Searching for %s...', pvname)
         await ctx.search(pvname)
+        logger.debug('... found!')
         chan = await ctx.create_channel(pvname)
         await chan.wait_for_connection()
+        logger.debug('Connected to %s', pvname)
 
         if initial_value is not None:
+            logger.debug('Writing initial value')
             await chan.write(initial_value)
+            logger.debug('Wrote initial value')
+        logger.debug('Init complete')
         return chan
 
     def curio_client():
@@ -122,15 +141,17 @@ def bench_curio_get_speed(pvname, *, initial_value=None):
     try:
         yield curio_client
     finally:
-        print('Shutting down the kernel')
+        logger.debug('Shutting down the kernel')
         kernel.run(shutdown=True)
-        print('Done')
+        logger.debug('Done')
 
 
 @pytest.mark.parametrize('waveform_size', [4000, 8000, 50000, 1000000])
 @pytest.mark.parametrize('backend', ['pyepics', 'curio', 'threading'])
-def test_waveform_get(benchmark, waveform_size, backend):
+@pytest.mark.parametrize('log_level', ['INFO'])
+def test_waveform_get(benchmark, waveform_size, backend, log_level):
     pvname = 'wfioc:wf{}'.format(waveform_size)
+    logging.getLogger('caproto').setLevel('DEBUG')
 
     context = {'pyepics': bench_pyepics_get_speed,
                'curio': bench_curio_get_speed,
@@ -138,12 +159,12 @@ def test_waveform_get(benchmark, waveform_size, backend):
                }[backend]
 
     val = list(range(waveform_size))
-    with context(pvname, initial_value=val) as bench_fcn:
+    with context(pvname, initial_value=val, log_level=log_level) as bench_fcn:
         benchmark(bench_fcn)
 
 
 @contextlib.contextmanager
-def bench_pyepics_put_speed(pvname, *, value):
+def bench_pyepics_put_speed(pvname, *, value, log_level='DEBUG'):
     with temporary_pyepics_access(pvname, auto_monitor=False) as pv:
         def pyepics():
             pv.put(value, wait=True)
@@ -152,12 +173,13 @@ def bench_pyepics_put_speed(pvname, *, value):
 
         np.testing.assert_array_almost_equal(pv.get(), value)
 
+        logger.debug('Disconnecting pyepics pv %s', pv)
         pv.disconnect()
 
 
 @contextlib.contextmanager
-def bench_threading_put_speed(pvname, *, value):
-    shared_broadcaster, context, PV = _setup_threading_client()
+def bench_threading_put_speed(pvname, *, value, log_level='ERROR'):
+    shared_broadcaster, context, PV = _setup_threading_client(log_level)
 
     def threading():
         pv.write(value, wait=True)
@@ -170,19 +192,23 @@ def bench_threading_put_speed(pvname, *, value):
     np.testing.assert_array_almost_equal(pv.read().data, value)
 
     context.disconnect()
-    print('Done')
+    logger.debug('Done')
 
 
 @contextlib.contextmanager
-def bench_curio_put_speed(pvname, *, value):
+def bench_curio_put_speed(pvname, *, value, log_level='DEBUG'):
+    logging.getLogger('caproto').setLevel(log_level)
     kernel = curio.Kernel()
 
     async def curio_setup():
         ctx = await get_curio_context()
 
+        logger.debug('Searching for %s...', pvname)
         await ctx.search(pvname)
+        logger.debug('... found!')
         chan = await ctx.create_channel(pvname)
         await chan.wait_for_connection()
+        logger.debug('Connected to %s', pvname)
         return chan
 
     def curio_client():
@@ -203,15 +229,17 @@ def bench_curio_put_speed(pvname, *, value):
 
         kernel.run(check())
     finally:
-        print('Shutting down the kernel')
+        logger.debug('Shutting down the kernel')
         kernel.run(shutdown=True)
-        print('Done')
+        logger.debug('Done')
 
 
 @pytest.mark.parametrize('waveform_size', [4000, 8000, 50000, 1000000])
 @pytest.mark.parametrize('backend', ['pyepics', 'curio', 'threading'])
-def test_waveform_put(benchmark, waveform_size, backend):
+@pytest.mark.parametrize('log_level', ['INFO'])
+def test_waveform_put(benchmark, waveform_size, backend, log_level):
     pvname = 'wfioc:wf{}'.format(waveform_size)
+    logging.getLogger('caproto').setLevel('DEBUG')
 
     context = {'pyepics': bench_pyepics_put_speed,
                'curio': bench_curio_put_speed,
@@ -219,12 +247,13 @@ def test_waveform_put(benchmark, waveform_size, backend):
                }[backend]
 
     value = list(range(waveform_size))
-    with context(pvname, value=value) as bench_fcn:
+    with context(pvname, value=value, log_level=log_level) as bench_fcn:
         benchmark(bench_fcn)
 
 
 @contextlib.contextmanager
-def bench_pyepics_many_connections(pv_names, *, initial_value=None):
+def bench_pyepics_many_connections(pv_names, *, initial_value=None,
+                                   log_level='DEBUG'):
     import epics
 
     pvs = []
@@ -252,8 +281,9 @@ def bench_pyepics_many_connections(pv_names, *, initial_value=None):
 
 
 @contextlib.contextmanager
-def bench_threading_many_connections(pv_names, *, initial_value=None):
-    shared_broadcaster, context, PV = _setup_threading_client()
+def bench_threading_many_connections(pv_names, *, initial_value=None,
+                                     log_level='DEBUG'):
+    shared_broadcaster, context, PV = _setup_threading_client(log_level)
     pvs = []
 
     def threading():
@@ -267,12 +297,13 @@ def bench_threading_many_connections(pv_names, *, initial_value=None):
         yield threading
     finally:
         context.disconnect()
-    print('Done')
+    logger.debug('Done')
 
 
 @contextlib.contextmanager
-def bench_curio_many_connections(pv_names, *, initial_value=None):
-
+def bench_curio_many_connections(pv_names, *, initial_value=None,
+                                 log_level='DEBUG'):
+    logging.getLogger('caproto').setLevel(log_level)
     async def test():
         ctx = await get_curio_context()
         channels = await ctx.create_many_channels(*pv_names,
@@ -291,8 +322,10 @@ def bench_curio_many_connections(pv_names, *, initial_value=None):
 
 
 @contextlib.contextmanager
-def bench_trio_many_connections(pv_names, *, initial_value=None):
+def bench_trio_many_connections(pv_names, *, initial_value=None,
+                                log_level='DEBUG'):
     async def test(context):
+        logging.getLogger('caproto').setLevel(log_level)
         channels = await context.create_many_channels(
             *pv_names, wait_for_connection=True,
             move_on_after=10)
@@ -305,15 +338,231 @@ def bench_trio_many_connections(pv_names, *, initial_value=None):
         run_with_trio_context(test)
 
     yield trio_test
-    print('Done')
+    logger.debug('Done')
 
 
 @pytest.mark.parametrize('connection_count', [5, 100, 500])
 @pytest.mark.parametrize('pv_format', ['connections:{}'])
 @pytest.mark.parametrize('backend', ['pyepics', 'curio', 'trio', 'threading'])
+@pytest.mark.parametrize('log_level', ['INFO'])
 def test_many_connections_same_ioc(benchmark, backend, connection_count,
-                                   pv_format):
+                                   pv_format, log_level):
+    logging.getLogger('caproto').setLevel('DEBUG')
 
+    context = {'pyepics': bench_pyepics_put_speed,
+               'curio': bench_curio_put_speed,
+               'threading': bench_threading_put_speed
+               }[backend]
+
+    value = list(range(waveform_size))
+    with context(pvname, value=value, log_level=log_level) as bench_fcn:
+        benchmark(bench_fcn)
+
+
+@contextlib.contextmanager
+def bench_pyepics_many_connections(pv_names, *, initial_value=None,
+                                   log_level='DEBUG'):
+    import epics
+
+    pvs = []
+
+    def pyepics():
+        nonlocal pvs
+
+        pvs = [epics.PV(pvname, auto_monitor=False)
+               for pvname in pv_names]
+
+        while not all(pv.connected for pv in pvs):
+            time.sleep(0.01)
+
+    epics.ca.initial_context = None
+    epics.ca.clear_cache()
+
+    try:
+        yield pyepics
+    finally:
+        for pv in pvs:
+            pv.disconnect()
+
+        epics.ca.initial_context = None
+        epics.ca.clear_cache()
+
+
+@contextlib.contextmanager
+def bench_threading_many_connections(pv_names, *, initial_value=None,
+                                     log_level='DEBUG'):
+    shared_broadcaster, context, PV = _setup_threading_client(log_level)
+    pvs = []
+
+    def threading():
+        nonlocal pvs
+
+        pvs = context.get_pvs(*pv_names)
+        while not all(pv.connected for pv in pvs):
+            time.sleep(0.01)
+
+    try:
+        yield threading
+    finally:
+        context.disconnect()
+    logger.debug('Done')
+
+
+@contextlib.contextmanager
+def bench_curio_many_connections(pv_names, *, initial_value=None,
+                                 log_level='DEBUG'):
+    logging.getLogger('caproto').setLevel(log_level)
+    async def test():
+        ctx = await get_curio_context()
+        channels = await ctx.create_many_channels(*pv_names,
+                                                  wait_for_connection=True,
+                                                  move_on_after=20)
+
+        connected_channels = [ch for ch in channels.values()
+                              if ch.channel.states[ca.CLIENT] is ca.CONNECTED]
+        assert len(connected_channels) == len(pv_names)
+
+    def curio_client():
+        with curio.Kernel() as kernel:
+            kernel.run(test)
+
+    yield curio_client
+
+
+@contextlib.contextmanager
+def bench_trio_many_connections(pv_names, *, initial_value=None,
+                                log_level='DEBUG'):
+    async def test(context):
+        logging.getLogger('caproto').setLevel(log_level)
+        channels = await context.create_many_channels(
+            *pv_names, wait_for_connection=True,
+            move_on_after=10)
+
+        connected_channels = [ch for ch in channels.values()
+                              if ch.channel.states[ca.CLIENT] is ca.CONNECTED]
+        assert len(connected_channels) == len(pv_names)
+
+    def trio_test():
+        run_with_trio_context(test)
+
+    yield trio_test
+    logger.debug('Done')
+
+
+@pytest.mark.parametrize('connection_count', [5, 100, 500])
+@pytest.mark.parametrize('pv_format', ['connections:{}'])
+@pytest.mark.parametrize('backend', ['pyepics', 'curio', 'trio', 'threading'])
+@pytest.mark.parametrize('log_level', ['INFO'])
+def test_many_connections_same_ioc(benchmark, backend, connection_count,
+                                   pv_format, log_level):
+    logging.getLogger('caproto').setLevel('DEBUG')
+
+    context = {'pyepics': bench_pyepics_put_speed,
+               'curio': bench_curio_put_speed,
+               'threading': bench_threading_put_speed
+               }[backend]
+
+    value = list(range(waveform_size))
+    with context(pvname, value=value, log_level=log_level) as bench_fcn:
+        benchmark(bench_fcn)
+
+
+@contextlib.contextmanager
+def bench_pyepics_many_connections(pv_names, *, initial_value=None,
+                                   log_level='DEBUG'):
+    import epics
+
+    pvs = []
+
+    def pyepics():
+        nonlocal pvs
+
+        pvs = [epics.PV(pvname, auto_monitor=False)
+               for pvname in pv_names]
+
+        while not all(pv.connected for pv in pvs):
+            time.sleep(0.01)
+
+    epics.ca.initial_context = None
+    epics.ca.clear_cache()
+
+    try:
+        yield pyepics
+    finally:
+        for pv in pvs:
+            pv.disconnect()
+
+        epics.ca.initial_context = None
+        epics.ca.clear_cache()
+
+
+@contextlib.contextmanager
+def bench_threading_many_connections(pv_names, *, initial_value=None,
+                                     log_level='DEBUG'):
+    shared_broadcaster, context, PV = _setup_threading_client(log_level)
+    pvs = []
+
+    def threading():
+        nonlocal pvs
+
+        pvs = context.get_pvs(*pv_names)
+        while not all(pv.connected for pv in pvs):
+            time.sleep(0.01)
+
+    try:
+        yield threading
+    finally:
+        context.disconnect()
+    logger.debug('Done')
+
+
+@contextlib.contextmanager
+def bench_curio_many_connections(pv_names, *, initial_value=None,
+                                 log_level='DEBUG'):
+    logging.getLogger('caproto').setLevel(log_level)
+    async def test():
+        ctx = await get_curio_context()
+        channels = await ctx.create_many_channels(*pv_names,
+                                                  wait_for_connection=True,
+                                                  move_on_after=20)
+
+        connected_channels = [ch for ch in channels.values()
+                              if ch.channel.states[ca.CLIENT] is ca.CONNECTED]
+        assert len(connected_channels) == len(pv_names)
+
+    def curio_client():
+        with curio.Kernel() as kernel:
+            kernel.run(test)
+
+    yield curio_client
+
+
+@contextlib.contextmanager
+def bench_trio_many_connections(pv_names, *, initial_value=None,
+                                log_level='DEBUG'):
+    async def test(context):
+        logging.getLogger('caproto').setLevel(log_level)
+        channels = await context.create_many_channels(
+            *pv_names, wait_for_connection=True,
+            move_on_after=10)
+
+        connected_channels = [ch for ch in channels.values()
+                              if ch.channel.states[ca.CLIENT] is ca.CONNECTED]
+        assert len(connected_channels) == len(pv_names)
+
+    def trio_test():
+        run_with_trio_context(test)
+
+    yield trio_test
+    logger.debug('Done')
+
+
+@pytest.mark.parametrize('connection_count', [5, 100, 500])
+@pytest.mark.parametrize('pv_format', ['connections:{}'])
+@pytest.mark.parametrize('backend', ['pyepics', 'curio', 'trio', 'threading'])
+@pytest.mark.parametrize('log_level', ['INFO'])
+def test_many_connections_same_ioc(benchmark, backend, connection_count,
+                                   pv_format, log_level):
     context = {'pyepics': bench_pyepics_many_connections,
                'curio': bench_curio_many_connections,
                'threading': bench_threading_many_connections,
@@ -321,5 +570,6 @@ def test_many_connections_same_ioc(benchmark, backend, connection_count,
                }[backend]
 
     pv_names = [pv_format.format(i) for i in range(connection_count)]
+    logging.getLogger('caproto').setLevel(log_level)
     with context(pv_names) as bench_fcn:
         benchmark(bench_fcn)
