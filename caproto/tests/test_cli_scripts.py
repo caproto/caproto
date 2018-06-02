@@ -123,18 +123,14 @@ def test_monitor(args, ioc):
     else:
         os_kwargs = {}
 
+
+    # For the purposes of this test, one monitor output is sufficient
+    args += ['--maximum', '1']
+
     p = subprocess.Popen([sys.executable, '-um', 'caproto.tests.example_runner',
                           '--script', 'caproto-monitor'] + list(args),
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                          **os_kwargs)
-    # Wait for the first line of output.
-    line = p.stdout.readline()
-    print(line)
-    # Process should run forever, therefore should still be running now.
-    assert p.poll() is None
-
-    # Send SIGINT. If the CLI is otherwise happy, it should still exit code 0.
-    os.kill(p.pid, signal.SIGINT)
 
     _subprocess_communicate(p, 'camonitor', timeout=2.0)
 
