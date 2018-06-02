@@ -1,7 +1,5 @@
-import os
 import sys
 import pytest
-import signal
 import subprocess
 from caproto.sync.client import get, put, monitor, parse_data_type
 from caproto._dbr import ChannelType
@@ -122,7 +120,6 @@ def test_monitor(args, ioc):
         os_kwargs = dict(startupinfo=si)
     else:
         os_kwargs = {}
-
 
     # For the purposes of this test, one monitor output is sufficient
     args += ['--maximum', '1']

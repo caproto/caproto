@@ -10,7 +10,6 @@
 #
 import getpass
 import logging
-import sys
 
 import caproto as ca
 import curio

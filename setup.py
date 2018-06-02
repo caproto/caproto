@@ -1,5 +1,4 @@
 from distutils.core import setup
-import glob
 import setuptools  # noqa F401
 import versioneer
 

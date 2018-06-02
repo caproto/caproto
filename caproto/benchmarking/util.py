@@ -98,7 +98,6 @@ def softioc(*, db_text='', access_rules_text='', additional_args=None,
                           '-a', cf.name,
                           '-d', df.name]
 
-
             if sys.platform == 'win32':
                 si = subprocess.STARTUPINFO()
                 si.dwFlags = (subprocess.STARTF_USESTDHANDLES |
