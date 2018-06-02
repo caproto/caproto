@@ -66,20 +66,13 @@ test_script:
   # - cmd: set EPICS_CA_AUTO_ADDR_LIST=NO
   
   # - cmd: %RUN_TEST% caproto/tests/test_bench.py
-  - cmd: "%RUN_TEST% caproto/tests/test_cli_scripts.py"
-  - cmd: "%RUN_TEST% caproto/tests/test_core.py"
-  - cmd: "%RUN_TEST% caproto/tests/test_create_many_channels.py"
-  - cmd: "%RUN_TEST% caproto/tests/test_data_conversion.py"
-  - cmd: "%RUN_TEST% caproto/tests/test_dbr_types.py"
-  - cmd: "%RUN_TEST% caproto/tests/test_examples.py"
-  - cmd: "%RUN_TEST% caproto/tests/test_fixtures.py"
-  - cmd: "%RUN_TEST% caproto/tests/test_nonet.py"
-  - cmd: "%RUN_TEST% caproto/tests/test_pyepics_compat.py"
-  - cmd: "%RUN_TEST% caproto/tests/test_repeater.py"
-  - cmd: "%RUN_TEST% caproto/tests/test_serialization.py"
-  - cmd: "%RUN_TEST% caproto/tests/test_server.py"
-  - cmd: "%RUN_TEST% caproto/tests/test_status.py"
-  - cmd: "%RUN_TEST% caproto/tests/test_threading_client.py"
-  - cmd: "%RUN_TEST% caproto/tests/test_utils.py"
-  - cmd: coverage combine
-  - cmd: coverage report -m
+  - "%RUN_TEST% caproto/tests/test_cli_scripts.py
+    caproto/tests/test_core.py caproto/tests/test_create_many_channels.py
+    caproto/tests/test_data_conversion.py caproto/tests/test_dbr_types.py
+    caproto/tests/test_examples.py caproto/tests/test_fixtures.py
+    caproto/tests/test_nonet.py caproto/tests/test_pyepics_compat.py
+    caproto/tests/test_repeater.py caproto/tests/test_serialization.py
+    caproto/tests/test_server.py caproto/tests/test_status.py
+    caproto/tests/test_threading_client.py caproto/tests/test_utils.py"
+  - coverage combine
+  - coverage report -m
