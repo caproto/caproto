@@ -78,7 +78,7 @@ Why rewrite it from scratch in Python instead of just wrapping C?
    pattern and a list of related projects.
 8. **Consistent**: Server and client implementations share protocol state
    machine code.
-9. **Robust**: Over 1000 unit tests verify compatibility with standard
+9. **Robust**: Over 1500 unit tests verify compatibility with standard
    epics-base tools (tested against 3.14, 3.15, 3.16, R7).
 10. **Succinct**: The core of the package is about the same word count as the
     CA protocol documentation.
