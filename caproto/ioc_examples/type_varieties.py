@@ -63,7 +63,7 @@ pvdb = {'pi': ca.ChannelDouble(value=3.14,
         }
 
 
-if __name__ == '__main__':
+def main():
     ioc_options, run_options = ioc_arg_parser(
         default_prefix='type_varieties:',
         desc='Run an IOC with PVs of various data types.')
@@ -72,3 +72,7 @@ if __name__ == '__main__':
     warnings.warn("The IOC options are ignored by this IOC. "
                   "It needs to be updated.")
     run(pvdb, **run_options)
+
+
+if __name__ == '__main__':
+    main()
