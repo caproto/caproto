@@ -339,11 +339,11 @@ def monitor_cli():
                         help="PV (channel) name")
     fmt_group.add_argument('--format', type=str,
                            help=("Python format string. Available tokens are "
-                                 "{pv_name} and {response}. Additionally, if "
-                                 "this data type includes time, {timestamp}, "
-                                 "{timedelta} and usages like "
-                                 "{timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are "
-                                 "supported."))
+                                 "{pv_name}, {response}, {callback_count}. "
+                                 "Additionally, if this data type includes "
+                                 "time, {timestamp}, {timedelta} and usages "
+                                 "like {timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are"
+                                 " supported."))
     parser.add_argument('-m', type=str, metavar='MASK', default='va',
                         help=("Channel Access mask. Any combination of "
                               "'v' (value), 'a' (alarm), 'l' (log/archive), "
@@ -364,6 +364,8 @@ def monitor_cli():
                         help="Show DEBUG log messages.")
     parser.add_argument('-vvv', action='store_true',
                         help=argparse.SUPPRESS)
+    parser.add_argument('--maximum', type=int, default=None,
+                        help="Maximum number of monitor events to display.")
     args = parser.parse_args()
     if args.verbose:
         logging.getLogger('caproto.monitor').setLevel('DEBUG')
@@ -381,14 +383,17 @@ def monitor_cli():
         mask |= SubscriptionType.DBE_PROPERTY
 
     history = []
+    tokens = {'callback_count': 0}
 
     def callback(pv_name, response):
+        tokens['callback_count'] += 1
         if args.format is None:
             format_str = ("{pv_name: <40}  {timestamp:%Y-%m-%d %H:%M:%S} "
                           "{response.data}")
         else:
             format_str = args.format
-        tokens = dict(pv_name=pv_name, response=response)
+        tokens['pv_name'] = pv_name
+        tokens['response'] = response
         dt = datetime.fromtimestamp(response.metadata.timestamp)
         tokens['timestamp'] = dt
         if history:
@@ -402,6 +407,10 @@ def monitor_cli():
         history.append(dt)
         tokens['timedelta'] = td
         print(format_str.format(**tokens), flush=True)
+
+        if args.maximum is not None:
+            if tokens['callback_count'] >= args.maximum:
+                raise KeyboardInterrupt()
     try:
         monitor(*args.pv_names,
                 callback=callback, mask=mask,
@@ -409,6 +418,8 @@ def monitor_cli():
                 priority=args.priority,
                 force_int_enums=args.n,
                 repeater=not args.no_repeater)
+    except KeyboardInterrupt:
+        ...
     except BaseException as exc:
         if args.verbose:
             # Show the full traceback.
