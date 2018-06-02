@@ -113,8 +113,7 @@ def poll_readiness(pv_to_check, attempts=15):
     start_repeater()
     for attempt in range(attempts):
         try:
-            get(pv_to_check, timeout=1, repeater=False,
-                verbose=True)
+            get(pv_to_check, timeout=1, repeater=False)
         except TimeoutError:
             continue
         else:
