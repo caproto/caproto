@@ -76,12 +76,30 @@ fmt2 = '{timestamp:%%H:%%M}'
                           ])
 def test_cli(command, args, ioc):
     args = fix_arg_prefixes(ioc, args)
-    p = subprocess.Popen([sys.executable, '-m', 'caproto.tests.example_runner',
+    p = subprocess.Popen([sys.executable, '-um', 'caproto.tests.example_runner',
                           '--script', command] + list(args),
-                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    p.wait()
-    print(p.communicate())
-    assert p.poll() == 0
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                         )
+
+    def dump_output():
+        print('-- Process stdout --')
+        if stdout is not None:
+            for line in stdout.decode('latin-1').split('\n'):
+                print('[CLI-stdout]', line)
+        print('-- Process stderr --')
+        if stderr is not None:
+            for line in stderr.decode('latin-1').split('\n'):
+                print('[CLI-stderr]', line)
+        print('--')
+
+    try:
+        stdout, stderr = p.communicate(timeout=50.0)
+    except subprocess.TimeoutExpired:
+        dump_output()
+        raise
+    else:
+        dump_output()
+        assert p.poll() == 0
 
 
 @pytest.mark.skipif(sys.platform == 'win32',
@@ -103,7 +121,7 @@ def test_cli(command, args, ioc):
                           ])
 def test_monitor(args, ioc):
     args = fix_arg_prefixes(ioc, args)
-    p = subprocess.Popen([sys.executable, '-m', 'caproto.tests.example_runner',
+    p = subprocess.Popen([sys.executable, '-um', 'caproto.tests.example_runner',
                           '--script', 'caproto-monitor'] + list(args),
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     # Wait for the first line of output.

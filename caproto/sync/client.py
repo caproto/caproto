@@ -181,24 +181,21 @@ def read(chan, timeout, data_type):
     while True:
         try:
             commands = recv(chan.circuit)
-            if time.monotonic() - t > timeout:
-                raise socket.timeout
         except socket.timeout:
+            commands = []
+
+        if time.monotonic() - t > timeout:
             raise TimeoutError("Timeout while awaiting reading.")
+
         for command in commands:
             if (isinstance(command, ca.ReadNotifyResponse) and
                     command.ioid == req.ioid):
-                response = command
-                break
+                return command
             elif isinstance(command, ca.ErrorResponse):
                 raise ErrorResponseReceived(command)
             elif command is ca.DISCONNECTED:
                 raise CaprotoError('Disconnected while waiting for '
                                    'read response')
-        else:
-            continue
-        break
-    return response
 
 
 def get_cli():
@@ -674,10 +671,12 @@ def put(pv_name, data, *, data_type=None, metadata=None,
         while True:
             try:
                 commands = recv(chan.circuit)
-                if time.monotonic() - t > timeout:
-                    raise socket.timeout
             except socket.timeout:
+                commands = []
+
+            if time.monotonic() - t > timeout:
                 raise TimeoutError("Timeout while awaiting write reply.")
+
             for command in commands:
                 if (isinstance(command, ca.WriteNotifyResponse) and
                         command.ioid == req.ioid):

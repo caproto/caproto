@@ -62,7 +62,7 @@ class VirtualCircuit:
         """
         try:
             bytes_received = await self.client.recv(4096)
-        except ConnectionResetError:
+        except (ConnectionResetError, ConnectionAbortedError) as ex:
             bytes_received = []
 
         commands, _ = self.circuit.recv(bytes_received)

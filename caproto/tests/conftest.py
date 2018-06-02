@@ -76,7 +76,7 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
         logger.debug(f'Running {module_name}')
     os.environ['COVERAGE_PROCESS_START'] = '.coveragerc'
 
-    p = subprocess.Popen([sys.executable, '-m', 'caproto.tests.example_runner',
+    p = subprocess.Popen([sys.executable, '-um', 'caproto.tests.example_runner',
                           module_name] + list(args),
                          stdout=stdout, stderr=stderr, stdin=stdin,
                          env=os.environ)
@@ -175,6 +175,24 @@ def epics_base_ioc(prefix, request):
 ******* Returned: %s ******
 ***********************************''',
                     process.returncode)
+        stdout, stderr = process.communicate()
+        if process.returncode != 0:
+            print()
+            print()
+            print('IOC Standard output:')
+            if stdout is not None:
+                for line in stdout.decode('latin-1').split('\n'):
+                    print('[Server-stdout]', line)
+            else:
+                print('(None)')
+            print('IOC Standard error:')
+            if stderr is not None:
+                for line in stderr.decode('latin-1').split('\n'):
+                    print('[Server-stderr]', line)
+            else:
+                print('(None)')
+            print()
+            print()
 
     threading.Thread(target=ioc_monitor).start()
     pvs = {pv[len(prefix):]: pv
