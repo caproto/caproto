@@ -68,7 +68,7 @@ script:
     then
       pip uninstall --yes numpy
     fi
-  - coverage run --parallel-mode run_tests.py -v --benchmark-disable --timeout=50
+  - coverage run --parallel-mode run_tests.py -v --benchmark-disable --timeout=50 -k 'not bench'
   - coverage combine --append
 
   - export ASV_ENV_NAME=${TRAVIS_PYTHON_VERSION}_${BASE}
