@@ -26,6 +26,7 @@ if __name__ == '__main__':
         print("--------------------------------------")
         print(f"Running {script} with coverage")
         sys.argv = sys.argv[2:]
+        print(f"Arguments: {sys.argv}")
         try:
             entry_point()
         except KeyboardInterrupt:
@@ -37,7 +38,7 @@ if __name__ == '__main__':
         print(f"Running {example_module} with coverage")
         print(os.getcwd())
         sys.argv = sys.argv[:1] + sys.argv[2:]
-        print(f"sys.argv is now: {sys.argv}")
+        print(f"Arguments: {sys.argv}")
         try:
             runpy.run_module(example_module, run_name='__main__')
         except KeyboardInterrupt:

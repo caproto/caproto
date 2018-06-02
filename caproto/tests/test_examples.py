@@ -1,6 +1,7 @@
 import curio
 import pytest
 import trio
+import sys
 
 import caproto as ca
 
@@ -9,12 +10,18 @@ from .conftest import default_setup_module as setup_module  # noqa
 from .conftest import default_teardown_module as teardown_module  # noqa
 
 
+# skip on windows - no motorsim ioc there just yet
+@pytest.mark.skipif(sys.platform == 'win32',
+                    reason='win32 motorsim IOC')
 def test_curio_client_example():
     from caproto.examples.curio_client_simple import main
     with curio.Kernel() as kernel:
         kernel.run(main())
 
 
+# skip on windows - no motorsim ioc there just yet
+@pytest.mark.skipif(sys.platform == 'win32',
+                    reason='win32 motorsim IOC')
 def test_trio_client_example():
     from caproto.examples.trio_client_simple import main
     trio.run(main)
@@ -305,15 +312,27 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
 @pytest.mark.parametrize('async_lib', ['curio', 'trio', 'asyncio'])
 def test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
                       prefix, async_lib):
+    skip_on_windows = (
+        # no areadetector ioc
+        'caproto.ioc_examples.areadetector_image',
+        # no termios support
+        'caproto.ioc_examples.io_interrupt',
+    )
+
     if (module_name == 'caproto.ioc_examples.io_interrupt' and
             async_lib == 'asyncio'):
         # TODO FIX ME
         raise pytest.xfail(reason='known not to work on asyncio')
+    elif module_name in skip_on_windows:
+        raise pytest.skip('win32 TODO')
+
     return _test_ioc_examples(request, module_name, pvdb_class_name,
                               class_kwargs, prefix, async_lib)
 
 
 # These tests require numpy.
+@pytest.mark.skipif(sys.platform == 'win32',
+                    reason='win32 AD IOC')
 @pytest.mark.parametrize(
     'module_name, pvdb_class_name, class_kwargs',
     [('caproto.ioc_examples.caproto_to_ophyd', 'Group', {}),
@@ -343,6 +362,9 @@ def test_flaky_ioc_examples(request, module_name, pvdb_class_name,
                               class_kwargs, prefix)
 
 
+# skip on windows - no areadetector ioc there just yet
+@pytest.mark.skipif(sys.platform == 'win32',
+                    reason='win32 AD IOC')
 def test_areadetector_generate():
     pytest.importorskip('numpy')
     from caproto.ioc_examples import areadetector_image

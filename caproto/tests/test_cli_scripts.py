@@ -28,9 +28,9 @@ def test_timeout(func, args, kwargs):
         func(*args, **kwargs)
 
 
-def _run_cli_process(process, command, timeout=10.0):
+def _subprocess_communicate(process, command, timeout=10.0):
     try:
-        stdout, stderr = process.communicate(timeout=10.0)
+        stdout, stderr = process.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
         dump_process_output(command, stdout, stderr)
         raise
@@ -94,11 +94,9 @@ def test_cli(command, args, ioc):
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE
                          )
 
-    _run_cli_process(p, command, timeout=10.0)
+    _subprocess_communicate(p, command, timeout=10.0)
 
 
-@pytest.mark.skipif(sys.platform == 'win32',
-                    reason='SIGINT on windows (TODO)')
 @pytest.mark.parametrize('args',
                          [('float', '--format', fmt1),
                           ('float', '--format', fmt2),
@@ -116,9 +114,19 @@ def test_cli(command, args, ioc):
                           ])
 def test_monitor(args, ioc):
     args = fix_arg_prefixes(ioc, args)
+
+    if sys.platform == 'win32':
+        si = subprocess.STARTUPINFO()
+        si.dwFlags = (subprocess.STARTF_USESTDHANDLES |
+                      subprocess.CREATE_NEW_PROCESS_GROUP)
+        os_kwargs = dict(startupinfo=si)
+    else:
+        os_kwargs = {}
+
     p = subprocess.Popen([sys.executable, '-um', 'caproto.tests.example_runner',
                           '--script', 'caproto-monitor'] + list(args),
-                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                         **os_kwargs)
     # Wait for the first line of output.
     line = p.stdout.readline()
     print(line)
@@ -128,7 +136,7 @@ def test_monitor(args, ioc):
     # Send SIGINT. If the CLI is otherwise happy, it should still exit code 0.
     os.kill(p.pid, signal.SIGINT)
 
-    _run_cli_process(p, 'camonitor', timeout=10.0)
+    _subprocess_communicate(p, 'camonitor', timeout=2.0)
 
 
 @pytest.mark.parametrize('data_type', ['enum', 'ENUM', '3'])

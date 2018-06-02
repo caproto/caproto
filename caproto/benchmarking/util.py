@@ -1,4 +1,5 @@
 import os
+import sys
 import subprocess
 import shutil
 import logging
@@ -97,10 +98,20 @@ def softioc(*, db_text='', access_rules_text='', additional_args=None,
                           '-a', cf.name,
                           '-d', df.name]
 
+
+            if sys.platform == 'win32':
+                si = subprocess.STARTUPINFO()
+                si.dwFlags = (subprocess.STARTF_USESTDHANDLES |
+                              subprocess.CREATE_NEW_PROCESS_GROUP)
+                os_kwargs = dict(startupinfo=si)
+            else:
+                os_kwargs = {}
+
             proc = subprocess.Popen(popen_args + additional_args, env=proc_env,
                                     stdin=subprocess.PIPE,
                                     stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE)
+                                    stderr=subprocess.PIPE,
+                                    **os_kwargs)
             yield proc
             proc.kill()
             proc.wait()
