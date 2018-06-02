@@ -91,6 +91,7 @@ import pytest
 numpy = pytest.importorskip("numpy")
 import time
 import os
+import sys
 import threading
 from types import SimpleNamespace
 from contextlib import contextmanager
@@ -532,6 +533,8 @@ def test_put_string_waveform(pvnames):
         numpy.testing.assert_array_equal(get_value, put_value)
 
 
+@pytest.mark.skipif(sys.platform == 'win32',
+                    reason='win32 motorsim IOC')
 def test_putcomplete(pvnames):
     print('Put with wait and put_complete (using real motor!) \n')
     vals = (1.35, 1.50, 1.44, 1.445, 1.45, 1.453, 1.446, 1.447, 1.450,
@@ -556,6 +559,8 @@ def test_putcomplete(pvnames):
     assert len(see_complete) > (len(vals) - 5)
 
 
+@pytest.mark.skipif(sys.platform == 'win32',
+                    reason='win32 motorsim IOC')
 def test_putwait(pvnames):
     print('Put with wait (using real motor!) \n')
     pv = PV(pvnames.motor1)
@@ -832,6 +837,8 @@ def test_subarray_1elem(pvnames):
     assert len(val) == 1
 
 
+@pytest.mark.skipif(sys.platform == 'win32',
+                    reason='win32 motorsim IOC')
 def test_pyepics_pv():
     pv1 = "sim:mtr1"
 
