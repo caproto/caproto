@@ -88,6 +88,7 @@ def ensure_connected(func):
                 if timeout is not None:
                     timeout = deadline - time.monotonic()
                     kwargs['timeout'] = timeout
+                self._idle = False
                 with pv.component_lock:
                     cm = pv.circuit_manager
                     try:
@@ -96,8 +97,8 @@ def ensure_connected(func):
                         # Something in func tried operate on the circuit after
                         # it died. The context will automatically build us a
                         # new circuit. Try again.
-                        logger.debug('Caught DeadCircuitError. '
-                                     'Retrying {func.__name__}.')
+                        self.log.debug('Caught DeadCircuitError. '
+                                       'Retrying %s.', func.__name__)
                         continue
                     except TimeoutError:
                         # The circuit may have died after func was done calling
@@ -105,9 +106,9 @@ def ensure_connected(func):
                         # were expecting. The context will automatically build
                         # us a new circuit. Try again.
                         if cm.dead.is_set():
-                            logger.debug('Caught TimeoutError due to dead '
-                                         'circuit. '
-                                         'Retrying {func.__name__}.')
+                            self.log.debug('Caught TimeoutError due to dead '
+                                           'circuit. '
+                                           'Retrying %s.', func.__name__)
                             continue
                         # The circuit is fine -- this is a real error.
                         raise
@@ -152,10 +153,10 @@ STR_ENC = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
 MAX_USER_CALLBACK_WORKERS = os.environ.get('MAX_USER_CALLBACK_WORKERS', 1)
 
 
-logger = logging.getLogger(__name__)
-
-
 class SelectorThread:
+    """
+    This is used internally by the Context and the VirtualCircuitManager.
+    """
     def __init__(self, *, parent=None):
         self.thread = None  # set by the `start` method
         self._close_event = threading.Event()
@@ -205,7 +206,7 @@ class SelectorThread:
                              lambda obj_id=self._object_id:
                              self._object_removed(obj_id))
             self._register_sockets.add(sock)
-            # logger.debug('Socket %s was added (obj %s)', sock, target_obj)
+            # self.log.debug('Socket %s was added (obj %s)', sock, target_obj)
 
     def remove_socket(self, sock):
         with self._socket_map_lock:
@@ -219,11 +220,11 @@ class SelectorThread:
 
             if sock in self._register_sockets:
                 # removed before it was even added...
-                # logger.debug('Socket %s was removed before it was added '
+                # self.log.debug('Socket %s was removed before it was added '
                 #              '(obj = %s)', sock, obj)
                 self._register_sockets.remove(sock)
             else:
-                # logger.debug('Socket %s was removed '
+                # self.log.debug('Socket %s was removed '
                 #              '(obj = %s)', sock, obj)
                 self._unregister_sockets.add(sock)
 
@@ -231,7 +232,7 @@ class SelectorThread:
         with self._socket_map_lock:
             if obj_id in self.id_to_socket:
                 sock = self.id_to_socket.pop(obj_id)
-                # logger.debug('Object ID %s was destroyed: removing %s', obj_id,
+                # self.log.debug('Object ID %s was destroyed: removing %s', obj_id,
                 #              sock)
                 del self.socket_to_id[sock]
                 self._unregister_sockets.add(sock)
@@ -283,29 +284,25 @@ class SelectorThread:
 
                 # Let objects handle disconnection by returning a failure here
                 if obj.received(bytes_recv, address) is ca.DISCONNECTED:
-                    # logger.debug('Removing %s = %s due to receive failure',
+                    # self.log.debug('Removing %s = %s due to receive failure',
                     #              sock, obj)
                     self.remove_socket(sock)
 
                     # TODO: consider adding specific DISCONNECTED instead of b''
                     # sent to disconnected sockets
-        logger.debug('Selector loop exited')
 
 
 class SharedBroadcaster:
-    def __init__(self, *, log_level='ERROR', registration_retry_time=10.0):
+    def __init__(self, *, registration_retry_time=10.0):
         '''
-        A broadcaster client which can be shared among multiple clients
+        A broadcaster client which can be shared among multiple Contexts
 
         Parameters
         ----------
-        log_level : str, optional
-            The log level to use
         registration_retry_time : float, optional
             The time, in seconds, between attempts made to register with the
-            repeater
+            repeater. Default is 10.
         '''
-        self.log_level = log_level
         self.udp_sock = None
         self._search_lock = threading.RLock()
         self._retry_unanswered_searches_thread = None
@@ -323,9 +320,7 @@ class SharedBroadcaster:
         self.listeners = weakref.WeakSet()
 
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
-        self.broadcaster.log.setLevel(self.log_level)
-        self.log = logging.getLogger(self.__class__.__name__)
-        self.log.setLevel(self.log_level)
+        self.log = self.broadcaster.log
         self.command_bundle_queue = Queue()
 
         # an event to tear down and clean up the broadcaster
@@ -344,7 +339,7 @@ class SharedBroadcaster:
             # Always attempt registration on initialization, but allow failures
             self._register()
         except Exception as ex:
-            logger.exception('Broadcaster registration failed on init')
+            self.log.exception('Broadcaster registration failed on init')
 
     def _should_attempt_registration(self):
         'Whether or not a registration attempt should be tried'
@@ -524,6 +519,7 @@ class SharedBroadcaster:
         search_results = self.search_results
         unanswered_searches = self.unanswered_searches
         queues = defaultdict(list)
+        self.log.debug('Broadcaster command loop is running.')
 
         while not self._close_event.is_set():
             try:
@@ -537,7 +533,7 @@ class SharedBroadcaster:
             try:
                 self.broadcaster.process_commands(commands)
             except ca.CaprotoError as ex:
-                logger.warning('Broadcaster command error', exc_info=ex)
+                self.log.warning('Broadcaster command error', exc_info=ex)
                 continue
 
             queues.clear()
@@ -546,7 +542,7 @@ class SharedBroadcaster:
                 if isinstance(command, ca.VersionResponse):
                     # Check that the server version is one we can talk to.
                     if command.version <= 11:
-                        logger.warning('Version response <= 11: %r', command)
+                        self.log.warning('Version response <= 11: %r', command)
                 elif isinstance(command, ca.SearchResponse):
                     cid = command.cid
                     try:
@@ -568,7 +564,7 @@ class SharedBroadcaster:
                         queues[queue].append(name)
                         # Cache this to save time on future searches.
                         # (Entries expire after STALE_SEARCH_EXPIRATION.)
-                        logger.debug('Found %s at %s', name, address)
+                        self.log.debug('Found %s at %s', name, address)
                         search_results[name] = (address, now)
             # Send the search results to the Contexts that asked for
             # them. This is probably more general than is has to be but
@@ -577,7 +573,7 @@ class SharedBroadcaster:
                 for queue, names in queues.items():
                     queue.put((address, names))
 
-        logger.debug('Broadcaster command loop exiting')
+        self.log.debug('Broadcaster command loop has exited.')
 
     def _retry_unanswered_searches(self):
         """
@@ -586,7 +582,7 @@ class SharedBroadcaster:
         When the self._search_now Event is set, stop waiting and re-issue
         SearchRequests immediately.
         """
-        logger.debug('Search-retry thread started.')
+        self.log.debug('Broadcaster search-retry thread has started.')
         while not self._close_event.is_set():
             try:
                 self._searching_enabled.wait(0.5)
@@ -606,7 +602,7 @@ class SharedBroadcaster:
                 continue
 
             if items:
-                logger.debug('Sending %d SearchRequests', len(items))
+                self.log.debug('Sending %d SearchRequests', len(items))
 
             for batch in batch_requests(requests,
                                         SEARCH_MAX_DATAGRAM_BYTES):
@@ -616,7 +612,7 @@ class SharedBroadcaster:
             self._search_now.wait(wait_time)
             self._search_now.clear()
 
-        logger.debug('Search-retry thread exiting.')
+        self.log.debug('Broadcaster search-retry thread has exited.')
 
     def __del__(self):
         try:
@@ -627,10 +623,19 @@ class SharedBroadcaster:
 
 
 class Context:
-    "Wraps Broadcaster and a cache of VirtualCircuits"
+    """
+    Encapsulates the state and connections of a client
+
+    Parameters
+    ----------
+    broadcaster : SharedBroadcaster
+    host_name : string, optional
+        uses value of ``socket.gethostname()`` by default
+    client_name : string, optional
+        uses value of ``getpass.getuser()`` by default
+    """
     def __init__(self, broadcaster, *,
-                 host_name=None, client_name=None,
-                 log_level='DEBUG'):
+                 host_name=None, client_name=None):
         self.broadcaster = broadcaster
         if host_name is None:
             host_name = socket.gethostname()
@@ -638,7 +643,7 @@ class Context:
         if client_name is None:
             client_name = getpass.getuser()
         self.client_name = client_name
-        self.log_level = log_level
+        self.log = logging.getLogger(f'caproto.ctx.{id(self)}')
         self.pv_cache_lock = threading.RLock()
         self.circuit_managers = {}  # keyed on address
         self._lock_during_get_circuit_manager = threading.RLock()
@@ -653,13 +658,11 @@ class Context:
         self.subscriptions_to_activate = defaultdict(set)
         self.activate_subscriptions_now = threading.Event()
 
-        logger.debug('Context: start process search results loop')
         self._process_search_results_thread = threading.Thread(
             target=self._process_search_results_loop,
             daemon=True, name='search')
         self._process_search_results_thread.start()
 
-        logger.debug('Context: start restart_subscriptions loop')
         self._activate_subscriptions_thread = threading.Thread(
             target=self._activate_subscriptions,
             daemon=True, name='activate_subscriptions')
@@ -672,6 +675,13 @@ class Context:
         self.user_callback_executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=MAX_USER_CALLBACK_WORKERS,
             thread_name_prefix='user-callback-executor')
+
+    def __repr__(self):
+        return (f"<Context "
+                f"searches_pending={len(self.broadcaster.unanswered_searches)} "
+                f"circuits={len(self.circuit_managers)} "
+                f"pvs={len(self.pvs)} "
+                f"idle={len([1 for pv in self.pvs.values() if pv._idle])}>")
 
     def get_pvs(self, *names, priority=0, connection_state_callback=None,
                 access_rights_callback=None):
@@ -741,6 +751,8 @@ class Context:
     def _process_search_results_loop(self):
         # Receive (address, (name1, name2, ...)). The sending side of this
         # queue is held by SharedBroadcaster.command_loop.
+        self.log.debug('Context search-results processing loop has '
+                       'started.')
         while not self._close_event.is_set():
             try:
                 address, names = self._search_results_queue.get(timeout=0.5)
@@ -786,16 +798,16 @@ class Context:
                     cm.send(*commands)
                 except Exception:
                     if cm.dead.is_set():
-                        logger.debug("Circuit died while we were trying "
-                                     "to create the channel. We will "
-                                     "keep attempting this until it "
-                                     "works.")
+                        self.log.debug("Circuit died while we were trying "
+                                       "to create the channel. We will "
+                                       "keep attempting this until it "
+                                       "works.")
                         # When the Context creates a new circuit, we will end
                         # up here again. No big deal.
                         continue
                     raise
 
-        logger.debug('Process search results thread exiting')
+        self.log.debug('Context search-results processing thread has exited.')
 
     def get_circuit_manager(self, address, priority):
         """
@@ -811,7 +823,6 @@ class Context:
                                             address=address,
                                             priority=priority)
                 cm = VirtualCircuitManager(self, circuit, self.selector)
-                cm.circuit.log.setLevel(self.log_level)
                 self.circuit_managers[(address, priority)] = cm
             return cm
 
@@ -840,11 +851,11 @@ class Context:
                         cm.send(*batch)
                     except Exception:
                         if cm.dead.is_set():
-                            logger.debug("Circuit died while we were "
-                                         "trying to activate "
-                                         "subscriptions. We will "
-                                         "keep attempting this until it "
-                                         "works.")
+                            self.log.debug("Circuit died while we were "
+                                           "trying to activate "
+                                           "subscriptions. We will "
+                                           "keep attempting this until it "
+                                           "works.")
                         # When the Context creates a new circuit, we will
                         # end up here again. No big deal.
                         break
@@ -854,7 +865,7 @@ class Context:
             self.activate_subscriptions_now.wait(wait_time)
             self.activate_subscriptions_now.clear()
 
-    logger.debug('Restart subscriptions thread exiting')
+        self.log.debug('Context restart-subscriptions thread exiting')
 
     def disconnect(self, *, wait=True):
         self._user_disconnected = True
@@ -865,27 +876,27 @@ class Context:
             total_circuits = len(circuits)
             for idx, circuit in enumerate(circuits, 1):
                 if circuit.connected:
-                    logger.debug('Disconnecting circuit %d/%d: %s',
-                                 idx, total_circuits, circuit)
+                    self.log.debug('Disconnecting circuit %d/%d: %s',
+                                   idx, total_circuits, circuit)
                     circuit.disconnect()
-                    logger.debug('... Circuit %d disconnect complete.', idx)
+                    self.log.debug('... Circuit %d disconnect complete.', idx)
                 else:
-                    logger.debug('Circuit %d/%d was already disconnected: %s',
-                                 idx, total_circuits, circuit)
-            logger.debug('All circuits disconnected')
+                    self.log.debug('Circuit %d/%d was already disconnected: %s',
+                                   idx, total_circuits, circuit)
+            self.log.debug('All circuits disconnected')
         finally:
             # clear any state about circuits and search results
-            logger.debug('Clearing circuit managers')
+            self.log.debug('Clearing circuit managers')
             self.circuit_managers.clear()
 
             # disconnect the underlying state machine
-            logger.debug('Removing Context from the broadcaster')
+            self.log.debug('Removing Context from the broadcaster')
             self.broadcaster.remove_listener(self)
 
-            logger.debug("Stopping Context's SelectorThread")
+            self.log.debug("Stopping Context's SelectorThread")
             self.selector.stop()
 
-            logger.debug("Shutting down ThreadPoolExecutor for user callbacks")
+            self.log.debug("Shutting down ThreadPoolExecutor for user callbacks")
             self.user_callback_executor.shutdown()
 
             if wait:
@@ -893,7 +904,7 @@ class Context:
                 self._activate_subscriptions_thread.join()
                 self.selector.thread.join()
 
-            logger.debug('Disconnection complete')
+            self.log.debug('Disconnection complete')
 
     def __del__(self):
         try:
@@ -907,8 +918,15 @@ class Context:
 
 
 class VirtualCircuitManager:
+    """
+    Encapsulates a VirtualCircuit, a TCP socket, and additional state
+
+    This object should never be instantiated directly by user code. It is used
+    internally by the Context. Its methods may be touched by user code, but
+    this is rarely necessary.
+    """
     __slots__ = ('context', 'circuit', 'channels', 'ioids', '_ioid_counter',
-                 'subscriptions', '_user_disconnected', '_ready',
+                 'subscriptions', '_user_disconnected', '_ready', 'log',
                  'socket', 'selector', 'pvs', 'all_created_pvnames',
                  'dead', 'process_queue', 'processing',
                  '_subscriptionid_counter', '__weakref__')
@@ -916,6 +934,7 @@ class VirtualCircuitManager:
     def __init__(self, context, circuit, selector, timeout=TIMEOUT):
         self.context = context
         self.circuit = circuit  # a caproto.VirtualCircuit
+        self.log = circuit.log
         self.channels = {}  # map cid to Channel
         self.pvs = {}  # map cid to PV
         self.ioids = {}  # map ioid to Channel and info dict
@@ -990,16 +1009,15 @@ class VirtualCircuitManager:
         except ca.CaprotoError as ex:
             if hasattr(ex, 'channel'):
                 channel = ex.channel
-                logger.warning('Invalid command %s for Channel %s in state %s',
-
-                               command, channel, channel.states,
-                               exc_info=ex)
+                self.log.warning('Invalid command %s for Channel %s in state %s',
+                                 command, channel, channel.states,
+                                 exc_info=ex)
                 # channel exceptions are not fatal
                 return
             else:
-                logger.error('Invalid command %s for VirtualCircuit %s in '
-                             'state %s', command, self, self.circuit.states,
-                             exc_info=ex)
+                self.log.error('Invalid command %s for VirtualCircuit %s in '
+                               'state %s', command, self, self.circuit.states,
+                               exc_info=ex)
                 # circuit exceptions are fatal; exit the loop
                 self.disconnect()
                 return
@@ -1014,12 +1032,12 @@ class VirtualCircuitManager:
             ioid_info = self.ioids.pop(command.ioid)
             deadline = ioid_info['deadline']
             if deadline is not None and time.monotonic() > deadline:
-                logger.warn(f"ignoring late response with "
-                            f"ioid={command.ioid} because it arrived "
-                            f"{time.monotonic() - ioid_info['deadline']} "
-                            f"seconds after the deadline specified by the "
-                            f"timeout."
-                            )
+                self.log.warn(f"ignoring late response with "
+                              f"ioid={command.ioid} because it arrived "
+                              f"{time.monotonic() - ioid_info['deadline']} "
+                              f"seconds after the deadline specified by the "
+                              f"timeout."
+                              )
             else:
                 chan = ioid_info['channel']
                 callback = ioid_info.get('callback')
@@ -1074,13 +1092,13 @@ class VirtualCircuitManager:
             pv.connection_state_changed('disconnected', None)
             # NOTE: pv remains valid until server goes down
         else:
-            logger.debug('other command %s', command)
+            self.log.debug('other command %s', command)
 
     def _disconnected(self):
         # Ensure that this method is idempotent.
         if self.dead.is_set():
             return
-        logger.debug('Entered VCM._disconnected')
+        self.log.debug('Entered VCM._disconnected')
         # Update circuit state. This will be reflected on all PVs, which
         # continue to hold a reference to this disconnected circuit.
         self.circuit.disconnect()
@@ -1115,7 +1133,7 @@ class VirtualCircuitManager:
         if not self._user_disconnected:
             # If the user didn't request disconnection, kick off attempt to
             # reconnect all PVs via fresh circuit(s).
-            logger.debug('VCM: Attempting reconnection')
+            self.log.debug('VCM: Attempting reconnection')
             self.context.reconnect(((chan.name, chan.circuit.priority)
                                     for chan in self.channels.values()))
 
@@ -1130,7 +1148,7 @@ class VirtualCircuitManager:
             sock.shutdown(socket.SHUT_WR)
         except OSError as ex:
             pass
-        logger.debug('Circuit manager disconnected by user')
+        self.log.debug('Circuit manager disconnected by user')
 
     def __del__(self):
         try:
@@ -1140,12 +1158,21 @@ class VirtualCircuitManager:
 
 
 class PV:
-    """Wraps a VirtualCircuit and a caproto.ClientChannel."""
+    """
+    Represents one PV, specified by a name and priority.
+
+    This object may exist prior to connection and persists across any
+    subsequent re-connections.
+
+    This object should never be instantiated directly by user code; rather it
+    should be created by calling the ``get_pvs`` method on a ``Context``
+    object.
+    """
     __slots__ = ('name', 'priority', 'context', '_circuit_manager', '_channel',
                  'circuit_ready', 'channel_ready',
                  'access_rights_callback', 'subscriptions',
                  'command_bundle_queue', 'component_lock', '_idle', '_in_use',
-                 '_usages', 'connection_state_callback',
+                 '_usages', 'connection_state_callback', 'log',
                  '__weakref__')
 
     def __init__(self, name, priority, context, connection_state_callback,
@@ -1156,6 +1183,7 @@ class PV:
         self.name = name
         self.priority = priority
         self.context = context
+        self.log = logging.getLogger(f'caproto.ch.{name}.{priority}')
         # Use this lock whenever we touch circuit_manager or channel.
         self.component_lock = threading.RLock()
         self.circuit_ready = threading.Event()
@@ -1200,11 +1228,7 @@ class PV:
         self.access_rights_callback.process(rights)
 
     def connection_state_changed(self, state, channel):
-        logger.debug('%s Connection state changed %s %s', self.name, state,
-                     channel)
-        # PV is responsible for updating its channel attribute.
-        self.channel = channel
-
+        self.log.info('%s connection state changed to %s.', self.name, state)
         self.connection_state_callback.process(self, state)
 
     def __repr__(self):
@@ -1512,6 +1536,15 @@ class CallbackHandler:
 
 
 class Subscription(CallbackHandler):
+    """
+    Represents one subscription, specified by a PV and configurational parameters
+
+    It may fan out to zero, one, or multiple user-registered callback
+    functions.
+
+    This object should never be instantiated directly by user code; rather
+    it should be made by calling the ``subscribe()`` method on a ``PV`` object.
+    """
     def __init__(self, pv, sub_args, sub_kwargs):
         super().__init__(pv)
         # Stash everything, but do not send any EPICS messages until the first
@@ -1520,6 +1553,10 @@ class Subscription(CallbackHandler):
         self.sub_kwargs = sub_kwargs
         self.subscriptionid = None
         self.most_recent_response = None
+
+    @property
+    def log(self):
+        return self.pv.log
 
     def __repr__(self):
         return f"<Subscription to {self.pv.name!r}, id={self.subscriptionid}>"

@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-import sys
-import curio
-
-from caproto.curio.server import start_server
-from caproto.server import (PVGroup, get_pv_pair_wrapper)
+from caproto.server import PVGroup, get_pv_pair_wrapper, ioc_arg_parser, run
 
 
 # Create _two_ PVs with a single pvproperty_with_rbv:
@@ -17,8 +13,6 @@ class Group(PVGroup):
     pair = pvproperty_with_rbv(dtype=int, doc='This is the first pair')
     # Creates {prefix}pair2 and {prefix}pair2_RBV
     pair2 = pvproperty_with_rbv(dtype=float, doc='This is pair2')
-
-    # TODO: @danielballan to rename the above appropriately
 
     # We can then directly decorate our functions with the putters from the
     # setpoint:
@@ -39,13 +33,8 @@ class Group(PVGroup):
 
 
 if __name__ == '__main__':
-    try:
-        prefix = sys.argv[1]
-    except IndexError:
-        prefix = 'setpoint_rbv:'
-
-    ioc = Group(prefix)
-    from pprint import pprint
-    pprint(ioc.pvdb)
-
-    curio.run(start_server, ioc.pvdb)
+    ioc_options, run_options = ioc_arg_parser(
+        default_prefix='setpoint_rbv:',
+        desc='Run an IOC with two setpoint/readback pairs.')
+    ioc = Group(**ioc_options)
+    run(ioc.pvdb, **run_options)

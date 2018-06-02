@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
-import sys
-import logging
+from pprint import pprint
 import random
 
-from caproto.benchmarking import set_logging_level
-from caproto.curio.server import start_server
-from caproto.server import (pvproperty, PVGroup, pvfunction)
-
-
-logger = logging.getLogger(__name__)
+from caproto.server import (pvproperty, PVGroup, pvfunction, ioc_arg_parser,
+                            run)
 
 
 class MyPVGroup(PVGroup):
@@ -17,7 +12,6 @@ class MyPVGroup(PVGroup):
     @pvproperty
     async def fixed_random(self, instance):
         'Random integer between 1 and 100'
-        logger.debug('read random')
         return random.randint(1, 100)
 
     @pvfunction(default=[0])
@@ -30,22 +24,11 @@ class MyPVGroup(PVGroup):
 
 
 if __name__ == '__main__':
-    import curio
-    from pprint import pprint
+    ioc_options, run_options = ioc_arg_parser(
+        default_prefix='rpc:',
+        desc='Run an IOC with an RPC function.')
 
-    try:
-        prefix = sys.argv[1]
-    except IndexError:
-        prefix = 'rpc:'
-
-    macros = {}
-
-    set_logging_level(logging.DEBUG)
-    logger.setLevel(logging.DEBUG)
-    logging.basicConfig()
-
-    logger.info('Starting up: prefix=%r macros=%r', prefix, macros)
-    ioc = MyPVGroup(prefix=prefix, macros=macros)
+    ioc = MyPVGroup(**ioc_options)
 
     # here's what accessing a pvproperty descriptor looks like:
     print(f'fixed_random using the descriptor getter is: {ioc.fixed_random}')
@@ -56,5 +39,4 @@ if __name__ == '__main__':
 
     # here is the auto-generated pvdb:
     pprint(ioc.pvdb)
-
-    curio.run(start_server, ioc.pvdb)
+    run(ioc.pvdb, **run_options)

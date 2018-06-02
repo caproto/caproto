@@ -16,37 +16,62 @@ servers on its network. It locates these servers using UDP broadcasts. It
 communicates with an individual server via one or more TCP connections, which
 it calls *Virtual Circuits*.
 
-In this example, our client will talk to 
-`EPICS motorsim <github.com/danielballan/motorsim>`_, which provides a
-collection of simulated motors we can read and move. But this same code could
-talk to any Channel Access server, including one implemented in caproto itself.
-
-Registering with the Repeater
------------------------------
-
-To begin, we need a socket configured for UDP broadcasting.
-
-.. code-block:: python
-
-    import socket
-    udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    # for BSD/Darwin only
-    if hasattr(socket, 'SO_REUSEPORT'):
-        udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+In this example, our client will talk to a example IOC provided by caproto,
+but this same code could talk to any Channel Access server.
 
 .. ipython:: python
     :suppress:
 
-    import socket
-    udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    # for BSD/Darwin only
-    if hasattr(socket, 'SO_REUSEPORT'):
-        udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-    udp_sock.settimeout(1)  # should never be tripped, but it help to debug
+    import sys
+    import subprocess
+    import time
+    processes = []
+    def run_example(module_name, *args):
+        p = subprocess.Popen([sys.executable, '-m', module_name] + list(args))
+        processes.append(p)  # Clean this up at the end.
+        time.sleep(1)  # Give it time to start up.
+
+
+.. ipython:: python
+    :suppress:
+
+    run_example('caproto.ioc_examples.random_walk')
+    run_example('caproto.sync.repeater')
+
+In a separate shell, start one of caproto's demo IOCs.
+
+.. code-block:: bash
+
+    $ python3 -m caproto.ioc_examples.random_walk
+    PVs: ['random_walk:dt', 'random_walk:x']
+
+In a second separate shell, start a repeater process. You may see output like
+this:
+
+.. code-block:: bash
+
+    $ caproto-repeater
+    [I 18:04:30.686 repeater:84] Repeater is listening on 0.0.0.0:5065
+
+or this:
+
+.. code-block:: bash
+
+    $ caproto-repeater
+    [I 18:04:08.790 repeater:189] Another repeater is already running; exiting.
+
+Either is fine.
+
+Registering with the Repeater
+-----------------------------
+
+To begin, we need a socket configured for UDP broadcasting. Caproto provides a
+convenient utility for doing this in a way that works on all platforms.
+
+.. ipython:: python
+
+    import caproto
+    udp_sock = caproto.bcast_socket()
 
 A new Channel Access client is required to register itself with a Channel
 Access *Repeater*.  (What a Repeater is *for* is not really important to our
@@ -76,8 +101,7 @@ Let's try this again using caproto.
     *Command*. "Event" is an overloaded term in Channel Access, so we're going
     our own way here.
 
-As above, create a fresh UDP socket and configure it for broadcast. Follow the
-same steps we used above, or use a convenience function provided by caproto:
+As above, create a fresh UDP socket configured for broadcasting.
 
 .. ipython:: python
 
@@ -151,25 +175,20 @@ Searching for a Channel
 -----------------------
 
 Say we're looking for a channel ("Process Variable") with a typically lyrical
-EPICS name like :data:`"XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"`. Some server on our
-network provides this channel. The range of IP addresses to search is
-conventionally recorded in an environment variable.
+EPICS name like :data:`"random_walk:dt"`. Some server on our
+network provides this channel.
 
-.. ipython:: python
-
-    import os
-    hosts = os.environ['EPICS_CA_ADDR_LIST'].split()
-    # example: ['172.17.255.255']
-
-Something simple like this would work, but a more complete implementation is
-avaailable in the convenience function :func:`get_address_list`, which respects
-EPICS_CA_AUTO_ADDR_LIST settings and checks network interfaces for broadcast
-addresses in the case of an automatic address list setting.
+The range of IP addresses to search is conventionally controlled by the
+environment variables ``EPICS_CA_ADDR_LIST`` (a space-separated list of IP
+addresses) and ``EPICS_CA_AUTO_ADDR_LIST`` (``yes`` or ``no``). Caproto
+provides a convenience function :func:`get_address_list` for parsing these
+variables, checking the available network interfaces if necessary, and
+returning a list.
 
 .. ipython:: python
     
     import caproto
-    hosts = caproto.get_address_list()
+    hosts = caproto.get_address_list()  # example: ['172.17.255.255']
     
 We need to broadcast a search request to the servers on our network and receive
 a response. (In the event that multiple responses arrive, Channel Access
@@ -183,7 +202,7 @@ broadcast (UDP datagram), so we pass them to :meth:`Broadcaster.send` together.
 
 .. ipython:: python
 
-    name  = "XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL"
+    name  = "random_walk:dt"
     bytes_to_send = b.send(caproto.VersionRequest(priority=0, version=13),
                            caproto.SearchRequest(name=name, cid=0, version=13))
     bytes_to_send
@@ -195,7 +214,8 @@ Our answer will arrive in a single datagram with multiple commands in it.
 .. ipython:: python
 
     bytes_received, recv_address = udp_sock.recvfrom(1024)
-    version_response, search_response = b.recv(bytes_received, recv_address)
+    commands = b.recv(bytes_received, recv_address)
+    version_response, search_response = commands
     version_response
     search_response
     address = caproto.extract_address(search_response)
@@ -262,17 +282,19 @@ level.)
     send(caproto.HostNameRequest('localhost'))
     send(caproto.ClientNameRequest('user'))
 
-Finally, create the channel.
+Finally, create the channel and look at the responses.
 
 .. ipython:: python
 
     cid = 1  # a client-specified unique ID for this Channel
     send(caproto.CreateChanRequest(name=name, cid=cid, version=13))
-    access_response, create_chan_response = recv()
-    access_response, create_chan_response
+    commands = recv()
+    access_response, create_chan_response = commands
+    access_response
+    create_chan_response
 
-Success! We now have a connection to the ``XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL``
-channel. Next we'll read and write values.
+Success! We now have a connection to the ``random_walk:dt`` channel. Next we'll
+read and write values.
 
 Incidentally, we can reuse this same ``circuit`` and ``sock`` to connect to
 other channels on the same server. In the commands that follow, we'll use the
@@ -432,8 +454,8 @@ Here is the equivalent, a condensed copy of our work from previous sections:
     send(caproto.ClientNameRequest('user'))
     cid = 1  # a client-specified unique ID for this Channel
     send(caproto.CreateChanRequest(name=name, cid=cid, version=13))
-    access_response, create_chan_response = recv()
-    access_response, create_chan_response
+    commands = recv()
+    access_response, create_chan_response = commands
 
     ### Read and Write
     send(caproto.ReadNotifyRequest(data_type=2, data_count=1, sid=sid, ioid=1))
@@ -464,3 +486,12 @@ VirtualCircuit and then send it over the socket. These are just easy ways to
 generate valid commands --- with auto-generated unique IDs filled in --- which
 you may or may not then choose to send. The state machines are not updated
 until (unless) the command is actually sent.
+
+.. ipython:: python
+    :suppress:
+
+    # Clean up IOC processes.
+    for p in processes:
+        p.terminate()
+    for p in processes:
+        p.wait()

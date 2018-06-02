@@ -27,7 +27,7 @@ import caproto
 from caproto._constants import MAX_UDP_RECV, SERVER_MIA_PRESUMED_DEAD
 
 
-logger = logging.getLogger('repeater')
+logger = logging.getLogger('caproto.repeater')
 
 
 class RepeaterAlreadyRunning(RuntimeError):
@@ -181,15 +181,22 @@ def check_for_running_repeater(addr):
 def run(host='0.0.0.0'):
     port = caproto.get_environment_variables()['EPICS_CA_REPEATER_PORT']
     addr = (host, port)
-    logger.debug('Checking for another repeater')
+    logger.debug('Checking for another repeater....')
 
     try:
         sock = check_for_running_repeater(addr)
     except RepeaterAlreadyRunning:
-        logger.error('Another repeater is already running; exiting')
+        logger.info('Another repeater is already running; exiting.')
         return
 
     try:
         _run_repeater(sock, addr)
     except KeyboardInterrupt:
-        logger.info('Keyboard interrupt; exiting')
+        logger.info('Keyboard interrupt; exiting.')
+
+
+if __name__ == '__main__':
+    # Support usage python -m caproto.sync.repeater
+    # HACK: This is a runtime circular import. Need organization of cli funcs.
+    from .client import repeater_cli
+    repeater_cli()

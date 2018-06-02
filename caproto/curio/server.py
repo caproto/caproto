@@ -1,4 +1,4 @@
-import logging
+import functools
 from ..server import AsyncLibraryLayer
 import caproto as ca
 import curio
@@ -7,7 +7,6 @@ from caproto import find_available_tcp_port
 
 from ..server.common import (VirtualCircuit as _VirtualCircuit,
                              Context as _Context)
-logger = logging.getLogger(__name__)
 
 
 class ServerExit(curio.KernelExit):
@@ -37,7 +36,6 @@ class CurioAsyncLayer(AsyncLibraryLayer):
 class VirtualCircuit(_VirtualCircuit):
     "Wraps a caproto.VirtualCircuit with a curio client."
     TaskCancelled = curio.TaskCancelled
-    logger = logger
 
     def __init__(self, circuit, client, context):
         super().__init__(circuit, client, context)
@@ -68,8 +66,8 @@ class Context(_Context):
     ServerExit = ServerExit
     TaskCancelled = curio.TaskCancelled
 
-    def __init__(self, host, port, pvdb, *, log_level='ERROR'):
-        super().__init__(host, port, pvdb, log_level=log_level)
+    def __init__(self, host, port, pvdb):
+        super().__init__(host, port, pvdb)
         self.command_bundle_queue = curio.Queue()
         self.subscription_queue = curio.UniversalQueue()
 
@@ -78,16 +76,17 @@ class Context(_Context):
         try:
             self.udp_sock.bind((self.host, ca.EPICS_CA1_PORT))
         except Exception:
-            logger.exception('[server] udp bind failure!')
+            self.log.exception('[server] udp bind failure!')
             raise
         await self._core_broadcaster_loop()
 
-    async def run(self):
+    async def run(self, *, log_pv_names=False):
         'Start the server'
+        self.log.info('Server starting up...')
         try:
             async with curio.TaskGroup() as g:
                 for addr, port in ca.get_server_address_list(self.port):
-                    logger.debug('Listening on %s:%d', addr, port)
+                    self.log.debug('Listening on %s:%d', addr, port)
                     await g.spawn(curio.tcp_server,
                                   addr, port, self.tcp_handler)
                 await g.spawn(self.broadcaster_udp_server_loop)
@@ -96,25 +95,42 @@ class Context(_Context):
                 await g.spawn(self.broadcast_beacon_loop)
 
                 async_lib = CurioAsyncLayer()
-                for method in self.startup_methods:
-                    logger.debug('Calling startup method %r', method)
+                for name, method in self.startup_methods.items():
+                    self.log.debug('Calling startup method %r', name)
                     await g.spawn(method, async_lib)
+                self.log.info('Server startup complete.')
+                if log_pv_names:
+                    self.log.info('PVs available:\n%s', '\n'.join(self.pvdb))
         except curio.TaskGroupError as ex:
-            logger.error('Curio server failed: %s', ex.errors)
+            self.log.error('Curio server failed: %s', ex.errors)
             for task in ex:
-                logger.error('Task %s failed: %s', task, task.exception)
+                self.log.error('Task %s failed: %s', task, task.exception)
         except curio.TaskCancelled as ex:
-            logger.info('Server task cancelled; exiting')
+            self.log.info('Server task cancelled. Must shut down.')
             raise ServerExit() from ex
+        finally:
+            self.log.info('Server exiting....')
 
 
-async def start_server(pvdb, log_level='DEBUG', *, bind_addr='0.0.0.0'):
+async def start_server(pvdb, *, bind_addr='0.0.0.0', log_pv_names=False):
     '''Start a curio server with a given PV database'''
-    logger.setLevel(log_level)
-    ctx = Context(bind_addr, find_available_tcp_port(), pvdb,
-                  log_level=log_level)
-    logger.info('Server starting up on %s:%d', ctx.host, ctx.port)
+    ctx = Context(bind_addr, find_available_tcp_port(), pvdb)
     try:
-        return await ctx.run()
+        return await ctx.run(log_pv_names=log_pv_names)
     except ServerExit:
-        print('ServerExit caught; exiting')
+        pass
+
+
+def run(pvdb, *, bind_addr='0.0.0.0', log_pv_names=False):
+    """
+    A synchronous function that runs server, catches KeyboardInterrupt at exit.
+    """
+    try:
+        return curio.run(
+            functools.partial(
+                start_server,
+                pvdb,
+                bind_addr=bind_addr,
+                log_pv_names=log_pv_names))
+    except KeyboardInterrupt:
+        return

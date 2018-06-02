@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
 import logging
-
-from caproto.benchmarking import set_logging_level
-from caproto.curio.server import start_server
-from caproto.server import (pvproperty, PVGroup)
+from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('caproto')
 
 
 class MyPVGroup(PVGroup):
@@ -62,34 +59,15 @@ class MyPVGroup(PVGroup):
 
 
 if __name__ == '__main__':
-    # usage: all_in_one.py [PREFIX] [MACRO]
-    import curio
-    from pprint import pprint
-    import sys
-
-    try:
-        prefix = sys.argv[1]
-    except IndexError:
-        prefix = 'all_in_one:'
-    try:
-        macros = {'macro': sys.argv[2]}
-    except IndexError:
-        macros = {'macro': 'expanded'}
-
-    set_logging_level(logging.DEBUG)
-    logger.setLevel(logging.DEBUG)
-    logging.basicConfig()
-
-    logger.info('Starting up: prefix=%r macros=%r', prefix, macros)
-    ioc = MyPVGroup(prefix=prefix, macros=macros)
+    ioc_options, run_options = ioc_arg_parser(
+        default_prefix='all_in_one:',
+        desc='Run an IOC that is an amalgam of several other examples.',
+        macros=dict(macro='expanded'))
+    ioc = MyPVGroup(**ioc_options)
 
     # here's what accessing a pvproperty descriptor looks like:
     print('random using the descriptor getter is:', ioc.random)
 
     # and the pvspec is accessible as well:
     print('single pvspec is:', ioc.single.pvspec)
-
-    # here is the auto-generated pvdb:
-    pprint(ioc.pvdb)
-
-    curio.run(start_server, ioc.pvdb)
+    run(ioc.pvdb, **run_options)

@@ -3,15 +3,10 @@ import termios
 import fcntl
 import sys
 import os
-import logging
 import threading
 import atexit
 
-import curio
-
-from caproto.benchmarking import set_logging_level
-from caproto.curio.server import start_server
-from caproto.server import pvproperty, PVGroup
+from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
 
 
 def start_io_interrupt_monitor(new_value_callback):
@@ -90,13 +85,8 @@ class IOInterruptIOC(PVGroup):
 
 
 if __name__ == '__main__':
-    # usage: io_interrupt.py [PREFIX]
-    try:
-        prefix = sys.argv[1]
-    except IndexError:
-        prefix = 'io:'
-
-    print(f'IO interrupt prefix is {prefix}')
-    set_logging_level(logging.DEBUG)
-    ioc = IOInterruptIOC(prefix=prefix, macros={})
-    curio.run(start_server, ioc.pvdb)
+    ioc_options, run_options = ioc_arg_parser(
+        default_prefix='io:',
+        desc='Run an IOC that updates via I/O interrupt on key-press events.')
+    ioc = IOInterruptIOC(**ioc_options)
+    run(ioc.pvdb, **run_options)

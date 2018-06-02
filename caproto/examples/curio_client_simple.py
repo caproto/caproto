@@ -1,8 +1,6 @@
 import logging
-
 import curio
-from caproto.curio.client import (SharedBroadcaster, Context,
-                                  logger)
+from caproto.curio.client import SharedBroadcaster, Context
 
 
 async def main(pv1="XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL",
@@ -53,7 +51,6 @@ async def main(pv1="XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL",
 
 
 if __name__ == '__main__':
-    logger.setLevel('DEBUG')
-    logging.basicConfig()
+    logging.getLogger('caproto').setLevel('DEBUG')
 
     curio.run(main())

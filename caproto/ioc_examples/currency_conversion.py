@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
 import re
-import logging
-
-import asks  # for http requests through curio
+import asks
+import warnings
 
 import urllib.request
 import urllib.parse
-from caproto.benchmarking import set_logging_level
-from caproto.curio.server import start_server
-from caproto.server import pvproperty, PVGroup
+from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
 
 
 class CurrencyConversionIOC(PVGroup):
@@ -28,23 +25,26 @@ class CurrencyConversionIOC(PVGroup):
     async def converted(self, instance):
         resp = await asks.get('https://finance.google.com/finance/'
                               'converter?' + self.request_params)
-        m = re.search(r'<span class=bld>([^ ]*)',
-                      resp.content.decode('latin-1'))
-        return float(m.groups()[0])
+        if resp.status_code != 200:
+            warnings.warn(f"Request to Google return response status "
+                          f"{resp.status_code} {resp.reason_phrase}. "
+                          f"Setting value 'converted' PV to -1.")
+            return -1
+        else:
+            m = re.search(r'<span class=bld>([^ ]*)',
+                          resp.content.decode('latin-1'))
+            return float(m.groups()[0])
 
 
 if __name__ == '__main__':
-    # usage: currency_conversion.py [PREFIX]
-    import curio
-    import sys
+    ioc_options, run_options = ioc_arg_parser(
+        default_prefix='currency:',
+        desc='Run an IOC that performs a currency conversion when read.')
 
-    try:
-        prefix = sys.argv[1]
-    except IndexError:
-        prefix = 'currency_conversion:'
-
-    set_logging_level(logging.DEBUG)
+    if run_options['module_name'] != 'caproto.curio.server':
+        raise ValueError("This example must be run with '--async-lib curio'.")
+    # Initialize this async HTTP library.
     asks.init('curio')
-    ioc = CurrencyConversionIOC(prefix=prefix)
-    print('PVs:', list(ioc.pvdb))
-    curio.run(start_server, ioc.pvdb)
+
+    ioc = CurrencyConversionIOC(**ioc_options)
+    run(ioc.pvdb, **run_options)

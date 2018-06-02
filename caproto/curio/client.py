@@ -16,9 +16,6 @@ from collections import OrderedDict
 from curio import socket
 
 
-logger = logging.getLogger(__name__)
-
-
 class ChannelReadError(Exception):
     ...
 
@@ -27,6 +24,7 @@ class VirtualCircuit:
     "Wraps a caproto.VirtualCircuit and adds transport."
     def __init__(self, circuit):
         self.circuit = circuit  # a caproto.VirtualCircuit
+        self.log = circuit.log
         self.channels = {}  # map cid to Channel
         self.ioids = {}  # map ioid to Channel
         self.ioid_data = {}  # map ioid to server response
@@ -72,8 +70,8 @@ class VirtualCircuit:
             except curio.TaskCancelled:
                 break
             except Exception as ex:
-                logger.error('Command queue evaluation failed: {!r}'
-                             ''.format(command), exc_info=ex)
+                self.log.error('Command queue evaluation failed: {!r}'
+                               ''.format(command), exc_info=ex)
                 continue
 
             if isinstance(command, (ca.ReadNotifyResponse,
@@ -220,10 +218,9 @@ class Channel:
 
 
 class SharedBroadcaster:
-    def __init__(self, *, log_level='ERROR'):
-        self.log_level = log_level
+    def __init__(self):
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
-        self.broadcaster.log.setLevel(self.log_level)
+        self.log = self.broadcaster.log
         self.command_bundle_queue = curio.Queue()
         self.broadcaster_command_condition = curio.Condition()
 
@@ -273,8 +270,8 @@ class SharedBroadcaster:
             except curio.TaskCancelled:
                 break
             except Exception as ex:
-                logger.error('Broadcaster command queue evaluation failed',
-                             exc_info=ex)
+                self.log.error('Broadcaster command queue evaluation failed',
+                               exc_info=ex)
                 continue
 
             for command in commands:
@@ -283,8 +280,8 @@ class SharedBroadcaster:
                 if isinstance(command, ca.VersionResponse):
                     # Check that the server version is one we can talk to.
                     if command.version <= 11:
-                        logger.debug('Old client on version %s',
-                                     command.version)
+                        self.log.debug('Old client on version %s',
+                                       command.version)
                         continue
                 if isinstance(command, ca.SearchResponse):
                     name = self.unanswered_searches.pop(command.cid, None)
@@ -319,10 +316,10 @@ class SharedBroadcaster:
 
 class Context:
     "Wraps a caproto.Broadcaster, a UDP socket, and cache of VirtualCircuits."
-    def __init__(self, broadcaster, *, log_level='ERROR'):
-        self.log_level = log_level
+    def __init__(self, broadcaster):
         self.circuits = []  # list of VirtualCircuits
         self.broadcaster = broadcaster
+        self.log = logging.getLogger(f'caproto.ctx.{id(self)}')
 
     async def get_circuit(self, address, priority):
         """
@@ -338,7 +335,6 @@ class Context:
         ca_circuit = ca.VirtualCircuit(our_role=ca.CLIENT, address=address,
                                        priority=priority)
         circuit = VirtualCircuit(ca_circuit)
-        circuit.circuit.log.setLevel(self.log_level)
         self.circuits.append(circuit)
         await curio.spawn(circuit.connect, daemon=True)
         return circuit

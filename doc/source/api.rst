@@ -1,8 +1,8 @@
 .. currentmodule:: caproto
 
-*****************
-API Documentation
-*****************
+**********************
+Core API Documentation
+**********************
 
 .. contents::
 
@@ -421,3 +421,40 @@ and :class:`RemoteProtocolError`. These inherit from
 
 .. autoclass:: LocalProtocolError
 .. autoclass:: RemoteProtocolError
+
+.. _loggers:
+
+Loggers
+=======
+
+Caproto uses Python's built-in logging framework. Many objects expose a logger
+instance as a attribute, ``log``, as a convenience. And any logger instance can
+always be obtained from ``logging.getLogger(logger_name)`` if you know the
+``logger_name``.
+
+For example, to turn on maximal logging (usually way too much information!) use
+
+.. code-block:: python
+
+    import logging
+    log = logger.getLogger('caproto')
+    log.setLevel('DEBUG')
+
+Each of the other loggers is more targeted. Here are their names:
+
+* ``'caproto'`` --- the logger to which all caproto messages propagate
+* ``'caproto.ch'`` --- logs changes to channel connection state on all channels
+* ``'caproto.ch.<name>'`` --- narrows to channel(s) with a given PV name, as in
+  ``'caproto.ch.random_walk:x'``
+* ``'caproto.ch.<name>.<priority>'`` --- narrows one channel with a given PV
+  name and priority, as in ``'caproto.ch.random_walk:x.0'``
+* ``'caproto.circ'`` --- logs commands sent and received over TCP
+* ``'caproto.circ.<addr>'`` -- narrows to circuits connected to the address
+  ``<addr>``, as in ``'caproto.circ.127.0.0.1:49384'``
+* ``'caproto.circ.<addr>.<priority>'`` -- specifies example one circuit with a
+  certain address and priority, as in ``'caproto.circ.127.0.0.1:49384.0'``
+* ``'caproto.bcast'`` --- logs command sent and received over UDP
+* ``'caproto.ctx'`` -- logs updates from Contexts, such as how many search
+  requests are still awaiting replies
+* ``'caproto.ctx.<id>'`` -- narrows to one specific Context instance ``ctx``
+  where ``<id>`` ``str(id(ctx))``

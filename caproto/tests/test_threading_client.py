@@ -103,7 +103,7 @@ def test_specified_port(monkeypatch, context, ioc):
     print()
     print('- address list is now:', address_list)
     shared_broadcaster = SharedBroadcaster()
-    new_context = Context(shared_broadcaster, log_level='DEBUG')
+    new_context = Context(shared_broadcaster)
     pv1, = new_context.get_pvs(ioc.pvs['float'])
     pv1.wait_for_connection()
     assert pv1.connected
@@ -113,7 +113,7 @@ def test_specified_port(monkeypatch, context, ioc):
 
 @pytest.fixture(scope='function')
 def shared_broadcaster(request):
-    sb = SharedBroadcaster(log_level='DEBUG')
+    sb = SharedBroadcaster()
 
     def cleanup():
         sb.disconnect()
@@ -127,7 +127,7 @@ def shared_broadcaster(request):
 
 @pytest.fixture(scope='function')
 def context(request, shared_broadcaster):
-    context = Context(broadcaster=shared_broadcaster, log_level='DEBUG')
+    context = Context(broadcaster=shared_broadcaster)
 
     def cleanup():
         print('*** Cleaning up the context!')
@@ -527,6 +527,7 @@ def test_multithreaded_many_subscribe(ioc, context, thread_count,
         init_barrier.wait(timeout=2)
         # Everybody here? On my signal... SUBSCRIBE!! Ahahahahaha!
         # Destruction!!
+        time.sleep(1)  # Wait for EventAddRequest to be sent and processed.
         sub_ended_barrier.wait(timeout=2)
 
         sub.clear()

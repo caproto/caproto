@@ -1,8 +1,7 @@
 import logging
 
 import trio
-import caproto.benchmarking
-from caproto.trio.client import (SharedBroadcaster, Context, logger)
+from caproto.trio.client import (SharedBroadcaster, Context)
 
 
 async def main(pv1="XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL",
@@ -20,12 +19,12 @@ async def main(pv1="XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL",
             print("Subscription has received data: {}".format(command))
             called.append(True)
 
-        broadcaster = SharedBroadcaster(nursery=nursery, log_level='DEBUG')
+        broadcaster = SharedBroadcaster(nursery=nursery)
         print('Registering with the repeater...')
         await broadcaster.register()
         print('Registered.')
 
-        ctx = Context(broadcaster, nursery=nursery, log_level='DEBUG')
+        ctx = Context(broadcaster, nursery=nursery)
         await ctx.search(pv1)
         await ctx.search(pv2)
         # Send out connection requests without waiting for responses...
@@ -57,8 +56,5 @@ async def main(pv1="XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL",
 
 
 if __name__ == '__main__':
-    logger.setLevel('DEBUG')
-    caproto.benchmarking.set_logging_level('DEBUG')
-    logging.basicConfig()
-
+    logging.getLogger('caproto').setLevel('DEBUG')
     trio.run(main)

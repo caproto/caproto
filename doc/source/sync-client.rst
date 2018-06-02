@@ -1,0 +1,136 @@
+******************
+Synchronous Client
+******************
+
+.. currentmodule:: caproto.sync.client
+
+.. ipython:: python
+    :suppress:
+    
+    import sys
+    import subprocess
+    import time
+    processes = []
+    def run_example(module_name, *args):
+        p = subprocess.Popen([sys.executable, '-m', module_name] + list(args))
+        processes.append(p)  # Clean this up at the end.
+        time.sleep(1)  # Give it time to start up.
+
+The synchronous client optimizes for simplicity of implementation over
+performance. This has its uses, but for high-performance applications one of
+the other clients, such as the :doc:`threading-client`, should be used.
+
+Tutorial
+========
+
+.. ipython:: python
+    :suppress:
+
+    run_example('caproto.ioc_examples.random_walk')
+
+In a separate shell, start one of caproto's demo IOCs.
+
+.. code-block:: bash
+
+    $ python3 -m caproto.ioc_examples.random_walk
+    PVs: ['random_walk:dt', 'random_walk:x']
+
+Now, in Python we will talk to it using caproto's synchronous client:
+
+.. ipython:: python
+
+    from caproto.sync.client import get, put, monitor
+    res = get('random_walk:dt')
+    res
+
+This object is a human-friendly representation of the server's response. The
+raw bytes of that response are:
+
+.. ipython:: python
+
+    bytes(res)
+
+Access particular fields in the response using attribute ("dot") access on
+``res``.
+
+.. ipython:: python
+
+    res.data
+
+.. note::
+
+    **Performance Note**
+
+    The underlying metadata and data are stored in efficient, contiguous-memory
+    data structures.
+
+    .. ipython:: python
+
+        res.header  # a ctypes.BigEndianStructure
+        res.buffers  # a collection of one or more buffers
+
+    They were received directly from the socket into these structure with no
+    intermediate copies. Accessing the ``res.data`` --- which returns a
+    ``numpy.ndarray`` or ``array.array`` --- provides a view onto that same
+    memory with no copying (if the data was received from the socket all at
+    once) or one copy (if the data bridged multiple receipts).
+
+Let us set the value to ``1``.
+
+.. ipython:: python
+
+    before, after = put('random_walk:dt', 1)
+    before.data
+    after.data
+
+The synchronous client issues three requests:
+
+1. Read the current value.
+2. Write ``1``.
+3. Read the value again.
+
+This behavior is particular to caproto's *synchronous* client. The other, more
+sophisticated clients leave it up to the caller when and whether to request
+readings.
+
+Let us now monitor a channel. The server updates the ``random_walk:x`` channel
+periodically. (The period is set by ``random_walk:dt``.) We can subscribe
+to updates.
+
+.. ipython:: python
+
+   responses = []
+   def f(name, response):
+       "On each update, print the data and cache the full response."
+       responses.append(response)
+       print(response.data)
+
+This call to :func:`monitor` blocks indefinitely, passing responses to ``f`` as
+they arrive. When we are satisfied, we can interrupted it with Ctrl+C.
+   
+.. ipython::
+   :verbatim:
+
+   In [12]: monitor('random_walk:x', callback=f)
+   [24.51439201]
+   [24.6344612]
+   [24.7142318]
+   [25.54776527]
+   [25.67713186]
+   ^C
+
+.. ipython:: python
+    :suppress:
+
+    # Clean up IOC processes.
+    for p in processes:
+        p.terminate()
+    for p in processes:
+        p.wait()
+
+API Documentation
+=================
+
+.. autofunction:: get
+.. autofunction:: put
+.. autofunction:: monitor

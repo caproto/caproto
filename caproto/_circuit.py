@@ -49,15 +49,11 @@ class VirtualCircuit:
         self.our_role = our_role
         if our_role is CLIENT:
             self.their_role = SERVER
-            abbrev = 'cli'  # just for logger
         else:
             self.their_role = CLIENT
-            abbrev = 'srv'
         self.address = address
         self.priority = priority
         self.channels = {}  # map cid to Channel
-        logger_name = f"{abbrev}.{address[0]}:{address[1]}.{priority}"
-        self.log = logging.getLogger(logger_name)
         self.states = CircuitState(self.channels)
         self._data = bytearray()
         self.channels_sid = {}  # map sid to Channel
@@ -72,6 +68,21 @@ class VirtualCircuit:
                                       "non-None priority at initialization "
                                       "time.")
         self.protocol_version = DEFAULT_PROTOCOL_VERSION
+
+    @property
+    def priority(self):
+        return self._priority
+
+    @priority.setter
+    def priority(self, priority):
+        # A server-side circuit does not get to know its priority until after
+        # instantiation, so we need a setter.
+        self._priority = priority
+        # The logger_name includes the priority so we have to set it.
+        logger_name = (f"caproto.circ."
+                       f"{self.address[0]}:{self.address[1]}."
+                       f"{priority}")
+        self.log = logging.getLogger(logger_name)
 
     @property
     def host(self):

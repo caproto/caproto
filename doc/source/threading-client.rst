@@ -1,30 +1,294 @@
+****************
+Threading Client
+****************
+
 .. currentmodule:: caproto.threading.client
 
-*****************************************
-Thread-based Client Mirroring pyepics API
-*****************************************
+.. ipython:: python
+    :suppress:
+    
+    import sys
+    import subprocess
+    import time
+    processes = []
+    def run_example(module_name, *args):
+        p = subprocess.Popen([sys.executable, '-m', module_name] + list(args))
+        processes.append(p)  # Clean this up at the end.
+        time.sleep(1)  # Give it time to start up.
 
-The :mod:`caproto.threading.client` implements a Channel Access client using
-threads. It provides an interface familiar to pyepics users.
+The threading client is a high-performance client that uses Python's built-in
+threading module to manage concurrency.
 
-Before using you should start a CA repeater process in the background if one is
-not already running. You may use the one from epics-base or one provided with
-caproto as a CLI.
+Tutorial
+========
+
+.. ipython:: python
+    :suppress:
+
+    run_example('caproto.ioc_examples.random_walk')
+
+In a separate shell, start one of caproto's demo IOCs.
 
 .. code-block:: bash
 
-    caproto-reapeater &
+    $ python3 -m caproto.ioc_examples.random_walk
+    PVs: ['random_walk:dt', 'random_walk:x']
+
+Connect
+-------
+
+Now, in Python we will talk to it using caproto's threading client. Start by
+creating a :class:`Context`.
+
+.. ipython:: python
+
+    from caproto.threading.client import Context, SharedBroadcaster
+    ctx = Context(SharedBroadcaster())
+
+The :class:`Context` object tracks the state of connections in progress.
+We can use it to request new connections. Formulating requests for many PVs in
+a large batch is efficient. In this example we'll just ask for two PVs.
+
+.. ipython:: python
+
+    x, dt = ctx.get_pvs('random_walk:x', 'random_walk:dt')
+
+:meth:`Context.get_pvs`  accepts an arbitrary number of PV names and
+immediately returns a collection of :class:`PV` objects representing each name.
+In a background thread, the Context searches for an EPICS server that provides
+that PV name and then connects to it. The PV object displays its connection
+state:
+
+.. ipython:: python
+
+    dt
+
+The Context displays aggregate information about the state of all connections.
+
+.. ipython:: python
+
+    ctx
+
+Read and Write
+--------------
+
+Now, to read a PV:
+
+.. ipython:: python
+
+    res = dt.read()
+    res
+
+This object is a human-friendly representation of the server's response. The
+raw bytes of that response are:
+
+.. ipython:: python
+
+    bytes(res)
+
+Access particular fields in the response using attribute ("dot") access on ``res``.
+
+.. ipython:: python
+
+    res.data
+
+.. note::
+
+    **Performance Note**
+
+    The underlying metadata and data are stored in efficient, contiguous-memory
+    data structures.
+
+    .. ipython:: python
+
+        res.header  # a ctypes.BigEndianStructure
+        res.buffers  # a collection of one or more buffers
+
+    They were received directly from the socket into these structure with no
+    intermediate copies. Accessing the ``res.data`` --- which returns a
+    ``numpy.ndarray`` or ``array.array`` --- provides a view onto that same
+    memory with no copying (if the data was received from the socket all at
+    once) or one copy (if the data bridged multiple receipts).
+
+Let us set the value to ``1``.
+
+.. ipython:: python
+
+    dt.write([1])
+
+Subscribe ("Monitor")
+---------------------
+
+Let us now monitor a channel. The server updates the ``random_walk:x`` channel
+periodically. (The period is set by ``random_walk:dt``.) We can subscribe to
+updates and fan them out to one or more user-defined callback functions.
+The user-defined function msut accept one positional argument.
+
+.. ipython:: python
+
+    responses = []
+    def f(response):
+        responses.append(response)
+
+.. ipython:: python
+
+    sub = x.subscribe()
+    token = sub.add_callback(f)
+
+The ``token`` is just an integer which we can use to unsubscribe later. We can
+define a second callback
+
+.. ipython:: python
+
+    values = []
+    def g(response):
+        values.append(response.data[0])
+
+and add it to the same subscription, putting no additional load on the network.
+
+.. ipython:: python
+
+    sub.add_callback(g)
+
+After some time has passed, we will have accumulated some responses.
+
+.. ipython:: python
+    :suppress:
+
+    import time; time.sleep(5)
+
+.. ipython:: python
+
+    len(responses)
+    values
+
+At any point we can remove a specific callback function
+
+.. ipython:: python
+
+    sub.remove_callback(token)
+
+or clear all the callbacks on a subscription
+
+.. ipython:: python
+
+    sub.clear()
+
+In order to minimize load on the network, a :class:`Subscription` waits to
+request updates from the server until the first user callback is added. Thus,
+the first callback added by the user is guaranteed to get the first response
+received from the server. If all user callbacks are later removed, either
+explicitly (via ``remove_callback`` or ``clear``) or implicitly via Python
+garbage collection, the Subscription automatically cancels future updates from
+the server.  If a callback is then later added, the Subscription silently
+re-initiates updates. All of this is transparent to the user.
+
+.. warning::
+
+    The callback registry in :class:`Subscription`  only holds weak references
+    to the user callback functions. If there are no other references to the
+    function, it will be silently removed and garbage collected. Therefore,
+    constructions like this do not work:
+
+    .. code-block:: python
+
+        sub.add_callback(lambda response: print(response.data))
+
+    The lambda function will be promptly removed and garbage collected. This
+    can be surprising, but it is a standard approach for avoiding the
+    accidental costly accumulation of abandoned callbacks.
+
+Go Idle
+-------
+
+Once created, PVs are cached for the lifetime of the :class:`Context` and
+returned again to the user if a PV with the same name and priority is
+requested. In order to reduce the load on the network, a PV can be temporarily
+made "idle" (disconnected). It will silently, automatically reconnect the next
+time it is used.
+
+.. ipython:: python
+
+    x
+    x.go_idle()
+    x
+    x.read()
+    x
+
+Notice that when the PV was read it automatically reconnected, requiring no
+action from the user.
+
+The ``go_idle()`` method is merely a *request* and is not guaranteed to have
+any effect. If a PV has active subscriptions, it will ignore the request: it
+must stay active to continue servicing user callbacks. Therefore, it is safe
+call ``go_idle()`` on any PV at any time, knowing that the PV will decline to
+disconnect if it is being actively used and that, if it is currently unused, it
+will transparently reconnect the next time it is used.
+
+Loggers for Debugging
+---------------------
+
+Various Python loggers are available. They inherit Python's default of
+silencing log messages below the WARNING level. To receive more information
+about a given PV, turn up the verbosity of the ``PV.log`` logger:
 
 .. code-block:: python
 
-    from caproto.threading.client import caget, caput, get_pv
+    x.log.setLevel('DEBUG')
 
-    # Simple functions
-    caget('pvname')
-    caput('pvname', 3)
+To see the individual requests sent and responses received by the TCP
+connection support ``x`` (and any other PVs on that same Virtual Circuit) use
+the ``PV.circuit_manager.log`` logger:
 
-    # Object-oriented interface
-    pv = get_pv('pvname')
-    pv.wait_for_connection()
-    pv.get()
-    pv.put(3)
+.. code-block:: python
+
+    x.circuit_manager.log.setLevel('DEBUG')
+
+For updates about the overall state of the Context (number of unanswered
+searches still await responses, etc.) use ``Context.log``:
+
+.. code-block:: python
+
+    ctx.log.setLevel('DEBUG')
+
+or, equivalently:
+
+.. code-block:: python
+
+    x.context.log.setLevel('DEBUG')
+
+Finally, to turn on *maximal* debugging, use:
+
+.. code-block:: python
+
+    import logging
+    logging.getLogger('caproto').setLevel('DEBUG')
+
+For more information see :ref:`loggers`.
+
+.. ipython:: python
+    :suppress:
+
+    # Clean up IOC processes.
+    for p in processes:
+        p.terminate()
+    for p in processes:
+        p.wait()
+
+API Documentation
+=================
+
+.. autoclass:: SharedBroadcaster
+   :members:
+
+.. autoclass:: Context
+   :members:
+
+.. autoclass:: PV
+   :members:
+
+.. autoclass:: Subscription
+   :members:
+
+.. autoclass:: VirtualCircuitManager
+   :members:

@@ -2,18 +2,17 @@ import logging
 import subprocess
 import sys
 
-from caproto.threading.client import (SharedBroadcaster, Context, logger)
+from caproto.threading.client import SharedBroadcaster, Context
 
 
-def main(pvname1='pi', pvname2='str',
-         log_level='DEBUG'):
+def main(pvname1='pi', pvname2='str'):
     '''Simple example which connects to two motorsim PVs (by default).
 
     It tests reading, writing, and subscriptions.
     '''
 
     shared_broadcaster = SharedBroadcaster()
-    ctx = Context(broadcaster=shared_broadcaster, log_level=log_level)
+    ctx = Context(broadcaster=shared_broadcaster)
 
     # Some user function to call when subscriptions receive data.
     called = []
@@ -56,8 +55,7 @@ def main(pvname1='pi', pvname2='str',
 
 
 if __name__ == '__main__':
-    logger.setLevel('DEBUG')
-    logging.basicConfig()
+    logging.getLogger('caproto').setLevel('DEBUG')
     p = subprocess.Popen([sys.executable, '-m',
                          'caproto.ioc_examples.type_varieties'])
     try:

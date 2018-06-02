@@ -1,4 +1,3 @@
-import logging
 from ..server import AsyncLibraryLayer
 import caproto as ca
 import asyncio
@@ -8,9 +7,6 @@ from caproto import find_available_tcp_port
 from ..server.common import (VirtualCircuit as _VirtualCircuit,
                              Context as _Context)
 from .._utils import bcast_socket
-
-
-logger = logging.getLogger(__name__)
 
 
 class ServerExit(Exception):
@@ -26,7 +22,6 @@ class AsyncioAsyncLayer(AsyncLibraryLayer):
 class VirtualCircuit(_VirtualCircuit):
     "Wraps a caproto.VirtualCircuit with a curio client."
     TaskCancelled = asyncio.CancelledError
-    logger = logger
 
     def __init__(self, circuit, client, context, *, loop=None):
         if loop is None:
@@ -78,10 +73,9 @@ class Context(_Context):
     async_layer = AsyncioAsyncLayer
     ServerExit = ServerExit
     TaskCancelled = asyncio.CancelledError
-    logger = logger
 
-    def __init__(self, host, port, pvdb, *, log_level='ERROR', loop=None):
-        super().__init__(host, port, pvdb, log_level=log_level)
+    def __init__(self, host, port, pvdb, *, loop=None):
+        super().__init__(host, port, pvdb)
         self.command_bundle_queue = asyncio.Queue()
         self.subscription_queue = asyncio.Queue()
         if loop is None:
@@ -92,7 +86,7 @@ class Context(_Context):
 
     async def server_accept_loop(self, addr, port):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0) as s:
-            logger.debug('Listening on %s:%d', addr, port)
+            self.log.debug('Listening on %s:%d', addr, port)
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.setblocking(False)
             s.bind((addr, port))
@@ -104,11 +98,12 @@ class Context(_Context):
                                                              addr))
                 self._server_tasks.append(tsk)
 
-    async def run(self):
+    async def run(self, *, log_pv_names=False):
         'Start the server'
+        self.log.info('Server starting up...')
         tasks = []
         for addr, port in ca.get_server_address_list(self.port):
-            logger.debug('Listening on %s:%d', addr, port)
+            self.log.debug('Listening on %s:%d', addr, port)
             tasks.append(self.loop.create_task(self.server_accept_loop(addr, port)))
             # self.loop.create_task(tcp_server,
             #                       addr, port, self.tcp_handler)
@@ -141,7 +136,7 @@ class Context(_Context):
         try:
             udp_sock.bind((self.host, ca.EPICS_CA1_PORT))
         except Exception:
-            logger.exception('[server] udp bind failure!')
+            self.log.exception('[server] udp bind failure!')
             raise
 
         transport, self.p = await self.loop.create_datagram_endpoint(
@@ -153,13 +148,17 @@ class Context(_Context):
         tasks.append(self.loop.create_task(self.broadcast_beacon_loop()))
 
         async_lib = AsyncioAsyncLayer()
-        for method in self.startup_methods:
-            logger.debug('Calling startup method %r', method)
+        for name, method in self.startup_methods.items():
+            self.log.debug('Calling startup method %r', name)
             tasks.append(self.loop.create_task(method(async_lib)))
+        self.log.info('Server startup complete.')
+        if log_pv_names:
+            self.log.info('PVs available:\n%s', '\n'.join(self.pvdb))
 
         try:
             await asyncio.gather(*tasks)
         except asyncio.CancelledError:
+            self.log.info('Server task cancelled. Will shut down.')
             udp_sock.close()
             all_tasks = (tasks + self._server_tasks + [c._cq_task
                                                        for c in self.circuits
@@ -171,17 +170,31 @@ class Context(_Context):
             await asyncio.wait(all_tasks)
             return
         except Exception as ex:
+            self.log.exception('Server error. Will shut down', exc_info=ex)
             udp_sock.close()
             raise
+        finally:
+            self.log.info('Server exiting....')
 
 
-async def start_server(pvdb, log_level='DEBUG', *, bind_addr='0.0.0.0'):
-    '''Start a curio server with a given PV database'''
-    logger.setLevel(log_level)
-    ctx = Context(bind_addr, find_available_tcp_port(), pvdb,
-                  log_level=log_level)
-    logger.info('Server starting up on %s:%d', ctx.host, ctx.port)
+async def start_server(pvdb, *, bind_addr='0.0.0.0', log_pv_names=False):
+    '''Start an asyncio server with a given PV database'''
+    ctx = Context(bind_addr, find_available_tcp_port(), pvdb)
+    ctx.log.info('Server starting up on %s:%d', ctx.host, ctx.port)
     try:
-        return await ctx.run()
+        ret = await ctx.run(log_pv_names=log_pv_names)
     except ServerExit:
-        print('ServerExit caught; exiting')
+        ctx.log.info('ServerExit caught; exiting')
+    return ret
+
+
+def run(pvdb, *, bind_addr='0.0.0.0', log_pv_names=False):
+    """
+    A synchronous function that wraps start_server and exits cleanly.
+    """
+    loop = asyncio.get_event_loop()
+    try:
+        loop.run_until_complete(
+            start_server(pvdb, bind_addr=bind_addr, log_pv_names=log_pv_names))
+    except KeyboardInterrupt:
+        return

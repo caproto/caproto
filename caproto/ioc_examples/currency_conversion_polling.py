@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
-import sys
 import re
-import logging
+import warnings
 
+import asks
 import urllib.request
 import urllib.parse
-from caproto.benchmarking import set_logging_level
-from caproto.curio.server import start_server
-from caproto.server import pvproperty, PVGroup
+from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
 
 
 async def convert_currency(amount, from_currency, to_currency):
@@ -18,9 +16,15 @@ async def convert_currency(amount, from_currency, to_currency):
                                      })
     resp = await asks.get('https://finance.google.com/finance/'
                           'converter?' + params)
-    m = re.search(r'<span class=bld>([^ ]*)',
-                  resp.content.decode('latin-1'))
-    converted = float(m.groups()[0])
+    if resp.status_code != 200:
+        warnings.warn(f"Request to Google return response status "
+                      f"{resp.status_code} {resp.reason_phrase}. "
+                      f"Setting value 'converted' PV to -1.")
+        converted = -1
+    else:
+        m = re.search(r'<span class=bld>([^ ]*)',
+                      resp.content.decode('latin-1'))
+        converted = float(m.groups()[0])
     print(f'Converted {amount} {from_currency} to {to_currency} = {converted}')
     return converted
 
@@ -36,7 +40,6 @@ class CurrencyPollingIOC(PVGroup):
     @converted.startup
     async def converted(self, instance, async_lib):
         'Periodically update the value'
-        print('Starting currency conversion')
         while True:
             # perform the conversion
             converted_amount = await convert_currency(
@@ -53,16 +56,14 @@ class CurrencyPollingIOC(PVGroup):
 
 
 if __name__ == '__main__':
-    # usage: currency_conversion_polling.py [PREFIX]
-    import curio
-    import asks  # for http requests through curio
+    ioc_options, run_options = ioc_arg_parser(
+        default_prefix='currency_poll:',
+        desc='Run an IOC with a periodically updating currency conversion.')
 
-    try:
-        prefix = sys.argv[1]
-    except IndexError:
-        prefix = 'currency_polling:'
-
-    set_logging_level(logging.DEBUG)
+    if run_options['module_name'] != 'caproto.curio.server':
+        raise ValueError("This example must be run with '--async-lib curio'.")
+    # Initialize this async HTTP library.
     asks.init('curio')
-    ioc = CurrencyPollingIOC(prefix=prefix, macros={})
-    curio.run(start_server, ioc.pvdb)
+
+    ioc = CurrencyPollingIOC(**ioc_options)
+    run(ioc.pvdb, **run_options)

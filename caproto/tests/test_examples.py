@@ -52,9 +52,9 @@ def test_curio_server_example(prefix):
             commands.append(command)
 
         pi_pv = prefix + 'pi'
-        broadcaster = client.SharedBroadcaster(log_level='DEBUG')
+        broadcaster = client.SharedBroadcaster()
         await broadcaster.register()
-        ctx = client.Context(broadcaster, log_level='DEBUG')
+        ctx = client.Context(broadcaster)
         await ctx.search(pi_pv)
         print('done searching')
         chan1 = await ctx.create_channel(pi_pv)
@@ -220,7 +220,7 @@ def test_curio_server_example(prefix):
 
 # See test_ioc_example and test_flaky_ioc_examples, below.
 def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
-                       prefix):
+                       prefix, async_lib='curio'):
     from .conftest import run_example_ioc
     from caproto.sync.client import get, put
     from caproto.server import PvpropertyReadOnlyData
@@ -244,7 +244,7 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
 
     print('stdin=', stdin)
     run_example_ioc(module_name, request=request,
-                    args=[prefix],
+                    args=['--prefix', prefix, '--async-lib', async_lib],
                     pv_to_check=pv_to_check,
                     stdin=stdin)
 
@@ -279,9 +279,9 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
             continue
 
         print(f'Writing {value} to {pv}')
-        put(pv, value, verbose=True)
+        put(pv, value)
 
-        value = get(pv, verbose=True)
+        value = get(pv)
         print(f'Read {pv} = {value}')
 
 
@@ -292,6 +292,7 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
      ('caproto.ioc_examples.io_interrupt', 'IOInterruptIOC', {}),
      ('caproto.ioc_examples.macros', 'MacroifiedNames',
       dict(macros={'beamline': 'my_beamline', 'thing': 'thing'})),
+     ('caproto.ioc_examples.random_walk', 'RandomWalkIOC', {}),
      ('caproto.ioc_examples.reading_counter', 'ReadingCounter', {}),
      ('caproto.ioc_examples.rpc_function', 'MyPVGroup', {}),
      ('caproto.ioc_examples.simple', 'SimpleIOC', {}),
@@ -301,10 +302,15 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
       dict(macros={'macro': 'expanded'})),
      ]
 )
+@pytest.mark.parametrize('async_lib', ['curio', 'trio', 'asyncio'])
 def test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
-                      prefix):
+                      prefix, async_lib):
+    if (module_name == 'caproto.ioc_examples.io_interrupt' and
+            async_lib == 'asyncio'):
+        # TODO FIX ME
+        raise pytest.xfail(reason='known not to work on asyncio')
     return _test_ioc_examples(request, module_name, pvdb_class_name,
-                              class_kwargs, prefix)
+                              class_kwargs, prefix, async_lib)
 
 
 # These tests require numpy.
@@ -349,7 +355,7 @@ def test_typhon_example(request, prefix):
     pytest.importorskip('numpy')
     from .conftest import run_example_ioc
     run_example_ioc('caproto.ioc_examples.caproto_to_ophyd', request=request,
-                    args=[prefix], pv_to_check=f'{prefix}random1')
+                    args=['--prefix', prefix], pv_to_check=f'{prefix}random1')
 
     from caproto.ioc_examples import caproto_to_typhon
     caproto_to_typhon.pydm = None
@@ -360,7 +366,7 @@ def test_typhon_example(request, prefix):
 def test_mocking_records(request, prefix):
     from .conftest import run_example_ioc
     run_example_ioc('caproto.ioc_examples.mocking_records', request=request,
-                    args=[prefix], pv_to_check=f'{prefix}A')
+                    args=['--prefix', prefix], pv_to_check=f'{prefix}A')
 
     from caproto.sync.client import get, put
 

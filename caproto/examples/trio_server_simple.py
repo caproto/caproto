@@ -1,7 +1,7 @@
 import logging
 
 import trio
-from caproto.trio.server import (Context, logger)
+from caproto.trio.server import Context
 import caproto as ca
 
 
@@ -58,15 +58,13 @@ pvdb = {'pi': ca.ChannelDouble(value=3.14,
         }
 
 
-async def main(pvdb, port=None, log_level='DEBUG'):
+async def main(pvdb, port=None):
     if port is None:
         port = ca.find_available_tcp_port()
-    ctx = Context('0.0.0.0', port, pvdb, log_level=log_level)
-    logger.info('Server starting up on %s:%d', ctx.host, ctx.port)
+    ctx = Context('0.0.0.0', port, pvdb)
     return await ctx.run()
 
 
 if __name__ == '__main__':
-    logging.basicConfig()
-    logger.setLevel('DEBUG')
-    trio.run(main, pvdb, ca.find_available_tcp_port(), 'DEBUG')
+    logging.getLogger('caproto').setLevel('DEBUG')
+    trio.run(main, pvdb, ca.find_available_tcp_port())

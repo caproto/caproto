@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-import logging
-import sys
+"""
+NOTICE
 
-import curio
-from caproto.curio.server import (Context, logger, ServerExit)
+This particular example predates the IOC class framework that makes IOC
+specification much more succinct.
+"""
+import warnings
 import caproto as ca
+from caproto.server import ioc_arg_parser, run
 
 
 alarm = ca.ChannelAlarm(
@@ -60,24 +63,12 @@ pvdb = {'pi': ca.ChannelDouble(value=3.14,
         }
 
 
-async def main(pvdb, prefix=None, port=None):
-    if prefix is not None:
-        pvdb = {prefix + key: value
-                for key, value in pvdb.items()}
-    if port is None:
-        port = ca.find_available_tcp_port()
-    ctx = Context('0.0.0.0', port, pvdb, log_level='DEBUG')
-    logger.info('Server starting up on %s:%d', ctx.host, ctx.port)
-    logger.info("Available PVs: %s", ' '.join(pvdb))
-    try:
-        return await ctx.run()
-    except ServerExit:
-        print('ServerExit caught; exiting')
-
-
 if __name__ == '__main__':
-    # TODO Use new IOC code.
-    logging.basicConfig()
-    logger.setLevel('DEBUG')
-    prefix = sys.argv[1] if len(sys.argv) > 1 else None
-    curio.run(main(pvdb, prefix=prefix))
+    ioc_options, run_options = ioc_arg_parser(
+        default_prefix='type_varieties:',
+        desc='Run an IOC with PVs of various data types.')
+    prefix = ioc_options['prefix']
+    pvdb = {prefix + key: value for key, value in pvdb.items()}
+    warnings.warn("The IOC options are ignored by this IOC. "
+                  "It needs to be updated.")
+    run(pvdb, **run_options)
