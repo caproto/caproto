@@ -659,3 +659,15 @@ def backends(request):
         select_backend(request.param)
     except KeyError:
         raise pytest.skip(f'backend {request.param} unavailable')
+
+
+def dump_process_output(prefix, stdout, stderr):
+    print('-- Process stdout --')
+    if stdout is not None:
+        for line in stdout.decode('latin-1').split('\n'):
+            print(f'[{prefix}-stdout]', line)
+    print('-- Process stderr --')
+    if stderr is not None:
+        for line in stderr.decode('latin-1').split('\n'):
+            print(f'[{prefix}-stderr]', line)
+    print('--')

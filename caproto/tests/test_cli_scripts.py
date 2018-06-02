@@ -6,6 +6,8 @@ import subprocess
 from caproto.sync.client import get, put, monitor, parse_data_type
 from caproto._dbr import ChannelType
 
+from .conftest import dump_process_output
+
 
 def escape(pv_name, response):
     raise KeyboardInterrupt
@@ -24,6 +26,17 @@ def fix_arg_prefixes(ioc, args):
 def test_timeout(func, args, kwargs):
     with pytest.raises(TimeoutError):
         func(*args, **kwargs)
+
+
+def _run_cli_process(process, command, timeout=10.0):
+    try:
+        stdout, stderr = process.communicate(timeout=10.0)
+    except subprocess.TimeoutExpired:
+        dump_process_output(command, stdout, stderr)
+        raise
+    else:
+        dump_process_output(command, stdout, stderr)
+        assert process.poll() == 0
 
 
 @pytest.mark.parametrize('more_kwargs,',
@@ -81,25 +94,7 @@ def test_cli(command, args, ioc):
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE
                          )
 
-    def dump_output():
-        print('-- Process stdout --')
-        if stdout is not None:
-            for line in stdout.decode('latin-1').split('\n'):
-                print('[CLI-stdout]', line)
-        print('-- Process stderr --')
-        if stderr is not None:
-            for line in stderr.decode('latin-1').split('\n'):
-                print('[CLI-stderr]', line)
-        print('--')
-
-    try:
-        stdout, stderr = p.communicate(timeout=50.0)
-    except subprocess.TimeoutExpired:
-        dump_output()
-        raise
-    else:
-        dump_output()
-        assert p.poll() == 0
+    _run_cli_process(p, command, timeout=10.0)
 
 
 @pytest.mark.skipif(sys.platform == 'win32',
@@ -133,9 +128,7 @@ def test_monitor(args, ioc):
     # Send SIGINT. If the CLI is otherwise happy, it should still exit code 0.
     os.kill(p.pid, signal.SIGINT)
 
-    p.wait()
-    print(p.communicate())
-    assert p.poll() == 0
+    _run_cli_process(p, 'camonitor', timeout=10.0)
 
 
 @pytest.mark.parametrize('data_type', ['enum', 'ENUM', '3'])
