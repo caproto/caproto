@@ -1,27 +1,78 @@
+# vi: ts=2 sw=2 sts=2 expandtab
+
 skip_tags: true
 
-os: Visual Studio 2015
+os: Visual Studio 2017
+
+# Shallow clone of repo
+clone_depth: 2
+
+platform:
+  - x86
+  - x64
+
+cache:
+  - C:\projects\epics-base-3.15
 
 environment:
+  # 192.168.0.0/21 -> 192.168.7.255 broadcast
+  # EPICS_CA_AUTO_ADDR_LIST: NO
+  # EPICS_CA_ADDR_LIST: 192.168.7.255
+  # EPICS_CAS_AUTO_ADDR_LIST: NO
+  # EPICS_CAS_INTF_ADDR_LIST: 192.168.7.255
+  RUN_TEST: coverage run run_tests.py -v --benchmark-disable --timeout=50
   matrix:
     - PYTHON: "C:\\Python36"
+      EPICS_VER: 3.15
+      TOOLCHAIN: 2017
+      CONFIGURATION: STATIC
     - PYTHON: "C:\\Python36-x64"
+      EPICS_VER: 3.15
+      TOOLCHAIN: 2017
+      CONFIGURATION: STATIC
+
+init:
+  # command-line scripts for windows
+  - git config --global core.autocrlf true
 
 build_script:
-  - "git --no-pager log -n2"
-  - "echo %APPVEYOR_REPO_COMMIT%"
-  - "SET PATH=%PYTHON%;%PYTHON%\\Scripts;;%PATH%"
-  - "python --version"
-  - "python -c \"import struct; print(struct.calcsize('P') * 8)\""
-  - "pip install ."
-  - "pip install -Ur test-requirements.txt"
-  - "pip install codecov"
+  - cmd: git --no-pager log -n2
+
+  # Build epics-base in C:\projects\epics-base-VER
+  - cmd: set EPICS_BASE=C:\Projects\epics-base-%EPICS_VER%
+  - ps: |
+      $epics_base="C:\projects\epics-base-3.15\"
+      $release_path="$epics_base\configure\RELEASE"
+      if (!(Test-Path -Path $release_path)) {
+        git clone --single-branch --branch=3.15 --depth=2 https://github.com/epics-base/epics-base $epics_base
+        Push-Location $epics_base
+        ci/appveyor-prepare.bat
+        ci/appveyor-make.bat
+        Pop-Location
+      }
+  - cmd: dir /s /b %EPICS_BASE%\dbd %EPICS_BASE%\bin 
+
+  - cmd: echo %APPVEYOR_REPO_COMMIT%
+  - cmd: SET PATH=%EPICS_BASE%\bin\win32-x86-static;%EPICS_BASE%\bin\windows-x64-static;%PYTHON%;%PYTHON%\Scripts;;%PATH%
+  - cmd: python --version"
+  - cmd: python -c "import struct; print(struct.calcsize('P') * 8)"
+  - cmd: pip install .
+  - cmd: pip install -Ur test-requirements.txt
+  - cmd: pip install codecov
+  - cmd: ipconfig /all
 
 test_script:
-  - "mkdir empty"
-  - "cd empty"
-  # Make sure it's being imported from where we expect
-  - "python -c \"import os, caproto; print(os.path.dirname(caproto.__file__))\""
-  # - "coverage run run_tests.py -v --benchmark-disable --timeout=50 --log-format=\"%(asctime)s %(levelname)s (%(threadName)s) %(message)s\" --log-date-format=\"%H:%M:%S,%03d\""
-  # - "coverage combine"
-  # - "coverage report -m"
+  # Not sure why this setting isn't working above
+  # - cmd: set EPICS_CA_AUTO_ADDR_LIST=NO
+  
+  # - cmd: %RUN_TEST% caproto/tests/test_bench.py
+  - "%RUN_TEST% caproto/tests/test_cli_scripts.py
+    caproto/tests/test_core.py caproto/tests/test_create_many_channels.py
+    caproto/tests/test_data_conversion.py caproto/tests/test_dbr_types.py
+    caproto/tests/test_examples.py caproto/tests/test_fixtures.py
+    caproto/tests/test_nonet.py caproto/tests/test_pyepics_compat.py
+    caproto/tests/test_repeater.py caproto/tests/test_serialization.py
+    caproto/tests/test_server.py caproto/tests/test_status.py
+    caproto/tests/test_threading_client.py caproto/tests/test_utils.py"
+  - coverage combine
+  - coverage report -m

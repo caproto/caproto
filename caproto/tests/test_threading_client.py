@@ -128,6 +128,7 @@ def shared_broadcaster(request):
 @pytest.fixture(scope='function')
 def context(request, shared_broadcaster):
     context = Context(broadcaster=shared_broadcaster)
+    sb = shared_broadcaster
 
     def cleanup():
         print('*** Cleaning up the context!')
@@ -135,6 +136,10 @@ def context(request, shared_broadcaster):
         assert not context._process_search_results_thread.is_alive()
         assert not context._activate_subscriptions_thread.is_alive()
         assert not context.selector.thread.is_alive()
+        sb.disconnect()
+        assert not sb._command_thread.is_alive()
+        assert not sb.selector.thread.is_alive()
+        assert not sb._retry_unanswered_searches_thread.is_alive()
 
     request.addfinalizer(cleanup)
     return context
@@ -353,7 +358,8 @@ def test_timeout(ioc, context):
     # This may or may not raise a TimeoutError depending on who wins the race.
     # The important thing is that the callback should _never_ be processed.
     try:
-        pv.write((2, ), timeout=0, callback=cb)
+        # TODO add custom monotonic_time function in caproto._utils
+        pv.write((2, ), timeout=-1, callback=cb)
     except TimeoutError:
         pass
     # Wait and make sure that the callback is not called.

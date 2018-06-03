@@ -1,10 +1,10 @@
-import os
 import sys
 import pytest
-import signal
 import subprocess
 from caproto.sync.client import get, put, monitor, parse_data_type
 from caproto._dbr import ChannelType
+
+from .conftest import dump_process_output
 
 
 def escape(pv_name, response):
@@ -24,6 +24,17 @@ def fix_arg_prefixes(ioc, args):
 def test_timeout(func, args, kwargs):
     with pytest.raises(TimeoutError):
         func(*args, **kwargs)
+
+
+def _subprocess_communicate(process, command, timeout=10.0):
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        dump_process_output(command, stdout, stderr)
+        raise
+    else:
+        dump_process_output(command, stdout, stderr)
+        assert process.poll() == 0
 
 
 @pytest.mark.parametrize('more_kwargs,',
@@ -76,12 +87,12 @@ fmt2 = '{timestamp:%%H:%%M}'
                           ])
 def test_cli(command, args, ioc):
     args = fix_arg_prefixes(ioc, args)
-    p = subprocess.Popen([sys.executable, '-m', 'caproto.tests.example_runner',
+    p = subprocess.Popen([sys.executable, '-um', 'caproto.tests.example_runner',
                           '--script', command] + list(args),
-                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    p.wait()
-    print(p.communicate())
-    assert p.poll() == 0
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                         )
+
+    _subprocess_communicate(p, command, timeout=10.0)
 
 
 @pytest.mark.parametrize('args',
@@ -101,19 +112,24 @@ def test_cli(command, args, ioc):
                           ])
 def test_monitor(args, ioc):
     args = fix_arg_prefixes(ioc, args)
-    p = subprocess.Popen([sys.executable, '-m', 'caproto.tests.example_runner',
+
+    if sys.platform == 'win32':
+        si = subprocess.STARTUPINFO()
+        si.dwFlags = (subprocess.STARTF_USESTDHANDLES |
+                      subprocess.CREATE_NEW_PROCESS_GROUP)
+        os_kwargs = dict(startupinfo=si)
+    else:
+        os_kwargs = {}
+
+    # For the purposes of this test, one monitor output is sufficient
+    args += ['--maximum', '1']
+
+    p = subprocess.Popen([sys.executable, '-um', 'caproto.tests.example_runner',
                           '--script', 'caproto-monitor'] + list(args),
-                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    # Wait for the first line of output.
-    line = p.stdout.readline()
-    print(line)
-    # Process should run forever, therefore should still be running now.
-    assert p.poll() is None
-    # Send SIGINT. If the CLI is otherwise happy, it should still exit code 0.
-    os.kill(p.pid, signal.SIGINT)
-    p.wait()
-    print(p.communicate())
-    assert p.poll() == 0
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                         **os_kwargs)
+
+    _subprocess_communicate(p, 'camonitor', timeout=2.0)
 
 
 @pytest.mark.parametrize('data_type', ['enum', 'ENUM', '3'])

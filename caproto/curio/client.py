@@ -8,10 +8,12 @@
 # Context: has a caproto.Broadcaster, a UDP socket, a cache of
 #          search results and a cache of VirtualCircuits.
 #
-import logging
 import getpass
+import logging
+
 import caproto as ca
 import curio
+
 from collections import OrderedDict
 from curio import socket
 
@@ -227,6 +229,7 @@ class SharedBroadcaster:
         # UDP socket broadcasting to CA servers
         self.udp_sock = ca.bcast_socket(socket)
         self.registered = False  # refers to RepeaterRegisterRequest
+        self.loop_ready_event = curio.Event()
         self.unanswered_searches = {}  # map search id (cid) to name
         self.search_results = {}  # map name to address
 
@@ -245,13 +248,15 @@ class SharedBroadcaster:
 
     async def register(self):
         "Register this client with the CA Repeater."
+        # TODO don't spawn this more than once
         await curio.spawn(self._broadcaster_queue_loop, daemon=True)
-
-        while not self.registered:
-            async with self.broadcaster_command_condition:
-                await self.broadcaster_command_condition.wait()
+        await self.loop_ready_event.wait()
 
     async def _broadcaster_recv_loop(self):
+        command = self.broadcaster.register('127.0.0.1')
+        await self.send(ca.EPICS_CA2_PORT, command)
+        await self.loop_ready_event.set()
+
         while True:
             bytes_received, address = await self.udp_sock.recvfrom(4096)
             if bytes_received:
@@ -260,8 +265,6 @@ class SharedBroadcaster:
 
     async def _broadcaster_queue_loop(self):
         await curio.spawn(self._broadcaster_recv_loop, daemon=True)
-        command = self.broadcaster.register('127.0.0.1')
-        await self.send(ca.EPICS_CA2_PORT, command)
 
         while True:
             try:

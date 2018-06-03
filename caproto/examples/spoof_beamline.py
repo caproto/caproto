@@ -6,6 +6,7 @@ import caproto.curio.server as ccs
 from caproto import ChannelData, ChannelString, ChannelEnum
 import re
 
+
 PLUGIN_TYPE_PVS = [
     (re.compile('image\\d:'), 'NDPluginStdArrays'),
     (re.compile('Stats\\d:'), 'NDPluginStats'),
@@ -41,6 +42,7 @@ class ReallyDefaultDict(defaultdict):
         ret = self[key] = self.default_factory(key)
         return ret
 
+
 def fabricate_channel(key):
     if 'PluginType' in key:
         for pattern, val in PLUGIN_TYPE_PVS:
@@ -55,5 +57,25 @@ def fabricate_channel(key):
     return ChannelData(value=0)
 
 
-curio.run(ccs.start_server(ReallyDefaultDict(fabricate_channel),
-                           bind_addr='127.0.0.1'))
+def main():
+    print('''
+*** WARNING ***
+This script spawns an EPICS IOC which responds to ALL caget, caput, camonitor
+requests.  As this is effectively a PV black hole, it may affect the
+performance and functionality of other IOCs on your network.
+*** WARNING ***
+
+Press return if you have acknowledged the above, or Ctrl-C to quit.''')
+
+    try:
+        input()
+    except KeyboardInterrupt:
+        print()
+        return
+
+    curio.run(ccs.start_server(ReallyDefaultDict(fabricate_channel),
+                               bind_addr='127.0.0.1'))
+
+
+if __name__ == '__main__':
+    main()

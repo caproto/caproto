@@ -8,29 +8,31 @@
 # - TCP socket SelectorThread
 # - restart subscriptions
 # - ThreadPoolExecutor for processing user callbacks on read, write, subscribe
+import array
 import concurrent.futures
+import errno
 import getpass
+import inspect
 import itertools
 import logging
 import os
-from queue import Queue, Empty
+import selectors
 import socket
+import sys
 import threading
 import time
 import weakref
-import selectors
-import array
-import fcntl
-import errno
-import termios
-import inspect
+
+from queue import Queue, Empty
 from inspect import Parameter, Signature
 from functools import partial
 from collections import defaultdict
 import caproto as ca
 from .._constants import (MAX_ID, STALE_SEARCH_EXPIRATION,
                           SEARCH_MAX_DATAGRAM_BYTES)
-from .._utils import batch_requests, CaprotoError, ThreadsafeCounter
+from .._utils import (batch_requests, CaprotoError, ThreadsafeCounter,
+                      socket_bytes_available)
+
 
 print = partial(print, flush=True)
 
@@ -162,6 +164,11 @@ class SelectorThread:
         self._close_event = threading.Event()
         self.selector = selectors.DefaultSelector()
 
+        if sys.platform == 'win32':
+            # Empty select() list is problematic for windows
+            dummy_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.selector.register(dummy_socket, selectors.EVENT_READ)
+
         self._socket_map_lock = threading.RLock()
         self.objects = weakref.WeakValueDictionary()
         self.id_to_socket = {}
@@ -266,14 +273,10 @@ class SelectorThread:
                     continue
 
                 # TODO: consider thread pool for recv and command_loop
-                if fcntl.ioctl(sock, termios.FIONREAD, avail_buf) < 0:
-                    continue
-
-                bytes_available = avail_buf[0]
-
                 try:
-                    bytes_recv, address = sock.recvfrom(
-                        max((4096, bytes_available)))
+                    bytes_available = socket_bytes_available(
+                        sock, available_buffer=avail_buf)
+                    bytes_recv, address = sock.recvfrom(bytes_available)
                 except OSError as ex:
                     if ex.errno != errno.EAGAIN:
                         # register as a disconnection

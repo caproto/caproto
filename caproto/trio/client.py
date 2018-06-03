@@ -291,15 +291,14 @@ class SharedBroadcaster:
 
     async def register(self):
         "Register this client with the CA Repeater."
+        # TODO don't spawn these more than once
         self.nursery.start_soon(self._broadcaster_queue_loop)
-
-        while not self.registered:
-            async with self.broadcaster_command_condition:
-                await self.broadcaster_command_condition.wait()
+        await self.nursery.start(self._broadcaster_recv_loop)
 
     async def _broadcaster_recv_loop(self, task_status):
-        # with ca.bcast_socket(socket_module=socket) as self.udp_sock:
         self.udp_sock = ca.bcast_socket(socket_module=socket)
+        command = self.broadcaster.register('127.0.0.1')
+        await self.send(ca.EPICS_CA2_PORT, command)
         task_status.started()
 
         while True:
@@ -321,10 +320,6 @@ class SharedBroadcaster:
                 await self.command_bundle_queue.put(commands)
 
     async def _broadcaster_queue_loop(self):
-        await self.nursery.start(self._broadcaster_recv_loop)
-        command = self.broadcaster.register('127.0.0.1')
-        await self.send(ca.EPICS_CA2_PORT, command)
-
         while True:
             try:
                 commands = await self.command_bundle_queue.get()

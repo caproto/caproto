@@ -56,7 +56,7 @@ def main(pvname1='pi', pvname2='str'):
 
 if __name__ == '__main__':
     logging.getLogger('caproto').setLevel('DEBUG')
-    p = subprocess.Popen([sys.executable, '-m',
+    p = subprocess.Popen([sys.executable, '-um',
                          'caproto.ioc_examples.type_varieties'])
     try:
         main()

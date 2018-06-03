@@ -1,5 +1,4 @@
 from distutils.core import setup
-import glob
 import setuptools  # noqa F401
 import versioneer
 
@@ -39,7 +38,16 @@ setup(name='caproto',
                 'caproto.threading',
                 'caproto.trio',
                 ],
-      scripts=glob.glob('scripts/*'),
+      entry_points={
+          'console_scripts': [
+              'caproto-get = caproto.sync.client:get_cli',
+              'caproto-put = caproto.sync.client:put_cli',
+              'caproto-monitor = caproto.sync.client:monitor_cli',
+              'caproto-repeater = caproto.sync.client:repeater_cli',
+              'caproto-defaultdictserver = caproto.examples.defaultdictserver:main',
+              'caproto-spoof-beamline = caproto.examples.spoof_beamline:main',
+          ],
+      },
       python_requires='>=3.6',
       classifiers=classifiers,
       extras_require=extras_require

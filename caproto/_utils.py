@@ -1,6 +1,7 @@
 # This module includes all exceptions raised by caproto, sentinel objects used
 # throughout the package (see detailed comment below), various network-related
 # helper functions, and other miscellaneous utilities.
+import array
 import collections
 import os
 import socket
@@ -9,7 +10,17 @@ import enum
 import json
 import threading
 from collections import namedtuple
+from contextlib import contextmanager
 from warnings import warn
+
+try:
+    import fcntl
+    import termios
+except ImportError:
+    fcntl = None
+    termios = None
+    # fcntl is unavailale on windows
+
 
 try:
     import netifaces
@@ -132,7 +143,11 @@ def get_environment_variables():
     if (result.get('EPICS_CA_ADDR_LIST') and
             result.get('EPICS_CA_AUTO_ADDR_LIST', '').upper() != 'NO'):
         warn("EPICS_CA_ADDR_LIST is set but will be ignored because "
-             "EPICS_CA_AUTO_ADDR_LIST is not set to 'no'.")
+             "EPICS_CA_AUTO_ADDR_LIST is not set to 'no'. "
+             "EPICS_CA_ADDR_LIST={!r} EPICS_CA_AUTO_ADDR_LIST={!r}"
+             "".format(result.get('EPICS_CA_AUTO_ADDR_LIST', ''),
+                       result.get('EPICS_CA_ADDR_LIST', ''))
+             )
     if (result.get('EPICS_CAS_BEACON_ADDR_LIST') and
             result.get('EPICS_CAS_AUTO_BEACON_ADDR_LIST', '').upper() != 'NO'):
         warn("EPICS_CAS_BEACON_ADDR_LIST is set but will be ignored because "
@@ -300,18 +315,28 @@ def bcast_socket(socket_module=socket):
         Default is the built-in :mod:`socket` module, but anything with the
         same interface may be used, such as :mod:`curio.socket`.
     """
-    socket = socket_module
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    sock = socket_module.socket(socket_module.AF_INET, socket_module.SOCK_DGRAM)
+    try:
+        sock.setsockopt(socket_module.SOL_SOCKET, socket_module.SO_REUSEADDR, 1)
+    except AttributeError:
+        if sys.platform != 'win32':
+            raise
+        # WIN32_TODO: trio compatibility
+        import socket as system_socket
+        sock.setsockopt(socket_module.SOL_SOCKET,
+                        system_socket.SO_REUSEADDR, 1)
+        # sock.setsockopt(socket_module.SOL_SOCKET,
+        #                 system_socket.SO_EXCLUSIVEADDRUSE, 1)
+
+    sock.setsockopt(socket_module.SOL_SOCKET, socket_module.SO_BROADCAST, 1)
 
     # for BSD/Darwin only
     try:
-        socket.SO_REUSEPORT
+        socket_module.SO_REUSEPORT
     except AttributeError:
         ...
     else:
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        sock.setsockopt(socket_module.SOL_SOCKET, socket_module.SO_REUSEPORT, 1)
     return sock
 
 
@@ -602,3 +627,45 @@ class ThreadsafeCounter:
 
                 self.value = value
                 return value
+
+
+if sys.platform == 'win32' or fcntl is None:
+    def socket_bytes_available(sock, *, default_buffer_size=4096,  # noqa
+                               available_buffer=None):
+        # No support for fcntl/termios on win32
+        return default_buffer_size
+else:
+    def socket_bytes_available(sock, *, default_buffer_size=4096,
+                               available_buffer=None):
+        '''Return bytes available to receive on socket
+
+        Parameters
+        ----------
+        sock : socket.socket
+        default_buffer_size : int, optional
+            Default recv buffer size, should the platform not support the call or
+            the call fails for unknown reasons
+        available_buffer : array.array, optional
+            Array used for call to fcntl; can be specified to avoid reallocating
+            many times
+        '''
+        if available_buffer is None:
+            available_buffer = array.array('i', [0])
+
+        ok = fcntl.ioctl(sock, termios.FIONREAD, available_buffer) >= 0
+        return (max((available_buffer[0], default_buffer_size))
+                if ok else default_buffer_size)
+
+
+@contextmanager
+def named_temporary_file(*args, delete=True, **kwargs):
+    '''NamedTemporaryFile wrapper that works around issues in windows'''
+    # See: https://bugs.python.org/issue14243
+
+    from tempfile import NamedTemporaryFile
+    with NamedTemporaryFile(*args, delete=False, **kwargs) as f:
+        try:
+            yield f
+        finally:
+            if delete:
+                os.unlink(f.name)

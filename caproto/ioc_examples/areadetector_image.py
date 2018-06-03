@@ -291,6 +291,7 @@ def generate_detector_code(prefix='13SIM1:'):
         my_detector.wait_for_connection(1.0)
     except TimeoutError:
         print('Connection timed out')
+        return
     else:
         print('Connected to detector')
 

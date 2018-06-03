@@ -3,8 +3,11 @@ Helper functions for dealing with EPICS base binaries (caget, caput, catest)
 '''
 
 import os
+import sys
 import datetime
+import subprocess
 
+import asyncio
 import curio
 import curio.subprocess
 
@@ -21,44 +24,51 @@ async def run_epics_base_binary(backend, *args):
     stdout, stderr
         Decoded standard output and standard error text
     '''
-    args = ['/usr/bin/env'] + list(args)
+
+    import sys
+    if sys.platform == 'win32':
+        args = list(args)
+    else:
+        args = ['/usr/bin/env'] + list(args)
 
     print()
     print('* Executing', args)
 
     epics_env = ca.get_environment_variables()
-    env = dict(PATH=os.environ['PATH'],
+    env = os.environ.copy()
+    env.update(PATH=os.environ['PATH'],
                EPICS_CA_AUTO_ADDR_LIST=epics_env['EPICS_CA_AUTO_ADDR_LIST'],
                EPICS_CA_ADDR_LIST=epics_env['EPICS_CA_ADDR_LIST'])
 
-    if backend == 'curio':
-        p = curio.subprocess.Popen(args, env=env,
-                                   stdout=curio.subprocess.PIPE,
-                                   stderr=curio.subprocess.PIPE)
-        await p.wait()
-        raw_stdout = await p.stdout.read()
-        raw_stderr = await p.stderr.read()
-    elif backend == 'trio':
-        def trio_subprocess():
-            import subprocess
-            pipes = subprocess.Popen(args, env=env, stdout=subprocess.PIPE,
-                                     stderr=subprocess.PIPE)
-            return pipes.communicate()
+    def runner():
+        e = os.environ.copy()
+        e.update(env)
+        pipes = subprocess.Popen(args, env=e, stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE)
+        return pipes.communicate()
 
-        raw_stdout, raw_stderr = await trio.run_sync_in_worker_thread(
-            trio_subprocess)
+    if backend == 'curio':
+        if sys.platform == 'win32':
+            raw_stdout, raw_stderr = await curio.run_in_thread(runner)
+        else:
+            p = curio.subprocess.Popen(args, env=env,
+                                       stdout=curio.subprocess.PIPE,
+                                       stderr=curio.subprocess.PIPE)
+            await p.wait()
+            raw_stdout = await p.stdout.read()
+            raw_stderr = await p.stderr.read()
+    elif backend == 'trio':
+        raw_stdout, raw_stderr = await trio.run_sync_in_worker_thread(runner)
     elif backend == 'asyncio':
-        import asyncio
-        import subprocess
         loop = asyncio.get_event_loop()
-        print('about to run subprocess')
-        process = await asyncio.create_subprocess_exec(
-            *args, env=env, loop=loop,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
-        print('about to wait on subprocess')
-        raw_stdout, raw_stderr = await process.communicate()
-        print('subprocess done')
+        if sys.platform == 'win32':
+            raw_stdout, raw_stderr = await loop.run_in_executor(None, runner)
+        else:
+            process = await asyncio.create_subprocess_exec(
+                *args, env=env, loop=loop,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE)
+            raw_stdout, raw_stderr = await process.communicate()
     else:
         raise NotImplementedError('Unsupported async backend')
 
@@ -78,7 +88,10 @@ async def run_caget(backend, pv, *, dbr_type=None):
         Specific dbr_type to request
     '''
     sep = '@'
-    args = ['caget', '-w', '0.2', '-F', sep]
+    args = ['caget', '-F', sep,
+            '-w', '1.0' if sys.platform == 'win32' else '0.3',
+            ]
+
     if dbr_type is None:
         args += ['-a']
         wide_mode = True
@@ -206,7 +219,7 @@ async def run_caput(backend, pv, value, *, async_put=True, as_string=False):
             '-' + (('c' if async_put else '') +
                    ('S' if as_string else '') +
                    'w'),
-            '0.2',
+            '1.0' if sys.platform == 'win32' else '0.3',
             pv]
 
     if isinstance(value, (list, tuple)):

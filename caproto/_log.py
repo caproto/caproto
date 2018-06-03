@@ -155,7 +155,8 @@ class LogFormatter(logging.Formatter):
 
 
 plain_log_format = "[%(levelname)1.1s %(asctime)s.%(msecs)03d %(module)s:%(lineno)d] %(message)s"
-color_log_format = "%(color)s[%(levelname)1.1s %(asctime)s.%(msecs)03d %(module)s:%(lineno)d]%(end_color)s  %(message)s"
+color_log_format = ("%(color)s[%(levelname)1.1s %(asctime)s.%(msecs)03d "
+                    "%(module)s:%(lineno)d]%(end_color)s %(message)s")
 log_date_format = "%H:%M:%S"
 logger = logging.getLogger('caproto')
 color_handler = logging.StreamHandler(sys.stdout)

@@ -76,16 +76,18 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
         logger.debug(f'Running {module_name}')
     os.environ['COVERAGE_PROCESS_START'] = '.coveragerc'
 
-    p = subprocess.Popen([sys.executable, '-m', 'caproto.tests.example_runner',
+    p = subprocess.Popen([sys.executable, '-um', 'caproto.tests.example_runner',
                           module_name] + list(args),
                          stdout=stdout, stderr=stderr, stdin=stdin,
                          env=os.environ)
 
     def stop_ioc():
         if p.poll() is None:
-            logger.debug('Sending Ctrl-C to the example IOC')
-            p.send_signal(signal.SIGINT)
-            logger.debug('Waiting on process...')
+            if sys.platform != 'win32':
+                logger.debug('Sending Ctrl-C to the example IOC')
+                p.send_signal(signal.SIGINT)
+                logger.debug('Waiting on process...')
+
             try:
                 p.wait(timeout=1)
             except subprocess.TimeoutExpired:
@@ -172,6 +174,24 @@ def epics_base_ioc(prefix, request):
 ******* Returned: %s ******
 ***********************************''',
                     process.returncode)
+        stdout, stderr = process.communicate()
+        if process.returncode != 0:
+            print()
+            print()
+            print('IOC Standard output:')
+            if stdout is not None:
+                for line in stdout.decode('latin-1').split('\n'):
+                    print('[Server-stdout]', line)
+            else:
+                print('(None)')
+            print('IOC Standard error:')
+            if stderr is not None:
+                for line in stderr.decode('latin-1').split('\n'):
+                    print('[Server-stderr]', line)
+            else:
+                print('(None)')
+            print()
+            print()
 
     threading.Thread(target=ioc_monitor).start()
     pvs = {pv[len(prefix):]: pv
@@ -238,7 +258,10 @@ def stop_repeater():
         return
 
     logger.info('[Repeater] Sending Ctrl-C to the repeater')
-    _repeater_process.send_signal(signal.SIGINT)
+    if sys.platform == 'win32':
+        _repeater_process.terminate()
+    else:
+        _repeater_process.send_signal(signal.SIGINT)
     _repeater_process.wait()
     _repeater_process = None
     logger.info('[Repeater] Repeater exited')
@@ -635,3 +658,15 @@ def backends(request):
         select_backend(request.param)
     except KeyError:
         raise pytest.skip(f'backend {request.param} unavailable')
+
+
+def dump_process_output(prefix, stdout, stderr):
+    print('-- Process stdout --')
+    if stdout is not None:
+        for line in stdout.decode('latin-1').split('\n'):
+            print(f'[{prefix}-stdout]', line)
+    print('-- Process stderr --')
+    if stderr is not None:
+        for line in stderr.decode('latin-1').split('\n'):
+            print(f'[{prefix}-stderr]', line)
+    print('--')

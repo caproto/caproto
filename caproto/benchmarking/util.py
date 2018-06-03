@@ -1,9 +1,11 @@
 import os
+import sys
 import subprocess
 import shutil
 import logging
 from contextlib import contextmanager
-from tempfile import NamedTemporaryFile
+
+from .._utils import named_temporary_file
 
 
 logger = logging.getLogger(__name__)
@@ -59,7 +61,7 @@ def softioc(*, db_text='', access_rules_text='', additional_args=None,
     if macros is None:
         macros = dict(P='test')
 
-    proc_env = dict(os.environ)
+    proc_env = os.environ.copy()
     if env is not None:
         proc_env.update(**env)
 
@@ -72,14 +74,16 @@ def softioc(*, db_text='', access_rules_text='', additional_args=None,
 
     macros = ','.join('{}={}'.format(k, v) for k, v in macros.items())
 
-    with NamedTemporaryFile(mode='w+') as cf:
+    with named_temporary_file(mode='w+') as cf:
         cf.write(access_rules_text)
         cf.flush()
+        cf.close()  # win32_compat
 
         logger.debug('access rules filename is: %s', cf.name)
-        with NamedTemporaryFile(mode='w+') as df:
+        with named_temporary_file(mode='w+') as df:
             df.write(db_text)
             df.flush()
+            df.close()  # win32_compat
 
             logger.debug('db filename is: %s', df.name)
             if dbd_path is None:
@@ -87,7 +91,6 @@ def softioc(*, db_text='', access_rules_text='', additional_args=None,
 
             dbd_path = os.path.join(dbd_path, dbd_name)
             logger.debug('dbd path is: %s', dbd_path)
-            assert os.path.exists(dbd_path)
 
             popen_args = ['softIoc',
                           '-D', dbd_path,
@@ -95,14 +98,22 @@ def softioc(*, db_text='', access_rules_text='', additional_args=None,
                           '-a', cf.name,
                           '-d', df.name]
 
+            if sys.platform == 'win32':
+                si = subprocess.STARTUPINFO()
+                si.dwFlags = (subprocess.STARTF_USESTDHANDLES |
+                              subprocess.CREATE_NEW_PROCESS_GROUP)
+                os_kwargs = dict(startupinfo=si)
+            else:
+                os_kwargs = {}
+
             proc = subprocess.Popen(popen_args + additional_args, env=proc_env,
                                     stdin=subprocess.PIPE,
-                                    stdout=subprocess.PIPE)
-            try:
-                yield proc
-            finally:
-                proc.kill()
-                proc.wait()
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE,
+                                    **os_kwargs)
+            yield proc
+            proc.kill()
+            proc.wait()
 
 
 def make_database(records):
