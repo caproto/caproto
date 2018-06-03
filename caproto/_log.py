@@ -2,6 +2,7 @@ import logging
 import sys
 try:
     import colorama
+    colorama.init()
 except ImportError:
     colorama = None
 try:
