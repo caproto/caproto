@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
+import os
+import sys
+
 from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
 import pathlib
+
+
+temp_path = pathlib.Path('/tmp' if sys.platform != 'win32'
+                         else os.environ.get('TEMP'))
 
 
 class CustomWrite(PVGroup):
     """
     When a PV is written to, write the new value into a file as a string.
     """
-    DIRECTORY = pathlib.Path('/tmp')
+    DIRECTORY = temp_path
 
     async def my_write(self, instance, value):
         # Compose the filename based on whichever PV this is.
