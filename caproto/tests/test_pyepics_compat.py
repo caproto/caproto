@@ -100,7 +100,7 @@ from caproto.threading.pyepics_compat import (PV, caput, caget, cainfo,
                                               AccessRightsException)
 
 from .conftest import default_setup_module, default_teardown_module
-from .test_threading_client import context
+from .test_threading_client import context, shared_broadcaster
 
 
 def setup_module(module):
