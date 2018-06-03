@@ -249,16 +249,16 @@ class PV:
         connected : bool
             If the PV is connected when this method returns
         """
-        logger.debug(f'{self} wait for connection...')
-
         if timeout is None:
             timeout = self.connection_timeout
 
         with self._state_lock:
             if self.connected:
                 return True
+
             self._connect_event.clear()
 
+        logger.debug(f'{self} wait for connection...')
         self._caproto_pv.wait_for_connection(timeout=timeout)
 
         # TODO shorten timeouts based on the above
@@ -510,9 +510,10 @@ class PV:
     @ensure_connection
     def force_read_access_rights(self):
         'Force a read of access rights, not relying on last event callback.'
-        self._access_rights_changed(self._caproto_pv.channel.access_rights)
+        self._access_rights_changed(self._caproto_pv.channel.access_rights,
+                                    forced=True)
 
-    def _access_rights_changed(self, access_rights):
+    def _access_rights_changed(self, access_rights, *, forced=False):
         read_access = AccessRights.READ in access_rights
         write_access = AccessRights.WRITE in access_rights
         access_strs = ('no access', 'read-only', 'write-only', 'read/write')
@@ -520,7 +521,8 @@ class PV:
                           read_access=read_access,
                           access=access_strs[access_rights])
 
-        logger.debug('%r access rights updated', self)
+        if not forced:
+            logger.debug('%r access rights updated', self)
 
         for cb in self.access_callbacks:
             try:
