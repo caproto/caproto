@@ -2,7 +2,6 @@ import functools
 import itertools
 import time
 import copy
-import logging
 import threading
 
 from math import log10
@@ -15,9 +14,6 @@ from caproto import AccessRights, field_types, ChannelType
 
 
 __all__ = ['PV', 'get_pv', 'caget', 'caput']
-
-
-logger = logging.getLogger(__name__)
 
 
 class AccessRightsException(ca.CaprotoError):
@@ -208,7 +204,6 @@ class PV:
 
         self.access_callbacks = []
         if access_callback is not None:
-            logger.debug('%s registered callback!', self.pvname)
             self.access_callbacks.append(access_callback)
 
         self.callbacks = {}
@@ -230,7 +225,6 @@ class PV:
 
         if self._caproto_pv.connected:
             # connection state callback was already called
-            logger.debug('%s already connected', self.pvname)
             self._connection_established(self._caproto_pv)
 
     @property
@@ -258,7 +252,6 @@ class PV:
 
             self._connect_event.clear()
 
-        logger.debug(f'{self} wait for connection...')
         self._caproto_pv.wait_for_connection(timeout=timeout)
 
         # TODO shorten timeouts based on the above
@@ -274,21 +267,17 @@ class PV:
 
     def _connection_closed(self):
         'Callback when connection is closed'
-        logger.debug('%r disconnected', self)
         self._connected = False
 
     def _connection_established(self, caproto_pv):
         'Callback when connection is initially established'
         # Take in caproto_pv as an argument because this might be called
         # before self._caproto_pv is set.
-        logger.debug('%r connected', self)
         ch = caproto_pv.channel
         form = self.form
         count = self.default_count
 
         if ch is None:
-            logger.error('Connection dropped in connection callback')
-            logger.error('Connected = %r', self._connected)
             return
 
         type_key = 'control' if form == 'ctrl' else form
@@ -326,7 +315,6 @@ class PV:
                 if connected:
                     self._connection_established(caproto_pv)
             except Exception as ex:
-                logger.exception('Connection state callback failed!')
                 raise
             finally:
                 self._connect_event.set()
@@ -521,14 +509,11 @@ class PV:
                           read_access=read_access,
                           access=access_strs[access_rights])
 
-        if not forced:
-            logger.debug('%r access rights updated', self)
-
         for cb in self.access_callbacks:
             try:
                 cb(read_access, write_access, pv=self)
             except Exception:
-                logger.exception('Access rights callback failed')
+                ...
 
     def __on_changes(self, command):
         """internal callback function: do not overwrite!!
