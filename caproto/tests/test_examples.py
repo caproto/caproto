@@ -43,8 +43,8 @@ def test_thread_client_example(curio_server):
 def test_curio_server_example(prefix):
     import caproto.curio.client as client
     from caproto.ioc_examples.type_varieties import (
-        pvdb, main as server_main)
-    from caproto.curio.server import ServerExit
+        pvdb)
+    from caproto.curio.server import ServerExit, start_server as server_main
 
     commands = []
 
