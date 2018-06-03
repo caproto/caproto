@@ -323,7 +323,7 @@ def test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
             async_lib == 'asyncio'):
         # TODO FIX ME
         raise pytest.xfail(reason='known not to work on asyncio')
-    elif module_name in skip_on_windows:
+    elif sys.platform == 'win32' and module_name in skip_on_windows:
         raise pytest.skip('win32 TODO')
 
     return _test_ioc_examples(request, module_name, pvdb_class_name,
