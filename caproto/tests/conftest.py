@@ -28,7 +28,7 @@ _repeater_process = None
 
 REPEATER_PORT = 5065
 SERVER_HOST = '0.0.0.0'
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('caproto')
 logger.setLevel('DEBUG')
 
 
@@ -177,22 +177,16 @@ def epics_base_ioc(prefix, request):
                     process.returncode)
         stdout, stderr = process.communicate()
         if process.returncode != 0:
-            print()
-            print()
-            print('IOC Standard output:')
             if stdout is not None:
                 for line in stdout.decode('latin-1').split('\n'):
-                    print('[Server-stdout]', line)
+                    logger.debug('[Server-stdout] %s', line)
             else:
-                print('(None)')
-            print('IOC Standard error:')
+                logger.debug('No Server-stdout')
             if stderr is not None:
                 for line in stderr.decode('latin-1').split('\n'):
-                    print('[Server-stderr]', line)
+                    logger.debug('[Server-stderr] %s', line)
             else:
-                print('(None)')
-            print()
-            print()
+                logger.debug('No Server-stderr')
 
     threading.Thread(target=ioc_monitor).start()
     pvs = {pv[len(prefix):]: pv
