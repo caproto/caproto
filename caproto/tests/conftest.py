@@ -386,8 +386,8 @@ def curio_server(prefix):
 
     async def _server(pvdb):
         port = ca.find_available_tcp_port(
-                host=SERVER_HOST,
-                starting_port=random.randint(49152, 65535))
+            host=SERVER_HOST,
+            starting_port=random.randint(49152, 65535))
 
         logger.info('Server will be on %s', (SERVER_HOST, port))
         ctx = caproto.curio.server.Context(SERVER_HOST, port, pvdb)
