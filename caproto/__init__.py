@@ -11,7 +11,7 @@ from ._backend import *
 from ._array_backend import Array
 from . import _numpy_backend  # registers backend on import
 del _numpy_backend
-from ._log import set_log_coloring
+from ._log import *
 
 from ._version import get_versions
 __version__ = get_versions()['version']
