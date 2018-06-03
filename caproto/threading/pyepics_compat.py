@@ -24,22 +24,6 @@ class AccessRightsException(ca.CaprotoError):
     ...
 
 
-def _args_lock(func):
-    """
-    Apply to a lock during an instance method's execution.
-
-    This expects the instance to have an attribute named `master_lock`.
-    """
-    counter = itertools.count()
-
-    def inner(self, *args, **kwargs):
-        next(counter)
-        with self._args_lock:
-            ret = func(self, *args, **kwargs)
-            return ret
-    return inner
-
-
 def ensure_connection(func):
     # TODO get timeout default from func signature
     @functools.wraps(func)
@@ -202,7 +186,6 @@ class PV:
         self.ftype = None
         self._connect_event = threading.Event()
         self._state_lock = threading.RLock()
-        self._args_lock = threading.RLock()
         self.connection_timeout = connection_timeout
         self.default_count = count
         self._auto_monitor_sub = None
@@ -308,18 +291,18 @@ class PV:
             logger.error('Connected = %r', self._connected)
             return
 
-        with self._args_lock:
-            self._args['type'] = ch.native_data_type
+        type_key = 'control' if form == 'ctrl' else form
+        self._args.update(
+            type=ch.native_data_type,
+            typefull=field_types[type_key][ch.native_data_type],
+            nelm=ch.native_data_count,
+            count=ch.native_data_count,
+        )
+        self._access_rights_changed(ch.access_rights)
 
-            type_key = 'control' if form == 'ctrl' else form
-            self._args['typefull'] = field_types[type_key][ch.native_data_type]
-            self._args['nelm'] = ch.native_data_count
-            self._args['count'] = ch.native_data_count
-            self._access_rights_changed(ch.access_rights)
-
-            if self.auto_monitor is None:
-                mcount = count if count is not None else self._args['count']
-                self.auto_monitor = mcount < AUTOMONITOR_MAXLENGTH
+        if self.auto_monitor is None:
+            mcount = count if count is not None else ch.native_data_count
+            self.auto_monitor = mcount < AUTOMONITOR_MAXLENGTH
 
         self._check_auto_monitor_sub()
         self._connected = True
@@ -415,34 +398,37 @@ class PV:
             # TODO if you want char arrays not as_string
             # force no-monitor rather than
             use_monitor = False
-        with self._args_lock:
-            # trigger going out to got data from network
-            if ((not use_monitor) or
-                (self._auto_monitor_sub is None) or
-                (self._args['value'] is None) or
-                (count is not None and
-                 count > len(self._args['value']))):
 
-                command = self._caproto_pv.read(data_type=dt,
-                                                data_count=count)
-                info = _read_response_to_pyepics(self.typefull, command)
-                self._args.update(**info)
+        cached_info = self._args
+        cached_value = cached_info['value']
 
-            info = self._args
+        # trigger going out to got data from network
+        if ((not use_monitor) or
+            (self._auto_monitor_sub is None) or
+            (cached_value is None) or
+            (count is not None and
+             count > len(cached_value))):
 
-            if as_string and self.typefull in ca.enum_types:
-                enum_strs = self.enum_strs
-            else:
-                enum_strs = None
+            command = self._caproto_pv.read(data_type=dt, data_count=count)
+            read_info = _read_response_to_pyepics(self.typefull, command)
+            self._args.update(**read_info)
 
-            return _pyepics_get_value(
-                value=info['raw_value'], string_value=info['char_value'],
-                full_type=self.typefull, native_count=info['count'],
-                requested_count=count, enum_strings=enum_strs,
-                as_string=as_string, as_numpy=as_numpy)
+        if as_string and self.typefull in ca.enum_types:
+            enum_strs = self.enum_strs
+        else:
+            enum_strs = None
+
+        raw_value = cached_info['raw_value']
+        string_value = cached_info['char_value']
+        native_count = cached_info['count']
+
+        return _pyepics_get_value(
+            value=raw_value, string_value=string_value,
+            full_type=self.typefull, native_count=native_count,
+            requested_count=count, enum_strings=enum_strs, as_string=as_string,
+            as_numpy=as_numpy)
 
     @ensure_connection
-    @_args_lock
     def put(self, value, *, wait=False, timeout=30.0,
             use_complete=False, callback=None, callback_data=None):
         """set value for PV, optionally waiting until the processing is
@@ -498,7 +484,6 @@ class PV:
                                timeout=timeout, use_notify=use_notify)
 
     @ensure_connection
-    @_args_lock
     def get_ctrlvars(self, timeout=5, warn=True):
         "get control values for variable"
         dtype = field_types['control'][self.type]
@@ -512,7 +497,6 @@ class PV:
         return info
 
     @ensure_connection
-    @_args_lock
     def get_timevars(self, timeout=5, warn=True):
         "get time values for variable"
         dtype = field_types['time'][self.type]
@@ -529,14 +513,12 @@ class PV:
         self._access_rights_changed(self._caproto_pv.channel.access_rights)
 
     def _access_rights_changed(self, access_rights):
-        with self._args_lock:
-            read_access = AccessRights.READ in access_rights
-            write_access = AccessRights.WRITE in access_rights
-            self._args['write_access'] = write_access
-            self._args['read_access'] = read_access
-
-            access_strs = ('no access', 'read-only', 'write-only', 'read/write')
-            self._args['access'] = access_strs[access_rights]
+        read_access = AccessRights.READ in access_rights
+        write_access = AccessRights.WRITE in access_rights
+        access_strs = ('no access', 'read-only', 'write-only', 'read/write')
+        self._args.update(write_access=write_access,
+                          read_access=read_access,
+                          access=access_strs[access_rights])
 
         logger.debug('%r access rights updated', self)
 
@@ -546,7 +528,6 @@ class PV:
             except Exception:
                 logger.exception('Access rights callback failed')
 
-    @_args_lock
     def __on_changes(self, command):
         """internal callback function: do not overwrite!!
         To have user-defined code run when the PV value changes,
@@ -645,13 +626,11 @@ class PV:
         return self._getarg('status')
 
     @property
-    @_args_lock
     def type(self):
         "pv type"
         return self._args['type']
 
     @property
-    @_args_lock
     def typefull(self):
         "pv type"
         return self._args['typefull']
@@ -780,7 +759,6 @@ class PV:
         "returns True if a put-with-wait has completed"
         return self._args['put_complete']
 
-    @_args_lock
     def _getinfo(self):
         "get information paragraph"
         self.get_ctrlvars()
@@ -854,7 +832,6 @@ class PV:
         out.append('=============================')
         return '\n'.join(out)
 
-    @_args_lock
     def _getarg(self, arg):
         "wrapper for property retrieval"
         if self._args['value'] is None:

@@ -1009,4 +1009,7 @@ def test_pv_access_event_callback(access_security_softioc):
     pvs['permit'].put(1, wait=True)
     assert pvs['permit'].get(as_string=True, use_monitor=False) == 'ENABLED'
 
+    # give the callback a bit of time to run
+    time.sleep(0.2)
+
     assert bo.flag is True
