@@ -27,14 +27,9 @@ def test_timeout(func, args, kwargs):
 
 
 def _subprocess_communicate(process, command, timeout=10.0):
-    try:
-        stdout, stderr = process.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        dump_process_output(command, stdout, stderr)
-        raise
-    else:
-        dump_process_output(command, stdout, stderr)
-        assert process.poll() == 0
+    stdout, stderr = process.communicate(timeout=timeout)
+    dump_process_output(command, stdout, stderr)
+    assert process.poll() == 0
 
 
 @pytest.mark.parametrize('more_kwargs,',
