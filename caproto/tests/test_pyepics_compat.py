@@ -98,9 +98,9 @@ from contextlib import contextmanager
 from caproto.threading.pyepics_compat import (PV, caput, caget, cainfo,
                                               caget_many, caput_many,
                                               AccessRightsException)
-from caproto.threading.client import Context, SharedBroadcaster
 
 from .conftest import default_setup_module, default_teardown_module
+from .test_threading_client import context
 
 
 def setup_module(module):
@@ -116,7 +116,7 @@ def teardown_module(module):
 
 
 @pytest.fixture(scope='function')
-def pvnames(request, epics_base_ioc):
+def pvnames(request, epics_base_ioc, context):
     class PVNames:
         prefix = epics_base_ioc.prefix
         double_pv = prefix + 'ao1'
@@ -171,16 +171,19 @@ def pvnames(request, epics_base_ioc):
         def __repr__(self):
             return f'<PVNames prefix={epics_base_ioc.prefix}>'
 
-    shared_broadcaster = SharedBroadcaster()
-    PV._default_context = Context(broadcaster=shared_broadcaster)
+    PV._default_context = context
 
     def finalize_context():
         print('Cleaning up PV context')
-        broadcaster = PV._default_context.broadcaster
-        broadcaster.disconnect()
-
-        PV._default_context.disconnect()
-        PV._default_context = None
+        context.disconnect()
+        assert not context._process_search_results_thread.is_alive()
+        assert not context._activate_subscriptions_thread.is_alive()
+        assert not context.selector.thread.is_alive()
+        sb = context.broadcaster
+        sb.disconnect()
+        assert not sb._command_thread.is_alive()
+        assert not sb.selector.thread.is_alive()
+        assert not sb._retry_unanswered_searches_thread.is_alive()
         print('Done cleaning up PV context')
 
     request.addfinalizer(finalize_context)
@@ -839,8 +842,9 @@ def test_subarray_1elem(pvnames):
 
 @pytest.mark.skipif(sys.platform == 'win32',
                     reason='win32 motorsim IOC')
-def test_pyepics_pv():
+def test_pyepics_pv(context):
     pv1 = "sim:mtr1"
+    ctx = context
 
     # Some user function to call when subscriptions receive data.
     called = []
@@ -850,8 +854,6 @@ def test_pyepics_pv():
         print('-- user callback', value)
         called.append(True)
 
-    shared_broadcaster = SharedBroadcaster()
-    ctx = Context(broadcaster=shared_broadcaster)
     time_pv = PV(pv1, context=ctx, form='time')
     ctrl_pv = PV(pv1, context=ctx, form='ctrl')
 
@@ -880,7 +882,7 @@ def test_pyepics_pv():
 
 
 @pytest.fixture(scope='function')
-def access_security_softioc(request, prefix):
+def access_security_softioc(request, prefix, context):
     'From pyepics test_cas.py'
     access_rights_db = {
         ('{}:ao'.format(prefix), 'ao') : {
@@ -936,8 +938,7 @@ def access_security_softioc(request, prefix):
                           macros={'P': prefix},
                           )
 
-    shared_broadcaster = SharedBroadcaster()
-    PV._default_context = Context(broadcaster=shared_broadcaster)
+    PV._default_context = context
 
     process = handler.processes[-1]
     pvs = {pv[len(prefix) + 1:]: PV(pv)
