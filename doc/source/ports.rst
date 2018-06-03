@@ -5,24 +5,31 @@ Configuration of Interfaces and Ports
 Servers
 =======
 
+Servers run one more TCP servers (one per network interface), which listen on
+ports with the same port number. Servers also interact with a UDP broadcast
+socket.
+
 UDP
 ---
 
-* Servers bind a UDP socket to ``EPICS_CA1_PORT`` (``5064`` --- not
+* Servers bind a UDP broadcast socket to ``EPICS_CA1_PORT`` (``5064`` --- not
   configurable).
-* Servers listen for ``SearchResponse`` commands and may reply to the address
-  of the sender.
+* Servers listen for ``SearchResponse`` commands and may reply with a datagram
+  to the address of the sender. Clients may use this response to initiate a TCP
+  connection with the TCP server. To support this, the ``SearchResponse``
+  command encodes the port number of the TCP server(s). The clients obtain the
+  server's IP address from the datagram itself.
 * Servers periodically broadcast ``RsrvIsUp`` commands to the hosts defined by
-  ``EPICS_CA_ATO_BEACON_ADDR_LIST`` or if ``EPICS_CAS_BEACON_ADDR_LIST`` is not
-  ``'no'``, to all broadcast interfaces. The port used is
+  ``EPICS_CA_AUTO_BEACON_ADDR_LIST`` or, if ``EPICS_CAS_BEACON_ADDR_LIST`` is
+  not ``'no'``, to all broadcast interfaces. The port used is
   ``EPICS_CAS_BEACON_PORT`` (default ``5065``).
 
 TCP
 ---
 
-* Servers start a TCP server, listening on all interface ``0.0.0.0`` or or the
-  list of interfaces defined by ``EPICS_CAS_INTF_ADDR_LIST``, if set. The
-  addresses in the list may include a port or not. If not, ???
+* Servers start a TCP server, listening on all interfaces (``0.0.0.0``) or on
+  the specific list of interfaces defined by ``EPICS_CAS_INTF_ADDR_LIST``, if
+  set. The addresses in the list may include a port or not. If not, ???
 
 Clients
 =======

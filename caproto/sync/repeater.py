@@ -96,7 +96,7 @@ def _run_repeater(server_sock, bind_addr):
             commands = broadcaster.recv(msg, addr)
             broadcaster.process_commands(commands)
         except Exception as ex:
-            logger.exception('Failed to process incoming packet')
+            logger.exception('Failed to process incoming datagram')
             continue
 
         if not commands:

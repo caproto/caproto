@@ -392,7 +392,7 @@ class Context:
 
                 if known_pv:
                     # responding with an IP of `None` tells client to get IP
-                    # address from packet
+                    # address from the datagram.
                     search_replies.append(
                         ca.SearchResponse(self.port, None, command.cid, 13)
                     )
