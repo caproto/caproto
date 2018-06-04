@@ -2,7 +2,6 @@ from ..server import AsyncLibraryLayer
 import caproto as ca
 import asyncio
 import socket
-from caproto import find_available_tcp_port
 
 from ..server.common import (VirtualCircuit as _VirtualCircuit,
                              Context as _Context)

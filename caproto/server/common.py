@@ -481,6 +481,7 @@ class Context:
 
     async def tcp_handler(self, client, addr):
         '''Handler for each new TCP client to the server'''
+        self.log.debug('Listening on %s', addr)
         cavc = ca.VirtualCircuit(ca.SERVER, addr, None)
         circuit = self.CircuitClass(cavc, client, self)
         self.circuits.add(circuit)

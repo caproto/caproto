@@ -81,10 +81,10 @@ class Context(_Context):
                 self.log.exception('[server] udp bind failure on interface %r',
                                    interface)
                 raise
-        self.udp_socks[interface] = udp_sock
+            self.udp_socks[interface] = udp_sock
 
         async with curio.TaskGroup() as g:
-            for udp_sock in self.udp_socks.values():
+            for interface, udp_sock in self.udp_socks.items():
                 self.log.debug('Broadcasting on %s:%d', interface,
                                ca.EPICS_CA1_PORT)
                 await g.spawn(self._core_broadcaster_loop, udp_sock)
@@ -111,13 +111,12 @@ class Context(_Context):
                         s.close()
                     tcp_sockets.clear()
                 else:
+                    self.port = port
                     break
             else:
                 raise RuntimeError('No available ports and/or bind failed') from stashed_ex
-            self.port = port
             async with curio.TaskGroup() as g:
                 for interface, sock in tcp_sockets.items():
-                    self.log.debug('Listening on %s:%d', interface, port)
                     # Use run_server instead of tcp_server so we can hand in a
                     # socket that is already bound, avoiding a race between the
                     # moment we check for port availability and the moment the

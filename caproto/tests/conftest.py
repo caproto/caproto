@@ -491,23 +491,9 @@ def server(request):
     def trio_runner(pvdb, client, *, threaded_client=False):
         async def trio_server_main(task_status):
             try:
-                ex = None
-                for j in range(5):
-                    port = ca.find_available_tcp_port(
-                        host=SERVER_HOST,
-                        starting_port=random.randint(49152, 65535))
-                    ctx = caproto.trio.server.Context(
-                        SERVER_HOST, port, pvdb)
-                    print(f'Server will be on (try {j}): {(SERVER_HOST, port)}')
-                    try:
-                        task_status.started(ctx)
-                        await ctx.run()
-                    except OSError as ex:
-                        # if we get an OS error, likely due to
-                        # port already is use, try again
-                        continue
-                    else:
-                        break
+                ctx = caproto.trio.server.Context(pvdb)
+                task_status.started(ctx)
+                await ctx.run()
             except Exception as ex:
                 print('Server failed', ex)
                 raise
