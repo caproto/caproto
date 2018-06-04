@@ -73,8 +73,8 @@ class Context(_Context):
     ServerExit = ServerExit
     TaskCancelled = asyncio.CancelledError
 
-    def __init__(self, host, port, pvdb, *, loop=None):
-        super().__init__(host, port, pvdb)
+    def __init__(self, pvdb, interfaces=None, *, loop=None):
+        super().__init__(pvdb, interfaces)
         self.command_bundle_queue = asyncio.Queue()
         self.subscription_queue = asyncio.Queue()
         if loop is None:
@@ -83,29 +83,41 @@ class Context(_Context):
         self.udp_sock = None
         self._server_tasks = []
 
-    async def server_accept_loop(self, addr, port):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0) as s:
-            self.log.debug('Listening on %s:%d', addr, port)
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            s.setblocking(False)
-            s.bind((addr, port))
-            s.listen()
+    async def server_accept_loop(self, sock):
+            sock.listen()
 
             while True:
-                client_sock, addr = await self.loop.sock_accept(s)
-                tsk = self.loop.create_task(self.tcp_handler(client_sock,
-                                                             addr))
-                self._server_tasks.append(tsk)
+                client_sock, addr = await self.loop.sock_accept(sock)
+                task = self.loop.create_task(
+                    self.tcp_handler(client_sock, addr))
+                self._server_tasks.append(task)
 
     async def run(self, *, log_pv_names=False):
         'Start the server'
         self.log.info('Server starting up...')
+        tcp_sockets = {}
+        stashed_ex = None
+        for port in ca.random_ports(100):
+            try:
+                for interface in self.interfaces:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+                    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                    s.setblocking(False)
+                    s.bind((interface, port))
+                    tcp_sockets[interface] = s
+            except IOError as ex:
+                stashed_ex = ex
+                for s in tcp_sockets.values():
+                    s.close()
+                tcp_sockets.clear()
+            else:
+                self.port = port
+                break
+        else:
+            raise RuntimeError('No available ports and/or bind failed') from stashed_ex
         tasks = []
-        for addr, port in ca.get_server_address_list(self.port):
-            self.log.debug('Listening on %s:%d', addr, port)
-            tasks.append(self.loop.create_task(self.server_accept_loop(addr, port)))
-            # self.loop.create_task(tcp_server,
-            #                       addr, port, self.tcp_handler)
+        for interface, sock in tcp_sockets.items():
+            tasks.append(self.loop.create_task(self.server_accept_loop(sock)))
 
         class BcastLoop(asyncio.Protocol):
             parent = self
@@ -131,16 +143,26 @@ class Context(_Context):
             async def sendto(self, bytes_to_send, addr_port):
                 self.transport.sendto(bytes_to_send, addr_port)
 
-        udp_sock = bcast_socket()
-        try:
-            udp_sock.bind((self.host, ca.EPICS_CA1_PORT))
-        except Exception:
-            self.log.exception('[server] udp bind failure!')
-            raise
+        beacon_sock = ca.bcast_socket(socket)
+        # TODO Should this interface be configurable?
+        transport, _ = await self.loop.create_datagram_endpoint(
+            BcastLoop, sock=beacon_sock)
+        self.beacon_sock = TransportWrapper(transport)
 
-        transport, self.p = await self.loop.create_datagram_endpoint(
-            BcastLoop, sock=udp_sock)
-        self.udp_sock = TransportWrapper(transport)
+        for interface in self.interfaces:
+            udp_sock = bcast_socket()
+            try:
+                udp_sock.bind((interface, ca.EPICS_CA1_PORT))
+            except Exception:
+                self.log.exception('[server] udp bind failure on interface %r',
+                                interface)
+                raise
+
+            transport, self.p = await self.loop.create_datagram_endpoint(
+                BcastLoop, sock=udp_sock)
+            self.udp_socks[interface] = TransportWrapper(transport)
+            self.log.debug('Broadcasting on %s:%d', interface,
+                           ca.EPICS_CA1_PORT)
 
         tasks.append(self.loop.create_task(self.broadcaster_queue_loop()))
         tasks.append(self.loop.create_task(self.subscription_queue_loop()))
@@ -176,24 +198,22 @@ class Context(_Context):
             self.log.info('Server exiting....')
 
 
-async def start_server(pvdb, *, bind_addr='0.0.0.0', log_pv_names=False):
+async def start_server(pvdb, *, interfaces=None, log_pv_names=False):
     '''Start an asyncio server with a given PV database'''
-    ctx = Context(bind_addr, find_available_tcp_port(), pvdb)
-    ctx.log.info('Server starting up on %s:%d', ctx.host, ctx.port)
-    try:
-        ret = await ctx.run(log_pv_names=log_pv_names)
-    except ServerExit:
-        ctx.log.info('ServerExit caught; exiting')
+    ctx = Context(pvdb, interfaces)
+    # ctx.log.info('Server starting up on %s:%d', ctx.host, ctx.port)
+    ret = await ctx.run(log_pv_names=log_pv_names)
     return ret
 
 
-def run(pvdb, *, bind_addr='0.0.0.0', log_pv_names=False):
+def run(pvdb, *, interfaces=None, log_pv_names=False):
     """
     A synchronous function that wraps start_server and exits cleanly.
     """
     loop = asyncio.get_event_loop()
     try:
         loop.run_until_complete(
-            start_server(pvdb, bind_addr=bind_addr, log_pv_names=log_pv_names))
+            start_server(pvdb, interfaces=interfaces,
+                         log_pv_names=log_pv_names))
     except KeyboardInterrupt:
         return
