@@ -173,7 +173,7 @@ class VirtualCircuit:
              num_bytes_needed) = read_from_bytestream(self._data,
                                                       self.their_role)
             len_data = len(self._data)  # just for logging
-            if type(command) is not NEED_DATA:
+            if command is not NEED_DATA:
                 self.log.debug("%d bytes -> %r", len(command), command)
                 commands.append(command)
             else:
