@@ -206,13 +206,6 @@ handling of disconnection events through the command queues:
 
 .. data:: DISCONNECTED
 
-Borrowing a trick (one of many!) from the h11 project, these special constants
-are modeled after ``None``: they’re singletons, their ``__repr__()`` is
-their name, and you compare them with ``is``.  They are also *instances of
-themselves*. This can be useful if you have some object ``obj`` that might be a
-Command or might be a sentinel (e.g. :class:`NEED_DATA`). You can always call
-``type(obj)`` and get something useful.
-
 The VirtualCircuit object
 =========================
 
