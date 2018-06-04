@@ -4,6 +4,7 @@
 import array
 import collections
 import os
+import random
 import socket
 import sys
 import enum
@@ -37,7 +38,7 @@ __all__ = (  # noqa F822
     'get_netifaces_addresses',
     'broadcast_address_list_from_interfaces',
     'ensure_bytes',
-    'find_available_tcp_port',
+    'random_ports',
     'bcast_socket',
     'buffer_list_slice',
     'incremental_buffer_list_slice',
@@ -217,25 +218,25 @@ def get_address_list():
     return addr_list.split(' ')
 
 
-def get_server_address_list(default_port):
-    '''Get the server interface addresses based on environment variables
+def get_server_address_list():
+    '''Get the server interfaces based on environment variables
 
     Returns
     -------
-    list of (addr, port)
+    list of interfaces
     '''
     intf_addrs = get_environment_variables()['EPICS_CAS_INTF_ADDR_LIST']
 
     if not intf_addrs:
-        return [('0.0.0.0', default_port)]
+        return ['0.0.0.0']
 
-    def get_addr_port(addr):
+    def strip_port(addr):
         if ':' in addr:
             addr, _, specified_port = addr.partition(':')
-            return (addr, int(specified_port))
-        return (addr, default_port)
+            warn("Port specified in EPICS_CAS_INTF_ADDR_LIST was ignored.")
+        return addr
 
-    return [get_addr_port(addr) for addr in intf_addrs.split(' ')]
+    return [strip_port(addr) for addr in intf_addrs.split(' ')]
 
 
 def get_beacon_address_list():
@@ -316,37 +317,10 @@ def ensure_bytes(s):
                                f"{type(s)}")
 
 
-def find_available_tcp_port(host='0.0.0.0', starting_port=None):
-    '''Find the next available TCP server port
-
-    Parameters
-    ----------
-    host : str, optional
-        Host/interface to bind on; defaults to 0.0.0.0
-    starting_port : int, optional
-        Port to try first
-    '''
-    import random
-    if starting_port is None:
-        from ._constants import EPICS_CA2_PORT
-        starting_port = EPICS_CA2_PORT + 1
-
-    port = starting_port
-    stashed_ex = None
-
-    for attempt in range(100):
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.bind((host, port))
-        except IOError as ex:
-            stashed_ex = ex
-        else:
-            s.close()
-            return port
-
-        port = random.randint(49152, 65535)
-
-    raise RuntimeError('No available ports and/or bind failed') from stashed_ex
+def random_ports(num):
+    """Yield `num` random port numbers."""
+    for _ in range(num):
+        yield random.randint(49152, 65535)
 
 
 def bcast_socket(socket_module=socket):

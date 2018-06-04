@@ -286,9 +286,11 @@ class VirtualCircuit:
 
 
 class Context:
-    def __init__(self, host, port, pvdb):
-        self.host = host
-        self.port = port
+    def __init__(self, pvdb, interfaces=None):
+        if interfaces is None:
+            interfaces = ca.get_server_address_list()
+        self.interfaces = interfaces
+        self.udp_socks = {}  # map each interface to a UDP socket for searches
         self.pvdb = pvdb
         self.log = logging.getLogger(f'caproto.ctx.{id(self)}')
 
@@ -302,10 +304,10 @@ class Context:
         ignore_addresses = self.environ['EPICS_CAS_IGNORE_ADDR_LIST']
         self.ignore_addresses = ignore_addresses.split(' ')
 
-    async def _core_broadcaster_loop(self):
+    async def _core_broadcaster_loop(self, udp_sock):
         while True:
             try:
-                bytes_received, address = await self.udp_sock.recvfrom(4096)
+                bytes_received, address = await udp_sock.recvfrom(4096)
             except ConnectionResetError:
                 self.log.exception('UDP server connection reset')
                 await self.async_layer.library.sleep(0.1)
@@ -412,7 +414,8 @@ class Context:
             else:
                 bytes_to_send = self.broadcaster.send(*search_replies)
 
-            await self.udp_sock.sendto(bytes_to_send, addr)
+            for udp_sock in self.udp_socks.values():
+                await udp_sock.sendto(bytes_to_send, addr)
 
     async def subscription_queue_loop(self):
         while True:
@@ -446,15 +449,15 @@ class Context:
         addresses = get_beacon_address_list()
 
         while True:
-            if self.udp_sock is None:
+            if self.beacon_sock is None:
                 await self.async_layer.library.sleep(.1)
                 continue
             beacon = ca.RsrvIsUpResponse(13, self.port, self.beacon_count,
-                                         self.host)
+                                         self.interfaces[0])  # TODO which one?
             bytes_to_send = self.broadcaster.send(beacon)
             for addr_port in addresses:
                 try:
-                    await self.udp_sock.sendto(bytes_to_send, addr_port)
+                    await self.beacon_sock.sendto(bytes_to_send, addr_port)
                 except IOError:
                     self.log.exception(
                         "Failed to send beacon to %r. Try setting "
