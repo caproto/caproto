@@ -18,6 +18,18 @@ from ._utils import CaprotoError
 from ._commands import parse_metadata
 from ._backend import backend
 
+__all__ = ('Forbidden', 'ConversionError', 'ConversionDirection',
+           'ChannelAlarm',
+           'ChannelData',
+           'ChannelEnum',
+           'ChannelNumeric',
+           'ChannelDouble',
+           'ChannelByte',
+           'ChannelChar',
+           'ChannelString',
+           'ChannelInteger',
+           )
+
 
 class Forbidden(CaprotoError):
     ...

@@ -4,6 +4,9 @@ from enum import IntEnum
 from collections import namedtuple
 
 
+__all__ = ('CAStatusCode', 'CASeverity', 'eca_value_to_status')
+
+
 CAStatusCode = namedtuple('CAStatusCode',
                           'name code code_with_severity severity success '
                           'defunct description')
