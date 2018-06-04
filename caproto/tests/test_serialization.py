@@ -3,6 +3,9 @@ import copy
 import ctypes
 
 import caproto as ca
+from caproto._dbr import DBR_LONG, DBR_TIME_DOUBLE, TimeStamp
+from caproto._commands import read_datagram, bytelen, Message, bytelen
+from caproto._headers import MessageHeader, ExtendedMessageHeader
 import inspect
 import pytest
 from .conftest import assert_array_equal, assert_array_almost_equal
@@ -21,7 +24,7 @@ parameter_values = {
     'beacon_id': [3],
     'cid': [2],
     'data_count': [1],
-    'data_type': [ca.DBR_LONG.DBR_ID],
+    'data_type': [DBR_LONG.DBR_ID],
     'error_message': ['error msg'],
     'header': [9],
     'high': [27],
@@ -31,7 +34,7 @@ parameter_values = {
     'metadata': [None],
     'name': ['name'],
     'original_request': [ca.CreateChanRequest('test', 0, 1)],
-    'payload': [ca.DBR_LONG(5)],
+    'payload': [DBR_LONG(5)],
     'port': [4321],
     'priority': [0],
     'server_port': [1234],
@@ -45,7 +48,7 @@ parameter_values = {
     'version': [13],
 }
 
-all_commands = set(ca._commands._commands) - set([ca.Message])
+all_commands = set(ca._commands._commands) - set([Message])
 
 
 def _np_hack(buf):
@@ -80,7 +83,7 @@ def test_serialize(cmd):
     print('    ', inst.header.payload_size)
     print('    dt ', inst.header.data_type)
 
-    wire_inst = ca.read_datagram(bytes(inst), ('addr', 0), role)[0]
+    wire_inst = read_datagram(bytes(inst), ('addr', 0), role)[0]
     print('wire', bytes(wire_inst))
     print('    ', wire_inst)
     print('    ', bytes(wire_inst.header))
@@ -151,9 +154,9 @@ payloads = [
     (ca.ChannelType.DOUBLE, 3, bytes(double_arr), None),
 
     (ca.ChannelType.TIME_DOUBLE, 1, (7,),
-     ca.DBR_TIME_DOUBLE(1, 0, ca.TimeStamp(3, 5))),
-    (ca.ChannelType.TIME_DOUBLE, 1, (7,), (1, 0, ca.TimeStamp(3, 5))),
-    (ca.ChannelType.TIME_DOUBLE, 2, (7, 3.4), (1, 0, ca.TimeStamp(3, 5))),
+     DBR_TIME_DOUBLE(1, 0, TimeStamp(3, 5))),
+    (ca.ChannelType.TIME_DOUBLE, 1, (7,), (1, 0, TimeStamp(3, 5))),
+    (ca.ChannelType.TIME_DOUBLE, 2, (7, 3.4), (1, 0, TimeStamp(3, 5))),
 
     (ca.ChannelType.STRING, 1, b'abc'.ljust(40, b'\x00'), None),
     (ca.ChannelType.STRING, 3, 3 * b'abc'.ljust(40, b'\x00'), None),
@@ -284,17 +287,17 @@ def test_extended():
     req = ca.ReadNotifyRequest(data_type=5, data_count=1000000, sid=0, ioid=0)
     assert req.header.data_count == 1000000
     assert req.data_count == 1000000
-    assert isinstance(req.header, ca.ExtendedMessageHeader)
+    assert isinstance(req.header, ExtendedMessageHeader)
 
 
 def test_bytelen():
     with pytest.raises(ca.CaprotoNotImplementedError):
-        ca.bytelen([1, 2, 3])
-    assert ca.bytelen(b'abc') == 3
-    assert ca.bytelen(bytearray(b'abc')) == 3
-    assert ca.bytelen(array.array('d', [1, 2, 3])) == 3 * 8
-    assert ca.bytelen(memoryview(b'abc')) == 3
-    assert ca.bytelen(ctypes.c_uint(1)) == 4
+        bytelen([1, 2, 3])
+    assert bytelen(b'abc') == 3
+    assert bytelen(bytearray(b'abc')) == 3
+    assert bytelen(array.array('d', [1, 2, 3])) == 3 * 8
+    assert bytelen(memoryview(b'abc')) == 3
+    assert bytelen(ctypes.c_uint(1)) == 4
 
     try:
         import numpy
@@ -302,7 +305,7 @@ def test_bytelen():
         pass
         # skip this one assert
     else:
-        assert ca.bytelen(numpy.array([1, 2, 3], 'f8')) == 3 * 8
+        assert bytelen(numpy.array([1, 2, 3], 'f8')) == 3 * 8
 
 
 def test_overlong_strings():
@@ -332,7 +335,7 @@ all_headers = [header_name
 
 @pytest.mark.parametrize('header_name', all_headers)
 def test_extended_headers_smoke(header_name):
-    header = getattr(ca, header_name)
+    header = getattr(ca._headers, header_name)
     sig = inspect.signature(header)
 
     regular_bind_args = {}
@@ -348,6 +351,6 @@ def test_extended_headers_smoke(header_name):
     ext_hdr = header(*ext_args.args, **ext_args.kwargs)
 
     print(reg_hdr)
-    assert isinstance(reg_hdr, ca.MessageHeader)
+    assert isinstance(reg_hdr, MessageHeader)
     print(ext_hdr)
-    assert isinstance(ext_hdr, ca.ExtendedMessageHeader)
+    assert isinstance(ext_hdr, ExtendedMessageHeader)

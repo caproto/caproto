@@ -16,7 +16,19 @@ from ._dbr import (DBR_TYPES, ChannelType, native_type, native_float_types,
 
 from ._utils import CaprotoError
 from ._commands import parse_metadata
-from ._backend import backend_ns as backend
+from ._backend import backend
+
+__all__ = ('Forbidden', 'ConversionError', 'ConversionDirection',
+           'ChannelAlarm',
+           'ChannelData',
+           'ChannelEnum',
+           'ChannelNumeric',
+           'ChannelDouble',
+           'ChannelByte',
+           'ChannelChar',
+           'ChannelString',
+           'ChannelInteger',
+           )
 
 
 class Forbidden(CaprotoError):

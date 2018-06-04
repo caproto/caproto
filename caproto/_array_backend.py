@@ -7,6 +7,7 @@ from ._dbr import (ChannelType, DbrStringArray,
                    native_types, DBR_TYPES)
 
 
+__all__ = ('Array',)
 default_endian = ('>' if sys.byteorder == 'big'
                   else '<')
 
