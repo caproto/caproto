@@ -79,10 +79,12 @@ script:
     then
       pip uninstall --yes numpy
     fi
+
   - pip install git+https://github.com/klauer/catvs.git@py3k
 
   # give us an early warning of flake8 failure
   - flake8 . || echo "flake8 FAILED!"
+  - caproto-repeater &
   - coverage run --parallel-mode run_tests.py -k 'not bench' -n $(expr 1 + $(nproc)) --benchmark-disable --dist=loadfile --timeout=100 -v
   - coverage combine --append
 
