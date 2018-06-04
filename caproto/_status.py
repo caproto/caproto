@@ -300,5 +300,5 @@ def ensure_eca_value(status):
         return status
     if isinstance(status, CAStatusCode):
         return status.code_with_severity
-    if hasattr(status, 'value') and isinstance(status.value, CAStatusCode):
+    if isinstance(status, CAStatus):
         return status.value.code_with_severity
