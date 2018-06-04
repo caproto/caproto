@@ -1,6 +1,7 @@
 import os
 import pytest
 import caproto as ca
+from caproto._headers import MessageHeader
 
 
 def test_broadcast_address_list_from_interfaces():
@@ -37,14 +38,14 @@ _incr_sends = [
      (b'def', b'ghi')
      ],
 
-    [(ca.MessageHeader(0, 1, 2, 3, 4, 5), b'def'),
+    [(MessageHeader(0, 1, 2, 3, 4, 5), b'def'),
      0,
-     (bytes(ca.MessageHeader(0, 1, 2, 3, 4, 5)), b'def'),
+     (bytes(MessageHeader(0, 1, 2, 3, 4, 5)), b'def'),
      ],
 
-    [(ca.MessageHeader(0, 1, 2, 3, 4, 5), b'def'),
+    [(MessageHeader(0, 1, 2, 3, 4, 5), b'def'),
      5,
-     (bytes(ca.MessageHeader(0, 1, 2, 3, 4, 5))[5:], b'def'),
+     (bytes(MessageHeader(0, 1, 2, 3, 4, 5))[5:], b'def'),
      ],
 ]
 

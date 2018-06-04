@@ -2,8 +2,10 @@ import ctypes
 import pytest
 
 import caproto as ca
+from caproto._constants import (MAX_STRING_SIZE, MAX_UNITS_SIZE,
+                                MAX_ENUM_STATES, MAX_ENUM_STRING_SIZE)
 
-string_t = ca.MAX_STRING_SIZE * ctypes.c_char
+string_t = MAX_STRING_SIZE * ctypes.c_char
 char_t = ctypes.c_char
 short_t = ctypes.c_int16
 ushort_t = ctypes.c_uint16
@@ -223,7 +225,7 @@ class DBR_GR_INT(ctypes.BigEndianStructure):
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
-        ('units', ca.MAX_UNITS_SIZE * char_t),
+        ('units', MAX_UNITS_SIZE * char_t),
         ('upper_disp_limit', short_t),
         ('lower_disp_limit', short_t),
         ('upper_alarm_limit', short_t),
@@ -241,7 +243,7 @@ class DBR_GR_FLOAT(ctypes.BigEndianStructure):
         ('severity', short_t),
         ('precision', short_t),
         ('RISC_pad0', short_t),
-        ('units', ca.MAX_UNITS_SIZE * char_t),
+        ('units', MAX_UNITS_SIZE * char_t),
         ('upper_disp_limit', float_t),
         ('lower_disp_limit', float_t),
         ('upper_alarm_limit', float_t),
@@ -258,7 +260,7 @@ class DBR_GR_ENUM(ctypes.BigEndianStructure):
         ('status', short_t),
         ('severity', short_t),
         ('no_str', short_t),  # number of strings
-        ('strs', ca.MAX_ENUM_STATES * (ca.MAX_ENUM_STRING_SIZE * char_t)),
+        ('strs', MAX_ENUM_STATES * (MAX_ENUM_STRING_SIZE * char_t)),
     ]
 
 
@@ -268,7 +270,7 @@ class DBR_GR_CHAR(ctypes.BigEndianStructure):
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
-        ('units', ca.MAX_UNITS_SIZE * char_t),
+        ('units', MAX_UNITS_SIZE * char_t),
         ('upper_disp_limit', char_t),
         ('lower_disp_limit', char_t),
         ('upper_alarm_limit', char_t),
@@ -285,7 +287,7 @@ class DBR_GR_LONG(ctypes.BigEndianStructure):
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
-        ('units', ca.MAX_UNITS_SIZE * char_t),
+        ('units', MAX_UNITS_SIZE * char_t),
         ('upper_disp_limit', long_t),
         ('lower_disp_limit', long_t),
         ('upper_alarm_limit', long_t),
@@ -303,7 +305,7 @@ class DBR_GR_DOUBLE(ctypes.BigEndianStructure):
         ('severity', short_t),
         ('precision', short_t),
         ('RISC_pad0', short_t),
-        ('units', ca.MAX_UNITS_SIZE * char_t),
+        ('units', MAX_UNITS_SIZE * char_t),
         ('upper_disp_limit', double_t),
         ('lower_disp_limit', double_t),
         ('upper_alarm_limit', double_t),
@@ -319,7 +321,7 @@ class DBR_CTRL_INT(ctypes.BigEndianStructure):
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
-        ('units', ca.MAX_UNITS_SIZE * char_t),
+        ('units', MAX_UNITS_SIZE * char_t),
         ('upper_disp_limit', short_t),
         ('lower_disp_limit', short_t),
         ('upper_alarm_limit', short_t),
@@ -339,7 +341,7 @@ class DBR_CTRL_FLOAT(ctypes.BigEndianStructure):
         ('severity', short_t),
         ('precision', short_t),
         ('RISC_pad0', short_t),
-        ('units', ca.MAX_UNITS_SIZE * char_t),
+        ('units', MAX_UNITS_SIZE * char_t),
         ('upper_disp_limit', float_t),
         ('lower_disp_limit', float_t),
         ('upper_alarm_limit', float_t),
@@ -358,7 +360,7 @@ class DBR_CTRL_ENUM(ctypes.BigEndianStructure):
         ('status', short_t),
         ('severity', short_t),
         ('no_str', short_t),  # number of strings
-        ('strs', ca.MAX_ENUM_STATES * (ca.MAX_ENUM_STRING_SIZE * char_t)),
+        ('strs', MAX_ENUM_STATES * (MAX_ENUM_STRING_SIZE * char_t)),
     ]
 
 
@@ -368,7 +370,7 @@ class DBR_CTRL_CHAR(ctypes.BigEndianStructure):
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
-        ('units', ca.MAX_UNITS_SIZE * char_t),
+        ('units', MAX_UNITS_SIZE * char_t),
         ('upper_disp_limit', char_t),
         ('lower_disp_limit', char_t),
         ('upper_alarm_limit', char_t),
@@ -387,7 +389,7 @@ class DBR_CTRL_LONG(ctypes.BigEndianStructure):
     _fields_ = [
         ('status', short_t),
         ('severity', short_t),
-        ('units', ca.MAX_UNITS_SIZE * char_t),
+        ('units', MAX_UNITS_SIZE * char_t),
         ('upper_disp_limit', long_t),
         ('lower_disp_limit', long_t),
         ('upper_alarm_limit', long_t),
@@ -407,7 +409,7 @@ class DBR_CTRL_DOUBLE(ctypes.BigEndianStructure):
         ('severity', short_t),
         ('precision', short_t),
         ('RISC_pad0', short_t),
-        ('units', ca.MAX_UNITS_SIZE * char_t),
+        ('units', MAX_UNITS_SIZE * char_t),
         ('upper_disp_limit', double_t),
         ('lower_disp_limit', double_t),
         ('upper_alarm_limit', double_t),
@@ -447,7 +449,7 @@ class DBR_STSACK_STRING(ctypes.BigEndianStructure):
     ]
 
 
-dbr_types = [(getattr(ca, attr), globals()[attr])
+dbr_types = [(getattr(ca._dbr, attr), globals()[attr])
              for attr in sorted(globals())
              if attr.startswith('DBR_') and
              issubclass(globals()[attr], ctypes.BigEndianStructure)]

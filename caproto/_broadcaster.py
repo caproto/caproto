@@ -13,6 +13,9 @@ from ._commands import (RepeaterConfirmResponse, RepeaterRegisterRequest,
                         )
 
 
+__all__ = ('Broadcaster',)
+
+
 class Broadcaster:
     """
     An object encapsulating the state of one CA UDP connection.

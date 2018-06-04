@@ -11,9 +11,9 @@
 # A command class may be instantiated in one of two ways:
 # 1. For sending: by passing user-friendly inputs to ``__init__``.
 # 2. For receiving: by passing a datagram or bytestream to the functions
-#    ``read_datagram`` and `read_bytestream`` respectively. These identify the
-#    command type and instantiate the appropriate class from bytes using
-#    ``__new__``.
+#    ``read_datagram`` and `read_from _bytestream`` respectively. These
+#    identify the command type and instantiate the appropriate class from bytes
+#    using ``__new__``.
 #
 # (1) is typically done by the user. (2) is typically done by calling the
 # ``next_command`` method of a :class:`Broadcaster` or a
@@ -51,12 +51,35 @@ from ._dbr import (DBR_INT, DBR_TYPES, ChannelType, float_t, short_t, ushort_t,
                    native_type, special_types, MAX_STRING_SIZE, AccessRights)
 
 from . import _dbr as dbr
-from ._backend import backend_ns as backend
-from ._status import eca_value_to_status
+from ._backend import backend
+from ._status import eca_value_to_status, ensure_eca_value
 from ._utils import (CLIENT, NEED_DATA, REQUEST, RESPONSE, SERVER,
                      CaprotoTypeError, CaprotoValueError,
                      CaprotoNotImplementedError,
                      ensure_bytes)
+
+
+__all__ = ('AccessRightsResponse', 'ClearChannelRequest',
+           'ClearChannelResponse', 'ClientNameRequest',
+           'CreateChFailResponse', 'CreateChanRequest',
+           'CreateChanResponse', 'EchoRequest',
+           'EchoResponse', 'ErrorResponse',
+           'EventAddRequest', 'EventAddRequestPayload', 'EventAddResponse',
+           'EventCancelRequest', 'EventCancelResponse',
+           'EventsOffRequest', 'EventsOnRequest',
+           'get_command_class', 'HostNameRequest',
+           'ipv4_from_int32', 'ipv4_to_int32',
+           'NotFoundResponse',
+           'ReadNotifyRequest', 'ReadNotifyResponse',
+           'ReadRequest', 'ReadResponse',
+           'ReadSyncRequest',
+           'RepeaterConfirmResponse',
+           'RepeaterRegisterRequest', 'RsrvIsUpResponse',
+           'SearchRequest', 'SearchResponse',
+           'ServerDisconnResponse', 'VersionRequest',
+           'VersionResponse', 'WriteNotifyRequest',
+           'WriteNotifyResponse', 'WriteRequest',
+           )
 
 
 _MessageHeaderSize = ctypes.sizeof(MessageHeader)
@@ -927,6 +950,7 @@ class EventAddResponse(Message):
     def __init__(self, data, data_type, data_count,
                  status_code, subscriptionid, *, metadata=None):
         size, *buffers = data_payload(data, metadata, data_type, data_count)
+        status_code = ensure_eca_value(status_code)
         header = EventAddResponseHeader(size, data_type, data_count,
                                         status_code, subscriptionid)
         super().__init__(header, *buffers)
@@ -1175,6 +1199,7 @@ class ErrorResponse(Message):
         size = len(req_bytes) + msg_size
         payload = req_bytes + msg_payload
 
+        status_code = ensure_eca_value(status_code)
         header = ErrorResponseHeader(size, cid, status_code)
         super().__init__(header, b'', payload)
 
@@ -1326,6 +1351,7 @@ class ReadNotifyResponse(Message):
     def __init__(self, data, data_type, data_count, status, ioid, *,
                  metadata=None):
         size, *buffers = data_payload(data, metadata, data_type, data_count)
+        status = ensure_eca_value(status)
         header = ReadNotifyResponseHeader(size, data_type, data_count, status,
                                           ioid)
         super().__init__(header, *buffers)
@@ -1524,6 +1550,7 @@ class WriteNotifyResponse(Message):
     HAS_PAYLOAD = False
 
     def __init__(self, data_type, data_count, status, ioid):
+        status = ensure_eca_value(status)
         header = WriteNotifyResponseHeader(data_type, data_count, status, ioid)
         super().__init__(header)
 

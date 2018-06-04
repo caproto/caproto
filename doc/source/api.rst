@@ -458,3 +458,16 @@ Each of the other loggers is more targeted. Here are their names:
   requests are still awaiting replies
 * ``'caproto.ctx.<id>'`` -- narrows to one specific Context instance ``ctx``
   where ``<id>`` ``str(id(ctx))``
+
+At import time, caproto adds a logging stream handler
+``caproto.color_log_handler`` to the ``'caproto'`` logger, which uses ANSI
+color codes to color-code the log messages by log level.
+
+To conveniently switch to a version without the colors:
+
+.. code-block::
+
+    caproto.color_logs(False)  # color_log_handler -> plain_log_handler
+
+You can, of course, configure the handlers manually in the standard fashion
+supported by Python, using ``logging.getLogger('caproto').handlers``.
