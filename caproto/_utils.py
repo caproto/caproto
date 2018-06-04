@@ -28,6 +28,52 @@ except ImportError:
     netifaces = None
 
 
+__all__ = (
+    'make_sentinel',
+    'get_environment_variables',
+    'get_address_list',
+    'get_server_address_list',
+    'get_beacon_address_list',
+    'get_netifaces_addresses',
+    'broadcast_address_list_from_interfaces',
+    'ensure_bytes',
+    'find_available_tcp_port',
+    'bcast_socket',
+    'buffer_list_slice',
+    'incremental_buffer_list_slice',
+    'send_all',
+    'async_send_all',
+    'spawn_daemon',
+    'parse_record_field',
+    'evaluate_channel_filter',
+    'batch_requests',
+    'CaprotoError',
+    'ProtocolError',
+    'LocalProtocolError',
+    'RemoteProtocolError',
+    'CaprotoKeyError',
+    'CaprotoNotImplementedError',
+    'CaprotoValueError',
+    'CaprotoTypeError',
+    'CaprotoRuntimeError',
+    'ErrorResponseReceived',
+    'SendAllRetry',
+    'RecordModifiers',
+    'RecordModifier',
+    'RecordAndField',
+    'ThreadsafeCounter',
+    'CLIENT', 'SERVER',  # roles
+    'RESPONSE', 'REQUEST',  # directions
+    'NEED_DATA',  # special sentinel for read_* functions
+    # and states
+    'SEND_SEARCH_REQUEST', 'AWAIT_SEARCH_RESPONSE',
+    'SEND_SEARCH_RESPONSE', 'SEND_VERSION_REQUEST',
+    'AWAIT_VERSION_RESPONSE', 'SEND_VERSION_RESPONSE',
+    'SEND_CREATE_CHAN_REQUEST', 'AWAIT_CREATE_CHAN_RESPONSE',
+    'SEND_CREATE_CHAN_RESPONSE', 'CONNECTED', 'MUST_CLOSE', 'CLOSED',
+    'IDLE', 'FAILED', 'DISCONNECTED')
+
+
 # This module defines sentinels used in the state machine and elsewhere, such
 # as NEED_DATA, CLIENT, SERVER, AWAITING_SEARCH_RESPONSE, etc.
 # It also defines some custom Exceptions. That is all.
