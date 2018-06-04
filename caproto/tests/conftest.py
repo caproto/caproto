@@ -456,25 +456,8 @@ def server(request):
     def curio_runner(pvdb, client, *, threaded_client=False):
         async def server_main():
             try:
-                ex = None
-                for j in range(5):
-                    port = ca.find_available_tcp_port(
-                        host=SERVER_HOST,
-                        starting_port=random.randint(49152, 65535))
-                    ctx = caproto.curio.server.Context(
-                        SERVER_HOST, port, pvdb)
-                    print(f'Server will be on (try {j}): {(SERVER_HOST, port)}')
-
-                    try:
-                        await ctx.run()
-                    except OSError as ex:
-                        # if we get an OS error, likely due to
-                        # port already is use, try again
-                        continue
-                    else:
-                        break
-                else:
-                    raise ex
+                ctx = caproto.curio.server.Context(pvdb)
+                await ctx.run()
             except caproto.curio.server.ServerExit:
                 print('Server exited normally')
             except Exception as ex:
