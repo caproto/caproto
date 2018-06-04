@@ -58,12 +58,13 @@ from ._utils import (CLIENT, NEED_DATA, REQUEST, RESPONSE, SERVER,
                      CaprotoNotImplementedError,
                      ensure_bytes)
 
+
 __all__ = ('AccessRightsResponse', 'ClearChannelRequest',
            'ClearChannelResponse', 'ClientNameRequest',
            'CreateChFailResponse', 'CreateChanRequest',
            'CreateChanResponse', 'EchoRequest',
            'EchoResponse', 'ErrorResponse',
-           'EventAddRequest', 'EventAddResponse',
+           'EventAddRequest', 'EventAddRequestPayload', 'EventAddResponse',
            'EventCancelRequest', 'EventCancelResponse',
            'EventsOffRequest', 'EventsOnRequest',
            'HostNameRequest', 'NotFoundResponse',
