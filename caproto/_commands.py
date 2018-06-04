@@ -11,9 +11,9 @@
 # A command class may be instantiated in one of two ways:
 # 1. For sending: by passing user-friendly inputs to ``__init__``.
 # 2. For receiving: by passing a datagram or bytestream to the functions
-#    ``read_datagram`` and `read_bytestream`` respectively. These identify the
-#    command type and instantiate the appropriate class from bytes using
-#    ``__new__``.
+#    ``read_datagram`` and `read_from _bytestream`` respectively. These
+#    identify the command type and instantiate the appropriate class from bytes
+#    using ``__new__``.
 #
 # (1) is typically done by the user. (2) is typically done by calling the
 # ``next_command`` method of a :class:`Broadcaster` or a
@@ -67,7 +67,9 @@ __all__ = ('AccessRightsResponse', 'ClearChannelRequest',
            'EventAddRequest', 'EventAddRequestPayload', 'EventAddResponse',
            'EventCancelRequest', 'EventCancelResponse',
            'EventsOffRequest', 'EventsOnRequest',
-           'HostNameRequest', 'NotFoundResponse',
+           'get_command_class', 'HostNameRequest',
+           'ipv4_from_int32', 'ipv4_to_int32',
+           'NotFoundResponse',
            'ReadNotifyRequest', 'ReadNotifyResponse',
            'ReadRequest', 'ReadResponse',
            'ReadSyncRequest',
