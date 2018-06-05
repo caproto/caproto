@@ -479,6 +479,32 @@ class Context:
                 if hasattr(instance, 'server_startup') and
                 instance.server_startup is not None}
 
+    def _bind_tcp_sockets_with_consistent_port_number(self, make_socket):
+        # Find a random port number that is free on all self.interfaces,
+        # and get a bound TCP socket with that port number on each
+        # interface. The argument `make_socket` is expected to be a
+        # synchronous callable with the signature
+        # `make_socket(interface, port)` that does whatever
+        # library-specific incantation is necessary to return a bound
+        # socket or raise an IOError.
+        tcp_sockets = {}  # maps interface to bound socket
+        stashed_ex = None
+        for port in ca.random_ports(100):
+            try:
+                for interface in self.interfaces:
+                    s = make_socket(interface, port)
+                    tcp_sockets[interface] = s
+            except IOError as ex:
+                stashed_ex = ex
+                for s in tcp_sockets.values():
+                    s.close()
+                tcp_sockets.clear()
+            else:
+                break
+        else:
+            raise RuntimeError('No available ports and/or bind failed') from stashed_ex
+        return port, tcp_sockets
+
     async def tcp_handler(self, client, addr):
         '''Handler for each new TCP client to the server'''
         self.log.info('Connected to new client at %s:%d.', *addr)

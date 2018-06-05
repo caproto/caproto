@@ -78,7 +78,7 @@ class Context(_Context):
             try:
                 udp_sock.bind((interface, ca.EPICS_CA1_PORT))
             except Exception:
-                self.log.exception('[server] udp bind failure on interface %r',
+                self.log.exception('UDP bind failure on interface %r',
                                    interface)
                 raise
             self.udp_socks[interface] = udp_sock
@@ -95,33 +95,16 @@ class Context(_Context):
         try:
             # TODO Should this interface be configurable?
             self.beacon_sock.bind(('0.0.0.0', 0))
-            # Find a random port number that is free on all self.interfaces,
-            # and get a bound TCP socket with that port number on each
-            # interface.
-            tcp_sockets = {}  # maps interface to bound socket
-            stashed_ex = None
-            for port in ca.random_ports(100):
-                try:
-                    for interface in self.interfaces:
-                        self.log.info("Listening on %s:%d", interface, port)
-                        s = curio.network.tcp_server_socket(interface, port)
-                        tcp_sockets[interface] = s
-                except IOError as ex:
-                    stashed_ex = ex
-                    for s in tcp_sockets.values():
-                        s.close()
-                    tcp_sockets.clear()
-                else:
-                    self.port = port
-                    break
-            else:
-                raise RuntimeError('No available ports and/or bind failed') from stashed_ex
+            port, tcp_sockets = self._bind_tcp_sockets_with_consistent_port_number(
+                curio.network.tcp_server_socket)
+            self.port = port
             async with curio.TaskGroup() as g:
                 for interface, sock in tcp_sockets.items():
                     # Use run_server instead of tcp_server so we can hand in a
                     # socket that is already bound, avoiding a race between the
                     # moment we check for port availability and the moment the
                     # TCP server binds.
+                    self.log.info("Listening on %s:%d", interface, self.port)
                     await g.spawn(curio.network.run_server,
                                   sock, self.tcp_handler)
                 await g.spawn(self.broadcaster_udp_server_loop)

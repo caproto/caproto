@@ -11,7 +11,6 @@ import threading
 import time
 import uuid
 import trio
-import random
 
 from types import SimpleNamespace
 

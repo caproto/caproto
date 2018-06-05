@@ -92,7 +92,7 @@ class Context(_Context):
             try:
                 await udp_sock.bind((interface, ca.EPICS_CA1_PORT))
             except Exception:
-                self.log.exception('[server] udp bind failure on interface %r',
+                self.log.exception('UDP bind failure on interface %r',
                                    interface)
                 raise
             self.udp_socks[interface] = udp_sock
@@ -133,6 +133,11 @@ class Context(_Context):
             async with trio.open_nursery() as self.nursery:
                 # TODO Should this interface be configurable?
                 await self.beacon_sock.bind(('0.0.0.0', 0))
+
+                # This reproduces the common with
+                # self._bind_tcp_sockets_with_consistent_port_number because
+                # trio makes socket binding async where asyncio and curio make
+                # it synchronous.
                 # Find a random port number that is free on all interfaces,
                 # and get a bound TCP socket with that port number on each
                 # interface.
@@ -153,10 +158,12 @@ class Context(_Context):
                         break
                 else:
                     raise RuntimeError('No available ports and/or bind failed') from stashed_ex
+                # (End of reproduced code)
+
                 for interface, listen_sock in tcp_sockets.items():
                     self.log.info("Listening on %s:%d", interface, self.port)
                     await self.nursery.start(self.server_accept_loop,
-                                            listen_sock)
+                                             listen_sock)
                 await self.nursery.start(self.broadcaster_udp_server_loop)
                 await self.nursery.start(self.broadcaster_queue_loop)
                 await self.nursery.start(self.subscription_queue_loop)

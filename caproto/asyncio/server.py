@@ -95,26 +95,16 @@ class Context(_Context):
     async def run(self, *, log_pv_names=False):
         'Start the server'
         self.log.info('Server starting up...')
-        tcp_sockets = {}
-        stashed_ex = None
-        for port in ca.random_ports(100):
-            try:
-                for interface in self.interfaces:
-                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-                    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                    s.setblocking(False)
-                    s.bind((interface, port))
-                    tcp_sockets[interface] = s
-            except IOError as ex:
-                stashed_ex = ex
-                for s in tcp_sockets.values():
-                    s.close()
-                tcp_sockets.clear()
-            else:
-                self.port = port
-                break
-        else:
-            raise RuntimeError('No available ports and/or bind failed') from stashed_ex
+
+        def make_socket(interface, port):
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s.setblocking(False)
+            s.bind((interface, port))
+            return s
+        port, tcp_sockets = self._bind_tcp_sockets_with_consistent_port_number(
+            make_socket)
+        self.port = port
         tasks = []
         for interface, sock in tcp_sockets.items():
             self.log.info("Listening on %s:%d", interface, self.port)
@@ -155,8 +145,8 @@ class Context(_Context):
             try:
                 udp_sock.bind((interface, ca.EPICS_CA1_PORT))
             except Exception:
-                self.log.exception('[server] udp bind failure on interface %r',
-                                interface)
+                self.log.exception('UDP bind failure on interface %r',
+                                   interface)
                 raise
 
             transport, self.p = await self.loop.create_datagram_endpoint(
