@@ -1,4 +1,6 @@
 import logging
+import logging.handlers
+import queue
 import sys
 try:
     import colorama
@@ -163,13 +165,21 @@ color_log_format = ("%(color)s[%(levelname)1.1s %(asctime)s.%(msecs)03d "
                     "%(module)s:%(lineno)d]%(end_color)s %(message)s")
 log_date_format = "%H:%M:%S"
 logger = logging.getLogger('caproto')
-color_log_handler = logging.StreamHandler(sys.stdout)
-color_log_handler.setFormatter(
+_color_log_handler = logging.StreamHandler(sys.stdout)
+_plain_log_handler = logging.StreamHandler(sys.stdout)
+_color_log_handler.setFormatter(
     LogFormatter(color_log_format, datefmt=log_date_format))
-plain_log_handler = logging.StreamHandler(sys.stdout)
-plain_log_handler.setFormatter(
+_plain_log_handler.setFormatter(
     logging.Formatter(plain_log_format, datefmt=log_date_format))
 
+# https://docs.python.org/3/howto/logging-cookbook.html#dealing-with-handlers-that-block
+color_message_queue = queue.Queue()
+color_log_handler = logging.handlers.QueueHandler(color_message_queue)
+logging.handlers.QueueListener(color_message_queue, _color_log_handler).start()
+
+plain_message_queue = queue.Queue()
+plain_log_handler = logging.handlers.QueueHandler(plain_message_queue)
+logging.handlers.QueueListener(plain_message_queue, _plain_log_handler).start()
 
 def color_logs(color):
     """
