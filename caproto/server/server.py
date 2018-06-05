@@ -979,7 +979,7 @@ def ioc_arg_parser(*, desc, default_prefix, argv=None, macros=None):
     parser.add_argument('--interfaces', default=default_intf,
                         nargs='+',
                         help=(f"Interfaces to listen on. Default is "
-                              f"{default_msg}.  Multiple entires can be "
+                              f"{default_msg}.  Multiple entries can be "
                               f"given; separate entries by spaces."))
     for name, default_value in macros.items():
         if default_value is None:
