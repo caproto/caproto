@@ -202,7 +202,6 @@ class Context(_Context):
 async def start_server(pvdb, *, interfaces=None, log_pv_names=False):
     '''Start an asyncio server with a given PV database'''
     ctx = Context(pvdb, interfaces)
-    # ctx.log.info('Server starting up on %s:%d', ctx.host, ctx.port)
     ret = await ctx.run(log_pv_names=log_pv_names)
     return ret
 
