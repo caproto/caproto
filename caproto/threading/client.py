@@ -1497,9 +1497,9 @@ class CallbackHandler:
         self._callback_lock = threading.RLock()
 
     def add_callback(self, func):
-        # TODO thread safety
-        cb_id = self._callback_id
-        self._callback_id += 1
+        with self._callback_lock:
+            cb_id = self._callback_id
+            self._callback_id += 1
 
         def removed(_):
             self.remove_callback(cb_id)

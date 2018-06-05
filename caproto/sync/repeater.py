@@ -21,6 +21,8 @@
 
 import logging
 import socket
+import subprocess
+import sys
 import time
 
 import caproto
@@ -199,8 +201,28 @@ def run(host='0.0.0.0'):
         logger.info('Keyboard interrupt; exiting.')
 
 
-if __name__ == '__main__':
-    # Support usage python -m caproto.sync.repeater
-    # HACK: This is a runtime circular import. Need organization of cli funcs.
-    from .client import repeater_cli
-    repeater_cli()
+def repeater_args(args):
+    # Taking argparse args from caproto-get, caproto-put, or caproto-monitor,
+    # extract relevant list of command-line argument to pass to
+    # caproto-repeater.
+    arg_list = []
+    if args.vvv:
+        arg_list.append('-vvv')
+    elif args.verbose:
+        arg_list.append('--verbose')
+    else:
+        arg_list.append('--quiet')
+    if args.no_color:
+        arg_list.append('--no-color')
+    return arg_list
+
+
+def spawn_repeater(args):
+    # Spawn repeater with a verbosity level matching the current logger.
+    logger.debug('Spawning caproto-repeater process....')
+    # TODO Check if socket is taken before spawning.
+    try:
+        subprocess.Popen(
+            [sys.executable, '-m', 'caproto.repeater'] + args, cwd="/")
+    except Exception:
+        logger.exception('Failed to spawn repeater.')

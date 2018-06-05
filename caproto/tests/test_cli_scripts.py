@@ -1,7 +1,8 @@
 import sys
 import pytest
 import subprocess
-from caproto.sync.client import get, put, monitor, parse_data_type
+from caproto.sync.client import read, write, subscribe, block
+from caproto.get import parse_data_type
 from caproto._dbr import ChannelType
 
 from .conftest import dump_process_output
@@ -17,13 +18,21 @@ def fix_arg_prefixes(ioc, args):
 
 
 @pytest.mark.parametrize('func,args,kwargs',
-                         [(get, ('__does_not_exist',), {}),
-                          (put, ('__does_not_exist', 5), {}),
-                          (monitor, ('__does_not_exist',),
-                           {'callback': escape})])
+                         [(read, ('__does_not_exist',), {}),
+                          (write, ('__does_not_exist', 5), {}),
+                          ])
 def test_timeout(func, args, kwargs):
     with pytest.raises(TimeoutError):
         func(*args, **kwargs)
+
+
+def test_subscribe_timeout():
+    with pytest.raises(TimeoutError):
+        sub = subscribe('__does_not_exit')
+        sub.block()
+    with pytest.raises(TimeoutError):
+        sub = subscribe('__does_not_exit')
+        block(sub)
 
 
 def _subprocess_communicate(process, command, timeout=10.0):
@@ -38,14 +47,25 @@ def _subprocess_communicate(process, command, timeout=10.0):
                           ]
                          )
 @pytest.mark.parametrize('func,args,kwargs',
-                         [(get, ('float',), {}),
-                          (put, ('float', 5), {}),
-                          (monitor, ('float',), {'callback': escape})
+                         [(read, ('float',), {}),
+                          (write, ('float', 5), {}),
                           ])
 def test_options(func, args, kwargs, more_kwargs, ioc):
     args = fix_arg_prefixes(ioc, args)
     kwargs.update(more_kwargs)
     func(*args, **kwargs)
+
+
+@pytest.mark.parametrize('more_kwargs,',
+                         [{'repeater': False},
+                          {'timeout': 3},
+                          ]
+                         )
+def test_subscribe_options(more_kwargs, ioc):
+    args = ('float',)
+    args = fix_arg_prefixes(ioc, args)
+    sub = subscribe(*args)
+    block(sub, duration=0.5, **more_kwargs)
 
 
 fmt1 = '{response.data[0]}'

@@ -229,7 +229,7 @@ def test_curio_server_example(prefix):
 def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
                        prefix, async_lib='curio'):
     from .conftest import run_example_ioc
-    from caproto.sync.client import get, put
+    from caproto.sync.client import read, write
     from caproto.server import PvpropertyReadOnlyData
     import subprocess
 
@@ -286,9 +286,9 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
             continue
 
         print(f'Writing {value} to {pv}')
-        put(pv, value)
+        write(pv, value)
 
-        value = get(pv)
+        value = read(pv)
         print(f'Read {pv} = {value}')
 
 
@@ -390,33 +390,33 @@ def test_mocking_records(request, prefix):
     run_example_ioc('caproto.ioc_examples.mocking_records', request=request,
                     args=['--prefix', prefix], pv_to_check=f'{prefix}A')
 
-    from caproto.sync.client import get, put
+    from caproto.sync.client import read, write
 
     # check that the alarm fields are linked
     b = f'{prefix}B'
     b_val = f'{prefix}B.VAL'
     b_stat = f'{prefix}B.STAT'
     b_severity = f'{prefix}B.SEVR'
-    put(b_val, 0)
-    assert list(get(b_val).data) == [0]
-    assert list(get(b_stat).data) == [b'NO_ALARM']
-    assert list(get(b_severity).data) == [b'NO_ALARM']
+    write(b_val, 0)
+    assert list(read(b_val).data) == [0]
+    assert list(read(b_stat).data) == [b'NO_ALARM']
+    assert list(read(b_severity).data) == [b'NO_ALARM']
 
     # write a special value that causes it to fail
     with pytest.raises(ca.ErrorResponseReceived):
-        put(b_val, 1)
+        write(b_val, 1)
 
     # status should be WRITE, MAJOR
-    assert list(get(b_val).data) == [0]
-    assert list(get(b_stat).data) == [b'WRITE']
-    assert list(get(b_severity).data) == [b'MAJOR']
+    assert list(read(b_val).data) == [0]
+    assert list(read(b_stat).data) == [b'WRITE']
+    assert list(read(b_severity).data) == [b'MAJOR']
 
     # now a field that's linked back to the precision metadata:
     b_precision = f'{prefix}B.PREC'
-    assert list(get(b_precision).data) == [3]
-    assert put(b_precision, 4)
-    assert list(get(b_precision).data) == [4]
+    assert list(read(b_precision).data) == [3]
+    assert write(b_precision, 4)
+    assert list(read(b_precision).data) == [4]
 
     # does writing to .PREC update the ChannelData metadata?
-    data = get(b, data_type=ca.ChannelType.CTRL_DOUBLE)
+    data = read(b, data_type=ca.ChannelType.CTRL_DOUBLE)
     assert data.metadata.precision == 4

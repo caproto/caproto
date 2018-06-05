@@ -1,42 +1,35 @@
 # This module contains a synchronous implementation of a Channel Access client
-# as three top-level functions: get, put, and monitor. They are comparatively
+# as three top-level functions: read, write, subscribe. They are comparatively
 # simple and naive, with no caching or concurrency, and therefore less
 # performant but more robust.
 
-# The module also includes variants intended for use at the command line
-# (get_cli, put_cli, monitor_cli) which layers argparse on top of the get, put
-# and monitor. These can be called directly from the shell using the scripts
-# caproto-get, caproto-put, and caproto-monitor, which are added to the PATH
-# when caproto is installed.
-
-# Additionally, there is repeater_cli and caproto-repeater, which spawns a
-# repeater in a detached subprocess.
-
-import argparse
 import ast
 from collections import Iterable
-from datetime import datetime
+import inspect
 import getpass
 import logging
 import os
-import time
 import selectors
 import socket
-import subprocess
+import threading  # just to make callback processing thread-safe
+import time
+import weakref
 
 import caproto as ca
 from .._dbr import (field_types, ChannelType, native_type, SubscriptionType)
 from .._utils import ErrorResponseReceived, CaprotoError
-from .repeater import run as run_repeater
+from .repeater import spawn_repeater
 
 
-__all__ = ['get', 'put', 'monitor']
-
+__all__ = ['read', 'write', 'subscribe', 'block']
+logger = logging.getLogger('caproto')
 
 CA_SERVER_PORT = 5064  # just a default
 
 # Make a dict to hold our tcp sockets.
 sockets = {}
+
+poison_pill = False
 
 
 # Convenience functions that do both transport and caproto validation/ingest.
@@ -53,7 +46,7 @@ def recv(circuit):
     return commands
 
 
-def search(pv_name, logger, udp_sock, timeout, *, max_retries=2):
+def search(pv_name, udp_sock, timeout, *, max_retries=2):
     # Set Broadcaster log level to match our logger.
     b = ca.Broadcaster(our_role=ca.CLIENT)
 
@@ -125,8 +118,8 @@ def search(pv_name, logger, udp_sock, timeout, *, max_retries=2):
         udp_sock.settimeout(orig_timeout)
 
 
-def make_channel(pv_name, logger, udp_sock, priority, timeout):
-    address = search(pv_name, logger, udp_sock, timeout)
+def make_channel(pv_name, udp_sock, priority, timeout):
+    address = search(pv_name, udp_sock, timeout)
     circuit = ca.VirtualCircuit(our_role=ca.CLIENT,
                                 address=address,
                                 priority=priority)
@@ -154,27 +147,13 @@ def make_channel(pv_name, logger, udp_sock, priority, timeout):
                 if command is ca.DISCONNECTED:
                     raise CaprotoError('Disconnected during initialization')
 
-        logger.debug('Channel created.')
     except BaseException:
         sockets[chan.circuit].close()
         raise
     return chan
 
 
-def spawn_repeater(logger):
-    # Spawn repeater with a verbosity level matching the current logger.
-    if logger.getEffectiveLevel() <= 10:
-        args = ['--verbose']
-    elif logger.getEffectiveLevel() >= 30:
-        args = ['--quiet']
-    logger.debug('Spawning caproto-repeater process....')
-    try:
-        subprocess.Popen(['caproto-repeater'] + args, cwd="/")
-    except Exception:
-        logger.exception('Failed to spawn repeater.')
-
-
-def read(chan, timeout, data_type):
+def _read(chan, timeout, data_type):
     req = chan.read(data_type=data_type)
     send(chan.circuit, req)
     t = time.monotonic()
@@ -198,85 +177,8 @@ def read(chan, timeout, data_type):
                                    'read response')
 
 
-def get_cli():
-    parser = argparse.ArgumentParser(description='Read the value of a PV.')
-    parser.register('action', 'list_types', _ListTypesAction)
-    fmt_group = parser.add_mutually_exclusive_group()
-    parser.add_argument('pv_names', type=str, nargs='+',
-                        help="PV (channel) name(s) separated by spaces")
-    parser.add_argument('-d', type=str, default=None, metavar="DATA_TYPE",
-                        help=("Request a certain data type. Accepts numeric "
-                              "code ('3') or case-insensitive string ('enum')"
-                              ". See --list-types"))
-    fmt_group.add_argument('--format', type=str,
-                           help=("Python format string. Available tokens are "
-                                 "{pv_name} and {response}. Additionally, if "
-                                 "this data type includes time, {timestamp} "
-                                 "and usages like "
-                                 "{timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are "
-                                 "supported."))
-    parser.add_argument('--list-types', action='list_types',
-                        default=argparse.SUPPRESS,
-                        help="List allowed values for -d and exit.")
-    parser.add_argument('-n', action='store_true',
-                        help=("Retrieve enums as integers (default is "
-                              "strings)."))
-    parser.add_argument('--no-repeater', action='store_true',
-                        help=("Do not spawn a Channel Access repeater daemon "
-                              "process."))
-    parser.add_argument('--priority', '-p', type=int, default=0,
-                        help="Channel Access Virtual Circuit priority. "
-                             "Lowest is 0; highest is 99.")
-    fmt_group.add_argument('--terse', '-t', action='store_true',
-                           help=("Display data only. Unpack scalars: "
-                                 "[3.] -> 3."))
-    parser.add_argument('--timeout', '-w', type=float, default=1,
-                        help=("Timeout ('wait') in seconds for server "
-                              "responses."))
-    parser.add_argument('--verbose', '-v', action='store_true',
-                        help="Verbose mode. (Use -vvv for more.)")
-    parser.add_argument('-vvv', action='store_true',
-                        help=argparse.SUPPRESS)
-    args = parser.parse_args()
-    if args.verbose:
-        logging.getLogger('caproto.get').setLevel('DEBUG')
-    if args.vvv:
-        logging.getLogger('caproto').setLevel('DEBUG')
-    data_type = parse_data_type(args.d)
-    try:
-        for pv_name in args.pv_names:
-            response = get(pv_name=pv_name,
-                           data_type=data_type,
-                           timeout=args.timeout,
-                           priority=args.priority,
-                           force_int_enums=args.n,
-                           repeater=not args.no_repeater)
-            if args.format is None:
-                format_str = '{pv_name: <40}  {response.data}'
-            else:
-                format_str = args.format
-            if args.terse:
-                if len(response.data) == 1:
-                    format_str = '{response.data[0]}'
-                else:
-                    format_str = '{response.data}'
-            tokens = dict(pv_name=pv_name, response=response)
-            if hasattr(response.metadata, 'timestamp'):
-                dt = datetime.fromtimestamp(response.metadata.timestamp)
-                tokens['timestamp'] = dt
-            print(format_str.format(**tokens))
-
-    except BaseException as exc:
-        if args.verbose:
-            # Show the full traceback.
-            raise
-        else:
-            # Print a one-line error message.
-            print(exc)
-
-
-def get(pv_name, *, data_type=None, timeout=1, priority=0,
-        force_int_enums=False, repeater=True):
+def read(pv_name, *, data_type=None, timeout=1, priority=0,
+         force_int_enums=False, repeater=True):
     """
     Read a Channel.
 
@@ -305,15 +207,15 @@ def get(pv_name, *, data_type=None, timeout=1, priority=0,
     Get the value of a Channel named 'cat'.
     >>> get('cat').data
     """
-    logger = logging.getLogger('caproto.get')
+    logger = logging.getLogger(f'caproto.ch.{pv_name}')
     if repeater:
         # As per the EPICS spec, a well-behaved client should start a
         # caproto-repeater that will continue running after it exits.
-        spawn_repeater(logger)
+        spawn_repeater(['--quiet'])
     udp_sock = ca.bcast_socket()
     try:
         udp_sock.settimeout(timeout)
-        chan = make_channel(pv_name, logger, udp_sock, priority, timeout)
+        chan = make_channel(pv_name, udp_sock, priority, timeout)
     finally:
         udp_sock.close()
     try:
@@ -323,7 +225,7 @@ def get(pv_name, *, data_type=None, timeout=1, priority=0,
                 (data_type is None) and (not force_int_enums)):
             logger.debug("Changing requested data_type to STRING.")
             data_type = ChannelType.STRING
-        return read(chan, timeout, data_type=data_type)
+        return _read(chan, timeout, data_type=data_type)
     finally:
         try:
             if chan.states[ca.CLIENT] is ca.CONNECTED:
@@ -332,124 +234,32 @@ def get(pv_name, *, data_type=None, timeout=1, priority=0,
             sockets[chan.circuit].close()
 
 
-def monitor_cli():
-    parser = argparse.ArgumentParser(description='Read the value of a PV.')
-    fmt_group = parser.add_mutually_exclusive_group()
-    parser.add_argument('pv_names', type=str, nargs='+',
-                        help="PV (channel) name")
-    fmt_group.add_argument('--format', type=str,
-                           help=("Python format string. Available tokens are "
-                                 "{pv_name}, {response}, {callback_count}. "
-                                 "Additionally, if this data type includes "
-                                 "time, {timestamp}, {timedelta} and usages "
-                                 "like {timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are"
-                                 " supported."))
-    parser.add_argument('-m', type=str, metavar='MASK', default='va',
-                        help=("Channel Access mask. Any combination of "
-                              "'v' (value), 'a' (alarm), 'l' (log/archive), "
-                              "'p' (property). Default is 'va'."))
-    parser.add_argument('-n', action='store_true',
-                        help=("Retrieve enums as integers (default is "
-                              "strings)."))
-    parser.add_argument('--no-repeater', action='store_true',
-                        help=("Do not spawn a Channel Access repeater daemon "
-                              "process."))
-    parser.add_argument('--priority', '-p', type=int, default=0,
-                        help="Channel Access Virtual Circuit priority. "
-                             "Lowest is 0; highest is 99.")
-    parser.add_argument('--timeout', '-w', type=float, default=1,
-                        help=("Timeout ('wait') in seconds for server "
-                              "responses."))
-    parser.add_argument('--verbose', '-v', action='store_true',
-                        help="Show DEBUG log messages.")
-    parser.add_argument('-vvv', action='store_true',
-                        help=argparse.SUPPRESS)
-    parser.add_argument('--maximum', type=int, default=None,
-                        help="Maximum number of monitor events to display.")
-    args = parser.parse_args()
-    if args.verbose:
-        logging.getLogger('caproto.monitor').setLevel('DEBUG')
-    if args.vvv:
-        logging.getLogger('caproto').setLevel('DEBUG')
-
-    mask = 0
-    if 'v' in args.m:
-        mask |= SubscriptionType.DBE_VALUE
-    if 'a' in args.m:
-        mask |= SubscriptionType.DBE_ALARM
-    if 'l' in args.m:
-        mask |= SubscriptionType.DBE_LOG
-    if 'p' in args.m:
-        mask |= SubscriptionType.DBE_PROPERTY
-
-    history = []
-    tokens = {'callback_count': 0}
-
-    def callback(pv_name, response):
-        tokens['callback_count'] += 1
-        if args.format is None:
-            format_str = ("{pv_name: <40}  {timestamp:%Y-%m-%d %H:%M:%S} "
-                          "{response.data}")
-        else:
-            format_str = args.format
-        tokens['pv_name'] = pv_name
-        tokens['response'] = response
-        dt = datetime.fromtimestamp(response.metadata.timestamp)
-        tokens['timestamp'] = dt
-        if history:
-            # Add a {timedelta} token using the previous timestamp.
-            td = dt - history.pop()
-        else:
-            # Special case for the first reading: show difference between
-            # timestamp and current time -- showing how old the most recent
-            # update is.
-            td = datetime.fromtimestamp(time.time()) - dt
-        history.append(dt)
-        tokens['timedelta'] = td
-        print(format_str.format(**tokens), flush=True)
-
-        if args.maximum is not None:
-            if tokens['callback_count'] >= args.maximum:
-                raise KeyboardInterrupt()
-    try:
-        monitor(*args.pv_names,
-                callback=callback, mask=mask,
-                timeout=args.timeout,
-                priority=args.priority,
-                force_int_enums=args.n,
-                repeater=not args.no_repeater)
-    except KeyboardInterrupt:
-        ...
-    except BaseException as exc:
-        if args.verbose:
-            # Show the full traceback.
-            raise
-        else:
-            # Print a one-line error message.
-            print(exc)
+def subscribe(pv_name, priority=0, data_type=None, data_count=None,
+              low=0.0, high=0.0, to=0.0, mask=None):
+    return Subscription(pv_name, priority, data_type, data_count, low, high,
+                        to, mask)
 
 
-def monitor(*pv_names, callback, mask=None, timeout=1,
-            priority=0, force_int_enums=False, repeater=True):
+def interrupt():
+    global poison_pill
+    poison_pill = True
+
+
+def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
+          repeater=True):
     """
     Monitor one or more Channels indefinitely.
 
-    Use Ctrl+C (SIGINT) to escape.
+    Use Ctrl+C (SIGINT) to escape, or from another thread, call interrupt().
 
     Parameters
     ----------
-    pv_names : str
-    callback : callable, required keyword-only argument
-        Expected signature is ``f(pv_name, ReadNotifyResponse)``.
-    mask : int, optional
-        Default, None, resolves to
-        ``(SubscriptionType.DBE_VALUE | SubscriptionType.DBE_ALARM)``.
-    data_type : int, optional
-        Request specific data type. Default is Channel's native data type.
+    *subscriptions : Subscriptions
+    duration : float, optional
+        How many seconds to run for. Run forever (None) by default.
     timeout : float, optional
-        Default is 1 second.
-    priority : 0, optional
-        Virtual Circuit priority. Default is 0, lowest. Highest is 99.
+        Default is 1 second. This is not the same as `for`; this is the timeout
+        for failure in the event of no connection.
     force_int_enums : boolean, optional
         Retrieve enums as integers. (Default is strings.)
     repeater : boolean, optional
@@ -459,31 +269,38 @@ def monitor(*pv_names, callback, mask=None, timeout=1,
 
     Examples
     --------
-    Get the value of a Channel named 'cat'.
-    >>> get('cat').data
+    Activate subscription(s) and block while they process updates.
+    >>> sub1 = subscribe('cat')
+    >>> sub1 = subscribe('dog')
+    >>> block(sub1, sub2)
     """
-    if mask is None:
-        mask = SubscriptionType.DBE_VALUE | SubscriptionType.DBE_ALARM
-    logger = logging.getLogger('caproto.monitor')
+    if duration is not None:
+        deadline = time.time() + duration
+    else:
+        deadline = None
     if repeater:
         # As per the EPICS spec, a well-behaved client should start a
         # caproto-repeater that will continue running after it exits.
-        spawn_repeater(logger)
+        spawn_repeater(['--quiet'])
+    loggers = {}
+    for sub in subscriptions:
+        loggers[sub.pv_name] = logging.getLogger(f'caproto.ch.{sub.pv_name}')
     udp_sock = ca.bcast_socket()
     try:
         udp_sock.settimeout(timeout)
-        channels = []
-        for pv_name in pv_names:
-            chan = make_channel(pv_name, logger, udp_sock, priority, timeout)
-            channels.append(chan)
+        channels = {}
+        for sub in subscriptions:
+            pv_name = sub.pv_name
+            chan = make_channel(pv_name, udp_sock, sub.priority, timeout)
+            channels[sub] = chan
     finally:
         udp_sock.close()
     try:
         # Subscribe to all the channels.
         sub_ids = {}
-        for chan in channels:
-            logger.debug("Detected native data_type %r.",
-                         chan.native_data_type)
+        for sub, chan in channels.items():
+            loggers[chan.name].debug("Detected native data_type %r.",
+                                     chan.native_data_type)
 
             # abundance of caution
             ntype = field_types['native'][chan.native_data_type]
@@ -492,22 +309,31 @@ def monitor(*pv_names, callback, mask=None, timeout=1,
             time_type = field_types['time'][ntype]
             # Adjust the timeout during monitoring.
             sockets[chan.circuit].settimeout(None)
-            logger.debug("Subscribing with data_type %r.", time_type)
-            req = chan.subscribe(data_type=time_type, mask=mask)
+            loggers[chan.name].debug("Subscribing with data_type %r.",
+                                     time_type)
+            req = chan.subscribe(data_type=time_type, mask=sub.mask)
             send(chan.circuit, req)
-            sub_ids[req.subscriptionid] = chan
+            sub_ids[req.subscriptionid] = sub
         logger.debug('Subscribed. Building socket selector.')
         try:
-            circuits = set(chan.circuit for chan in channels)
+            circuits = set(chan.circuit for chan in channels.values())
             selector = selectors.DefaultSelector()
             sock_to_circuit = {}
             for circuit in circuits:
                 sock = sockets[circuit]
                 sock_to_circuit[sock] = circuit
                 selector.register(sock, selectors.EVENT_READ)
-            logger.debug('Continuing until SIGINT is received....')
+            if duration is None:
+                logger.debug('Continuing until SIGINT is received....')
             while True:
                 events = selector.select(timeout=0.1)
+                if deadline is not None and time.time() > deadline:
+                    logger.debug('Deadline reached.')
+                    return
+                global poison_pill
+                if poison_pill:
+                    poison_pill = False
+                    break
                 for selector_key, mask in events:
                     circuit = sock_to_circuit[selector_key.fileobj]
                     commands = recv(circuit)
@@ -517,96 +343,27 @@ def monitor(*pv_names, callback, mask=None, timeout=1,
                         if response is ca.DISCONNECTED:
                             # TODO Re-connect.
                             raise CaprotoError("Disconnected")
-                        chan = sub_ids.get(response.subscriptionid)
-                        if chan:
-                            callback(chan.name, response)
+                        sub = sub_ids.get(response.subscriptionid)
+                        if sub:
+                            sub.process(response)
         except KeyboardInterrupt:
             logger.debug('Received SIGINT. Closing.')
             pass
     finally:
         try:
-            for chan in channels:
+            for chan in channels.values():
                 if chan.states[ca.CLIENT] is ca.CONNECTED:
                     send(chan.circuit, chan.disconnect())
         finally:
             # Reinstate the timeout for channel cleanup.
-            for chan in channels:
+            for chan in channels.values():
                 sockets[chan.circuit].settimeout(timeout)
                 sockets[chan.circuit].close()
 
 
-def put_cli():
-    parser = argparse.ArgumentParser(description='Write a value to a PV.')
-    fmt_group = parser.add_mutually_exclusive_group()
-    parser.add_argument('pv_name', type=str,
-                        help="PV (channel) name")
-    parser.add_argument('data', type=str,
-                        help="Value or values to write.")
-    fmt_group.add_argument('--format', type=str,
-                           help=("Python format string. Available tokens are "
-                                 "{pv_name} and {response}. Additionally, "
-                                 "this data type includes time, {timestamp} "
-                                 "and usages like "
-                                 "{timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are "
-                                 "supported."))
-    parser.add_argument('--no-repeater', action='store_true',
-                        help=("Do not spawn a Channel Access repeater daemon "
-                              "process."))
-    parser.add_argument('--priority', '-p', type=int, default=0,
-                        help="Channel Access Virtual Circuit priority. "
-                             "Lowest is 0; highest is 99.")
-    fmt_group.add_argument('--terse', '-t', action='store_true',
-                           help=("Display data only. Unpack scalars: "
-                                 "[3.] -> 3."))
-    parser.add_argument('--timeout', '-w', type=float, default=1,
-                        help=("Timeout ('wait') in seconds for server "
-                              "responses."))
-    parser.add_argument('--verbose', '-v', action='store_true',
-                        help="Show DEBUG log messages.")
-    parser.add_argument('-vvv', action='store_true',
-                        help=argparse.SUPPRESS)
-    args = parser.parse_args()
-    if args.verbose:
-        logging.getLogger('caproto.put').setLevel('DEBUG')
-    if args.vvv:
-        logging.getLogger('caproto').setLevel('DEBUG')
-    try:
-        initial, final = put(pv_name=args.pv_name, data=args.data,
-                             timeout=args.timeout,
-                             priority=args.priority,
-                             repeater=not args.no_repeater)
-        if args.format is None:
-            format_str = '{pv_name: <40}  {response.data}'
-        else:
-            format_str = args.format
-        if args.terse:
-            if len(initial.data) == 1:
-                format_str = '{response.data[0]}'
-            else:
-                format_str = '{response.data}'
-        tokens = dict(pv_name=args.pv_name, response=initial)
-        if hasattr(initial.metadata, 'timestamp'):
-            dt = datetime.fromtimestamp(initial.metadata.timestamp)
-            tokens['timestamp'] = dt
-        print(format_str.format(**tokens))
-        tokens = dict(pv_name=args.pv_name, response=final)
-        if hasattr(final.metadata, 'timestamp'):
-            dt = datetime.fromtimestamp(final.metadata.timestamp)
-            tokens['timestamp'] = dt
-        tokens = dict(pv_name=args.pv_name, response=final)
-        print(format_str.format(**tokens))
-    except BaseException as exc:
-        if args.verbose:
-            # Show the full traceback.
-            raise
-        else:
-            # Print a one-line error message.
-            print(exc)
-
-
-def put(pv_name, data, *, data_type=None, metadata=None,
-        timeout=1, priority=0,
-        repeater=True):
+def write(pv_name, data, *, data_type=None, metadata=None,
+          timeout=1, priority=0,
+          repeater=True):
     """
     Write to a Channel.
 
@@ -638,11 +395,11 @@ def put(pv_name, data, *, data_type=None, metadata=None,
     >>> initial, final = put('cat', 5)
     """
     raw_data = data
-    logger = logging.getLogger('caproto.put')
+    logger = logging.getLogger(f'caproto.ch.{pv_name}')
     if repeater:
         # As per the EPICS spec, a well-behaved client should start a
         # caproto-repeater that will continue running after it exits.
-        spawn_repeater(logger)
+        spawn_repeater(['--quiet'])
     if isinstance(raw_data, str):
         try:
             data = ast.literal_eval(raw_data)
@@ -658,7 +415,7 @@ def put(pv_name, data, *, data_type=None, metadata=None,
     udp_sock = ca.bcast_socket()
     try:
         udp_sock.settimeout(timeout)
-        chan = make_channel(pv_name, logger, udp_sock, priority, timeout)
+        chan = make_channel(pv_name, udp_sock, priority, timeout)
     finally:
         udp_sock.close()
     try:
@@ -667,7 +424,7 @@ def put(pv_name, data, *, data_type=None, metadata=None,
         ntype = field_types['native'][chan.native_data_type]
         # Stash initial value
         logger.debug("Taking 'initial' reading before writing.")
-        initial_response = read(chan, timeout, None)
+        initial_response = _read(chan, timeout, None)
 
         if data_type is None:
             # Handle ENUM: If data is INT, carry on. If data is STRING,
@@ -701,7 +458,7 @@ def put(pv_name, data, *, data_type=None, metadata=None,
                 continue
             break
         logger.debug("Taking 'final' reading after writing.")
-        final_response = read(chan, timeout, None)
+        final_response = _read(chan, timeout, None)
     finally:
         try:
             if chan.states[ca.CLIENT] is ca.CONNECTED:
@@ -711,84 +468,73 @@ def put(pv_name, data, *, data_type=None, metadata=None,
     return initial_response, final_response
 
 
-def repeater_cli():
-    parser = argparse.ArgumentParser(
-        description="""
-Run a Channel Access Repeater.
+class Subscription:
+    def __init__(self, pv_name, priority=0, data_type=None, data_count=None,
+                 low=0.0, high=0.0, to=0.0, mask=None):
+        if mask is None:
+            mask = SubscriptionType.DBE_VALUE | SubscriptionType.DBE_ALARM
+        self.pv_name = pv_name
+        self.priority = priority
+        self.data_type = data_type
+        self.data_count = data_count
+        self.low = low
+        self.high = high
+        self.to = to
+        self.mask = mask
 
-If the Repeater port is already in use, assume a Repeater is already running
-and exit. That port number is set by the environment variable
-EPICS_CA_REPEATER_PORT. It defaults to the standard 5065. The current value is
-{}.""".format(os.environ.get('EPICS_CA_REPEATER_PORT', 5065)))
+        self.callbacks = {}
+        self._callback_id = 0
+        self._callback_lock = threading.RLock()
 
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument('-q', '--quiet', action='store_true',
-                       help=("Suppress INFO log messages. "
-                             "(Still show WARNING or higher.)"))
-    group.add_argument('-v', '--verbose', action='store_true',
-                       help="Verbose mode. (Use -vvv for more.)")
-    group.add_argument('-vvv', action='store_true',
-                       help=argparse.SUPPRESS)
-    args = parser.parse_args()
-    if args.vvv:
-        logging.getLogger('caproto').setLevel('DEBUG')
-    else:
-        if args.verbose:
-            level = 'DEBUG'
-        elif args.quiet:
-            level = 'WARNING'
+    def block(self, *subscriptions, duration=None, timeout=1,
+              force_int_enums=False,
+              repeater=True):
+        block(self, *subscriptions, duration=None, timeout=1,
+              force_int_enums=False,
+              repeater=True)
+
+    def interrupt(self):
+        interrupt()
+
+    def add_callback(self, func):
+        with self._callback_lock:
+            cb_id = self._callback_id
+            self._callback_id += 1
+
+        def removed(_):
+            self.remove_callback(cb_id)
+
+        if inspect.ismethod(func):
+            ref = weakref.WeakMethod(func, removed)
         else:
-            level = 'INFO'
-        logging.getLogger('caproto.repeater').setLevel(level)
-    try:
-        run_repeater()
-    except BaseException as exc:
-        if args.verbose:
-            # Show the full traceback.
-            raise
-        else:
-            # Print a one-line error message.
-            print(exc)
+            # TODO: strong reference to non-instance methods?
+            ref = weakref.ref(func, removed)
 
+        with self._callback_lock:
+            self.callbacks[cb_id] = ref
+        return cb_id
 
-def parse_data_type(raw_data_type):
-    """
-    Parse raw_data_type string as ChannelType. None passes through.
+    def remove_callback(self, cb_id):
+        with self._callback_lock:
+            self.callbacks.pop(cb_id, None)
 
-    '3', 'ENUM', and 'enum' all parse as <ChannelType.ENUM 3>.
-    """
-    if raw_data_type is None:
-        data_type = None
-    else:
-        assert isinstance(raw_data_type, str)
-        # ChannelType is an IntEnum.
-        # If d is int, use ChannelType(d). If string, getattr(ChannelType, d).
-        try:
-            data_type_int = int(raw_data_type)
-        except ValueError:
-            data_type = getattr(ChannelType, raw_data_type.upper())
-        else:
-            data_type = ChannelType(data_type_int)
-    return data_type
+    def process(self, response):
+        """
+        This is a fast operation that submits jobs to the Context's
+        ThreadPoolExecutor and then returns.
+        """
+        to_remove = []
+        with self._callback_lock:
+            callbacks = list(self.callbacks.items())
 
+        for cb_id, ref in callbacks:
+            callback = ref()
+            if callback is None:
+                to_remove.append(cb_id)
+                continue
 
-class _ListTypesAction(argparse.Action):
-    # a special action that allows the usage --list-types to override
-    # any 'required args' requirements, the same way that --help does
+            callback(response)
 
-    def __init__(self,
-                 option_strings,
-                 dest=argparse.SUPPRESS,
-                 default=argparse.SUPPRESS,
-                 help=None):
-        super(_ListTypesAction, self).__init__(
-            option_strings=option_strings,
-            dest=dest,
-            default=default,
-            nargs=0,
-            help=help)
-
-    def __call__(self, parser, namespace, values, option_string=None):
-        for elem in ChannelType:
-            print(f'{elem.value: <2} {elem.name}')
-        parser.exit()
+        with self._callback_lock:
+            for remove_id in to_remove:
+                self.callbacks.pop(remove_id, None)
