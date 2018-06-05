@@ -287,13 +287,23 @@ class SharedBroadcaster:
                                        command.version)
                         continue
                 if isinstance(command, ca.SearchResponse):
-                    name = self.unanswered_searches.pop(command.cid, None)
-                    if name is not None:
-                        self.search_results[name] = ca.extract_address(command)
+                    try:
+                        name = self.unanswered_searches.pop(command.cid)
+                    except KeyError:
+                        # This is a redundant response, which the EPICS
+                        # spec tells us to ignore. (The first responder
+                        # to a given request wins.)
+                        if name in self.search_results:
+                            accepted_address = self.search_results[name]
+                            new_address = ca.extract_address(command)
+                            self.log.warning("PV found on multiple servers. "
+                                             "Accepted address is %s. "
+                                             "Also found on %s",
+                                             accepted_address, new_address)
                     else:
-                        # This is a redundant response, which the spec tell us
-                        # we must ignore.
-                        pass
+                        address = ca.extract_address(command)
+                        self.log.debug('Found %s at %s', name, address)
+                        self.search_results[name] = address
 
                 async with self.broadcaster_command_condition:
                     await self.broadcaster_command_condition.notify_all()
