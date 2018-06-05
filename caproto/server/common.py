@@ -2,7 +2,7 @@ from collections import defaultdict, deque, namedtuple
 import logging
 import os
 import caproto as ca
-from caproto import get_beacon_address_list, get_environment_variables
+from caproto import get_environment_variables
 
 
 class DisconnectedCircuit(Exception):
@@ -291,6 +291,7 @@ class Context:
             interfaces = ca.get_server_address_list()
         self.interfaces = interfaces
         self.udp_socks = {}  # map each interface to a UDP socket for searches
+        self.beacon_socks = {}  # map each interface to a UDP socket for beacons
         self.pvdb = pvdb
         self.log = logging.getLogger(f'caproto.ctx.{id(self)}')
 
@@ -445,24 +446,22 @@ class Context:
                     await sub.circuit.send(command)
 
     async def broadcast_beacon_loop(self):
+        self.log.debug('Will send beacons to %r',
+                       list(self.beacon_socks.keys()))
         beacon_period = self.environ['EPICS_CAS_BEACON_PERIOD']
-        addresses = get_beacon_address_list()
-
         while True:
-            if self.beacon_sock is None:
-                await self.async_layer.library.sleep(.1)
-                continue
-            beacon = ca.RsrvIsUpResponse(13, self.port, self.beacon_count,
-                                         self.interfaces[0])  # TODO which one?
-            bytes_to_send = self.broadcaster.send(beacon)
-            for addr_port in addresses:
+            for address, (interface, sock) in self.beacon_socks.items():
                 try:
-                    await self.beacon_sock.sendto(bytes_to_send, addr_port)
+                    beacon = ca.RsrvIsUpResponse(13, self.port,
+                                                 self.beacon_count,
+                                                 interface)
+                    bytes_to_send = self.broadcaster.send(beacon)
+                    await sock.send(bytes_to_send)
                 except IOError:
                     self.log.exception(
                         "Failed to send beacon to %r. Try setting "
                         "EPICS_CAS_AUTO_BEACON_ADDR_LIST=no and "
-                        "EPICS_CAS_BEACON_ADDR_LIST=<addresses>.", addr_port)
+                        "EPICS_CAS_BEACON_ADDR_LIST=<addresses>.", address)
                     raise
             self.beacon_count += 1
             await self.async_layer.library.sleep(beacon_period)

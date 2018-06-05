@@ -70,7 +70,6 @@ class Context(_Context):
         super().__init__(pvdb, interfaces)
         self.command_bundle_queue = curio.Queue()
         self.subscription_queue = curio.UniversalQueue()
-        self.beacon_sock = ca.bcast_socket(socket)
 
     async def broadcaster_udp_server_loop(self):
         for interface in self.interfaces:
@@ -93,8 +92,11 @@ class Context(_Context):
         'Start the server'
         self.log.info('Server starting up...')
         try:
-            # TODO Should this interface be configurable?
-            self.beacon_sock.bind(('0.0.0.0', 0))
+            for address in ca.get_beacon_address_list():
+                sock = ca.bcast_socket(socket)
+                await sock.connect(address)
+                interface, _ = sock.getsockname()
+                self.beacon_socks[address] = (interface, sock)
             port, tcp_sockets = self._bind_tcp_sockets_with_consistent_port_number(
                 curio.network.tcp_server_socket)
             self.port = port

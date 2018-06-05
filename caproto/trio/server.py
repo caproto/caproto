@@ -131,8 +131,11 @@ class Context(_Context):
         self.log.info('Server starting up...')
         try:
             async with trio.open_nursery() as self.nursery:
-                # TODO Should this interface be configurable?
-                await self.beacon_sock.bind(('0.0.0.0', 0))
+                for address in ca.get_beacon_address_list():
+                    sock = ca.bcast_socket(socket)
+                    await sock.connect(address)
+                    interface, _ = sock.getsockname()
+                    self.beacon_socks[address] = (interface, sock)
 
                 # This reproduces the common with
                 # self._bind_tcp_sockets_with_consistent_port_number because

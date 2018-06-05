@@ -128,17 +128,34 @@ class Context(_Context):
                                     if not t.done())
 
         class TransportWrapper:
+            """Make an asyncio transport something you can call sendto on."""
             def __init__(self, transport):
                 self.transport = transport
 
             async def sendto(self, bytes_to_send, addr_port):
                 self.transport.sendto(bytes_to_send, addr_port)
 
-        beacon_sock = ca.bcast_socket(socket)
-        # TODO Should this interface be configurable?
-        transport, _ = await self.loop.create_datagram_endpoint(
-            BcastLoop, sock=beacon_sock)
-        self.beacon_sock = TransportWrapper(transport)
+        class ConnectedTransportWrapper:
+            """Make an asyncio transport something you can call send on."""
+            def __init__(self, transport, address):
+                self.transport = transport
+                self.address = address
+
+            async def send(self, bytes_to_send):
+                self.transport.sendto(bytes_to_send, self.address)
+
+        for address in ca.get_beacon_address_list():
+            # Connected sockets do not play well with asyncio, so connect to
+            # one and then discard it.
+            temp_sock = ca.bcast_socket(socket)
+            temp_sock.connect(address)
+            interface, _ = temp_sock.getsockname()
+            temp_sock.close()
+            sock = ca.bcast_socket(socket)
+            transport, _ = await self.loop.create_datagram_endpoint(
+                BcastLoop, sock=sock)
+            wrapped_transport = ConnectedTransportWrapper(transport, address)
+            self.beacon_socks[address] = (interface, wrapped_transport)
 
         for interface in self.interfaces:
             udp_sock = bcast_socket()
