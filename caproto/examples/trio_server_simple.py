@@ -58,13 +58,11 @@ pvdb = {'pi': ca.ChannelDouble(value=3.14,
         }
 
 
-async def main(pvdb, port=None):
-    if port is None:
-        port = ca.find_available_tcp_port()
-    ctx = Context('0.0.0.0', port, pvdb)
+async def main(pvdb):
+    ctx = Context(pvdb)
     return await ctx.run()
 
 
 if __name__ == '__main__':
     logging.getLogger('caproto').setLevel('DEBUG')
-    trio.run(main, pvdb, ca.find_available_tcp_port())
+    trio.run(main, pvdb)

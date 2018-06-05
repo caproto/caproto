@@ -192,7 +192,7 @@ class Context(_Context):
             await asyncio.wait(all_tasks)
             return
         except Exception as ex:
-            self.log.exception('Server error. Will shut down', exc_info=ex)
+            self.log.exception('Server error. Will shut down')
             udp_sock.close()
             raise
         finally:
