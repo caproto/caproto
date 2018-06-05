@@ -63,7 +63,6 @@ class VirtualCircuit(_VirtualCircuit):
     async def _on_disconnect(self):
         """Executed when disconnection detected"""
         await super()._on_disconnect()
-        print('client connection closed')
         self.client.close()
 
     async def _start_write_task(self, handle_write):
@@ -155,6 +154,7 @@ class Context(_Context):
                 else:
                     raise RuntimeError('No available ports and/or bind failed') from stashed_ex
                 for interface, listen_sock in tcp_sockets.items():
+                    self.log.info("Listening on %s:%d", interface, self.port)
                     await self.nursery.start(self.server_accept_loop,
                                             listen_sock)
                 await self.nursery.start(self.broadcaster_udp_server_loop)

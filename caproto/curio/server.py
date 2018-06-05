@@ -103,6 +103,7 @@ class Context(_Context):
             for port in ca.random_ports(100):
                 try:
                     for interface in self.interfaces:
+                        self.log.info("Listening on %s:%d", interface, port)
                         s = curio.network.tcp_server_socket(interface, port)
                         tcp_sockets[interface] = s
                 except IOError as ex:

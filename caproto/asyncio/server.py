@@ -84,13 +84,13 @@ class Context(_Context):
         self._server_tasks = []
 
     async def server_accept_loop(self, sock):
-            sock.listen()
+        sock.listen()
 
-            while True:
-                client_sock, addr = await self.loop.sock_accept(sock)
-                task = self.loop.create_task(
-                    self.tcp_handler(client_sock, addr))
-                self._server_tasks.append(task)
+        while True:
+            client_sock, addr = await self.loop.sock_accept(sock)
+            task = self.loop.create_task(
+                self.tcp_handler(client_sock, addr))
+            self._server_tasks.append(task)
 
     async def run(self, *, log_pv_names=False):
         'Start the server'
@@ -117,6 +117,7 @@ class Context(_Context):
             raise RuntimeError('No available ports and/or bind failed') from stashed_ex
         tasks = []
         for interface, sock in tcp_sockets.items():
+            self.log.info("Listening on %s:%d", interface, self.port)
             tasks.append(self.loop.create_task(self.server_accept_loop(sock)))
 
         class BcastLoop(asyncio.Protocol):
