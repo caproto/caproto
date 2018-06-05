@@ -631,14 +631,17 @@ class Context:
 
     Parameters
     ----------
-    broadcaster : SharedBroadcaster
+    broadcaster : SharedBroadcaster, optional
+        If None is specified, a fresh one is instantiated.
     host_name : string, optional
         uses value of ``socket.gethostname()`` by default
     client_name : string, optional
         uses value of ``getpass.getuser()`` by default
     """
-    def __init__(self, broadcaster, *,
+    def __init__(self, broadcaster=None, *,
                  host_name=None, client_name=None):
+        if broadcaster is None:
+            broadcaster = SharedBroadcaster()
         self.broadcaster = broadcaster
         if host_name is None:
             host_name = socket.gethostname()

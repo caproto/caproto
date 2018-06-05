@@ -437,9 +437,11 @@ class SharedBroadcaster:
 
 class Context:
     "Wraps a caproto.Broadcaster, a UDP socket, and cache of VirtualCircuits."
-    def __init__(self, broadcaster, *, nursery):
+    def __init__(self, broadcaster=None, *, nursery):
         self.nursery = nursery
         self.circuits = []  # list of VirtualCircuits
+        if broadcaster is None:
+            broadcaster = SharedBroadcaster(nursery=nursery)
         self.broadcaster = broadcaster
         self.log = logging.getLogger(f'caproto.ctx.{id(self)}')
 
