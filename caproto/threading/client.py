@@ -1501,19 +1501,19 @@ class CallbackHandler:
         self._callback_lock = threading.RLock()
 
     def add_callback(self, func):
+
+        def removed(_):
+            self.remove_callback(cb_id)  # defined below inside the lock
+
+        if inspect.ismethod(func):
+            ref = weakref.WeakMethod(func, removed)
+        else:
+            # TODO: strong reference to non-instance methods?
+            ref = weakref.ref(func, removed)
+
         with self._callback_lock:
             cb_id = self._callback_id
             self._callback_id += 1
-
-            def removed(_):
-                self.remove_callback(cb_id)
-
-            if inspect.ismethod(func):
-                ref = weakref.WeakMethod(func, removed)
-            else:
-                # TODO: strong reference to non-instance methods?
-                ref = weakref.ref(func, removed)
-
             self.callbacks[cb_id] = ref
         return cb_id
 
@@ -1651,6 +1651,19 @@ class Subscription(CallbackHandler):
         self.most_recent_response = (args, kwargs)
 
     def add_callback(self, func):
+        """
+        Add a callback to receive responses.
+
+        Parameters
+        ----------
+        func : callable
+            Expected signature: ``func(response)``
+
+        Returns
+        -------
+        token : int
+            Integer token that can be passed to :meth:`remove_callback`.
+        """
         cb_id = super().add_callback(func)
         with self._callback_lock:
             if self.subscriptionid is None:
@@ -1673,6 +1686,9 @@ class Subscription(CallbackHandler):
         return cb_id
 
     def remove_callback(self, cb_id):
+        """
+        Remove callback using token that was returned by :meth:`add_callback`.
+        """
         with self._callback_lock:
             super().remove_callback(cb_id)
             if not self.callbacks:

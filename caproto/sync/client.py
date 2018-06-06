@@ -400,7 +400,7 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
                 sockets[chan.circuit].close()
 
 
-def write(pv_name, data, *, use_notify=True, data_type=None, metadata=None,
+def write(pv_name, data, *, use_notify=False, data_type=None, metadata=None,
           timeout=1, priority=0,
           repeater=True):
     """
@@ -411,8 +411,8 @@ def write(pv_name, data, *, use_notify=True, data_type=None, metadata=None,
     pv_name : str
     data : str, int, or float or a list of these
         Value to write.
-    use_notify : boolean
-        Request notification of completion and wait for it.
+    use_notify : boolean, optional
+        Request notification of completion and wait for it. False by default.
     data_type : ChannelType or corresponding integer ID, optional
         Request specific data type. Default is inferred from input.
     metadata : ``ctypes.BigEndianStructure`` or tuple
@@ -587,19 +587,18 @@ class Subscription:
         token : int
             Integer token that can be passed to :meth:`remove_callback`.
         """
+        def removed(_):
+            self.remove_callback(cb_id)
+
+        if inspect.ismethod(func):
+            ref = weakref.WeakMethod(func, removed)
+        else:
+            # TODO: strong reference to non-instance methods?
+            ref = weakref.ref(func, removed)
+
         with self._callback_lock:
             cb_id = self._callback_id
             self._callback_id += 1
-
-            def removed(_):
-                self.remove_callback(cb_id)
-
-            if inspect.ismethod(func):
-                ref = weakref.WeakMethod(func, removed)
-            else:
-                # TODO: strong reference to non-instance methods?
-                ref = weakref.ref(func, removed)
-
             self.callbacks[cb_id] = ref
         return cb_id
 
