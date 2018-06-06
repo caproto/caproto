@@ -282,7 +282,7 @@ def main(host, server_port, pv):
     get_ioid = 2
     get_cls = cli_messages[pva.ApplicationCommands.GET]
     get_init_req = get_cls(server_chid=server_chid, ioid=get_ioid,
-                           subcommand=pva.GetSubcommands.INIT,
+                           subcommand=pva.Subcommands.INIT,
                            pv_request_if='field(value)',
                            pv_request=dict(field=dict(value=None)),
                            # or if field() then pv_request ignored
@@ -302,7 +302,7 @@ def main(host, server_port, pv):
     print('- 7. Perform an actual get request')
     get_cls = cli_messages[pva.ApplicationCommands.GET]
     get_req = get_cls(server_chid=server_chid, ioid=get_ioid,  # <-- note same ioid
-                      subcommand=pva.GetSubcommands.GET,
+                      subcommand=pva.Subcommands.GET,
                       )
     send(get_req)
     get_reply, buf, off = recv(buf)

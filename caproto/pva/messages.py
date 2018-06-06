@@ -30,25 +30,25 @@ intro.update_namespace_with_definitions(basic_types, basic_type_definitions,
                                         logger=logger)
 
 
-class QOS(enum.IntEnum):
+class Subcommands(enum.IntEnum):
     # Default behavior.
-    QOS_DEFAULT = 0x00
+    DEFAULT = 0x00
     # Require reply (acknowledgment for reliable operation).
-    QOS_REPLY_REQUIRED = 0x01
+    REPLY_REQUIRED = 0x01
     # Best-effort option (no reply).
-    QOS_BESY_EFFORT = 0x02
+    BEST_EFFORT = 0x02
     # Process option.
-    QOS_PROCESS = 0x04
+    PROCESS = 0x04
     # Initialize option.
-    QOS_INIT = 0x08
+    INIT = 0x08
     # Destroy option.
-    QOS_DESTROY = 0x10
+    DESTROY = 0x10
     # Share data option.
-    QOS_SHARE = 0x20
+    SHARE = 0x20
     # Get.
-    QOS_GET = 0x40
+    GET = 0x40
     # Get-put.
-    QOS_GET_PUT = 0x80
+    GET_PUT = 0x80
 
 
 class ApplicationCommands(enum.IntEnum):
@@ -81,12 +81,6 @@ class ControlCommands(enum.Enum):
     SET_MARKER = 0
     ACK_MARKER = 1
     SET_ENDIANESS = 2
-
-
-class GetSubcommands(enum.IntEnum):
-    INIT = 0x08
-    GET = 0x40
-    DESTROY = 0x50
 
 
 class SearchFlags(enum.IntFlag):
@@ -684,7 +678,7 @@ class ChannelDestroyResponse(ExtendedMessageBase):
 
 
 def _is_get_init_condition(msg, buf):
-    return msg.subcommand == GetSubcommands.INIT
+    return msg.subcommand == Subcommands.INIT
 
 
 class ChannelGetRequest(ExtendedMessageBase):
@@ -709,12 +703,12 @@ class ChannelGetRequest(ExtendedMessageBase):
 
 def _get_response_init_cond(msg, buf):
     return ((msg.status_type in success_status_types) and
-            msg.subcommand == GetSubcommands.INIT)
+            msg.subcommand == Subcommands.INIT)
 
 
 def _get_response_get_cond(msg, buf):
     return ((msg.status_type in success_status_types) and
-            msg.subcommand == GetSubcommands.GET)
+            msg.subcommand == Subcommands.GET)
 
 
 class ChannelGetResponse(ExtendedMessageBase):

@@ -9,8 +9,7 @@ from .const import SYS_ENDIAN, LITTLE_ENDIAN, BIG_ENDIAN
 from .messages import (basic_types, DirectionFlag, ApplicationCommands, ControlCommands,
                        EndianSetting, read_from_bytestream, messages_grouped,
                        MessageHeaderBE, MessageHeaderLE, MessageTypeFlag,
-                       EndianFlag, StatusType,
-                       GetSubcommands,
+                       EndianFlag, StatusType, Subcommands
                        )
 from .messages import (Status, BeaconMessage, SetMarker, AcknowledgeMarker,
                        SetByteOrder, ConnectionValidationRequest,
@@ -296,12 +295,12 @@ class VirtualCircuit:
                 self._ioids[command.ioid] = chan
             elif isinstance(command, ChannelGetResponse):
                 ioid = command.ioid
-                if command.subcommand == GetSubcommands.INIT:
+                if command.subcommand == Subcommands.INIT:
                     interface = command.pv_structure_if
                     self.cache.ioid_interfaces[ioid] = interface
-                elif command.subcommand == GetSubcommands.GET:
+                elif command.subcommand == Subcommands.GET:
                     ...
-                elif command.subcommand == GetSubcommands.DESTROY:
+                elif command.subcommand == Subcommands.DESTROY:
                     self._ioids.pop(ioid)
                     self.cache.ioid_interfaces.pop(ioid)
 
@@ -544,7 +543,7 @@ class ClientChannel(_BaseChannel):
         cls = self.circuit.messages[ApplicationCommands.GET]
         return cls(server_chid=self.sid,
                    ioid=ioid,
-                   subcommand=GetSubcommands.INIT,
+                   subcommand=Subcommands.INIT,
                    pv_request_if=pvrequest_if,
                    pv_request=pvrequest_data,
                    )
@@ -565,7 +564,7 @@ class ClientChannel(_BaseChannel):
         cls = self.circuit.messages[ApplicationCommands.GET]
         return cls(server_chid=self.sid,
                    ioid=ioid,
-                   subcommand=GetSubcommands.GET,
+                   subcommand=Subcommands.GET,
                    interface=dict(pv_data=interface),
                    )
 

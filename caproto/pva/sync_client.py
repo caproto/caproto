@@ -28,7 +28,7 @@ from caproto.pva import (CLIENT, SERVER, CONNECTED, NEED_DATA, DISCONNECTED,
                          ClientChannel, ConnectionValidationRequest,
                          ConnectionValidatedResponse, CreateChannelResponse,
                          ChannelFieldInfoResponse, ChannelGetResponse,
-                         GetSubcommands, basic_types)
+                         Subcommands, basic_types)
 
 # __all__ = ['get', 'put', 'monitor']
 
@@ -234,11 +234,11 @@ def read(chan, timeout, pvrequest):
                 # interface = command.field_if
                 ...
             elif isinstance(command, ChannelGetResponse):
-                if command.subcommand == GetSubcommands.INIT:
+                if command.subcommand == Subcommands.INIT:
                     interface = command.pv_structure_if
                     read_req = chan.read(ioid, interface=interface)
                     send(chan.circuit, read_req)
-                elif command.subcommand == GetSubcommands.GET:
+                elif command.subcommand == Subcommands.GET:
                     return interface, command
 
                 # raise ErrorResponseReceived(command)
