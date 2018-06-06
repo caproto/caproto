@@ -25,6 +25,7 @@ import _ctypes
 import inspect
 import struct
 import socket
+import warnings
 from ._headers import (MessageHeader, ExtendedMessageHeader,
                        AccessRightsResponseHeader, ClearChannelRequestHeader,
                        ClearChannelResponseHeader, ClientNameRequestHeader,
