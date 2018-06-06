@@ -37,7 +37,7 @@ def main():
     parser.add_argument('--timeout', '-w', type=float, default=1,
                         help=("Timeout ('wait') in seconds for server "
                               "responses."))
-    exit_group.add_argument('--duration', type=int, default=None,
+    exit_group.add_argument('--duration', type=float, default=None,
                             help=("Maximum number seconds to run before "
                                   "exiting. Runs indefinitely by default."))
     exit_group.add_argument('--maximum', type=int, default=None,
