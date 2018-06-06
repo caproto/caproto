@@ -1034,6 +1034,7 @@ class VirtualCircuitManager:
             assert self.connected  # double check that the state machine agrees
             self._ready.set()
         elif isinstance(command, (ca.ReadNotifyResponse,
+                                  ca.ReadResponse,
                                   ca.WriteNotifyResponse)):
             ioid_info = self.ioids.pop(command.ioid)
             deadline = ioid_info['deadline']
@@ -1318,7 +1319,7 @@ class PV:
 
     @ensure_connected
     def read(self, *, wait=True, callback=None, timeout=2, data_type=None,
-             data_count=None):
+             data_count=None, use_notify=False):
         """Request a fresh reading.
 
         Can do one or both of:
@@ -1328,11 +1329,11 @@ class PV:
         Parameters
         ----------
         wait : boolean
-            If True (default) block until a matching WriteNotifyResponse is
+            If True (default) block until a matching response is
             received from the server. Raises TimeoutError if that response is
             not received within the time specified by the `timeout` parameter.
         callback : callable or None
-            Called with the WriteNotifyResponse as its argument when received.
+            Called with the response as its argument when received.
         timeout : number or None
             Number of seconds to wait before raising TimeoutError. Default is
             2.
@@ -1344,11 +1345,14 @@ class PV:
             Requested number of values. Default is the channel's native data
             count, which can be checked in the Channel's attribute
             :attr:`native_data_count`.
+        use_notify: boolean
+            Send a ``ReadNotifyRequest`` instead of a ``ReadRequest``.
         """
         ioid = self.circuit_manager._ioid_counter()
         command = self.channel.read(ioid=ioid,
                                     data_type=data_type,
-                                    data_count=data_count)
+                                    data_count=data_count,
+                                    use_notify=use_notify)
         # Stash the ioid to match the response to the request.
 
         event = threading.Event()

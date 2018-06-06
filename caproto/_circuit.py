@@ -15,7 +15,8 @@ from ._commands import (AccessRightsResponse, CreateChFailResponse,
                         ClientNameRequest, CreateChanRequest,
                         CreateChanResponse, EventAddRequest, EventAddResponse,
                         EventCancelRequest, EventCancelResponse,
-                        HostNameRequest, ReadNotifyRequest, ReadNotifyResponse,
+                        HostNameRequest, ReadNotifyRequest, ReadRequest,
+                        ReadNotifyResponse, ReadResponse,
                         SearchResponse, ServerDisconnResponse,
                         VersionRequest, VersionResponse, WriteNotifyRequest,
                         WriteNotifyResponse, WriteRequest,
@@ -211,6 +212,7 @@ class VirtualCircuit:
                                 CreateChanRequest, CreateChanResponse,
                                 CreateChFailResponse, AccessRightsResponse,
                                 ReadNotifyRequest, ReadNotifyResponse,
+                                ReadRequest, ReadResponse,
                                 WriteNotifyRequest, WriteNotifyResponse,
                                 WriteRequest,
                                 EventAddRequest, EventAddResponse,
@@ -220,7 +222,8 @@ class VirtualCircuit:
             # do this in one of a couple different ways depenending on the
             # Command.
             if isinstance(command, (ReadNotifyRequest, WriteNotifyRequest,
-                                    WriteRequest, EventAddRequest)):
+                                    WriteRequest, ReadRequest,
+                                    EventAddRequest)):
                 # Identify the Channel based on its sid.
                 sid = command.sid
                 try:
@@ -228,7 +231,7 @@ class VirtualCircuit:
                 except KeyError:
                     err = get_exception(self.our_role, command)
                     raise err("Unknown Channel sid {!r}".format(command.sid))
-            elif isinstance(command, (ReadNotifyResponse,
+            elif isinstance(command, (ReadNotifyResponse, ReadResponse,
                                       WriteNotifyResponse)):
                 # Identify the Channel based on its ioid.
                 try:
@@ -310,7 +313,8 @@ class VirtualCircuit:
             elif isinstance(command, ClearChannelResponse):
                 self.channels_sid.pop(chan.sid)
                 self.channels.pop(chan.cid)
-            elif isinstance(command, (ReadNotifyRequest, WriteNotifyRequest)):
+            elif isinstance(command, (ReadNotifyRequest, ReadRequest,
+                                      WriteNotifyRequest)):
                 # Stash the ioid for later reference.
                 self._ioids[command.ioid] = chan
             elif isinstance(command, EventAddRequest):
@@ -760,9 +764,9 @@ class ServerChannel(_BaseChannel):
         return command
 
     def read(self, data, ioid, data_type=None, data_count=None, status=1, *,
-             metadata=None):
+             metadata=None, use_notify=False):
         """
-        Generate a valid :class:`ReadNotifyResponse`.
+        Generate a valid :class:`ReadResponse` or :class:`ReadNotifyResponse`.
 
         Parameters
         ----------
@@ -780,14 +784,18 @@ class ServerChannel(_BaseChannel):
             Default is 1 (success).
         metadata : ``ctypes.BigEndianStructure`` or tuple
             Status and control metadata for the values
+        use_notify : boolean, optional
+            False by default. If True, send a ``ReadNotifyRespose`` instead of
+            a ``ReadResponse``.
 
         Returns
         -------
-        ReadNotifyResponse
+        ReadResponse or ReadNotifyResponse
         """
         data_type, data_count = self._fill_defaults(data_type, data_count)
-        command = ReadNotifyResponse(data, data_type, data_count, status,
-                                     ioid, metadata=metadata)
+        cls = ReadNotifyResponse if use_notify else ReadResponse
+        command = cls(data, data_type, data_count, status, ioid,
+                      metadata=metadata)
         return command
 
     def write(self, ioid, data_type=None, data_count=None, status=1):

@@ -208,14 +208,16 @@ class VirtualCircuit:
             self.client_hostname = command.name.decode(STR_ENC)
         elif isinstance(command, ca.ClientNameRequest):
             self.client_username = command.name.decode(STR_ENC)
-        elif isinstance(command, ca.ReadNotifyRequest):
+        elif isinstance(command, (ca.ReadNotifyRequest, ca.ReadRequest)):
             chan, db_entry = get_db_entry()
             metadata, data = await db_entry.auth_read(
                 self.client_hostname, self.client_username,
                 command.data_type, user_address=self.circuit.address)
+            use_notify = isinstance(command, ca.ReadNotifyRequest)
             return [chan.read(data=data, data_type=command.data_type,
                               data_count=len(data), status=1,
-                              ioid=command.ioid, metadata=metadata)
+                              ioid=command.ioid, metadata=metadata,
+                              use_notify=use_notify)
                     ]
         elif isinstance(command, (ca.WriteRequest, ca.WriteNotifyRequest)):
             chan, db_entry = get_db_entry()

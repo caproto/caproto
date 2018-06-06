@@ -101,6 +101,7 @@ class VirtualCircuit:
                 self.log.debug('Command queue loop exiting')
                 break
             elif isinstance(command, (ca.ReadNotifyResponse,
+                                      ca.ReadResponse,
                                       ca.WriteNotifyResponse)):
                 user_event = self.ioids.pop(command.ioid)
                 self.ioid_data[command.ioid] = command
@@ -113,7 +114,8 @@ class VirtualCircuit:
             elif isinstance(command, ca.ErrorResponse):
                 original_req = command.original_request
                 cmd_class = ca.get_command_class(ca.CLIENT, original_req)
-                if cmd_class in (ca.ReadNotifyRequest, ca.WriteNotifyRequest):
+                if cmd_class in (ca.ReadNotifyRequest, ca.ReadRequest,
+                                 ca.WriteNotifyRequest):
                     ioid = original_req.parameter2
                     user_event = self.ioids.pop(ioid)
                     self.ioid_data[ioid] = command
@@ -199,7 +201,7 @@ class Channel:
         await event.wait()
 
         reading = self.circuit.ioid_data.pop(ioid)
-        if isinstance(reading, ca.ReadNotifyResponse):
+        if isinstance(reading, (ca.ReadResponse, ca.ReadNotifyResponse)):
             self.last_reading = reading
             return self.last_reading
         else:

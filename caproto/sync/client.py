@@ -167,7 +167,7 @@ def _read(chan, timeout, data_type, use_notify):
             raise TimeoutError("Timeout while awaiting reading.")
 
         for command in commands:
-            if (isinstance(command, (ca.ReadResponse, ca.ReadNotifyResponse) and
+            if (isinstance(command, (ca.ReadResponse, ca.ReadNotifyResponse)) and
                     command.ioid == req.ioid):
                 return command
             elif isinstance(command, ca.ErrorResponse):
