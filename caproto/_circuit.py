@@ -25,6 +25,7 @@ from ._utils import (CLIENT, SERVER, NEED_DATA, DISCONNECTED, CaprotoKeyError,
                      CaprotoValueError, CaprotoRuntimeError, CaprotoError)
 from ._dbr import (SubscriptionType, )
 from ._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
+from ._status import CAStatus
 
 
 __all__ = ('VirtualCircuit', 'ClientChannel', 'ServerChannel',
@@ -816,7 +817,8 @@ class ServerChannel(_BaseChannel):
         return command
 
     def subscribe(self, data, subscriptionid, data_type=None,
-                  data_count=None, status_code=32, metadata=None):
+                  data_count=None, status_code=CAStatus.ECA_NEWCONN,
+                  metadata=None):
         """
         Generate a valid :class:`EventAddResponse`.
 
@@ -832,8 +834,8 @@ class ServerChannel(_BaseChannel):
             Requested number of values. Default is the channel's native data
             count, which can be checked in the Channel's attribute
             :attr:`native_data_count`.
-        status_code : integer, optional
-            Default is 32 (???).
+        status_code : CAStatus or corresponding integer code
+            Default is ``CAStatus.ECA_NEWCONN``
         metadata : ``ctypes.BigEndianStructure`` or tuple
             Status and control metadata for the values
 
@@ -841,7 +843,6 @@ class ServerChannel(_BaseChannel):
         -------
         EventAddResponse
         """
-        # TODO It's unclear what the status_code means here.
         data_type, data_count = self._fill_defaults(data_type, data_count)
         command = EventAddResponse(data, data_type, data_count, status_code,
                                    subscriptionid, metadata=metadata)
