@@ -54,6 +54,9 @@ def main():
                         help="Verbose mode. (Use -vvv for more.)")
     parser.add_argument('-vvv', action='store_true',
                         help=argparse.SUPPRESS)
+    parser.add_argument('--notify', '-c', action='store_true',
+                        help=("Send a ReadNotifyRequest instead of a "
+                              "ReadRequest."))
     parser.add_argument('--no-color', action='store_true',
                         help="Suppress ANSI color codes in log messages.")
     parser.add_argument('--no-repeater', action='store_true',
@@ -76,6 +79,7 @@ def main():
                             timeout=args.timeout,
                             priority=args.priority,
                             force_int_enums=args.n,
+                            use_notify=args.notify,
                             repeater=False)
             if args.format is None:
                 format_str = '{pv_name: <40}  {response.data}'
