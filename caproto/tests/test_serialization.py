@@ -353,4 +353,4 @@ def test_extended_headers_smoke(header_name):
     print(reg_hdr)
     assert isinstance(reg_hdr, MessageHeader)
     print(ext_hdr)
-    assert isinstance(ext_hdr, ExtendedMessageHeader)
+    assert isinstance(ext_hdr, (MessageHeader, ExtendedMessageHeader))

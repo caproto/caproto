@@ -4,14 +4,9 @@ import ctypes
 
 
 # constants related to ExtendedMessageHeader
-MAX_16BIT = 2**16 - 1
-MAX_32BIT = 2**32 - 1
+MAX_16BIT = 0xffff
 MARKER1 = 0xffff
 MARKER2 = 0x0000
-
-def has_overflowing_field(struct_args):
-    return (any(x > MAX_16BIT for x in struct_args[:4]) or
-            any(x > MAX_32BIT for x in struct_args[4:]))
 
 
 class _BaseMessageHeader(ctypes.BigEndianStructure):
@@ -45,6 +40,11 @@ class ExtendedMessageHeader(_BaseMessageHeader):
     The specification is documented at:
     http://www.aps.anl.gov/epics/base/R3-16/0-docs/CAproto/index.html#_messages
     """
+    def __init__(self, command, payload_size, data_type, data_count,
+                 parameter1, parameter2):
+        super().__init__(command, MARKER1, data_type, MARKER2, parameter1,
+                         parameter2, payload_size, data_count)
+
     _fields_ = [("command", ctypes.c_uint16),
                 ("marker1", ctypes.c_uint16),
                 ("data_type", ctypes.c_uint16),
@@ -62,13 +62,13 @@ def VersionRequestHeader(priority, version):
     Construct a ``MessageHeader`` for a VersionRequest command.
 
     Exchanges client and server protocol versions and desired circuit priority.
-    This is the first message sent when a new TCP (Virtual Circuit) connection is established.
-    Must be sent before any other exchange between client, server and repeater.
-    The communication is not strictly request response, but will be perceived as such by the implementation.
-    When a new TCP connection is established by the client, CA_PROTO_VERSION is sent.
-    Likewise, the server will accept the connection and send the response form back.
-    Sent over UDP or TCP.
-
+    This is the first message sent when a new TCP (Virtual Circuit) connection
+    is established.   Must be sent before any other exchange between client,
+    server and repeater.   The communication is not strictly request response,
+    but will be perceived as such by the implementation.   When a new TCP
+    connection is established by the client, CA_PROTO_VERSION is sent.
+    Likewise, the server will accept the connection and send the response form
+    back.   Sent over UDP or TCP.
 
     Parameters
     ----------
@@ -80,19 +80,7 @@ def VersionRequestHeader(priority, version):
         Minor protocol version number. Only used when sent over TCP.
 
     """
-    struct_args = (0, 0, priority, version, 0, 0)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    return MessageHeader(0, 0, priority, version, 0, 0)
 
 
 def VersionResponseHeader(version):
@@ -100,13 +88,13 @@ def VersionResponseHeader(version):
     Construct a ``MessageHeader`` for a VersionResponse command.
 
     Exchanges client and server protocol versions and desired circuit priority.
-    This is the first message sent when a new TCP (Virtual Circuit) connection is established.
-    Must be sent before any other exchange between client, server and repeater.
-    The communication is not strictly request response, but will be perceived as such by the implementation.
-    When a new TCP connection is established by the client, CA_PROTO_VERSION is sent.
-    Likewise, the server will accept the connection and send the response form back.
-    Sent over UDP or TCP.
-
+    This is the first message sent when a new TCP (Virtual Circuit) connection
+    is established.   Must be sent before any other exchange between client,
+    server and repeater.   The communication is not strictly request response,
+    but will be perceived as such by the implementation.   When a new TCP
+    connection is established by the client, CA_PROTO_VERSION is sent.
+    Likewise, the server will accept the connection and send the response form
+    back.   Sent over UDP or TCP.
 
     Parameters
     ----------
@@ -115,28 +103,14 @@ def VersionResponseHeader(version):
         Minor protocol version number. Only used when sent over TCP.
 
     """
-    struct_args = (0, 0, 1, version, 1, 0)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    return MessageHeader(0, 0, 1, version, 1, 0)
 
 
 def SearchRequestHeader(payload_size, reply, version, cid):
     """
     Construct a ``MessageHeader`` for a SearchRequest command.
 
-    Searches for a given channel name.
-    Sent over UDP or TCP.
-
+    Searches for a given channel name.   Sent over UDP or TCP.
 
     Parameters
     ----------
@@ -145,8 +119,8 @@ def SearchRequestHeader(payload_size, reply, version, cid):
         Padded size of channel name.
 
     reply : integer
-        Search Reply Flag
-					(8.4.), indicating whether failed search response should be returned.
+        Search Reply Flag  (8.4.), indicating whether failed search response should
+    be returned.
 
     version : integer
         Client minor protocol version number.
@@ -156,27 +130,18 @@ def SearchRequestHeader(payload_size, reply, version, cid):
 
     """
     struct_args = (6, payload_size, reply, version, cid, cid)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    # If payload_size or data_count cannot fit into a 16-bit integer, use the
+    # extended header.
+    return (ExtendedMessageHeader(*struct_args)
+            if any((payload_size > 0xffff, version > 0xffff, ))
+            else MessageHeader(*struct_args))
 
 
 def SearchResponseHeader(data_type, sid, cid):
     """
     Construct a ``MessageHeader`` for a SearchResponse command.
 
-    Searches for a given channel name.
-    Sent over UDP or TCP.
-
+    Searches for a given channel name.   Sent over UDP or TCP.
 
     Parameters
     ----------
@@ -185,38 +150,22 @@ def SearchResponseHeader(data_type, sid, cid):
         TCP Port number of server that responded.
 
     sid : integer
-        Temporary SID, SID - Server ID
-					(3.2.2.).
+        Temporary SID, SID - Server ID  (3.2.2.).
 
     cid : integer
-        Channel CID, CID - Client ID
-					(3.2.1.).
+        Channel CID, CID - Client ID  (3.2.1.).
 
     """
-    struct_args = (6, 8, data_type, 0, sid, cid)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    return MessageHeader(6, 8, data_type, 0, sid, cid)
 
 
 def NotFoundResponseHeader(reply_flag, version, cid):
     """
     Construct a ``MessageHeader`` for a NotFoundResponse command.
 
-    Indicates that a channel with requested name does not exist.
-    Sent in response to CA_PROTO_SEARCH
-    		(4.6.), but only when its DO_REPLY flag was set.
-    Sent over UDP.
-
+    Indicates that a channel with requested name does not exist.   Sent in
+    response to CA_PROTO_SEARCH   (4.6.), but only when its DO_REPLY flag was
+    set.   Sent over UDP.
 
     Parameters
     ----------
@@ -231,84 +180,43 @@ def NotFoundResponseHeader(reply_flag, version, cid):
         CID of the channel.
 
     """
-    struct_args = (14, 0, reply_flag, version, cid, cid)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    return MessageHeader(14, 0, reply_flag, version, cid, cid)
 
 
 def EchoRequestHeader():
     """
     Construct a ``MessageHeader`` for a EchoRequest command.
 
-    Connection verify used by CA_V43.
-    Sent over TCP.
-
+    Connection verify used by CA_V43.   Sent over TCP.
 
     Parameters
     ----------
 
     """
-    struct_args = (23, 0, 0, 0, 0, 0)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    return MessageHeader(23, 0, 0, 0, 0, 0)
 
 
 def EchoResponseHeader():
     """
     Construct a ``MessageHeader`` for a EchoResponse command.
 
-    Connection verify used by CA_V43.
-    Sent over TCP.
-
+    Connection verify used by CA_V43.   Sent over TCP.
 
     Parameters
     ----------
 
     """
-    struct_args = (23, 0, 0, 0, 0, 0)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    return MessageHeader(23, 0, 0, 0, 0, 0)
 
 
 def RsrvIsUpResponseHeader(version, server_port, beaconid, address):
     """
     Construct a ``MessageHeader`` for a RsrvIsUpResponse command.
 
-    Beacon sent by a server when it becomes available.
-    Beacons are also sent out periodically to announce the server is still alive.
-    Another function of beacons is to allow detection of changes in network topology.
-    Sent over UDP.
-
+    Beacon sent by a server when it becomes available.   Beacons are also sent
+    out periodically to announce the server is still alive.   Another function
+    of beacons is to allow detection of changes in network topology.   Sent
+    over UDP.
 
     Parameters
     ----------
@@ -326,28 +234,14 @@ def RsrvIsUpResponseHeader(version, server_port, beaconid, address):
         May contain IP address of the server.
 
     """
-    struct_args = (13, 0, version, server_port, beaconid, address)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    return MessageHeader(13, 0, version, server_port, beaconid, address)
 
 
 def RepeaterConfirmResponseHeader(repeater_address):
     """
     Construct a ``MessageHeader`` for a RepeaterConfirmResponse command.
 
-    Confirms successful client registration with repeater.
-    Sent over UDP.
-
+    Confirms successful client registration with repeater.   Sent over UDP.
 
     Parameters
     ----------
@@ -356,29 +250,15 @@ def RepeaterConfirmResponseHeader(repeater_address):
         Address with which the registration succeeded.
 
     """
-    struct_args = (17, 0, 0, 0, 0, repeater_address)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    return MessageHeader(17, 0, 0, 0, 0, repeater_address)
 
 
 def RepeaterRegisterRequestHeader(client_ip_address):
     """
     Construct a ``MessageHeader`` for a RepeaterRegisterRequest command.
 
-    Requests registration with the repeater.
-    Repeater will confirm successful registration using CA_REPEATER_CONFIRM.
-    Sent over TCP.
-
+    Requests registration with the repeater.   Repeater will confirm successful
+    registration using CA_REPEATER_CONFIRM.   Sent over TCP.
 
     Parameters
     ----------
@@ -387,29 +267,16 @@ def RepeaterRegisterRequestHeader(client_ip_address):
         IP address on which the client is listening
 
     """
-    struct_args = (24, 0, 0, 0, 0, client_ip_address)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    return MessageHeader(24, 0, 0, 0, 0, client_ip_address)
 
 
 def EventAddRequestHeader(data_type, data_count, sid, subscriptionid):
     """
     Construct a ``MessageHeader`` for a EventAddRequest command.
 
-    Creates a subscription on a channel, allowing the client to be notified of changes in value.
-    A request will produce at least one response.
-    Sent over TCP.
-
+    Creates a subscription on a channel, allowing the client to be notified of
+    changes in value.   A request will produce at least one response.   Sent
+    over TCP.
 
     Parameters
     ----------
@@ -421,43 +288,29 @@ def EventAddRequestHeader(data_type, data_count, sid, subscriptionid):
         Desired number of elements
 
     sid : integer
-
-				SID of the channel on which to reqister this subscription.
-				See SID - Server ID
-					(3.2.2.).
-
+        SID of the channel on which to reqister this subscription.   See SID -
+    Server ID  (3.2.2.).
 
     subscriptionid : integer
-
-				Subscription ID identifying this subscription.
-				See Subscription ID
-					(3.2.3.).
-
+        Subscription ID identifying this subscription.  See Subscription ID
+    (3.2.3.).
 
     """
     struct_args = (1, 16, data_type, data_count, sid, subscriptionid)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    # If payload_size or data_count cannot fit into a 16-bit integer, use the
+    # extended header.
+    return (ExtendedMessageHeader(*struct_args)
+            if any((16 > 0xffff, data_count > 0xffff, ))
+            else MessageHeader(*struct_args))
 
 
 def EventAddResponseHeader(payload_size, data_type, data_count, status_code, subscriptionid):
     """
     Construct a ``MessageHeader`` for a EventAddResponse command.
 
-    Creates a subscription on a channel, allowing the client to be notified of changes in value.
-    A request will produce at least one response.
-    Sent over TCP.
-
+    Creates a subscription on a channel, allowing the client to be notified of
+    changes in value.   A request will produce at least one response.   Sent
+    over TCP.
 
     Parameters
     ----------
@@ -472,80 +325,57 @@ def EventAddResponseHeader(payload_size, data_type, data_count, status_code, sub
         Payload data count.
 
     status_code : integer
-        Status code
-					(13.) (ECA_NORMAL on success).
+        Status code  (13.) (ECA_NORMAL on success).
 
     subscriptionid : integer
         Subscription ID
 
     """
     struct_args = (1, payload_size, data_type, data_count, status_code, subscriptionid)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    # If payload_size or data_count cannot fit into a 16-bit integer, use the
+    # extended header.
+    return (ExtendedMessageHeader(*struct_args)
+            if any((payload_size > 0xffff, data_count > 0xffff, ))
+            else MessageHeader(*struct_args))
 
 
 def EventCancelRequestHeader(data_type, data_count, sid, subscriptionid):
     """
     Construct a ``MessageHeader`` for a EventCancelRequest command.
 
-    Clears event subscription.
-    This message will stop event updates for specified channel.
-    Sent over TCP.
-
+    Clears event subscription.   This message will stop event updates for
+    specified channel.   Sent over TCP.
 
     Parameters
     ----------
 
     data_type : integer
-        Same value as in corresponding CA_PROTO_EVENT_ADD
-					(6.1.).
+        Same value as in corresponding CA_PROTO_EVENT_ADD  (6.1.).
 
     data_count : integer
-        Same value as in corresponding CA_PROTO_EVENT_ADD
-					(6.1.).
+        Same value as in corresponding CA_PROTO_EVENT_ADD  (6.1.).
 
     sid : integer
-        Same value as in corresponding CA_PROTO_EVENT_ADD
-					(6.1.).
+        Same value as in corresponding CA_PROTO_EVENT_ADD  (6.1.).
 
     subscriptionid : integer
-        Same value as in corresponding CA_PROTO_EVENT_ADD
-					(6.1.).
+        Same value as in corresponding CA_PROTO_EVENT_ADD  (6.1.).
 
     """
     struct_args = (2, 0, data_type, data_count, sid, subscriptionid)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    # If payload_size or data_count cannot fit into a 16-bit integer, use the
+    # extended header.
+    return (ExtendedMessageHeader(*struct_args)
+            if any((data_count > 0xffff, ))
+            else MessageHeader(*struct_args))
 
 
 def EventCancelResponseHeader(data_type, sid, subscriptionid):
     """
     Construct a ``MessageHeader`` for a EventCancelResponse command.
 
-    Clears event subscription.
-    This message will stop event updates for specified channel.
-    Sent over TCP.
-
+    Clears event subscription.   This message will stop event updates for
+    specified channel.   Sent over TCP.
 
     Parameters
     ----------
@@ -560,33 +390,15 @@ def EventCancelResponseHeader(data_type, sid, subscriptionid):
         Same value as CA_PROTO_EVENT_ADD request.
 
     """
-    struct_args = (1, 0, data_type, 0, sid, subscriptionid)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    return MessageHeader(1, 0, data_type, 0, sid, subscriptionid)
 
 
 def ReadRequestHeader(data_type, data_count, sid, ioid):
     """
     Construct a ``MessageHeader`` for a ReadRequest command.
 
-
-		Read value of a channel.
-		Sent over TCP.
-
-
-Deprecated since protocol version 3.13.
-
-
+    Read value of a channel. Sent over TCP.   Deprecated since protocol version
+    3.13.
 
     Parameters
     ----------
@@ -605,32 +417,19 @@ Deprecated since protocol version 3.13.
 
     """
     struct_args = (3, 0, data_type, data_count, sid, ioid)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    # If payload_size or data_count cannot fit into a 16-bit integer, use the
+    # extended header.
+    return (ExtendedMessageHeader(*struct_args)
+            if any((data_count > 0xffff, ))
+            else MessageHeader(*struct_args))
 
 
 def ReadResponseHeader(payload_size, data_type, data_count, sid, ioid):
     """
     Construct a ``MessageHeader`` for a ReadResponse command.
 
-
-		Read value of a channel.
-		Sent over TCP.
-
-
-Deprecated since protocol version 3.13.
-
-
+    Read value of a channel. Sent over TCP.   Deprecated since protocol version
+    3.13.
 
     Parameters
     ----------
@@ -652,27 +451,18 @@ Deprecated since protocol version 3.13.
 
     """
     struct_args = (3, payload_size, data_type, data_count, sid, ioid)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    # If payload_size or data_count cannot fit into a 16-bit integer, use the
+    # extended header.
+    return (ExtendedMessageHeader(*struct_args)
+            if any((payload_size > 0xffff, data_count > 0xffff, ))
+            else MessageHeader(*struct_args))
 
 
 def WriteRequestHeader(payload_size, data_type, data_count, sid, ioid):
     """
     Construct a ``MessageHeader`` for a WriteRequest command.
 
-    Writes new channel value.
-    Sent over TCP.
-
+    Writes new channel value.   Sent over TCP.
 
     Parameters
     ----------
@@ -694,152 +484,99 @@ def WriteRequestHeader(payload_size, data_type, data_count, sid, ioid):
 
     """
     struct_args = (4, payload_size, data_type, data_count, sid, ioid)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    # If payload_size or data_count cannot fit into a 16-bit integer, use the
+    # extended header.
+    return (ExtendedMessageHeader(*struct_args)
+            if any((payload_size > 0xffff, data_count > 0xffff, ))
+            else MessageHeader(*struct_args))
 
 
 def EventsOffRequestHeader():
     """
     Construct a ``MessageHeader`` for a EventsOffRequest command.
 
-    Disables a server from sending any subscription updates over this virtual circuit.
-    Sent over TCP.
-    This mechanism is used by clients with slow CPU to prevent congestion when they are unable to handle all updates recived.
-    Effective automated handling of flow control is beyond the scope of this document.
-
+    Disables a server from sending any subscription updates over this virtual
+    circuit.   Sent over TCP.   This mechanism is used by clients with slow CPU
+    to prevent congestion when they are unable to handle all updates recived.
+    Effective automated handling of flow control is beyond the scope of this
+    document.
 
     Parameters
     ----------
 
     """
-    struct_args = (8, 0, 0, 0, 0, 0)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    return MessageHeader(8, 0, 0, 0, 0, 0)
 
 
 def EventsOnRequestHeader():
     """
     Construct a ``MessageHeader`` for a EventsOnRequest command.
 
-    Enables the server to resume sending subscription updates for this virtual circuit.
-    Sent over TCP.
-    This mechanism is used by clients with slow CPU to prevent congestion when they are unable to handle all updates recived.
-    Effective automated handling of flow control is beyond the scope of this document.
-
+    Enables the server to resume sending subscription updates for this virtual
+    circuit.   Sent over TCP.   This mechanism is used by clients with slow CPU
+    to prevent congestion when they are unable to handle all updates recived.
+    Effective automated handling of flow control is beyond the scope of this
+    document.
 
     Parameters
     ----------
 
     """
-    struct_args = (9, 0, 0, 0, 0, 0)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    return MessageHeader(9, 0, 0, 0, 0, 0)
 
 
 def ReadSyncRequestHeader():
     """
     Construct a ``MessageHeader`` for a ReadSyncRequest command.
 
-Deprecated since protocol version 3.13.
-
+    Deprecated since protocol version 3.13.
 
     Parameters
     ----------
 
     """
-    struct_args = (10, 0, 0, 0, 0, 0)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    return MessageHeader(10, 0, 0, 0, 0, 0)
 
 
 def ErrorResponseHeader(payload_size, cid, status_code):
     """
     Construct a ``MessageHeader`` for a ErrorResponse command.
 
-    Sends error message and code.
-    This message is only sent from server to client in response to any request that fails and does not include error code in response.
-    This applies to all asynchronous commands.
-    Error message will contain a copy of original request and textual description of the error.
-    Sent over UDP.
-
+    Sends error message and code.   This message is only sent from server to
+    client in response to any request that fails and does not include error
+    code in response.   This applies to all asynchronous commands.   Error
+    message will contain a copy of original request and textual description of
+    the error.   Sent over UDP.
 
     Parameters
     ----------
 
     payload_size : integer
-        Size of the request header that triggered the error plus size of the error message.
+        Size of the request header that triggered the error plus size of the error
+    message.
 
     cid : integer
-        CID of the channel for which request failed, CID - Client ID
-					(3.2.1.).
+        CID of the channel for which request failed, CID - Client ID  (3.2.1.).
 
     status_code : integer
-        Error status code
-					(13.).
+        Error status code  (13.).
 
     """
     struct_args = (11, payload_size, 0, 0, cid, status_code)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    # If payload_size or data_count cannot fit into a 16-bit integer, use the
+    # extended header.
+    return (ExtendedMessageHeader(*struct_args)
+            if any((payload_size > 0xffff, ))
+            else MessageHeader(*struct_args))
 
 
 def ClearChannelRequestHeader(sid, cid):
     """
     Construct a ``MessageHeader`` for a ClearChannelRequest command.
 
-    Clears a channel.
-    This command will cause server to release the associated channel resources and no longer accept any requests for this SID/CID.
-
+    Clears a channel.   This command will cause server to release the
+    associated channel resources and no longer accept any requests for this
+    SID/CID.
 
     Parameters
     ----------
@@ -851,28 +588,16 @@ def ClearChannelRequestHeader(sid, cid):
         CID of channel to clear.
 
     """
-    struct_args = (12, 0, 0, 0, sid, cid)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    return MessageHeader(12, 0, 0, 0, sid, cid)
 
 
 def ClearChannelResponseHeader(sid, cid):
     """
     Construct a ``MessageHeader`` for a ClearChannelResponse command.
 
-    Clears a channel.
-    This command will cause server to release the associated channel resources and no longer accept any requests for this SID/CID.
-
+    Clears a channel.   This command will cause server to release the
+    associated channel resources and no longer accept any requests for this
+    SID/CID.
 
     Parameters
     ----------
@@ -884,28 +609,14 @@ def ClearChannelResponseHeader(sid, cid):
         CID of cleared channel.
 
     """
-    struct_args = (12, 0, 0, 0, sid, cid)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    return MessageHeader(12, 0, 0, 0, sid, cid)
 
 
 def ReadNotifyRequestHeader(data_type, data_count, sid, ioid):
     """
     Construct a ``MessageHeader`` for a ReadNotifyRequest command.
 
-		Read value of a channel.
-		Sent over TCP.
-
+    Read value of a channel. Sent over TCP.
 
     Parameters
     ----------
@@ -924,27 +635,18 @@ def ReadNotifyRequestHeader(data_type, data_count, sid, ioid):
 
     """
     struct_args = (15, 0, data_type, data_count, sid, ioid)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    # If payload_size or data_count cannot fit into a 16-bit integer, use the
+    # extended header.
+    return (ExtendedMessageHeader(*struct_args)
+            if any((data_count > 0xffff, ))
+            else MessageHeader(*struct_args))
 
 
 def ReadNotifyResponseHeader(payload_size, data_type, data_count, sid, ioid):
     """
     Construct a ``MessageHeader`` for a ReadNotifyResponse command.
 
-		Read value of a channel.
-		Sent over TCP.
-
+    Read value of a channel. Sent over TCP.
 
     Parameters
     ----------
@@ -966,28 +668,19 @@ def ReadNotifyResponseHeader(payload_size, data_type, data_count, sid, ioid):
 
     """
     struct_args = (15, payload_size, data_type, data_count, sid, ioid)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    # If payload_size or data_count cannot fit into a 16-bit integer, use the
+    # extended header.
+    return (ExtendedMessageHeader(*struct_args)
+            if any((payload_size > 0xffff, data_count > 0xffff, ))
+            else MessageHeader(*struct_args))
 
 
 def CreateChanRequestHeader(payload_size, cid, client_version):
     """
     Construct a ``MessageHeader`` for a CreateChanRequest command.
 
-    Requests creation of channel.
-    Server will allocate required resources and return initialized SID.
-    Sent over TCP.
-
+    Requests creation of channel.   Server will allocate required resources and
+    return initialized SID.   Sent over TCP.
 
     Parameters
     ----------
@@ -1003,28 +696,19 @@ def CreateChanRequestHeader(payload_size, cid, client_version):
 
     """
     struct_args = (18, payload_size, 0, 0, cid, client_version)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    # If payload_size or data_count cannot fit into a 16-bit integer, use the
+    # extended header.
+    return (ExtendedMessageHeader(*struct_args)
+            if any((payload_size > 0xffff, ))
+            else MessageHeader(*struct_args))
 
 
 def CreateChanResponseHeader(data_type, data_count, cid, sid):
     """
     Construct a ``MessageHeader`` for a CreateChanResponse command.
 
-    Requests creation of channel.
-    Server will allocate required resources and return initialized SID.
-    Sent over TCP.
-
+    Requests creation of channel.   Server will allocate required resources and
+    return initialized SID.   Sent over TCP.
 
     Parameters
     ----------
@@ -1043,27 +727,18 @@ def CreateChanResponseHeader(data_type, data_count, cid, sid):
 
     """
     struct_args = (18, 0, data_type, data_count, cid, sid)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    # If payload_size or data_count cannot fit into a 16-bit integer, use the
+    # extended header.
+    return (ExtendedMessageHeader(*struct_args)
+            if any((data_count > 0xffff, ))
+            else MessageHeader(*struct_args))
 
 
 def WriteNotifyRequestHeader(payload_size, data_type, data_count, sid, ioid):
     """
     Construct a ``MessageHeader`` for a WriteNotifyRequest command.
 
-    Writes new channel value.
-    Sent over TCP.
-
+    Writes new channel value.   Sent over TCP.
 
     Parameters
     ----------
@@ -1085,27 +760,18 @@ def WriteNotifyRequestHeader(payload_size, data_type, data_count, sid, ioid):
 
     """
     struct_args = (19, payload_size, data_type, data_count, sid, ioid)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    # If payload_size or data_count cannot fit into a 16-bit integer, use the
+    # extended header.
+    return (ExtendedMessageHeader(*struct_args)
+            if any((payload_size > 0xffff, data_count > 0xffff, ))
+            else MessageHeader(*struct_args))
 
 
 def WriteNotifyResponseHeader(data_type, data_count, status, ioid):
     """
     Construct a ``MessageHeader`` for a WriteNotifyResponse command.
 
-    Writes new channel value.
-    Sent over TCP.
-
+    Writes new channel value.   Sent over TCP.
 
     Parameters
     ----------
@@ -1124,27 +790,19 @@ def WriteNotifyResponseHeader(data_type, data_count, status, ioid):
 
     """
     struct_args = (19, 0, data_type, data_count, status, ioid)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    # If payload_size or data_count cannot fit into a 16-bit integer, use the
+    # extended header.
+    return (ExtendedMessageHeader(*struct_args)
+            if any((data_count > 0xffff, ))
+            else MessageHeader(*struct_args))
 
 
 def ClientNameRequestHeader(payload_size):
     """
     Construct a ``MessageHeader`` for a ClientNameRequest command.
 
-    Sends local username to virtual circuit peer.
-    This name identifies the user and affects access rights.
-
+    Sends local username to virtual circuit peer.  This name identifies the
+    user and affects access rights.
 
     Parameters
     ----------
@@ -1154,28 +812,19 @@ def ClientNameRequestHeader(payload_size):
 
     """
     struct_args = (20, payload_size, 0, 0, 0, 0)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    # If payload_size or data_count cannot fit into a 16-bit integer, use the
+    # extended header.
+    return (ExtendedMessageHeader(*struct_args)
+            if any((payload_size > 0xffff, ))
+            else MessageHeader(*struct_args))
 
 
 def HostNameRequestHeader(payload_size):
     """
     Construct a ``MessageHeader`` for a HostNameRequest command.
 
-    Sends local host name to virtual circuit peer.
-    This name will affect access rights.
-    Sent over TCP.
-
+    Sends local host name to virtual circuit peer.   This name will affect
+    access rights.   Sent over TCP.
 
     Parameters
     ----------
@@ -1185,28 +834,21 @@ def HostNameRequestHeader(payload_size):
 
     """
     struct_args = (21, payload_size, 0, 0, 0, 0)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    # If payload_size or data_count cannot fit into a 16-bit integer, use the
+    # extended header.
+    return (ExtendedMessageHeader(*struct_args)
+            if any((payload_size > 0xffff, ))
+            else MessageHeader(*struct_args))
 
 
 def AccessRightsResponseHeader(cid, access_rights):
     """
     Construct a ``MessageHeader`` for a AccessRightsResponse command.
 
-    Notifies of access rights for a channel.
-    This value is determined based on host and client name and may change during runtime.
-    Client cannot change access rights nor can it explicitly query its value, so last received value must be stored.
-
+    Notifies of access rights for a channel.   This value is determined based
+    on host and client name and may change during runtime.   Client cannot
+    change access rights nor can it explicitly query its value, so last
+    received value must be stored.
 
     Parameters
     ----------
@@ -1215,32 +857,18 @@ def AccessRightsResponseHeader(cid, access_rights):
         Channel affected by change.
 
     access_rights : integer
-        Access rights
-					(8.5.) for given channel.
+        Access rights  (8.5.) for given channel.
 
     """
-    struct_args = (22, 0, 0, 0, cid, access_rights)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    return MessageHeader(22, 0, 0, 0, cid, access_rights)
 
 
 def CreateChFailResponseHeader(cid):
     """
     Construct a ``MessageHeader`` for a CreateChFailResponse command.
 
-    Reports that channel creation failed.
-    This response is sent to when channel creation in CA_PROTO_CREATE_CHAN fails.
-
+    Reports that channel creation failed.   This response is sent to when
+    channel creation in CA_PROTO_CREATE_CHAN fails.
 
     Parameters
     ----------
@@ -1249,29 +877,15 @@ def CreateChFailResponseHeader(cid):
         Client channel ID
 
     """
-    struct_args = (26, 0, 0, 0, cid, 0)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    return MessageHeader(26, 0, 0, 0, cid, 0)
 
 
 def ServerDisconnResponseHeader(cid):
     """
     Construct a ``MessageHeader`` for a ServerDisconnResponse command.
 
-    Notifies the client that server has disconnected the channel.
-    This may be since the channel has been destroyed on server.
-    Sent over TCP.
-
+    Notifies the client that server has disconnected the channel.   This may be
+    since the channel has been destroyed on server.   Sent over TCP.
 
     Parameters
     ----------
@@ -1280,17 +894,9 @@ def ServerDisconnResponseHeader(cid):
         CID that was provided during CA_PROTO_CREATE_CHAN
 
     """
-    struct_args = (27, 0, 0, 0, cid, 0)
-    if has_overflowing_field(struct_args):
-        # Use extended message form.
-        return ExtendedMessageHeader(struct_args[0],  # command
-                                     MARKER1,
-                                     struct_args[2],  # data_type
-                                     MARKER2,
-                                     struct_args[4],  # parameter1
-                                     struct_args[5],  # parameter2
-                                     struct_args[1],  # payload_size
-                                     struct_args[3])  # data_count
-    else:
-        return MessageHeader(*struct_args)
+    return MessageHeader(27, 0, 0, 0, cid, 0)
 
+
+# This file auto-generated by `generate_headers.py`.
+# Do not modify this file directly.
+# (end of auto-generated code)
