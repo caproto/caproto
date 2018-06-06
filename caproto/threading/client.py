@@ -1501,16 +1501,15 @@ class CallbackHandler:
             cb_id = self._callback_id
             self._callback_id += 1
 
-        def removed(_):
-            self.remove_callback(cb_id)
+            def removed(_):
+                self.remove_callback(cb_id)
 
-        if inspect.ismethod(func):
-            ref = weakref.WeakMethod(func, removed)
-        else:
-            # TODO: strong reference to non-instance methods?
-            ref = weakref.ref(func, removed)
+            if inspect.ismethod(func):
+                ref = weakref.WeakMethod(func, removed)
+            else:
+                # TODO: strong reference to non-instance methods?
+                ref = weakref.ref(func, removed)
 
-        with self._callback_lock:
             self.callbacks[cb_id] = ref
         return cb_id
 
