@@ -404,7 +404,7 @@ def test_mocking_records(request, prefix):
 
     # write a special value that causes it to fail
     with pytest.raises(ca.ErrorResponseReceived):
-        write(b_val, 1)
+        write(b_val, 1, use_notify=True)
 
     # status should be WRITE, MAJOR
     assert list(read(b_val).data) == [0]
