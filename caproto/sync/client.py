@@ -19,7 +19,8 @@ from .._utils import ErrorResponseReceived, CaprotoError
 from .repeater import spawn_repeater
 
 
-__all__ = ['read', 'write', 'subscribe', 'block']
+__all__ = ('read', 'write', 'subscribe', 'block', 'interrupt',
+           'read_write_read')
 logger = logging.getLogger('caproto')
 
 CA_SERVER_PORT = 5064  # just a default

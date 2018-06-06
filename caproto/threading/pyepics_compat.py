@@ -13,7 +13,7 @@ from .client import (Context, SharedBroadcaster, AUTOMONITOR_MAXLENGTH,
 from caproto import AccessRights, field_types, ChannelType
 
 
-__all__ = ['PV', 'get_pv', 'caget', 'caput']
+__all__ = ('PV', 'get_pv', 'caget', 'caput')
 
 
 class AccessRightsException(ca.CaprotoError):
