@@ -32,9 +32,6 @@ def main():
                                  "and usages like "
                                  "{timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are "
                                  "supported."))
-    parser.add_argument('--no-repeater', action='store_true',
-                        help=("Do not spawn a Channel Access repeater daemon "
-                              "process."))
     parser.add_argument('--priority', '-p', type=int, default=0,
                         help="Channel Access Virtual Circuit priority. "
                              "Lowest is 0; highest is 99.")
@@ -50,6 +47,9 @@ def main():
                         help=argparse.SUPPRESS)
     parser.add_argument('--no-color', action='store_true',
                         help="Suppress ANSI color codes in log messages.")
+    parser.add_argument('--no-repeater', action='store_true',
+                        help=("Do not spawn a Channel Access repeater daemon "
+                              "process."))
     args = parser.parse_args()
     if args.no_color:
         color_logs(False)

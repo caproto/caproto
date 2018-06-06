@@ -185,7 +185,7 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0,
     Parameters
     ----------
     pv_name : str
-    data_type : int, optional
+    data_type : ChannelType or corresponding integer ID, optional
         Request specific data type. Default is Channel's native data type.
     timeout : float, optional
         Default is 1 second.
@@ -411,7 +411,7 @@ def write(pv_name, data, *, data_type=None, metadata=None,
     pv_name : str
     data : str, int, or float or a list of these
         Value to write.
-    data_type : int, optional
+    data_type : ChannelType or corresponding integer ID, optional
         Request specific data type. Default is inferred from input.
     metadata : ``ctypes.BigEndianStructure`` or tuple
         Status and control metadata for the values
