@@ -414,7 +414,7 @@ def test_mocking_records(request, prefix):
     # now a field that's linked back to the precision metadata:
     b_precision = f'{prefix}B.PREC'
     assert list(read(b_precision).data) == [3]
-    assert write(b_precision, 4)
+    write(b_precision, 4, use_notify=True)
     assert list(read(b_precision).data) == [4]
 
     # does writing to .PREC update the ChannelData metadata?
