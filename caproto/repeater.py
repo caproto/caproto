@@ -1,3 +1,16 @@
+"""
+This module is installed as an entry-point, available from the shell as:
+
+caproto-repeater ...
+
+It can equivalently be invoked as:
+
+python3 -m caproto.commandline.repeater ...
+
+For access to the underlying functionality from a Python script or interactive
+Python session, do not import this module; instead import
+caproto.sync.repeater.
+"""
 import argparse
 import logging
 import os

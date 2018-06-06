@@ -1,3 +1,15 @@
+"""
+This module is installed as an entry-point, available as:
+
+caproto-get ...
+
+It can equivalently be invoked as:
+
+python3 -m caproto.commandline.get ...
+
+For access to the underlying functionality from a Python script or interactive
+Python session, do not import this module; instead import caproto.sync.client.
+"""
 import argparse
 from datetime import datetime
 import logging

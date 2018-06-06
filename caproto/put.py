@@ -1,3 +1,15 @@
+"""
+This module is installed as an entry-point, available from the shell as:
+
+caproto-put ...
+
+It can equivalently be invoked as:
+
+python3 -m caproto.commandline.put ...
+
+For access to the underlying functionality from a Python script or interactive
+Python session, do not import this module; instead import caproto.sync.client.
+"""
 import argparse
 from datetime import datetime
 import logging
