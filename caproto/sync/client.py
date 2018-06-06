@@ -630,3 +630,12 @@ class Subscription:
         with self._callback_lock:
             for remove_id in to_remove:
                 self.callbacks.pop(remove_id, None)
+
+    def clear(self):
+        """
+        Remove all callbacks. If currently blocking, interrupt.
+        """
+        interrupt()
+        with self._callback_lock:
+            for cb_id in list(self.callbacks):
+                self.remove_callback(cb_id)
