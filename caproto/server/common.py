@@ -2,7 +2,7 @@ from collections import defaultdict, deque, namedtuple
 import logging
 import os
 import caproto as ca
-from caproto import get_beacon_address_list, get_environment_variables
+from caproto import get_environment_variables
 
 
 class DisconnectedCircuit(Exception):
@@ -286,9 +286,12 @@ class VirtualCircuit:
 
 
 class Context:
-    def __init__(self, host, port, pvdb):
-        self.host = host
-        self.port = port
+    def __init__(self, pvdb, interfaces=None):
+        if interfaces is None:
+            interfaces = ca.get_server_address_list()
+        self.interfaces = interfaces
+        self.udp_socks = {}  # map each interface to a UDP socket for searches
+        self.beacon_socks = {}  # map each interface to a UDP socket for beacons
         self.pvdb = pvdb
         self.log = logging.getLogger(f'caproto.ctx.{id(self)}')
 
@@ -302,10 +305,10 @@ class Context:
         ignore_addresses = self.environ['EPICS_CAS_IGNORE_ADDR_LIST']
         self.ignore_addresses = ignore_addresses.split(' ')
 
-    async def _core_broadcaster_loop(self):
+    async def _core_broadcaster_loop(self, udp_sock):
         while True:
             try:
-                bytes_received, address = await self.udp_sock.recvfrom(4096)
+                bytes_received, address = await udp_sock.recvfrom(4096)
             except ConnectionResetError:
                 self.log.exception('UDP server connection reset')
                 await self.async_layer.library.sleep(0.1)
@@ -392,7 +395,7 @@ class Context:
 
                 if known_pv:
                     # responding with an IP of `None` tells client to get IP
-                    # address from packet
+                    # address from the datagram.
                     search_replies.append(
                         ca.SearchResponse(self.port, None, command.cid, 13)
                     )
@@ -412,7 +415,8 @@ class Context:
             else:
                 bytes_to_send = self.broadcaster.send(*search_replies)
 
-            await self.udp_sock.sendto(bytes_to_send, addr)
+            for udp_sock in self.udp_socks.values():
+                await udp_sock.sendto(bytes_to_send, addr)
 
     async def subscription_queue_loop(self):
         while True:
@@ -442,24 +446,22 @@ class Context:
                     await sub.circuit.send(command)
 
     async def broadcast_beacon_loop(self):
+        self.log.debug('Will send beacons to %r',
+                       list(self.beacon_socks.keys()))
         beacon_period = self.environ['EPICS_CAS_BEACON_PERIOD']
-        addresses = get_beacon_address_list()
-
         while True:
-            if self.udp_sock is None:
-                await self.async_layer.library.sleep(.1)
-                continue
-            beacon = ca.RsrvIsUpResponse(13, self.port, self.beacon_count,
-                                         self.host)
-            bytes_to_send = self.broadcaster.send(beacon)
-            for addr_port in addresses:
+            for address, (interface, sock) in self.beacon_socks.items():
                 try:
-                    await self.udp_sock.sendto(bytes_to_send, addr_port)
+                    beacon = ca.RsrvIsUpResponse(13, self.port,
+                                                 self.beacon_count,
+                                                 interface)
+                    bytes_to_send = self.broadcaster.send(beacon)
+                    await sock.send(bytes_to_send)
                 except IOError:
                     self.log.exception(
                         "Failed to send beacon to %r. Try setting "
                         "EPICS_CAS_AUTO_BEACON_ADDR_LIST=no and "
-                        "EPICS_CAS_BEACON_ADDR_LIST=<addresses>.", addr_port)
+                        "EPICS_CAS_BEACON_ADDR_LIST=<addresses>.", address)
                     raise
             self.beacon_count += 1
             await self.async_layer.library.sleep(beacon_period)
@@ -476,8 +478,35 @@ class Context:
                 if hasattr(instance, 'server_startup') and
                 instance.server_startup is not None}
 
+    def _bind_tcp_sockets_with_consistent_port_number(self, make_socket):
+        # Find a random port number that is free on all self.interfaces,
+        # and get a bound TCP socket with that port number on each
+        # interface. The argument `make_socket` is expected to be a
+        # synchronous callable with the signature
+        # `make_socket(interface, port)` that does whatever
+        # library-specific incantation is necessary to return a bound
+        # socket or raise an IOError.
+        tcp_sockets = {}  # maps interface to bound socket
+        stashed_ex = None
+        for port in ca.random_ports(100):
+            try:
+                for interface in self.interfaces:
+                    s = make_socket(interface, port)
+                    tcp_sockets[interface] = s
+            except IOError as ex:
+                stashed_ex = ex
+                for s in tcp_sockets.values():
+                    s.close()
+                tcp_sockets.clear()
+            else:
+                break
+        else:
+            raise RuntimeError('No available ports and/or bind failed') from stashed_ex
+        return port, tcp_sockets
+
     async def tcp_handler(self, client, addr):
         '''Handler for each new TCP client to the server'''
+        self.log.info('Connected to new client at %s:%d.', *addr)
         cavc = ca.VirtualCircuit(ca.SERVER, addr, None)
         circuit = self.CircuitClass(cavc, client, self)
         self.circuits.add(circuit)

@@ -749,12 +749,7 @@ class RsrvIsUpResponse(Message):
     version = property(lambda self: self.header.data_type)
     server_port = property(lambda self: self.header.data_count)
     beacon_id = property(lambda self: self.header.parameter1)
-    address = property(lambda self: self.header.parameter2)
-
-    @property
-    def address_string(self):
-        addr_bytes = struct.pack('!I', self.address)
-        return socket.inet_ntop(socket.AF_INET, addr_bytes)
+    address = property(lambda self: ipv4_from_int32(self.header.parameter2))
 
 
 class RepeaterConfirmResponse(Message):

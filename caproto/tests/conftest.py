@@ -11,7 +11,6 @@ import threading
 import time
 import uuid
 import trio
-import random
 
 from types import SimpleNamespace
 
@@ -385,12 +384,7 @@ def curio_server(prefix):
                   for key, value in caget_pvdb.items()}
 
     async def _server(pvdb):
-        port = ca.find_available_tcp_port(
-            host=SERVER_HOST,
-            starting_port=random.randint(49152, 65535))
-
-        logger.info('Server will be on %s', (SERVER_HOST, port))
-        ctx = caproto.curio.server.Context(SERVER_HOST, port, pvdb)
+        ctx = caproto.curio.server.Context(pvdb)
         try:
             await ctx.run()
         except caproto.curio.server.ServerExit:
@@ -456,25 +450,8 @@ def server(request):
     def curio_runner(pvdb, client, *, threaded_client=False):
         async def server_main():
             try:
-                ex = None
-                for j in range(5):
-                    port = ca.find_available_tcp_port(
-                        host=SERVER_HOST,
-                        starting_port=random.randint(49152, 65535))
-                    ctx = caproto.curio.server.Context(
-                        SERVER_HOST, port, pvdb)
-                    print(f'Server will be on (try {j}): {(SERVER_HOST, port)}')
-
-                    try:
-                        await ctx.run()
-                    except OSError as ex:
-                        # if we get an OS error, likely due to
-                        # port already is use, try again
-                        continue
-                    else:
-                        break
-                else:
-                    raise ex
+                ctx = caproto.curio.server.Context(pvdb)
+                await ctx.run()
             except caproto.curio.server.ServerExit:
                 print('Server exited normally')
             except Exception as ex:
@@ -508,23 +485,9 @@ def server(request):
     def trio_runner(pvdb, client, *, threaded_client=False):
         async def trio_server_main(task_status):
             try:
-                ex = None
-                for j in range(5):
-                    port = ca.find_available_tcp_port(
-                        host=SERVER_HOST,
-                        starting_port=random.randint(49152, 65535))
-                    ctx = caproto.trio.server.Context(
-                        SERVER_HOST, port, pvdb)
-                    print(f'Server will be on (try {j}): {(SERVER_HOST, port)}')
-                    try:
-                        task_status.started(ctx)
-                        await ctx.run()
-                    except OSError as ex:
-                        # if we get an OS error, likely due to
-                        # port already is use, try again
-                        continue
-                    else:
-                        break
+                ctx = caproto.trio.server.Context(pvdb)
+                task_status.started(ctx)
+                await ctx.run()
             except Exception as ex:
                 print('Server failed', ex)
                 raise
@@ -557,25 +520,8 @@ def server(request):
 
         async def asyncio_server_main():
             try:
-                ex = None
-                for j in range(5):
-                    port = ca.find_available_tcp_port(
-                        host=SERVER_HOST,
-                        starting_port=random.randint(49152, 65535))
-                    ctx = caproto.asyncio.server.Context(
-                        SERVER_HOST, port, pvdb)
-                    print(f'Server will be on (try {j}): {(SERVER_HOST, port)}')
-
-                    try:
-                        await ctx.run()
-                    except OSError as ex:
-                        # if we get an OS error, likely due to
-                        # port already is use, try again
-                        continue
-                    else:
-                        break
-                else:
-                    raise ex
+                ctx = caproto.asyncio.server.Context(pvdb)
+                await ctx.run()
             except Exception as ex:
                 print(f'Server failed: {type(ex)}, {ex}', ex)
                 raise

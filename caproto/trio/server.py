@@ -3,7 +3,6 @@ from ..server import AsyncLibraryLayer
 import caproto as ca
 import trio
 from trio import socket
-from caproto import find_available_tcp_port
 
 from ..server.common import (VirtualCircuit as _VirtualCircuit,
                              Context as _Context)
@@ -64,7 +63,6 @@ class VirtualCircuit(_VirtualCircuit):
     async def _on_disconnect(self):
         """Executed when disconnection detected"""
         await super()._on_disconnect()
-        print('client connection closed')
         self.client.close()
 
     async def _start_write_task(self, handle_write):
@@ -81,23 +79,30 @@ class Context(_Context):
     ServerExit = ServerExit
     TaskCancelled = trio.Cancelled
 
-    def __init__(self, host, port, pvdb):
-        super().__init__(host, port, pvdb)
+    def __init__(self, pvdb, interfaces=None):
+        super().__init__(pvdb, interfaces)
         self.nursery = None
         self.command_bundle_queue = trio.Queue(1000)
         self.subscription_queue = trio.Queue(1000)
+        self.beacon_sock = ca.bcast_socket(socket)
 
     async def broadcaster_udp_server_loop(self, task_status):
-        self.udp_sock = ca.bcast_socket(socket)
-        try:
-            await self.udp_sock.bind((self.host, ca.EPICS_CA1_PORT))
-        except Exception:
-            self.log.exception('[server] udp bind failure!')
-            raise
+        for interface in self.interfaces:
+            udp_sock = ca.bcast_socket(socket)
+            try:
+                await udp_sock.bind((interface, ca.EPICS_CA1_PORT))
+            except Exception:
+                self.log.exception('UDP bind failure on interface %r',
+                                   interface)
+                raise
+            self.udp_socks[interface] = udp_sock
+
+        for interface, udp_sock in self.udp_socks.items():
+            self.log.debug('Broadcasting on %s:%d', interface,
+                           ca.EPICS_CA1_PORT)
+            self.nursery.start_soon(self._core_broadcaster_loop, udp_sock)
 
         task_status.started()
-
-        await self._core_broadcaster_loop()
 
     async def broadcaster_queue_loop(self, task_status):
         task_status.started()
@@ -111,27 +116,57 @@ class Context(_Context):
         task_status.started()
         await super().broadcast_beacon_loop()
 
-    async def server_accept_loop(self, addr, port, *, task_status):
-        with trio.socket.socket() as listen_sock:
-            self.log.debug('Listening on %s:%d', addr, port)
-            await listen_sock.bind((addr, port))
-            listen_sock.listen()
-
-            task_status.started()
-
-            while True:
-                client_sock, addr = await listen_sock.accept()
-                self.nursery.start_soon(self.tcp_handler, client_sock, addr)
+    async def server_accept_loop(self, listen_sock, *, task_status):
+            try:
+                listen_sock.listen()
+                task_status.started()
+                while True:
+                    client_sock, addr = await listen_sock.accept()
+                    self.nursery.start_soon(self.tcp_handler, client_sock, addr)
+            finally:
+                listen_sock.close()
 
     async def run(self, *, log_pv_names=False):
         'Start the server'
         self.log.info('Server starting up...')
         try:
             async with trio.open_nursery() as self.nursery:
-                for addr, port in ca.get_server_address_list(self.port):
-                    self.log.debug('Listening on %s:%d', addr, port)
+                for address in ca.get_beacon_address_list():
+                    sock = ca.bcast_socket(socket)
+                    await sock.connect(address)
+                    interface, _ = sock.getsockname()
+                    self.beacon_socks[address] = (interface, sock)
+
+                # This reproduces the common with
+                # self._bind_tcp_sockets_with_consistent_port_number because
+                # trio makes socket binding async where asyncio and curio make
+                # it synchronous.
+                # Find a random port number that is free on all interfaces,
+                # and get a bound TCP socket with that port number on each
+                # interface.
+                tcp_sockets = {}  # maps interface to bound socket
+                stashed_ex = None
+                for port in ca.random_ports(100):
+                    try:
+                        for interface in self.interfaces:
+                            s = trio.socket.socket()
+                            await s.bind((interface, port))
+                            tcp_sockets[interface] = s
+                    except IOError as ex:
+                        stashed_ex = ex
+                        for s in tcp_sockets.values():
+                            s.close()
+                    else:
+                        self.port = port
+                        break
+                else:
+                    raise RuntimeError('No available ports and/or bind failed') from stashed_ex
+                # (End of reproduced code)
+
+                for interface, listen_sock in tcp_sockets.items():
+                    self.log.info("Listening on %s:%d", interface, self.port)
                     await self.nursery.start(self.server_accept_loop,
-                                             addr, port)
+                                             listen_sock)
                 await self.nursery.start(self.broadcaster_udp_server_loop)
                 await self.nursery.start(self.broadcaster_queue_loop)
                 await self.nursery.start(self.subscription_queue_loop)
@@ -163,13 +198,13 @@ class Context(_Context):
         nursery.cancel_scope.cancel()
 
 
-async def start_server(pvdb, *, bind_addr='0.0.0.0', log_pv_names=False):
+async def start_server(pvdb, *, interfaces=None, log_pv_names=False):
     '''Start a trio server with a given PV database'''
-    ctx = Context(bind_addr, find_available_tcp_port(), pvdb)
+    ctx = Context(pvdb, interfaces=interfaces)
     return (await ctx.run(log_pv_names=log_pv_names))
 
 
-def run(pvdb, *, bind_addr='0.0.0.0', log_pv_names=False):
+def run(pvdb, *, interfaces=None, log_pv_names=False):
     """
     A synchronous function that runs server, catches KeyboardInterrupt at exit.
     """
@@ -178,7 +213,7 @@ def run(pvdb, *, bind_addr='0.0.0.0', log_pv_names=False):
             functools.partial(
                 start_server,
                 pvdb,
-                bind_addr=bind_addr,
+                interfaces=interfaces,
                 log_pv_names=log_pv_names))
     except KeyboardInterrupt:
         return

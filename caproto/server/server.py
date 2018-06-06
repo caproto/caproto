@@ -16,7 +16,7 @@ from types import MethodType
 
 from .. import (ChannelDouble, ChannelInteger, ChannelString,
                 ChannelEnum, ChannelType, ChannelChar, ChannelAlarm,
-                AccessRights)
+                AccessRights, get_server_address_list)
 
 module_logger = logging.getLogger(__name__)
 
@@ -968,7 +968,19 @@ def ioc_arg_parser(*, desc, default_prefix, argv=None, macros=None):
                         help="At startup, log the list of PV names served.")
     parser.add_argument('--async-lib', default='curio',
                         choices=('asyncio', 'curio', 'trio'),
-                        help="Which asynchronous library to use.")
+                        help=("Which asynchronous library to use. "
+                              "Default is curio."))
+    default_intf = get_server_address_list()
+    if default_intf == ['0.0.0.0']:
+        default_msg = '0.0.0.0'
+    else:
+        default_msg = (f"{' '.join(default_intf)} as specified by environment "
+                       f"variable EPICS_CAS_INTF_ADDR_LIST")
+    parser.add_argument('--interfaces', default=default_intf,
+                        nargs='+',
+                        help=(f"Interfaces to listen on. Default is "
+                              f"{default_msg}.  Multiple entries can be "
+                              f"given; separate entries by spaces."))
     for name, default_value in macros.items():
         if default_value is None:
             parser.add_argument(f'--{name}', type=str, required=True,
@@ -990,5 +1002,6 @@ def ioc_arg_parser(*, desc, default_prefix, argv=None, macros=None):
     ioc_options = {'prefix': args.prefix,
                    'macros': {key: getattr(args, key) for key in macros}}
     run_options = {'module_name': f'caproto.{args.async_lib}.server',
-                   'log_pv_names': args.list_pvs}
+                   'log_pv_names': args.list_pvs,
+                   'interfaces': args.interfaces}
     return ioc_options, run_options
