@@ -211,7 +211,7 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0,
     if repeater:
         # As per the EPICS spec, a well-behaved client should start a
         # caproto-repeater that will continue running after it exits.
-        spawn_repeater(['--quiet'])
+        spawn_repeater()
     udp_sock = ca.bcast_socket()
     try:
         udp_sock.settimeout(timeout)
@@ -319,7 +319,7 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
     if repeater:
         # As per the EPICS spec, a well-behaved client should start a
         # caproto-repeater that will continue running after it exits.
-        spawn_repeater(['--quiet'])
+        spawn_repeater()
     loggers = {}
     for sub in subscriptions:
         loggers[sub.pv_name] = logging.getLogger(f'caproto.ch.{sub.pv_name}')
@@ -438,7 +438,7 @@ def write(pv_name, data, *, data_type=None, metadata=None,
     if repeater:
         # As per the EPICS spec, a well-behaved client should start a
         # caproto-repeater that will continue running after it exits.
-        spawn_repeater(['--quiet'])
+        spawn_repeater()
     if isinstance(raw_data, str):
         try:
             data = ast.literal_eval(raw_data)
