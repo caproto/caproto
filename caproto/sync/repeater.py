@@ -24,6 +24,7 @@ import socket
 import subprocess
 import sys
 import time
+import warnings
 
 import caproto
 from caproto._constants import MAX_UDP_RECV, SERVER_MIA_PRESUMED_DEAD
