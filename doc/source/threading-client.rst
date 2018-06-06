@@ -42,8 +42,8 @@ creating a :class:`Context`.
 
 .. ipython:: python
 
-    from caproto.threading.client import Context, SharedBroadcaster
-    ctx = Context(SharedBroadcaster())
+    from caproto.threading.client import Context
+    ctx = Context()
 
 The :class:`Context` object tracks the state of connections in progress.
 We can use it to request new connections. Formulating requests for many PVs in

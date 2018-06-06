@@ -12,8 +12,9 @@ Type ``caproto-<TAB>`` to check:
 .. code-block:: bash
 
    $ caproto-
-   caproto-example-ioc  caproto-monitor      caproto-repeater
-   caproto-get          caproto-put
+   caproto-defaultdictserver  caproto-monitor            caproto-spoof-beamline
+   caproto-example-ioc        caproto-put
+   caproto-get                caproto-repeater
 
 Tutorial
 ========
