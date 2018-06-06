@@ -153,8 +153,8 @@ def make_channel(pv_name, udp_sock, priority, timeout):
     return chan
 
 
-def _read(chan, timeout, data_type):
-    req = chan.read(data_type=data_type)
+def _read(chan, timeout, data_type, use_notify):
+    req = chan.read(data_type=data_type, use_notify=use_notify)
     send(chan.circuit, req)
     t = time.monotonic()
     while True:
@@ -167,7 +167,7 @@ def _read(chan, timeout, data_type):
             raise TimeoutError("Timeout while awaiting reading.")
 
         for command in commands:
-            if (isinstance(command, ca.ReadNotifyResponse) and
+            if (isinstance(command, (ca.ReadResponse, ca.ReadNotifyResponse) and
                     command.ioid == req.ioid):
                 return command
             elif isinstance(command, ca.ErrorResponse):
@@ -177,7 +177,7 @@ def _read(chan, timeout, data_type):
                                    'read response')
 
 
-def read(pv_name, *, data_type=None, timeout=1, priority=0,
+def read(pv_name, *, data_type=None, timeout=1, priority=0, use_notify=False,
          force_int_enums=False, repeater=True):
     """
     Read a Channel.
@@ -191,6 +191,8 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0,
         Default is 1 second.
     priority : 0, optional
         Virtual Circuit priority. Default is 0, lowest. Highest is 99.
+    use_notify : boolean, optional
+        Send a ReadNotifyRequest instead of a ReadRequest. False by default.
     force_int_enums : boolean, optional
         Retrieve enums as integers. (Default is strings.)
     repeater : boolean, optional
@@ -200,7 +202,7 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0,
 
     Returns
     -------
-    response : ReadNotifyResponse
+    response : ReadResponse or ReadNotifyResponse
 
     Examples
     --------
@@ -225,7 +227,7 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0,
                 (data_type is None) and (not force_int_enums)):
             logger.debug("Changing requested data_type to STRING.")
             data_type = ChannelType.STRING
-        return _read(chan, timeout, data_type=data_type)
+        return _read(chan, timeout, data_type=data_type, use_notify=use_notify)
     finally:
         try:
             if chan.states[ca.CLIENT] is ca.CONNECTED:
