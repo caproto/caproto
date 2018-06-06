@@ -112,11 +112,11 @@ def parse_data_type(raw_data_type):
     else:
         assert isinstance(raw_data_type, str)
         # ChannelType is an IntEnum.
-        # If d is int, use ChannelType(d). If string, getattr(ChannelType, d).
+        # If d is int, use ChannelType(d). If string, ChannelType[d].
         try:
             data_type_int = int(raw_data_type)
         except ValueError:
-            data_type = getattr(ChannelType, raw_data_type.upper())
+            data_type = ChannelType[raw_data_type.upper()]
         else:
             data_type = ChannelType(data_type_int)
     return data_type
