@@ -2,7 +2,7 @@ import argparse
 from datetime import datetime
 import logging
 from .sync.client import write
-from .sync.repeater import spawn_repeater, repeater_args
+from .sync.repeater import spawn_repeater
 from . import color_logs
 
 
@@ -46,9 +46,7 @@ def main():
     if args.vvv:
         logging.getLogger('caproto').setLevel('DEBUG')
     if not args.no_repeater:
-        # Spawn the repeater (if needed) manually here so we can pass through
-        # preferences about verboseness etc.
-        spawn_repeater(repeater_args(args))
+        spawn_repeater()
     try:
         initial, final = write(pv_name=args.pv_name, data=args.data,
                                timeout=args.timeout,

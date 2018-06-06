@@ -458,7 +458,7 @@ color codes to color-code the log messages by log level.
 
 To conveniently switch to a version without the colors:
 
-.. code-block::
+.. code-block:: python
 
     caproto.color_logs(False)  # color_log_handler -> plain_log_handler
 

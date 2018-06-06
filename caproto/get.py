@@ -3,7 +3,7 @@ from datetime import datetime
 import logging
 from . import ChannelType, color_logs
 from .sync.client import read
-from .sync.repeater import spawn_repeater, repeater_args
+from .sync.repeater import spawn_repeater
 
 
 def main():
@@ -55,9 +55,7 @@ def main():
     if args.vvv:
         logging.getLogger('caproto').setLevel('DEBUG')
     if not args.no_repeater:
-        # Spawn the repeater (if needed) manually here so we can pass through
-        # preferences about verboseness etc.
-        spawn_repeater(repeater_args(args))
+        spawn_repeater()
     data_type = parse_data_type(args.d)
     try:
         for pv_name in args.pv_names:

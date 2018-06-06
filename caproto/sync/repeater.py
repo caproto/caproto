@@ -201,28 +201,29 @@ def run(host='0.0.0.0'):
         logger.info('Keyboard interrupt; exiting.')
 
 
-def repeater_args(args):
-    # Taking argparse args from caproto-get, caproto-put, or caproto-monitor,
-    # extract relevant list of command-line argument to pass to
-    # caproto-repeater.
-    arg_list = []
-    if args.vvv:
-        arg_list.append('-vvv')
-    elif args.verbose:
-        arg_list.append('--verbose')
-    else:
-        arg_list.append('--quiet')
-    if args.no_color:
-        arg_list.append('--no-color')
-    return arg_list
-
-
-def spawn_repeater(args):
-    # Spawn repeater with a verbosity level matching the current logger.
+def spawn_repeater():
+    """
+    Spawn a repeater process unless one is not already running.
+    """
+    host = '0.0.0.0'  # not configurable for a spawned repeater
+    port = caproto.get_environment_variables()['EPICS_CA_REPEATER_PORT']
+    try:
+        sock = check_for_running_repeater((host, port))
+    except RepeaterAlreadyRunning:
+        logger.debug('Another repeater is already running; will not spawn '
+                     'one.')
+        return
+    # We will now spawn a repeater in a subprocess at the same address as sock.
+    # Make the address reusable so that, if the OS does not clean up sock
+    # before the subprocess tries to bind to it, there is no conflict.
+    try:
+        reuse = socket.SO_REUSEADDR
+    except AttributeError:
+        warnings.warn("SO_REUSEADDR is not supported on this platform.")
+    sock.setsockopt(socket.SOL_SOCKET, reuse, 1)
     logger.debug('Spawning caproto-repeater process....')
-    # TODO Check if socket is taken before spawning.
     try:
         subprocess.Popen(
-            [sys.executable, '-m', 'caproto.repeater'] + args, cwd="/")
+            [sys.executable, '-m', 'caproto.repeater', '--quiet'], cwd="/")
     except Exception:
         logger.exception('Failed to spawn repeater.')

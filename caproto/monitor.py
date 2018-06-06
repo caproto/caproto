@@ -4,7 +4,7 @@ import functools
 import logging
 import time
 from .sync.client import subscribe, block
-from .sync.repeater import spawn_repeater, repeater_args
+from .sync.repeater import spawn_repeater
 from . import SubscriptionType, color_logs
 
 
@@ -58,9 +58,7 @@ def main():
     if args.vvv:
         logging.getLogger('caproto').setLevel('DEBUG')
     if not args.no_repeater:
-        # Spawn the repeater (if needed) manually here so we can pass through
-        # preferences about verboseness etc.
-        spawn_repeater(repeater_args(args))
+        spawn_repeater()
 
     mask = 0
     if 'v' in args.m:
