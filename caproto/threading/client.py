@@ -1466,15 +1466,19 @@ class PV:
             )
         return ioid_info['response']
 
-    def subscribe(self, *args, **kwargs):
+    def subscribe(data_type=None, data_count=None,
+                  low=0.0, high=0.0, to=0.0, mask=None):
         "Start a new subscription to which user callback may be added."
         # A Subscription is uniquely identified by the Signature created by its
         # args and kwargs.
-        key = tuple(SUBSCRIBE_SIG.bind(*args, **kwargs).arguments.items())
+        bound = SUBSCRIBE_SIG.bind(data_type, data_count, low, high, to, mask)
+        key = tuple(bound.arguments.items())
         try:
             sub = self.subscriptions[key]
         except KeyError:
-            sub = Subscription(self, args, kwargs)
+            sub = Subscription(self,
+                               data_type, data_count,
+                               low, high, to, mask)
             self.subscriptions[key] = sub
         # The actual EPICS messages will not be sent until the user adds
         # callbacks via sub.add_callback(user_func).
@@ -1550,12 +1554,16 @@ class Subscription(CallbackHandler):
     This object should never be instantiated directly by user code; rather
     it should be made by calling the ``subscribe()`` method on a ``PV`` object.
     """
-    def __init__(self, pv, sub_args, sub_kwargs):
+    def __init__(self, pv, data_type, data_count, low, high, to, mask):
         super().__init__(pv)
         # Stash everything, but do not send any EPICS messages until the first
         # user callback is attached.
-        self.sub_args = sub_args
-        self.sub_kwargs = sub_kwargs
+        self.data_type = data_type
+        self.data_count = data_count
+        self.low = low
+        self.high = high
+        self.to = to
+        self.mask = mask
         self.subscriptionid = None
         self.most_recent_response = None
 
@@ -1587,9 +1595,13 @@ class Subscription(CallbackHandler):
             if not self.callbacks:
                 return None
             subscriptionid = self.pv.circuit_manager._subscriptionid_counter()
-            command = self.pv.channel.subscribe(*self.sub_args,
-                                                subscriptionid=subscriptionid,
-                                                **self.sub_kwargs)
+            command = self.pv.channel.subscribe(data_type=data_type,
+                                                data_count=data_count,
+                                                low=low,
+                                                high=high,
+                                                to=to,
+                                                mask=mask,
+                                                subscriptionid=subscriptionid)
             subscriptionid = command.subscriptionid
             self.subscriptionid = subscriptionid
         # The circuit_manager needs to know the subscriptionid so that it can
