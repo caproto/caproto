@@ -9,7 +9,7 @@ from .const import SYS_ENDIAN, LITTLE_ENDIAN, BIG_ENDIAN
 from .messages import (basic_types, DirectionFlag, ApplicationCommands, ControlCommands,
                        EndianSetting, read_from_bytestream, messages_grouped,
                        MessageHeaderBE, MessageHeaderLE, MessageTypeFlag,
-                       EndianFlag, StatusType, Subcommands
+                       EndianFlag, StatusType, Subcommands, MonitorFlags,
                        )
 from .messages import (Status, BeaconMessage, SetMarker, AcknowledgeMarker,
                        SetByteOrder, ConnectionValidationRequest,
@@ -19,7 +19,11 @@ from .messages import (Status, BeaconMessage, SetMarker, AcknowledgeMarker,
                        CreateChannelResponse, ChannelGetRequest,
                        ChannelGetResponse, ChannelFieldInfoRequest,
                        ChannelFieldInfoResponse, ChannelDestroyRequest,
-                       ChannelDestroyResponse)
+                       ChannelDestroyResponse, ChannelMonitorRequest,
+                       ChannelMonitorResponse, ChannelPutRequest,
+                       ChannelPutResponse, ChannelProcessRequest,
+                       ChannelProcessResponse, ChannelPutGetRequest,
+                       ChannelPutGetResponse)
 
 from .state import (ChannelState, CircuitState, get_exception)
 from .utils import (CLIENT, SERVER, NEED_DATA, DISCONNECTED,
@@ -260,7 +264,10 @@ class VirtualCircuit:
         if isinstance(command, (CreateChannelRequest, CreateChannelResponse,
                                 ChannelFieldInfoRequest, ChannelFieldInfoResponse,
                                 ChannelDestroyRequest, ChannelDestroyResponse,
-                                ChannelGetRequest, ChannelGetResponse)):
+                                ChannelGetRequest, ChannelGetResponse, ChannelMonitorRequest,
+                                ChannelMonitorResponse, ChannelPutRequest, ChannelPutResponse,
+                                ChannelProcessRequest, ChannelProcessResponse,
+                                ChannelPutGetRequest, ChannelPutGetResponse)):
             if isinstance(command, CreateChannelRequest):
                 print(command.channels)
                 for info in [command.channels]:
@@ -290,7 +297,8 @@ class VirtualCircuit:
                 self._ioids[command.ioid] = chan
             elif isinstance(command, ChannelFieldInfoResponse):
                 self._ioids.pop(command.ioid)
-            elif isinstance(command, ChannelGetRequest):
+            elif isinstance(command, (ChannelGetRequest,
+                                      ChannelMonitorRequest)):
                 ioid = command.ioid
                 self._ioids[command.ioid] = chan
             elif isinstance(command, ChannelGetResponse):
@@ -299,6 +307,16 @@ class VirtualCircuit:
                     interface = command.pv_structure_if
                     self.cache.ioid_interfaces[ioid] = interface
                 elif command.subcommand == Subcommands.GET:
+                    ...
+                elif command.subcommand == Subcommands.DESTROY:
+                    self._ioids.pop(ioid)
+                    self.cache.ioid_interfaces.pop(ioid)
+            elif isinstance(command, ChannelMonitorResponse):
+                ioid = command.ioid
+                if command.subcommand == Subcommands.INIT:
+                    interface = command.pv_structure_if
+                    self.cache.ioid_interfaces[ioid] = interface
+                elif command.subcommand == Subcommands.DEFAULT:
                     ...
                 elif command.subcommand == Subcommands.DESTROY:
                     self._ioids.pop(ioid)
@@ -566,6 +584,64 @@ class ClientChannel(_BaseChannel):
                    ioid=ioid,
                    subcommand=Subcommands.GET,
                    interface=dict(pv_data=interface),
+                   )
+
+    def subscribe_init(self, *, ioid=None, pvrequest=None, queue_size=None):
+        """
+        Generate a valid :class:`...`.
+
+        Parameters
+        ----------
+        ioid
+        pvrequest_if
+        pvrequest
+
+        Returns
+        -------
+        ChannelMonitorRequest
+        """
+        if pvrequest is None:
+            pvrequest = 'field(value)'
+
+        # TODO pvrequest handling is, overall, rather awkward
+        if isinstance(pvrequest, str):
+            pvrequest_if = pvrequest_string_to_structure(pvrequest)
+        else:
+            pvrequest_if = pvrequest_to_structure(pvrequest)
+
+        pvrequest_data = field_description_to_value_dict(
+            pvrequest_if, user_types={})
+
+        if ioid is None:
+            ioid = self.circuit.new_ioid()
+
+        cls = self.circuit.messages[ApplicationCommands.MONITOR]
+        return cls(server_chid=self.sid,
+                   ioid=ioid,
+                   subcommand=Subcommands.INIT,
+                   pv_request_if=pvrequest_if,
+                   pv_request=pvrequest_data,
+                   )
+
+    def subscribe_control(self, ioid, *, flag):
+        """
+        Generate a valid ...
+
+        Parameters
+        ----------
+        ioid
+        flag : MonitorFlags
+            PIPELINE, START, STOP, DESTROY
+
+        Returns
+        -------
+        ChannelMonitorRequest
+        """
+        assert flag in MonitorFlags
+        cls = self.circuit.messages[ApplicationCommands.MONITOR]
+        return cls(server_chid=self.sid,
+                   ioid=ioid,
+                   subcommand=flag,
                    )
 
     def write(self, data, data_type=None, data_count=None, metadata=None):

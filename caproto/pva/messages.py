@@ -118,6 +118,7 @@ class MonitorFlags(enum.IntFlag):
     PIPELINE = 0x80
     START = 0x44
     STOP = 0x04
+    DESTROY = 0x10
 
 
 _flag_masks = {
@@ -253,6 +254,10 @@ class MessageBase:
 
         subcommand = (msg.subcommand if msg.has_subcommand
                       else None)
+
+        if msg.has_subcommand:
+            print('-> received', cls.__name__, 'subcommand=', subcommand)
+
         additional_fields = cls._get_additional_fields(subcommand)
         if not additional_fields:
             # Without additional fields, this is just a ctypes.Structure
@@ -889,8 +894,6 @@ class ChannelMonitorRequest(ExtendedMessageBase):
                                                 MonitorFlags.PIPELINE)),
         ],
         Subcommands.DEFAULT: [
-            RequiredField('to_put_bitset', 'BitSet'),
-            RequiredField('put_data', 'PVField'),
         ],
         MonitorFlags.START: [],
         MonitorFlags.STOP: [],
@@ -904,12 +907,14 @@ class ChannelMonitorResponse(ExtendedMessageBase):
 
     _fields_ = [('ioid', c_int),
                 ('subcommand', c_byte),
-                ('status_type', c_byte),
                 ]
 
-    _additional_fields_ = Status._additional_fields_
+    _additional_fields_ = []
     _subcommand_fields_ = {
         Subcommands.INIT: [
+            # status only on INIT!
+            RequiredField('status_type', 'byte'),
+        ] + Status._additional_fields_ + [
             OptionalField('pv_structure_if', 'FieldDesc',
                           OptionalStopMarker.stop, _success_condition),
         ],

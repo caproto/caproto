@@ -30,7 +30,8 @@ from caproto.pva import (CLIENT, SERVER, CONNECTED, NEED_DATA, DISCONNECTED,
                          ClientChannel, ConnectionValidationRequest,
                          ConnectionValidatedResponse, CreateChannelResponse,
                          ChannelFieldInfoResponse, ChannelGetResponse,
-                         Subcommands, basic_types)
+                         ChannelMonitorResponse, MonitorFlags, Subcommands,
+                         basic_types)
 
 # __all__ = ['get', 'put', 'monitor']
 
@@ -251,7 +252,6 @@ def read(chan, timeout, pvrequest):
 
 def get_cli():
     parser = argparse.ArgumentParser(description='Read the value of a PV.')
-    # parser.register('action', 'list_types', _ListTypesAction)
     fmt_group = parser.add_mutually_exclusive_group()
     parser.add_argument('pv_names', type=str, nargs='+',
                         help="PV (channel) name(s) separated by spaces")
@@ -296,29 +296,20 @@ def get(pv_name, *, pvrequest, verbose=False, timeout=1,
     Parameters
     ----------
     pv_name : str
-    data_type : int, optional
-        Request specific data type. Default is Channel's native data type.
     verbose : boolean, optional
         Verbose logging. Default is False.
     timeout : float, optional
         Default is 1 second.
     priority : 0, optional
-        Virtual Circuit priority. Default is 0, lowest. Highest is 99.
-    force_int_enums : boolean, optional
-        Retrieve enums as integers. (Default is strings.)
-    repeater : boolean, optional
-        Spawn a Channel Access Repeater process if the port is available.
-        True default, as the Channel Access spec stipulates that well-behaved
-        clients should do this.
+        Virtual Circuit qos. Default is 0, lowest. Highest is 99.
 
     Returns
     -------
-    response : ReadNotifyResponse
 
     Examples
     --------
     Get the value of a Channel named 'cat'.
-    >>> get('cat').data
+    >>> get('cat')
     """
     logger = logging.getLogger('get')
     if verbose:
@@ -344,6 +335,115 @@ def get(pv_name, *, pvrequest, verbose=False, timeout=1,
                 send(chan.circuit, chan.disconnect())
         finally:
             sockets[chan.circuit].close()
+
+
+def _monitor(chan, timeout, pvrequest):
+    interface_req = chan.read_interface()
+    send(chan.circuit, interface_req)
+
+    init_req = chan.subscribe_init(pvrequest=pvrequest)
+    ioid = init_req.ioid
+    send(chan.circuit, init_req)
+
+    t = time.monotonic()
+    while True:
+        try:
+            commands = recv(chan.circuit)
+            if time.monotonic() - t > timeout:
+                raise socket.timeout
+        except socket.timeout:
+            raise TimeoutError("Timeout while awaiting reading.")
+
+        for command in commands:
+            if isinstance(command, ChannelMonitorResponse):
+                if command.subcommand == Subcommands.INIT:
+                    monitor_start_req = chan.subscribe_control(
+                        ioid=ioid, flag=MonitorFlags.START)
+                    send(chan.circuit, monitor_start_req)
+                else:
+                    ...
+            elif command is DISCONNECTED:
+                raise CaprotoError('Disconnected while waiting for '
+                                   'read response')
+
+
+def monitor(pv_name, *, pvrequest, verbose=False, timeout=1,
+            force_int_enums=False):
+    """
+    Monitor a Channel.
+
+    Parameters
+    ----------
+    pv_name : str
+    verbose : boolean, optional
+        Verbose logging. Default is False.
+    timeout : float, optional
+        Default is 1 second.
+    qos : 0, optional
+        Virtual Circuit qos. Default is 0, lowest. Highest is 99.
+
+    Returns
+    -------
+
+    Examples
+    --------
+    """
+    logger = logging.getLogger('get')
+    if verbose:
+        level = 'DEBUG'
+    else:
+        level = 'INFO'
+    logger.setLevel(level)
+    handler.setLevel(level)
+    ca_logger.setLevel(level)
+
+    udp_sock, udp_port = make_broadcaster_socket(logger)
+    try:
+        udp_sock.settimeout(timeout)
+        chan = make_channel(pv_name, logger, udp_sock, udp_port, timeout)
+    finally:
+        udp_sock.close()
+
+    try:
+        return _monitor(chan, timeout, pvrequest=pvrequest)
+    finally:
+        try:
+            if chan.states[CLIENT] is CONNECTED:
+                send(chan.circuit, chan.disconnect())
+        finally:
+            sockets[chan.circuit].close()
+
+
+def monitor_cli():
+    parser = argparse.ArgumentParser(description='Read the value of a PV.')
+    fmt_group = parser.add_mutually_exclusive_group()
+    parser.add_argument('pv_names', type=str, nargs='+',
+                        help="PV (channel) name(s) separated by spaces")
+    parser.add_argument('--pvrequest', type=str, default='field(value)',
+                        help=("PVRequest"))
+    fmt_group.add_argument('--terse', '-t', action='store_true',
+                           help=("Display data only. Unpack scalars: "
+                                 "[3.] -> 3."))
+    parser.add_argument('--timeout', '-w', type=float, default=1,
+                        help=("Timeout ('wait') in seconds for server "
+                              "responses."))
+    parser.add_argument('--verbose', '-v', action='store_true',
+                        help="Show DEBUG log messages.")
+    args = parser.parse_args()
+    try:
+        pv_name = args.pv_names[0]
+        interface, response = monitor(pv_name=pv_name,
+                                      pvrequest=args.pvrequest,
+                                      verbose=args.verbose,
+                                      timeout=args.timeout)
+    except BaseException as exc:
+        if args.verbose:
+            # Show the full traceback.
+            raise
+        else:
+            # Print a one-line error message.
+            print(exc)
+
 
 
 # TODO TODO TODO segmentation in sync client
@@ -413,4 +513,5 @@ if __name__ == '__main__':
         pv = 'TST:image1:Array'
 
     # get(pv)
-    get_cli()
+    # get_cli()
+    monitor_cli()
