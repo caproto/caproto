@@ -155,22 +155,42 @@ def _success_condition(msg, buf):
 
 class MessageBase:
     _pack_ = 1
-    _additional_fields_ = []
+    _additional_fields_ = None
+    _subcommand_fields_ = None
 
     def __repr__(self):
         info = ', '.join('{}={!r}'.format(field, getattr(self, field))
                          for field, type_ in self._fields_)
         return '{}({})'.format(type(self).__name__, info)
 
+    @classmethod
+    def _get_additional_fields(cls, subcommand=None):
+        if (cls._additional_fields_ is None and
+                cls._subcommand_fields_ is None):
+            return []
+
+        fields = cls._additional_fields_
+        if cls._subcommand_fields_ and subcommand is not None:
+            try:
+                return fields + cls._subcommand_fields_[subcommand]
+            except KeyError:
+                raise ValueError(f'Invalid (or currently unhandled) subcommand'
+                                 f' for class {cls}: {subcommand}') from None
+        return fields
+
+    @property
+    def has_subcommand(self):
+        return ('subcommand', c_byte) in self._fields_
+
     def serialize(self, *, default_pvrequest=default_pvrequest,
                   cache=NullCache):
-        if self._additional_fields_ is None:
+        subcommand = (self.subcommand
+                      if self.has_subcommand
+                      else None)
+        additional_fields = self._get_additional_fields(subcommand)
+        if not additional_fields:
             # Without additional fields, this is just a ctypes.Structure
             return bytes(self)
-
-        # TODO
-        # if user_types is None:
-        #     user_types = basic_types
 
         endian = self._ENDIAN
 
@@ -183,7 +203,7 @@ class MessageBase:
 
         # (2) move onto the "additional fields" which are not as easily
         # serializable:
-        for field_info in self._additional_fields_:
+        for field_info in additional_fields:
             if isinstance(field_info, (OptionalField, OptionalInterfaceField)):
                 if field_info.condition is not None:
                     if not field_info.condition(self, buf):
@@ -230,10 +250,14 @@ class MessageBase:
         offset = base_size
         buf = buf[offset:]
 
-        if not hasattr(cls, '_additional_fields_'):
+        subcommand = (msg.subcommand if msg.has_subcommand
+                      else None)
+        additional_fields = cls._get_additional_fields(subcommand)
+        if not additional_fields:
+            # Without additional fields, this is just a ctypes.Structure
             return Decoded(data=msg, buffer=buf, offset=offset)
 
-        for field_info in cls._additional_fields_:
+        for field_info in additional_fields:
             if isinstance(field_info, (OptionalField, OptionalInterfaceField)):
                 if not buflen:
                     # No bytes remaining, and any additional fields are
@@ -677,10 +701,6 @@ class ChannelDestroyResponse(ExtendedMessageBase):
     _additional_fields_ = Status._additional_fields_
 
 
-def _is_get_init_condition(msg, buf):
-    return msg.subcommand == Subcommands.INIT
-
-
 class ChannelGetRequest(ExtendedMessageBase):
     ID = ApplicationCommands.GET
 
@@ -688,27 +708,15 @@ class ChannelGetRequest(ExtendedMessageBase):
                 ('ioid', c_int),
                 ('subcommand', c_byte),
                 ]
-
-    _additional_fields_ = [
-        OptionalInterfaceField('pv_request_if', 'PVRequest',
-                               stop=OptionalStopMarker.stop,
-                               condition=_is_get_init_condition,
-                               data_field='pv_request'),
-        OptionalField('pv_request', 'PVField',
-                      stop=OptionalStopMarker.stop,
-                      condition=_is_get_init_condition,
-                      ),
-    ]
-
-
-def _get_response_init_cond(msg, buf):
-    return ((msg.status_type in success_status_types) and
-            msg.subcommand == Subcommands.INIT)
-
-
-def _get_response_get_cond(msg, buf):
-    return ((msg.status_type in success_status_types) and
-            msg.subcommand == Subcommands.GET)
+    _additional_fields_ = []
+    _subcommand_fields_ = {
+        Subcommands.INIT: [
+            RequiredInterfaceField('pv_request_if', 'PVRequest',
+                                   data_field='pv_request'),
+            RequiredField('pv_request', 'PVField'),
+        ],
+        Subcommands.GET: [],
+    }
 
 
 class ChannelGetResponse(ExtendedMessageBase):
@@ -719,24 +727,17 @@ class ChannelGetResponse(ExtendedMessageBase):
                 ('status_type', c_byte),
                 ]
 
-    _additional_fields_ = Status._additional_fields_ + [
-        # TODO some structure to break up subcommands into separate responses
-        # for now, this is handled by the optional.conditions
-
-        # init:
-        OptionalInterfaceField('pv_structure_if', 'FieldDesc',
-                               stop=OptionalStopMarker.continue_,
-                               condition=_get_response_init_cond,
-                               data_field='pv_request'),
-
-        # get:
-        OptionalField('changed_bit_set', 'BitSet',
-                      stop=OptionalStopMarker.continue_,
-                      condition=_get_response_get_cond),
-        OptionalField('pv_data', 'PVField',
-                      stop=OptionalStopMarker.stop,
-                      condition=_get_response_get_cond),
-    ]
+    _additional_fields_ = Status._additional_fields_
+    _subcommand_fields_ = {
+        Subcommands.INIT: [
+            RequiredInterfaceField('pv_structure_if', 'FieldDesc',
+                                   data_field='pv_request'),
+        ],
+        Subcommands.GET: [
+            RequiredField('changed_bit_set', 'BitSet'),
+            RequiredField('pv_data', 'PVField'),
+        ],
+    }
 
 
 class ChannelFieldInfoRequest(ExtendedMessageBase):
