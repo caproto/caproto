@@ -560,9 +560,10 @@ class ClientChannel(_BaseChannel):
         command = ClearChannelRequest(self.sid, self.cid)
         return command
 
-    def read(self, data_type=None, data_count=None, ioid=None):
+    def read(self, data_type=None, data_count=None, ioid=None,
+             use_notify=False):
         """
-        Generate a valid :class:`ReadNotifyRequest`.
+        Generate a valid :class:`ReadRequest` or :class:`ReadNotifyRequest`.
 
         Parameters
         ----------
@@ -574,6 +575,11 @@ class ClientChannel(_BaseChannel):
             Requested number of values. Default is the channel's native data
             count, which can be checked in the Channel's attribute
             :attr:`native_data_count`.
+        ioid : integer, optional
+            Input/output ID. If None, one is generated.
+        use_notify : boolean, optional
+            False by default. If True, send a ``ReadNotifyRequest`` instead of
+            a ``ReadRequest``.
 
         Returns
         -------
@@ -582,13 +588,14 @@ class ClientChannel(_BaseChannel):
         data_type, data_count = self._fill_defaults(data_type, data_count)
         if ioid is None:
             ioid = self.circuit.new_ioid()
-        command = ReadNotifyRequest(data_type, data_count, self.sid, ioid)
+        cls = ReadNotifyRequest if use_notify else ReadRequest
+        command = cls(data_type, data_count, self.sid, ioid)
         return command
 
-    def write(self, data, data_type=None, data_count=None, metadata=None, ioid=None,
-              use_notify=True):
+    def write(self, data, data_type=None, data_count=None, metadata=None,
+              ioid=None, use_notify=False):
         """
-        Generate a valid :class:`WriteNotifyRequest`.
+        Generate a valid :class:`WriteRequest or `:class:`WriteNotifyRequest`.
 
         Parameters
         ----------
@@ -603,6 +610,11 @@ class ClientChannel(_BaseChannel):
             :attr:`native_data_count`.
         metadata : ``ctypes.BigEndianStructure`` or tuple
             Status and control metadata for the values
+        ioid : integer, optional
+            Input/output ID. If None, one is generated.
+        use_notify : boolean, optional
+            False by default. If True, send a ``WriteNotifyRequest`` instead of
+            a ``WriteRequest``.
 
         Returns
         -------
@@ -614,13 +626,9 @@ class ClientChannel(_BaseChannel):
         if ioid is None:
             ioid = self.circuit.new_ioid()
 
-        # TODO: change use_notify default value; may break tests
-        if use_notify:
-            command = WriteNotifyRequest(data, data_type, data_count, self.sid,
-                                         ioid, metadata=metadata)
-        else:
-            command = WriteRequest(data, data_type, data_count, self.sid, ioid,
-                                   metadata=metadata)
+        cls = WriteNotifyRequest if use_notify else WriteRequest
+        command = cls(data, data_type, data_count, self.sid, ioid,
+                      metadata=metadata)
         return command
 
     def subscribe(self, data_type=None, data_count=None,
