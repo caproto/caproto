@@ -2,8 +2,6 @@
 # as three top-level functions: read, write, subscribe. They are comparatively
 # simple and naive, with no caching or concurrency, and therefore less
 # performant but more robust.
-
-import ast
 from collections import Iterable
 import inspect
 import getpass
@@ -440,23 +438,14 @@ def write(pv_name, data, *, use_notify=False, data_type=None, metadata=None,
     Request notification of completion ("put completion") and wait for it.
     >>> write('cat', 5, use_notify=True)  # returns a WriteNotifyResponse
     """
-    raw_data = data
-    logger = logging.getLogger(f'caproto.ch.{pv_name}')
     if repeater:
         # As per the EPICS spec, a well-behaved client should start a
         # caproto-repeater that will continue running after it exits.
         spawn_repeater()
-    if isinstance(raw_data, str):
-        try:
-            data = ast.literal_eval(raw_data)
-        except ValueError:
-            # interpret as string
-            data = raw_data
     if not isinstance(data, Iterable) or isinstance(data, (str, bytes)):
         data = [data]
     if data and isinstance(data[0], str):
         data = [val.encode('latin-1') for val in data]
-    logger.debug('Data argument %s parsed as %r.', raw_data, data)
 
     udp_sock = ca.bcast_socket()
     try:

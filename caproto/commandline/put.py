@@ -11,6 +11,7 @@ For access to the underlying functionality from a Python script or interactive
 Python session, do not import this module; instead import caproto.sync.client.
 """
 import argparse
+import ast
 from datetime import datetime
 import logging
 from ..sync.client import read, write
@@ -27,7 +28,8 @@ def main():
                         help="Value or values to write.")
     fmt_group.add_argument('--format', type=str,
                            help=("Python format string. Available tokens are "
-                                 "{pv_name} and {response}. Additionally, "
+                                 "{pv_name}, {response} and {which} (Old/New)."
+                                 "Additionally, "
                                  "this data type includes time, {timestamp} "
                                  "and usages like "
                                  "{timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are "
@@ -62,16 +64,23 @@ def main():
         logging.getLogger('caproto').setLevel('DEBUG')
     if not args.no_repeater:
         spawn_repeater()
+    logger = logging.getLogger(f'caproto.ch.{args.pv_name}')
+    try:
+        data = ast.literal_eval(args.data)
+    except ValueError:
+        # interpret as string
+        data = args.data
+    logger.debug('Data argument %s parsed as %r.', args.data, data)
     try:
         initial = read(pv_name=args.pv_name, timeout=args.timeout)
-        write(pv_name=args.pv_name, data=args.data,
+        write(pv_name=args.pv_name, data=data,
               use_notify=args.notify,
               timeout=args.timeout,
               priority=args.priority,
               repeater=not args.no_repeater)
         final = read(pv_name=args.pv_name, timeout=args.timeout)
         if args.format is None:
-            format_str = '{pv_name: <40}  {response.data}'
+            format_str = '{which} : {pv_name: <40}  {response.data}'
         else:
             format_str = args.format
         if args.terse:
@@ -83,13 +92,13 @@ def main():
         if hasattr(initial.metadata, 'timestamp'):
             dt = datetime.fromtimestamp(initial.metadata.timestamp)
             tokens['timestamp'] = dt
-        print(format_str.format(**tokens))
+        print(format_str.format(which='Old', **tokens))
         tokens = dict(pv_name=args.pv_name, response=final)
         if hasattr(final.metadata, 'timestamp'):
             dt = datetime.fromtimestamp(final.metadata.timestamp)
             tokens['timestamp'] = dt
         tokens = dict(pv_name=args.pv_name, response=final)
-        print(format_str.format(**tokens))
+        print(format_str.format(which='New', **tokens))
     except BaseException as exc:
         if args.verbose or args.vvv:
             # Show the full traceback.

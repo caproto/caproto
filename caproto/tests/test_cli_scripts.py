@@ -3,7 +3,7 @@ import pytest
 import subprocess
 from caproto.sync.client import read, write, subscribe, block
 from caproto.commandline.get import parse_data_type
-from caproto._dbr import ChannelType
+from .. import ChannelType
 
 from .conftest import dump_process_output
 
@@ -44,11 +44,13 @@ def _subprocess_communicate(process, command, timeout=10.0):
 @pytest.mark.parametrize('more_kwargs,',
                          [{'repeater': False},
                           {'timeout': 3},
+                          {'use_notify': True},
                           ]
                          )
 @pytest.mark.parametrize('func,args,kwargs',
                          [(read, ('float',), {}),
                           (write, ('float', 5), {}),
+                          (write, ('float', '5'), {'data_type': 0}),
                           ])
 def test_options(func, args, kwargs, more_kwargs, ioc):
     args = fix_arg_prefixes(ioc, args)
