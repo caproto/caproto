@@ -2,7 +2,7 @@ import sys
 import pytest
 import subprocess
 from caproto.sync.client import read, write, subscribe, block
-from caproto.get import parse_data_type
+from caproto.commandline.get import parse_data_type
 from caproto._dbr import ChannelType
 
 from .conftest import dump_process_output

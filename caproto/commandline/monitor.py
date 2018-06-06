@@ -15,9 +15,9 @@ from datetime import datetime
 import functools
 import logging
 import time
-from .sync.client import subscribe, block
-from .sync.repeater import spawn_repeater
-from . import SubscriptionType, color_logs
+from ..sync.client import subscribe, block
+from ..sync.repeater import spawn_repeater
+from .. import SubscriptionType, color_logs
 
 
 def main():

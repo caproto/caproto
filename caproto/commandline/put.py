@@ -13,9 +13,9 @@ Python session, do not import this module; instead import caproto.sync.client.
 import argparse
 from datetime import datetime
 import logging
-from .sync.client import write
-from .sync.repeater import spawn_repeater
-from . import color_logs
+from ..sync.client import write
+from ..sync.repeater import spawn_repeater
+from .. import color_logs
 
 
 def main():

@@ -16,10 +16,10 @@ if __name__ == '__main__':
 
     if example_module == '--script':
         script = sys.argv[2]
-        from caproto.get import main as get_cli
-        from caproto.put import main as put_cli
-        from caproto.monitor import main as monitor_cli
-        from caproto.repeater import main as repeater_cli
+        from caproto.commandline.get import main as get_cli
+        from caproto.commandline.put import main as put_cli
+        from caproto.commandline.monitor import main as monitor_cli
+        from caproto.commandline.repeater import main as repeater_cli
         entry_point = {'caproto-get': get_cli,
                        'caproto-put': put_cli,
                        'caproto-monitor': monitor_cli,

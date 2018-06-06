@@ -14,8 +14,8 @@ caproto.sync.repeater.
 import argparse
 import logging
 import os
-from .sync.repeater import run
-from . import color_logs
+from ..sync.repeater import run
+from .. import color_logs
 
 
 def main():
