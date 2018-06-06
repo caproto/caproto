@@ -236,13 +236,44 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0,
 
 def subscribe(pv_name, priority=0, data_type=None, data_count=None,
               low=0.0, high=0.0, to=0.0, mask=None):
+    """
+    Define a subscription.
+
+    Example
+    -------
+    Define a subscription on the ``cat`` PV.
+    >>> sub = subscribe('cat')
+
+    Add one or more user-defined callbacks to process responses.
+    >>> def f(response):
+    ...     print(repsonse.data)
+    ...
+    >>> sub.add_callback(f)
+
+    Activate the subscription and process incoming responses.
+    >>> sub.block()
+
+    This is a blocking operation in the sync client. (To do this on a
+    background thread, using the threading client.) Interrupt using Ctrl+C or
+    by calling :meth:`sub.interrupt()` from another thread.
+
+    The subscription may be reactivated by calling ``sub.block()`` again.
+
+    To process multiple subscriptions at once, use the *function*
+    :func:`block`, which takes one more Subscriptions as arguments.
+
+    >>> block(sub1, sub2)
+
+    There is also an :func:`interrupt` function, which is merely an alias to
+    the method.
+    """
     return Subscription(pv_name, priority, data_type, data_count, low, high,
                         to, mask)
 
 
 def interrupt():
     """
-    Signal to block() to stop blocking. Idempotent.
+    Signal to :func:`block` to stop blocking. Idempotent.
 
     This obviously cannot be called interactively while blocked;
     it is intended to be called from another thread.
@@ -253,9 +284,10 @@ def interrupt():
 def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
           repeater=True):
     """
-    Monitor one or more Channels indefinitely.
+    Activate one or more subscriptions and process incoming responses.
 
-    Use Ctrl+C (SIGINT) to escape, or from another thread, call interrupt().
+    Use Ctrl+C (SIGINT) to escape, or from another thread, call
+    :func:`interrupt()`.
 
     Parameters
     ----------
@@ -476,6 +508,11 @@ def write(pv_name, data, *, data_type=None, metadata=None,
 
 
 class Subscription:
+    """
+    This object encapsulates state related to a Subscription.
+
+    See the :func:`subscribe` function.
+    """
     def __init__(self, pv_name, priority=0, data_type=None, data_count=None,
                  low=0.0, high=0.0, to=0.0, mask=None):
         if mask is None:
@@ -493,17 +530,62 @@ class Subscription:
         self._callback_id = 0
         self._callback_lock = threading.RLock()
 
-    def block(self, *subscriptions, duration=None, timeout=1,
+    def block(self, duration=None, timeout=1,
               force_int_enums=False,
               repeater=True):
-        block(self, *subscriptions, duration=None, timeout=1,
-              force_int_enums=False,
-              repeater=True)
+        """
+        Activate one or more subscriptions and process incoming responses.
+
+        Use Ctrl+C (SIGINT) to escape, or from another thread, call
+        :meth:`interrupt()`.
+
+        Convenience alias for the top-level function :func:`block`, which may
+        be used to process multiple Subscriptions concurrently.
+
+        Parameters
+        ----------
+
+        duration : float, optional
+            How many seconds to run for. Run forever (None) by default.
+        timeout : float, optional
+            Default is 1 second. This is not the same as `for`; this is the
+            timeout for failure in the event of no connection.
+        force_int_enums : boolean, optional
+            Retrieve enums as integers. (Default is strings.)
+        repeater : boolean, optional
+            Spawn a Channel Access Repeater process if the port is available.
+            True default, as the Channel Access spec stipulates that
+            well-behaved clients should do this.
+        """
+        block(self, duration=duration, timeout=timeout,
+              force_int_enums=force_int_enums,
+              repeater=repeater)
 
     def interrupt(self):
+        """
+        Signal to block() to stop blocking. Idempotent.
+
+        This obviously cannot be called interactively while blocked;
+        it is intended to be called from another thread.
+        This method is a convenience alias for the top-level function
+        :func:`interrupt`.
+        """
         interrupt()
 
     def add_callback(self, func):
+        """
+        Add a callback to receive responses.
+
+        Parameters
+        ----------
+        func : callable
+            Expected signature: ``func(response)``
+
+        Returns
+        -------
+        token : int
+            Integer token that can be passed to :meth:`remove_callback`.
+        """
         with self._callback_lock:
             cb_id = self._callback_id
             self._callback_id += 1
@@ -521,13 +603,17 @@ class Subscription:
         return cb_id
 
     def remove_callback(self, cb_id):
+        """
+        Remove callback using token that was returned by :meth:`add_callback`.
+        """
         with self._callback_lock:
             self.callbacks.pop(cb_id, None)
 
     def process(self, response):
         """
-        This is a fast operation that submits jobs to the Context's
-        ThreadPoolExecutor and then returns.
+        Run the callbacks on a response.
+
+        This is used internally by block(), generally not called by the user.
         """
         to_remove = []
         with self._callback_lock:
