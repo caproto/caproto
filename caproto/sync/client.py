@@ -29,7 +29,7 @@ CA_SERVER_PORT = 5064  # just a default
 # Make a dict to hold our tcp sockets.
 sockets = {}
 
-poison_pill = False
+_permission_to_block = []  # mutable state shared by block and interrupt
 
 
 # Convenience functions that do both transport and caproto validation/ingest.
@@ -241,8 +241,13 @@ def subscribe(pv_name, priority=0, data_type=None, data_count=None,
 
 
 def interrupt():
-    global poison_pill
-    poison_pill = True
+    """
+    Signal to block() to stop blocking. Idempotent.
+
+    This obviously cannot be called interactively while blocked;
+    it is intended to be called from another thread.
+    """
+    _permission_to_block.clear()
 
 
 def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
@@ -274,6 +279,7 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
     >>> sub1 = subscribe('dog')
     >>> block(sub1, sub2)
     """
+    _permission_to_block.append(object())
     if duration is not None:
         deadline = time.time() + duration
     else:
@@ -330,9 +336,9 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
                 if deadline is not None and time.time() > deadline:
                     logger.debug('Deadline reached.')
                     return
-                global poison_pill
-                if poison_pill:
-                    poison_pill = False
+                if not _permission_to_block:
+                    logger.debug("Interrupted via "
+                                 "caproto.sync.client.interrupt().")
                     break
                 for selector_key, mask in events:
                     circuit = sock_to_circuit[selector_key.fileobj]
@@ -350,6 +356,7 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
             logger.debug('Received SIGINT. Closing.')
             pass
     finally:
+        _permission_to_block.clear()
         try:
             for chan in channels.values():
                 if chan.states[ca.CLIENT] is ca.CONNECTED:
