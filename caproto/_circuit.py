@@ -566,7 +566,7 @@ class ClientChannel(_BaseChannel):
         return command
 
     def read(self, data_type=None, data_count=None, ioid=None,
-             use_notify=False):
+             use_notify=True):
         """
         Generate a valid :class:`ReadRequest` or :class:`ReadNotifyRequest`.
 
@@ -583,8 +583,9 @@ class ClientChannel(_BaseChannel):
         ioid : integer, optional
             Input/output ID. If None, one is generated.
         use_notify : boolean, optional
-            False by default. If True, send a ``ReadNotifyRequest`` instead of
-            a ``ReadRequest``.
+            True by default. If True, send a ``ReadNotifyRequest`` instead of
+            a ``ReadRequest``. Note that ``ReadRequest`` has been deprecated by
+            Channel Access in 3.13 and is not well-supported by caproto.
 
         Returns
         -------
@@ -764,7 +765,7 @@ class ServerChannel(_BaseChannel):
         return command
 
     def read(self, data, ioid, data_type=None, data_count=None, status=1, *,
-             metadata=None, use_notify=False):
+             metadata=None, use_notify=True):
         """
         Generate a valid :class:`ReadResponse` or :class:`ReadNotifyResponse`.
 
@@ -785,8 +786,9 @@ class ServerChannel(_BaseChannel):
         metadata : ``ctypes.BigEndianStructure`` or tuple
             Status and control metadata for the values
         use_notify : boolean, optional
-            False by default. If True, send a ``ReadNotifyRespose`` instead of
-            a ``ReadResponse``.
+            True by default. If True, send a ``ReadNotifyRequest`` instead of
+            a ``ReadRequest``. Note that ``ReadRequest`` has been deprecated by
+            Channel Access in 3.13 and is not well-supported by caproto.
 
         Returns
         -------

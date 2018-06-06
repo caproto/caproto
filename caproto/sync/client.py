@@ -175,7 +175,7 @@ def _read(chan, timeout, data_type, use_notify):
                                    'read response')
 
 
-def read(pv_name, *, data_type=None, timeout=1, priority=0, use_notify=False,
+def read(pv_name, *, data_type=None, timeout=1, priority=0, use_notify=True,
          force_int_enums=False, repeater=True):
     """
     Read a Channel.
@@ -190,7 +190,7 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0, use_notify=False,
     priority : 0, optional
         Virtual Circuit priority. Default is 0, lowest. Highest is 99.
     use_notify : boolean, optional
-        Send a ReadNotifyRequest instead of a ReadRequest. False by default.
+        Send a ReadNotifyRequest instead of a ReadRequest. True by default.
     force_int_enums : boolean, optional
         Retrieve enums as integers. (Default is strings.)
     repeater : boolean, optional

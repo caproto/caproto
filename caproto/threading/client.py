@@ -1319,7 +1319,7 @@ class PV:
 
     @ensure_connected
     def read(self, *, wait=True, callback=None, timeout=2, data_type=None,
-             data_count=None, use_notify=False):
+             data_count=None, use_notify=True):
         """Request a fresh reading.
 
         Can do one or both of:
@@ -1345,8 +1345,9 @@ class PV:
             Requested number of values. Default is the channel's native data
             count, which can be checked in the Channel's attribute
             :attr:`native_data_count`.
-        use_notify: boolean
-            Send a ``ReadNotifyRequest`` instead of a ``ReadRequest``.
+        use_notify: boolean, optional
+            Send a ``ReadNotifyRequest`` instead of a ``ReadRequest``. True by
+            default.
         """
         ioid = self.circuit_manager._ioid_counter()
         command = self.channel.read(ioid=ioid,
