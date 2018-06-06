@@ -31,23 +31,18 @@ intro.update_namespace_with_definitions(basic_types, basic_type_definitions,
 
 
 class Subcommands(enum.IntEnum):
-    # Default behavior.
+    # Default behavior
     DEFAULT = 0x00
-    # Require reply (acknowledgment for reliable operation).
+    # Require reply (acknowledgment for reliable operation)
     REPLY_REQUIRED = 0x01
-    # Best-effort option (no reply).
+    # Best-effort option (no reply)
     BEST_EFFORT = 0x02
-    # Process option.
     PROCESS = 0x04
-    # Initialize option.
     INIT = 0x08
-    # Destroy option.
     DESTROY = 0x10
-    # Share data option.
+    # Share data option
     SHARE = 0x20
-    # Get.
     GET = 0x40
-    # Get-put.
     GET_PUT = 0x80
 
 
@@ -117,6 +112,12 @@ class EndianFlag(enum.IntFlag):
     # MSG_* prefix added to reduce confusion with pva.const.*_ENDIAN
     MSG_LITTLE_ENDIAN = 0
     MSG_BIG_ENDIAN = 1
+
+
+class MonitorFlags(enum.IntFlag):
+    PIPELINE = 0x80
+    START = 0x44
+    STOP = 0x04
 
 
 _flag_masks = {
@@ -505,8 +506,8 @@ class BeaconMessage(ExtendedMessageBase):
         OptionalField('server_status_if', 'FieldDesc',
                       OptionalStopMarker.continue_, None),
         OptionalField('server_status', 'PVField', OptionalStopMarker.continue_,
-                      lambda s: (s.server_status_if !=
-                                 TypeCode.NULL_TYPE_CODE)),
+                      lambda msg, buf: (msg.server_status_if !=
+                                        TypeCode.NULL_TYPE_CODE)),
     ]
 
 
@@ -716,6 +717,7 @@ class ChannelGetRequest(ExtendedMessageBase):
             RequiredField('pv_request', 'PVField'),
         ],
         Subcommands.GET: [],
+        Subcommands.DESTROY: [],
     }
 
 
@@ -730,13 +732,13 @@ class ChannelGetResponse(ExtendedMessageBase):
     _additional_fields_ = Status._additional_fields_
     _subcommand_fields_ = {
         Subcommands.INIT: [
-            RequiredInterfaceField('pv_structure_if', 'FieldDesc',
-                                   data_field='pv_request'),
+            RequiredField('pv_structure_if', 'FieldDesc'),
         ],
         Subcommands.GET: [
             RequiredField('changed_bit_set', 'BitSet'),
             RequiredField('pv_data', 'PVField'),
         ],
+        Subcommands.DESTROY: [],
     }
 
 
@@ -764,6 +766,257 @@ class ChannelFieldInfoResponse(ExtendedMessageBase):
     ]
 
 
+class ChannelPutRequest(ExtendedMessageBase):
+    ID = ApplicationCommands.PUT
+
+    _fields_ = [('server_chid', c_int),
+                ('ioid', c_int),
+                ('subcommand', c_byte),
+                ]
+    _additional_fields_ = []
+    _subcommand_fields_ = {
+        Subcommands.INIT: [
+            RequiredInterfaceField('pv_request_if', 'PVRequest',
+                                   data_field='pv_request'),
+            RequiredField('pv_request', 'PVField'),
+        ],
+        Subcommands.GET: [
+            # Query what the last put request was
+            RequiredField('pv_put_data', 'PVField'),
+        ],
+        Subcommands.DEFAULT: [
+            # Perform the put
+            RequiredField('to_put_bitset', 'BitSet'),
+            RequiredField('put_data', 'PVField'),
+        ],
+        # TODO mask DESTROY | DEFAULT
+        Subcommands.DESTROY: [],
+    }
+
+
+class ChannelPutResponse(ExtendedMessageBase):
+    ID = ApplicationCommands.PUT
+
+    _fields_ = [('ioid', c_int),
+                ('subcommand', c_byte),
+                ('status_type', c_byte),
+                ]
+
+    _additional_fields_ = Status._additional_fields_
+    _subcommand_fields_ = {
+        Subcommands.INIT: [],
+        Subcommands.DEFAULT: [],
+        Subcommands.DESTROY: [],
+    }
+
+
+class ChannelPutGetRequest(ExtendedMessageBase):
+    ID = ApplicationCommands.PUT_GET
+
+    _fields_ = [('server_chid', c_int),
+                ('ioid', c_int),
+                ('subcommand', c_byte),
+                ]
+    _additional_fields_ = []
+    _subcommand_fields_ = {
+        Subcommands.INIT: [
+            RequiredInterfaceField('pv_request_if', 'PVRequest',
+                                   data_field='pv_request'),
+            RequiredField('pv_request', 'PVField'),
+        ],
+        Subcommands.DEFAULT: [
+            RequiredField('to_put_bitset', 'BitSet'),
+            RequiredField('put_data', 'PVField'),
+        ],
+        Subcommands.GET: [
+            # Get the remote "put request"
+        ],
+        Subcommands.GET_PUT: [
+            # Get the remote "get request"
+        ],
+        Subcommands.DESTROY: [],
+    }
+
+
+class ChannelPutGetResponse(ExtendedMessageBase):
+    ID = ApplicationCommands.PUT_GET
+
+    _fields_ = [('ioid', c_int),
+                ('subcommand', c_byte),
+                ('status_type', c_byte),
+                ]
+
+    _additional_fields_ = Status._additional_fields_
+    _subcommand_fields_ = {
+        Subcommands.INIT: [
+            OptionalField('put_structure_if', 'FieldDesc',
+                          OptionalStopMarker.stop, _success_condition),
+            OptionalField('get_structure_if', 'PVField',
+                          OptionalStopMarker.stop, _success_condition)
+        ],
+        Subcommands.DEFAULT: [
+            OptionalField('pv_data', 'PVField', OptionalStopMarker.stop,
+                          _success_condition),
+        ],
+        Subcommands.GET: [
+            OptionalField('get_data', 'PVField', OptionalStopMarker.stop,
+                          _success_condition),
+        ],
+        Subcommands.GET_PUT: [
+            OptionalField('put_data', 'PVField', OptionalStopMarker.stop,
+                          _success_condition),
+        ],
+        Subcommands.DESTROY: [],
+    }
+
+
+class ChannelMonitorRequest(ExtendedMessageBase):
+    ID = ApplicationCommands.MONITOR
+
+    _fields_ = [('server_chid', c_int),
+                ('ioid', c_int),
+                ('subcommand', c_byte),
+                ]
+    _additional_fields_ = []
+    _subcommand_fields_ = {
+        Subcommands.INIT: [
+            RequiredInterfaceField('pv_request_if', 'PVRequest',
+                                   data_field='pv_request'),
+            RequiredField('pv_request', 'PVField'),
+            OptionalField('queue_size', 'int',
+                          OptionalStopMarker.stop,
+                          lambda msg, buf: bool(msg.subcommand &
+                                                MonitorFlags.PIPELINE)),
+        ],
+        Subcommands.DEFAULT: [
+            RequiredField('to_put_bitset', 'BitSet'),
+            RequiredField('put_data', 'PVField'),
+        ],
+        MonitorFlags.START: [],
+        MonitorFlags.STOP: [],
+        # Subcommands.PIPELINE: [],
+        Subcommands.DESTROY: [],
+    }
+
+
+class ChannelMonitorResponse(ExtendedMessageBase):
+    ID = ApplicationCommands.MONITOR
+
+    _fields_ = [('ioid', c_int),
+                ('subcommand', c_byte),
+                ('status_type', c_byte),
+                ]
+
+    _additional_fields_ = Status._additional_fields_
+    _subcommand_fields_ = {
+        Subcommands.INIT: [
+            OptionalField('pv_structure_if', 'FieldDesc',
+                          OptionalStopMarker.stop, _success_condition),
+        ],
+        Subcommands.DEFAULT: [
+            RequiredField('changed_bit_set', 'BitSet'),
+            RequiredField('pv_data', 'PVField'),
+            RequiredField('overrun_bitset', 'BitSet'),
+        ],
+        # MonitorFlags.START: [],
+        # MonitorFlags.STOP: [],
+        MonitorFlags.PIPELINE: [
+            RequiredField('nfree', 'int'),
+        ],
+        Subcommands.GET_PUT: [
+            OptionalField('put_data', 'PVField', OptionalStopMarker.stop,
+                          _success_condition),
+        ],
+        Subcommands.DESTROY: [],
+    }
+
+
+class ChannelProcessRequest(ExtendedMessageBase):
+    ID = ApplicationCommands.PROCESS
+
+    _fields_ = [('server_chid', c_int),
+                ('ioid', c_int),
+                ('subcommand', c_byte),
+                ]
+    _additional_fields_ = []
+    _subcommand_fields_ = {
+        Subcommands.INIT: [
+            RequiredInterfaceField('pv_request_if', 'PVRequest',
+                                   data_field='pv_request'),
+            OptionalField('pv_request', 'PVField', OptionalStopMarker.stop,
+                          lambda msg, buf: (msg.pv_request_if !=
+                                            TypeCode.NULL_TYPE_CODE)),
+            # TODO_DOCS typo serverStatusIF -> PVRequestIF
+        ],
+        Subcommands.DEFAULT: [],  # TODO: not PROCESS?
+        Subcommands.DESTROY: [],
+    }
+
+
+class ChannelProcessResponse(ExtendedMessageBase):
+    ID = ApplicationCommands.PROCESS
+
+    _fields_ = [('ioid', c_int),
+                ('subcommand', c_byte),
+                ('status_type', c_byte),
+                ]
+
+    _additional_fields_ = Status._additional_fields_
+    _subcommand_fields_ = {
+        Subcommands.INIT: [],
+        Subcommands.DEFAULT: [],  # TODO: not PROCESS?
+        Subcommands.DESTROY: [],
+    }
+
+
+class ChannelRpcRequest(ExtendedMessageBase):
+    ID = ApplicationCommands.RPC
+
+    _fields_ = [('server_chid', c_int),
+                ('ioid', c_int),
+                ('subcommand', c_byte),
+                ]
+    _additional_fields_ = []
+    _subcommand_fields_ = {
+        Subcommands.INIT: [
+            RequiredInterfaceField('pv_request_if', 'PVRequest',
+                                   data_field='pv_request'),
+            RequiredField('pv_request', 'PVField'),
+        ],
+        Subcommands.DEFAULT: [
+            RequiredInterfaceField('pv_structure_if', 'FieldDesc',
+                                   data_field='pv_request'),
+            RequiredField('pv_data', 'PVField'),
+        ],
+        Subcommands.DESTROY: [],
+    }
+
+
+class ChannelRpcResponse(ExtendedMessageBase):
+    ID = ApplicationCommands.PROCESS
+
+    _fields_ = [('ioid', c_int),
+                ('subcommand', c_byte),
+                ('status_type', c_byte),
+                ]
+
+    _additional_fields_ = Status._additional_fields_
+    _subcommand_fields_ = {
+        Subcommands.INIT: [],
+        Subcommands.DEFAULT: [
+            OptionalInterfaceField('pv_response_if', 'FieldDesc',
+                                   OptionalStopMarker.stop,
+                                   condition=_success_condition,
+                                   data_field='pv_response',
+                                   ),
+            OptionalField('pv_response', 'PVField', OptionalStopMarker.stop,
+                          condition=_success_condition,
+                          ),
+        ],
+        Subcommands.DESTROY: [],
+    }
+
+
 AppCmd = ApplicationCommands
 CtrlCmd = ControlCommands
 
@@ -776,6 +1029,7 @@ ConnectionValidationRequestLE = _make_endian(ConnectionValidationRequest, LE)
 ConnectionValidationRequestBE = _make_endian(ConnectionValidationRequest, BE)
 EchoLE = _make_endian(Echo, LE)
 EchoBE = _make_endian(Echo, BE)
+
 ConnectionValidatedResponseLE = _make_endian(ConnectionValidatedResponse, LE)
 ConnectionValidatedResponseBE = _make_endian(ConnectionValidatedResponse, BE)
 SearchResponseLE = _make_endian(SearchResponse, LE)
@@ -794,16 +1048,36 @@ EchoLE = _make_endian(Echo, LE)
 EchoBE = _make_endian(Echo, BE)
 SearchRequestLE = _make_endian(SearchRequest, LE)
 SearchRequestBE = _make_endian(SearchRequest, BE)
-CreateChannelRequestLE = _make_endian(CreateChannelRequest, LE)
-CreateChannelRequestBE = _make_endian(CreateChannelRequest, BE)
-ChannelGetRequestLE = _make_endian(ChannelGetRequest, LE)
-ChannelGetRequestBE = _make_endian(ChannelGetRequest, BE)
-ChannelDestroyRequestLE = _make_endian(ChannelDestroyRequest, LE)
 ChannelDestroyRequestBE = _make_endian(ChannelDestroyRequest, BE)
-ChannelDestroyResponseLE = _make_endian(ChannelDestroyResponse, LE)
+ChannelDestroyRequestLE = _make_endian(ChannelDestroyRequest, LE)
 ChannelDestroyResponseBE = _make_endian(ChannelDestroyResponse, BE)
-ChannelFieldInfoRequestLE = _make_endian(ChannelFieldInfoRequest, LE)
+ChannelDestroyResponseLE = _make_endian(ChannelDestroyResponse, LE)
 ChannelFieldInfoRequestBE = _make_endian(ChannelFieldInfoRequest, BE)
+ChannelFieldInfoRequestLE = _make_endian(ChannelFieldInfoRequest, LE)
+ChannelGetRequestBE = _make_endian(ChannelGetRequest, BE)
+ChannelGetRequestLE = _make_endian(ChannelGetRequest, LE)
+ChannelPutGetRequestBE = _make_endian(ChannelPutGetRequest, BE)
+ChannelPutGetRequestLE = _make_endian(ChannelPutGetRequest, LE)
+ChannelPutGetResponseBE = _make_endian(ChannelPutGetResponse, BE)
+ChannelPutGetResponseLE = _make_endian(ChannelPutGetResponse, LE)
+ChannelPutRequestBE = _make_endian(ChannelPutRequest, BE)
+ChannelPutRequestLE = _make_endian(ChannelPutRequest, LE)
+ChannelPutResponseBE = _make_endian(ChannelPutResponse, BE)
+ChannelPutResponseLE = _make_endian(ChannelPutResponse, LE)
+CreateChannelRequestBE = _make_endian(CreateChannelRequest, BE)
+CreateChannelRequestLE = _make_endian(CreateChannelRequest, LE)
+ChannelMonitorRequestBE = _make_endian(ChannelMonitorRequest, BE)
+ChannelMonitorRequestLE = _make_endian(ChannelMonitorRequest, LE)
+ChannelMonitorResponseBE = _make_endian(ChannelMonitorResponse, BE)
+ChannelMonitorResponseLE = _make_endian(ChannelMonitorResponse, LE)
+ChannelProcessRequestBE = _make_endian(ChannelProcessRequest, BE)
+ChannelProcessRequestLE = _make_endian(ChannelProcessRequest, LE)
+ChannelProcessResponseBE = _make_endian(ChannelProcessResponse, BE)
+ChannelProcessResponseLE = _make_endian(ChannelProcessResponse, LE)
+ChannelRpcRequestBE = _make_endian(ChannelRpcRequest, BE)
+ChannelRpcRequestLE = _make_endian(ChannelRpcRequest, LE)
+ChannelRpcResponseBE = _make_endian(ChannelRpcResponse, BE)
+ChannelRpcResponseLE = _make_endian(ChannelRpcResponse, LE)
 
 FROM_CLIENT, FROM_SERVER = DirectionFlag.FROM_CLIENT, DirectionFlag.FROM_SERVER
 
@@ -819,6 +1093,11 @@ messages = {
     (LE, FROM_SERVER, AppCmd.GET): ChannelGetResponseLE,
     (LE, FROM_SERVER, AppCmd.GET_FIELD): ChannelFieldInfoResponseLE,
     (LE, FROM_SERVER, AppCmd.DESTROY_CHANNEL): ChannelDestroyResponseLE,
+    (LE, FROM_SERVER, AppCmd.PUT): ChannelPutResponseLE,
+    (LE, FROM_SERVER, AppCmd.PUT_GET): ChannelPutGetResponseLE,
+    (LE, FROM_SERVER, AppCmd.MONITOR): ChannelMonitorResponseLE,
+    (LE, FROM_SERVER, AppCmd.PROCESS): ChannelProcessResponseLE,
+    (LE, FROM_SERVER, AppCmd.RPC): ChannelRpcResponseLE,
 
     # LITTLE ENDIAN, CLIENT -> SERVER
     (LE, FROM_CLIENT, AppCmd.BEACON): BeaconMessageLE,
@@ -829,6 +1108,11 @@ messages = {
     (LE, FROM_CLIENT, AppCmd.GET): ChannelGetRequestLE,
     (LE, FROM_CLIENT, AppCmd.GET_FIELD): ChannelFieldInfoRequestLE,
     (LE, FROM_CLIENT, AppCmd.DESTROY_CHANNEL): ChannelDestroyRequestLE,
+    (LE, FROM_CLIENT, AppCmd.PUT): ChannelPutRequestLE,
+    (LE, FROM_CLIENT, AppCmd.PUT_GET): ChannelPutGetRequestLE,
+    (LE, FROM_CLIENT, AppCmd.MONITOR): ChannelMonitorRequestLE,
+    (LE, FROM_CLIENT, AppCmd.PROCESS): ChannelProcessRequestLE,
+    (LE, FROM_CLIENT, AppCmd.RPC): ChannelRpcRequestLE,
 
     # BIG ENDIAN, SERVER -> CLIENT
     (BE, FROM_SERVER, CtrlCmd.SET_ENDIANESS): SetByteOrder,
@@ -841,6 +1125,11 @@ messages = {
     (BE, FROM_SERVER, AppCmd.GET): ChannelGetResponseBE,
     (BE, FROM_SERVER, AppCmd.GET_FIELD): ChannelFieldInfoResponseBE,
     (BE, FROM_SERVER, AppCmd.DESTROY_CHANNEL): ChannelDestroyResponseBE,
+    (BE, FROM_SERVER, AppCmd.PUT): ChannelPutResponseBE,
+    (BE, FROM_SERVER, AppCmd.PUT_GET): ChannelPutGetResponseBE,
+    (BE, FROM_SERVER, AppCmd.MONITOR): ChannelMonitorResponseBE,
+    (BE, FROM_SERVER, AppCmd.PROCESS): ChannelProcessResponseBE,
+    (BE, FROM_SERVER, AppCmd.RPC): ChannelRpcResponseBE,
 
     # BIG ENDIAN, CLIENT -> SERVER
     (BE, FROM_CLIENT, AppCmd.BEACON): BeaconMessageBE,
@@ -851,6 +1140,11 @@ messages = {
     (BE, FROM_CLIENT, AppCmd.GET): ChannelGetRequestBE,
     (BE, FROM_CLIENT, AppCmd.GET_FIELD): ChannelFieldInfoRequestBE,
     (BE, FROM_CLIENT, AppCmd.DESTROY_CHANNEL): ChannelDestroyRequestBE,
+    (BE, FROM_CLIENT, AppCmd.PUT): ChannelPutRequestBE,
+    (BE, FROM_CLIENT, AppCmd.PUT_GET): ChannelPutGetRequestBE,
+    (BE, FROM_CLIENT, AppCmd.MONITOR): ChannelMonitorRequestBE,
+    (BE, FROM_CLIENT, AppCmd.PROCESS): ChannelProcessRequestBE,
+    (BE, FROM_CLIENT, AppCmd.RPC): ChannelRpcRequestBE,
 }
 
 
