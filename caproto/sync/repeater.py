@@ -220,7 +220,8 @@ def spawn_repeater():
         reuse = socket.SO_REUSEADDR
     except AttributeError:
         warnings.warn("SO_REUSEADDR is not supported on this platform.")
-    sock.setsockopt(socket.SOL_SOCKET, reuse, 1)
+    else:
+        sock.setsockopt(socket.SOL_SOCKET, reuse, 1)
     logger.debug('Spawning caproto-repeater process....')
     try:
         subprocess.Popen(
