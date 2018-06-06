@@ -13,7 +13,7 @@ Python session, do not import this module; instead import caproto.sync.client.
 import argparse
 from datetime import datetime
 import logging
-from ..sync.client import write
+from ..sync.client import read, write
 from ..sync.repeater import spawn_repeater
 from .. import color_logs
 
@@ -32,6 +32,9 @@ def main():
                                  "and usages like "
                                  "{timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are "
                                  "supported."))
+    parser.add_argument('--notify', '-c', action='store_true',
+                        help=("Request notification of completion, and wait "
+                              "for it."))
     parser.add_argument('--priority', '-p', type=int, default=0,
                         help="Channel Access Virtual Circuit priority. "
                              "Lowest is 0; highest is 99.")
@@ -60,10 +63,13 @@ def main():
     if not args.no_repeater:
         spawn_repeater()
     try:
-        initial, final = write(pv_name=args.pv_name, data=args.data,
-                               timeout=args.timeout,
-                               priority=args.priority,
-                               repeater=not args.no_repeater)
+        initial = read(pv_name=args.pv_name, timeout=args.timeout)
+        write(pv_name=args.pv_name, data=args.data,
+              use_notify=args.notify,
+              timeout=args.timeout,
+              priority=args.priority,
+              repeater=not args.no_repeater)
+        final = read(pv_name=args.pv_name, timeout=args.timeout)
         if args.format is None:
             format_str = '{pv_name: <40}  {response.data}'
         else:

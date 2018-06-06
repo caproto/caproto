@@ -400,7 +400,7 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
                 sockets[chan.circuit].close()
 
 
-def write(pv_name, data, *, data_type=None, metadata=None,
+def write(pv_name, data, *, use_notify=True, data_type=None, metadata=None,
           timeout=1, priority=0,
           repeater=True):
     """
@@ -411,6 +411,8 @@ def write(pv_name, data, *, data_type=None, metadata=None,
     pv_name : str
     data : str, int, or float or a list of these
         Value to write.
+    use_notify : boolean
+        Request notification of completion and wait for it.
     data_type : ChannelType or corresponding integer ID, optional
         Request specific data type. Default is inferred from input.
     metadata : ``ctypes.BigEndianStructure`` or tuple
@@ -461,10 +463,6 @@ def write(pv_name, data, *, data_type=None, metadata=None,
         logger.debug("Detected native data_type %r.", chan.native_data_type)
         # abundance of caution
         ntype = field_types['native'][chan.native_data_type]
-        # Stash initial value
-        logger.debug("Taking 'initial' reading before writing.")
-        initial_response = _read(chan, timeout, None)
-
         if data_type is None:
             # Handle ENUM: If data is INT, carry on. If data is STRING,
             # write it specifically as STRING data_Type.
@@ -472,39 +470,42 @@ def write(pv_name, data, *, data_type=None, metadata=None,
                 logger.debug("Will write to ENUM as data_type STRING.")
                 data_type = ChannelType.STRING
         logger.debug("Writing.")
-        req = chan.write(data=data, data_type=data_type, metadata=metadata)
+        req = chan.write(data=data, use_notify=use_notify,
+                         data_type=data_type, metadata=metadata)
         send(chan.circuit, req)
         t = time.monotonic()
-        while True:
-            try:
-                commands = recv(chan.circuit)
-            except socket.timeout:
-                commands = []
+        if use_notify:
+            while True:
+                try:
+                    commands = recv(chan.circuit)
+                except socket.timeout:
+                    commands = []
 
-            if time.monotonic() - t > timeout:
-                raise TimeoutError("Timeout while awaiting write reply.")
+                if time.monotonic() - t > timeout:
+                    raise TimeoutError("Timeout while awaiting write reply.")
 
-            for command in commands:
-                if (isinstance(command, ca.WriteNotifyResponse) and
-                        command.ioid == req.ioid):
-                    break
-                elif isinstance(command, ca.ErrorResponse):
-                    raise ErrorResponseReceived(command)
-                elif command is ca.DISCONNECTED:
-                    raise CaprotoError('Disconnected while waiting for '
-                                       'write response')
-            else:
-                continue
-            break
-        logger.debug("Taking 'final' reading after writing.")
-        final_response = _read(chan, timeout, None)
+                for command in commands:
+                    if (isinstance(command, ca.WriteNotifyResponse) and
+                            command.ioid == req.ioid):
+                        response = command
+                        break
+                    elif isinstance(command, ca.ErrorResponse):
+                        raise ErrorResponseReceived(command)
+                    elif command is ca.DISCONNECTED:
+                        raise CaprotoError('Disconnected while waiting for '
+                                        'write response')
+                else:
+                    continue
+                break
+            return response
+        else:
+            return None
     finally:
         try:
             if chan.states[ca.CLIENT] is ca.CONNECTED:
                 send(chan.circuit, chan.disconnect())
         finally:
             sockets[chan.circuit].close()
-    return initial_response, final_response
 
 
 class Subscription:
