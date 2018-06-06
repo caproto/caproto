@@ -400,6 +400,53 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
                 sockets[chan.circuit].close()
 
 
+def _write(chan, data, metadata, timeout, data_type, use_notify):
+    if not isinstance(data, Iterable) or isinstance(data, (str, bytes)):
+        data = [data]
+    if data and isinstance(data[0], str):
+        data = [val.encode('latin-1') for val in data]
+    logger.debug("Detected native data_type %r.", chan.native_data_type)
+    # abundance of caution
+    ntype = field_types['native'][chan.native_data_type]
+    if data_type is None:
+        # Handle ENUM: If data is INT, carry on. If data is STRING,
+        # write it specifically as STRING data_Type.
+        if (ntype is ChannelType.ENUM) and isinstance(data[0], bytes):
+            logger.debug("Will write to ENUM as data_type STRING.")
+            data_type = ChannelType.STRING
+    logger.debug("Writing.")
+    req = chan.write(data=data, use_notify=use_notify,
+                     data_type=data_type, metadata=metadata)
+    send(chan.circuit, req)
+    t = time.monotonic()
+    if use_notify:
+        while True:
+            try:
+                commands = recv(chan.circuit)
+            except socket.timeout:
+                commands = []
+
+            if time.monotonic() - t > timeout:
+                raise TimeoutError("Timeout while awaiting write reply.")
+
+            for command in commands:
+                if (isinstance(command, ca.WriteNotifyResponse) and
+                        command.ioid == req.ioid):
+                    response = command
+                    break
+                elif isinstance(command, ca.ErrorResponse):
+                    raise ErrorResponseReceived(command)
+                elif command is ca.DISCONNECTED:
+                    raise CaprotoError('Disconnected while waiting for '
+                                       'write response')
+            else:
+                continue
+            break
+        return response
+    else:
+        return None
+
+
 def write(pv_name, data, *, use_notify=False, data_type=None, metadata=None,
           timeout=1, priority=0,
           repeater=True):
@@ -442,10 +489,6 @@ def write(pv_name, data, *, use_notify=False, data_type=None, metadata=None,
         # As per the EPICS spec, a well-behaved client should start a
         # caproto-repeater that will continue running after it exits.
         spawn_repeater()
-    if not isinstance(data, Iterable) or isinstance(data, (str, bytes)):
-        data = [data]
-    if data and isinstance(data[0], str):
-        data = [val.encode('latin-1') for val in data]
 
     udp_sock = ca.bcast_socket()
     try:
@@ -454,52 +497,87 @@ def write(pv_name, data, *, use_notify=False, data_type=None, metadata=None,
     finally:
         udp_sock.close()
     try:
-        logger.debug("Detected native data_type %r.", chan.native_data_type)
-        # abundance of caution
-        ntype = field_types['native'][chan.native_data_type]
-        if data_type is None:
-            # Handle ENUM: If data is INT, carry on. If data is STRING,
-            # write it specifically as STRING data_Type.
-            if (ntype is ChannelType.ENUM) and isinstance(data[0], bytes):
-                logger.debug("Will write to ENUM as data_type STRING.")
-                data_type = ChannelType.STRING
-        logger.debug("Writing.")
-        req = chan.write(data=data, use_notify=use_notify,
-                         data_type=data_type, metadata=metadata)
-        send(chan.circuit, req)
-        t = time.monotonic()
-        if use_notify:
-            while True:
-                try:
-                    commands = recv(chan.circuit)
-                except socket.timeout:
-                    commands = []
-
-                if time.monotonic() - t > timeout:
-                    raise TimeoutError("Timeout while awaiting write reply.")
-
-                for command in commands:
-                    if (isinstance(command, ca.WriteNotifyResponse) and
-                            command.ioid == req.ioid):
-                        response = command
-                        break
-                    elif isinstance(command, ca.ErrorResponse):
-                        raise ErrorResponseReceived(command)
-                    elif command is ca.DISCONNECTED:
-                        raise CaprotoError('Disconnected while waiting for '
-                                           'write response')
-                else:
-                    continue
-                break
-            return response
-        else:
-            return None
+        _write(chan, data, metadata, timeout, data_type, use_notify)
     finally:
         try:
             if chan.states[ca.CLIENT] is ca.CONNECTED:
                 send(chan.circuit, chan.disconnect())
         finally:
             sockets[chan.circuit].close()
+
+
+def read_write_read(pv_name, data, *, use_notify=False, data_type=None,
+                    metadata=None, timeout=1, priority=0, repeater=True):
+    """
+    Write to a Channel, but sandwich the write between to reads.
+
+    This is what the command-line utilities ``caput`` and ``caproto-put`` do.
+    Notice that if you want the second reading to reflect the written value,
+    you should pass the parameter ``use_notify=True``. (This is also true of
+    ``caput``, which needs the ``-c`` argument to behave the way you might
+    expect it to behave.)
+
+    This is provided as a separate function in order to support ``caproto-put``
+    efficiently. Making separate calls to :func:`read` and :func:`write` would
+    re-create a connection redundantly.
+
+    Parameters
+    ----------
+    pv_name : str
+    data : str, int, or float or a list of these
+        Value to write.
+    use_notify : boolean, optional
+        Request notification of completion and wait for it. False by default.
+    data_type : ChannelType or corresponding integer ID, optional
+        Request specific data type. Default is inferred from input.
+    metadata : ``ctypes.BigEndianStructure`` or tuple
+        Status and control metadata for the values
+    timeout : float, optional
+        Default is 1 second.
+    priority : 0, optional
+        Virtual Circuit priority. Default is 0, lowest. Highest is 99.
+    repeater : boolean, optional
+        Spawn a Channel Access Repeater process if the port is available.
+        True default, as the Channel Access spec stipulates that well-behaved
+        clients should do this.
+
+    Returns
+    -------
+    initial, write_response, final : tuple of response
+
+    The middle response comes from the write, and it will be ``None`` unless
+    ``use_notify=True``.
+
+    Examples
+    --------
+    Write the value 5 to a Channel named 'cat'.
+    >>> write('cat', 5)  # returns None
+
+    Request notification of completion ("put completion") and wait for it.
+    >>> write('cat', 5, use_notify=True)  # returns a WriteNotifyResponse
+    """
+    if repeater:
+        # As per the EPICS spec, a well-behaved client should start a
+        # caproto-repeater that will continue running after it exits.
+        spawn_repeater()
+
+    udp_sock = ca.bcast_socket()
+    try:
+        udp_sock.settimeout(timeout)
+        chan = make_channel(pv_name, udp_sock, priority, timeout)
+    finally:
+        udp_sock.close()
+    try:
+        initial = _read(chan, timeout, data_type, use_notify=True)
+        res = _write(chan, data, metadata, timeout, data_type, use_notify)
+        final = _read(chan, timeout, data_type, use_notify=True)
+    finally:
+        try:
+            if chan.states[ca.CLIENT] is ca.CONNECTED:
+                send(chan.circuit, chan.disconnect())
+        finally:
+            sockets[chan.circuit].close()
+    return initial, res, final
 
 
 class Subscription:

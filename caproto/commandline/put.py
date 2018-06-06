@@ -14,7 +14,7 @@ import argparse
 import ast
 from datetime import datetime
 import logging
-from ..sync.client import read, write
+from ..sync.client import read_write_read
 from ..sync.repeater import spawn_repeater
 from .. import color_logs
 
@@ -72,13 +72,11 @@ def main():
         data = args.data
     logger.debug('Data argument %s parsed as %r.', args.data, data)
     try:
-        initial = read(pv_name=args.pv_name, timeout=args.timeout)
-        write(pv_name=args.pv_name, data=data,
-              use_notify=args.notify,
-              timeout=args.timeout,
-              priority=args.priority,
-              repeater=not args.no_repeater)
-        final = read(pv_name=args.pv_name, timeout=args.timeout)
+        initial, _, final = read_write_read(pv_name=args.pv_name, data=data,
+                                            use_notify=args.notify,
+                                            timeout=args.timeout,
+                                            priority=args.priority,
+                                            repeater=not args.no_repeater)
         if args.format is None:
             format_str = '{which} : {pv_name: <40}  {response.data}'
         else:
