@@ -1466,7 +1466,7 @@ class PV:
             )
         return ioid_info['response']
 
-    def subscribe(data_type=None, data_count=None,
+    def subscribe(self, data_type=None, data_count=None,
                   low=0.0, high=0.0, to=0.0, mask=None):
         "Start a new subscription to which user callback may be added."
         # A Subscription is uniquely identified by the Signature created by its
@@ -1595,12 +1595,12 @@ class Subscription(CallbackHandler):
             if not self.callbacks:
                 return None
             subscriptionid = self.pv.circuit_manager._subscriptionid_counter()
-            command = self.pv.channel.subscribe(data_type=data_type,
-                                                data_count=data_count,
-                                                low=low,
-                                                high=high,
-                                                to=to,
-                                                mask=mask,
+            command = self.pv.channel.subscribe(data_type=self.data_type,
+                                                data_count=self.data_count,
+                                                low=self.low,
+                                                high=self.high,
+                                                to=self.to,
+                                                mask=self.mask,
                                                 subscriptionid=subscriptionid)
             subscriptionid = command.subscriptionid
             self.subscriptionid = subscriptionid
