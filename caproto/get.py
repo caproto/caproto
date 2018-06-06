@@ -48,16 +48,16 @@ def main():
     parser.add_argument('--no-color', action='store_true',
                         help="Suppress ANSI color codes in log messages.")
     args = parser.parse_args()
+    if args.no_color:
+        color_logs(False)
+    if args.verbose:
+        logging.getLogger(f'caproto.ch').setLevel('DEBUG')
+    if args.vvv:
+        logging.getLogger('caproto').setLevel('DEBUG')
     if not args.no_repeater:
         # Spawn the repeater (if needed) manually here so we can pass through
         # preferences about verboseness etc.
         spawn_repeater(repeater_args(args))
-    if args.no_color:
-        color_logs(False)
-    if args.verbose:
-        logging.getLogger('caproto.get').setLevel('DEBUG')
-    if args.vvv:
-        logging.getLogger('caproto').setLevel('DEBUG')
     data_type = parse_data_type(args.d)
     try:
         for pv_name in args.pv_names:
