@@ -493,7 +493,7 @@ def write(pv_name, data, *, use_notify=False, data_type=None, metadata=None,
                         raise ErrorResponseReceived(command)
                     elif command is ca.DISCONNECTED:
                         raise CaprotoError('Disconnected while waiting for '
-                                        'write response')
+                                           'write response')
                 else:
                     continue
                 break
