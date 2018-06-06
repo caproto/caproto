@@ -205,7 +205,7 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0,
     Examples
     --------
     Get the value of a Channel named 'cat'.
-    >>> get('cat').data
+    >>> read('cat').data
     """
     logger = logging.getLogger(f'caproto.ch.{pv_name}')
     if repeater:
@@ -433,7 +433,10 @@ def write(pv_name, data, *, use_notify=False, data_type=None, metadata=None,
     Examples
     --------
     Write the value 5 to a Channel named 'cat'.
-    >>> initial, final = put('cat', 5)
+    >>> write('cat', 5)  # returns None
+
+    Request notification of completion ("put completion") and wait for it.
+    >>> write('cat', 5, use_notify=True)  # returns a WriteNotifyResponse
     """
     raw_data = data
     logger = logging.getLogger(f'caproto.ch.{pv_name}')
