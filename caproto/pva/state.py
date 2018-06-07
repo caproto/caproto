@@ -15,7 +15,8 @@ from .utils import (CLIENT, SERVER,
                     )
 
 from .._state import (CircuitState as _CircuitState,
-                      ChannelState as _ChannelState)
+                      ChannelState as _ChannelState,
+                      _BaseState)
 from .messages import (
     ApplicationCommands, DirectionFlag, Status, BeaconMessage, SetMarker,
     AcknowledgeMarker, SetByteOrder, ConnectionValidationRequest,
@@ -27,6 +28,7 @@ from .messages import (
     ChannelPutGetResponse, ChannelMonitorRequest, ChannelMonitorResponse,
     ChannelRpcRequest, ChannelRpcResponse, ChannelProcessRequest,
     ChannelProcessResponse,
+    Subcommands, MonitorSubcommands,
 )
 
 
@@ -152,6 +154,47 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
     },
 }
 
+SUBCOMMAND_TRANSITIONS = {
+    CLIENT: {
+        NEVER_CONNECTED: {
+            Subcommands.INIT: CONNECTED,
+        },
+        CONNECTED: {
+            Subcommands.INIT: CONNECTED,
+            Subcommands.DEFAULT: CONNECTED,
+            Subcommands.GET: CONNECTED,
+            Subcommands.GET_PUT: CONNECTED,
+            Subcommands.PROCESS: CONNECTED,
+            Subcommands.DESTROY: DISCONNECTED,
+        },
+        DISCONNECTED: {
+        },
+    }
+}
+
+SUBCOMMAND_TRANSITIONS[SERVER] = SUBCOMMAND_TRANSITIONS[CLIENT]
+
+MONITOR_TRANSITIONS = {
+    CLIENT: {
+        NEVER_CONNECTED: {
+            MonitorSubcommands.INIT: CONNECTED,
+        },
+        CONNECTED: {
+            MonitorSubcommands.INIT: CONNECTED,
+            MonitorSubcommands.DEFAULT: CONNECTED,
+            MonitorSubcommands.PIPELINE: CONNECTED,
+            MonitorSubcommands.START: CONNECTED,
+            MonitorSubcommands.STOP: CONNECTED,
+            MonitorSubcommands.DESTROY: DISCONNECTED,
+        },
+        DISCONNECTED: {
+        },
+    }
+}
+
+
+MONITOR_TRANSITIONS[SERVER] = MONITOR_TRANSITIONS[CLIENT]
+
 STATE_TRIGGERED_TRANSITIONS = {
     # (CHANNEL_STATE, CIRCUIT_STATE)
     CLIENT: {
@@ -220,6 +263,37 @@ class CircuitState(_CircuitState):
             err_cls = get_exception(role, command)
             err = err_cls(f"{self} cannot handle command type "
                           f"{command_type.__name__} when role={role} and "
+                          f"state={self.states[role]}")
+            raise err from None
+        self.states[role] = new_state
+
+
+class RequestState(_BaseState):
+    def __init__(self, is_monitor):
+        self.monitor = is_monitor
+        self.TRANSITIONS = (MONITOR_TRANSITIONS if is_monitor
+                            else SUBCOMMAND_TRANSITIONS)
+        self.states = {CLIENT: NEVER_CONNECTED, SERVER: NEVER_CONNECTED}
+
+    def process_subcommand(self, subcommand):
+        self._fire_command_triggered_transitions(CLIENT, subcommand)
+        self._fire_command_triggered_transitions(SERVER, subcommand)
+
+    # MERGE
+    def _fire_command_triggered_transitions(self, role, subcommand):
+        current_state = self.states[role]
+        allowed_transitions = self.TRANSITIONS[role][current_state]
+        if self.monitor:
+            subcommand = MonitorSubcommands(subcommand)
+        else:
+            subcommand = Subcommands(subcommand)
+
+        try:
+            new_state = allowed_transitions[subcommand]
+        except KeyError:
+            err_cls = get_exception(role, subcommand)
+            err = err_cls(f"{self} cannot handle subcommand type "
+                          f"{subcommand!r} when role={role} and "
                           f"state={self.states[role]}")
             raise err from None
         self.states[role] = new_state

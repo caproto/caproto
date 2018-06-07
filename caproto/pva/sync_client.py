@@ -30,8 +30,8 @@ from caproto.pva import (CLIENT, SERVER, CONNECTED, NEED_DATA, DISCONNECTED,
                          ClientChannel, ConnectionValidationRequest,
                          ConnectionValidatedResponse, CreateChannelResponse,
                          ChannelFieldInfoResponse, ChannelGetResponse,
-                         ChannelMonitorResponse, MonitorFlags, Subcommands,
-                         basic_types)
+                         ChannelMonitorResponse, MonitorSubcommands,
+                         Subcommands, basic_types)
 
 # __all__ = ['get', 'put', 'monitor']
 
@@ -358,7 +358,7 @@ def _monitor(chan, timeout, pvrequest):
             if isinstance(command, ChannelMonitorResponse):
                 if command.subcommand == Subcommands.INIT:
                     monitor_start_req = chan.subscribe_control(
-                        ioid=ioid, flag=MonitorFlags.START)
+                        ioid=ioid, subcommand=MonitorSubcommands.START)
                     send(chan.circuit, monitor_start_req)
                 else:
                     ...

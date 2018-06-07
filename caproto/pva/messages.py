@@ -114,7 +114,9 @@ class EndianFlag(enum.IntFlag):
     MSG_BIG_ENDIAN = 1
 
 
-class MonitorFlags(enum.IntFlag):
+class MonitorSubcommands(enum.IntFlag):
+    INIT = 0x08
+    DEFAULT = 0x00
     PIPELINE = 0x80
     START = 0x44
     STOP = 0x04
@@ -886,12 +888,12 @@ class ChannelMonitorRequest(ExtendedMessageBase):
             OptionalField('queue_size', 'int',
                           OptionalStopMarker.stop,
                           lambda msg, buf: bool(msg.subcommand &
-                                                MonitorFlags.PIPELINE)),
+                                                MonitorSubcommands.PIPELINE)),
         ],
         Subcommands.DEFAULT: [
         ],
-        MonitorFlags.START: [],
-        MonitorFlags.STOP: [],
+        MonitorSubcommands.START: [],
+        MonitorSubcommands.STOP: [],
         # Subcommands.PIPELINE: [],
         Subcommands.DESTROY: [],
     }
@@ -906,24 +908,21 @@ class ChannelMonitorResponse(ExtendedMessageBase):
 
     _additional_fields_ = []
     _subcommand_fields_ = {
-        Subcommands.INIT: [
+        MonitorSubcommands.INIT: [
             # status only on INIT!
             RequiredField('status_type', 'byte'),
         ] + Status._additional_fields_ + [
             SuccessField('pv_structure_if', 'FieldDesc'),
         ],
-        Subcommands.DEFAULT: [
+        MonitorSubcommands.DEFAULT: [
             RequiredField('changed_bit_set', 'BitSet'),
             RequiredField('pv_data', 'PVField'),
             RequiredField('overrun_bitset', 'BitSet'),
         ],
-        # MonitorFlags.START: [],
-        # MonitorFlags.STOP: [],
-        MonitorFlags.PIPELINE: [
+        # MonitorSubcommands.START: [],
+        # MonitorSubcommands.STOP: [],
+        MonitorSubcommands.PIPELINE: [
             RequiredField('nfree', 'int'),
-        ],
-        Subcommands.GET_PUT: [
-            SuccessField('put_data', 'PVField'),
         ],
         Subcommands.DESTROY: [],
     }

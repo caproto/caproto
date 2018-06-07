@@ -9,7 +9,7 @@ from .const import SYS_ENDIAN, LITTLE_ENDIAN, BIG_ENDIAN
 from .messages import (basic_types, DirectionFlag, ApplicationCommands, ControlCommands,
                        EndianSetting, read_from_bytestream, messages_grouped,
                        MessageHeaderBE, MessageHeaderLE, MessageTypeFlag,
-                       EndianFlag, StatusType, Subcommands, MonitorFlags,
+                       EndianFlag, StatusType, Subcommands, MonitorSubcommands,
                        )
 from .messages import (Status, BeaconMessage, SetMarker, AcknowledgeMarker,
                        SetByteOrder, ConnectionValidationRequest,
@@ -25,7 +25,7 @@ from .messages import (Status, BeaconMessage, SetMarker, AcknowledgeMarker,
                        ChannelProcessResponse, ChannelPutGetRequest,
                        ChannelPutGetResponse)
 
-from .state import (ChannelState, CircuitState, get_exception)
+from .state import (ChannelState, CircuitState, RequestState, get_exception)
 from .utils import (CLIENT, SERVER, NEED_DATA, DISCONNECTED,
                     CaprotoKeyError, CaprotoValueError, CaprotoRuntimeError,
                     CaprotoError,
@@ -269,7 +269,6 @@ class VirtualCircuit:
                                 ChannelProcessRequest, ChannelProcessResponse,
                                 ChannelPutGetRequest, ChannelPutGetResponse)):
             if isinstance(command, CreateChannelRequest):
-                print(command.channels)
                 for info in [command.channels]:
                     cid = info['id']
                     chan = self.channels[cid]
@@ -283,34 +282,46 @@ class VirtualCircuit:
                     chan = self.channels_sid[command.server_chid]
                 else:
                     ioid = command.ioid
-                    chan = self._ioids[ioid]
+                    chan = self._ioids[ioid]['channel']
 
-            # Update the state machine of the pertinent Channel.
-            # If this is not a valid command, the state machine will raise
-            # here. Stash the state transitions in a local var and run the
-            # callbacks at the end.
+            # Update the state machine of the pertinent Channel.  If this is
+            # not a valid command, the state machine will raise here. Stash the
+            # state transitions in a local var, run the callbacks at the end.
             transitions = chan.process_command(command)
+
+            ioid = None
+            if hasattr(command, 'ioid'):
+                ioid = command.ioid
+                try:
+                    ioid_info = self._ioids[ioid]
+                except KeyError:
+                    monitor = isinstance(command, (ChannelMonitorRequest,
+                                                   ChannelMonitorResponse))
+                    ioid_info = dict(
+                        channel=chan,
+                        state=RequestState(monitor)
+                    )
+                    self._ioids[ioid] = ioid_info
+
+                if hasattr(command, 'subcommand'):
+                    ioid_state = ioid_info['state']
+                    ioid_state.process_subcommand(command.subcommand)
 
             if isinstance(command, CreateChannelResponse):
                 self.channels_sid[command.server_chid] = chan
             elif isinstance(command, ChannelFieldInfoRequest):
-                self._ioids[command.ioid] = chan
+                ...
             elif isinstance(command, ChannelFieldInfoResponse):
-                self._ioids.pop(command.ioid)
+                self._ioids.pop(ioid)
             elif isinstance(command, (ChannelGetRequest,
                                       ChannelMonitorRequest)):
-                ioid = command.ioid
-                self._ioids[command.ioid] = chan
+                ...
             elif isinstance(command, ChannelGetResponse):
-                ioid = command.ioid
                 if command.subcommand == Subcommands.INIT:
                     interface = command.pv_structure_if
                     self.cache.ioid_interfaces[ioid] = interface
                 elif command.subcommand == Subcommands.GET:
                     ...
-                elif command.subcommand == Subcommands.DESTROY:
-                    self._ioids.pop(ioid)
-                    self.cache.ioid_interfaces.pop(ioid)
             elif isinstance(command, ChannelMonitorResponse):
                 ioid = command.ioid
                 if command.subcommand == Subcommands.INIT:
@@ -318,7 +329,9 @@ class VirtualCircuit:
                     self.cache.ioid_interfaces[ioid] = interface
                 elif command.subcommand == Subcommands.DEFAULT:
                     ...
-                elif command.subcommand == Subcommands.DESTROY:
+
+            if hasattr(command, 'subcommand'):
+                if command.subcommand == Subcommands.DESTROY:
                     self._ioids.pop(ioid)
                     self.cache.ioid_interfaces.pop(ioid)
 
@@ -623,25 +636,25 @@ class ClientChannel(_BaseChannel):
                    pv_request=pvrequest_data,
                    )
 
-    def subscribe_control(self, ioid, *, flag):
+    def subscribe_control(self, ioid, *, subcommand):
         """
         Generate a valid ...
 
         Parameters
         ----------
         ioid
-        flag : MonitorFlags
+        subcommand : MonitorSubcommands
             PIPELINE, START, STOP, DESTROY
 
         Returns
         -------
         ChannelMonitorRequest
         """
-        assert flag in MonitorFlags
+        assert subcommand in MonitorSubcommands
         cls = self.circuit.messages[ApplicationCommands.MONITOR]
         return cls(server_chid=self.sid,
                    ioid=ioid,
-                   subcommand=flag,
+                   subcommand=subcommand,
                    )
 
     def write(self, data, data_type=None, data_count=None, metadata=None):
