@@ -23,6 +23,7 @@ import collections
 import ctypes
 import _ctypes
 import inspect
+import os
 import struct
 import socket
 import warnings
@@ -89,6 +90,8 @@ _ExtendedMessageHeaderSize = ctypes.sizeof(ExtendedMessageHeader)
 _pad_buffer = {mod_sz: b'\0' * (8 - mod_sz)
                for mod_sz in range(1, 8)}
 _pad_buffer[0] = b''
+
+STR_ENC = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
 
 
 def ipv4_to_int32(ip: str) -> int:
@@ -593,7 +596,7 @@ class SearchRequest(Message):
     reply = property(lambda self: self.header.data_type)
     version = property(lambda self: self.header.data_count)
     cid = property(lambda self: self.header.parameter1)
-    name = property(lambda self: bytes(self.buffers[1]).rstrip(b'\x00'))
+    name = property(lambda self: bytes(self.buffers[1]).rstrip(b'\x00').decode(STR_ENC))
 
 
 class SearchResponse(Message):
@@ -1425,7 +1428,7 @@ class CreateChanRequest(Message):
     payload_size = property(lambda self: self.header.payload_size)
     cid = property(lambda self: self.header.parameter1)
     version = property(lambda self: self.header.parameter2)
-    name = property(lambda self: bytes(self.buffers[1]).rstrip(b'\x00'))
+    name = property(lambda self: bytes(self.buffers[1]).rstrip(b'\x00').decode(STR_ENC))
 
 
 class CreateChanResponse(Message):
@@ -1600,7 +1603,7 @@ class ClientNameRequest(Message):
                                    sender_address=sender_address)
 
     payload_size = property(lambda self: self.header.payload_size)
-    name = property(lambda self: bytes(self.buffers[1]).rstrip(b'\x00'))
+    name = property(lambda self: bytes(self.buffers[1]).rstrip(b'\x00').decode(STR_ENC))
 
 
 class HostNameRequest(Message):
@@ -1623,7 +1626,7 @@ class HostNameRequest(Message):
         super().__init__(header, b'', payload)
 
     payload_size = property(lambda self: self.header.payload_size)
-    name = property(lambda self: bytes(self.buffers[1]).rstrip(b'\x00'))
+    name = property(lambda self: bytes(self.buffers[1]).rstrip(b'\x00').decode(STR_ENC))
 
     @classmethod
     def from_wire(cls, header, payload_bytes, *, sender_address=None):

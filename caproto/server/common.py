@@ -185,7 +185,7 @@ class VirtualCircuit:
         '''Process a command from a client, and return the server response'''
         def get_db_entry():
             chan = self.circuit.channels_sid[command.sid]
-            db_entry = self.context[chan.name.decode(STR_ENC)]
+            db_entry = self.context[chan.name]
             return chan, db_entry
 
         if command is ca.DISCONNECTED:
@@ -193,7 +193,7 @@ class VirtualCircuit:
         elif isinstance(command, ca.VersionRequest):
             return [ca.VersionResponse(13)]
         elif isinstance(command, ca.CreateChanRequest):
-            db_entry = self.context[command.name.decode(STR_ENC)]
+            db_entry = self.context[command.name]
             access = db_entry.check_access(self.client_hostname,
                                            self.client_username)
 
@@ -205,9 +205,9 @@ class VirtualCircuit:
                                           sid=self.circuit.new_channel_id()),
                     ]
         elif isinstance(command, ca.HostNameRequest):
-            self.client_hostname = command.name.decode(STR_ENC)
+            self.client_hostname = command.name
         elif isinstance(command, ca.ClientNameRequest):
-            self.client_username = command.name.decode(STR_ENC)
+            self.client_username = command.name
         elif isinstance(command, (ca.ReadNotifyRequest, ca.ReadRequest)):
             chan, db_entry = get_db_entry()
             metadata, data = await db_entry.auth_read(
@@ -389,7 +389,7 @@ class Context:
             if isinstance(command, ca.VersionRequest):
                 version_requested = True
             if isinstance(command, ca.SearchRequest):
-                pv_name = command.name.decode(STR_ENC)
+                pv_name = command.name
                 try:
                     known_pv = self[pv_name] is not None
                 except KeyError:
