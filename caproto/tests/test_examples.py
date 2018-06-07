@@ -40,166 +40,201 @@ def test_thread_client_example(curio_server):
         kernel.run(server_runner, client)
 
 
-def test_curio_server_example(prefix):
+# The following asynchronous functions are used as parameters in the
+# parameterized tests test_curio_server_example.
+
+
+async def simple_read(chan1, pvdb, ctx):
+    reading = await chan1.read()
+    print('reading:', reading)
+
+
+async def simple_subscription(chan1, pvdb, ctx):
+    commands = []
+
+    def user_callback(command):
+        print("Subscription has received data: {}".format(command))
+        commands.append(command)
+
+    chan1.register_user_callback(user_callback)
+    sub_id = await chan1.subscribe()
+    await curio.sleep(0.2)
+    await chan1.unsubscribe(sub_id)
+    assert commands
+
+
+async def write_and_read(chan1, pvdb, ctx):
+    await chan1.write((5,), use_notify=True)
+    reading = await chan1.read()
+    expected = 5
+    actual, = reading.data
+    assert actual == expected
+    print('reading:', reading)
+    await chan1.write((6,), use_notify=True)
+    reading = await chan1.read()
+    expected = 6
+    actual, = reading.data
+    assert actual == expected
+    print('reading:', reading)
+
+
+async def update_metadata(chan1, pvdb, ctx):
+    # Test updating metadata...
+    # _fields_ = [
+    #     ('status', short_t),
+    #     ('severity', short_t),
+    #     ('secondsSinceEpoch', ctypes.c_uint32),
+    #     ('nanoSeconds', ctypes.c_uint32),
+    #     ('RISC_Pad', long_t),
+    # ]
+    metadata = (0, 0, ca.TimeStamp(4, 0), 0)  # set timestamp to 4 seconds
+    await chan1.write((7,), use_notify=True,
+                      data_type=ca.ChannelType.TIME_DOUBLE,
+                      metadata=metadata)
+    reading = await chan1.read(data_type=20)
+    # check reading
+    expected = 7
+    actual, = reading.data
+    assert actual == expected
+    # check timestamp
+    expected = 4
+    actual = reading.metadata.secondsSinceEpoch
+    assert actual == expected
+    print('reading:', reading)
+
+
+async def update_alarm(chan1, pvdb, ctx):
+    status, severity = ca.AlarmStatus.SCAN, ca.AlarmSeverity.MAJOR_ALARM
+    server_alarm = pvdb[chan1.channel.name].alarm
+
+    await server_alarm.write(status=status, severity=severity)
+
+    # test acknowledge alarm status/severity
+    reading = await chan1.read(data_type=ca.ChannelType.TIME_DOUBLE)
+    assert reading.metadata.status == status
+    assert reading.metadata.severity == severity
+
+    # acknowledge the severity
+    metadata = (severity + 1, )
+    await chan1.write((),
+                      use_notify=True,
+                      data_type=ca.ChannelType.PUT_ACKS,
+                      metadata=metadata)
+
+    assert server_alarm.severity_to_acknowledge == 0
+
+    # now make a transient alarm and toggle the severity
+    # now require transients to be acknowledged
+    metadata = (1, )
+    await chan1.write((),
+                      use_notify=True,
+                      data_type=ca.ChannelType.PUT_ACKT,
+                      metadata=metadata)
+
+    assert server_alarm.must_acknowledge_transient
+
+    await server_alarm.write(severity=severity)
+    await server_alarm.write(severity=ca.AlarmSeverity.NO_ALARM)
+
+    assert server_alarm.severity_to_acknowledge == severity
+
+    # acknowledge the severity
+    metadata = (severity + 1, )
+    await chan1.write((),
+                      use_notify=True,
+                      data_type=ca.ChannelType.PUT_ACKS,
+                      metadata=metadata)
+
+    assert server_alarm.severity_to_acknowledge == 0
+
+    severity = ca.AlarmSeverity.NO_ALARM
+
+    reading = await chan1.read(data_type=ca.ChannelType.TIME_DOUBLE)
+    # check reading (unchanged since last time)
+    expected = 7
+    actual, = reading.data
+    assert actual == expected
+    # check status
+    actual = reading.metadata.status
+    assert actual == status
+    # check severity
+    actual = reading.metadata.severity
+    assert actual == severity
+
+
+async def strings_and_subscriptions(chan1, pvdb, ctx):
+    commands = []
+
+    def user_callback(command):
+        print("Subscription has received data: {}".format(command))
+        commands.append(command)
+
+    prefix, _ = chan1.channel.name.split(':')  # HACK
+    prefix = prefix + ':'
+    await ctx.search(prefix + 'str')
+    await ctx.search(prefix + 'str2')
+    print('done searching')
+    chan2 = await ctx.create_channel(prefix + 'str')
+    chan3 = await ctx.create_channel(prefix + 'str2')
+    print('done creating')
+    chan2.register_user_callback(user_callback)
+    chan3.register_user_callback(user_callback)
+    await chan2.wait_for_connection()
+    await chan3.wait_for_connection()
+    print('done waiting')
+    sub_id2 = await chan2.subscribe()
+    sub_id3 = await chan3.subscribe()
+    print('write...')
+    await chan2.write(b'hell', use_notify=True)
+    await chan3.write(b'good', use_notify=True)
+    print('done writing')
+
+    print('setting alarm status...')
+    await pvdb[prefix + 'str'].alarm.write(
+        severity=ca.AlarmSeverity.MAJOR_ALARM)
+
+    await curio.sleep(0.5)
+
+    await chan2.unsubscribe(sub_id2)
+    await chan3.unsubscribe(sub_id3)
+    # expecting that the subscription callback should get called:
+    #   1. on connection (2)
+    #   2. when chan2 is written to (1)
+    #   3. when chan3 is written to (1)
+    #   4. when alarm status is updated for both channels (2)
+    # for a total of 6
+    assert len(commands) == 2 + 2 + 2
+    print('CLIENT IS DONE')
+
+
+@pytest.mark.parametrize('run_client',
+                         [simple_read,
+                          simple_subscription,
+                          write_and_read,
+                          update_metadata,
+                          update_alarm,
+                          strings_and_subscriptions,
+                          ])
+def test_curio_server_example(prefix, run_client):
     import caproto.curio.client as client
     from caproto.ioc_examples.type_varieties import (
         pvdb)
     from caproto.curio.server import ServerExit, start_server as server_main
 
-    commands = []
-
     pvdb = {prefix + key: value
             for key, value in pvdb.items()}
+    pi_pv = prefix + 'pi'
+    broadcaster = client.SharedBroadcaster()
+    ctx = client.Context(broadcaster)
 
-    async def run_client():
-        # Some user function to call when subscriptions receive data.
-
-        def user_callback(command):
-            print("Subscription has received data: {}".format(command))
-            commands.append(command)
-
-        pi_pv = prefix + 'pi'
-        broadcaster = client.SharedBroadcaster()
+    async def connect():
         await broadcaster.register()
-        ctx = client.Context(broadcaster)
         await ctx.search(pi_pv)
         print('done searching')
         chan1 = await ctx.create_channel(pi_pv)
-        chan1.register_user_callback(user_callback)
         # ...and then wait for all the responses.
         await chan1.wait_for_connection()
-        reading = await chan1.read()
-        print('reading:', reading)
-        sub_id = await chan1.subscribe()
-        await curio.sleep(0.2)
-        await chan1.unsubscribe(sub_id)
-        await chan1.write((5,))
-        reading = await chan1.read()
-        expected = 5
-        actual, = reading.data
-        assert actual == expected
-        print('reading:', reading)
-        await chan1.write((6,))
-        reading = await chan1.read()
-        expected = 6
-        actual, = reading.data
-        assert actual == expected
-        print('reading:', reading)
-
-        # Test updating metadata...
-        # _fields_ = [
-        #     ('status', short_t),
-        #     ('severity', short_t),
-        #     ('secondsSinceEpoch', ctypes.c_uint32),
-        #     ('nanoSeconds', ctypes.c_uint32),
-        #     ('RISC_Pad', long_t),
-        # ]
-        metadata = (0, 0, ca.TimeStamp(4, 0), 0)  # set timestamp to 4 seconds
-        await chan1.write((7,), data_type=ca.ChannelType.TIME_DOUBLE,
-                          metadata=metadata)
-        reading = await chan1.read(data_type=20)
-        # check reading
-        expected = 7
-        actual, = reading.data
-        assert actual == expected
-        # check timestamp
-        expected = 4
-
-        print('timestamp is', reading.metadata.stamp.as_datetime())
-
-        actual = reading.metadata.secondsSinceEpoch
-        assert actual == expected
-        print('reading:', reading)
-
-        status, severity = ca.AlarmStatus.SCAN, ca.AlarmSeverity.MAJOR_ALARM
-        server_alarm = pvdb[pi_pv].alarm
-
-        await server_alarm.write(status=status, severity=severity)
-
-        # test acknowledge alarm status/severity
-        reading = await chan1.read(data_type=ca.ChannelType.TIME_DOUBLE)
-        assert reading.metadata.status == status
-        assert reading.metadata.severity == severity
-
-        # acknowledge the severity
-        metadata = (severity + 1, )
-        await chan1.write((),
-                          data_type=ca.ChannelType.PUT_ACKS,
-                          metadata=metadata)
-
-        assert server_alarm.severity_to_acknowledge == 0
-
-        # now make a transient alarm and toggle the severity
-        # now require transients to be acknowledged
-        metadata = (1, )
-        await chan1.write((),
-                          data_type=ca.ChannelType.PUT_ACKT,
-                          metadata=metadata)
-
-        assert server_alarm.must_acknowledge_transient
-
-        await server_alarm.write(severity=severity)
-        await server_alarm.write(severity=ca.AlarmSeverity.NO_ALARM)
-
-        assert server_alarm.severity_to_acknowledge == severity
-
-        # acknowledge the severity
-        metadata = (severity + 1, )
-        await chan1.write((),
-                          data_type=ca.ChannelType.PUT_ACKS,
-                          metadata=metadata)
-
-        assert server_alarm.severity_to_acknowledge == 0
-
-        severity = ca.AlarmSeverity.NO_ALARM
-
-        reading = await chan1.read(data_type=ca.ChannelType.TIME_DOUBLE)
-        # check reading (unchanged since last time)
-        expected = 7
-        actual, = reading.data
-        assert actual == expected
-        # check status
-        actual = reading.metadata.status
-        assert actual == status
-        # check severity
-        actual = reading.metadata.severity
-        assert actual == severity
-
-        await chan1.disconnect()
-        assert commands, 'subscription not called in client'
-        # await chan1.circuit.socket.close()
-
-        commands.clear()
-        await ctx.search(prefix + 'str')
-        await ctx.search(prefix + 'str2')
-        print('done searching')
-        chan2 = await ctx.create_channel(prefix + 'str')
-        chan3 = await ctx.create_channel(prefix + 'str2')
-        chan2.register_user_callback(user_callback)
-        chan3.register_user_callback(user_callback)
-        await chan2.wait_for_connection()
-        await chan3.wait_for_connection()
-        sub_id2 = await chan2.subscribe()
-        sub_id3 = await chan3.subscribe()
-        print('write...')
-        await chan2.write(b'hell')
-        await chan3.write(b'good')
-
-        print('setting alarm status...')
-        await pvdb[prefix + 'str'].alarm.write(
-            severity=ca.AlarmSeverity.MAJOR_ALARM)
-
-        await curio.sleep(0.5)
-
-        await chan2.unsubscribe(sub_id2)
-        await chan3.unsubscribe(sub_id3)
-        # expecting that the subscription callback should get called:
-        #   1. on connection (2)
-        #   2. when chan2 is written to (1)
-        #   3. when chan3 is written to (1)
-        #   4. when alarm status is updated for both channels (2)
-        # for a total of 6
-        assert len(commands) == 2 + 2 + 2
+        return chan1
 
     async def task():
         async def server_wrapper():
@@ -211,7 +246,9 @@ def test_curio_server_example(prefix):
         try:
             server_task = await curio.spawn(server_wrapper)
             await curio.sleep(1)  # Give server some time to start up.
-            await run_client()
+            chan1 = await connect()
+            await run_client(chan1, pvdb, ctx)
+            await chan1.disconnect()
             print('client is done')
         finally:
             try:
@@ -397,7 +434,7 @@ def test_mocking_records(request, prefix):
     b_val = f'{prefix}B.VAL'
     b_stat = f'{prefix}B.STAT'
     b_severity = f'{prefix}B.SEVR'
-    write(b_val, 0)
+    write(b_val, 0, use_notify=True)
     assert list(read(b_val).data) == [0]
     assert list(read(b_stat).data) == [b'NO_ALARM']
     assert list(read(b_severity).data) == [b'NO_ALARM']
