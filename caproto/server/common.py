@@ -9,14 +9,12 @@ class DisconnectedCircuit(Exception):
     ...
 
 
-Subscription = namedtuple('Subscription', ('mask', 'circuit', 'channel',
+Subscription = namedtuple('Subscription', ('mask', 'channel_filter',
+                                           'circuit', 'channel',
                                            'data_type',
                                            'data_count', 'subscriptionid'))
 SubscriptionSpec = namedtuple('SubscriptionSpec', ('db_entry', 'data_type',
-                                                   'mask'))
-
-
-STR_ENC = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
+                                                   'mask', 'channel_filter'))
 
 
 class VirtualCircuit:
@@ -260,14 +258,17 @@ class VirtualCircuit:
             chan, db_entry = get_db_entry()
             # TODO no support for deprecated low/high/to
             sub = Subscription(mask=command.mask,
+                               channel_filter=chan.channel_filter,
                                channel=chan,
                                circuit=self,
                                data_type=command.data_type,
                                data_count=command.data_count,
                                subscriptionid=command.subscriptionid)
-            sub_spec = SubscriptionSpec(db_entry=db_entry,
-                                        data_type=command.data_type,
-                                        mask=command.mask)
+            sub_spec = SubscriptionSpec(
+                db_entry=db_entry,
+                data_type=command.data_type,
+                mask=command.mask,
+                channel_filter=chan.channel_filter)
             self.subscriptions[sub_spec].append(sub)
             self.context.subscriptions[sub_spec].append(sub)
             await db_entry.subscribe(self.context.subscription_queue, sub_spec)
