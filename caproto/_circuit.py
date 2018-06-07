@@ -23,7 +23,8 @@ from ._commands import (AccessRightsResponse, CreateChFailResponse,
                         read_from_bytestream,)
 from ._state import (ChannelState, CircuitState, get_exception)
 from ._utils import (CLIENT, SERVER, NEED_DATA, DISCONNECTED, CaprotoKeyError,
-                     CaprotoValueError, CaprotoRuntimeError, CaprotoError)
+                     CaprotoValueError, CaprotoRuntimeError, CaprotoError,
+                     evaluate_channel_filter, parse_record_field)
 from ._dbr import (SubscriptionType, )
 from ._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
 from ._status import CAStatus
@@ -410,8 +411,14 @@ class _BaseChannel:
     # methods for composing requests and repsponses, respectively. All of the
     # important code is here in the base class.
     def __init__(self, name, circuit, cid=None):
+        self.log = logging.getLogger(f'caproto.ch.{name}.{circuit.priority}')
         self.protocol_version = circuit.protocol_version
         self.name = name
+        modifiers = parse_record_field(name).modifiers
+        if modifiers is not None:
+            self.channel_filter = evaluate_channel_filter(modifiers.filter_)
+        else:
+            self.channel_filter = {}
         self.circuit = circuit
         if cid is None:
             cid = self.circuit.new_channel_id()
