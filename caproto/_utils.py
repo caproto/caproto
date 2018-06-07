@@ -595,10 +595,11 @@ SyncFilter = namedtuple('SyncFilter', 'm s')
 
 def evaluate_channel_filter(filter_text):
     "Parse and validate filter_text into a ChannelFilter."
+    # https://epics.anl.gov/base/R3-15/5-docs/filters.html
     if filter_text.startswith('[') and filter_text.endswith(']'):
         # This is the array "shorthand" which is not JSON.
         # The shorthand precludes using any filters but the arr one.
-        elements = filter_text[1:-2].split(':')
+        elements = list(map(int, filter_text[1:-2].split(':')))
         if len(elements) == 1:
             arr = ArrayFilter(s=elements[0], i=1, e=elements[0])
         if len(elements) == 2:
