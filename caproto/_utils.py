@@ -157,6 +157,10 @@ class CaprotoValueError(ValueError, CaprotoError):
     ...
 
 
+class FilterValidationError(CaprotoValueError):
+    ...
+
+
 class CaprotoTypeError(TypeError, CaprotoError):
     ...
 
@@ -556,6 +560,10 @@ def parse_record_field(pvname):
             field, filter_ = field.split('{', 1)
             filter_ = '{' + filter_
             modifiers = RecordModifiers.filtered
+        if '[' in field and field.endswith(']'):
+            field, filter_ = field.split('[', 1)
+            filter_ = '[' + filter_
+            modifiers = RecordModifiers.filtered
         else:
             filter_ = None
             modifiers = None
@@ -578,18 +586,105 @@ def parse_record_field(pvname):
     return RecordAndField(record_field, record, field, modifiers)
 
 
-def evaluate_channel_filter(filter_text):
-    'Evaluate JSON-based channel filter into easy Python type'
+ChannelFilter = namedtuple('ChannelFilter', 'ts dbnd arr sync')
+# TimestampFilter is just True or None, no need for namedtuple.
+DeadbandFilter = namedtuple('DeadbandFilter', 'm d')
+ArrayFilter = namedtuple('ArrayFilter', 's i e')
+SyncFilter = namedtuple('SyncFilter', 'm s')
 
-    filter_ = json.loads(filter_text)
+
+def evaluate_channel_filter(filter_text):
+    "Parse and validate filter_text into a ChannelFilter."
+    if filter_text.startswith('[') and filter_text.endswith(']'):
+        # This is the array "shorthand" which is not JSON.
+        # The shorthand precludes using any filters but the arr one.
+        elements = filter_text[1:-2].split(':')
+        if len(elements) == 1:
+            arr = ArrayFilter(s=elements[0], i=1, e=elements[0])
+        if len(elements) == 2:
+            arr = ArrayFilter(s=elements[0], i=1, e=elements[1])
+        if len(elements) == 3:
+            arr = ArrayFilter(s=elements[0], i=elements[1], e=elements[2])
+        return ChannelFilter(ts=False, dbnd=None, sync=None, arr=arr)
+    try:
+        filter_ = json.loads(filter_text)
+    except Exception as exc:
+        raise FilterValidationError("Unable to parse channel filter text as JSON") from exc
 
     valid_filters = {'ts', 'arr', 'sync', 'dbnd'}
     filter_keys = set(filter_.keys())
     invalid_keys = filter_keys - valid_filters
     if invalid_keys:
-        raise ValueError(f'Unsupported filters: {invalid_keys}')
-    # TODO: parse/validate filters into python types?
-    return filter_
+        raise FilterValidationError(f'Unsupported filters: {invalid_keys}')
+    # Validate and normalize the filter, expanding "shorthand" notation and
+    # applying defaults.
+    norm = {}
+    if 'ts' in filter_:
+        if val != {}:
+            raise FilterValidationError("Only valid value for 'ts' is {}.")
+        norm['ts'] = True
+    else:
+        norm['ts'] = None
+    if 'dbnd' in filter_:
+        val = filter_['dbnd']
+        if 'rel' in val:
+            norm['dbnd'] = DeadbandFilter(m='rel', d=float(val['rel']))
+            invalid_keys = set(val.keys()) - set(['rel'])
+            if invalid_keys:
+                raise FilterValidationError(
+                    f"Unsupported keys in 'dbnd': {invalid_keys}. When 'rel' "
+                    f"shorthand is used, no other keys may be used.")
+        if 'abs' in val:
+            norm['dbnd'] = DeadbandFilter(m='abs', d=float(val['abs']))
+            invalid_keys = set(val.keys()) - set(['abs'])
+            if invalid_keys:
+                raise FilterValidationError(
+                    f"Unsupported keys in 'dbnd': {invalid_keys}. When 'abs' "
+                    f"shorthand is used, no other keys may be used.")
+        else:
+            invalid_keys = set(val.keys()) - set('dm')
+            if invalid_keys:
+                raise FilterValidationError(
+                    f"Unsupported keys in 'dbnd': {invalid_keys}")
+            if set('md') != set(val.keys()):
+                raise FilterValidationError(
+                    f"'dbnd' must include 'rel' or 'abs' or both 'd' and 'm'. "
+                    f"Found keys {set(val.keys())}.")
+            norm['dbnd'] = DeadbandFilter(m=float(val['m']), d=float(val['d']))
+    else:
+        norm['dbnd'] = None
+    if 'arr' in filter_:
+        val = filter_['arr']
+        invalid_keys = set(val.keys()) - set('sie')
+        if invalid_keys:
+            raise FilterValidationError(f"Unsupported keys in 'arr': "
+                                        f"{invalid_keys}")
+        norm['arr'] = ArrayFilter(s=int(val.get('s', 0)),
+                                  i=int(val.get('i', 1)),
+                                  e=int(val.get('e', -1)))
+    else:
+        norm['arr'] = None
+    if 'sync' in filter_:
+        val = filter_['sync']
+        if set('ms') != set(val.keys()):
+            raise FilterValidationError(
+                f"'sync' must include both 'm' and 's'. "
+                f"Found keys {set(val.keys())}.")
+        valid_modes = set(['before', 'first', 'while', 'last', 'after',
+                           'unless'])
+        if val['m'] not in valid_modes:
+            raise FilterValidationError(f"Unsupported mode in 'sync': "
+                                        f"{val['m']}")
+        if not isinstance(val['s'], str):
+            raise FilterValidationError(f"Unsupported type in 'sync': "
+                                        f"value 's' must be a string. "
+                                        f"Found {repr(val['s'])}.")
+        norm['sync'] = SyncFilter(m=val['m'], s=val['s'])
+    else:
+        norm['sync'] = None
+    # We will need a hashable type downstream,
+    # so unpack this dict into a namedtuple.
+    return ChannelFilter(**norm)
 
 
 def batch_requests(request_iter, max_length):
