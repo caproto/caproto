@@ -351,6 +351,10 @@ RequiredInterfaceField = namedtuple('RequiredField', 'name type data_field')
 OptionalInterfaceField = namedtuple('OptionalInterfaceField',
                                     'name type stop condition data_field')
 
+def SuccessField(name, type, stop=OptionalStopMarker.stop):
+    'Return an OptionalField which requires the message status be successful'
+    return OptionalField(name, type, stop, _success_condition)
+
 
 def _make_endian(cls, endian):
     '''Creates big- or little-endian versions of a Structure
@@ -683,9 +687,7 @@ class CreateChannelResponse(ExtendedMessageBase):
                 ]
     _additional_fields_ = Status._additional_fields_ + [
         # TODO access rights aren't sent, even if status_type is OK
-        OptionalField('access_rights', 'short', OptionalStopMarker.stop,
-                      _success_condition
-                      ),
+        SuccessField('access_rights', 'short'),
     ]
 
 
@@ -765,9 +767,7 @@ class ChannelFieldInfoResponse(ExtendedMessageBase):
                 ('status_type', c_byte),
                 ]
     _additional_fields_ = Status._additional_fields_ + [
-        OptionalField('field_if', 'FieldDesc', OptionalStopMarker.stop,
-                      _success_condition
-                      ),
+        SuccessField('field_if', 'FieldDesc'),
     ]
 
 
@@ -854,22 +854,17 @@ class ChannelPutGetResponse(ExtendedMessageBase):
     _additional_fields_ = Status._additional_fields_
     _subcommand_fields_ = {
         Subcommands.INIT: [
-            OptionalField('put_structure_if', 'FieldDesc',
-                          OptionalStopMarker.stop, _success_condition),
-            OptionalField('get_structure_if', 'PVField',
-                          OptionalStopMarker.stop, _success_condition)
+            SuccessField('put_structure_if', 'FieldDesc'),
+            SuccessField('get_structure_if', 'PVField'),
         ],
         Subcommands.DEFAULT: [
-            OptionalField('pv_data', 'PVField', OptionalStopMarker.stop,
-                          _success_condition),
+            SuccessField('pv_data', 'PVField'),
         ],
         Subcommands.GET: [
-            OptionalField('get_data', 'PVField', OptionalStopMarker.stop,
-                          _success_condition),
+            SuccessField('get_data', 'PVField'),
         ],
         Subcommands.GET_PUT: [
-            OptionalField('put_data', 'PVField', OptionalStopMarker.stop,
-                          _success_condition),
+            SuccessField('put_data', 'PVField'),
         ],
         Subcommands.DESTROY: [],
     }
@@ -915,8 +910,7 @@ class ChannelMonitorResponse(ExtendedMessageBase):
             # status only on INIT!
             RequiredField('status_type', 'byte'),
         ] + Status._additional_fields_ + [
-            OptionalField('pv_structure_if', 'FieldDesc',
-                          OptionalStopMarker.stop, _success_condition),
+            SuccessField('pv_structure_if', 'FieldDesc'),
         ],
         Subcommands.DEFAULT: [
             RequiredField('changed_bit_set', 'BitSet'),
@@ -929,8 +923,7 @@ class ChannelMonitorResponse(ExtendedMessageBase):
             RequiredField('nfree', 'int'),
         ],
         Subcommands.GET_PUT: [
-            OptionalField('put_data', 'PVField', OptionalStopMarker.stop,
-                          _success_condition),
+            SuccessField('put_data', 'PVField'),
         ],
         Subcommands.DESTROY: [],
     }
@@ -1014,9 +1007,7 @@ class ChannelRpcResponse(ExtendedMessageBase):
                                    condition=_success_condition,
                                    data_field='pv_response',
                                    ),
-            OptionalField('pv_response', 'PVField', OptionalStopMarker.stop,
-                          condition=_success_condition,
-                          ),
+            SuccessField('pv_response', 'PVField'),
         ],
         Subcommands.DESTROY: [],
     }
@@ -1026,51 +1017,25 @@ AppCmd = ApplicationCommands
 CtrlCmd = ControlCommands
 
 BE, LE = BIG_ENDIAN, LITTLE_ENDIAN  # removed below
-StatusLE = _make_endian(Status, LE)
+BeaconMessageBE = _make_endian(BeaconMessage, BE)
+BeaconMessageLE = _make_endian(BeaconMessage, LE)
+EchoBE = _make_endian(Echo, BE)
+EchoLE = _make_endian(Echo, LE)
 StatusBE = _make_endian(Status, BE)
-BeaconMessageLE = _make_endian(BeaconMessage, LE)
-BeaconMessageBE = _make_endian(BeaconMessage, BE)
-ConnectionValidationRequestLE = _make_endian(ConnectionValidationRequest, LE)
-ConnectionValidationRequestBE = _make_endian(ConnectionValidationRequest, BE)
-EchoLE = _make_endian(Echo, LE)
-EchoBE = _make_endian(Echo, BE)
+StatusLE = _make_endian(Status, LE)
 
-ConnectionValidatedResponseLE = _make_endian(ConnectionValidatedResponse, LE)
-ConnectionValidatedResponseBE = _make_endian(ConnectionValidatedResponse, BE)
-SearchResponseLE = _make_endian(SearchResponse, LE)
-SearchResponseBE = _make_endian(SearchResponse, BE)
-CreateChannelResponseLE = _make_endian(CreateChannelResponse, LE)
-CreateChannelResponseBE = _make_endian(CreateChannelResponse, BE)
-ChannelGetResponseLE = _make_endian(ChannelGetResponse, LE)
-ChannelGetResponseBE = _make_endian(ChannelGetResponse, BE)
-ChannelFieldInfoResponseLE = _make_endian(ChannelFieldInfoResponse, LE)
-ChannelFieldInfoResponseBE = _make_endian(ChannelFieldInfoResponse, BE)
-BeaconMessageLE = _make_endian(BeaconMessage, LE)
-BeaconMessageBE = _make_endian(BeaconMessage, BE)
-ConnectionValidationResponseLE = _make_endian(ConnectionValidationResponse, LE)
-ConnectionValidationResponseBE = _make_endian(ConnectionValidationResponse, BE)
-EchoLE = _make_endian(Echo, LE)
-EchoBE = _make_endian(Echo, BE)
-SearchRequestLE = _make_endian(SearchRequest, LE)
-SearchRequestBE = _make_endian(SearchRequest, BE)
 ChannelDestroyRequestBE = _make_endian(ChannelDestroyRequest, BE)
 ChannelDestroyRequestLE = _make_endian(ChannelDestroyRequest, LE)
 ChannelDestroyResponseBE = _make_endian(ChannelDestroyResponse, BE)
 ChannelDestroyResponseLE = _make_endian(ChannelDestroyResponse, LE)
 ChannelFieldInfoRequestBE = _make_endian(ChannelFieldInfoRequest, BE)
 ChannelFieldInfoRequestLE = _make_endian(ChannelFieldInfoRequest, LE)
+ChannelFieldInfoResponseBE = _make_endian(ChannelFieldInfoResponse, BE)
+ChannelFieldInfoResponseLE = _make_endian(ChannelFieldInfoResponse, LE)
 ChannelGetRequestBE = _make_endian(ChannelGetRequest, BE)
 ChannelGetRequestLE = _make_endian(ChannelGetRequest, LE)
-ChannelPutGetRequestBE = _make_endian(ChannelPutGetRequest, BE)
-ChannelPutGetRequestLE = _make_endian(ChannelPutGetRequest, LE)
-ChannelPutGetResponseBE = _make_endian(ChannelPutGetResponse, BE)
-ChannelPutGetResponseLE = _make_endian(ChannelPutGetResponse, LE)
-ChannelPutRequestBE = _make_endian(ChannelPutRequest, BE)
-ChannelPutRequestLE = _make_endian(ChannelPutRequest, LE)
-ChannelPutResponseBE = _make_endian(ChannelPutResponse, BE)
-ChannelPutResponseLE = _make_endian(ChannelPutResponse, LE)
-CreateChannelRequestBE = _make_endian(CreateChannelRequest, BE)
-CreateChannelRequestLE = _make_endian(CreateChannelRequest, LE)
+ChannelGetResponseBE = _make_endian(ChannelGetResponse, BE)
+ChannelGetResponseLE = _make_endian(ChannelGetResponse, LE)
 ChannelMonitorRequestBE = _make_endian(ChannelMonitorRequest, BE)
 ChannelMonitorRequestLE = _make_endian(ChannelMonitorRequest, LE)
 ChannelMonitorResponseBE = _make_endian(ChannelMonitorResponse, BE)
@@ -1079,10 +1044,32 @@ ChannelProcessRequestBE = _make_endian(ChannelProcessRequest, BE)
 ChannelProcessRequestLE = _make_endian(ChannelProcessRequest, LE)
 ChannelProcessResponseBE = _make_endian(ChannelProcessResponse, BE)
 ChannelProcessResponseLE = _make_endian(ChannelProcessResponse, LE)
+ChannelPutGetRequestBE = _make_endian(ChannelPutGetRequest, BE)
+ChannelPutGetRequestLE = _make_endian(ChannelPutGetRequest, LE)
+ChannelPutGetResponseBE = _make_endian(ChannelPutGetResponse, BE)
+ChannelPutGetResponseLE = _make_endian(ChannelPutGetResponse, LE)
+ChannelPutRequestBE = _make_endian(ChannelPutRequest, BE)
+ChannelPutRequestLE = _make_endian(ChannelPutRequest, LE)
+ChannelPutResponseBE = _make_endian(ChannelPutResponse, BE)
+ChannelPutResponseLE = _make_endian(ChannelPutResponse, LE)
 ChannelRpcRequestBE = _make_endian(ChannelRpcRequest, BE)
 ChannelRpcRequestLE = _make_endian(ChannelRpcRequest, LE)
 ChannelRpcResponseBE = _make_endian(ChannelRpcResponse, BE)
 ChannelRpcResponseLE = _make_endian(ChannelRpcResponse, LE)
+ConnectionValidatedResponseBE = _make_endian(ConnectionValidatedResponse, BE)
+ConnectionValidatedResponseLE = _make_endian(ConnectionValidatedResponse, LE)
+ConnectionValidationRequestBE = _make_endian(ConnectionValidationRequest, BE)
+ConnectionValidationRequestLE = _make_endian(ConnectionValidationRequest, LE)
+ConnectionValidationResponseBE = _make_endian(ConnectionValidationResponse, BE)
+ConnectionValidationResponseLE = _make_endian(ConnectionValidationResponse, LE)
+CreateChannelRequestBE = _make_endian(CreateChannelRequest, BE)
+CreateChannelRequestLE = _make_endian(CreateChannelRequest, LE)
+CreateChannelResponseBE = _make_endian(CreateChannelResponse, BE)
+CreateChannelResponseLE = _make_endian(CreateChannelResponse, LE)
+SearchRequestBE = _make_endian(SearchRequest, BE)
+SearchRequestLE = _make_endian(SearchRequest, LE)
+SearchResponseBE = _make_endian(SearchResponse, BE)
+SearchResponseLE = _make_endian(SearchResponse, LE)
 
 FROM_CLIENT, FROM_SERVER = DirectionFlag.FROM_CLIENT, DirectionFlag.FROM_SERVER
 
