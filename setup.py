@@ -24,7 +24,7 @@ extras_require['complete'] = sorted(set(sum(extras_require.values(), [])))
 setup(name='caproto',
       version=versioneer.get_version(),
       cmdclass=versioneer.get_cmdclass(),
-      author='Daniel Allan',
+      author='Caproto Contributors',
       description='a sans-I/O implementation of the EPICS Channel Access '
                   'protocol',
       packages=['caproto',
