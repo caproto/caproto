@@ -49,8 +49,8 @@ def _subprocess_communicate(process, command, timeout=10.0):
                          )
 @pytest.mark.parametrize('func,args,kwargs',
                          [(read, ('float',), {}),
-                          (write, ('float', 5), {}),
-                          (write, ('float', '5'), {'data_type': 0}),
+                          (write, ('float', 3.16), {}),
+                          (write, ('float', '3.16'), {'data_type': 0}),
                           ])
 def test_options(func, args, kwargs, more_kwargs, ioc):
     args = fix_arg_prefixes(ioc, args)
@@ -93,14 +93,14 @@ fmt2 = '{timestamp:%%H:%%M}'
                           ('caproto-get', ('float', '-p', '99')),
                           ('caproto-get', ('float', '-t')),
                           ('caproto-get', ('float', '-v')),
-                          ('caproto-put', ('float', '5')),
-                          ('caproto-put', ('float', '5', '--format', fmt1)),
-                          ('caproto-put', ('float', '5', '--format', fmt2)),
-                          ('caproto-put', ('float', '5', '--no-repeater')),
-                          ('caproto-put', ('float', '5', '-p', '0')),
-                          ('caproto-put', ('float', '5', '-p', '99')),
-                          ('caproto-put', ('float', '5', '-t')),
-                          ('caproto-put', ('float', '5', '-v')),
+                          ('caproto-put', ('float', '3.16')),
+                          ('caproto-put', ('float', '3.16', '--format', fmt1)),
+                          ('caproto-put', ('float', '3.16', '--format', fmt2)),
+                          ('caproto-put', ('float', '3.16', '--no-repeater')),
+                          ('caproto-put', ('float', '3.16', '-p', '0')),
+                          ('caproto-put', ('float', '3.16', '-p', '99')),
+                          ('caproto-put', ('float', '3.16', '-t')),
+                          ('caproto-put', ('float', '3.16', '-v')),
                           ])
 def test_cli(command, args, ioc):
     args = fix_arg_prefixes(ioc, args)
