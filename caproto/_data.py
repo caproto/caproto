@@ -838,6 +838,7 @@ class ChannelNumeric(ChannelData):
         return await super().write(value, **metadata)
 
     def _is_eligible(self, ss, flags, pair):
+        out_of_band = True
         if pair is not None:
             old, new = pair
             if len(old) == 1 and len(new) == 1:
@@ -845,11 +846,10 @@ class ChannelNumeric(ChannelData):
                 new, = new
                 dbnd = ss.channel_filter.dbnd
                 if dbnd is not None:
-                    # TODO: So we just igmore mask if dbnd filter is set?
                     if dbnd.m == 'rel':
-                        return dbnd.d < abs((old - new) / old)
+                        out_of_band = dbnd.d < abs((old - new) / old)
                     else:  # must be 'abs' -- was already validated
-                        return dbnd.d < abs(old - new)
+                        out_of_band = dbnd.d < abs(old - new)
                 # TODO Does epics normally set these limits in relative or
                 # absolute terms? We should probably support both (as numpy
                 # does).
@@ -861,7 +861,7 @@ class ChannelNumeric(ChannelData):
             else:
                 # TODO What to do with waveforms?
                 pass
-        return ss.mask & flags
+        return out_of_band & ss.mask & flags
 
 
 class ChannelInteger(ChannelNumeric):
