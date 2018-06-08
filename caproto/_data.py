@@ -864,7 +864,7 @@ class ChannelNumeric(ChannelData):
             # of worms. We just want to know if these are scalars.
             if ((not isinstance(old, Iterable) or
                     (isinstance(old, Iterable) and len(old) == 1)) and
-                    (not isinstance(new, Iterable) or
+                (not isinstance(new, Iterable) or
                     (isinstance(new, Iterable) and len(new) == 1))):
                 if isinstance(old, Iterable):
                     old, = old
