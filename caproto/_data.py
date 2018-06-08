@@ -861,7 +861,7 @@ class ChannelNumeric(ChannelData):
             else:
                 # epics-base explicitly says only scalar values are supported:
                 # https://github.com/epics-base/epics-base/blob/3.15/src/std/filters/dbnd.c#L70
-                pass
+                flags |= (SubscriptionType.DBE_VALUE | SubscriptionType.DBE_LOG)
         return out_of_band & ss.mask & flags
 
 
