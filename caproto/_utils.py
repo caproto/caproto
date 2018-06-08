@@ -30,6 +30,7 @@ except ImportError:
 
 
 __all__ = (  # noqa F822
+    'apply_arr_filter',
     'get_environment_variables',
     'get_address_list',
     'get_server_address_list',

@@ -2,7 +2,7 @@ from collections import defaultdict, deque, namedtuple
 import logging
 import os
 import caproto as ca
-from caproto import get_environment_variables
+from caproto import apply_arr_filter, get_environment_variables
 
 
 class DisconnectedCircuit(Exception):
@@ -210,8 +210,10 @@ class VirtualCircuit:
             chan, db_entry = get_db_entry()
             metadata, data = await db_entry.auth_read(
                 self.client_hostname, self.client_username,
-                command.data_type, user_address=self.circuit.address,
-                channel_filter=chan.channel_filter)
+                command.data_type, user_address=self.circuit.address)
+            # This is a pass-through if arr is None.
+            data = apply_arr_filter(chan.channel_filter.arr, data)
+
             use_notify = isinstance(command, ca.ReadNotifyRequest)
             return [chan.read(data=data, data_type=command.data_type,
                               data_count=len(data), status=1,
@@ -428,9 +430,16 @@ class Context:
             # have a different requested data_count.
             for sub in subs:
                 chan = sub.channel
-                # if the subscription has a non-zero value respect it,
-                # else default to the full length of the data
+
+                # This is a pass-through if arr is None.
+                values = apply_arr_filter(sub_spec.channel_filter.arr, values)
+
+                # If the subscription has a non-zero value respect it,
+                # else default to the full length of the data.
                 data_count = sub.data_count or len(values)
+                if data_count != len(values):
+                    values = values[:data_count]
+
                 command = chan.subscribe(data=values,
                                          metadata=metadata,
                                          data_type=sub.data_type,

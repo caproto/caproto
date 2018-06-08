@@ -14,7 +14,7 @@ from ._dbr import (DBR_TYPES, ChannelType, native_type, native_float_types,
                    GraphicControlBase, AlarmStatus, AlarmSeverity,
                    SubscriptionType, DbrStringArray)
 
-from ._utils import CaprotoError, apply_arr_filter
+from ._utils import CaprotoError
 from ._commands import parse_metadata
 from ._backend import backend
 
@@ -467,8 +467,7 @@ class ChannelData:
         except KeyError:
             # Do the expensive data type conversion and cache it in case
             # a future subscription wants the same data type.
-            metadata, values = await self._read(data_type,
-                                                sub_spec.channel_filter)
+            metadata, values = await self._read(data_type)
             self._content[data_type] = metadata, values
         await queue.put(((sub_spec,), metadata, values))
 
@@ -476,20 +475,20 @@ class ChannelData:
         self._queues[queue][sub_spec.data_type].remove(sub_spec)
 
     async def auth_read(self, hostname, username, data_type, *,
-                        channel_filter, user_address=None):
+                        user_address=None):
         '''Get DBR data and native data, converted to a specific type'''
         access = self.check_access(hostname, username)
         if AccessRights.READ not in access:
             raise Forbidden("Client with hostname {} and username {} cannot "
                             "read.".format(hostname, username))
-        return (await self.read(data_type, channel_filter))
+        return (await self.read(data_type))
 
-    async def read(self, data_type, channel_filter):
+    async def read(self, data_type):
         # Subclass might trigger a write here to update self._data
         # before reading it out.
-        return (await self._read(data_type, channel_filter))
+        return (await self._read(data_type))
 
-    async def _read(self, data_type, channel_filter):
+    async def _read(self, data_type):
         # special cases for alarm strings and class name
         if data_type == ChannelType.STSACK_STRING:
             ret = await self.alarm.read()
@@ -507,9 +506,6 @@ class ChannelData:
                                 string_encoding=self.string_encoding,
                                 enum_strings=self._data.get('enum_strings'),
                                 direction=ConversionDirection.TO_WIRE)
-
-        # This is a pass-through if ss.arr is None.
-        values = apply_arr_filter(channel_filter.arr, values)
 
         # for native types, there is no dbr metadata - just data
         if data_type in native_types:
@@ -639,9 +635,13 @@ class ChannelData:
                     metadata, values = await self._read(data_type)
                     self._content[data_type] = metadata, values
 
-                # This is a pass-through if ss.arr is None.
-                values = apply_arr_filter(ss.channel_filter.arr, values)
-
+                # We have applied the deadband filter on this side of the
+                # queue, deciding while SubscriptionSpecs should get this
+                # update. We will apply the array filter on the other side of
+                # the queue, since each eligible SubscriptionSpec may want a
+                # different slice. Sending the whole array through the queue
+                # isn't any more expensive that sending a slice; this is just a
+                # reference.
                 await queue.put((eligible, metadata, values))
 
     def _read_metadata(self, dbr_metadata):
