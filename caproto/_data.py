@@ -836,22 +836,21 @@ class ChannelNumeric(ChannelData):
     upper_ctrl_limit = _read_only_property('upper_ctrl_limit')
     lower_ctrl_limit = _read_only_property('lower_ctrl_limit')
 
-    async def write(self, value, **metadata):
-        # TODO: check against limits here and raise
+    async def verify_value(self, data):
         if self.lower_control_limit != self.upper_ctrl_limit:
-            if not self.lower_control_limit < value <self.upper_ctrl_limit:
+            if not self.lower_control_limit < data <self.upper_ctrl_limit:
                 raise CannotExceedLimits(
-                    f"Cannot write value {value}. Limits are set to "
+                    f"Cannot write data {data}. Limits are set to "
                     f"{self.lower_control_limit} and {self.upper_ctrl_limit}.")
         if self.lower_warning_limit != self.upper_warning_limit:
-            if not self.lower_control_limit < value <self.upper_warning_limit:
+            if not self.lower_control_limit < data <self.upper_warning_limit:
                 warnings.warn(
-                    f"Writing {value} outside warning limits which are are "
+                    f"Writing {data} outside warning limits which are are "
                     f"set to {self.lower_control_limit} and "
                     f"{self.upper_warning_limit}.")
-        if not isinstance(value, Iterable):
-            value = [value]
-        return await super().write(value, **metadata)
+        if not isinstance(data, Iterable):
+            data = [data]
+        return data
 
     def _is_eligible(self, ss, flags, pair):
         out_of_band = True
