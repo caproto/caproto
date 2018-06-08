@@ -859,7 +859,8 @@ class ChannelNumeric(ChannelData):
                     if rel_diff > self.value_rtol:
                         flags |= SubscriptionType.DBE_VALUE
             else:
-                # TODO What to do with waveforms?
+                # epics-base explicitly says only scalar values are supported:
+                # https://github.com/epics-base/epics-base/blob/3.15/src/std/filters/dbnd.c#L70
                 pass
         return out_of_band & ss.mask & flags
 
