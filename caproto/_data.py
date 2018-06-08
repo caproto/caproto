@@ -3,7 +3,7 @@
 # metadata. They perform data type conversions in response to requests to read
 # data as a certain type, and they push updates into queues registered by a
 # higher-level server.
-from collections import defaultdict
+from collections import defaultdict, Iterable
 import enum
 import time
 import warnings
@@ -835,16 +835,23 @@ class ChannelNumeric(ChannelData):
     lower_ctrl_limit = _read_only_property('lower_ctrl_limit')
 
     async def verify_value(self, data):
-        if self.lower_control_limit != self.upper_ctrl_limit:
-            if not self.lower_control_limit < data <self.upper_ctrl_limit:
+        if not isinstance(data, Iterable):
+            val = data
+        elif len(data) == 1:
+            val = data[0]
+        else:
+            # data is an array -- limits do not apply.
+            return data
+        if self.lower_ctrl_limit != self.upper_ctrl_limit:
+            if not self.lower_ctrl_limit <= val <= self.upper_ctrl_limit:
                 raise CannotExceedLimits(
-                    f"Cannot write data {data}. Limits are set to "
-                    f"{self.lower_control_limit} and {self.upper_ctrl_limit}.")
+                    f"Cannot write data {val}. Limits are set to "
+                    f"{self.lower_ctrl_limit} and {self.upper_ctrl_limit}.")
         if self.lower_warning_limit != self.upper_warning_limit:
-            if not self.lower_control_limit < data <self.upper_warning_limit:
+            if not self.lower_ctrl_limit <= val <= self.upper_warning_limit:
                 warnings.warn(
-                    f"Writing {data} outside warning limits which are are "
-                    f"set to {self.lower_control_limit} and "
+                    f"Writing {val} outside warning limits which are are "
+                    f"set to {self.lower_ctrl_limit} and "
                     f"{self.upper_warning_limit}.")
         return data
 
