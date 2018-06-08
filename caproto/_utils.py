@@ -45,7 +45,7 @@ __all__ = (  # noqa F822
     'send_all',
     'async_send_all',
     'parse_record_field',
-    'evaluate_channel_filter',
+    'parse_channel_filter',
     'batch_requests',
     'CaprotoError',
     'ProtocolError',
@@ -555,25 +555,16 @@ ArrayFilter = namedtuple('ArrayFilter', 's i e')
 SyncFilter = namedtuple('SyncFilter', 'm s')
 
 
-def evaluate_channel_filter(filter_text):
+def parse_channel_filter(filter_text):
     "Parse and validate filter_text into a ChannelFilter."
     # https://epics.anl.gov/base/R3-15/5-docs/filters.html
+
+    # If there is a shorthand array filter, that is the only filter allowed, so
+    # we parse that and return, shortcircuiting the rest.
     if filter_text.startswith('[') and filter_text.endswith(']'):
-        # This is the array "shorthand" which is not JSON.
-        # The shorthand precludes using any filters but the arr one.
-        elements = []
-        for elem in filter_text[1:-1].split(':'):
-            if not elem:
-                elements.append(None)
-            else:
-                elements.append(int(elem))
-        if len(elements) == 1:
-            arr = ArrayFilter(s=elements[0], i=1, e=elements[0])
-        if len(elements) == 2:
-            arr = ArrayFilter(s=elements[0], i=1, e=elements[1])
-        if len(elements) == 3:
-            arr = ArrayFilter(s=elements[0], i=elements[1], e=elements[2])
+        arr = parse_arr_shorthand_filter(filter_text)
         return ChannelFilter(ts=False, dbnd=None, sync=None, arr=arr)
+
     try:
         filter_ = json.loads(filter_text)
     except Exception as exc:
@@ -586,73 +577,93 @@ def evaluate_channel_filter(filter_text):
         raise FilterValidationError(f'Unsupported filters: {invalid_keys}')
     # Validate and normalize the filter, expanding "shorthand" notation and
     # applying defaults.
-    norm = {}
-    if 'ts' in filter_:
-        if val != {}:
-            raise FilterValidationError("Only valid value for 'ts' is {}.")
-        norm['ts'] = True
-    else:
-        norm['ts'] = None
-    if 'dbnd' in filter_:
-        val = filter_['dbnd']
-        if 'rel' in val:
-            norm['dbnd'] = DeadbandFilter(m='rel', d=float(val['rel']))
-            invalid_keys = set(val.keys()) - set(['rel'])
-            if invalid_keys:
-                raise FilterValidationError(
-                    f"Unsupported keys in 'dbnd': {invalid_keys}. When 'rel' "
-                    f"shorthand is used, no other keys may be used.")
-        if 'abs' in val:
-            norm['dbnd'] = DeadbandFilter(m='abs', d=float(val['abs']))
-            invalid_keys = set(val.keys()) - set(['abs'])
-            if invalid_keys:
-                raise FilterValidationError(
-                    f"Unsupported keys in 'dbnd': {invalid_keys}. When 'abs' "
-                    f"shorthand is used, no other keys may be used.")
+    return ChannelFilter(arr=parse_arr_filter(filter_.get('arr')),
+                         dbnd=parse_dbnd_filter(filter_.get('dbnd')),
+                         ts=parse_ts_filter(filter_.get('ts')),
+                         sync=parse_sync_filter(filter_.get('sync')))
+
+
+def parse_arr_shorthand_filter(filter_text):
+    elements = []
+    for elem in filter_text[1:-1].split(':'):
+        if not elem:
+            elements.append(None)
         else:
-            invalid_keys = set(val.keys()) - set('dm')
-            if invalid_keys:
-                raise FilterValidationError(
-                    f"Unsupported keys in 'dbnd': {invalid_keys}")
-            if set('md') != set(val.keys()):
-                raise FilterValidationError(
-                    f"'dbnd' must include 'rel' or 'abs' or both 'd' and 'm'. "
-                    f"Found keys {set(val.keys())}.")
-            norm['dbnd'] = DeadbandFilter(m=float(val['m']), d=float(val['d']))
-    else:
-        norm['dbnd'] = None
-    if 'arr' in filter_:
-        val = filter_['arr']
-        invalid_keys = set(val.keys()) - set('sie')
+            elements.append(int(elem))
+    if len(elements) == 1:
+        arr = ArrayFilter(s=elements[0], i=1, e=elements[0])
+    if len(elements) == 2:
+        arr = ArrayFilter(s=elements[0], i=1, e=elements[1])
+    if len(elements) == 3:
+        arr = ArrayFilter(s=elements[0], i=elements[1], e=elements[2])
+    return arr
+
+
+def parse_ts_filter(val):
+    if val is None:
+        return None
+    if val != {}:
+        raise FilterValidationError("Only valid value for 'ts' is {}.")
+    return True
+
+
+def parse_dbnd_filter(val):
+    if val is None:
+        return None
+    if 'rel' in val:
+        invalid_keys = set(val.keys()) - set(['rel'])
         if invalid_keys:
-            raise FilterValidationError(f"Unsupported keys in 'arr': "
-                                        f"{invalid_keys}")
-        norm['arr'] = ArrayFilter(s=int(val.get('s', 0)),
-                                  i=int(val.get('i', 1)),
-                                  e=int(val.get('e', -1)))
-    else:
-        norm['arr'] = None
-    if 'sync' in filter_:
-        val = filter_['sync']
-        if set('ms') != set(val.keys()):
             raise FilterValidationError(
-                f"'sync' must include both 'm' and 's'. "
-                f"Found keys {set(val.keys())}.")
-        valid_modes = set(['before', 'first', 'while', 'last', 'after',
-                           'unless'])
-        if val['m'] not in valid_modes:
-            raise FilterValidationError(f"Unsupported mode in 'sync': "
-                                        f"{val['m']}")
-        if not isinstance(val['s'], str):
-            raise FilterValidationError(f"Unsupported type in 'sync': "
-                                        f"value 's' must be a string. "
-                                        f"Found {repr(val['s'])}.")
-        norm['sync'] = SyncFilter(m=val['m'], s=val['s'])
+                f"Unsupported keys in 'dbnd': {invalid_keys}. When 'rel' "
+                f"shorthand is used, no other keys may be used.")
+        return DeadbandFilter(m='rel', d=float(val['rel']))
+    if 'abs' in val:
+        invalid_keys = set(val.keys()) - set(['abs'])
+        if invalid_keys:
+            raise FilterValidationError(
+                f"Unsupported keys in 'dbnd': {invalid_keys}. When 'abs' "
+                f"shorthand is used, no other keys may be used.")
+        return DeadbandFilter(m='abs', d=float(val['abs']))
     else:
-        norm['sync'] = None
-    # We will need a hashable type downstream,
-    # so unpack this dict into a namedtuple.
-    return ChannelFilter(**norm)
+        invalid_keys = set(val.keys()) - set('dm')
+        if invalid_keys:
+            raise FilterValidationError(
+                f"Unsupported keys in 'dbnd': {invalid_keys}")
+        if set('md') != set(val.keys()):
+            raise FilterValidationError(
+                f"'dbnd' must include 'rel' or 'abs' or both 'd' and 'm'. "
+                f"Found keys {set(val.keys())}.")
+        return DeadbandFilter(m=float(val['m']), d=float(val['d']))
+
+
+def parse_arr_filter(val):
+    if val is None:
+        return None
+    invalid_keys = set(val.keys()) - set('sie')
+    if invalid_keys:
+        raise FilterValidationError(f"Unsupported keys in 'arr': "
+                                    f"{invalid_keys}")
+    return ArrayFilter(s=int(val.get('s', 0)),
+                       i=int(val.get('i', 1)),
+                       e=int(val.get('e', -1)))
+
+
+def parse_sync_filter(val):
+    if val is None:
+        return None
+    if set('ms') != set(val.keys()):
+        raise FilterValidationError(
+            f"'sync' must include both 'm' and 's'. "
+            f"Found keys {set(val.keys())}.")
+    valid_modes = set(['before', 'first', 'while', 'last', 'after', 'unless'])
+    if val['m'] not in valid_modes:
+        raise FilterValidationError(f"Unsupported mode in 'sync': "
+                                    f"{val['m']}")
+    if not isinstance(val['s'], str):
+        raise FilterValidationError(f"Unsupported type in 'sync': "
+                                    f"value 's' must be a string. "
+                                    f"Found {repr(val['s'])}.")
+    return SyncFilter(m=val['m'], s=val['s'])
 
 
 def apply_arr_filter(arr_filter, values):

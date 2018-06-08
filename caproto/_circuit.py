@@ -24,7 +24,7 @@ from ._commands import (AccessRightsResponse, CreateChFailResponse,
 from ._state import (ChannelState, CircuitState, get_exception)
 from ._utils import (CLIENT, SERVER, NEED_DATA, DISCONNECTED, CaprotoKeyError,
                      CaprotoValueError, CaprotoRuntimeError, CaprotoError,
-                     evaluate_channel_filter, parse_record_field,
+                     parse_channel_filter, parse_record_field,
                      ChannelFilter)
 from ._dbr import (SubscriptionType, )
 from ._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
@@ -417,7 +417,7 @@ class _BaseChannel:
         self.name = name
         modifiers = parse_record_field(name).modifiers
         if modifiers is not None:
-            self.channel_filter = evaluate_channel_filter(modifiers.filter_)
+            self.channel_filter = parse_channel_filter(modifiers.filter_)
         else:
             self.channel_filter = ChannelFilter(
                 ts=None, dbnd=None, arr=None, sync=None)

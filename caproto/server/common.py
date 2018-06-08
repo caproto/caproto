@@ -1,6 +1,5 @@
 from collections import defaultdict, deque, namedtuple
 import logging
-import os
 import caproto as ca
 from caproto import apply_arr_filter, get_environment_variables
 
