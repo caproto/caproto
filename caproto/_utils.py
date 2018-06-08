@@ -599,7 +599,12 @@ def evaluate_channel_filter(filter_text):
     if filter_text.startswith('[') and filter_text.endswith(']'):
         # This is the array "shorthand" which is not JSON.
         # The shorthand precludes using any filters but the arr one.
-        elements = list(map(int, filter_text[1:-2].split(':')))
+        elements = []
+        for elem in filter_text[1:-1].split(':'):
+            if not elem:
+                elements.append(None)
+            else:
+                elements.append(int(elem))
         if len(elements) == 1:
             arr = ArrayFilter(s=elements[0], i=1, e=elements[0])
         if len(elements) == 2:
@@ -686,6 +691,22 @@ def evaluate_channel_filter(filter_text):
     # We will need a hashable type downstream,
     # so unpack this dict into a namedtuple.
     return ChannelFilter(**norm)
+
+
+def apply_arr_filter(arr_filter, values):
+    # Apply array Channel Filter.
+    if arr_filter is None:
+        return values
+    start, stop, step = arr_filter.s, arr_filter.e, arr_filter.i
+    # Cope with CA slice conventions being different from
+    # Python's. It specifies an interval closed on both ends,
+    # whereas Python's open open on the right end.
+    if stop is not None:
+        if stop == -1:
+            stop = None
+        else:
+            stop += 1
+    return values[start:stop:step]
 
 
 def batch_requests(request_iter, max_length):

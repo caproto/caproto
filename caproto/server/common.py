@@ -210,7 +210,8 @@ class VirtualCircuit:
             chan, db_entry = get_db_entry()
             metadata, data = await db_entry.auth_read(
                 self.client_hostname, self.client_username,
-                command.data_type, user_address=self.circuit.address)
+                command.data_type, user_address=self.circuit.address,
+                channel_filter=chan.channel_filter)
             use_notify = isinstance(command, ca.ReadNotifyRequest)
             return [chan.read(data=data, data_type=command.data_type,
                               data_count=len(data), status=1,
