@@ -374,14 +374,7 @@ class Context:
 
             # Cache record.FIELD for later usage
             self.pvdb[rec_field] = inst
-
-        # Finally, handle the modifiers
-        if not mods:
-            return inst
-
-        # filter check
-        # TODO: filter API? wrap somehow?
-        return inst.filtered(mods)
+        return inst
 
     async def _broadcaster_evaluate(self, addr, commands):
         search_replies = []

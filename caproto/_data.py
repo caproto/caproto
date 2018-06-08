@@ -348,9 +348,9 @@ class ChannelAlarm:
     async def write(self, *, status=None, severity=None,
                     must_acknowledge_transient=None,
                     severity_to_acknowledge=None,
-                    alarm_string=None, caller=None):
+                    alarm_string=None, caller=None,
+                    flags=0):
         data = self._data
-        flags = 0
 
         if status is not None:
             data['status'] = AlarmStatus(status)
@@ -386,7 +386,7 @@ class ChannelAlarm:
             flags |= SubscriptionType.DBE_ALARM
 
         for channel in self._channels:
-            await channel.publish(flags)
+            await channel.publish(flags, None)
 
 
 class ChannelData:
@@ -523,12 +523,13 @@ class ChannelData:
         return dbr_metadata, values
 
     async def auth_write(self, hostname, username, data, data_type, metadata,
-                         *, user_address=None):
+                         *, flags=0, user_address=None):
         access = self.check_access(hostname, username)
         if AccessRights.WRITE not in access:
             raise Forbidden("Client with hostname {} and username {} cannot "
                             "write.".format(hostname, username))
-        return (await self.write_from_dbr(data, data_type, metadata))
+        return (await self.write_from_dbr(data, data_type, metadata,
+                                          flags=flags))
 
     async def verify_value(self, data):
         '''Verify a value prior to it being written by CA or Python
@@ -538,7 +539,7 @@ class ChannelData:
         '''
         return data
 
-    async def write_from_dbr(self, data, data_type, metadata):
+    async def write_from_dbr(self, data, data_type, metadata, *, flags=0):
         '''Set data from DBR metadata/values'''
         if data_type == ChannelType.PUT_ACKS:
             await self.alarm.write(severity_to_acknowledge=metadata.value)
@@ -568,9 +569,9 @@ class ChannelData:
                                    )
             raise
 
-        self._data['value'] = (modified_value
-                               if modified_value is not None
-                               else value)
+        old = self._data['value']
+        new = modified_value if modified_value is not None else value
+        self._data['value'] = new
 
         if metadata is None:
             self._data['timestamp'] = timestamp
@@ -587,23 +588,24 @@ class ChannelData:
             await self.write_metadata(publish=False, **metadata_dict)
 
         # Send a new event to subscribers.
-        # TODO: mask should be at least DBE_VALUE
-        await self.publish(SubscriptionType.DBE_VALUE)
+        await self.publish(flags, (old, new))
 
-    async def write(self, value, **metadata):
+    async def write(self, value, flags=0, **metadata):
         '''Set data from native Python types'''
         metadata['timestamp'] = metadata.get('timestamp', time.time())
         modified_value = await self.verify_value(value)
-        self._data['value'] = (modified_value
-                               if modified_value is not None
-                               else value)
+        old = self._data['value']
+        new = modified_value if modified_value is not None else value
+        self._data['value'] = new
         await self.write_metadata(publish=False, **metadata)
         # Send a new event to subscribers.
-        # TO DO This should be DBE_VALUE or DBE_LOG or 0 depending on
-        # deadband and archiver deadband, which we have not defined yet.
-        await self.publish(SubscriptionType.DBE_VALUE)
+        await self.publish(flags, (old, new))
 
-    async def publish(self, flags):
+    def _is_eligible(self, ss, flags, pair):
+        # This is overridden in ChannelNumeric to check the contents of pair.
+        return ss.mask & flags
+
+    async def publish(self, flags, pair):
         # Each SubscriptionSpec specifies a certain data type it is interested
         # in and a mask. Send one update per queue per data_type if and only if
         # any subscriptions specs on a queue have a compatible mask.
@@ -620,7 +622,8 @@ class ChannelData:
             # data_types is a dict grouping the sub_specs for this queue by
             # their data_type.
             for data_type, sub_specs in data_types.items():
-                eligible = tuple(ss for ss in sub_specs if ss.mask & flags)
+                eligible = tuple(ss for ss in sub_specs
+                                 if self._is_eligible(ss, flags, pair))
                 if not eligible:
                     continue
                 try:
@@ -704,7 +707,7 @@ class ChannelData:
             await self.alarm.write(status=status, severity=severity)
 
         if publish:
-            await self.publish(SubscriptionType.DBE_PROPERTY)
+            await self.publish(SubscriptionType.DBE_PROPERTY, None)
 
     @property
     def epics_timestamp(self):
@@ -777,9 +780,13 @@ class ChannelEnum(ChannelData):
 
         return super()._read_metadata(dbr_metadata)
 
-    async def write(*args, flags=0, **kwargs):
+    async def write(self, *args, flags=0, **kwargs):
         flags |= (SubscriptionType.DBE_LOG | SubscriptionType.DBE_VALUE)
         await super().write(*args, flags=flags, **kwargs)
+
+    async def write_from_dbr(self, *args, flags=0, **kwargs):
+        flags |= (SubscriptionType.DBE_LOG | SubscriptionType.DBE_VALUE)
+        await super().write_from_dbr(*args, flags=flags, **kwargs)
 
 
 class ChannelNumeric(ChannelData):
@@ -803,6 +810,8 @@ class ChannelNumeric(ChannelData):
         self._data['lower_alarm_limit'] = lower_alarm_limit
         self._data['upper_ctrl_limit'] = upper_ctrl_limit
         self._data['lower_ctrl_limit'] = lower_ctrl_limit
+        self.value_rtol = value_rtol
+        self.log_rtol = log_rtol
 
     units = _read_only_property('units')
     upper_disp_limit = _read_only_property('upper_disp_limit')
@@ -816,7 +825,35 @@ class ChannelNumeric(ChannelData):
 
     async def write(self, value, **metadata):
         # TODO: check against limits here and raise
+        if not isinstance(value, Iterable):
+            value = [value]
         return await super().write(value, **metadata)
+
+    def _is_eligible(self, ss, flags, pair):
+        if pair is not None:
+            old, new = pair
+            if len(old) == 1 and len(new) == 1:
+                old, = old
+                new, = new
+                dbnd = ss.channel_filter.dbnd
+                if dbnd is not None:
+                    # TODO: So we just igmore mask if dbnd filter is set?
+                    if dbnd.m == 'rel':
+                        return dbnd.d < abs((old - new) / old)
+                    else:  # must be 'abs' -- was already validated
+                        return dbnd.d < abs(old - new)
+                # TODO Does epics normally set these limits in relative or
+                # absolute terms? We should probably support both (as numpy
+                # does).
+                rel_diff = abs((old - new) / old)
+                if rel_diff > self.log_rtol:
+                    flags |= SubscriptionType.DBE_LOG
+                    if rel_diff > self.value_rtol:
+                        flags |= SubscriptionType.DBE_VALUE
+            else:
+                # TODO What to do with waveforms?
+                pass
+        return ss.mask & flags
 
 
 class ChannelInteger(ChannelNumeric):
@@ -871,6 +908,14 @@ class ChannelChar(ChannelData):
         super().__init__(value=value, **kwargs)
         self.max_length = max_length
 
+    async def write(self, *args, flags=0, **kwargs):
+        flags |= (SubscriptionType.DBE_LOG | SubscriptionType.DBE_VALUE)
+        await super().write(*args, flags=flags, **kwargs)
+
+    async def write_from_dbr(self, *args, flags=0, **kwargs):
+        flags |= (SubscriptionType.DBE_LOG | SubscriptionType.DBE_VALUE)
+        await super().write_from_dbr(*args, flags=flags, **kwargs)
+
 
 class ChannelString(ChannelData):
     data_type = ChannelType.STRING
@@ -888,7 +933,12 @@ class ChannelString(ChannelData):
                          string_encoding=string_encoding,
                          reported_record_type=reported_record_type)
 
-    async def write(self, value, **metadata):
+    async def write(self, value, *, flags=0, **metadata):
         if isinstance(value, (str, bytes)):
             value = [value]
-        return await super().write(value, **metadata)
+        flags |= (SubscriptionType.DBE_LOG | SubscriptionType.DBE_VALUE)
+        await super().write(value, flags=flags, **metadata)
+
+    async def write_from_dbr(self, *args, flags=0, **kwargs):
+        flags |= (SubscriptionType.DBE_LOG | SubscriptionType.DBE_VALUE)
+        await super().write_from_dbr(*args, flags=flags, **kwargs)
