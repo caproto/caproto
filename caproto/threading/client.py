@@ -1034,6 +1034,7 @@ class VirtualCircuitManager:
             assert self.connected  # double check that the state machine agrees
             self._ready.set()
         elif isinstance(command, (ca.ReadNotifyResponse,
+                                  ca.ReadResponse,
                                   ca.WriteNotifyResponse)):
             ioid_info = self.ioids.pop(command.ioid)
             deadline = ioid_info['deadline']
@@ -1318,7 +1319,7 @@ class PV:
 
     @ensure_connected
     def read(self, *, wait=True, callback=None, timeout=2, data_type=None,
-             data_count=None):
+             data_count=None, use_notify=True):
         """Request a fresh reading.
 
         Can do one or both of:
@@ -1328,11 +1329,11 @@ class PV:
         Parameters
         ----------
         wait : boolean
-            If True (default) block until a matching WriteNotifyResponse is
+            If True (default) block until a matching response is
             received from the server. Raises TimeoutError if that response is
             not received within the time specified by the `timeout` parameter.
         callback : callable or None
-            Called with the WriteNotifyResponse as its argument when received.
+            Called with the response as its argument when received.
         timeout : number or None
             Number of seconds to wait before raising TimeoutError. Default is
             2.
@@ -1344,11 +1345,15 @@ class PV:
             Requested number of values. Default is the channel's native data
             count, which can be checked in the Channel's attribute
             :attr:`native_data_count`.
+        use_notify: boolean, optional
+            Send a ``ReadNotifyRequest`` instead of a ``ReadRequest``. True by
+            default.
         """
         ioid = self.circuit_manager._ioid_counter()
         command = self.channel.read(ioid=ioid,
                                     data_type=data_type,
-                                    data_count=data_count)
+                                    data_count=data_count,
+                                    use_notify=use_notify)
         # Stash the ioid to match the response to the request.
 
         event = threading.Event()
@@ -1466,15 +1471,19 @@ class PV:
             )
         return ioid_info['response']
 
-    def subscribe(self, *args, **kwargs):
+    def subscribe(self, data_type=None, data_count=None,
+                  low=0.0, high=0.0, to=0.0, mask=None):
         "Start a new subscription to which user callback may be added."
         # A Subscription is uniquely identified by the Signature created by its
         # args and kwargs.
-        key = tuple(SUBSCRIBE_SIG.bind(*args, **kwargs).arguments.items())
+        bound = SUBSCRIBE_SIG.bind(data_type, data_count, low, high, to, mask)
+        key = tuple(bound.arguments.items())
         try:
             sub = self.subscriptions[key]
         except KeyError:
-            sub = Subscription(self, args, kwargs)
+            sub = Subscription(self,
+                               data_type, data_count,
+                               low, high, to, mask)
             self.subscriptions[key] = sub
         # The actual EPICS messages will not be sent until the user adds
         # callbacks via sub.add_callback(user_func).
@@ -1497,12 +1506,9 @@ class CallbackHandler:
         self._callback_lock = threading.RLock()
 
     def add_callback(self, func):
-        # TODO thread safety
-        cb_id = self._callback_id
-        self._callback_id += 1
 
         def removed(_):
-            self.remove_callback(cb_id)
+            self.remove_callback(cb_id)  # defined below inside the lock
 
         if inspect.ismethod(func):
             ref = weakref.WeakMethod(func, removed)
@@ -1511,6 +1517,8 @@ class CallbackHandler:
             ref = weakref.ref(func, removed)
 
         with self._callback_lock:
+            cb_id = self._callback_id
+            self._callback_id += 1
             self.callbacks[cb_id] = ref
         return cb_id
 
@@ -1551,12 +1559,16 @@ class Subscription(CallbackHandler):
     This object should never be instantiated directly by user code; rather
     it should be made by calling the ``subscribe()`` method on a ``PV`` object.
     """
-    def __init__(self, pv, sub_args, sub_kwargs):
+    def __init__(self, pv, data_type, data_count, low, high, to, mask):
         super().__init__(pv)
         # Stash everything, but do not send any EPICS messages until the first
         # user callback is attached.
-        self.sub_args = sub_args
-        self.sub_kwargs = sub_kwargs
+        self.data_type = data_type
+        self.data_count = data_count
+        self.low = low
+        self.high = high
+        self.to = to
+        self.mask = mask
         self.subscriptionid = None
         self.most_recent_response = None
 
@@ -1588,9 +1600,13 @@ class Subscription(CallbackHandler):
             if not self.callbacks:
                 return None
             subscriptionid = self.pv.circuit_manager._subscriptionid_counter()
-            command = self.pv.channel.subscribe(*self.sub_args,
-                                                subscriptionid=subscriptionid,
-                                                **self.sub_kwargs)
+            command = self.pv.channel.subscribe(data_type=self.data_type,
+                                                data_count=self.data_count,
+                                                low=self.low,
+                                                high=self.high,
+                                                to=self.to,
+                                                mask=self.mask,
+                                                subscriptionid=subscriptionid)
             subscriptionid = command.subscriptionid
             self.subscriptionid = subscriptionid
         # The circuit_manager needs to know the subscriptionid so that it can
@@ -1640,6 +1656,19 @@ class Subscription(CallbackHandler):
         self.most_recent_response = (args, kwargs)
 
     def add_callback(self, func):
+        """
+        Add a callback to receive responses.
+
+        Parameters
+        ----------
+        func : callable
+            Expected signature: ``func(response)``
+
+        Returns
+        -------
+        token : int
+            Integer token that can be passed to :meth:`remove_callback`.
+        """
         cb_id = super().add_callback(func)
         with self._callback_lock:
             if self.subscriptionid is None:
@@ -1662,6 +1691,9 @@ class Subscription(CallbackHandler):
         return cb_id
 
     def remove_callback(self, cb_id):
+        """
+        Remove callback using token that was returned by :meth:`add_callback`.
+        """
         with self._callback_lock:
             super().remove_callback(cb_id)
             if not self.callbacks:

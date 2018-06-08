@@ -5,7 +5,7 @@ import selectors
 import functools
 
 
-__all__ = []
+__all__ = ()
 
 
 if sys.platform != 'win32':

@@ -18,6 +18,7 @@ from ._commands import (AccessRightsResponse, ClearChannelRequest,
                         EchoResponse, ErrorResponse, EventAddRequest,
                         EventAddResponse, EventCancelRequest,
                         EventCancelResponse, HostNameRequest,
+                        ReadRequest, ReadResponse,
                         ReadNotifyRequest, ReadNotifyResponse,
                         ServerDisconnResponse, VersionRequest, VersionResponse,
                         WriteNotifyRequest, WriteNotifyResponse, WriteRequest,
@@ -130,7 +131,9 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
         CONNECTED: {
             AccessRightsResponse: CONNECTED,
 
+            ReadRequest: CONNECTED,
             ReadNotifyRequest: CONNECTED,
+            ReadResponse: CONNECTED,
             ReadNotifyResponse: CONNECTED,
             WriteNotifyRequest: CONNECTED,
             WriteNotifyResponse: CONNECTED,
@@ -157,6 +160,7 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
             # All other received commands are acceptable:
             AccessRightsResponse: MUST_CLOSE,
             ReadNotifyResponse: MUST_CLOSE,
+            ReadResponse: MUST_CLOSE,
             WriteNotifyResponse: MUST_CLOSE,
             EventAddResponse: MUST_CLOSE,
             EventCancelResponse: MUST_CLOSE,
@@ -185,7 +189,9 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
         CONNECTED: {
             AccessRightsResponse: CONNECTED,
 
+            ReadRequest: CONNECTED,
             ReadNotifyRequest: CONNECTED,
+            ReadResponse: CONNECTED,
             ReadNotifyResponse: CONNECTED,
             WriteNotifyRequest: CONNECTED,
             WriteNotifyResponse: CONNECTED,
@@ -213,6 +219,7 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
             # is a restriction on any additional client _requests_ in this
             # state.
             AccessRightsResponse: MUST_CLOSE,
+            ReadResponse: MUST_CLOSE,
             ReadNotifyResponse: MUST_CLOSE,
             WriteNotifyResponse: MUST_CLOSE,
             EventAddResponse: MUST_CLOSE,

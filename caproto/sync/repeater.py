@@ -21,7 +21,10 @@
 
 import logging
 import socket
+import subprocess
+import sys
 import time
+import warnings
 
 import caproto
 from caproto._constants import MAX_UDP_RECV, SERVER_MIA_PRESUMED_DEAD
@@ -199,8 +202,30 @@ def run(host='0.0.0.0'):
         logger.info('Keyboard interrupt; exiting.')
 
 
-if __name__ == '__main__':
-    # Support usage python -m caproto.sync.repeater
-    # HACK: This is a runtime circular import. Need organization of cli funcs.
-    from .client import repeater_cli
-    repeater_cli()
+def spawn_repeater():
+    """
+    Spawn a repeater process unless one is not already running.
+    """
+    host = '0.0.0.0'  # not configurable for a spawned repeater
+    port = caproto.get_environment_variables()['EPICS_CA_REPEATER_PORT']
+    try:
+        sock = check_for_running_repeater((host, port))
+    except RepeaterAlreadyRunning:
+        logger.debug('Another repeater is already running; will not spawn '
+                     'one.')
+        return
+    # We will now spawn a repeater in a subprocess at the same address as sock.
+    # Make the address reusable so that, if the OS does not clean up sock
+    # before the subprocess tries to bind to it, there is no conflict.
+    try:
+        reuse = socket.SO_REUSEADDR
+    except AttributeError:
+        warnings.warn("SO_REUSEADDR is not supported on this platform.")
+    else:
+        sock.setsockopt(socket.SOL_SOCKET, reuse, 1)
+    logger.debug('Spawning caproto-repeater process....')
+    try:
+        subprocess.Popen(
+            [sys.executable, '-m', 'caproto.repeater', '--quiet'], cwd="/")
+    except Exception:
+        logger.exception('Failed to spawn repeater.')

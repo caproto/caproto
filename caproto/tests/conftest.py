@@ -16,7 +16,7 @@ from types import SimpleNamespace
 
 import caproto as ca
 import caproto.benchmarking  # noqa
-from caproto.sync.client import get
+from caproto.sync.client import read
 import caproto.curio  # noqa
 import caproto.threading  # noqa
 import caproto.trio  # noqa
@@ -113,7 +113,7 @@ def poll_readiness(pv_to_check, attempts=15):
     start_repeater()
     for attempt in range(attempts):
         try:
-            get(pv_to_check, timeout=1, repeater=False)
+            read(pv_to_check, timeout=1, repeater=False)
         except TimeoutError:
             continue
         else:

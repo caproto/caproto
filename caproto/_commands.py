@@ -25,6 +25,7 @@ import _ctypes
 import inspect
 import struct
 import socket
+import warnings
 from ._headers import (MessageHeader, ExtendedMessageHeader,
                        AccessRightsResponseHeader, ClearChannelRequestHeader,
                        ClearChannelResponseHeader, ClientNameRequestHeader,
@@ -437,7 +438,7 @@ class Message(metaclass=_MetaDirectionalMessage):
     @classmethod
     def from_wire(cls, header, payload_bytes, *, sender_address=None):
         """
-        Use header.dbr_type to pack payload bytes into the right strucutre.
+        Use header.dbr_type to pack payload bytes into the right structure.
 
         Some Command types allocate a different meaning to the header.dbr_type
         field, and these override this method in their subclass.
@@ -1059,7 +1060,7 @@ class EventCancelResponse(Message):
 
 
 class ReadRequest(Message):
-    "Deprecated by Channel Access: See :class:`ReadNotifyRequest`."
+    "Deprecated by Channel Access since 3.13. See :class:`ReadNotifyRequest`."
     __slots__ = ()
     ID = 3
     HAS_PAYLOAD = False
@@ -1075,13 +1076,23 @@ class ReadRequest(Message):
 
 
 class ReadResponse(Message):
-    "Deprecated by Channel Access: See :class:`ReadNotifyResponse`."
+    "Deprecated by Channel Access since 3.13. See :class:`ReadNotifyResponse`."
     __slots__ = ()
     ID = 3
     HAS_PAYLOAD = True
 
+    @classmethod
+    def from_wire(cls, header, payload_bytes, *, sender_address=None):
+        warnings.warn("ReadResponse was deprecated by ChannelAccess in 3.13, "
+                      "and is not well-supported by caproto. De-serialization "
+                      "may not be correct.")
+        return super().from_wire(header, payload_bytes, sender_address=sender_address)
+
     def __init__(self, data, data_type, data_count, sid, ioid, *,
                  metadata=None):
+        warnings.warn("ReadResponse was deprecated by ChannelAccess in 3.13, "
+                      "and is not well-supported by caproto. Serialization "
+                      "may not be correct.")
         size, *buffers = data_payload(data, metadata, data_type, data_count)
         header = ReadResponseHeader(size, data_type, data_count, sid, ioid)
         super().__init__(header, *buffers)
