@@ -278,8 +278,8 @@ class MessageBase:
         subcommand = (msg.subcommand if msg.has_subcommand
                       else None)
 
-        if msg.has_subcommand:
-            print('-> received', cls.__name__, 'subcommand=', subcommand)
+        # if msg.has_subcommand:
+        #     print('-> received', cls.__name__, 'subcommand=', subcommand)
 
         additional_fields = cls._get_additional_fields(subcommand)
         if not additional_fields:
@@ -287,7 +287,8 @@ class MessageBase:
             return Decoded(data=msg, buffer=buf, offset=offset)
 
         for field_info in additional_fields:
-            print(f'-- FIELD {field_info} --')
+            # print(f'-- FIELD {field_info} --')
+            bitset = None
             if isinstance(field_info, (OptionalField, OptionalInterfaceField)):
                 if not buflen:
                     # No bytes remaining, and any additional fields are
@@ -299,6 +300,8 @@ class MessageBase:
                             break
                         else:
                             continue
+            elif isinstance(field_info, RequiredPVField):
+                bitset = getattr(msg, field_info.bitset)
 
             interface = None
 
@@ -321,11 +324,16 @@ class MessageBase:
             values = []
 
             for i in range(count):
+                old_buf = buf
                 value, buf, off = deserialize_message_field(
                     buf=buf, type_name=field_info.type,
                     field_name=field_info.name, nested_types={},
                     interface=interface, endian=cls._ENDIAN, cache=cache,
+                    bitset=bitset,
                 )
+
+                # print(f'   FIELD {field_info}[{i}]: {bytes(old_buf[:off])} '
+                #       f'{value} ({off} bytes)')
 
                 offset += off
                 buflen -= off
@@ -333,7 +341,6 @@ class MessageBase:
                     values.append(value)
                 else:
                     setattr(msg, field_info.name, value)
-                print(f'   FIELD {field_info}[{i}]: {values} ({off} bytes)')
 
             if is_nonstandard_array:
                 setattr(msg, field_info.name, values)
@@ -370,11 +377,13 @@ class ExtendedMessageBase(MessageBase):
 
 
 RequiredField = namedtuple('RequiredField', 'name type')
+RequiredPVField = namedtuple('RequiredField', 'name type bitset')
 OptionalField = namedtuple('OptionalField', 'name type stop condition')
 NonstandardArrayField = namedtuple('OptionalField', 'name type count_name')
 RequiredInterfaceField = namedtuple('RequiredField', 'name type data_field')
 OptionalInterfaceField = namedtuple('OptionalInterfaceField',
                                     'name type stop condition data_field')
+
 
 def SuccessField(name, type, stop=OptionalStopMarker.stop):
     'Return an OptionalField which requires the message status be successful'
@@ -938,7 +947,7 @@ class ChannelMonitorResponse(ExtendedMessageBase):
         ],
         MonitorSubcommands.DEFAULT: [
             RequiredField('changed_bit_set', 'BitSet'),
-            RequiredField('pv_data', 'PVField'),
+            RequiredPVField('pv_data', 'PVField', bitset='changed_bit_set'),
             RequiredField('overrun_bitset', 'BitSet'),
         ],
         # MonitorSubcommands.START: [],
@@ -1292,6 +1301,7 @@ def read_from_bytestream(data, role, cache, *, byte_order=None):
     msg_class = header.get_message(direction=direction,
                                    use_fixed_byte_order=byte_order)
 
+    # print('Header', repr(header), header.flags_as_enums)
     if issubclass(msg_class, (SetByteOrder, )):
         offset = _MessageHeaderSize
         data = memoryview(data)

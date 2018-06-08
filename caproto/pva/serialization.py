@@ -512,7 +512,11 @@ def _deserialize_data_from_field_desc(fd, buf,
 
         value = array.array(type_to_array_code[type_name])
         if len(buf) < byte_size:
-            raise ValueError('Buffer does not hold all values')
+            raise SerializationFailure(
+                f'Deserialization buffer does not hold all values. Expected '
+                f'byte length {byte_size}, actual length {len(buf)}. '
+                f'Value of type {type_name}[{size}] at offset of {offset}'
+            )
 
         value.frombytes(buf[:byte_size])
         if endian != SYS_ENDIAN:
@@ -527,7 +531,8 @@ def _deserialize_data_from_field_desc(fd, buf,
     return Decoded(data=value, buffer=buf, offset=offset)
 
 
-def deserialize_data(fd, buf, *, endian, cache, nested_types=None):
+def deserialize_data(fd, buf, *, endian, cache, nested_types=None,
+                     bitset=None):
     'Deserialize data associated with a field description'
     if fd is None or not fd:
         raise ValueError('Must specify field description')
@@ -551,8 +556,15 @@ def deserialize_data(fd, buf, *, endian, cache, nested_types=None):
     ret = OrderedDict()
     offset = 0
 
-    for field_name, fd in fd['fields'].items():
-        logger.debug('Field: %s (%s)', field_name, fd['type_name'])
+    for index, (field_name, fd) in enumerate(fd['fields'].items()):
+        if bitset is not None and index not in bitset:
+            logger.debug('At offset %d field: %s (%s) skipped by bitset',
+                         offset, field_name, bitset)
+            continue
+
+        logger.debug('Offset: %d Field: %s (%s)', offset, field_name,
+                     fd['type_name'])
+
         fd = get_definition_from_namespaces(fd, nested_types,
                                             cache.user_types)
         deserialized = _deserialize_data_from_field_desc(
@@ -662,7 +674,7 @@ def serialize_message_field(type_name, field_name, value,
 
 def deserialize_message_field(buf, type_name, field_name,
                               *, endian, cache,
-                              interface=None, nested_types=None):
+                              interface=None, nested_types=None, bitset=None):
     if type_name == 'FieldDesc':
         return deserialize_introspection_data(buf, cache=cache, endian=endian)
     elif type_name == 'BitSet':
@@ -670,7 +682,8 @@ def deserialize_message_field(buf, type_name, field_name,
     elif type_name == 'PVRequest':
         return deserialize_pvrequest(buf, endian=endian)
     elif type_name == 'PVField':
-        return deserialize_data(interface, buf, endian=endian, cache=cache)
+        return deserialize_data(interface, buf, endian=endian, cache=cache,
+                                bitset=bitset)
 
     # TODO create these definitions globally for all non-fixed-length array
     #      types (i introduced a weird e.g. int[] in type names which
@@ -678,7 +691,7 @@ def deserialize_message_field(buf, type_name, field_name,
     declaration = '{} {}'.format(type_name, field_name)
     fd = definition_line_to_info(declaration, nested_types=nested_types,
                                  user_types=cache.user_types, has_fields=False)
-    return deserialize_data(fd, buf, cache=cache, endian=endian)
+    return deserialize_data(fd, buf, cache=cache, endian=endian, bitset=bitset)
 
 
 # TODO: inconsistently semi-private serialization functions

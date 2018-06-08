@@ -433,6 +433,67 @@ def walk_field_description_with_values(fd, values, user_types, *, keys=None,
                     allow_none=allow_none)
 
 
+def walk_field_description_with_bitset(
+        fd, bitset, user_types, *, keys=None, depth=0, root=None, parent=None,
+        index=None):
+    'Ignores structures and unselected union fields'
+    if fd is None:
+        return
+
+    if root is None:
+        root = fd
+
+    if keys is None:
+        keys = ()
+
+    array_type = fd['array_type']
+    fd = get_definition_from_namespaces(fd, root.get('nested_types', {}),
+                                        user_types)
+    has_value = field_descriptor_has_value(parent, fd, array_type)
+
+    if has_value:
+        if index is None:
+            index = 0
+        else:
+            index += 1
+
+        selected = index in bitset
+
+        if selected:
+            type_name = fd['type_name']
+            type_, type_specific = type_name_to_type[type_name]
+            fd_byte = FieldDesc(type_specific, array_type, type_)
+            yield WalkWithValueTuple(field_desc=fd, keys=keys,
+                                     variable='.'.join(keys), value=True,
+                                     parent=parent, fd_byte=fd_byte, depth=depth)
+
+        if array_type:
+            # only support an array value here - ignore the rest of the fields
+            return
+
+    type_name = fd['type_name']
+
+    if 'fields' in fd:
+        fields = fd['fields']
+
+        if type_name == 'union' and index in bitset:
+            raise NotImplementedError('TODO bitset with union')
+            # yield from walk_field_description_with_bitset(
+            #     fd=sel_field, values=value, user_types=user_types,
+            #     keys=keys + (fd['name'], ),
+            #     depth=depth + 1, root=root, parent=fd,
+            #     index=index)
+
+        else:
+            fields = fields.items()
+            for field_name, field in fields:
+                yield from walk_field_description_with_bitset(
+                    field, bitset, user_types,
+                    keys=keys + (field_name, ),
+                    depth=depth + 1, root=root, parent=fd,
+                    index=index)
+
+
 def create_value_dict_from_field_desc(fd, user_types):
     'Create a value dictionary from a field description'
     value_dict = OrderedDict()

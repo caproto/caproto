@@ -40,16 +40,20 @@ sockets = {}
 env = get_environment_variables()
 broadcast_port = env['EPICS_PVA_BROADCAST_PORT']
 
+serialization_logger = logging.getLogger('caproto.pva.serialization_debug')
 
 # Convenience functions that do both transport and caproto validation/ingest.
 def send(circuit, command):
     buffers_to_send = circuit.send(command)
     sockets[circuit].sendmsg(buffers_to_send)
+    serialization_logger.debug('<- %r', b''.join(buffers_to_send))
 
 
 def recv(circuit):
     commands = collections.deque()
     bytes_received = sockets[circuit].recv(4096)
+    serialization_logger.debug('<- %r', bytes_received)
+
     for c, remaining in circuit.recv(bytes_received):
         if type(c) is NEED_DATA:
             # TODO isn't this wrong?
@@ -292,8 +296,7 @@ def get_cli():
             print(exc)
 
 
-def get(pv_name, *, pvrequest, verbose=False, timeout=1,
-        force_int_enums=False):
+def get(pv_name, *, pvrequest, verbose=False, timeout=1):
     """
     Read a Channel.
 
@@ -334,7 +337,7 @@ def get(pv_name, *, pvrequest, verbose=False, timeout=1,
             sockets[chan.circuit].close()
 
 
-def _monitor(chan, timeout, pvrequest):
+def _monitor(chan, timeout, pvrequest, maximum_events):
     interface_req = chan.read_interface()
     send(chan.circuit, interface_req)
 
@@ -343,13 +346,12 @@ def _monitor(chan, timeout, pvrequest):
     send(chan.circuit, init_req)
 
     t = time.monotonic()
+    event_count = 0
     while True:
         try:
             commands = recv(chan.circuit)
-            if time.monotonic() - t > timeout:
-                raise socket.timeout
         except socket.timeout:
-            raise TimeoutError("Timeout while awaiting reading.")
+            continue
 
         for command in commands:
             if isinstance(command, ChannelMonitorResponse):
@@ -358,14 +360,19 @@ def _monitor(chan, timeout, pvrequest):
                         ioid=ioid, subcommand=MonitorSubcommands.START)
                     send(chan.circuit, monitor_start_req)
                 else:
-                    ...
+                    event_count += 1
+                    print('Saw event', command)
+                    if maximum_events is not None:
+                        if event_count >= maximum_events:
+                            break
+
             elif command is DISCONNECTED:
                 raise CaprotoError('Disconnected while waiting for '
                                    'read response')
 
 
 def monitor(pv_name, *, pvrequest, verbose=False, timeout=1,
-            force_int_enums=False):
+            maximum_events=None):
     """
     Monitor a Channel.
 
@@ -395,7 +402,8 @@ def monitor(pv_name, *, pvrequest, verbose=False, timeout=1,
         udp_sock.close()
 
     try:
-        return _monitor(chan, timeout, pvrequest=pvrequest)
+        return _monitor(chan, timeout, pvrequest=pvrequest,
+                        maximum_events=maximum_events)
     finally:
         try:
             if chan.states[CLIENT] is CONNECTED:
@@ -422,18 +430,23 @@ def monitor_cli():
                         help="Show DEBUG log messages.")
     parser.add_argument('-vvv', action='store_true',
                         help=argparse.SUPPRESS)
+    parser.add_argument('--maximum', type=int, default=None,
+                        help="Maximum number of monitor events to display.")
     args = parser.parse_args()
 
     if args.verbose:
         logging.getLogger('caproto.pva.put').setLevel('DEBUG')
     if args.vvv:
         logging.getLogger('caproto.pva').setLevel('DEBUG')
+        serialization_logger.setLevel('DEBUG')
+
     try:
         pv_name = args.pv_names[0]
         interface, response = monitor(pv_name=pv_name,
                                       pvrequest=args.pvrequest,
                                       verbose=args.verbose,
-                                      timeout=args.timeout)
+                                      timeout=args.timeout,
+                                      maximum_events=args.maximum)
     except BaseException as exc:
         if args.verbose:
             # Show the full traceback.
