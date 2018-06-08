@@ -4,9 +4,10 @@
 # data as a certain type, and they push updates into queues registered by a
 # higher-level server.
 from collections import defaultdict, Iterable
-import time
-import weakref
 import enum
+import time
+import warnings
+import weakref
 
 from ._dbr import (DBR_TYPES, ChannelType, native_type, native_float_types,
                    native_int_types, native_types, timestamp_to_epics,
@@ -14,7 +15,7 @@ from ._dbr import (DBR_TYPES, ChannelType, native_type, native_float_types,
                    GraphicControlBase, AlarmStatus, AlarmSeverity,
                    SubscriptionType, DbrStringArray)
 
-from ._utils import CaprotoError
+from ._utils import CaprotoError, CaprotoValueError
 from ._commands import parse_metadata
 from ._backend import backend
 
@@ -35,7 +36,11 @@ class Forbidden(CaprotoError):
     ...
 
 
-class ConversionError(ValueError, CaprotoError):
+class ConversionError(CaprotoValueError):
+    ...
+
+
+class CannotExceedLimits(CaprotoValueError):
     ...
 
 
@@ -833,6 +838,17 @@ class ChannelNumeric(ChannelData):
 
     async def write(self, value, **metadata):
         # TODO: check against limits here and raise
+        if self.lower_control_limit != self.upper_ctrl_limit:
+            if not self.lower_control_limit < value <self.upper_ctrl_limit:
+                raise CannotExceedLimits(
+                    f"Cannot write value {value}. Limits are set to "
+                    f"{self.lower_control_limit} and {self.upper_ctrl_limit}.")
+        if self.lower_warning_limit != self.upper_warning_limit:
+            if not self.lower_control_limit < value <self.upper_warning_limit:
+                warnings.warn(
+                    f"Writing {value} outside warning limits which are are "
+                    f"set to {self.lower_control_limit} and "
+                    f"{self.upper_warning_limit}.")
         if not isinstance(value, Iterable):
             value = [value]
         return await super().write(value, **metadata)
