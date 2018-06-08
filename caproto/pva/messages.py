@@ -14,9 +14,6 @@ from . import introspection as intro
 from .utils import (ip_to_ubyte_array, ubyte_array_to_ip, SERVER, NEED_DATA)
 
 
-logger = logging.getLogger(__name__)
-
-
 basic_type_definitions = (
     '''
     struct channel_with_id
@@ -26,8 +23,32 @@ basic_type_definitions = (
 )
 
 basic_types = {}
-intro.update_namespace_with_definitions(basic_types, basic_type_definitions,
-                                        logger=logger)
+intro.update_namespace_with_definitions(basic_types, basic_type_definitions)
+
+qos_priority_mask = 0x7f
+
+
+class QOSFlags(enum.IntFlag):
+    'First 7 bits of QOS settings are the priority (see qos_priority_mask)'
+    unused_7 = 1 << 7
+    low_latency = 1 << 8
+    throughput_priority = 1 << 9
+    enable_compression = 1 << 10
+    unused_11 = 1 << 11
+    unused_12 = 1 << 12
+    unused_13 = 1 << 13
+    unused_14 = 1 << 14
+    unused_15 = 1 << 15
+
+    @classmethod
+    def encode(cls, priority, flags):
+        return (qos_priority_mask & priority) | flags
+
+    @classmethod
+    def decode(cls, priority_word):
+        priority = (priority_word & qos_priority_mask)
+        flags = QOSFlags(priority_word & ~qos_priority_mask)
+        return (priority, flags)
 
 
 class Subcommands(enum.IntEnum):
@@ -266,6 +287,7 @@ class MessageBase:
             return Decoded(data=msg, buffer=buf, offset=offset)
 
         for field_info in additional_fields:
+            print(f'-- FIELD {field_info} --')
             if isinstance(field_info, (OptionalField, OptionalInterfaceField)):
                 if not buflen:
                     # No bytes remaining, and any additional fields are
@@ -311,6 +333,7 @@ class MessageBase:
                     values.append(value)
                 else:
                     setattr(msg, field_info.name, value)
+                print(f'   FIELD {field_info}[{i}]: {values} ({off} bytes)')
 
             if is_nonstandard_array:
                 setattr(msg, field_info.name, values)
@@ -890,8 +913,7 @@ class ChannelMonitorRequest(ExtendedMessageBase):
                           lambda msg, buf: bool(msg.subcommand &
                                                 MonitorSubcommands.PIPELINE)),
         ],
-        Subcommands.DEFAULT: [
-        ],
+        Subcommands.DEFAULT: [],
         MonitorSubcommands.START: [],
         MonitorSubcommands.STOP: [],
         # Subcommands.PIPELINE: [],

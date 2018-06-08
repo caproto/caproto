@@ -25,7 +25,7 @@ import random
 from caproto import pva
 from caproto import (get_netifaces_addresses, bcast_socket)
 from caproto.pva import (CLIENT, SERVER, CONNECTED, NEED_DATA, DISCONNECTED,
-                         Broadcaster, MessageTypeFlag, ErrorResponseReceived,
+                         Broadcaster, QOSFlags, MessageTypeFlag, ErrorResponseReceived,
                          CaprotoError, SearchResponse, VirtualCircuit,
                          ClientChannel, ConnectionValidationRequest,
                          ConnectionValidatedResponse, CreateChannelResponse,
@@ -39,11 +39,6 @@ from caproto.pva import (CLIENT, SERVER, CONNECTED, NEED_DATA, DISCONNECTED,
 sockets = {}
 env = get_environment_variables()
 broadcast_port = env['EPICS_PVA_BROADCAST_PORT']
-
-ca_logger = logging.getLogger()
-handler = logging.StreamHandler(sys.stdout)
-handler.setFormatter(logging.Formatter('[%(name)s] %(message)s'))
-ca_logger.addHandler(handler)
 
 
 # Convenience functions that do both transport and caproto validation/ingest.
@@ -171,7 +166,8 @@ def search(pv, logger, udp_sock, udp_port, timeout, max_retries=2):
 
 def make_channel(pv_name, logger, udp_sock, udp_port, timeout):
     address = search([pv_name], logger, udp_sock, udp_port, timeout)
-    circuit = VirtualCircuit(our_role=CLIENT, address=address)
+    circuit = VirtualCircuit(our_role=CLIENT, address=address,
+                             priority=QOSFlags.encode(priority=0, flags=0))
 
     # Set circuit log level to match our logger.
     circuit.log.setLevel(logger.level)
@@ -265,7 +261,15 @@ def get_cli():
                               "responses."))
     parser.add_argument('--verbose', '-v', action='store_true',
                         help="Show DEBUG log messages.")
+    parser.add_argument('-vvv', action='store_true',
+                        help=argparse.SUPPRESS)
+
     args = parser.parse_args()
+    if args.verbose:
+        logging.getLogger('caproto.pva.put').setLevel('DEBUG')
+    if args.vvv:
+        logging.getLogger('caproto.pva').setLevel('DEBUG')
+
     try:
         for pv_name in args.pv_names:
             interface, response = get(pv_name=pv_name,
@@ -311,14 +315,7 @@ def get(pv_name, *, pvrequest, verbose=False, timeout=1,
     Get the value of a Channel named 'cat'.
     >>> get('cat')
     """
-    logger = logging.getLogger('get')
-    if verbose:
-        level = 'DEBUG'
-    else:
-        level = 'INFO'
-    logger.setLevel(level)
-    handler.setLevel(level)
-    ca_logger.setLevel(level)
+    logger = logging.getLogger('caproto.pva.get')
 
     udp_sock, udp_port = make_broadcaster_socket(logger)
     try:
@@ -388,14 +385,7 @@ def monitor(pv_name, *, pvrequest, verbose=False, timeout=1,
     Examples
     --------
     """
-    logger = logging.getLogger('get')
-    if verbose:
-        level = 'DEBUG'
-    else:
-        level = 'INFO'
-    logger.setLevel(level)
-    handler.setLevel(level)
-    ca_logger.setLevel(level)
+    logger = logging.getLogger('caproto.pva.monitor')
 
     udp_sock, udp_port = make_broadcaster_socket(logger)
     try:
@@ -409,7 +399,8 @@ def monitor(pv_name, *, pvrequest, verbose=False, timeout=1,
     finally:
         try:
             if chan.states[CLIENT] is CONNECTED:
-                send(chan.circuit, chan.disconnect())
+                # send(chan.circuit, chan.disconnect())
+                ...
         finally:
             sockets[chan.circuit].close()
 
@@ -429,7 +420,14 @@ def monitor_cli():
                               "responses."))
     parser.add_argument('--verbose', '-v', action='store_true',
                         help="Show DEBUG log messages.")
+    parser.add_argument('-vvv', action='store_true',
+                        help=argparse.SUPPRESS)
     args = parser.parse_args()
+
+    if args.verbose:
+        logging.getLogger('caproto.pva.put').setLevel('DEBUG')
+    if args.vvv:
+        logging.getLogger('caproto.pva').setLevel('DEBUG')
     try:
         pv_name = args.pv_names[0]
         interface, response = monitor(pv_name=pv_name,
@@ -503,8 +501,7 @@ def recv_message(sock, fixed_byte_order, server_byte_order, cache, buf,
 
 
 if __name__ == '__main__':
-    import logging
-    logging.getLogger('caproto.pva.serialization').setLevel(logging.DEBUG)
+    logging.getLogger('caproto').setLevel(logging.DEBUG)
     logging.basicConfig()
 
     try:

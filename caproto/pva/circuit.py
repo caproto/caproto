@@ -49,21 +49,17 @@ class VirtualCircuit:
     address : tuple
         ``(host, port)`` as a string and an integer respectively
     priority : integer or None
-        May be used by the server to prioritize requests when under high
-        load. Lowest priority is 0; highest is 99.
+        QOS priority
     """
-    def __init__(self, our_role, address):
+    def __init__(self, our_role, address, priority):
         self.our_role = our_role
         if our_role is CLIENT:
             self.their_role = SERVER
-            abbrev = 'cli'  # just for logger
         else:
             self.their_role = CLIENT
-            abbrev = 'srv'
         self.address = address
+        self._priority = None
         self.channels = {}  # map cid to Channel
-        logger_name = f"{abbrev}.{address[0]}:{address[1]}"
-        self.log = logging.getLogger(logger_name)
         self.states = CircuitState(self.channels)
         self._data = bytearray()
         self.channels_sid = {}  # map sid to Channel
@@ -78,9 +74,29 @@ class VirtualCircuit:
         self.their_order = None
         self.fixed_recv_order = None
         self.messages = None
+        if priority is not None:
+            self.priority = priority
         self.cache = SerializeCache(ours={}, theirs={},
                                     user_types=basic_types.copy(),  # TODO
                                     ioid_interfaces={})
+
+    @property
+    def priority(self):
+        return self._priority
+
+    @priority.setter
+    def priority(self, priority):
+        if self._priority is not None:
+            raise RuntimeError('Cannot update priority after already set')
+
+        # A server-side circuit does not get to know its priority until after
+        # instantiation, so we need a setter.
+        self._priority = priority
+        # The logger_name includes the priority so we have to set it.
+        logger_name = (f"caproto.pva.circ."
+                       f"{self.address[0]}:{self.address[1]}."
+                       f"{priority}")
+        self.log = logging.getLogger(logger_name)
 
     def set_byte_order(self):
         """
@@ -288,10 +304,13 @@ class VirtualCircuit:
             # not a valid command, the state machine will raise here. Stash the
             # state transitions in a local var, run the callbacks at the end.
             transitions = chan.process_command(command)
+            ioid_info = None
 
-            ioid = None
-            if hasattr(command, 'ioid'):
+            try:
                 ioid = command.ioid
+            except AttributeError:
+                ioid = None
+            else:
                 try:
                     ioid_info = self._ioids[ioid]
                 except KeyError:
@@ -303,9 +322,11 @@ class VirtualCircuit:
                     )
                     self._ioids[ioid] = ioid_info
 
-                if hasattr(command, 'subcommand'):
-                    ioid_state = ioid_info['state']
-                    ioid_state.process_subcommand(command.subcommand)
+            subcommand = getattr(command, 'subcommand', None)
+
+            if subcommand is not None:
+                ioid_state = ioid_info['state']
+                ioid_state.process_subcommand(command.subcommand)
 
             if isinstance(command, CreateChannelResponse):
                 self.channels_sid[command.server_chid] = chan
@@ -330,10 +351,9 @@ class VirtualCircuit:
                 elif command.subcommand == Subcommands.DEFAULT:
                     ...
 
-            if hasattr(command, 'subcommand'):
-                if command.subcommand == Subcommands.DESTROY:
-                    self._ioids.pop(ioid)
-                    self.cache.ioid_interfaces.pop(ioid)
+            if subcommand == Subcommands.DESTROY:
+                self._ioids.pop(ioid)
+                self.cache.ioid_interfaces.pop(ioid)
 
             # We are done. Run the Channel state change callbacks.
             for transition in transitions:

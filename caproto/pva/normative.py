@@ -70,6 +70,7 @@ class NormativeTypeBase(FieldDescHelper):
             for line in repr(self).split('\n'):
                 logger.debug(line)
 
+
 class NTScalarType(NormativeTypeBase):
     type_name = 'epics:nt/NTScalar:1.0'
 
