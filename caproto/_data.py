@@ -3,7 +3,7 @@
 # metadata. They perform data type conversions in response to requests to read
 # data as a certain type, and they push updates into queues registered by a
 # higher-level server.
-from collections import defaultdict
+from collections import defaultdict, Iterable
 import time
 import weakref
 import enum
@@ -777,16 +777,23 @@ class ChannelEnum(ChannelData):
 
         return super()._read_metadata(dbr_metadata)
 
+    async def write(*args, flags=0, **kwargs):
+        flags |= (SubscriptionType.DBE_LOG | SubscriptionType.DBE_VALUE)
+        await super().write(*args, flags=flags, **kwargs)
+
 
 class ChannelNumeric(ChannelData):
-    def __init__(self, *, units='',
+    def __init__(self, *, value, units='',
                  upper_disp_limit=0, lower_disp_limit=0,
                  upper_alarm_limit=0, upper_warning_limit=0,
                  lower_warning_limit=0, lower_alarm_limit=0,
                  upper_ctrl_limit=0, lower_ctrl_limit=0,
+                 value_rtol=0.001, log_rtol=0.001,
                  **kwargs):
 
-        super().__init__(**kwargs)
+        if not isinstance(value, Iterable):
+            value = [value]
+        super().__init__(value=value, **kwargs)
         self._data['units'] = units
         self._data['upper_disp_limit'] = upper_disp_limit
         self._data['lower_disp_limit'] = lower_disp_limit
