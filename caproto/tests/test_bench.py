@@ -122,7 +122,7 @@ def bench_curio_get_speed(pvname, *, initial_value=None, log_level='DEBUG'):
 
         if initial_value is not None:
             logger.debug('Writing initial value')
-            await chan.write(initial_value)
+            await chan.write(initial_value, use_notify=True)
             logger.debug('Wrote initial value')
         logger.debug('Init complete')
         return chan
@@ -151,7 +151,7 @@ def bench_curio_get_speed(pvname, *, initial_value=None, log_level='DEBUG'):
 @pytest.mark.parametrize('log_level', ['INFO'])
 def test_waveform_get(benchmark, waveform_size, backend, log_level):
     pvname = 'wfioc:wf{}'.format(waveform_size)
-    logging.getLogger('caproto').setLevel('DEBUG')
+    logging.getLogger('caproto').setLevel(log_level)
 
     context = {'pyepics': bench_pyepics_get_speed,
                'curio': bench_curio_get_speed,
@@ -159,7 +159,7 @@ def test_waveform_get(benchmark, waveform_size, backend, log_level):
                }[backend]
 
     val = list(range(waveform_size))
-    with context(pvname, initial_value=val, log_level=log_level) as bench_fcn:
+    with context(pvname, initial_value=val) as bench_fcn:
         benchmark(bench_fcn)
 
 
@@ -213,7 +213,7 @@ def bench_curio_put_speed(pvname, *, value, log_level='DEBUG'):
 
     def curio_client():
         async def put():
-            await chan.write(value)
+            await chan.write(value, use_notify=True)
         kernel.run(put())
 
     chan = kernel.run(curio_setup())
@@ -239,7 +239,7 @@ def bench_curio_put_speed(pvname, *, value, log_level='DEBUG'):
 @pytest.mark.parametrize('log_level', ['INFO'])
 def test_waveform_put(benchmark, waveform_size, backend, log_level):
     pvname = 'wfioc:wf{}'.format(waveform_size)
-    logging.getLogger('caproto').setLevel('DEBUG')
+    logging.getLogger('caproto').setLevel(log_level)
 
     context = {'pyepics': bench_pyepics_put_speed,
                'curio': bench_curio_put_speed,
@@ -247,7 +247,7 @@ def test_waveform_put(benchmark, waveform_size, backend, log_level):
                }[backend]
 
     value = list(range(waveform_size))
-    with context(pvname, value=value, log_level=log_level) as bench_fcn:
+    with context(pvname, value=value) as bench_fcn:
         benchmark(bench_fcn)
 
 

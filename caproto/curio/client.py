@@ -179,16 +179,18 @@ class Channel:
         else:
             raise ChannelReadError(str(reading))
 
-    async def write(self, *args, **kwargs):
+    async def write(self, *args, use_notify=False, **kwargs):
         "Write a new value and await confirmation from the server."
-        command = self.channel.write(*args, **kwargs)
-        # Stash the ioid to match the response to the request.
-        ioid = command.ioid
-        event = curio.Event()
+        command = self.channel.write(*args, use_notify=use_notify, **kwargs)
+        if use_notify:
+            # Stash the ioid to match the response to the request.
+            ioid = command.ioid
+            event = curio.Event()
         self.circuit.ioids[ioid] = event
-        await self.circuit.send(command)
-        await event.wait()
-        return self.circuit.ioid_data.pop(ioid)
+        if use_notify:
+            await self.circuit.send(command)
+            await event.wait()
+            return self.circuit.ioid_data.pop(ioid)
 
     async def subscribe(self, *args, **kwargs):
         "Start a new subscription and spawn an async task to receive readings."
