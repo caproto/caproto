@@ -3,7 +3,7 @@
 # metadata. They perform data type conversions in response to requests to read
 # data as a certain type, and they push updates into queues registered by a
 # higher-level server.
-from collections import defaultdict, Iterable
+from collections import defaultdict
 import enum
 import time
 import warnings
@@ -811,8 +811,6 @@ class ChannelNumeric(ChannelData):
                  value_rtol=0.001, log_rtol=0.001,
                  **kwargs):
 
-        if not isinstance(value, Iterable):
-            value = [value]
         super().__init__(value=value, **kwargs)
         self._data['units'] = units
         self._data['upper_disp_limit'] = upper_disp_limit
@@ -848,17 +846,24 @@ class ChannelNumeric(ChannelData):
                     f"Writing {data} outside warning limits which are are "
                     f"set to {self.lower_control_limit} and "
                     f"{self.upper_warning_limit}.")
-        if not isinstance(data, Iterable):
-            data = [data]
         return data
 
     def _is_eligible(self, ss, flags, pair):
         out_of_band = True
         if pair is not None:
             old, new = pair
-            if len(old) == 1 and len(new) == 1:
-                old, = old
-                new, = new
+            # Deal with the fact that these values might be Iterable or
+            # not, which is dumb, but fixing it properly is a terrible can
+            # of worms. We just want to know if these are scalars.
+            if ((not isinstance(old, Iterable) or
+                    (isinstance(old, Iterable) and len(old) == 1)) and
+                    (not isinstance(new, Iterable) or
+                    (isinstance(new, Iterable) and len(new) == 1))):
+                if isinstance(old, Iterable):
+                    old, = old
+                if isinstance(new, Iterable):
+                    new, = new
+                # Cool that was fun.
                 dbnd = ss.channel_filter.dbnd
                 if dbnd is not None:
                     if dbnd.m == 'rel':
