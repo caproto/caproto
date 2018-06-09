@@ -80,7 +80,12 @@ fmt2 = '{timestamp:%%H:%%M}'
                           ('caproto-get', ('--list-types',)),
                           ('caproto-get', ('float',)),
                           ('caproto-get', ('float', 'str')),
-                          ('caproto-get', ('float', '-d', '5')),
+                          # data_type as int, enum name, class on type
+                          ('caproto-get', ('float', '-d', '0')),
+                          ('caproto-get', ('float', '-d', 'STRING')),
+                          ('caproto-get', ('float', '-d', 'string')),
+                          ('caproto-get', ('float', '-d', 'CONTROL')),
+                          ('caproto-get', ('float', '-d', 'control')),
                           ('caproto-get', ('float', '--format', fmt1)),
                           ('caproto-get', ('float', '--format', fmt2)),
                           ('caproto-get', ('enum',)),

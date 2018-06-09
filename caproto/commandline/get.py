@@ -81,7 +81,17 @@ def main():
     if args.vvv:
         logging.getLogger('caproto').setLevel('DEBUG')
     data_type = args.d
-    if args.wide and data_type is None:
+    # data_type might be '0', 'STRING', or a class like 'control'.
+    # The client functions accepts 0, ChannelType.STRING, or 'control'.
+    try:
+        data_type = int(data_type)  # '0' -> 0
+    except (ValueError, TypeError):
+        if isinstance(data_type, str):
+            if data_type.lower() not in field_types:
+                # 'STRING' -> ChannelType.STRING
+                data_type = ChannelType[data_type.upper()]
+            # else assume a class like 'control', which can pass through
+    if args.wide:
         data_type = 'time'
     try:
         for pv_name in args.pv_names:
