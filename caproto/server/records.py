@@ -157,7 +157,7 @@ class RecordFieldGroup(PVGroup):
         self._alarm = parent.alarm
         self._alarm.connect(self)
 
-    async def publish(self, flags):
+    async def publish(self, flags, pair):
         # if SubscriptionType.DBE_ALARM in flags:
         # TODO this needs tweaking - proof of concept at the moment
         await self.alarm_acknowledge_transient.write(
