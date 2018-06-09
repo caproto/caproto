@@ -138,7 +138,7 @@ def write_commands(path=None):
     """
     Generate _headers.py from headers.tpl and CAproto.html
     """
-    with open(getpath('..', 'CAproto.html')) as f:
+    with open(getpath('CAproto.html')) as f:
         soup = BeautifulSoup(f.read(), 'html.parser')
     commands = []
     for _id in ('secCommandsShared',
@@ -148,7 +148,7 @@ def write_commands(path=None):
         commands.extend(parse_section(h1))
     if path is None:
         path = getpath('.')
-    with open(os.path.join(path, '_headers.py'), 'w') as f:
+    with open(os.path.join(path, 'caproto', '_headers.py'), 'w') as f:
         f.write(template.render(commands=commands))
 
 

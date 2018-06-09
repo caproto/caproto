@@ -1,2 +1,4 @@
+include generate_headers.py
+include headers.tpl
 include versioneer.py
 include caproto/_version.py
