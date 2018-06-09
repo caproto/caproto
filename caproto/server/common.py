@@ -451,7 +451,7 @@ class Context:
 
     async def broadcast_beacon_loop(self):
         self.log.debug('Will send beacons to %r',
-                       list(self.beacon_socks.keys()))
+                       [f'{h}:{p}' for h, p in self.beacon_socks.keys()])
         beacon_period = self.environ['EPICS_CAS_BEACON_PERIOD']
         while True:
             for address, (interface, sock) in self.beacon_socks.items():
@@ -510,10 +510,12 @@ class Context:
 
     async def tcp_handler(self, client, addr):
         '''Handler for each new TCP client to the server'''
-        self.log.info('Connected to new client at %s:%d.', *addr)
         cavc = ca.VirtualCircuit(ca.SERVER, addr, None)
         circuit = self.CircuitClass(cavc, client, self)
         self.circuits.add(circuit)
+        self.log.info('Connected to new client at %s:%d.\n'
+                      'Circuits currently connected: %d', *addr,
+                      len(self.circuits))
 
         await circuit.run()
 
@@ -526,3 +528,6 @@ class Context:
         except KeyboardInterrupt as ex:
             self.log.debug('TCP handler received KeyboardInterrupt')
             raise self.ServerExit() from ex
+        self.log.info('Disconnected from client at %s:%d.\n'
+                      'Circuits currently connected: %d', *addr,
+                      len(self.circuits) - 1)

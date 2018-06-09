@@ -11,6 +11,7 @@
 import array
 import concurrent.futures
 import errno
+import functools
 import getpass
 import inspect
 import itertools
@@ -45,6 +46,7 @@ class DeadCircuitError(CaprotoError):
 
 
 def ensure_connected(func):
+    @functools.wraps(func)
     def inner(self, *args, **kwargs):
         if isinstance(self, PV):
             pv = self
@@ -1119,7 +1121,8 @@ class VirtualCircuitManager:
         # Ensure that this method is idempotent.
         if self.dead.is_set():
             return
-        self.log.debug('Entered VCM._disconnected')
+        self.log.debug('Virtual circuit with %s has disconnected.',
+                       '%s:%d' % (self.circuit.address))
         # Update circuit state. This will be reflected on all PVs, which
         # continue to hold a reference to this disconnected circuit.
         self.circuit.disconnect()
@@ -1154,7 +1157,10 @@ class VirtualCircuitManager:
         if not self._user_disconnected:
             # If the user didn't request disconnection, kick off attempt to
             # reconnect all PVs via fresh circuit(s).
-            self.log.debug('VCM: Attempting reconnection')
+            self.log.debug('Kicking off reconnection attempts for %d PVs '
+                           'disconnected from %s....',
+                           len(self.channels),
+                           '%s:%d' % self.circuit.address)
             self.context.reconnect(((chan.name, chan.circuit.priority)
                                     for chan in self.channels.values()))
 
@@ -1504,6 +1510,7 @@ class PV:
         return sub
 
     def unsubscribe_all(self):
+        "Clear all subscriptions. (Remove all user callbacks from them.)"
         for sub in self.subscriptions.values():
             sub.clear()
 

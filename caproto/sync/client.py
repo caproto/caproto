@@ -108,7 +108,9 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
             b.process_commands(commands)
             for command in commands:
                 if isinstance(command, ca.SearchResponse) and command.cid == 0:
-                    return ca.extract_address(command)
+                    address = ca.extract_address(command)
+                    logger.debug('Found %s at %s', pv_name, address)
+                    return address
             else:
                 # None of the commands we have seen are a reply to our request.
                 # Receive more data.
@@ -118,6 +120,7 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
 
 
 def make_channel(pv_name, udp_sock, priority, timeout):
+    log = logging.getLogger(f'caproto.ch.{pv_name}.{priority}')
     address = search(pv_name, udp_sock, timeout)
     circuit = ca.VirtualCircuit(our_role=ca.CLIENT,
                                 address=address,
@@ -141,6 +144,7 @@ def make_channel(pv_name, udp_sock, priority, timeout):
             except socket.timeout:
                 raise TimeoutError("Timeout while awaiting channel creation.")
             if chan.states[ca.CLIENT] is ca.CONNECTED:
+                log.info('%s connected' % pv_name)
                 break
             for command in commands:
                 if command is ca.DISCONNECTED:
@@ -152,7 +156,14 @@ def make_channel(pv_name, udp_sock, priority, timeout):
     return chan
 
 
-def _read(chan, timeout, data_type, use_notify):
+def _read(chan, timeout, data_type, use_notify, force_int_enums):
+    logger = chan.log
+    logger.debug("Detected native data_type %r.", chan.native_data_type)
+    ntype = native_type(chan.native_data_type)  # abundance of caution
+    if ((ntype is ChannelType.ENUM) and
+            (data_type is None) and (not force_int_enums)):
+        logger.debug("Changing requested data_type to STRING.")
+        data_type = ChannelType.STRING
     req = chan.read(data_type=data_type, use_notify=use_notify)
     send(chan.circuit, req)
     t = time.monotonic()
@@ -184,8 +195,9 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0, use_notify=True,
     Parameters
     ----------
     pv_name : str
-    data_type : ChannelType or corresponding integer ID, optional
-        Request specific data type. Default is Channel's native data type.
+    data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
+        Request specific data type or a class of data types, matched to the
+        channel's native data type. Default is Channel's native data type.
     timeout : float, optional
         Default is 1 second.
     priority : 0, optional
@@ -208,7 +220,6 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0, use_notify=True,
     Get the value of a Channel named 'cat'.
     >>> read('cat').data
     """
-    logger = logging.getLogger(f'caproto.ch.{pv_name}')
     if repeater:
         # As per the EPICS spec, a well-behaved client should start a
         # caproto-repeater that will continue running after it exits.
@@ -220,13 +231,8 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0, use_notify=True,
     finally:
         udp_sock.close()
     try:
-        logger.debug("Detected native data_type %r.", chan.native_data_type)
-        ntype = native_type(chan.native_data_type)  # abundance of caution
-        if ((ntype is ChannelType.ENUM) and
-                (data_type is None) and (not force_int_enums)):
-            logger.debug("Changing requested data_type to STRING.")
-            data_type = ChannelType.STRING
-        return _read(chan, timeout, data_type=data_type, use_notify=use_notify)
+        return _read(chan, timeout, data_type=data_type, use_notify=use_notify,
+                     force_int_enums=force_int_enums)
     finally:
         try:
             if chan.states[ca.CLIENT] is ca.CONNECTED:
@@ -461,8 +467,8 @@ def write(pv_name, data, *, use_notify=False, data_type=None, metadata=None,
         Value to write.
     use_notify : boolean, optional
         Request notification of completion and wait for it. False by default.
-    data_type : ChannelType or corresponding integer ID, optional
-        Request specific data type. Default is inferred from input.
+    data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
+        Write as specific data type. Default is inferred from input.
     metadata : ``ctypes.BigEndianStructure`` or tuple
         Status and control metadata for the values
     timeout : float, optional
@@ -507,8 +513,10 @@ def write(pv_name, data, *, use_notify=False, data_type=None, metadata=None,
             sockets[chan.circuit].close()
 
 
-def read_write_read(pv_name, data, *, use_notify=False, data_type=None,
-                    metadata=None, timeout=1, priority=0, repeater=True):
+def read_write_read(pv_name, data, *, use_notify=False,
+                    read_data_type=None, write_data_type=None,
+                    metadata=None, timeout=1, priority=0,
+                    force_int_enums=False, repeater=True):
     """
     Write to a Channel, but sandwich the write between to reads.
 
@@ -529,14 +537,18 @@ def read_write_read(pv_name, data, *, use_notify=False, data_type=None,
         Value to write.
     use_notify : boolean, optional
         Request notification of completion and wait for it. False by default.
-    data_type : ChannelType or corresponding integer ID, optional
-        Request specific data type. Default is inferred from input.
+    read_data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
+        Request specific data type.
+    write_data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
+        Write as specific data type. Default is inferred from input.
     metadata : ``ctypes.BigEndianStructure`` or tuple
         Status and control metadata for the values
     timeout : float, optional
         Default is 1 second.
     priority : 0, optional
         Virtual Circuit priority. Default is 0, lowest. Highest is 99.
+    force_int_enums : boolean, optional
+        Retrieve enums as integers. (Default is strings.)
     repeater : boolean, optional
         Spawn a Channel Access Repeater process if the port is available.
         True default, as the Channel Access spec stipulates that well-behaved
@@ -569,9 +581,11 @@ def read_write_read(pv_name, data, *, use_notify=False, data_type=None,
     finally:
         udp_sock.close()
     try:
-        initial = _read(chan, timeout, data_type, use_notify=True)
-        res = _write(chan, data, metadata, timeout, data_type, use_notify)
-        final = _read(chan, timeout, data_type, use_notify=True)
+        initial = _read(chan, timeout, read_data_type, use_notify=True,
+                        force_int_enums=force_int_enums)
+        res = _write(chan, data, metadata, timeout, write_data_type, use_notify)
+        final = _read(chan, timeout, read_data_type, use_notify=True,
+                      force_int_enums=force_int_enums)
     finally:
         try:
             if chan.states[ca.CLIENT] is ca.CONNECTED:

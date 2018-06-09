@@ -13,9 +13,8 @@ Python session, do not import this module; instead import caproto.sync.client.
 import argparse
 from datetime import datetime
 import logging
-from .. import ChannelType, color_logs
+from .. import ChannelType, color_logs, field_types
 from ..sync.client import read
-from ..sync.repeater import spawn_repeater
 
 
 def main():
@@ -25,9 +24,11 @@ def main():
     parser.add_argument('pv_names', type=str, nargs='+',
                         help="PV (channel) name(s) separated by spaces")
     parser.add_argument('-d', type=str, default=None, metavar="DATA_TYPE",
-                        help=("Request a certain data type. Accepts numeric "
+                        help=("Request a class of data type (native, status, "
+                              "time, graphic, control) or a specific type. "
+                              "Accepts numeric "
                               "code ('3') or case-insensitive string ('enum')"
-                              ". See --list-types"))
+                              ". See --list-types."))
     fmt_group.add_argument('--format', type=str,
                            help=("Python format string. Available tokens are "
                                  "{pv_name} and {response}. Additionally, if "
@@ -47,6 +48,14 @@ def main():
     fmt_group.add_argument('--terse', '-t', action='store_true',
                            help=("Display data only. Unpack scalars: "
                                  "[3.] -> 3."))
+    # caget calls this "wide mode" with -a and caput calls it "long mode" with
+    # -l. We will support both -a and -l in both caproto-get and caproto-put.
+    fmt_group.add_argument('--wide', '-a', '-l', action='store_true',
+                           help=("Wide mode, showing "
+                                 "'name timestamp value status'"
+                                 "(implies -d 'time')"))
+    # TODO caget/caput also include a 'srvr' column which seems to be `sid`. We
+    # would need a pretty invasive refactor to access that from here.
     parser.add_argument('--timeout', '-w', type=float, default=1,
                         help=("Timeout ('wait') in seconds for server "
                               "responses."))
@@ -71,9 +80,19 @@ def main():
         logging.getLogger(f'caproto.ch').setLevel('DEBUG')
     if args.vvv:
         logging.getLogger('caproto').setLevel('DEBUG')
-    if not args.no_repeater:
-        spawn_repeater()
-    data_type = parse_data_type(args.d)
+    data_type = args.d
+    # data_type might be '0', 'STRING', or a class like 'control'.
+    # The client functions accepts 0, ChannelType.STRING, or 'control'.
+    try:
+        data_type = int(data_type)  # '0' -> 0
+    except (ValueError, TypeError):
+        if isinstance(data_type, str):
+            if data_type.lower() not in field_types:
+                # 'STRING' -> ChannelType.STRING
+                data_type = ChannelType[data_type.upper()]
+            # else assume a class like 'control', which can pass through
+    if args.wide:
+        data_type = 'time'
     try:
         for pv_name in args.pv_names:
             response = read(pv_name=pv_name,
@@ -81,7 +100,7 @@ def main():
                             timeout=args.timeout,
                             priority=args.priority,
                             force_int_enums=args.n,
-                            repeater=False)
+                            repeater=not args.no_repeater)
             if args.format is None:
                 format_str = '{pv_name: <40}  {response.data}'
             else:
@@ -91,6 +110,9 @@ def main():
                     format_str = '{response.data[0]}'
                 else:
                     format_str = '{response.data}'
+            elif args.wide:
+                # TODO Make this look more like caget -a
+                format_str = '{pv_name} {timestamp} {response.data} {response.status.name}'
             tokens = dict(pv_name=pv_name, response=response)
             if hasattr(response.metadata, 'timestamp'):
                 dt = datetime.fromtimestamp(response.metadata.timestamp)
@@ -104,27 +126,6 @@ def main():
         else:
             # Print a one-line error message.
             print(exc)
-
-
-def parse_data_type(raw_data_type):
-    """
-    Parse raw_data_type string as ChannelType. None passes through.
-
-    '3', 'ENUM', and 'enum' all parse as <ChannelType.ENUM 3>.
-    """
-    if raw_data_type is None:
-        data_type = None
-    else:
-        assert isinstance(raw_data_type, str)
-        # ChannelType is an IntEnum.
-        # If d is int, use ChannelType(d). If string, ChannelType[d].
-        try:
-            data_type_int = int(raw_data_type)
-        except ValueError:
-            data_type = ChannelType[raw_data_type.upper()]
-        else:
-            data_type = ChannelType(data_type_int)
-    return data_type
 
 
 class _ListTypesAction(argparse.Action):
@@ -144,6 +145,14 @@ class _ListTypesAction(argparse.Action):
             help=help)
 
     def __call__(self, parser, namespace, values, option_string=None):
+        print("Request a general class of types:")
+        print()
+        for field_type in field_types:
+            print(field_type)
+        print()
+        print("or one of the following specific types, specified by "
+              "number or by (case-insensitive) name:")
+        print()
         for elem in ChannelType:
             print(f'{elem.value: <2} {elem.name}')
         parser.exit()
