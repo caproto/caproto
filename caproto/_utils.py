@@ -602,9 +602,12 @@ def parse_arr_shorthand_filter(filter_text):
 def parse_ts_filter(val):
     if val is None:
         return None
-    if val != {}:
-        raise FilterValidationError("Only valid value for 'ts' is {}.")
-    return True
+    # Empty object means 'true' according to the spec:
+    # https://epics.anl.gov/base/R3-15/3-docs/filters.html
+    if val == {}:
+        return True
+    # We'll accept `true` and any other truth-y value also....
+    return bool(val)
 
 
 def parse_dbnd_filter(val):
