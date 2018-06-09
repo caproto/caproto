@@ -42,7 +42,7 @@ def _subprocess_communicate(process, command, timeout=10.0):
 @pytest.mark.parametrize('more_kwargs,',
                          [{'repeater': False},
                           {'timeout': 3},
-                          {'use_notify': True},
+                          {'notify': True},
                           ]
                          )
 @pytest.mark.parametrize('func,args,kwargs',

@@ -2,7 +2,7 @@ import caproto as ca
 from caproto._status import eca_value_to_status
 
 
-doc_status_codes = [
+doc_statuss = [
     ('ECA_NORMAL', ca.CASeverity.SUCCESS, 0, 0x001),
     ('ECA_MAXIOC', ca.CASeverity.ERROR, 1, 0x00a),
     ('ECA_UKNHOST', ca.CASeverity.ERROR, 2, 0x012),
@@ -67,14 +67,14 @@ doc_status_codes = [
 ]
 
 
-def test_status_codes():
+def test_statuss():
     print(', '.join(hex(c) for c in sorted(eca_value_to_status.keys())))
 
     for value, st in sorted(eca_value_to_status.items()):
         print(hex(value), st)
 
     missing = []
-    for name, severity, code, code_with_severity in doc_status_codes:
+    for name, severity, code, code_with_severity in doc_statuss:
         try:
             code_nt = eca_value_to_status[code_with_severity]
         except KeyError:
@@ -90,4 +90,4 @@ def test_status_codes():
     assert not missing, ('Missing status code entries: {}'
                          ''.format(', '.join(missing)))
 
-    assert len(eca_value_to_status) == len(doc_status_codes)
+    assert len(eca_value_to_status) == len(doc_statuss)

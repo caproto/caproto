@@ -64,13 +64,13 @@ def test_put_complete(backends, context, ioc):
         responses.append(response)
 
     with pytest.raises(ValueError):
-        pv.write((0.1, ), use_notify=False, wait=True)
+        pv.write((0.1, ), notify=False, wait=True)
 
     with pytest.raises(ValueError):
-        pv.write((0.1, ), use_notify=False, callback=cb)
+        pv.write((0.1, ), notify=False, callback=cb)
 
     with pytest.raises(ValueError):
-        pv.write((0.1, ), use_notify=False, wait=True, callback=cb)
+        pv.write((0.1, ), notify=False, wait=True, callback=cb)
 
     # put and wait
     pv.write((0.1, ), wait=True)

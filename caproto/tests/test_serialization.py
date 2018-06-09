@@ -40,7 +40,6 @@ parameter_values = {
     'server_port': [1234],
     'sid': [2],
     'status': [1],
-    'status_code': [1],
     'subscriptionid': [5],
     'to': [7],
     'validate': [1],

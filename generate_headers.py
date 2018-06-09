@@ -45,6 +45,8 @@ def handle_special_cases(command):
     # These require the 'cid' param to be given twice for some reason.
     if command.name in ('SearchRequest', 'NotFoundResponse'):
         command = command._replace(input_params=command.input_params[:-1])
+    if command.name == 'RsrvIsUpResponse':
+        command = command._replace(name='Beacon')
     return command
 
 
@@ -97,6 +99,8 @@ def parse_commands(h2):
         for row, sn in zip(rows[1:], STANDARD_NAMES):  # exclude header row
             field_td, val_td, desc_td = row.find_all('td')
             field = field_td.find('tt').text.replace(' ', '_').lower()
+            if field == 'status_code':
+                field = 'status'  # for consistency -- docs are loose with this
             val = val_td.find('tt').text
             desc = desc_td.text
             params.append(Param(sn, field, val, desc))
@@ -138,7 +142,7 @@ def write_commands(path=None):
     """
     Generate _headers.py from headers.tpl and CAproto.html
     """
-    with open(getpath('..', 'CAproto.html')) as f:
+    with open(getpath('CAproto.html')) as f:
         soup = BeautifulSoup(f.read(), 'html.parser')
     commands = []
     for _id in ('secCommandsShared',
@@ -148,7 +152,7 @@ def write_commands(path=None):
         commands.extend(parse_section(h1))
     if path is None:
         path = getpath('.')
-    with open(os.path.join(path, '_headers.py'), 'w') as f:
+    with open(os.path.join(path, 'caproto', '_headers.py'), 'w') as f:
         f.write(template.render(commands=commands))
 
 

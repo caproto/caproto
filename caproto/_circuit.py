@@ -579,7 +579,7 @@ class ClientChannel(_BaseChannel):
         return command
 
     def read(self, data_type=None, data_count=None, ioid=None,
-             use_notify=True):
+             notify=True):
         """
         Generate a valid :class:`ReadRequest` or :class:`ReadNotifyRequest`.
 
@@ -595,7 +595,7 @@ class ClientChannel(_BaseChannel):
             :attr:`native_data_count`.
         ioid : integer, optional
             Input/output ID. If None, one is generated.
-        use_notify : boolean, optional
+        notify : boolean, optional
             True by default. If True, send a ``ReadNotifyRequest`` instead of
             a ``ReadRequest``. Note that ``ReadRequest`` has been deprecated by
             Channel Access in 3.13 and is not well-supported by caproto.
@@ -607,12 +607,12 @@ class ClientChannel(_BaseChannel):
         data_type, data_count = self._fill_defaults(data_type, data_count)
         if ioid is None:
             ioid = self.circuit.new_ioid()
-        cls = ReadNotifyRequest if use_notify else ReadRequest
+        cls = ReadNotifyRequest if notify else ReadRequest
         command = cls(data_type, data_count, self.sid, ioid)
         return command
 
     def write(self, data, data_type=None, data_count=None, metadata=None,
-              ioid=None, use_notify=False):
+              ioid=None, notify=False):
         """
         Generate a valid :class:`WriteRequest or `:class:`WriteNotifyRequest`.
 
@@ -631,7 +631,7 @@ class ClientChannel(_BaseChannel):
             Status and control metadata for the values
         ioid : integer, optional
             Input/output ID. If None, one is generated.
-        use_notify : boolean, optional
+        notify : boolean, optional
             False by default. If True, send a ``WriteNotifyRequest`` instead of
             a ``WriteRequest``.
 
@@ -645,7 +645,7 @@ class ClientChannel(_BaseChannel):
         if ioid is None:
             ioid = self.circuit.new_ioid()
 
-        cls = WriteNotifyRequest if use_notify else WriteRequest
+        cls = WriteNotifyRequest if notify else WriteRequest
         command = cls(data, data_type, data_count, self.sid, ioid,
                       metadata=metadata)
         return command
@@ -778,7 +778,7 @@ class ServerChannel(_BaseChannel):
         return command
 
     def read(self, data, ioid, data_type=None, data_count=None, status=1, *,
-             metadata=None, use_notify=True):
+             metadata=None, notify=True):
         """
         Generate a valid :class:`ReadResponse` or :class:`ReadNotifyResponse`.
 
@@ -798,7 +798,7 @@ class ServerChannel(_BaseChannel):
             Default is 1 (success).
         metadata : ``ctypes.BigEndianStructure`` or tuple
             Status and control metadata for the values
-        use_notify : boolean, optional
+        notify : boolean, optional
             True by default. If True, send a ``ReadNotifyRequest`` instead of
             a ``ReadRequest``. Note that ``ReadRequest`` has been deprecated by
             Channel Access in 3.13 and is not well-supported by caproto.
@@ -808,7 +808,7 @@ class ServerChannel(_BaseChannel):
         ReadResponse or ReadNotifyResponse
         """
         data_type, data_count = self._fill_defaults(data_type, data_count)
-        cls = ReadNotifyResponse if use_notify else ReadResponse
+        cls = ReadNotifyResponse if notify else ReadResponse
         command = cls(data, data_type, data_count, status, ioid,
                       metadata=metadata)
         return command
@@ -840,7 +840,7 @@ class ServerChannel(_BaseChannel):
         return command
 
     def subscribe(self, data, subscriptionid, data_type=None,
-                  data_count=None, status_code=CAStatus.ECA_NEWCONN,
+                  data_count=None, status=CAStatus.ECA_NEWCONN,
                   metadata=None):
         """
         Generate a valid :class:`EventAddResponse`.
@@ -857,7 +857,7 @@ class ServerChannel(_BaseChannel):
             Requested number of values. Default is the channel's native data
             count, which can be checked in the Channel's attribute
             :attr:`native_data_count`.
-        status_code : CAStatus or corresponding integer code
+        status : CAStatus or corresponding integer code
             Default is ``CAStatus.ECA_NEWCONN``
         metadata : ``ctypes.BigEndianStructure`` or tuple
             Status and control metadata for the values
@@ -867,7 +867,7 @@ class ServerChannel(_BaseChannel):
         EventAddResponse
         """
         data_type, data_count = self._fill_defaults(data_type, data_count)
-        command = EventAddResponse(data, data_type, data_count, status_code,
+        command = EventAddResponse(data, data_type, data_count, status,
                                    subscriptionid, metadata=metadata)
         return command
 

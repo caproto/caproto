@@ -154,7 +154,7 @@ def test_nonet():
                                   data_type=chan1.native_data_type,
                                   data_count=chan1.native_data_count,
                                   subscriptionid=0,
-                                  status_code=1)
+                                  status=1)
 
     srv_send(srv_circuit, add_res)
     cli_recv(chan1.circuit)

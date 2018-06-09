@@ -147,7 +147,7 @@ class VirtualCircuit:
 
                     response_command = ca.ErrorResponse(
                         command, cid,
-                        status_code=ca.CAStatus.ECA_INTERNAL,
+                        status=ca.CAStatus.ECA_INTERNAL,
                         error_message=('Python exception: {} {}'
                                        ''.format(type(ex).__name__, ex))
                     )
@@ -212,11 +212,11 @@ class VirtualCircuit:
             # This is a pass-through if arr is None.
             data = apply_arr_filter(chan.channel_filter.arr, data)
 
-            use_notify = isinstance(command, ca.ReadNotifyRequest)
+            notify = isinstance(command, ca.ReadNotifyRequest)
             return [chan.read(data=data, data_type=command.data_type,
                               data_count=len(data), status=1,
                               ioid=command.ioid, metadata=metadata,
-                              use_notify=use_notify)
+                              notify=notify)
                     ]
         elif isinstance(command, (ca.WriteRequest, ca.WriteNotifyRequest)):
             chan, db_entry = get_db_entry()
@@ -236,7 +236,7 @@ class VirtualCircuit:
                     cid = self.circuit.channels_sid[command.sid].cid
                     response_command = ca.ErrorResponse(
                         command, cid,
-                        status_code=ca.CAStatus.ECA_INTERNAL,
+                        status=ca.CAStatus.ECA_INTERNAL,
                         error_message=('Python exception: {} {}'
                                        ''.format(type(ex).__name__, ex))
                     )
@@ -443,7 +443,7 @@ class Context:
                                          data_type=sub.data_type,
                                          data_count=data_count,
                                          subscriptionid=sub.subscriptionid,
-                                         status_code=1)
+                                         status=1)
                 # Check that the Channel did not close at some point after
                 # this update started its flight.
                 if chan.states[ca.SERVER] is ca.CONNECTED:
@@ -456,9 +456,9 @@ class Context:
         while True:
             for address, (interface, sock) in self.beacon_socks.items():
                 try:
-                    beacon = ca.RsrvIsUpResponse(13, self.port,
-                                                 self.beacon_count,
-                                                 interface)
+                    beacon = ca.Beacon(13, self.port,
+                                       self.beacon_count,
+                                       interface)
                     bytes_to_send = self.broadcaster.send(beacon)
                     await sock.send(bytes_to_send)
                 except IOError:

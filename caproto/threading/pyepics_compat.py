@@ -448,7 +448,7 @@ class PV:
         if isinstance(value[0], str):
             value = tuple(v.encode(STR_ENC) for v in value)
 
-        use_notify = any((use_complete, callback is not None, wait))
+        notify = any((use_complete, callback is not None, wait))
 
         if callback is None and not use_complete:
             run_callback = None
@@ -462,14 +462,14 @@ class PV:
         # So, in pyepics, put_complete strictly refers to the functionality
         # where we toggle 'put_complete' in the args after a
         # WriteNotifyResponse.
-        if use_notify:
+        if notify:
             if use_complete:
                 self._args['put_complete'] = False
         else:
             wait = False
 
         self._caproto_pv.write(value, wait=wait, callback=run_callback,
-                               timeout=timeout, use_notify=use_notify)
+                               timeout=timeout, notify=notify)
 
     @ensure_connection
     def get_ctrlvars(self, timeout=5, warn=True):

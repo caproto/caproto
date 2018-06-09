@@ -87,7 +87,7 @@ def main():
     try:
         initial, _, final = read_write_read(pv_name=args.pv_name, data=data,
                                             read_data_type=read_data_type,
-                                            use_notify=args.notify,
+                                            notify=args.notify,
                                             timeout=args.timeout,
                                             priority=args.priority,
                                             force_int_enums=args.n,

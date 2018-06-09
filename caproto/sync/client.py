@@ -156,7 +156,7 @@ def make_channel(pv_name, udp_sock, priority, timeout):
     return chan
 
 
-def _read(chan, timeout, data_type, use_notify, force_int_enums):
+def _read(chan, timeout, data_type, notify, force_int_enums):
     logger = chan.log
     logger.debug("Detected native data_type %r.", chan.native_data_type)
     ntype = native_type(chan.native_data_type)  # abundance of caution
@@ -164,7 +164,7 @@ def _read(chan, timeout, data_type, use_notify, force_int_enums):
             (data_type is None) and (not force_int_enums)):
         logger.debug("Changing requested data_type to STRING.")
         data_type = ChannelType.STRING
-    req = chan.read(data_type=data_type, use_notify=use_notify)
+    req = chan.read(data_type=data_type, notify=notify)
     send(chan.circuit, req)
     t = time.monotonic()
     while True:
@@ -187,7 +187,7 @@ def _read(chan, timeout, data_type, use_notify, force_int_enums):
                                    'read response')
 
 
-def read(pv_name, *, data_type=None, timeout=1, priority=0, use_notify=True,
+def read(pv_name, *, data_type=None, timeout=1, priority=0, notify=True,
          force_int_enums=False, repeater=True):
     """
     Read a Channel.
@@ -202,7 +202,7 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0, use_notify=True,
         Default is 1 second.
     priority : 0, optional
         Virtual Circuit priority. Default is 0, lowest. Highest is 99.
-    use_notify : boolean, optional
+    notify : boolean, optional
         Send a ReadNotifyRequest instead of a ReadRequest. True by default.
     force_int_enums : boolean, optional
         Retrieve enums as integers. (Default is strings.)
@@ -231,7 +231,7 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0, use_notify=True,
     finally:
         udp_sock.close()
     try:
-        return _read(chan, timeout, data_type=data_type, use_notify=use_notify,
+        return _read(chan, timeout, data_type=data_type, notify=notify,
                      force_int_enums=force_int_enums)
     finally:
         try:
@@ -407,7 +407,7 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
                 sockets[chan.circuit].close()
 
 
-def _write(chan, data, metadata, timeout, data_type, use_notify):
+def _write(chan, data, metadata, timeout, data_type, notify):
     if not isinstance(data, Iterable) or isinstance(data, (str, bytes)):
         data = [data]
     if data and isinstance(data[0], str):
@@ -422,11 +422,11 @@ def _write(chan, data, metadata, timeout, data_type, use_notify):
             logger.debug("Will write to ENUM as data_type STRING.")
             data_type = ChannelType.STRING
     logger.debug("Writing.")
-    req = chan.write(data=data, use_notify=use_notify,
+    req = chan.write(data=data, notify=notify,
                      data_type=data_type, metadata=metadata)
     send(chan.circuit, req)
     t = time.monotonic()
-    if use_notify:
+    if notify:
         while True:
             try:
                 commands = recv(chan.circuit)
@@ -454,7 +454,7 @@ def _write(chan, data, metadata, timeout, data_type, use_notify):
         return None
 
 
-def write(pv_name, data, *, use_notify=False, data_type=None, metadata=None,
+def write(pv_name, data, *, notify=False, data_type=None, metadata=None,
           timeout=1, priority=0,
           repeater=True):
     """
@@ -465,7 +465,7 @@ def write(pv_name, data, *, use_notify=False, data_type=None, metadata=None,
     pv_name : str
     data : str, int, or float or a list of these
         Value to write.
-    use_notify : boolean, optional
+    notify : boolean, optional
         Request notification of completion and wait for it. False by default.
     data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
         Write as specific data type. Default is inferred from input.
@@ -490,7 +490,7 @@ def write(pv_name, data, *, use_notify=False, data_type=None, metadata=None,
     >>> write('cat', 5)  # returns None
 
     Request notification of completion ("put completion") and wait for it.
-    >>> write('cat', 5, use_notify=True)  # returns a WriteNotifyResponse
+    >>> write('cat', 5, notify=True)  # returns a WriteNotifyResponse
     """
     if repeater:
         # As per the EPICS spec, a well-behaved client should start a
@@ -504,7 +504,7 @@ def write(pv_name, data, *, use_notify=False, data_type=None, metadata=None,
     finally:
         udp_sock.close()
     try:
-        _write(chan, data, metadata, timeout, data_type, use_notify)
+        _write(chan, data, metadata, timeout, data_type, notify)
     finally:
         try:
             if chan.states[ca.CLIENT] is ca.CONNECTED:
@@ -513,7 +513,7 @@ def write(pv_name, data, *, use_notify=False, data_type=None, metadata=None,
             sockets[chan.circuit].close()
 
 
-def read_write_read(pv_name, data, *, use_notify=False,
+def read_write_read(pv_name, data, *, notify=False,
                     read_data_type=None, write_data_type=None,
                     metadata=None, timeout=1, priority=0,
                     force_int_enums=False, repeater=True):
@@ -522,7 +522,7 @@ def read_write_read(pv_name, data, *, use_notify=False,
 
     This is what the command-line utilities ``caput`` and ``caproto-put`` do.
     Notice that if you want the second reading to reflect the written value,
-    you should pass the parameter ``use_notify=True``. (This is also true of
+    you should pass the parameter ``notify=True``. (This is also true of
     ``caput``, which needs the ``-c`` argument to behave the way you might
     expect it to behave.)
 
@@ -535,7 +535,7 @@ def read_write_read(pv_name, data, *, use_notify=False,
     pv_name : str
     data : str, int, or float or a list of these
         Value to write.
-    use_notify : boolean, optional
+    notify : boolean, optional
         Request notification of completion and wait for it. False by default.
     read_data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
         Request specific data type.
@@ -559,7 +559,7 @@ def read_write_read(pv_name, data, *, use_notify=False,
     initial, write_response, final : tuple of response
 
     The middle response comes from the write, and it will be ``None`` unless
-    ``use_notify=True``.
+    ``notify=True``.
 
     Examples
     --------
@@ -567,7 +567,7 @@ def read_write_read(pv_name, data, *, use_notify=False,
     >>> write('cat', 5)  # returns None
 
     Request notification of completion ("put completion") and wait for it.
-    >>> write('cat', 5, use_notify=True)  # returns a WriteNotifyResponse
+    >>> write('cat', 5, notify=True)  # returns a WriteNotifyResponse
     """
     if repeater:
         # As per the EPICS spec, a well-behaved client should start a
@@ -581,10 +581,10 @@ def read_write_read(pv_name, data, *, use_notify=False,
     finally:
         udp_sock.close()
     try:
-        initial = _read(chan, timeout, read_data_type, use_notify=True,
+        initial = _read(chan, timeout, read_data_type, notify=True,
                         force_int_enums=force_int_enums)
-        res = _write(chan, data, metadata, timeout, write_data_type, use_notify)
-        final = _read(chan, timeout, read_data_type, use_notify=True,
+        res = _write(chan, data, metadata, timeout, write_data_type, notify)
+        final = _read(chan, timeout, read_data_type, notify=True,
                       force_int_enums=force_int_enums)
     finally:
         try:

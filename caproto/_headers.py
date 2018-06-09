@@ -209,9 +209,9 @@ def EchoResponseHeader():
     return MessageHeader(23, 0, 0, 0, 0, 0)
 
 
-def RsrvIsUpResponseHeader(version, server_port, beaconid, address):
+def BeaconHeader(version, server_port, beaconid, address):
     """
-    Construct a ``MessageHeader`` for a RsrvIsUpResponse command.
+    Construct a ``MessageHeader`` for a Beacon command.
 
     Beacon sent by a server when it becomes available.   Beacons are also sent
     out periodically to announce the server is still alive.   Another function
@@ -304,7 +304,7 @@ def EventAddRequestHeader(data_type, data_count, sid, subscriptionid):
             else MessageHeader(*struct_args))
 
 
-def EventAddResponseHeader(payload_size, data_type, data_count, status_code, subscriptionid):
+def EventAddResponseHeader(payload_size, data_type, data_count, status, subscriptionid):
     """
     Construct a ``MessageHeader`` for a EventAddResponse command.
 
@@ -324,14 +324,14 @@ def EventAddResponseHeader(payload_size, data_type, data_count, status_code, sub
     data_count : integer
         Payload data count.
 
-    status_code : integer
+    status : integer
         Status code  (13.) (ECA_NORMAL on success).
 
     subscriptionid : integer
         Subscription ID
 
     """
-    struct_args = (1, payload_size, data_type, data_count, status_code, subscriptionid)
+    struct_args = (1, payload_size, data_type, data_count, status, subscriptionid)
     # If payload_size or data_count cannot fit into a 16-bit integer, use the
     # extended header.
     return (ExtendedMessageHeader(*struct_args)
@@ -538,7 +538,7 @@ def ReadSyncRequestHeader():
     return MessageHeader(10, 0, 0, 0, 0, 0)
 
 
-def ErrorResponseHeader(payload_size, cid, status_code):
+def ErrorResponseHeader(payload_size, cid, status):
     """
     Construct a ``MessageHeader`` for a ErrorResponse command.
 
@@ -558,11 +558,11 @@ def ErrorResponseHeader(payload_size, cid, status_code):
     cid : integer
         CID of the channel for which request failed, CID - Client ID  (3.2.1.).
 
-    status_code : integer
+    status : integer
         Error status code  (13.).
 
     """
-    struct_args = (11, payload_size, 0, 0, cid, status_code)
+    struct_args = (11, payload_size, 0, 0, cid, status)
     # If payload_size or data_count cannot fit into a 16-bit integer, use the
     # extended header.
     return (ExtendedMessageHeader(*struct_args)

@@ -52,7 +52,7 @@ designated by the Channel Access specification.
 .. autoclass:: NotFoundResponse
 .. autoclass:: EchoRequest
 .. autoclass:: EchoResponse
-.. autoclass:: RsrvIsUpResponse
+.. autoclass:: Beacon
 .. autoclass:: RepeaterRegisterRequest
 .. autoclass:: RepeaterConfirmResponse
 .. autoclass:: EventAddRequest
