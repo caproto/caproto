@@ -108,7 +108,7 @@ def test_unknown_id_errors(circuit_pair):
 
     # Receive an event with an unknown subscriptionid.
     com = ca.EventAddResponse(data=(1,), data_type=5, data_count=1,
-                              status_code=1, subscriptionid=1)
+                              status=1, subscriptionid=1)
     (command,), _ = circuit.recv(bytes(com))
     with pytest.raises(ca.RemoteProtocolError):
         circuit.process_command(command)
@@ -125,20 +125,20 @@ def test_mismatched_event_add_responses(circuit_pair):
 
     # Good response
     res = ca.EventAddResponse(data=(1,), data_type=5, data_count=1,
-                              status_code=1, subscriptionid=1)
+                              status=1, subscriptionid=1)
     (command,), _ = circuit.recv(bytes(res))
     circuit.process_command(command)
 
     # Bad response -- wrong data_type
     res = ca.EventAddResponse(data=(1,), data_type=6, data_count=1,
-                              status_code=1, subscriptionid=1)
+                              status=1, subscriptionid=1)
     (command,), _ = circuit.recv(bytes(res))
     with pytest.raises(ca.RemoteProtocolError):
         circuit.process_command(command)
 
     # Bad response -- wrong data_count
     res = ca.EventAddResponse(data=(1, 2), data_type=5, data_count=2,
-                              status_code=1, subscriptionid=1)
+                              status=1, subscriptionid=1)
     (command,), _ = circuit.recv(bytes(res))
     with pytest.raises(ca.RemoteProtocolError):
         circuit.process_command(command)
@@ -234,7 +234,7 @@ def test_error_response(circuit_pair):
     srv_circuit.process_command(req_received)
     srv_circuit.send(ca.ErrorResponse(original_request=req_received,
                                       cid=srv_channel.cid,
-                                      status_code=42,
+                                      status=42,
                                       error_message='Tom missed the train.'))
 
 

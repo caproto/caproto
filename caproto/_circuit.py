@@ -840,7 +840,7 @@ class ServerChannel(_BaseChannel):
         return command
 
     def subscribe(self, data, subscriptionid, data_type=None,
-                  data_count=None, status_code=CAStatus.ECA_NEWCONN,
+                  data_count=None, status=CAStatus.ECA_NEWCONN,
                   metadata=None):
         """
         Generate a valid :class:`EventAddResponse`.
@@ -857,7 +857,7 @@ class ServerChannel(_BaseChannel):
             Requested number of values. Default is the channel's native data
             count, which can be checked in the Channel's attribute
             :attr:`native_data_count`.
-        status_code : CAStatus or corresponding integer code
+        status : CAStatus or corresponding integer code
             Default is ``CAStatus.ECA_NEWCONN``
         metadata : ``ctypes.BigEndianStructure`` or tuple
             Status and control metadata for the values
@@ -867,7 +867,7 @@ class ServerChannel(_BaseChannel):
         EventAddResponse
         """
         data_type, data_count = self._fill_defaults(data_type, data_count)
-        command = EventAddResponse(data, data_type, data_count, status_code,
+        command = EventAddResponse(data, data_type, data_count, status,
                                    subscriptionid, metadata=metadata)
         return command
 

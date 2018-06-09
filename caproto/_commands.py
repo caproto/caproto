@@ -934,7 +934,7 @@ class EventAddResponse(Message):
 
         Integer ID of this Channel designated by the server.
 
-    .. attribute:: status_code
+    .. attribute:: status
 
         As per Channel Access spec, 1 is success; 0 or >1 are various failures.
 
@@ -947,11 +947,11 @@ class EventAddResponse(Message):
     HAS_PAYLOAD = True
 
     def __init__(self, data, data_type, data_count,
-                 status_code, subscriptionid, *, metadata=None):
+                 status, subscriptionid, *, metadata=None):
         size, *buffers = data_payload(data, metadata, data_type, data_count)
-        status_code = ensure_eca_value(status_code)
+        status = ensure_eca_value(status)
         header = EventAddResponseHeader(size, data_type, data_count,
-                                        status_code, subscriptionid)
+                                        status, subscriptionid)
         super().__init__(header, *buffers)
 
     payload_size = property(lambda self: self.header.payload_size)
@@ -968,7 +968,7 @@ class EventAddResponse(Message):
         return extract_metadata(self.buffers[0], self.data_type)
 
     @property
-    def status_code(self):
+    def status(self):
         return eca_value_to_status[self.header.parameter1]
 
     @classmethod
@@ -1192,7 +1192,7 @@ class ErrorResponse(Message):
 
         Integer ID for this Channel designated by the client.
 
-    .. attribute:: status_code
+    .. attribute:: status
 
         As per Channel Access spec, 1 is success; 0 or >1 are various failures.
 
@@ -1201,15 +1201,15 @@ class ErrorResponse(Message):
     ID = 11
     HAS_PAYLOAD = True
 
-    def __init__(self, original_request, cid, status_code, error_message):
+    def __init__(self, original_request, cid, status, error_message):
         msg_size, msg_payload = padded_string_payload(error_message)
         req_bytes = bytes(original_request.header)
 
         size = len(req_bytes) + msg_size
         payload = req_bytes + msg_payload
 
-        status_code = ensure_eca_value(status_code)
-        header = ErrorResponseHeader(size, cid, status_code)
+        status = ensure_eca_value(status)
+        header = ErrorResponseHeader(size, cid, status)
         super().__init__(header, b'', payload)
 
     payload_size = property(lambda self: self.header.payload_size)
@@ -1226,7 +1226,7 @@ class ErrorResponse(Message):
         return MessageHeader.from_buffer(req_bytes)
 
     @property
-    def status_code(self):
+    def status(self):
         return eca_value_to_status[self.header.parameter2]
 
     @classmethod

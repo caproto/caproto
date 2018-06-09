@@ -147,7 +147,7 @@ class VirtualCircuit:
 
                     response_command = ca.ErrorResponse(
                         command, cid,
-                        status_code=ca.CAStatus.ECA_INTERNAL,
+                        status=ca.CAStatus.ECA_INTERNAL,
                         error_message=('Python exception: {} {}'
                                        ''.format(type(ex).__name__, ex))
                     )
@@ -236,7 +236,7 @@ class VirtualCircuit:
                     cid = self.circuit.channels_sid[command.sid].cid
                     response_command = ca.ErrorResponse(
                         command, cid,
-                        status_code=ca.CAStatus.ECA_INTERNAL,
+                        status=ca.CAStatus.ECA_INTERNAL,
                         error_message=('Python exception: {} {}'
                                        ''.format(type(ex).__name__, ex))
                     )
@@ -443,7 +443,7 @@ class Context:
                                          data_type=sub.data_type,
                                          data_count=data_count,
                                          subscriptionid=sub.subscriptionid,
-                                         status_code=1)
+                                         status=1)
                 # Check that the Channel did not close at some point after
                 # this update started its flight.
                 if chan.states[ca.SERVER] is ca.CONNECTED:
