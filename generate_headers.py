@@ -45,6 +45,8 @@ def handle_special_cases(command):
     # These require the 'cid' param to be given twice for some reason.
     if command.name in ('SearchRequest', 'NotFoundResponse'):
         command = command._replace(input_params=command.input_params[:-1])
+    if command.name == 'RsrvIsUpResponse':
+        command = command._replace(name='Beacon')
     return command
 
 
