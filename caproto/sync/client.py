@@ -156,7 +156,7 @@ def make_channel(pv_name, udp_sock, priority, timeout):
     return chan
 
 
-def _read(chan, timeout, data_type, use_notify):
+def _read(chan, timeout, data_type, use_notify, force_int_enums):
     logger = chan.log
     logger.debug("Detected native data_type %r.", chan.native_data_type)
     ntype = native_type(chan.native_data_type)  # abundance of caution
@@ -220,7 +220,6 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0, use_notify=True,
     Get the value of a Channel named 'cat'.
     >>> read('cat').data
     """
-    logger = logging.getLogger(f'caproto.ch.{pv_name}.{priority}')
     if repeater:
         # As per the EPICS spec, a well-behaved client should start a
         # caproto-repeater that will continue running after it exits.
@@ -232,7 +231,8 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0, use_notify=True,
     finally:
         udp_sock.close()
     try:
-        return _read(chan, timeout, data_type=data_type, use_notify=use_notify)
+        return _read(chan, timeout, data_type=data_type, use_notify=use_notify,
+                     force_int_enums=force_int_enums)
     finally:
         try:
             if chan.states[ca.CLIENT] is ca.CONNECTED:
@@ -515,7 +515,8 @@ def write(pv_name, data, *, use_notify=False, data_type=None, metadata=None,
 
 def read_write_read(pv_name, data, *, use_notify=False,
                     read_data_type=None, write_data_type=None,
-                    metadata=None, timeout=1, priority=0, repeater=True):
+                    metadata=None, timeout=1, priority=0,
+                    force_int_enums=False, repeater=True):
     """
     Write to a Channel, but sandwich the write between to reads.
 
@@ -546,6 +547,8 @@ def read_write_read(pv_name, data, *, use_notify=False,
         Default is 1 second.
     priority : 0, optional
         Virtual Circuit priority. Default is 0, lowest. Highest is 99.
+    force_int_enums : boolean, optional
+        Retrieve enums as integers. (Default is strings.)
     repeater : boolean, optional
         Spawn a Channel Access Repeater process if the port is available.
         True default, as the Channel Access spec stipulates that well-behaved
@@ -578,9 +581,11 @@ def read_write_read(pv_name, data, *, use_notify=False,
     finally:
         udp_sock.close()
     try:
-        initial = _read(chan, timeout, read_data_type, use_notify=True)
+        initial = _read(chan, timeout, read_data_type, use_notify=True,
+                        force_int_enums=force_int_enums)
         res = _write(chan, data, metadata, timeout, write_data_type, use_notify)
-        final = _read(chan, timeout, read_data_type, use_notify=True)
+        final = _read(chan, timeout, read_data_type, use_notify=True,
+                      force_int_enums=force_int_enums)
     finally:
         try:
             if chan.states[ca.CLIENT] is ca.CONNECTED:

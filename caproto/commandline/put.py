@@ -57,6 +57,9 @@ def main():
                         help="Show DEBUG log messages.")
     parser.add_argument('-vvv', action='store_true',
                         help=argparse.SUPPRESS)
+    parser.add_argument('-n', action='store_true',
+                        help=("Retrieve enums as integers (default is "
+                              "strings)."))
     parser.add_argument('--no-color', action='store_true',
                         help="Suppress ANSI color codes in log messages.")
     parser.add_argument('--no-repeater', action='store_true',
@@ -87,6 +90,7 @@ def main():
                                             use_notify=args.notify,
                                             timeout=args.timeout,
                                             priority=args.priority,
+                                            force_int_enums=args.n,
                                             repeater=not args.no_repeater)
         if args.format is None:
             format_str = '{which} : {pv_name: <40}  {response.data}'
