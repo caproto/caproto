@@ -26,7 +26,7 @@ import weakref
 from queue import Queue, Empty
 from inspect import Parameter, Signature
 from functools import partial
-from collections import defaultdict
+from collections import defaultdict, deque
 import caproto as ca
 from .._constants import (MAX_ID, STALE_SEARCH_EXPIRATION,
                           SEARCH_MAX_DATAGRAM_BYTES)
@@ -501,7 +501,9 @@ class SharedBroadcaster:
             for name in needs_search:
                 search_id = new_id()
                 search_ids.append(search_id)
-                unanswered_searches[search_id] = (name, results_queue)
+                print(f'about to search for {name} with {search_id}')
+                # make this a list because we are going to mutate it later
+                unanswered_searches[search_id] = [name, results_queue, 0]
         self._search_now.set()
 
     def received(self, bytes_recv, address):
@@ -550,7 +552,7 @@ class SharedBroadcaster:
                     cid = command.cid
                     try:
                         with self._search_lock:
-                            name, queue = unanswered_searches.pop(cid)
+                            name, queue, _ = unanswered_searches.pop(cid)
                     except KeyError:
                         # This is a redundant response, which the EPICS
                         # spec tells us to ignore. (The first responder
@@ -594,12 +596,18 @@ class SharedBroadcaster:
                 continue
 
             t = time.monotonic()
-            # Listify just so we can count the number of items and print a more
-            # informative debug message.
+
+            # filter to just things that need to go out
+            def _construct_search_requests(items):
+                for search_id, it in items:
+                    yield ca.SearchRequest(it[0], search_id, 13)
+                    it[-1] = t
+
             with self._search_lock:
-                items = list(self.unanswered_searches.items())
-            requests = (ca.SearchRequest(name, search_id, 13)
-                        for search_id, (name, _) in items)
+                items = list((search_id, it)
+                             for search_id, it in self.unanswered_searches.items()
+                             if (t - it[-1]) > RETRY_SEARCHES_PERIOD / 2)
+            requests = _construct_search_requests(items)
 
             if not self._searching_enabled.is_set():
                 continue
