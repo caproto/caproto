@@ -226,6 +226,7 @@ def spawn_repeater():
     logger.debug('Spawning caproto-repeater process....')
     try:
         subprocess.Popen(
-            [sys.executable, '-m', 'caproto.repeater', '--quiet'], cwd="/")
+            [sys.executable, '-m', 'caproto.commandline.repeater', '--quiet'],
+            cwd="/")
     except Exception:
         logger.exception('Failed to spawn repeater.')

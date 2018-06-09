@@ -1,22 +1,19 @@
 from collections import defaultdict, deque, namedtuple
 import logging
-import os
 import caproto as ca
-from caproto import get_environment_variables
+from caproto import apply_arr_filter, get_environment_variables
 
 
 class DisconnectedCircuit(Exception):
     ...
 
 
-Subscription = namedtuple('Subscription', ('mask', 'circuit', 'channel',
+Subscription = namedtuple('Subscription', ('mask', 'channel_filter',
+                                           'circuit', 'channel',
                                            'data_type',
                                            'data_count', 'subscriptionid'))
 SubscriptionSpec = namedtuple('SubscriptionSpec', ('db_entry', 'data_type',
-                                                   'mask'))
-
-
-STR_ENC = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
+                                                   'mask', 'channel_filter'))
 
 
 class VirtualCircuit:
@@ -184,7 +181,7 @@ class VirtualCircuit:
         '''Process a command from a client, and return the server response'''
         def get_db_entry():
             chan = self.circuit.channels_sid[command.sid]
-            db_entry = self.context[chan.name.decode(STR_ENC)]
+            db_entry = self.context[chan.name]
             return chan, db_entry
 
         if command is ca.DISCONNECTED:
@@ -192,7 +189,7 @@ class VirtualCircuit:
         elif isinstance(command, ca.VersionRequest):
             return [ca.VersionResponse(13)]
         elif isinstance(command, ca.CreateChanRequest):
-            db_entry = self.context[command.name.decode(STR_ENC)]
+            db_entry = self.context[command.name]
             access = db_entry.check_access(self.client_hostname,
                                            self.client_username)
 
@@ -204,14 +201,17 @@ class VirtualCircuit:
                                           sid=self.circuit.new_channel_id()),
                     ]
         elif isinstance(command, ca.HostNameRequest):
-            self.client_hostname = command.name.decode(STR_ENC)
+            self.client_hostname = command.name
         elif isinstance(command, ca.ClientNameRequest):
-            self.client_username = command.name.decode(STR_ENC)
+            self.client_username = command.name
         elif isinstance(command, (ca.ReadNotifyRequest, ca.ReadRequest)):
             chan, db_entry = get_db_entry()
             metadata, data = await db_entry.auth_read(
                 self.client_hostname, self.client_username,
                 command.data_type, user_address=self.circuit.address)
+            # This is a pass-through if arr is None.
+            data = apply_arr_filter(chan.channel_filter.arr, data)
+
             use_notify = isinstance(command, ca.ReadNotifyRequest)
             return [chan.read(data=data, data_type=command.data_type,
                               data_count=len(data), status=1,
@@ -259,14 +259,17 @@ class VirtualCircuit:
             chan, db_entry = get_db_entry()
             # TODO no support for deprecated low/high/to
             sub = Subscription(mask=command.mask,
+                               channel_filter=chan.channel_filter,
                                channel=chan,
                                circuit=self,
                                data_type=command.data_type,
                                data_count=command.data_count,
                                subscriptionid=command.subscriptionid)
-            sub_spec = SubscriptionSpec(db_entry=db_entry,
-                                        data_type=command.data_type,
-                                        mask=command.mask)
+            sub_spec = SubscriptionSpec(
+                db_entry=db_entry,
+                data_type=command.data_type,
+                mask=command.mask,
+                channel_filter=chan.channel_filter)
             self.subscriptions[sub_spec].append(sub)
             self.context.subscriptions[sub_spec].append(sub)
             await db_entry.subscribe(self.context.subscription_queue, sub_spec)
@@ -372,14 +375,7 @@ class Context:
 
             # Cache record.FIELD for later usage
             self.pvdb[rec_field] = inst
-
-        # Finally, handle the modifiers
-        if not mods:
-            return inst
-
-        # filter check
-        # TODO: filter API? wrap somehow?
-        return inst.filtered(mods)
+        return inst
 
     async def _broadcaster_evaluate(self, addr, commands):
         search_replies = []
@@ -388,7 +384,7 @@ class Context:
             if isinstance(command, ca.VersionRequest):
                 version_requested = True
             if isinstance(command, ca.SearchRequest):
-                pv_name = command.name.decode(STR_ENC)
+                pv_name = command.name
                 try:
                     known_pv = self[pv_name] is not None
                 except KeyError:
@@ -432,9 +428,16 @@ class Context:
             # have a different requested data_count.
             for sub in subs:
                 chan = sub.channel
-                # if the subscription has a non-zero value respect it,
-                # else default to the full length of the data
+
+                # This is a pass-through if arr is None.
+                values = apply_arr_filter(sub_spec.channel_filter.arr, values)
+
+                # If the subscription has a non-zero value respect it,
+                # else default to the full length of the data.
                 data_count = sub.data_count or len(values)
+                if data_count != len(values):
+                    values = values[:data_count]
+
                 command = chan.subscribe(data=values,
                                          metadata=metadata,
                                          data_type=sub.data_type,

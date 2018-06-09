@@ -30,6 +30,7 @@ except ImportError:
 
 
 __all__ = (  # noqa F822
+    'apply_arr_filter',
     'get_environment_variables',
     'get_address_list',
     'get_server_address_list',
@@ -43,9 +44,8 @@ __all__ = (  # noqa F822
     'incremental_buffer_list_slice',
     'send_all',
     'async_send_all',
-    'spawn_daemon',
     'parse_record_field',
-    'evaluate_channel_filter',
+    'parse_channel_filter',
     'batch_requests',
     'CaprotoError',
     'ProtocolError',
@@ -154,6 +154,10 @@ class CaprotoNotImplementedError(NotImplementedError, CaprotoError):
 
 
 class CaprotoValueError(ValueError, CaprotoError):
+    ...
+
+
+class FilterValidationError(CaprotoValueError):
     ...
 
 
@@ -478,44 +482,6 @@ async def async_send_all(buffers_to_send, async_send_func):
             break
 
 
-def spawn_daemon(func, *args, **kwargs):
-    # adapted from https://stackoverflow.com/a/6011298/1221924
-
-    # Do the UNIX double-fork magic to avoid receiving signals from the parent
-    # See Stevens' "Advanced # Programming in the UNIX Environment"
-    # (ISBN 0201563177)
-    try:
-        pid = os.fork()
-        if pid > 0:
-            # parent process, return and keep running
-            return
-    except OSError as e:
-        print("fork #1 failed: %d (%s)" % (e.errno, e.strerror),
-              out=sys.stderr)
-        sys.exit(1)
-
-    os.setsid()
-    sys.stdout = open('/dev/null', 'w')
-    sys.stderr = open('/dev/null', 'w')
-
-    # do second fork
-    try:
-        pid = os.fork()
-        if pid > 0:
-            # exit from second parent
-            sys.exit(0)
-    except OSError as e:
-        print("fork #2 failed: %d (%s)" % (e.errno, e.strerror),
-              out=sys.stderr)
-        sys.exit(1)
-
-    # do stuff
-    func(*args, **kwargs)
-
-    # all done
-    os._exit(os.EX_OK)
-
-
 RecordAndField = namedtuple('RecordAndField',
                             ['record_dot_field', 'record',
                              'field', 'modifiers'])
@@ -556,6 +522,10 @@ def parse_record_field(pvname):
             field, filter_ = field.split('{', 1)
             filter_ = '{' + filter_
             modifiers = RecordModifiers.filtered
+        elif '[' in field and field.endswith(']'):
+            field, filter_ = field.split('[', 1)
+            filter_ = '[' + filter_
+            modifiers = RecordModifiers.filtered
         else:
             filter_ = None
             modifiers = None
@@ -578,18 +548,141 @@ def parse_record_field(pvname):
     return RecordAndField(record_field, record, field, modifiers)
 
 
-def evaluate_channel_filter(filter_text):
-    'Evaluate JSON-based channel filter into easy Python type'
+ChannelFilter = namedtuple('ChannelFilter', 'ts dbnd arr sync')
+# TimestampFilter is just True or None, no need for namedtuple.
+DeadbandFilter = namedtuple('DeadbandFilter', 'm d')
+ArrayFilter = namedtuple('ArrayFilter', 's i e')
+SyncFilter = namedtuple('SyncFilter', 'm s')
 
-    filter_ = json.loads(filter_text)
+
+def parse_channel_filter(filter_text):
+    "Parse and validate filter_text into a ChannelFilter."
+    # https://epics.anl.gov/base/R3-15/5-docs/filters.html
+
+    # If there is a shorthand array filter, that is the only filter allowed, so
+    # we parse that and return, shortcircuiting the rest.
+    if filter_text.startswith('[') and filter_text.endswith(']'):
+        arr = parse_arr_shorthand_filter(filter_text)
+        return ChannelFilter(ts=False, dbnd=None, sync=None, arr=arr)
+
+    try:
+        filter_ = json.loads(filter_text)
+    except Exception as exc:
+        raise FilterValidationError("Unable to parse channel filter text as JSON") from exc
 
     valid_filters = {'ts', 'arr', 'sync', 'dbnd'}
     filter_keys = set(filter_.keys())
     invalid_keys = filter_keys - valid_filters
     if invalid_keys:
-        raise ValueError(f'Unsupported filters: {invalid_keys}')
-    # TODO: parse/validate filters into python types?
-    return filter_
+        raise FilterValidationError(f'Unsupported filters: {invalid_keys}')
+    # Validate and normalize the filter, expanding "shorthand" notation and
+    # applying defaults.
+    return ChannelFilter(arr=parse_arr_filter(filter_.get('arr')),
+                         dbnd=parse_dbnd_filter(filter_.get('dbnd')),
+                         ts=parse_ts_filter(filter_.get('ts')),
+                         sync=parse_sync_filter(filter_.get('sync')))
+
+
+def parse_arr_shorthand_filter(filter_text):
+    elements = []
+    for elem in filter_text[1:-1].split(':'):
+        if not elem:
+            elements.append(None)
+        else:
+            elements.append(int(elem))
+    if len(elements) == 1:
+        arr = ArrayFilter(s=elements[0], i=1, e=elements[0])
+    if len(elements) == 2:
+        arr = ArrayFilter(s=elements[0], i=1, e=elements[1])
+    if len(elements) == 3:
+        arr = ArrayFilter(s=elements[0], i=elements[1], e=elements[2])
+    return arr
+
+
+def parse_ts_filter(val):
+    if val is None:
+        return None
+    # Empty object means 'true' according to the spec:
+    # https://epics.anl.gov/base/R3-15/3-docs/filters.html
+    if val == {}:
+        return True
+    # We'll accept `true` and any other truth-y value also....
+    return bool(val)
+
+
+def parse_dbnd_filter(val):
+    if val is None:
+        return None
+    if 'rel' in val:
+        invalid_keys = set(val.keys()) - set(['rel'])
+        if invalid_keys:
+            raise FilterValidationError(
+                f"Unsupported keys in 'dbnd': {invalid_keys}. When 'rel' "
+                f"shorthand is used, no other keys may be used.")
+        return DeadbandFilter(m='rel', d=float(val['rel']))
+    if 'abs' in val:
+        invalid_keys = set(val.keys()) - set(['abs'])
+        if invalid_keys:
+            raise FilterValidationError(
+                f"Unsupported keys in 'dbnd': {invalid_keys}. When 'abs' "
+                f"shorthand is used, no other keys may be used.")
+        return DeadbandFilter(m='abs', d=float(val['abs']))
+    else:
+        invalid_keys = set(val.keys()) - set('dm')
+        if invalid_keys:
+            raise FilterValidationError(
+                f"Unsupported keys in 'dbnd': {invalid_keys}")
+        if set('md') != set(val.keys()):
+            raise FilterValidationError(
+                f"'dbnd' must include 'rel' or 'abs' or both 'd' and 'm'. "
+                f"Found keys {set(val.keys())}.")
+        return DeadbandFilter(m=float(val['m']), d=float(val['d']))
+
+
+def parse_arr_filter(val):
+    if val is None:
+        return None
+    invalid_keys = set(val.keys()) - set('sie')
+    if invalid_keys:
+        raise FilterValidationError(f"Unsupported keys in 'arr': "
+                                    f"{invalid_keys}")
+    return ArrayFilter(s=int(val.get('s', 0)),
+                       i=int(val.get('i', 1)),
+                       e=int(val.get('e', -1)))
+
+
+def parse_sync_filter(val):
+    if val is None:
+        return None
+    if set('ms') != set(val.keys()):
+        raise FilterValidationError(
+            f"'sync' must include both 'm' and 's'. "
+            f"Found keys {set(val.keys())}.")
+    valid_modes = set(['before', 'first', 'while', 'last', 'after', 'unless'])
+    if val['m'] not in valid_modes:
+        raise FilterValidationError(f"Unsupported mode in 'sync': "
+                                    f"{val['m']}")
+    if not isinstance(val['s'], str):
+        raise FilterValidationError(f"Unsupported type in 'sync': "
+                                    f"value 's' must be a string. "
+                                    f"Found {repr(val['s'])}.")
+    return SyncFilter(m=val['m'], s=val['s'])
+
+
+def apply_arr_filter(arr_filter, values):
+    # Apply array Channel Filter.
+    if arr_filter is None:
+        return values
+    start, stop, step = arr_filter.s, arr_filter.e, arr_filter.i
+    # Cope with CA slice conventions being different from
+    # Python's. It specifies an interval closed on both ends,
+    # whereas Python's open open on the right end.
+    if stop is not None:
+        if stop == -1:
+            stop = None
+        else:
+            stop += 1
+    return values[start:stop:step]
 
 
 def batch_requests(request_iter, max_length):

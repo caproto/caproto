@@ -111,7 +111,7 @@ def test_parse_record(pvname, expected_tuple):
         modifiers, filter_text = parsed.modifiers
         if filter_text:
             # smoke test these
-            ca.evaluate_channel_filter(filter_text)
+            ca.parse_channel_filter(filter_text)
 
 
 bad_filters = [
@@ -135,7 +135,7 @@ def test_parse_record_bad_filters(pvname, expected_tuple):
 
     modifiers, filter_text = parsed.modifiers
     try:
-        filter_ = ca.evaluate_channel_filter(filter_text)
+        filter_ = ca.parse_channel_filter(filter_text)
     except ValueError:
         # expected failure
         ...
