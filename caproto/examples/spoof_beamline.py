@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
+from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
 
-import curio
 from collections import defaultdict
-import caproto.curio.server as ccs
 from caproto import ChannelData, ChannelString, ChannelEnum
 import re
 
@@ -54,6 +53,10 @@ def fabricate_channel(key):
         return ChannelEnum(value=0, enum_strings=['Disabled', 'Enabled'])
     elif 'BlockingCallbacks' in key:
         return ChannelEnum(value=0, enum_strings=['No', 'Yes'])
+    elif 'ImageMode' in key:
+        return ChannelEnum(value=0, enum_strings=['Single', 'Multiple', 'Continious'])
+    elif 'TriggerMode' in key:
+        return ChannelEnum(value=0, enum_strings=['Internal', 'External'])
     return ChannelData(value=0)
 
 
@@ -72,9 +75,17 @@ Press return if you have acknowledged the above, or Ctrl-C to quit.''')
     except KeyboardInterrupt:
         print()
         return
+    print('''
 
-    curio.run(ccs.start_server(ReallyDefaultDict(fabricate_channel),
-                               bind_addr='127.0.0.1'))
+                         PV blackhole started
+
+''')
+    _, run_options = ioc_arg_parser(
+        default_prefix='',
+        desc="PV black hole")
+    run_options['interfaces'] = ['127.0.0.1']
+    run(ReallyDefaultDict(fabricate_channel),
+        **run_options)
 
 
 if __name__ == '__main__':

@@ -52,7 +52,6 @@ class VirtualCircuit:
         """
         if self.connected:
             buffers_to_send = self.circuit.send(*commands)
-
             # send bytes over the wire using some caproto utilities
             await ca.async_send_all(buffers_to_send, self.client.sendmsg)
 
@@ -310,7 +309,7 @@ class Context:
     async def _core_broadcaster_loop(self, udp_sock):
         while True:
             try:
-                bytes_received, address = await udp_sock.recvfrom(4096)
+                bytes_received, address = await udp_sock.recvfrom(4096 * 16)
             except ConnectionResetError:
                 self.log.exception('UDP server connection reset')
                 await self.async_layer.library.sleep(0.1)

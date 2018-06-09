@@ -26,7 +26,7 @@ import weakref
 from queue import Queue, Empty
 from inspect import Parameter, Signature
 from functools import partial
-from collections import defaultdict
+from collections import defaultdict, deque
 import caproto as ca
 from .._constants import (MAX_ID, STALE_SEARCH_EXPIRATION,
                           SEARCH_MAX_DATAGRAM_BYTES)
@@ -501,7 +501,8 @@ class SharedBroadcaster:
             for name in needs_search:
                 search_id = new_id()
                 search_ids.append(search_id)
-                unanswered_searches[search_id] = (name, results_queue)
+                # make this a list because we are going to mutate it later
+                unanswered_searches[search_id] = [name, results_queue, 0]
         self._search_now.set()
 
     def received(self, bytes_recv, address):
@@ -522,6 +523,7 @@ class SharedBroadcaster:
         search_results = self.search_results
         unanswered_searches = self.unanswered_searches
         queues = defaultdict(list)
+        results_by_cid = deque(maxlen=1000)
         self.log.debug('Broadcaster command loop is running.')
 
         while not self._close_event.is_set():
@@ -550,19 +552,25 @@ class SharedBroadcaster:
                     cid = command.cid
                     try:
                         with self._search_lock:
-                            name, queue = unanswered_searches.pop(cid)
+                            name, queue, _ = unanswered_searches.pop(cid)
                     except KeyError:
                         # This is a redundant response, which the EPICS
                         # spec tells us to ignore. (The first responder
                         # to a given request wins.)
-                        if name in self.search_results:
-                            accepted_address = self.search_results[name]
-                            new_address = ca.extract_address(command)
-                            self.log.warning("PV found on multiple servers. "
-                                             "Accepted address is %s. "
-                                             "Also found on %s",
-                                             accepted_address, new_address)
+                        try:
+                            _, name = next(r for r in results_by_cid if r[0] == cid)
+                        except StopIteration:
+                            continue
+                        else:
+                            if name in self.search_results:
+                                accepted_address = self.search_results[name]
+                                new_address = ca.extract_address(command)
+                                self.log.warning("PV %s with cid %d found on multiple servers. "
+                                                 "Accepted address is %s. "
+                                                 "Also found on %s",
+                                                 name, cid, accepted_address, new_address)
                     else:
+                        results_by_cid.append((cid, name))
                         address = ca.extract_address(command)
                         queues[queue].append(name)
                         # Cache this to save time on future searches.
@@ -594,12 +602,18 @@ class SharedBroadcaster:
                 continue
 
             t = time.monotonic()
-            # Listify just so we can count the number of items and print a more
-            # informative debug message.
+
+            # filter to just things that need to go out
+            def _construct_search_requests(items):
+                for search_id, it in items:
+                    yield ca.SearchRequest(it[0], search_id, 13)
+                    it[-1] = t
+
             with self._search_lock:
-                items = list(self.unanswered_searches.items())
-            requests = (ca.SearchRequest(name, search_id, 13)
-                        for search_id, (name, _) in items)
+                items = list((search_id, it)
+                             for search_id, it in self.unanswered_searches.items()
+                             if (t - it[-1]) > RETRY_SEARCHES_PERIOD / 2)
+            requests = _construct_search_requests(items)
 
             if not self._searching_enabled.is_set():
                 continue
@@ -1624,7 +1638,6 @@ class Subscription(CallbackHandler):
         # Once self.callbacks is empty, self.remove_callback calls
         # self._unsubscribe for us.
 
-    @ensure_connected
     def _unsubscribe(self, timeout=2):
         """
         This is automatically called if the number of callbacks goes to 0.
