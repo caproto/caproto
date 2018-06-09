@@ -212,11 +212,11 @@ class VirtualCircuit:
             # This is a pass-through if arr is None.
             data = apply_arr_filter(chan.channel_filter.arr, data)
 
-            use_notify = isinstance(command, ca.ReadNotifyRequest)
+            notify = isinstance(command, ca.ReadNotifyRequest)
             return [chan.read(data=data, data_type=command.data_type,
                               data_count=len(data), status=1,
                               ioid=command.ioid, metadata=metadata,
-                              use_notify=use_notify)
+                              notify=notify)
                     ]
         elif isinstance(command, (ca.WriteRequest, ca.WriteNotifyRequest)):
             chan, db_entry = get_db_entry()

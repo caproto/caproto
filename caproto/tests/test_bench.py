@@ -122,7 +122,7 @@ def bench_curio_get_speed(pvname, *, initial_value=None, log_level='DEBUG'):
 
         if initial_value is not None:
             logger.debug('Writing initial value')
-            await chan.write(initial_value, use_notify=True)
+            await chan.write(initial_value, notify=True)
             logger.debug('Wrote initial value')
         logger.debug('Init complete')
         return chan
@@ -213,7 +213,7 @@ def bench_curio_put_speed(pvname, *, value, log_level='DEBUG'):
 
     def curio_client():
         async def put():
-            await chan.write(value, use_notify=True)
+            await chan.write(value, notify=True)
         kernel.run(put())
 
     chan = kernel.run(curio_setup())

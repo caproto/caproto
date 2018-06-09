@@ -64,13 +64,13 @@ async def simple_subscription(chan1, pvdb, ctx):
 
 
 async def write_and_read(chan1, pvdb, ctx):
-    await chan1.write((5,), use_notify=True)
+    await chan1.write((5,), notify=True)
     reading = await chan1.read()
     expected = 5
     actual, = reading.data
     assert actual == expected
     print('reading:', reading)
-    await chan1.write((6,), use_notify=True)
+    await chan1.write((6,), notify=True)
     reading = await chan1.read()
     expected = 6
     actual, = reading.data
@@ -88,7 +88,7 @@ async def update_metadata(chan1, pvdb, ctx):
     #     ('RISC_Pad', long_t),
     # ]
     metadata = (0, 0, ca.TimeStamp(4, 0), 0)  # set timestamp to 4 seconds
-    await chan1.write((7,), use_notify=True,
+    await chan1.write((7,), notify=True,
                       data_type=ca.ChannelType.TIME_DOUBLE,
                       metadata=metadata)
     reading = await chan1.read(data_type=20)
@@ -117,7 +117,7 @@ async def update_alarm(chan1, pvdb, ctx):
     # acknowledge the severity
     metadata = (severity + 1, )
     await chan1.write((),
-                      use_notify=True,
+                      notify=True,
                       data_type=ca.ChannelType.PUT_ACKS,
                       metadata=metadata)
 
@@ -127,7 +127,7 @@ async def update_alarm(chan1, pvdb, ctx):
     # now require transients to be acknowledged
     metadata = (1, )
     await chan1.write((),
-                      use_notify=True,
+                      notify=True,
                       data_type=ca.ChannelType.PUT_ACKT,
                       metadata=metadata)
 
@@ -141,7 +141,7 @@ async def update_alarm(chan1, pvdb, ctx):
     # acknowledge the severity
     metadata = (severity + 1, )
     await chan1.write((),
-                      use_notify=True,
+                      notify=True,
                       data_type=ca.ChannelType.PUT_ACKS,
                       metadata=metadata)
 
@@ -185,8 +185,8 @@ async def strings_and_subscriptions(chan1, pvdb, ctx):
     sub_id2 = await chan2.subscribe()
     sub_id3 = await chan3.subscribe()
     print('write...')
-    await chan2.write(b'hell', use_notify=True)
-    await chan3.write(b'good', use_notify=True)
+    await chan2.write(b'hell', notify=True)
+    await chan3.write(b'good', notify=True)
     print('done writing')
 
     print('setting alarm status...')
@@ -434,14 +434,14 @@ def test_mocking_records(request, prefix):
     b_val = f'{prefix}B.VAL'
     b_stat = f'{prefix}B.STAT'
     b_severity = f'{prefix}B.SEVR'
-    write(b_val, 0, use_notify=True)
+    write(b_val, 0, notify=True)
     assert list(read(b_val).data) == [0]
     assert list(read(b_stat).data) == [b'NO_ALARM']
     assert list(read(b_severity).data) == [b'NO_ALARM']
 
     # write a special value that causes it to fail
     with pytest.raises(ca.ErrorResponseReceived):
-        write(b_val, 1, use_notify=True)
+        write(b_val, 1, notify=True)
 
     # status should be WRITE, MAJOR
     assert list(read(b_val).data) == [0]
@@ -451,7 +451,7 @@ def test_mocking_records(request, prefix):
     # now a field that's linked back to the precision metadata:
     b_precision = f'{prefix}B.PREC'
     assert list(read(b_precision).data) == [3]
-    write(b_precision, 4, use_notify=True)
+    write(b_precision, 4, notify=True)
     assert list(read(b_precision).data) == [4]
 
     # does writing to .PREC update the ChannelData metadata?

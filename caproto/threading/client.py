@@ -1339,7 +1339,7 @@ class PV:
 
     @ensure_connected
     def read(self, *, wait=True, callback=None, timeout=2, data_type=None,
-             data_count=None, use_notify=True):
+             data_count=None, notify=True):
         """Request a fresh reading.
 
         Can do one or both of:
@@ -1365,7 +1365,7 @@ class PV:
             Requested number of values. Default is the channel's native data
             count, which can be checked in the Channel's attribute
             :attr:`native_data_count`.
-        use_notify: boolean, optional
+        notify: boolean, optional
             Send a ``ReadNotifyRequest`` instead of a ``ReadRequest``. True by
             default.
         """
@@ -1373,7 +1373,7 @@ class PV:
         command = self.channel.read(ioid=ioid,
                                     data_type=data_type,
                                     data_count=data_count,
-                                    use_notify=use_notify)
+                                    notify=notify)
         # Stash the ioid to match the response to the request.
 
         event = threading.Event()
@@ -1407,7 +1407,7 @@ class PV:
 
     @ensure_connected
     def write(self, data, *, wait=True, callback=None, timeout=2,
-              use_notify=None, data_type=None, data_count=None):
+              notify=None, data_type=None, data_count=None):
         """
         Write a new value. Optionally, request confirmation from the server.
 
@@ -1428,7 +1428,7 @@ class PV:
         timeout : number or None
             Number of seconds to wait before raising TimeoutError. Default is
             2.
-        use_notify : boolean or None
+        notify : boolean or None
             If None (default), set to True if wait=True or callback is set.
             Can be manually set to True or False. Will raise ValueError if set
             to False while wait=True or callback is set.
@@ -1441,17 +1441,17 @@ class PV:
             count, which can be checked in the Channel's attribute
             :attr:`native_data_count`.
         """
-        if use_notify is None:
-            use_notify = (wait or callback is not None)
+        if notify is None:
+            notify = (wait or callback is not None)
         ioid = self.circuit_manager._ioid_counter()
         command = self.channel.write(data,
                                      ioid=ioid,
-                                     use_notify=use_notify,
+                                     notify=notify,
                                      data_type=data_type,
                                      data_count=data_count)
-        if not use_notify:
+        if not notify:
             if wait or callback is not None:
-                raise ValueError("Must set use_notify=True in order to use "
+                raise ValueError("Must set notify=True in order to use "
                                  "`wait` or `callback` because, without a "
                                  "notification of 'put-completion' from the "
                                  "server, there is nothing to wait on or to "

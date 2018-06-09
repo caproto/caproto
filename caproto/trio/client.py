@@ -207,16 +207,16 @@ class Channel:
         else:
             raise ChannelReadError(str(reading))
 
-    async def write(self, *args, use_notify=False, **kwargs):
+    async def write(self, *args, notify=False, **kwargs):
         "Write a new value and await confirmation from the server."
-        command = self.channel.write(*args, use_notify=use_notify, **kwargs)
-        if use_notify:
+        command = self.channel.write(*args, notify=notify, **kwargs)
+        if notify:
             # Stash the ioid to match the response to the request.
             ioid = command.ioid
             event = trio.Event()
             self.circuit.ioids[ioid] = event
         await self.circuit.send(command)
-        if use_notify:
+        if notify:
             await event.wait()
             return self.circuit.ioid_data.pop(ioid)
 
