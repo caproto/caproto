@@ -451,7 +451,7 @@ class Context:
 
     async def broadcast_beacon_loop(self):
         self.log.debug('Will send beacons to %r',
-                       [f'{h}:{p}' for h, p in self.beacon_socks.keys()'])
+                       [f'{h}:{p}' for h, p in self.beacon_socks.keys()])
         beacon_period = self.environ['EPICS_CAS_BEACON_PERIOD']
         while True:
             for address, (interface, sock) in self.beacon_socks.items():

@@ -108,7 +108,9 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
             b.process_commands(commands)
             for command in commands:
                 if isinstance(command, ca.SearchResponse) and command.cid == 0:
-                    return ca.extract_address(command)
+                    address = ca.extract_address(command)
+                    logger.debug('Found %s at %s', pv_name, address)
+                    return address
             else:
                 # None of the commands we have seen are a reply to our request.
                 # Receive more data.
@@ -118,6 +120,7 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
 
 
 def make_channel(pv_name, udp_sock, priority, timeout):
+    log = logging.getLogger(f'caproto.ch.{pv_name}.{priority}')
     address = search(pv_name, udp_sock, timeout)
     circuit = ca.VirtualCircuit(our_role=ca.CLIENT,
                                 address=address,
@@ -141,6 +144,7 @@ def make_channel(pv_name, udp_sock, priority, timeout):
             except socket.timeout:
                 raise TimeoutError("Timeout while awaiting channel creation.")
             if chan.states[ca.CLIENT] is ca.CONNECTED:
+                log.info('%s connected' % pv_name)
                 break
             for command in commands:
                 if command is ca.DISCONNECTED:
@@ -153,6 +157,13 @@ def make_channel(pv_name, udp_sock, priority, timeout):
 
 
 def _read(chan, timeout, data_type, use_notify):
+    logger = chan.log
+    logger.debug("Detected native data_type %r.", chan.native_data_type)
+    ntype = native_type(chan.native_data_type)  # abundance of caution
+    if ((ntype is ChannelType.ENUM) and
+            (data_type is None) and (not force_int_enums)):
+        logger.debug("Changing requested data_type to STRING.")
+        data_type = ChannelType.STRING
     req = chan.read(data_type=data_type, use_notify=use_notify)
     send(chan.circuit, req)
     t = time.monotonic()
@@ -209,7 +220,7 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0, use_notify=True,
     Get the value of a Channel named 'cat'.
     >>> read('cat').data
     """
-    logger = logging.getLogger(f'caproto.ch.{pv_name}')
+    logger = logging.getLogger(f'caproto.ch.{pv_name}.{priority}')
     if repeater:
         # As per the EPICS spec, a well-behaved client should start a
         # caproto-repeater that will continue running after it exits.
@@ -221,12 +232,6 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0, use_notify=True,
     finally:
         udp_sock.close()
     try:
-        logger.debug("Detected native data_type %r.", chan.native_data_type)
-        ntype = native_type(chan.native_data_type)  # abundance of caution
-        if ((ntype is ChannelType.ENUM) and
-                (data_type is None) and (not force_int_enums)):
-            logger.debug("Changing requested data_type to STRING.")
-            data_type = ChannelType.STRING
         return _read(chan, timeout, data_type=data_type, use_notify=use_notify)
     finally:
         try:

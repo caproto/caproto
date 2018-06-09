@@ -79,7 +79,8 @@ def main():
         read_data_type = 'time'
     else:
         read_data_type = None
-    logger.debug('Data argument %s parsed as %r.', args.data, data)
+    logger.debug('Data argument %s parsed as %r (Python type %s).',
+                 args.data, data, type(data).__name__)
     try:
         initial, _, final = read_write_read(pv_name=args.pv_name, data=data,
                                             read_data_type=read_data_type,
