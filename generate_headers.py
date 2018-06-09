@@ -99,6 +99,8 @@ def parse_commands(h2):
         for row, sn in zip(rows[1:], STANDARD_NAMES):  # exclude header row
             field_td, val_td, desc_td = row.find_all('td')
             field = field_td.find('tt').text.replace(' ', '_').lower()
+            if field == 'status_code':
+                field = 'status'  # for consistency -- docs are loose with this
             val = val_td.find('tt').text
             desc = desc_td.text
             params.append(Param(sn, field, val, desc))
