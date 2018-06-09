@@ -26,7 +26,7 @@ from ._utils import (CLIENT, SERVER, NEED_DATA, DISCONNECTED, CaprotoKeyError,
                      CaprotoValueError, CaprotoRuntimeError, CaprotoError,
                      parse_channel_filter, parse_record_field,
                      ChannelFilter)
-from ._dbr import (SubscriptionType, )
+from ._dbr import (SubscriptionType, field_types)
 from ._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
 from ._status import CAStatus
 
@@ -442,10 +442,14 @@ class _BaseChannel:
                 if v.sid == self.sid}
 
     def _fill_defaults(self, data_type, data_count):
-        # Boilerplate used in many convenience methods:
-        # Replace `None` default arg with actual default value.
+        # Boilerplate used in many convenience methods
         if data_type is None:
+            # Replace `None` default arg with actual default value.
             data_type = self.native_data_type
+        elif isinstance(data_type, str):
+            # For example, if data_type is 'time', look up the 'time' type
+            # corresponding to this channel's native data type.
+            data_type = field_types[data_type.lower()][self.native_data_type]
         if data_count is None:
             if self.protocol_version >= 13:
                 data_count = 0
@@ -581,7 +585,7 @@ class ClientChannel(_BaseChannel):
 
         Parameters
         ----------
-        data_type : a ChannelType or corresponding integer ID, optional
+        data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
             Requested Channel Access data type. Default is the channel's
             native data type, which can be checked in the Channel's attribute
             :attr:`native_data_type`.
@@ -615,7 +619,7 @@ class ClientChannel(_BaseChannel):
         Parameters
         ----------
         data : tuple, ``numpy.ndarray``, ``array.array``, or bytes
-        data_type : a ChannelType or corresponding integer ID, optional
+        data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
             Requested Channel Access data type. Default is the channel's
             native data type, which can be checked in the Channel's attribute
             :attr:`native_data_type`.
@@ -654,7 +658,7 @@ class ClientChannel(_BaseChannel):
 
         Parameters
         ----------
-        data_type : a ChannelType or corresponding integer ID, optional
+        data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
             Requested Channel Access data type. Default is the channel's
             native data type, which can be checked in the Channel's attribute
             :attr:`native_data_type`.
@@ -782,7 +786,7 @@ class ServerChannel(_BaseChannel):
         ----------
         data : tuple, ``numpy.ndarray``, ``array.array``, or bytes
         ioid : integer
-        data_type : a ChannelType or corresponding integer ID, optional
+        data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
             Requested Channel Access data type. Default is the channel's
             native data type, which can be checked in the Channel's attribute
             :attr:`native_data_type`.
@@ -816,7 +820,7 @@ class ServerChannel(_BaseChannel):
         Parameters
         ----------
         ioid : integer
-        data_type : a ChannelType or corresponding integer ID, optional
+        data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
             Requested Channel Access data type. Default is the channel's
             native data type, which can be checked in the Channel's attribute
             :attr:`native_data_type`.
@@ -845,7 +849,7 @@ class ServerChannel(_BaseChannel):
         ----------
         data : tuple, ``numpy.ndarray``, ``array.array``, or bytes
         subscriptionid : integer
-        data_type : a ChannelType or corresponding integer ID, optional
+        data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
             Requested Channel Access data type. Default is the channel's
             native data type, which can be checked in the Channel's attribute
             :attr:`native_data_type`.
@@ -874,7 +878,7 @@ class ServerChannel(_BaseChannel):
         Parameters
         ----------
         subscriptionid : integer
-        data_type : a ChannelType or corresponding integer ID, optional
+        data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
             Requested Channel Access data type. Default is the channel's
             native data type, which can be checked in the Channel's attribute
             :attr:`native_data_type`.

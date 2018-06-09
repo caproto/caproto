@@ -13,7 +13,7 @@ Python session, do not import this module; instead import caproto.sync.client.
 import argparse
 from datetime import datetime
 import logging
-from .. import ChannelType, color_logs
+from .. import ChannelType, color_logs, field_types
 from ..sync.client import read
 from ..sync.repeater import spawn_repeater
 
@@ -25,9 +25,11 @@ def main():
     parser.add_argument('pv_names', type=str, nargs='+',
                         help="PV (channel) name(s) separated by spaces")
     parser.add_argument('-d', type=str, default=None, metavar="DATA_TYPE",
-                        help=("Request a certain data type. Accepts numeric "
+                        help=("Request a class of data type (native, status, "
+                              "time, graphic, control) or a specific type. "
+                              "Accepts numeric "
                               "code ('3') or case-insensitive string ('enum')"
-                              ". See --list-types"))
+                              ". See --list-types."))
     fmt_group.add_argument('--format', type=str,
                            help=("Python format string. Available tokens are "
                                  "{pv_name} and {response}. Additionally, if "
@@ -73,11 +75,10 @@ def main():
         logging.getLogger('caproto').setLevel('DEBUG')
     if not args.no_repeater:
         spawn_repeater()
-    data_type = parse_data_type(args.d)
     try:
         for pv_name in args.pv_names:
             response = read(pv_name=pv_name,
-                            data_type=data_type,
+                            data_type=args.d,
                             timeout=args.timeout,
                             priority=args.priority,
                             force_int_enums=args.n,
@@ -106,27 +107,6 @@ def main():
             print(exc)
 
 
-def parse_data_type(raw_data_type):
-    """
-    Parse raw_data_type string as ChannelType. None passes through.
-
-    '3', 'ENUM', and 'enum' all parse as <ChannelType.ENUM 3>.
-    """
-    if raw_data_type is None:
-        data_type = None
-    else:
-        assert isinstance(raw_data_type, str)
-        # ChannelType is an IntEnum.
-        # If d is int, use ChannelType(d). If string, ChannelType[d].
-        try:
-            data_type_int = int(raw_data_type)
-        except ValueError:
-            data_type = ChannelType[raw_data_type.upper()]
-        else:
-            data_type = ChannelType(data_type_int)
-    return data_type
-
-
 class _ListTypesAction(argparse.Action):
     # a special action that allows the usage --list-types to override
     # any 'required args' requirements, the same way that --help does
@@ -144,6 +124,14 @@ class _ListTypesAction(argparse.Action):
             help=help)
 
     def __call__(self, parser, namespace, values, option_string=None):
+        print("Request a general class of types:")
+        print()
+        for field_type in field_types:
+            print(field_type)
+        print()
+        print("or one of the following specific types, specified by "
+              "number or by (case-insensitive) name:")
+        print()
         for elem in ChannelType:
             print(f'{elem.value: <2} {elem.name}')
         parser.exit()

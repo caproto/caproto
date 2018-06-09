@@ -184,8 +184,9 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0, use_notify=True,
     Parameters
     ----------
     pv_name : str
-    data_type : ChannelType or corresponding integer ID, optional
-        Request specific data type. Default is Channel's native data type.
+    data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
+        Request specific data type or a class of data types, matched to the
+        channel's native data type. Default is Channel's native data type.
     timeout : float, optional
         Default is 1 second.
     priority : 0, optional
