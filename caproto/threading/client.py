@@ -1504,6 +1504,7 @@ class PV:
         return sub
 
     def unsubscribe_all(self):
+        "Clear all subscriptions. (Remove all user callbacks from them.)"
         for sub in self.subscriptions.values():
             sub.clear()
 

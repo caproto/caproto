@@ -462,8 +462,8 @@ def write(pv_name, data, *, use_notify=False, data_type=None, metadata=None,
         Value to write.
     use_notify : boolean, optional
         Request notification of completion and wait for it. False by default.
-    data_type : ChannelType or corresponding integer ID, optional
-        Request specific data type. Default is inferred from input.
+    data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
+        Write as specific data type. Default is inferred from input.
     metadata : ``ctypes.BigEndianStructure`` or tuple
         Status and control metadata for the values
     timeout : float, optional
@@ -530,8 +530,8 @@ def read_write_read(pv_name, data, *, use_notify=False, data_type=None,
         Value to write.
     use_notify : boolean, optional
         Request notification of completion and wait for it. False by default.
-    data_type : ChannelType or corresponding integer ID, optional
-        Request specific data type. Default is inferred from input.
+    data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
+        Write as specific data type. Default is inferred from input.
     metadata : ``ctypes.BigEndianStructure`` or tuple
         Status and control metadata for the values
     timeout : float, optional
