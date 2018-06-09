@@ -209,9 +209,9 @@ def EchoResponseHeader():
     return MessageHeader(23, 0, 0, 0, 0, 0)
 
 
-def RsrvIsUpResponseHeader(version, server_port, beaconid, address):
+def BeaconHeader(version, server_port, beaconid, address):
     """
-    Construct a ``MessageHeader`` for a RsrvIsUpResponse command.
+    Construct a ``MessageHeader`` for a Beacon command.
 
     Beacon sent by a server when it becomes available.   Beacons are also sent
     out periodically to announce the server is still alive.   Another function
