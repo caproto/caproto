@@ -501,7 +501,6 @@ class SharedBroadcaster:
             for name in needs_search:
                 search_id = new_id()
                 search_ids.append(search_id)
-                print(f'about to search for {name} with {search_id}')
                 # make this a list because we are going to mutate it later
                 unanswered_searches[search_id] = [name, results_queue, 0]
         self._search_now.set()
@@ -524,6 +523,7 @@ class SharedBroadcaster:
         search_results = self.search_results
         unanswered_searches = self.unanswered_searches
         queues = defaultdict(list)
+        results_by_cid = deque(maxlen=1000)
         self.log.debug('Broadcaster command loop is running.')
 
         while not self._close_event.is_set():
@@ -557,14 +557,20 @@ class SharedBroadcaster:
                         # This is a redundant response, which the EPICS
                         # spec tells us to ignore. (The first responder
                         # to a given request wins.)
-                        if name in self.search_results:
-                            accepted_address = self.search_results[name]
-                            new_address = ca.extract_address(command)
-                            self.log.warning("PV found on multiple servers. "
-                                             "Accepted address is %s. "
-                                             "Also found on %s",
-                                             accepted_address, new_address)
+                        try:
+                            _, name = next(r for r in results_by_cid if r[0] == cid)
+                        except StopIteration:
+                            continue
+                        else:
+                            if name in self.search_results:
+                                accepted_address = self.search_results[name]
+                                new_address = ca.extract_address(command)
+                                self.log.warning("PV %s with cid %d found on multiple servers. "
+                                                 "Accepted address is %s. "
+                                                 "Also found on %s",
+                                                 name, cid, accepted_address, new_address)
                     else:
+                        results_by_cid.append((cid, name))
                         address = ca.extract_address(command)
                         queues[queue].append(name)
                         # Cache this to save time on future searches.
