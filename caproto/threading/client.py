@@ -1638,7 +1638,6 @@ class Subscription(CallbackHandler):
         # Once self.callbacks is empty, self.remove_callback calls
         # self._unsubscribe for us.
 
-    @ensure_connected
     def _unsubscribe(self, timeout=2):
         """
         This is automatically called if the number of callbacks goes to 0.
