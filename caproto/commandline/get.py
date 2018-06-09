@@ -90,7 +90,7 @@ def main():
                             timeout=args.timeout,
                             priority=args.priority,
                             force_int_enums=args.n,
-                            repeater=False)
+                            repeater=not args.no_repeater)
             if args.format is None:
                 format_str = '{pv_name: <40}  {response.data}'
             else:
