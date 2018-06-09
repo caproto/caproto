@@ -15,7 +15,6 @@ from datetime import datetime
 import logging
 from .. import ChannelType, color_logs, field_types
 from ..sync.client import read
-from ..sync.repeater import spawn_repeater
 
 
 def main():
@@ -81,8 +80,6 @@ def main():
         logging.getLogger(f'caproto.ch').setLevel('DEBUG')
     if args.vvv:
         logging.getLogger('caproto').setLevel('DEBUG')
-    if not args.no_repeater:
-        spawn_repeater()
     data_type = args.d
     if args.wide and data_type is None:
         data_type = 'time'

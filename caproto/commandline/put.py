@@ -15,7 +15,6 @@ import ast
 from datetime import datetime
 import logging
 from ..sync.client import read_write_read
-from ..sync.repeater import spawn_repeater
 from .. import color_logs
 
 
@@ -70,8 +69,6 @@ def main():
         logging.getLogger(f'caproto.ch').setLevel('DEBUG')
     if args.vvv:
         logging.getLogger('caproto').setLevel('DEBUG')
-    if not args.no_repeater:
-        spawn_repeater()
     logger = logging.getLogger(f'caproto.ch.{args.pv_name}')
     try:
         data = ast.literal_eval(args.data)
