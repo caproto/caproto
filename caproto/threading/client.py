@@ -11,6 +11,7 @@
 import array
 import concurrent.futures
 import errno
+import functools
 import getpass
 import inspect
 import itertools
@@ -45,6 +46,7 @@ class DeadCircuitError(CaprotoError):
 
 
 def ensure_connected(func):
+    @functools.wraps(func)
     def inner(self, *args, **kwargs):
         if isinstance(self, PV):
             pv = self
