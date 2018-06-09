@@ -522,7 +522,7 @@ def parse_record_field(pvname):
             field, filter_ = field.split('{', 1)
             filter_ = '{' + filter_
             modifiers = RecordModifiers.filtered
-        if '[' in field and field.endswith(']'):
+        elif '[' in field and field.endswith(']'):
             field, filter_ = field.split('[', 1)
             filter_ = '[' + filter_
             modifiers = RecordModifiers.filtered
