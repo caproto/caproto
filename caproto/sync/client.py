@@ -508,7 +508,8 @@ def write(pv_name, data, *, use_notify=False, data_type=None, metadata=None,
             sockets[chan.circuit].close()
 
 
-def read_write_read(pv_name, data, *, use_notify=False, data_type=None,
+def read_write_read(pv_name, data, *, use_notify=False,
+                    read_data_type=None, write_data_type=None,
                     metadata=None, timeout=1, priority=0, repeater=True):
     """
     Write to a Channel, but sandwich the write between to reads.
@@ -530,7 +531,9 @@ def read_write_read(pv_name, data, *, use_notify=False, data_type=None,
         Value to write.
     use_notify : boolean, optional
         Request notification of completion and wait for it. False by default.
-    data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
+    read_data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
+        Request specific data type.
+    write_data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
         Write as specific data type. Default is inferred from input.
     metadata : ``ctypes.BigEndianStructure`` or tuple
         Status and control metadata for the values
@@ -570,9 +573,9 @@ def read_write_read(pv_name, data, *, use_notify=False, data_type=None,
     finally:
         udp_sock.close()
     try:
-        initial = _read(chan, timeout, data_type, use_notify=True)
-        res = _write(chan, data, metadata, timeout, data_type, use_notify)
-        final = _read(chan, timeout, data_type, use_notify=True)
+        initial = _read(chan, timeout, read_data_type, use_notify=True)
+        res = _write(chan, data, metadata, timeout, write_data_type, use_notify)
+        final = _read(chan, timeout, read_data_type, use_notify=True)
     finally:
         try:
             if chan.states[ca.CLIENT] is ca.CONNECTED:

@@ -2,7 +2,6 @@ import sys
 import pytest
 import subprocess
 from caproto.sync.client import read, write, subscribe, block
-from caproto.commandline.get import parse_data_type
 from .. import ChannelType
 
 from .conftest import dump_process_output
@@ -92,7 +91,9 @@ fmt2 = '{timestamp:%%H:%%M}'
                           ('caproto-get', ('float', '-p', '0')),
                           ('caproto-get', ('float', '-p', '99')),
                           ('caproto-get', ('float', '-t')),
+                          ('caproto-get', ('float', '-l')),
                           ('caproto-get', ('float', '-v')),
+                          ('caproto-get', ('float', '-vvv')),
                           ('caproto-put', ('float', '3.16')),
                           ('caproto-put', ('float', '3.16', '--format', fmt1)),
                           ('caproto-put', ('float', '3.16', '--format', fmt2)),
@@ -100,7 +101,9 @@ fmt2 = '{timestamp:%%H:%%M}'
                           ('caproto-put', ('float', '3.16', '-p', '0')),
                           ('caproto-put', ('float', '3.16', '-p', '99')),
                           ('caproto-put', ('float', '3.16', '-t')),
+                          ('caproto-put', ('float', '3.16', '-l')),
                           ('caproto-put', ('float', '3.16', '-v')),
+                          ('caproto-put', ('float', '3.16', '-vvv')),
                           ])
 def test_cli(command, args, ioc):
     args = fix_arg_prefixes(ioc, args)
@@ -147,8 +150,3 @@ def test_monitor(args, ioc):
                          **os_kwargs)
 
     _subprocess_communicate(p, 'camonitor', timeout=2.0)
-
-
-@pytest.mark.parametrize('data_type', ['enum', 'ENUM', '3'])
-def test_parse_data_type(data_type):
-    assert parse_data_type(data_type) is ChannelType(3)

@@ -43,6 +43,14 @@ def main():
     fmt_group.add_argument('--terse', '-t', action='store_true',
                            help=("Display data only. Unpack scalars: "
                                  "[3.] -> 3."))
+    # caget calls this "wide mode" with -a and caput calls it "long mode" with
+    # -l. We will support both -a and -l in both caproto-get and caproto-put.
+    fmt_group.add_argument('--wide', '-a', '-l', action='store_true',
+                           help=("Wide mode, showing "
+                                 "'name timestamp value status'"
+                                 "(implies -d 'time')"))
+    # TODO caget/caput also include a 'srvr' column which seems to be `sid`. We
+    # would need a pretty invasive refactor to access that from here.
     parser.add_argument('--timeout', '-w', type=float, default=1,
                         help=("Timeout ('wait') in seconds for server "
                               "responses."))
@@ -70,9 +78,14 @@ def main():
     except ValueError:
         # interpret as string
         data = args.data
+    if args.wide:
+        read_data_type = 'time'
+    else:
+        read_data_type = None
     logger.debug('Data argument %s parsed as %r.', args.data, data)
     try:
         initial, _, final = read_write_read(pv_name=args.pv_name, data=data,
+                                            read_data_type=read_data_type,
                                             use_notify=args.notify,
                                             timeout=args.timeout,
                                             priority=args.priority,
@@ -86,6 +99,9 @@ def main():
                 format_str = '{response.data[0]}'
             else:
                 format_str = '{response.data}'
+        elif args.wide:
+            # TODO Make this look more like caput -l
+            format_str = '{pv_name} {timestamp} {response.data} {response.status.name}'
         tokens = dict(pv_name=args.pv_name, response=initial)
         if hasattr(initial.metadata, 'timestamp'):
             dt = datetime.fromtimestamp(initial.metadata.timestamp)
@@ -95,7 +111,6 @@ def main():
         if hasattr(final.metadata, 'timestamp'):
             dt = datetime.fromtimestamp(final.metadata.timestamp)
             tokens['timestamp'] = dt
-        tokens = dict(pv_name=args.pv_name, response=final)
         print(format_str.format(which='New', **tokens))
     except BaseException as exc:
         if args.verbose or args.vvv:

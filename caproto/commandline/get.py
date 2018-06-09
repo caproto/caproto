@@ -49,6 +49,14 @@ def main():
     fmt_group.add_argument('--terse', '-t', action='store_true',
                            help=("Display data only. Unpack scalars: "
                                  "[3.] -> 3."))
+    # caget calls this "wide mode" with -a and caput calls it "long mode" with
+    # -l. We will support both -a and -l in both caproto-get and caproto-put.
+    fmt_group.add_argument('--wide', '-a', '-l', action='store_true',
+                           help=("Wide mode, showing "
+                                 "'name timestamp value status'"
+                                 "(implies -d 'time')"))
+    # TODO caget/caput also include a 'srvr' column which seems to be `sid`. We
+    # would need a pretty invasive refactor to access that from here.
     parser.add_argument('--timeout', '-w', type=float, default=1,
                         help=("Timeout ('wait') in seconds for server "
                               "responses."))
@@ -75,10 +83,13 @@ def main():
         logging.getLogger('caproto').setLevel('DEBUG')
     if not args.no_repeater:
         spawn_repeater()
+    data_type = args.d
+    if args.wide and data_type is None:
+        data_type = 'time'
     try:
         for pv_name in args.pv_names:
             response = read(pv_name=pv_name,
-                            data_type=args.d,
+                            data_type=data_type,
                             timeout=args.timeout,
                             priority=args.priority,
                             force_int_enums=args.n,
@@ -92,6 +103,9 @@ def main():
                     format_str = '{response.data[0]}'
                 else:
                     format_str = '{response.data}'
+            elif args.wide:
+                # TODO Make this look more like caget -a
+                format_str = '{pv_name} {timestamp} {response.data} {response.status.name}'
             tokens = dict(pv_name=pv_name, response=response)
             if hasattr(response.metadata, 'timestamp'):
                 dt = datetime.fromtimestamp(response.metadata.timestamp)
