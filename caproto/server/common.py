@@ -456,9 +456,9 @@ class Context:
         while True:
             for address, (interface, sock) in self.beacon_socks.items():
                 try:
-                    beacon = ca.RsrvIsUpResponse(13, self.port,
-                                                 self.beacon_count,
-                                                 interface)
+                    beacon = ca.Beacon(13, self.port,
+                                       self.beacon_count,
+                                       interface)
                     bytes_to_send = self.broadcaster.send(beacon)
                     await sock.send(bytes_to_send)
                 except IOError:

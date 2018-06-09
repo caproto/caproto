@@ -112,7 +112,7 @@ def _run_repeater(server_sock, bind_addr):
 
         to_forward = []
         for command in commands:
-            if isinstance(command, caproto.RsrvIsUpResponse):
+            if isinstance(command, caproto.Beacon):
                 # Update our records of the last time each server checked in
                 # (i.e. issued a heartbeat).
                 servers[command.server_port] = dict(up_at=time.time(),

@@ -41,7 +41,7 @@ from ._headers import (MessageHeader, ExtendedMessageHeader,
                        ReadRequestHeader, ReadResponseHeader,
                        ReadSyncRequestHeader,
                        RepeaterConfirmResponseHeader,
-                       RepeaterRegisterRequestHeader, RsrvIsUpResponseHeader,
+                       RepeaterRegisterRequestHeader, BeaconHeader,
                        SearchRequestHeader, SearchResponseHeader,
                        ServerDisconnResponseHeader, VersionRequestHeader,
                        VersionResponseHeader, WriteNotifyRequestHeader,
@@ -76,7 +76,7 @@ __all__ = ('AccessRightsResponse', 'ClearChannelRequest',
            'ReadRequest', 'ReadResponse',
            'ReadSyncRequest',
            'RepeaterConfirmResponse',
-           'RepeaterRegisterRequest', 'RsrvIsUpResponse',
+           'RepeaterRegisterRequest', 'Beacon',
            'SearchRequest', 'SearchResponse',
            'ServerDisconnResponse', 'VersionRequest',
            'VersionResponse', 'WriteNotifyRequest',
@@ -403,7 +403,7 @@ class _MetaDirectionalMessage(type):
         if new_class.ID is not None:
             command_dict[new_class.ID] = new_class
 
-        if name in ('RsrvIsUpResponse, '):
+        if name in ('Beacon, '):
             Commands[CLIENT][new_class.ID] = new_class
             Commands[SERVER][new_class.ID] = new_class
 
@@ -713,7 +713,7 @@ class EchoResponse(Message):
         super().__init__(EchoResponseHeader())
 
 
-class RsrvIsUpResponse(Message):
+class Beacon(Message):
     """
     Heartbeat beacon sent by the server.
 
@@ -746,8 +746,8 @@ class RsrvIsUpResponse(Message):
     def __init__(self, version, server_port, beacon_id, address):
         # TODO if address is 0, it should be replaced with the remote ip from
         # the udp packet
-        header = RsrvIsUpResponseHeader(version, server_port, beacon_id,
-                                        ipv4_to_int32(str(address)))
+        header = BeaconHeader(version, server_port, beacon_id,
+                              ipv4_to_int32(str(address)))
         super().__init__(header)
 
     version = property(lambda self: self.header.data_type)
