@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-from caproto.server import (pvproperty, PVGroup, SubGroup)
+from caproto.server import (pvproperty, PVGroup, SubGroup,
+                            ioc_arg_parser, run)
 import numpy as np
 import time
 import functools
@@ -53,7 +54,7 @@ class PinHole(_JitterDetector):
 
 
 class Edge(_JitterDetector):
-    async def _read(self, instance):
+        async def _read(self, instance):
 
         sigma = 2.5
         center = 5
@@ -101,7 +102,7 @@ class MovingDot(PVGroup):
 
     Xcen = Ycen = 0
 
-    det = pvproperty(value=[0]*N*M,
+    det = pvproperty(value=[0] * N * M,
                      dtype=float,
                      read_only=True)
 
@@ -118,13 +119,13 @@ class MovingDot(PVGroup):
 
         Y, X = np.ogrid[:N, :M]
 
-        X = X - M/2 + x
-        Y = Y - N/2 + y
+        X = X - M / 2 + x
+        Y = Y - N / 2 + y
 
         X /= self.sigmax
         Y /= self.sigmay
 
-        dot = np.exp(-(X**2 + Y**2)/2) * np.exp(- (x**2 + y**2) / 100**2)
+        dot = np.exp(-(X**2 + Y**2) / 2) * np.exp(- (x**2 + y**2) / 100**2)
 
         I = self.parent.current.value
         e = self.exp.value
@@ -168,7 +169,7 @@ class JitterRead(PVGroup):
         f = (2 * np.pi) / 4
         while True:
             t = time.monotonic()
-            await instance.write(value=[500 + 25*np.sin(t * f)])
+            await instance.write(value=[500 + 25 * np.sin(t * f)])
             await async_lib.library.sleep(.1)
 
     ph = SubGroup(PinHole)
@@ -179,16 +180,12 @@ class JitterRead(PVGroup):
 
 
 if __name__ == '__main__':
-    # usage: jitter_read.py [PREFIX]
-    import sys
-    import curio
-    from caproto.curio.server import start_server
+    ioc_options, run_options = ioc_arg_parser(
+        default_prefix='jitter:',
+        desc=('An IOC that provides a simulated pinhole, edge and slit '
+              'with coupled with a shared global current that oscillates '
+              'in time.')
 
-    try:
-        prefix = sys.argv[1]
-    except IndexError:
-        prefix = 'jitter_read:'
-
-    ioc = JitterRead(prefix=prefix)
+    ioc = JitterRead(**ioc_options)
     print('PVs:', list(ioc.pvdb))
-    curio.run(start_server(ioc.pvdb))
+    run(ioc.pvdb, **run_options)
