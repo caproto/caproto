@@ -248,6 +248,24 @@ def subscribe(pv_name, priority=0, data_type=None, data_count=None,
     """
     Define a subscription.
 
+    Parameters
+    ----------
+    pv_name : string
+    priority : integer, optional
+        Used by the server to triage subscription responses when under high
+        load. 0 is lowest; 99 is highest.
+    data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
+        Request specific data type or a class of data types, matched to the
+        channel's native data type. Default is Channel's native data type.
+    data_count : integer, optional
+        Requested number of values. Default is the channel's native data
+        count, which can be checked in the Channel's attribute
+        :attr:`native_data_count`.
+    low, high, to : float, optional
+        deprecated by Channel Access, not yet implemented by caproto
+    mask :  SubscriptionType, optional
+        Subscribe to selective updates.
+
     Examples
     --------
 
