@@ -476,7 +476,7 @@ class ChannelData:
         await queue.put(((sub_spec,), metadata, values))
 
     async def unsubscribe(self, queue, sub_spec):
-        self._queues[queue][sub_spec.data_type].remove(sub_spec)
+        self._queues[queue][sub_spec.data_type].discard(sub_spec)
 
     async def auth_read(self, hostname, username, data_type, *,
                         user_address=None):
