@@ -24,7 +24,7 @@ choices, consistent with the rest of caproto:
 1. Caproto's threading client provides a lower-level API, handing the user
    objects encapsulating the complete response from the server as opposed to
    just the value.
-2. Caproto pulls apart the subscription process into two steps---defining a
+2. Caproto pulls apart the subscription process into two steps---specifying a
    subscription and adding a user callback function to one---whereas pyepics
    elides them.
 
