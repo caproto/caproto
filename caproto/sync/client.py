@@ -513,7 +513,7 @@ def write(pv_name, data, *, notify=False, data_type=None, metadata=None,
     finally:
         udp_sock.close()
     try:
-        _write(chan, data, metadata, timeout, data_type, notify)
+        return _write(chan, data, metadata, timeout, data_type, notify)
     finally:
         try:
             if chan.states[ca.CLIENT] is ca.CONNECTED:
@@ -575,11 +575,11 @@ def read_write_read(pv_name, data, *, notify=False,
 
     Write the value 5 to a Channel named 'cat'.
 
-    >>> write('cat', 5)  # returns None
+    >>> read_write_read('cat', 5)  # returns initial, None, final
 
     Request notification of completion ("put completion") and wait for it.
 
-    >>> write('cat', 5, notify=True)  # returns a WriteNotifyResponse
+    >>> read_write_read('cat', 5, notify=True)  # initial, WriteNotifyResponse, final
     """
     if repeater:
         # As per the EPICS spec, a well-behaved client should start a

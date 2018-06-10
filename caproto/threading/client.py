@@ -712,6 +712,17 @@ class Context:
 
         These objects may not be connected at first. Channel creation occurs on
         a background thread.
+
+        Parameters
+        ----------
+        *names : strings
+            any number of PV names
+        priority : integer
+            Used by the server to triage subscription responses when under high
+            load. 0 is lowest; 99 is highest.
+        connection_state_callback : callable
+        connection_state_callback : callable
+
         """
         if self._user_disconnected:
             raise ContextDisconnectedError("This Context is no longer usable.")
