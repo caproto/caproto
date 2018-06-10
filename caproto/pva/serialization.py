@@ -3,7 +3,7 @@ import array
 import logging
 import copy
 
-from collections import (OrderedDict, namedtuple)
+from collections import namedtuple
 
 from caproto import CaprotoError
 from .helpers import FrozenDict
@@ -17,6 +17,7 @@ from .introspection import (walk_field_description_with_values,
                             definition_line_to_info, variant_desc_from_value,
                             generate_hash
                             )
+from .utils import ThreadsafeCounter
 
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,11 @@ NullCache = SerializeCache(ours=FrozenDict(),
                            user_types=FrozenDict(),
                            ioid_interfaces=FrozenDict(),
                            )
+
+
+class SkippedByBitset(Exception):
+    'Deserialization skipped due to field not being specified by bitset'
+    ...
 
 
 class SerializationFailure(CaprotoError):
@@ -261,7 +267,7 @@ def deserialize_introspection_data(buf, *, endian, cache, data=None, depth=0,
     if data is None:
         data = {}
     if depth == 0 and nested_types is None:
-        nested_types = OrderedDict()
+        nested_types = {}
 
     buf = memoryview(buf)
     type_code = buf[0]
@@ -368,7 +374,7 @@ def _deserialize_field_interface(field_desc, buf, data,
                     nested_types=nested_types, data=field_data,
                     depth=depth + 1)
                 offset += off
-                data['fields'] = OrderedDict([('', st)])
+                data['fields'] = dict([('', st)])
                 return Decoded(data=data, buffer=buf, offset=offset)
 
             struct_name, buf, off = _deserialize_string(buf, endian=endian)
@@ -390,7 +396,7 @@ def _deserialize_field_interface(field_desc, buf, data,
             num_fields, buf, off = _deserialize_size(buf, endian=endian)
             offset += off
 
-            fields = OrderedDict()
+            fields = dict()
             for field in range(num_fields):
                 field_name, buf, off = _deserialize_string(buf, endian=endian)
                 offset += off
@@ -413,15 +419,27 @@ def _deserialize_field_interface(field_desc, buf, data,
     return Decoded(data=data, buffer=buf, offset=offset)
 
 
-def _deserialize_complex_data(fd, buf, *, endian, cache, nested_types):
+def _deserialize_complex_data(fd, buf, *, endian, cache, nested_types,
+                              bitset=None, bitset_counter=None):
     'Deserialize data from a struct, variant, or union'
     array_type = fd['array_type']
     type_name = fd['type_name']
 
+    skipped_by_bitset = False
+
+    if bitset is not None:
+        bitset_index = bitset_counter()
+        skipped_by_bitset = bitset_index not in bitset
+
     if array_type != FieldArrayType.scalar:
+        if skipped_by_bitset:
+            # bitset applies to whole complex array
+            return None
         count, buf, off = _deserialize_size(buf, endian=endian)
         offset = off
     else:
+        # bitset applies to individual components of (sub-)structure
+        # so we have to iterate through each of them
         count = 1
         offset = 0
 
@@ -440,7 +458,12 @@ def _deserialize_complex_data(fd, buf, *, endian, cache, nested_types):
             if not filled:
                 data.append(None)
                 continue
+            # note: bitset handling happens when deserialize_data recurses
         elif type_name == 'any':
+            if skipped_by_bitset:
+                bitset_counter()
+                continue
+
             # get the field description
             value_intf, buf, off = deserialize_introspection_data(
                 buf, endian=endian, cache=cache, depth=1,
@@ -448,6 +471,10 @@ def _deserialize_complex_data(fd, buf, *, endian, cache, nested_types):
                 nested_types=nested_types)
             offset += off
         else:  # union
+            if skipped_by_bitset:
+                bitset_counter()
+                continue
+
             field_index, buf, off = _deserialize_size(buf, endian=endian)
             offset += off
 
@@ -461,11 +488,12 @@ def _deserialize_complex_data(fd, buf, *, endian, cache, nested_types):
         else:
             di, buf, off = deserialize_data(
                 value_intf, buf, endian=endian, cache=cache,
-                nested_types=nested_types)
+                nested_types=nested_types, bitset=bitset,
+                bitset_counter=bitset_counter)
             offset += off
 
         if type_name == 'union':
-            di = OrderedDict(
+            di = dict(
                 [('_selector_', field_index),
                  (selector_key, di),
                  ]
@@ -473,20 +501,31 @@ def _deserialize_complex_data(fd, buf, *, endian, cache, nested_types):
 
         data.append(di)
 
+    if skipped_by_bitset and type_name not in ('struct', 'union'):
+        # need to still propagate empty structures
+        return None
+
     if array_type == FieldArrayType.scalar:
         data = data[0]
 
     return Decoded(data=data, buffer=buf, offset=offset)
 
 
-def _deserialize_data_from_field_desc(fd, buf,
-                                      *, endian, cache, nested_types):
+def _deserialize_data_from_field_desc(fd, buf, *, endian, cache, nested_types,
+                                      bitset=None, bitset_counter=None):
     'Given field description metadata, deserialize data from a single field'
     type_name = fd['type_name']
 
     if type_name in ('any', 'union', 'struct'):
         return _deserialize_complex_data(fd, buf, endian=endian, cache=cache,
-                                         nested_types=nested_types)
+                                         nested_types=nested_types,
+                                         bitset=bitset,
+                                         bitset_counter=bitset_counter)
+
+    if bitset is not None:
+        bitset_index = bitset_counter()
+        if bitset_index not in bitset:
+            return None
 
     offset = 0
     array_type = fd['array_type']
@@ -532,7 +571,7 @@ def _deserialize_data_from_field_desc(fd, buf,
 
 
 def deserialize_data(fd, buf, *, endian, cache, nested_types=None,
-                     bitset=None):
+                     bitset=None, bitset_counter=None):
     'Deserialize data associated with a field description'
     if fd is None or not fd:
         raise ValueError('Must specify field description')
@@ -551,37 +590,31 @@ def deserialize_data(fd, buf, *, endian, cache, nested_types=None,
         return _deserialize_data_from_field_desc(
             fd, buf, endian=endian, cache=cache, nested_types=nested_types)
 
-    # debug_logging = logger.isEnabledFor(logging.DEBUG)
-    debug_logging = True
-    ret = OrderedDict()
+    debug_logging = logger.isEnabledFor(logging.DEBUG)
+    ret = dict()
     offset = 0
 
-    for index, (field_name, fd) in enumerate(fd['fields'].items()):
-        if bitset is not None and index not in bitset:
-            logger.debug('At offset %d field: %s (%s) skipped by bitset',
-                         offset, field_name, bitset)
-            continue
+    if bitset_counter is None:
+        bitset_counter = ThreadsafeCounter(initial_value=0)
+    else:
+        # deserialize_data has recursed
+        ...
 
-        logger.debug('Offset: %d Field: %s (%s)', offset, field_name,
-                     fd['type_name'])
-
-        fd = get_definition_from_namespaces(fd, nested_types,
-                                            cache.user_types)
+    for field_name, fd in fd['fields'].items():
+        fd = get_definition_from_namespaces(fd, nested_types, cache.user_types)
         deserialized = _deserialize_data_from_field_desc(
-            fd, buf, endian=endian, cache=cache, nested_types=nested_types)
+            fd, buf, endian=endian, cache=cache, nested_types=nested_types,
+            bitset=bitset, bitset_counter=bitset_counter)
 
         if deserialized is not None:
-            start_buf = buf
-
             data, buf, off = deserialized
             offset += off
             ret[field_name] = data
 
             if debug_logging:
-                logger.debug("Deserialized: %s",
-                             ' '.join(hex(v)
-                                      for v in start_buf[:min((off, 1000))]))
-                logger.debug("-> %s = %s", field_name, repr(data)[:1000])
+                logger.debug('Index: %d offset: %d Field: %s (%s) = %s',
+                             bitset_counter.value, offset, field_name,
+                             fd['type_name'], repr(data)[:1000])
 
     return Decoded(data=ret, buffer=buf, offset=offset)
 

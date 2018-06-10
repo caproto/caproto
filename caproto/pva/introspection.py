@@ -3,11 +3,12 @@ import logging
 import textwrap
 
 from array import array
-from collections import (OrderedDict, namedtuple)
+from collections import namedtuple
 
-from .types import (FieldDesc, FieldArrayType)
-from .types import (type_name_to_type, variant_type_map)
+from .types import (FieldDesc, FieldArrayType, type_name_to_type,
+                    variant_type_map)
 from .definition_line import definition_line_to_info
+from .utils import ThreadsafeCounter
 
 
 logger = logging.getLogger(__name__)
@@ -172,7 +173,7 @@ def structure_from_repr(hier, *, nested_types=None, user_types=None, depth=0):
     if user_types is None:
         user_types = {}
     if nested_types is None:
-        nested_types = OrderedDict()
+        nested_types = {}
 
     ret = {}
     for idx, entry in enumerate(hier):
@@ -213,7 +214,7 @@ def structure_from_repr(hier, *, nested_types=None, user_types=None, depth=0):
                 ret[key] = einfo[key]
 
         if children:
-            fields = OrderedDict()
+            fields = {}
             ret['fields'] = fields
             struct_name = ret['struct_name']
             # TODO: _default_names from .serialization
@@ -305,7 +306,7 @@ def field_description_to_value_dict(fd, user_types, nested_types=None):
     if nested_types is None:
         nested_types = fd.get('nested_types', {})
 
-    values = OrderedDict()
+    values = {}
 
     full_def = get_definition_from_namespaces(fd, nested_types, user_types)
 
@@ -313,7 +314,7 @@ def field_description_to_value_dict(fd, user_types, nested_types=None):
         return fd.get('value', None)
 
     if fd['array_type'] == FieldArrayType.scalar:
-        values = OrderedDict()
+        values = {}
         if fd['type_name'] == 'union':
             values['_selector_'] = fd['value']
         for name, child_fd in full_def['fields'].items():
@@ -324,8 +325,8 @@ def field_description_to_value_dict(fd, user_types, nested_types=None):
     # For array types of structures, a list of dicts makes sense. Will not
     # support transposed version.
     field_names = list(full_def['fields'].keys())
-    return [OrderedDict([field, v]
-                        for field, v in zip(field_names, single_value))
+    return [dict([field, v]
+                 for field, v in zip(field_names, single_value))
             for single_value in fd['value']]
 
 
@@ -435,7 +436,7 @@ def walk_field_description_with_values(fd, values, user_types, *, keys=None,
 
 def walk_field_description_with_bitset(
         fd, bitset, user_types, *, keys=None, depth=0, root=None, parent=None,
-        index=None):
+        bitset_counter=None, only_selected=True):
     'Ignores structures and unselected union fields'
     if fd is None:
         return
@@ -449,54 +450,54 @@ def walk_field_description_with_bitset(
     array_type = fd['array_type']
     fd = get_definition_from_namespaces(fd, root.get('nested_types', {}),
                                         user_types)
-    has_value = field_descriptor_has_value(parent, fd, array_type)
+    # has_value = field_descriptor_has_value(parent, fd, array_type)
 
-    if has_value:
-        if index is None:
-            index = 0
-        else:
-            index += 1
+    if bitset_counter is None:
+        bitset_counter = ThreadsafeCounter(initial_value=0)
+    else:
+        bitset_counter()
 
-        selected = index in bitset
+    selected = bitset_counter.value in bitset
 
-        if selected:
-            type_name = fd['type_name']
-            type_, type_specific = type_name_to_type[type_name]
-            fd_byte = FieldDesc(type_specific, array_type, type_)
-            yield WalkWithValueTuple(field_desc=fd, keys=keys,
-                                     variable='.'.join(keys), value=True,
-                                     parent=parent, fd_byte=fd_byte, depth=depth)
+    if not only_selected or (only_selected and selected):
+        type_name = fd['type_name']
+        type_, type_specific = type_name_to_type[type_name]
+        fd_byte = FieldDesc(type_specific, array_type, type_)
+        yield WalkWithValueTuple(field_desc=fd, keys=keys,
+                                 variable='.'.join(keys),
+                                 value=bitset_counter.value, parent=parent,
+                                 fd_byte=fd_byte, depth=depth)
 
-        if array_type:
-            # only support an array value here - ignore the rest of the fields
-            return
+    if array_type:
+        # only support an array value here - ignore the rest of the fields
+        return
 
     type_name = fd['type_name']
 
-    if 'fields' in fd:
-        fields = fd['fields']
+    if 'fields' not in fd:
+        return
 
-        if type_name == 'union' and index in bitset:
-            raise NotImplementedError('TODO bitset with union')
-            # yield from walk_field_description_with_bitset(
-            #     fd=sel_field, values=value, user_types=user_types,
-            #     keys=keys + (fd['name'], ),
-            #     depth=depth + 1, root=root, parent=fd,
-            #     index=index)
+    fields = fd['fields']
 
-        else:
-            fields = fields.items()
-            for field_name, field in fields:
-                yield from walk_field_description_with_bitset(
-                    field, bitset, user_types,
-                    keys=keys + (field_name, ),
-                    depth=depth + 1, root=root, parent=fd,
-                    index=index)
+    if type_name == 'union' and bitset_counter.value in bitset:
+        raise NotImplementedError('TODO bitset with union')
+        # yield from walk_field_description_with_bitset(
+        #     fd=sel_field, values=value, user_types=user_types,
+        #     keys=keys + (fd['name'], ),
+        #     depth=depth + 1, root=root, parent=fd,
+        #     index=index)
+
+    else:
+        for field_name, field in fields.items():
+            yield from walk_field_description_with_bitset(
+                field, bitset, user_types, keys=keys + (field_name, ),
+                depth=depth + 1, root=root, parent=fd,
+                bitset_counter=bitset_counter, only_selected=only_selected)
 
 
 def create_value_dict_from_field_desc(fd, user_types):
     'Create a value dictionary from a field description'
-    value_dict = OrderedDict()
+    value_dict = {}
     for item in walk_field_description_with_values(fd, values=None,
                                                    user_types=user_types,
                                                    allow_none=True):
@@ -506,7 +507,7 @@ def create_value_dict_from_field_desc(fd, user_types):
             try:
                 parent = parent[key]
             except KeyError:
-                new_parent = OrderedDict()
+                new_parent = {}
                 parent[key] = new_parent
                 parent = new_parent
 

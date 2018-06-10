@@ -1,5 +1,6 @@
 import ctypes
 import ipaddress
+import itertools
 from .._utils import (CaprotoKeyError, CaprotoValueError, CaprotoRuntimeError,
                       CaprotoError, ErrorResponseReceived,
                       CLIENT, SERVER, make_sentinel,

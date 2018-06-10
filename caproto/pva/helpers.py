@@ -1,5 +1,7 @@
 import copy
+import datetime
 
+from .. import epics_timestamp_to_unix
 from .introspection import (structure_from_repr,
                             summarize_field_info,
                             create_value_dict_from_field_desc,
@@ -57,7 +59,7 @@ def freeze_field_desc(fd, nested_types=None):
 
     if 'fields' in fd:
         if nested_types is None:
-            nested_types = OrderedDict()
+            nested_types = {}
         ret['fields'] = OrderedDict(
             (field_name, freeze_field_desc(field, nested_types=nested_types))
             for field_name, field in fd['fields'].items())
@@ -172,6 +174,12 @@ class StructuredValueItem:
         self.parent[self.key] = value
         # TODO: validate value
 
+    def update(self, value):
+        if self.fd['type_name'] in ('struct', 'union'):
+            self.parent[self.key].update(**value)
+        else:
+            self.value = value
+
 
 class StructuredValueBase:
     def __init__(self, field_desc, *, user_types=None, value_dict=None):
@@ -242,3 +250,20 @@ class StructuredValueBase:
     def __setitem__(self, key, value):
         sv = self[key]
         sv.value = value
+
+    def __contains__(self, key):
+        return key in self._values
+
+    def update(self, **kw):
+        for key, value in kw.items():
+            sv = self[key]
+            sv.update(value)
+
+    @property
+    def timestamp(self):
+        if 'timeStamp' not in self:
+            raise ValueError('Does not contain standard timestamp')
+
+        ts = self['timeStamp'].value
+        seconds, nanoseconds = ts['secondsPastEpoch'], ts['nanoseconds']
+        return datetime.datetime.fromtimestamp(seconds + nanoseconds * 1e-9)

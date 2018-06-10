@@ -1,15 +1,7 @@
 import argparse
-import ast
-from collections import Iterable
-from datetime import datetime
-import getpass
 import logging
-import os
 import time
-import selectors
-import logging
 import socket
-import subprocess
 import collections
 import sys
 
@@ -23,7 +15,7 @@ import ctypes
 import random
 
 from caproto import pva
-from caproto import (get_netifaces_addresses, bcast_socket)
+from caproto import bcast_socket
 from caproto.pva import (CLIENT, SERVER, CONNECTED, NEED_DATA, DISCONNECTED,
                          Broadcaster, QOSFlags, MessageTypeFlag, ErrorResponseReceived,
                          CaprotoError, SearchResponse, VirtualCircuit,
@@ -32,6 +24,7 @@ from caproto.pva import (CLIENT, SERVER, CONNECTED, NEED_DATA, DISCONNECTED,
                          ChannelFieldInfoResponse, ChannelGetResponse,
                          ChannelMonitorResponse, MonitorSubcommands,
                          Subcommands, basic_types)
+from .helpers import StructuredValueBase
 
 # __all__ = ['get', 'put', 'monitor']
 
@@ -46,13 +39,17 @@ serialization_logger = logging.getLogger('caproto.pva.serialization_debug')
 def send(circuit, command):
     buffers_to_send = circuit.send(command)
     sockets[circuit].sendmsg(buffers_to_send)
-    serialization_logger.debug('<- %r', b''.join(buffers_to_send))
+
+    if serialization_logger.isEnabledFor(logging.DEBUG):
+        to_send = b''.join(buffers_to_send)
+        serialization_logger.debug('-> %d bytes: %r', len(to_send), to_send)
 
 
 def recv(circuit):
     commands = collections.deque()
     bytes_received = sockets[circuit].recv(4096)
-    serialization_logger.debug('<- %r', bytes_received)
+    serialization_logger.debug('<- %d bytes: %r', len(bytes_received),
+                               bytes_received)
 
     for c, remaining in circuit.recv(bytes_received):
         if type(c) is NEED_DATA:
@@ -345,7 +342,6 @@ def _monitor(chan, timeout, pvrequest, maximum_events):
     ioid = init_req.ioid
     send(chan.circuit, init_req)
 
-    t = time.monotonic()
     event_count = 0
     while True:
         try:
@@ -359,9 +355,10 @@ def _monitor(chan, timeout, pvrequest, maximum_events):
                     monitor_start_req = chan.subscribe_control(
                         ioid=ioid, subcommand=MonitorSubcommands.START)
                     send(chan.circuit, monitor_start_req)
+                    yield command
                 else:
                     event_count += 1
-                    print('Saw event', command)
+                    yield command
                     if maximum_events is not None:
                         if event_count >= maximum_events:
                             break
@@ -402,8 +399,8 @@ def monitor(pv_name, *, pvrequest, verbose=False, timeout=1,
         udp_sock.close()
 
     try:
-        return _monitor(chan, timeout, pvrequest=pvrequest,
-                        maximum_events=maximum_events)
+        yield from _monitor(chan, timeout, pvrequest=pvrequest,
+                            maximum_events=maximum_events)
     finally:
         try:
             if chan.states[CLIENT] is CONNECTED:
@@ -415,14 +412,23 @@ def monitor(pv_name, *, pvrequest, verbose=False, timeout=1,
 
 def monitor_cli():
     parser = argparse.ArgumentParser(description='Read the value of a PV.')
-    fmt_group = parser.add_mutually_exclusive_group()
     parser.add_argument('pv_names', type=str, nargs='+',
                         help="PV (channel) name(s) separated by spaces")
     parser.add_argument('--pvrequest', type=str, default='field(value)',
                         help=("PVRequest"))
+    fmt_group = parser.add_mutually_exclusive_group()
     fmt_group.add_argument('--terse', '-t', action='store_true',
                            help=("Display data only. Unpack scalars: "
                                  "[3.] -> 3."))
+    fmt_group.add_argument('--full', action='store_true',
+                           help=("Print full structure each time"))
+    fmt_group.add_argument('--format', type=str, default='{timestamp} {pv_name} {value}',
+                           help=("Python format string. Available tokens are "
+                                 "{pv_name} and {data}. Additionally, if "
+                                 "this data type includes time, {timestamp} "
+                                 "and usages like "
+                                 "{timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are "
+                                 "supported. "))
     parser.add_argument('--timeout', '-w', type=float, default=1,
                         help=("Timeout ('wait') in seconds for server "
                               "responses."))
@@ -442,11 +448,41 @@ def monitor_cli():
 
     try:
         pv_name = args.pv_names[0]
-        interface, response = monitor(pv_name=pv_name,
-                                      pvrequest=args.pvrequest,
-                                      verbose=args.verbose,
-                                      timeout=args.timeout,
-                                      maximum_events=args.maximum)
+        data = {}
+        if args.terse:
+            format_str = '{timestamp} {pv_name} {value}'
+        else:
+            format_str = args.format
+
+        timestamp = '(No timestamp)'
+
+        for idx, event in enumerate(monitor(pv_name=pv_name,
+                                            pvrequest=args.pvrequest,
+                                            verbose=args.verbose,
+                                            timeout=args.timeout,
+                                            maximum_events=args.maximum)):
+            if idx == 0:
+                interface = event.pv_structure_if
+                val = StructuredValueBase(interface)
+                has_timestamp = 'timeStamp' in val
+            else:
+                event_data = event.pv_data
+                data.update(**event_data)
+
+                val.update(**event_data)
+
+                if has_timestamp:
+                    timestamp = val.timestamp
+
+                if args.full:
+                    print(val)
+                    continue
+
+                try:
+                    print(format_str.format(pv_name=pv_name, timestamp=timestamp, **val._values))
+                except Exception as ex:
+                    print('(print format failed)', ex, data)
+
     except BaseException as exc:
         if args.verbose:
             # Show the full traceback.

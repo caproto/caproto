@@ -266,7 +266,7 @@ class MessageBase:
         return b''.join(buf)
 
     @classmethod
-    def deserialize(cls, buf, *, cache=NullCache):
+    def deserialize(cls, buf, *, cache=NullCache, debug_logger=None):
         base_size = ctypes.sizeof(cls)
         buflen = len(buf) - base_size
         buf = memoryview(buf)
@@ -287,7 +287,6 @@ class MessageBase:
             return Decoded(data=msg, buffer=buf, offset=offset)
 
         for field_info in additional_fields:
-            # print(f'-- FIELD {field_info} --')
             bitset = None
             if isinstance(field_info, (OptionalField, OptionalInterfaceField)):
                 if not buflen:
@@ -317,6 +316,21 @@ class MessageBase:
                         f'Interface unspecified for PVField key '
                         f'{field_info.name!r}') from None
 
+                if bitset is not None and debug_logger is not None:
+                    debug_logger.debug('Fields selected by bitset:')
+                    debug_logger.debug('--------------------------')
+                    for item in intro.walk_field_description_with_bitset(
+                            interface, bitset, user_types={},
+                            only_selected=False):
+                        indent = ' ' * item.depth
+                        fd = item.field_desc
+                        name_ = fd['name']
+                        type_ = fd['type_name']
+                        bitset_index = item.value
+                        marker = '*' if bitset_index in bitset else ' '
+                        debug_logger.debug(f'{marker} [{bitset_index:-3d}] '
+                                           f'{indent} {type_} {name_}')
+
             is_nonstandard_array = isinstance(field_info,
                                               NonstandardArrayField)
             count = (1 if not is_nonstandard_array
@@ -324,16 +338,12 @@ class MessageBase:
             values = []
 
             for i in range(count):
-                old_buf = buf
                 value, buf, off = deserialize_message_field(
                     buf=buf, type_name=field_info.type,
                     field_name=field_info.name, nested_types={},
                     interface=interface, endian=cls._ENDIAN, cache=cache,
                     bitset=bitset,
                 )
-
-                # print(f'   FIELD {field_info}[{i}]: {bytes(old_buf[:off])} '
-                #       f'{value} ({off} bytes)')
 
                 offset += off
                 buflen -= off
@@ -1221,7 +1231,7 @@ def header_from_wire(data, byte_order):
                       if byte_order == LITTLE_ENDIAN
                       else MessageHeaderBE)
         header = header_cls.from_buffer(data)
-        assert header.valid
+        assert header.valid, 'invalid header'
         return header
 
     # Guess little-endian, but fall back to big-endian if wrong.
@@ -1229,7 +1239,7 @@ def header_from_wire(data, byte_order):
     if header.byte_order != LITTLE_ENDIAN:
         header = MessageHeaderBE.from_buffer(data)
 
-    assert header.valid
+    assert header.valid, 'invalid header'
     return header
 
 
@@ -1302,21 +1312,20 @@ def read_from_bytestream(data, role, cache, *, byte_order=None):
                                    use_fixed_byte_order=byte_order)
 
     # print('Header', repr(header), header.flags_as_enums)
+    data = memoryview(data)
+    message_start = _MessageHeaderSize
+    next_data = data[message_start:]
+
     if issubclass(msg_class, (SetByteOrder, )):
-        offset = _MessageHeaderSize
-        data = memoryview(data)
-        next_data = data[offset:]
+        offset = message_start
         return bytearray(next_data), msg_class.from_buffer(data), offset, 0
 
-    # Receive the buffer (zero-copy).
-    data = bytearray(data)
-    offset = _MessageHeaderSize
+    data = memoryview(data)
+    message_end = message_start + header.payload_size
 
-    cmd, data, off = msg_class.deserialize(memoryview(data)[offset:],
-                                           cache=cache)
-
-    offset += off
+    next_data = data[message_end:]
+    cmd, _, off = msg_class.deserialize(data[message_start:message_end],
+                                        cache=cache)
 
     cmd.header = header
-    # Buffer is advanced automatically by deserialize()
-    return bytearray(data), cmd, offset, 0
+    return bytearray(next_data), cmd, message_start + off, 0
