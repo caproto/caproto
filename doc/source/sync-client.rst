@@ -99,8 +99,8 @@ server; it may result in an ``ErrorResponse``.)
     from caproto.sync.client import write 
     write('random_walk:dt', 1, notify=True)
 
-Subscribe
----------
+Subscribe ("Monitor")
+---------------------
 
 Let us now monitor a channel. The server updates the ``random_walk:x`` channel
 periodically at some period set by ``random_walk:dt``. We can subscribe

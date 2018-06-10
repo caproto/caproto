@@ -70,8 +70,8 @@ The Context displays aggregate information about the state of all connections.
 
     ctx
 
-Read and Write
---------------
+Read
+----
 
 Now, to read a PV:
 
@@ -111,11 +111,36 @@ Access particular fields in the response using attribute ("dot") access on ``res
     memory with no copying (if the data was received from the socket all at
     once) or one copy (if the data bridged multiple receipts).
 
+Write
+-----
+
 Let us set the value to ``1``.
 
 .. ipython:: python
 
     dt.write([1])
+
+By default, we send ``WriteNotifyResponse``, wait for a response, and return
+it. There are a couple others ways we can handle writes:
+
+* Return immediately, not asking for or waiting for a response.
+
+    .. code-block:: python
+
+        dt.write([1], wait=False)
+
+* Return immediately, not waiting for a response, but handing the response
+  (when it arrived) to some callback function, processed on a background
+  thread.
+
+    .. code-block:: python
+
+        def f(response):
+            print('got a response:', response)
+
+        dt.write([1], wait=False, callback=f)
+
+See the :meth:`PV.write` for more.
 
 Subscribe ("Monitor")
 ---------------------
