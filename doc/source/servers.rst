@@ -2,6 +2,10 @@
 Servers
 =======
 
+.. note::
+
+    If your goal is to write IOCs, see :doc:`iocs`.
+
 Caproto includes three implementations of a Channel Access server for three
 different Python concurrency libraries:
 

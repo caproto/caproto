@@ -32,19 +32,10 @@ def main():
                                  "time, {timestamp}, {timedelta} and usages "
                                  "like {timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are"
                                  " supported."))
-    parser.add_argument('-m', type=str, metavar='MASK', default='va',
-                        help=("Channel Access mask. Any combination of "
-                              "'v' (value), 'a' (alarm), 'l' (log/archive), "
-                              "'p' (property). Default is 'va'."))
-    parser.add_argument('-n', action='store_true',
-                        help=("Retrieve enums as integers (default is "
-                              "strings)."))
-    parser.add_argument('--priority', '-p', type=int, default=0,
-                        help="Channel Access Virtual Circuit priority. "
-                             "Lowest is 0; highest is 99.")
-    parser.add_argument('--timeout', '-w', type=float, default=1,
-                        help=("Timeout ('wait') in seconds for server "
-                              "responses."))
+    parser.add_argument('--verbose', '-v', action='store_true',
+                        help="Show DEBUG log messages.")
+    parser.add_argument('-vvv', action='store_true',
+                        help=argparse.SUPPRESS)
     exit_group.add_argument('--duration', type=float, default=None,
                             help=("Maximum number seconds to run before "
                                   "exiting. Runs indefinitely by default."))
@@ -52,10 +43,19 @@ def main():
                             help=("Maximum number of monitor events to "
                                   "process exiting. Unlimited by "
                                   "default."))
-    parser.add_argument('--verbose', '-v', action='store_true',
-                        help="Show DEBUG log messages.")
-    parser.add_argument('-vvv', action='store_true',
-                        help=argparse.SUPPRESS)
+    parser.add_argument('--timeout', '-w', type=float, default=1,
+                        help=("Timeout ('wait') in seconds for server "
+                              "responses."))
+    parser.add_argument('-m', type=str, metavar='MASK', default='va',
+                        help=("Channel Access mask. Any combination of "
+                              "'v' (value), 'a' (alarm), 'l' (log/archive), "
+                              "'p' (property). Default is 'va'."))
+    parser.add_argument('--priority', '-p', type=int, default=0,
+                        help="Channel Access Virtual Circuit priority. "
+                             "Lowest is 0; highest is 99.")
+    parser.add_argument('-n', action='store_true',
+                        help=("Retrieve enums as integers (default is "
+                              "strings)."))
     parser.add_argument('--no-color', action='store_true',
                         help="Suppress ANSI color codes in log messages.")
     parser.add_argument('--no-repeater', action='store_true',
