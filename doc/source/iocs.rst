@@ -26,22 +26,23 @@ Simple IOC
 
 .. code-block:: bash
 
-    $ simple.py example1:
+    $ simple.py --prefix example1: --list-pvs
     PVs: ['example1:A', 'example1:B']
 
 Now there are simple read/writable PVs named 'example1:A' and 'example1:B'.
 
 .. ipython:: python
 
-    from caproto.threading.client import get_pv
-    get_pv('example1:A').get()
-    get_pv('example1:B').get()
+    from caproto.threading.client import Context
+    ctx = Context()
+    pv = ctx.get_pv('example1:A')
+    pv.read()
 
 To run a second instance of the same IOC with a different prefix:
 
 .. code-block:: bash
 
-    $ simple_ioc.py example2:
+    $ simple_ioc.py --prefix example2: --list-pvs
     PVs: ['example2:A', 'example2:B']
 
 Write to a File When a PV is Written To

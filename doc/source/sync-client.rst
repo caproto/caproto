@@ -17,7 +17,7 @@ Synchronous Client
         time.sleep(1)  # Give it time to start up.
 
 The synchronous client optimizes for simplicity of implementation over
-performance. This has its uses, but for high-performance applications one of
+performance. This has its uses but for high-performance applications one of
 the other clients, such as the :doc:`threading-client`, should be used.
 
 Tutorial
@@ -39,8 +39,8 @@ Now, in Python we will talk to it using caproto's synchronous client:
 
 .. ipython:: python
 
-    from caproto.sync.client import get, put, monitor
-    res = get('random_walk:dt')
+    from caproto.sync.client import read
+    res = read('random_walk:dt')
     res
 
 This object is a human-friendly representation of the server's response. The
@@ -79,45 +79,88 @@ Let us set the value to ``1``.
 
 .. ipython:: python
 
-    before, after = put('random_walk:dt', 1)
-    before.data
-    after.data
+    from caproto.sync.client import write 
+    write('random_walk:dt', 1)
 
-The synchronous client issues three requests:
+The function returns immediately and returns ``None``. To wait for confirmation
+that the write has been successfully processed by the server, use the
+``notify`` keyword argument:
 
-1. Read the current value.
-2. Write ``1``.
-3. Read the value again.
+.. ipython:: python
 
-This behavior is particular to caproto's *synchronous* client. The other, more
-sophisticated clients leave it up to the caller when and whether to request
-readings.
+    from caproto.sync.client import write 
+    write('random_walk:dt', 1, notify=True)
 
 Let us now monitor a channel. The server updates the ``random_walk:x`` channel
 periodically. (The period is set by ``random_walk:dt``.) We can subscribe
-to updates.
+to updates. First, we define a :class:`Subscription`.
+
+.. ipython:: python
+
+    from caproto.sync.client import subscribe
+    sub = subscribe('random_walk:x')
+
+Next, we a function that will be called whenever the server send an update.
 
 .. ipython:: python
 
    responses = []
-   def f(name, response):
+   def f(response):
        "On each update, print the data and cache the full response."
        responses.append(response)
        print(response.data)
 
-This call to :func:`monitor` blocks indefinitely, passing responses to ``f`` as
-they arrive. When we are satisfied, we can interrupted it with Ctrl+C.
-   
-.. ipython::
-   :verbatim:
+We register this function with ``sub``.
 
-   In [12]: monitor('random_walk:x', callback=f)
-   [24.51439201]
-   [24.6344612]
-   [24.7142318]
-   [25.54776527]
-   [25.67713186]
-   ^C
+.. ipython:: python
+
+    sub.add_callback(f)
+
+We can register multiple such function is we wish.
+
+Because this is a *synchronous* client, processing subscriptions is a blocking
+operation,. (See the :doc:`threading-client` to process subscriptions on a
+separate, background thread.) To activate the subscription, call
+``sub.block()``.
+
+.. ipython::
+    :verbatim:
+
+    In [1]: sub.block()
+    [14.14272394]
+    [14.94322537]
+    [15.35695388]
+    [15.74301991]
+    ^C
+
+This call to ``sub.block()`` blocks indefinitely, passing responses to ``f`` as
+they arrive. When we are satisfied, we can interrupt it with Ctrl+C (or by
+calling ``sub.interrupt()`` from another thread).
+
+Equivalently, use the top-level function :func:`block`, which can be used to
+process multiple subscriptions concurrently:
+
+.. ipython::
+    :verbatim:
+
+    In [1]: from caproto.sync.client import block
+
+    In [2]: sub_dt = subscribe('random_walk:dt')
+
+    In [3]: sub_x = subscribe('random_walk:x')
+
+    In [4]: sub_dt.add_callback(f)
+    Out[4]: 0
+
+    In [5]: sub_x.add_callback(f)
+    Out[5]: 0
+
+    In [6]: block(sub_x, sub_dt)
+    [63.34866867]
+    [1.]
+    [63.53448681]
+    [64.30532391]
+    ^C
 
 .. ipython:: python
     :suppress:
@@ -131,6 +174,12 @@ they arrive. When we are satisfied, we can interrupted it with Ctrl+C.
 API Documentation
 =================
 
-.. autofunction:: get
-.. autofunction:: put
-.. autofunction:: monitor
+.. autofunction:: read
+.. autofunction:: write
+.. autofunction:: subscribe
+.. autofunction:: block
+.. autofunction:: interrupt
+.. autofunction:: read_write_read
+.. autoclass:: Subscription
+   :members:
+
