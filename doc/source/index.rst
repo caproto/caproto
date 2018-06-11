@@ -41,8 +41,8 @@ Now on to caproto:
    python3 -m caproto.ioc_examples.simple &  # background a demo server
    caproto-put simple:A 42  # run a command-line client
 
-11 Reasons This Isn't As Crazy as It Sounds
-===========================================
+10 Reasons To Use Caproto and 1 Big Reason Not To
+=================================================
 
 Most existing EPICS tools are built on a well-established C library, *libca*.
 Why rewrite it from scratch in Python instead of just wrapping C?
@@ -82,6 +82,12 @@ Why rewrite it from scratch in Python instead of just wrapping C?
    epics-base tools (tested against 3.14, 3.15, 3.16, R7).
 10. **Succinct**: The core of the package is about the same word count as the
     CA protocol documentation.
+
+All that said, some applications of EPICS --- such as running an accelerator
+--- rely on the battle-tested reliability of EPICS' reference implementation.
+We would advise those kinds of users to steer well clear of caproto. It is best
+suited to applications to reward convenience, fast iteration, and
+accessibility.
 
 Vital Statistics
 ================
