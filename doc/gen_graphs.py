@@ -7,7 +7,7 @@ from caproto import _state as state
 
 
 def to_node_name(node):
-    return node.__name__
+    return repr(node)
 
 
 def create_transition_graph(d, role, format_):
