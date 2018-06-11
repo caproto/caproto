@@ -1529,14 +1529,13 @@ class PV:
 
         Returns
         -------
-        
         subscription : Subscription
 
         Examples
         --------
 
         Define a subscription.
-        
+
         >>> sub = pv.subscribe()
 
         Add a user callback. The subscription will be transparently activated
