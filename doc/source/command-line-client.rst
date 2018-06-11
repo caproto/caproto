@@ -166,7 +166,7 @@ For extreme debugging, display all of the commands sent and received using ``-vv
     [D 20:00:47.579 _circuit:142] Serializing ClearChannelRequest(sid=1, cid=0)
     random_walk:x                             [5.38826246]
 
-For additional options, see ``caproto-get -h`` or the documentation below.
+For additional options, type ``caproto-get -h`` or see below.
 
 Let us set the value to ``1``.
 
@@ -182,11 +182,19 @@ The client issues three requests:
 2. Write ``1``.
 3. Read the value again.
 
-This behavior is particular to caproto's *synchronous* client, on which this
-command-line interface relies. The other, more sophisticated clients leave it
-up to the caller when and whether to request readings.
+By default it does actually wait for confirmation that the write has been
+processed by the server before moving on to the final read, so it is possible
+to receive a reading that isn't up to date. Use ``-c`` to ask the server to
+confirm the write's success and to wait on that confirmation before doing the
+final read.
 
-For additional options, see ``caproto-put -h`` or the documentation below.
+.. code-block:: bash
+
+    $ caproto-put -c random_walk:dt 2
+    random_walk:dt                            [1.]
+    random_walk:dt                            [2.]
+
+For additional options, type ``caproto-put -h`` or see below.
 
 Let us now monitor a channel. The server updates the ``random_walk:x`` channel
 periodically. (The period is set by ``random_walk:dt``.) We can subscribe
@@ -233,17 +241,18 @@ and the time-spacing between readings:
     0:00:01.004499 [219.30221942]
     ^C
 
-For additional options, see ``caproto-monitor -h`` or the documentation below.
+For additional options, type ``caproto-monitor -h`` or see below.
 
 API Documentation
 =================
 
-These are intended to provide a superset of the API provided by their standard
-counterparts in epics-base, ``caget``, ``caput``, ``camonitor``, and
-``caRepeater`` so that they can be safely used as drop-in replacements. Some
-arguments related to string formatting are not yet implemented
-(`Code contributions welcome!  <https://github.com/NSLS-II/caproto/issues/147>`_)
-but similar functionality is available via ``--format``.
+Caproto's command-line client is intended to provide a superset of the API
+provided by its counterparts in EPICS' reference implementation, epics-base:
+``caget``, ``caput``, ``camonitor``, and ``caRepeater``. It is our goal to make
+caproto's variants safe to use as drop-in replacements. As yet, some arguments
+related to string formatting are not yet implemented (`Code contributions
+welcome!  <https://github.com/NSLS-II/caproto/issues/147>`_) but similar
+functionality is available via ``--format``.
 
 caproto-get
 -----------
