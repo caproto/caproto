@@ -7,7 +7,7 @@ Pyepics-Compatible Client
 What is This?
 =============
 
-`Pyepics <http://cars9.uchicago.edu/software/python/pyepics3/>` is a
+`Pyepics <http://cars9.uchicago.edu/software/python/pyepics3/>`_ is a
 well-established Python wrapper of libca. Caproto includes a client that is a
 drop-in replacement for pyepics. It is implemented as a shim on top of
 caproto's main :doc:`threading-client`.  Caproto's pyepics-compatible client is

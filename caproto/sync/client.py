@@ -512,8 +512,8 @@ def write(pv_name, data, *, notify=False, data_type=None, metadata=None,
 
     Examples
     --------
-
     Write the value 5 to a Channel named 'cat'.
+
     >>> write('cat', 5)  # returns None
 
     Request notification of completion ("put completion") and wait for it.

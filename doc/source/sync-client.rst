@@ -89,10 +89,10 @@ Let us set the value to ``1``.
     from caproto.sync.client import write 
     write('random_walk:dt', 1)
 
-The function returns immediately and returns ``None``. To wait for confirmation
-that the write has been successfully processed by the server, use the
-``notify`` keyword argument. (This is not guaranteed to be supported by the
-server; it may result in an ``ErrorResponse``.)
+The function returns ``None`` immediately. To wait for confirmation that the
+write has been successfully processed by the server, use the ``notify`` keyword
+argument. (This is not guaranteed to be supported by an EPICS server; it may
+result in an ``ErrorResponse``.)
 
 .. ipython:: python
 

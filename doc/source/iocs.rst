@@ -4,7 +4,7 @@ Input-Output Controllers
 
 EPICS Input-Output Controllers (IOCs) expose an EPICS server. Behind the
 server, they may connect to a device driver, data-processing code, and/or
-an EPICS client.
+an EPICS client for chaining with other servers.
 
 In this section, we will review some of the example IOCs that are included with
 caproto, intended as demonstrations of what is possible.
@@ -69,7 +69,7 @@ and use ``--prefix`` to conveniently customize the PV prefix:
         my_custom_prefix:A
         my_custom_prefix:B
 
-See ``python3 -m caproto.ioc_examples.simple -h`` for more options.
+Type ``python3 -m caproto.ioc_examples.simple -h`` for more options.
 
 Examples
 ========
@@ -105,6 +105,7 @@ This IOC has two PVs that simply store a value.
 .. literalinclude:: ../../caproto/ioc_examples/simple.py
 
 .. ipython:: python
+    :suppress:
 
     run_example('caproto.ioc_examples.simple')
 
@@ -118,8 +119,8 @@ This IOC has two PVs that simply store a value.
         simple:A
         simple:B
 
-Using the threading client context we created above, we can interact read these
-values and write to them.
+Using the threading client context we created above, we can read these values
+and write to them.
 
 .. ipython:: python
 
@@ -161,7 +162,7 @@ client writes.
     print(open('/tmp/A').read())
 
 It is easy to imagine extending this example to write a socket or a serial
-device rather than a file, and we will do that further below.
+device rather than a file.
 
 Update Tallies When Each PV is Read
 -----------------------------------
@@ -189,9 +190,9 @@ customize its reading behavior.
 .. ipython:: python
 
     a, b = ctx.get_pvs('reading_counter:A', 'reading_counter:B')
-    a.read()
-    a.read()
-    a.read()
+    a.read().data
+    a.read().data
+    a.read().data
 
 Macros for PV names
 -------------------
@@ -241,6 +242,11 @@ Observe that the command line arguments fill in the PV names.
 
 "Inline" Style Read and Write Customization
 -------------------------------------------
+
+This example shows custom write and read behavior similar to what we have seen
+before, but implemented "inline" rather than siloed into a separate method.
+This may be useful, from a readability point of view, for implementing one-off
+behavior.
 
 .. literalinclude:: ../../caproto/ioc_examples/inline_style.py
 
