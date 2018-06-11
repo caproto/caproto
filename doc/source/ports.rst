@@ -19,7 +19,7 @@ UDP
   connection with the TCP server. To support this, the ``SearchResponse``
   command encodes the port number of the TCP server(s). The clients obtain the
   server's IP address from the datagram itself.
-* Servers periodically broadcast ``RsrvIsUp`` commands to the hosts defined by
+* Servers periodically broadcast ``Beacon`` commands to the hosts defined by
   ``EPICS_CA_AUTO_BEACON_ADDR_LIST`` or, if ``EPICS_CAS_BEACON_ADDR_LIST`` is
   not ``'no'``, to all broadcast interfaces. The port used is
   ``EPICS_CAS_BEACON_PORT`` (default ``5065``).
