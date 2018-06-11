@@ -65,7 +65,8 @@ def main():
     if args.no_color:
         color_logs(False)
     if args.verbose:
-        logging.getLogger('caproto.monitor').setLevel('DEBUG')
+        logging.getLogger('caproto.ch').setLevel('DEBUG')
+        logging.getLogger(f'caproto.ctx').setLevel('DEBUG')
     if args.vvv:
         logging.getLogger('caproto').setLevel('DEBUG')
 
