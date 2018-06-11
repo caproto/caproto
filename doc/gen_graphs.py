@@ -54,7 +54,7 @@ def generate(format_='png'):
             graph = create_transition_graph(d[role], role=role,
                                             format_=format_)
 
-            filename = 'source/_static/{}_{}'.format(name, role).lower()
+            filename = 'source/_static/{}_{}'.format(name, repr(role)).lower()
             print('Writing {}.{}'.format(filename, format_))
 
             graph.render(filename)
