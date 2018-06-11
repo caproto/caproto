@@ -18,4 +18,4 @@ These resources were useful in the development of this project.
 * `This Stack Overflow post about socket options <http://stackoverflow.com/questions/14388706/socket-options-so-reuseaddr-and-so-reuseport-how-do-they-differ-do-they-mean-t>`_
 * David Beazley's blog post,
   `Python Binary I/O Handling <https://dabeaz.blogspot.com/2009/08/python-binary-io-handling.html>`_
-* `Beej's Guide to Network Programming <https://beej.us/guide/bgnet/html/single/bgnet.html`_
+* `Beej's Guide to Network Programming <https://beej.us/guide/bgnet/html/single/bgnet.html>`_
