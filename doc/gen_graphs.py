@@ -7,7 +7,10 @@ from caproto import _state as state
 
 
 def to_node_name(node):
-    return node.__name__
+    try:
+        return node.__name__
+    except AttributeError:
+        return repr(node)
 
 
 def create_transition_graph(d, role, format_):
@@ -51,7 +54,7 @@ def generate(format_='png'):
             graph = create_transition_graph(d[role], role=role,
                                             format_=format_)
 
-            filename = 'source/_static/{}_{}'.format(name, role).lower()
+            filename = 'source/_static/{}_{}'.format(name, repr(role)).lower()
             print('Writing {}.{}'.format(filename, format_))
 
             graph.render(filename)

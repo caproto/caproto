@@ -21,7 +21,7 @@ from .repeater import spawn_repeater
 
 __all__ = ('read', 'write', 'subscribe', 'block', 'interrupt',
            'read_write_read')
-logger = logging.getLogger('caproto')
+logger = logging.getLogger('caproto.ctx')
 
 CA_SERVER_PORT = 5064  # just a default
 
@@ -217,7 +217,9 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0, notify=True,
 
     Examples
     --------
+
     Get the value of a Channel named 'cat'.
+
     >>> read('cat').data
     """
     if repeater:
@@ -246,28 +248,50 @@ def subscribe(pv_name, priority=0, data_type=None, data_count=None,
     """
     Define a subscription.
 
-    Example
-    -------
+    Parameters
+    ----------
+    pv_name : string
+    priority : integer, optional
+        Used by the server to triage subscription responses when under high
+        load. 0 is lowest; 99 is highest.
+    data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
+        Request specific data type or a class of data types, matched to the
+        channel's native data type. Default is Channel's native data type.
+    data_count : integer, optional
+        Requested number of values. Default is the channel's native data
+        count, which can be checked in the Channel's attribute
+        :attr:`native_data_count`.
+    low, high, to : float, optional
+        deprecated by Channel Access, not yet implemented by caproto
+    mask :  SubscriptionType, optional
+        Subscribe to selective updates.
+
+    Examples
+    --------
+
     Define a subscription on the ``cat`` PV.
+
     >>> sub = subscribe('cat')
 
     Add one or more user-defined callbacks to process responses.
+
     >>> def f(response):
     ...     print(repsonse.data)
     ...
     >>> sub.add_callback(f)
 
     Activate the subscription and process incoming responses.
+
     >>> sub.block()
 
     This is a blocking operation in the sync client. (To do this on a
-    background thread, using the threading client.) Interrupt using Ctrl+C or
+    background thread, use the threading client.) Interrupt using Ctrl+C or
     by calling :meth:`sub.interrupt()` from another thread.
 
     The subscription may be reactivated by calling ``sub.block()`` again.
 
     To process multiple subscriptions at once, use the *function*
-    :func:`block`, which takes one more Subscriptions as arguments.
+    :func:`block`, which takes one or more Subscriptions as arguments.
 
     >>> block(sub1, sub2)
 
@@ -313,7 +337,9 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
 
     Examples
     --------
+
     Activate subscription(s) and block while they process updates.
+
     >>> sub1 = subscribe('cat')
     >>> sub1 = subscribe('dog')
     >>> block(sub1, sub2)
@@ -487,6 +513,7 @@ def write(pv_name, data, *, notify=False, data_type=None, metadata=None,
     Examples
     --------
     Write the value 5 to a Channel named 'cat'.
+
     >>> write('cat', 5)  # returns None
 
     Request notification of completion ("put completion") and wait for it.
@@ -504,7 +531,7 @@ def write(pv_name, data, *, notify=False, data_type=None, metadata=None,
     finally:
         udp_sock.close()
     try:
-        _write(chan, data, metadata, timeout, data_type, notify)
+        return _write(chan, data, metadata, timeout, data_type, notify)
     finally:
         try:
             if chan.states[ca.CLIENT] is ca.CONNECTED:
@@ -520,11 +547,11 @@ def read_write_read(pv_name, data, *, notify=False,
     """
     Write to a Channel, but sandwich the write between to reads.
 
-    This is what the command-line utilities ``caput`` and ``caproto-put`` do.
+    This is what the command-line utilities ``caproto-put`` and ``caput`` do.
     Notice that if you want the second reading to reflect the written value,
     you should pass the parameter ``notify=True``. (This is also true of
-    ``caput``, which needs the ``-c`` argument to behave the way you might
-    expect it to behave.)
+    ``caproto-put``/``caput``, which needs the ``-c`` argument to behave the
+    way you might expect it to behave.)
 
     This is provided as a separate function in order to support ``caproto-put``
     efficiently. Making separate calls to :func:`read` and :func:`write` would
@@ -563,11 +590,14 @@ def read_write_read(pv_name, data, *, notify=False,
 
     Examples
     --------
+
     Write the value 5 to a Channel named 'cat'.
-    >>> write('cat', 5)  # returns None
+
+    >>> read_write_read('cat', 5)  # returns initial, None, final
 
     Request notification of completion ("put completion") and wait for it.
-    >>> write('cat', 5, notify=True)  # returns a WriteNotifyResponse
+
+    >>> read_write_read('cat', 5, notify=True)  # initial, WriteNotifyResponse, final
     """
     if repeater:
         # As per the EPICS spec, a well-behaved client should start a
@@ -700,7 +730,8 @@ class Subscription:
         """
         Run the callbacks on a response.
 
-        This is used internally by block(), generally not called by the user.
+        This is used internally by :func:`block()`, generally not called by the
+        user.
         """
         to_remove = []
         with self._callback_lock:

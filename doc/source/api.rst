@@ -302,8 +302,6 @@ in the :class:`ChannelType` enum:
 
 .. autoclass:: ChannelType
 
-    "Native" types hold a scalar or a homogeous array of values.
-
     .. attribute:: STRING = 0
     .. attribute:: INT = 1
     .. attribute:: FLOAT = 2
@@ -311,8 +309,6 @@ in the :class:`ChannelType` enum:
     .. attribute:: CHAR = 4
     .. attribute:: LONG = 5
     .. attribute:: DOUBLE = 6
-
-    Other types build on the native types by including a struct of metadata.
 
     .. attribute:: STS_STRING = 7
     .. attribute:: STS_INT = 8

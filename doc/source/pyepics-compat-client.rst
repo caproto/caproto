@@ -7,10 +7,11 @@ Pyepics-Compatible Client
 What is This?
 =============
 
-Caproto includes a client that is a drop-in replacement for pyepics. It is
-implemented as a shim on top of caproto's main :doc:`threading-client`.
-Caproto's pyepics-compatible client is tested against a representative sample
-of the pyepics test suite.
+`Pyepics <http://cars9.uchicago.edu/software/python/pyepics3/>`_ is a
+well-established Python wrapper of libca. Caproto includes a client that is a
+drop-in replacement for pyepics. It is implemented as a shim on top of
+caproto's main :doc:`threading-client`.  Caproto's pyepics-compatible client is
+tested against a representative sample of the pyepics test suite.
 
 Why would you ever want to use caproto's pyepics instead of actual pyepics?  It
 may be advantageous to run existing user code written for pyepics on top of
@@ -21,14 +22,15 @@ pyepics-compatible one? Caproto's main threading client makes different design
 choices, consistent with the rest of caproto:
 
 1. Caproto's threading client provides a lower-level API, handing the user
-   response objects as opposed to values.
-2. Caproto pulls apart the subscription process into two steps---defining a
+   objects encapsulating the complete response from the server as opposed to
+   just the value.
+2. Caproto pulls apart the subscription process into two steps---specifying a
    subscription and adding a user callback function to one---whereas pyepics
    elides them.
 
 Caproto is speed-competitive with pyepics. Because it controls the
 entire network stack, rather than calling out to libca, it can batch requests
-into UDP datagrams and TCP packets more efficiently, leading to ~100X speedup
+into UDP datagrams and TCP packets more efficiently, leading to a ~250X speedup
 in connecting a large number of channels in bulk.
 
 The authors of caproto are heavy pyepics users and occasional contributors.
@@ -40,8 +42,6 @@ Demonstration
 For full documentation on pyepics usage, see the
 `pyepics doucmentation <http://cars9.uchicago.edu/software/python/pyepics3/>`_.
 This is a brief demonstration of caproto's pyepics-compat client.
-
-.. currentmodule:: caproto.threading.pyepics_compat
 
 .. ipython:: python
     :suppress:

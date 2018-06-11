@@ -25,6 +25,10 @@ def main():
                         help="PV (channel) name")
     parser.add_argument('data', type=str,
                         help="Value or values to write.")
+    parser.add_argument('--verbose', '-v', action='store_true',
+                        help="Show DEBUG log messages.")
+    parser.add_argument('-vvv', action='store_true',
+                        help=argparse.SUPPRESS)
     fmt_group.add_argument('--format', type=str,
                            help=("Python format string. Available tokens are "
                                  "{pv_name}, {response} and {which} (Old/New)."
@@ -33,6 +37,9 @@ def main():
                                  "and usages like "
                                  "{timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are "
                                  "supported."))
+    parser.add_argument('--timeout', '-w', type=float, default=1,
+                        help=("Timeout ('wait') in seconds for server "
+                              "responses."))
     parser.add_argument('--notify', '-c', action='store_true',
                         help=("Request notification of completion, and wait "
                               "for it."))
@@ -50,13 +57,6 @@ def main():
                                  "(implies -d 'time')"))
     # TODO caget/caput also include a 'srvr' column which seems to be `sid`. We
     # would need a pretty invasive refactor to access that from here.
-    parser.add_argument('--timeout', '-w', type=float, default=1,
-                        help=("Timeout ('wait') in seconds for server "
-                              "responses."))
-    parser.add_argument('--verbose', '-v', action='store_true',
-                        help="Show DEBUG log messages.")
-    parser.add_argument('-vvv', action='store_true',
-                        help=argparse.SUPPRESS)
     parser.add_argument('-n', action='store_true',
                         help=("Retrieve enums as integers (default is "
                               "strings)."))
@@ -70,6 +70,7 @@ def main():
         color_logs(False)
     if args.verbose:
         logging.getLogger(f'caproto.ch').setLevel('DEBUG')
+        logging.getLogger(f'caproto.ctx').setLevel('DEBUG')
     if args.vvv:
         logging.getLogger('caproto').setLevel('DEBUG')
     logger = logging.getLogger(f'caproto.ch.{args.pv_name}')

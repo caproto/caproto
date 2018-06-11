@@ -23,12 +23,10 @@ def main():
     fmt_group = parser.add_mutually_exclusive_group()
     parser.add_argument('pv_names', type=str, nargs='+',
                         help="PV (channel) name(s) separated by spaces")
-    parser.add_argument('-d', type=str, default=None, metavar="DATA_TYPE",
-                        help=("Request a class of data type (native, status, "
-                              "time, graphic, control) or a specific type. "
-                              "Accepts numeric "
-                              "code ('3') or case-insensitive string ('enum')"
-                              ". See --list-types."))
+    parser.add_argument('--verbose', '-v', action='store_true',
+                        help="Verbose mode. (Use -vvv for more.)")
+    parser.add_argument('-vvv', action='store_true',
+                        help=argparse.SUPPRESS)
     fmt_group.add_argument('--format', type=str,
                            help=("Python format string. Available tokens are "
                                  "{pv_name} and {response}. Additionally, if "
@@ -36,12 +34,14 @@ def main():
                                  "and usages like "
                                  "{timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are "
                                  "supported."))
-    parser.add_argument('--list-types', action='list_types',
-                        default=argparse.SUPPRESS,
-                        help="List allowed values for -d and exit.")
-    parser.add_argument('-n', action='store_true',
-                        help=("Retrieve enums as integers (default is "
-                              "strings)."))
+    parser.add_argument('--timeout', '-w', type=float, default=1,
+                        help=("Timeout ('wait') in seconds for server "
+                              "responses."))
+    parser.add_argument('--notify', '-c', action='store_true',
+                        help=("This is a vestigial argument that now has no "
+                              "effect in caget but is provided for "
+                              "for backward-compatibility with caget "
+                              "invocations."))
     parser.add_argument('--priority', '-p', type=int, default=0,
                         help="Channel Access Virtual Circuit priority. "
                              "Lowest is 0; highest is 99.")
@@ -56,18 +56,18 @@ def main():
                                  "(implies -d 'time')"))
     # TODO caget/caput also include a 'srvr' column which seems to be `sid`. We
     # would need a pretty invasive refactor to access that from here.
-    parser.add_argument('--timeout', '-w', type=float, default=1,
-                        help=("Timeout ('wait') in seconds for server "
-                              "responses."))
-    parser.add_argument('--verbose', '-v', action='store_true',
-                        help="Verbose mode. (Use -vvv for more.)")
-    parser.add_argument('-vvv', action='store_true',
-                        help=argparse.SUPPRESS)
-    parser.add_argument('--notify', '-c', action='store_true',
-                        help=("This is a vestigial argument that now has no "
-                              "effect in caget but is provided for "
-                              "for backward-compatibility with caget "
-                              "invocations."))
+    parser.add_argument('-d', type=str, default=None, metavar="DATA_TYPE",
+                        help=("Request a class of data type (native, status, "
+                              "time, graphic, control) or a specific type. "
+                              "Accepts numeric "
+                              "code ('3') or case-insensitive string ('enum')"
+                              ". See --list-types."))
+    parser.add_argument('--list-types', action='list_types',
+                        default=argparse.SUPPRESS,
+                        help="List allowed values for -d and exit.")
+    parser.add_argument('-n', action='store_true',
+                        help=("Retrieve enums as integers (default is "
+                              "strings)."))
     parser.add_argument('--no-color', action='store_true',
                         help="Suppress ANSI color codes in log messages.")
     parser.add_argument('--no-repeater', action='store_true',
@@ -78,6 +78,7 @@ def main():
         color_logs(False)
     if args.verbose:
         logging.getLogger(f'caproto.ch').setLevel('DEBUG')
+        logging.getLogger(f'caproto.ctx').setLevel('DEBUG')
     if args.vvv:
         logging.getLogger('caproto').setLevel('DEBUG')
     data_type = args.d

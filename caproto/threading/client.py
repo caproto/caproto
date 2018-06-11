@@ -712,6 +712,25 @@ class Context:
 
         These objects may not be connected at first. Channel creation occurs on
         a background thread.
+
+        PVs are uniquely defined by their name and priority. If a PV with the
+        same name and priority is requested twice, the same (cached) object is
+        returned. Any callbacks included here are added to added alongside any
+        existing ones.
+
+        Parameters
+        ----------
+        *names : strings
+            any number of PV names
+        priority : integer
+            Used by the server to triage subscription responses when under high
+            load. 0 is lowest; 99 is highest.
+        connection_state_callback : callable
+            Expected signature: ``f(state)`` where ``state`` is a string
+        access_rights_callback : callable
+            Expected signature: ``f(access_rights)`` where ``access_rights`` is
+            a member of the caproto ``AccessRights`` enum
+
         """
         if self._user_disconnected:
             raise ContextDisconnectedError("This Context is no longer usable.")
@@ -1356,11 +1375,10 @@ class PV:
             Called with the response as its argument when received.
         timeout : number or None
             Number of seconds to wait before raising TimeoutError. Default is
+        data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
+            Request specific data type or a class of data types, matched to the
+            channel's native data type. Default is Channel's native data type.
             2.
-        data_type : a ChannelType or corresponding integer ID, optional
-            Requested Channel Access data type. Default is the channel's
-            native data type, which can be checked in the Channel's attribute
-            :attr:`native_data_type`.
         data_count : integer, optional
             Requested number of values. Default is the channel's native data
             count, which can be checked in the Channel's attribute
@@ -1432,10 +1450,9 @@ class PV:
             If None (default), set to True if wait=True or callback is set.
             Can be manually set to True or False. Will raise ValueError if set
             to False while wait=True or callback is set.
-        data_type : a ChannelType or corresponding integer ID, optional
-            Requested Channel Access data type. Default is the channel's
-            native data type, which can be checked in the Channel's attribute
-            :attr:`native_data_type`.
+        data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
+            Write specific data type or a class of data types, matched to the
+            channel's native data type. Default is Channel's native data type.
         data_count : integer, optional
             Requested number of values. Default is the channel's native data
             count, which can be checked in the Channel's attribute
@@ -1493,7 +1510,46 @@ class PV:
 
     def subscribe(self, data_type=None, data_count=None,
                   low=0.0, high=0.0, to=0.0, mask=None):
-        "Start a new subscription to which user callback may be added."
+        """
+        Start a new subscription to which user callback may be added.
+
+        Parameters
+        ----------
+        data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
+            Request specific data type or a class of data types, matched to the
+            channel's native data type. Default is Channel's native data type.
+        data_count : integer, optional
+            Requested number of values. Default is the channel's native data
+            count, which can be checked in the Channel's attribute
+            :attr:`native_data_count`.
+        low, high, to : float, optional
+            deprecated by Channel Access, not yet implemented by caproto
+        mask :  SubscriptionType, optional
+            Subscribe to selective updates.
+
+        Returns
+        -------
+        subscription : Subscription
+
+        Examples
+        --------
+
+        Define a subscription.
+
+        >>> sub = pv.subscribe()
+
+        Add a user callback. The subscription will be transparently activated
+        (i.e. an ``EventAddRequest`` will be sent) when the first user callback
+        is added.
+
+        >>> sub.add_callback(my_func)
+
+        Multiple callbacks may be added to the same subscription.
+
+        >>> sub.add_callback(another_func)
+
+        See the docstring for :class:`Subscription` for more.
+        """
         # A Subscription is uniquely identified by the Signature created by its
         # args and kwargs.
         bound = SUBSCRIBE_SIG.bind(data_type, data_count, low, high, to, mask)
@@ -1543,9 +1599,9 @@ class CallbackHandler:
             self.callbacks[cb_id] = ref
         return cb_id
 
-    def remove_callback(self, cb_id):
+    def remove_callback(self, token):
         with self._callback_lock:
-            self.callbacks.pop(cb_id, None)
+            self.callbacks.pop(token, None)
 
     def process(self, *args, **kwargs):
         """
@@ -1710,12 +1766,18 @@ class Subscription(CallbackHandler):
 
         return cb_id
 
-    def remove_callback(self, cb_id):
+    def remove_callback(self, token):
         """
         Remove callback using token that was returned by :meth:`add_callback`.
+
+        Parameters
+        ----------
+
+        token : integer
+            Token returned by :meth:`add_callback`.
         """
         with self._callback_lock:
-            super().remove_callback(cb_id)
+            super().remove_callback(token)
             if not self.callbacks:
                 # Go dormant.
                 self._unsubscribe()

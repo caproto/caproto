@@ -2,19 +2,9 @@
 Command-Line Client
 *******************
 
-
 Installing the caproto Python package places several executable command-line
 utilities next to whichever ``python3`` binary was used to install caproto.
-They should be available on your ``PATH``.
-
-Type ``caproto-<TAB>`` to check:
-
-.. code-block:: bash
-
-   $ caproto-
-   caproto-defaultdictserver  caproto-monitor            caproto-spoof-beamline
-   caproto-example-ioc        caproto-put
-   caproto-get                caproto-repeater
+They should be available on your ``PATH``. Type ``caproto-<TAB>`` to check.
 
 Tutorial
 ========
@@ -23,8 +13,13 @@ Start one of caproto's demo IOCs.
 
 .. code-block:: bash
 
-    $ python3 -m caproto.ioc_examples.random_walk
-    PVs: ['random_walk:dt', 'random_walk:x']
+    $ python3 -m caproto.ioc_examples.random_walk --list-pvs
+    [I 19:50:37.509 server:93] Server starting up...
+    [I 19:50:37.512 server:109] Listening on 0.0.0.0:55704
+    [I 19:50:37.512 server:121] Server startup complete.
+    [I 19:50:37.512 server:123] PVs available:
+        random_walk:dt
+        random_walk:x
 
 Now, in a separate shell, we will talk to it using caproto's command-line
 client:
@@ -59,24 +54,33 @@ Access particular fields in the response using attribute ("dot") access.
     $ caproto-get random_walk:dt --format="{response.metadata}"
     None
 
-By default, the server sends no metadata. Obtain metadata by specifically
-requesting a richer data type.
+By default, the server sends no metadata. Obtain metadata by requesting a
+richer data type. 
 
 .. code-block:: bash
 
-    $ caproto-get random_walk:dt -d CTRL_FLOAT --format="{response.metadata}"
+    $ caproto-get random_walk:dt -d control --format="{response.metadata}"
     DBR_CTRL_FLOAT(status=<AlarmStatus.NO_ALARM: 0>,
     severity=<AlarmSeverity.NO_ALARM: 0>, upper_disp_limit=0.0,
     lower_disp_limit=0.0, upper_alarm_limit=0.0, upper_warning_limit=0.0,
     lower_warning_limit=0.0, lower_alarm_limit=0.0, upper_ctrl_limit=0.0,
     lower_ctrl_limit=0.0, precision=0, units=b'')
 
-To view the list of data types, use ``-list-types``. The ``-d`` parameter used
-above accepts a data type's name or its numerical code.
+To view the list of data types, use ``-list-types``.
 
 .. code-block:: bash
 
     $ caproto-get --list-types
+    Request a general class of types:
+
+    native
+    status
+    time
+    graphic
+    control
+
+    or one of the following specific types, specified by number or by (case-insensitive) name:
+
     0  STRING
     1  INT
     2  FLOAT
@@ -91,11 +95,11 @@ above accepts a data type's name or its numerical code.
     37 STSACK_STRING
     38 CLASS_NAME
 
-Access multiple fields.
+Display multiple fields.
 
 .. code-block:: bash
 
-    $ caproto-get random_walk:dt -d TIME_FLOAT \
+    $ caproto-get random_walk:dt -d time \
       --format="{response.metadata.timestamp}   {response.data}"
     1527708484.417967   [3.]
 
@@ -114,16 +118,14 @@ visually parse.
 .. code-block:: bash
 
     $ caproto-get -v random_walk:x
-    [D 19:27:02.523 client:167] Spawning caproto-repeater process....
-    [D 19:27:03.221 repeater:184] Checking for another repeater....
-    [I 19:27:03.221 repeater:84] Repeater is listening on 0.0.0.0:5065
-    [D 19:27:02.527 client:61] Registering with the Channel Access repeater.
-    [D 19:27:02.529 client:68] Searching for 'random_walk:x'....
-    [D 19:27:02.531 client:80] Search request sent to ('127.0.0.1', 5064).
-    [D 19:27:02.531 client:80] Search request sent to ('192.168.86.255', 5064).
-    [D 19:27:02.543 client:154] Channel created.
-    [D 19:27:02.543 client:320] Detected native data_type <ChannelType.DOUBLE: 6>.
-    random_walk:x                             [2.95033725]
+    [D 20:00:15.753 client:53] Registering with the Channel Access repeater.
+    [D 20:00:15.755 client:60] Searching for 'random_walk:x'....
+    [D 20:00:15.758 client:72] Search request sent to ('127.0.0.1', 5064).
+    [D 20:00:15.758 client:72] Search request sent to ('172.27.7.255', 5064).
+    [D 20:00:15.759 client:112] Found random_walk:x at ('127.0.0.1', 54388)
+    [I 20:00:15.765 client:147] random_walk:x connected
+    [D 20:00:15.765 client:161] Detected native data_type <ChannelType.DOUBLE: 6>.
+    random_walk:x                             [0.49813506]
 
 
 For extreme debugging, display all of the commands sent and received using ``-vvv``.
@@ -131,42 +133,40 @@ For extreme debugging, display all of the commands sent and received using ``-vv
 .. code-block:: bash
 
     $ caproto-get -vvv random_walk:x
-    [D 19:27:08.557 client:167] Spawning caproto-repeater process....
-    [D 19:27:08.561 client:61] Registering with the Channel Access repeater.
-    [D 19:27:08.561 _broadcaster:68] Serializing 1 commands into one datagram
-    [D 19:27:08.562 _broadcaster:71] 1 of 1 RepeaterRegisterRequest(client_address='0.0.0.0')
-    [D 19:27:08.565 client:68] Searching for 'random_walk:x'....
-    [D 19:27:08.566 _broadcaster:68] Serializing 2 commands into one datagram
-    [D 19:27:08.566 _broadcaster:71] 1 of 2 VersionRequest(priority=0, version=13)
-    [D 19:27:08.567 _broadcaster:71] 2 of 2 SearchRequest(name=b'random_walk:x', cid=0, version=13)
-    [D 19:27:08.567 repeater:131] New client ('127.0.0.1', 60442)
-    [D 19:27:08.569 client:80] Search request sent to ('127.0.0.1', 5064).
-    [D 19:27:08.569 client:80] Search request sent to ('192.168.86.255', 5064).
-    [D 19:27:08.570 _broadcaster:95] Received datagram from ('127.0.0.1', 5065) with 16 bytes.
-    [D 19:27:08.584 _broadcaster:95] Received datagram from ('127.0.0.1', 5064) with 40 bytes.
-    [D 19:27:08.598 _circuit:133] Serializing VersionRequest(priority=0, version=13)
-    [D 19:27:08.598 _circuit:133] Serializing HostNameRequest(name=b'daniels-air-3.lan')
-    [D 19:27:08.599 _circuit:133] Serializing ClientNameRequest(name=b'dallan')
-    [D 19:27:08.600 _circuit:133] Serializing CreateChanRequest(name=b'random_walk:x', cid=0, version=13)
-    [D 19:27:09.191 _circuit:162] Received 16 bytes.
-    [D 19:27:09.191 _circuit:172] 16 bytes -> VersionResponse(version=13)
-    [D 19:27:09.192 _circuit:176] 0 bytes are cached. Need more bytes to parse next command.
-    [D 19:27:09.192 _circuit:162] Received 32 bytes.
-    [D 19:27:09.192 _circuit:172] 16 bytes -> AccessRightsResponse(cid=0, access_rights=<AccessRights.WRITE|READ: 3>)
-    [D 19:27:09.193 _circuit:172] 16 bytes -> CreateChanResponse(data_type=<ChannelType.DOUBLE: 6>, data_count=1, cid=0, sid=1)
-    [D 19:27:09.193 _circuit:176] 0 bytes are cached. Need more bytes to parse next command.
-    [D 19:27:09.193 client:154] Channel created.
-    [D 19:27:09.193 client:320] Detected native data_type <ChannelType.DOUBLE: 6>.
-    [D 19:27:09.195 _circuit:133] Serializing ReadNotifyRequest(data_type=<ChannelType.DOUBLE: 6>, data_count=0, sid=1, ioid=0)
-    [D 19:27:09.198 _circuit:162] Received 24 bytes.
-    [D 19:27:09.208 _circuit:172] 24 bytes -> ReadNotifyResponse(data=array([4.10904623]), data_type=<ChannelType.DOUBLE: 6>, data_count=1, status=CAStatusCode(name='ECA_NORMAL', code=0, code_with_severity=1, severity=<CASeverity.SUCCESS: 1>, success=1, defunct=False, description='Normal successful completion'), ioid=0, metadata=None)
-    [D 19:27:09.274 _circuit:176] 0 bytes are cached. Need more bytes to parse next command.
-    [D 19:27:09.274 _circuit:133] Serializing ClearChannelRequest(sid=1, cid=0)
-    random_walk:x                             [4.10904623]
-    [D 19:27:09.690 repeater:184] Checking for another repeater....
-    [I 19:27:09.691 repeater:189] Another repeater is already running; exiting.
+    [D 20:00:47.562 repeater:214] Another repeater is already running; will not spawn one.
+    [D 20:00:47.563 client:53] Registering with the Channel Access repeater.
+    [D 20:00:47.563 _broadcaster:71] Serializing 1 commands into one datagram
+    [D 20:00:47.564 _broadcaster:74] 1 of 1 RepeaterRegisterRequest(client_address='0.0.0.0')
+    [D 20:00:47.565 client:60] Searching for 'random_walk:x'....
+    [D 20:00:47.566 _broadcaster:71] Serializing 2 commands into one datagram
+    [D 20:00:47.566 _broadcaster:74] 1 of 2 VersionRequest(priority=0, version=13)
+    [D 20:00:47.566 _broadcaster:74] 2 of 2 SearchRequest(name='random_walk:x', cid=0, version=13)
+    [D 20:00:47.567 client:72] Search request sent to ('127.0.0.1', 5064).
+    [D 20:00:47.567 client:72] Search request sent to ('172.27.7.255', 5064).
+    [D 20:00:47.568 _broadcaster:98] Received datagram from ('127.0.0.1', 5065) with 16 bytes.
+    [D 20:00:47.568 _broadcaster:98] Received datagram from ('127.0.0.1', 5064) with 40 bytes.
+    [D 20:00:47.568 client:112] Found random_walk:x at ('127.0.0.1', 54388)
+    [D 20:00:47.572 _circuit:142] Serializing VersionRequest(priority=0, version=13)
+    [D 20:00:47.573 _circuit:142] Serializing HostNameRequest(name='Daniels-MacBook-Air-3.local')
+    [D 20:00:47.574 _circuit:142] Serializing ClientNameRequest(name='dallan')
+    [D 20:00:47.574 _circuit:142] Serializing CreateChanRequest(name='random_walk:x', cid=0, version=13)
+    [D 20:00:47.575 _circuit:171] Received 16 bytes.
+    [D 20:00:47.575 _circuit:181] 16 bytes -> VersionResponse(version=13)
+    [D 20:00:47.575 _circuit:185] 0 bytes are cached. Need more bytes to parse next command.
+    [D 20:00:47.575 _circuit:171] Received 32 bytes.
+    [D 20:00:47.575 _circuit:181] 16 bytes -> AccessRightsResponse(cid=0, access_rights=<AccessRights.WRITE|READ: 3>)
+    [D 20:00:47.576 _circuit:181] 16 bytes -> CreateChanResponse(data_type=<ChannelType.DOUBLE: 6>, data_count=1, cid=0, sid=1)
+    [D 20:00:47.576 _circuit:185] 0 bytes are cached. Need more bytes to parse next command.
+    [I 20:00:47.576 client:147] random_walk:x connected
+    [D 20:00:47.577 client:161] Detected native data_type <ChannelType.DOUBLE: 6>.
+    [D 20:00:47.577 _circuit:142] Serializing ReadNotifyRequest(data_type=<ChannelType.DOUBLE: 6>, data_count=0, sid=1, ioid=0)
+    [D 20:00:47.578 _circuit:171] Received 24 bytes.
+    [D 20:00:47.578 _circuit:181] 24 bytes -> ReadNotifyResponse(data=array([5.38826246]), data_type=<ChannelType.DOUBLE: 6>, data_count=1, status=CAStatusCode(name='ECA_NORMAL', code=0, code_with_severity=1, severity=<CASeverity.SUCCESS: 1>, success=1, defunct=False, description='Normal successful completion'), ioid=0, metadata=None)
+    [D 20:00:47.579 _circuit:185] 0 bytes are cached. Need more bytes to parse next command.
+    [D 20:00:47.579 _circuit:142] Serializing ClearChannelRequest(sid=1, cid=0)
+    random_walk:x                             [5.38826246]
 
-For additional options, see ``caproto-get -h`` or the documentation below.
+For additional options, type ``caproto-get -h`` or see below.
 
 Let us set the value to ``1``.
 
@@ -182,11 +182,19 @@ The client issues three requests:
 2. Write ``1``.
 3. Read the value again.
 
-This behavior is particular to caproto's *synchronous* client, on which this
-command-line interface relies. The other, more sophisticated clients leave it
-up to the caller when and whether to request readings.
+By default it does actually wait for confirmation that the write has been
+processed by the server before moving on to the final read, so it is possible
+to receive a reading that isn't up to date. Use ``-c`` to ask the server to
+confirm the write's success and to wait on that confirmation before doing the
+final read.
 
-For additional options, see ``caproto-put -h`` or the documentation below.
+.. code-block:: bash
+
+    $ caproto-put -c random_walk:dt 2
+    random_walk:dt                            [1.]
+    random_walk:dt                            [2.]
+
+For additional options, type ``caproto-put -h`` or see below.
 
 Let us now monitor a channel. The server updates the ``random_walk:x`` channel
 periodically. (The period is set by ``random_walk:dt``.) We can subscribe
@@ -231,20 +239,20 @@ and the time-spacing between readings:
     0:00:01.002946 [217.64755049]
     0:00:01.003341 [218.41384969]
     0:00:01.004499 [219.30221942]
-    0:00:01.004556 [220.2028958]
     ^C
 
-For additional options, see ``caproto-monitor -h`` or the documentation below.
+For additional options, type ``caproto-monitor -h`` or see below.
 
 API Documentation
 =================
 
-These are intended to provide a superset of the API provided by their standard
-counterparts in epics-base, ``caget``, ``caput``, ``camonitor``, and
-``caRepeater`` so that they can be safely used as drop-in replacements. Some of
-``caget``'s arguments related to string formatting are not yet implemented
-(`Code contributions welcome!  <https://github.com/NSLS-II/caproto/issues/147>`_)
-but similar functionality is available via ``--format``.
+Caproto's command-line client is intended to provide a superset of the API
+provided by its counterparts in EPICS' reference implementation, epics-base:
+``caget``, ``caput``, ``camonitor``, and ``caRepeater``. It is our goal to make
+caproto's variants safe to use as drop-in replacements. As yet, some arguments
+related to string formatting are not yet implemented (`Code contributions
+welcome!  <https://github.com/NSLS-II/caproto/issues/147>`_) but similar
+functionality is available via ``--format``.
 
 caproto-get
 -----------
@@ -252,9 +260,10 @@ caproto-get
 .. code-block:: bash
 
     $ caproto-get -h
-    usage: caproto-get [-h] [-d DATA_TYPE] [--format FORMAT] [--list-types] [-n]
-                    [--no-repeater] [--priority PRIORITY] [--terse]
-                    [--timeout TIMEOUT] [--verbose]
+    usage: caproto-get [-h] [--verbose] [--format FORMAT] [--timeout TIMEOUT]
+                    [--notify] [--priority PRIORITY] [--terse] [--wide]
+                    [-d DATA_TYPE] [--list-types] [-n] [--no-color]
+                    [--no-repeater]
                     pv_names [pv_names ...]
 
     Read the value of a PV.
@@ -264,23 +273,30 @@ caproto-get
 
     optional arguments:
     -h, --help            show this help message and exit
-    -d DATA_TYPE          Request a certain data type. Accepts numeric code
-                          ('3') or case-insensitive string ('enum'). See --list-
-                          types
+    --verbose, -v         Verbose mode. (Use -vvv for more.)
     --format FORMAT       Python format string. Available tokens are {pv_name}
-                          and {response}. Additionally, if this data type
-                          includes time, {timestamp} and usages like
-                          {timestamp:%Y-%m-%d %H:%M:%S} are supported.
+                            and {response}. Additionally, if this data type
+                            includes time, {timestamp} and usages like
+                            {timestamp:%Y-%m-%d %H:%M:%S} are supported.
+    --timeout TIMEOUT, -w TIMEOUT
+                            Timeout ('wait') in seconds for server responses.
+    --notify, -c          This is a vestigial argument that now has no effect in
+                            caget but is provided for for backward-compatibility
+                            with caget invocations.
+    --priority PRIORITY, -p PRIORITY
+                            Channel Access Virtual Circuit priority. Lowest is 0;
+                            highest is 99.
+    --terse, -t           Display data only. Unpack scalars: [3.] -> 3.
+    --wide, -a, -l        Wide mode, showing 'name timestamp value
+                            status'(implies -d 'time')
+    -d DATA_TYPE          Request a class of data type (native, status, time,
+                            graphic, control) or a specific type. Accepts numeric
+                            code ('3') or case-insensitive string ('enum'). See
+                            --list-types.
     --list-types          List allowed values for -d and exit.
     -n                    Retrieve enums as integers (default is strings).
+    --no-color            Suppress ANSI color codes in log messages.
     --no-repeater         Do not spawn a Channel Access repeater daemon process.
-    --priority PRIORITY, -p PRIORITY
-                          Channel Access Virtual Circuit priority. Lowest is 0;
-                          highest is 99.
-    --terse, -t           Display data only. Unpack scalars: [3.] -> 3.
-    --timeout TIMEOUT, -w TIMEOUT
-                          Timeout ('wait') in seconds for server responses.
-    --verbose, -v         Verbose mode. (Use -vvv for more.)
 
 caproto-put
 -----------
@@ -288,9 +304,9 @@ caproto-put
 .. code-block:: bash
 
     $ caproto-put -h
-    usage: caproto-put [-h] [--format FORMAT] [--no-repeater]
-                    [--priority PRIORITY] [--terse] [--timeout TIMEOUT]
-                    [--verbose]
+    usage: caproto-put [-h] [--verbose] [--format FORMAT] [--timeout TIMEOUT]
+                    [--notify] [--priority PRIORITY] [--terse] [--wide] [-n]
+                    [--no-color] [--no-repeater]
                     pv_name data
 
     Write a value to a PV.
@@ -301,18 +317,23 @@ caproto-put
 
     optional arguments:
     -h, --help            show this help message and exit
-    --format FORMAT       Python format string. Available tokens are {pv_name}
-                          and {response}. Additionally, this data type includes
-                          time, {timestamp} and usages like {timestamp:%Y-%m-%d
-                          %H:%M:%S} are supported.
-    --no-repeater         Do not spawn a Channel Access repeater daemon process.
-    --priority PRIORITY, -p PRIORITY
-                          Channel Access Virtual Circuit priority. Lowest is 0;
-                          highest is 99.
-    --terse, -t           Display data only. Unpack scalars: [3.] -> 3.
+    --verbose, -v         Show DEBUG log messages.
+    --format FORMAT       Python format string. Available tokens are {pv_name},
+                            {response} and {which} (Old/New).Additionally, this
+                            data type includes time, {timestamp} and usages like
+                            {timestamp:%Y-%m-%d %H:%M:%S} are supported.
     --timeout TIMEOUT, -w TIMEOUT
-                          Timeout ('wait') in seconds for server responses.
-    --verbose, -v         Verbose mode. (Use -vvv for more.)
+                            Timeout ('wait') in seconds for server responses.
+    --notify, -c          Request notification of completion, and wait for it.
+    --priority PRIORITY, -p PRIORITY
+                            Channel Access Virtual Circuit priority. Lowest is 0;
+                            highest is 99.
+    --terse, -t           Display data only. Unpack scalars: [3.] -> 3.
+    --wide, -a, -l        Wide mode, showing 'name timestamp value
+                            status'(implies -d 'time')
+    -n                    Retrieve enums as integers (default is strings).
+    --no-color            Suppress ANSI color codes in log messages.
+    --no-repeater         Do not spawn a Channel Access repeater daemon process.
 
 caproto-monitor
 ---------------
@@ -320,8 +341,10 @@ caproto-monitor
 .. code-block:: bash
 
     $ caproto-monitor -h
-    usage: caproto-monitor [-h] [--format FORMAT] [-m MASK] [-n] [--no-repeater]
-                        [--priority PRIORITY] [--timeout TIMEOUT] [--verbose]
+    usage: caproto-monitor [-h] [--format FORMAT] [--verbose]
+                        [--duration DURATION | --maximum MAXIMUM]
+                        [--timeout TIMEOUT] [-m MASK] [--priority PRIORITY]
+                        [-n] [--no-color] [--no-repeater]
                         pv_names [pv_names ...]
 
     Read the value of a PV.
@@ -331,22 +354,27 @@ caproto-monitor
 
     optional arguments:
     -h, --help            show this help message and exit
-    --format FORMAT       Python format string. Available tokens are {pv_name}
-                          and {response}. Additionally, if this data type
-                          includes time, {timestamp}, {timedelta} and usages
-                          like {timestamp:%Y-%m-%d %H:%M:%S} are supported.
-    -m MASK               Channel Access mask. Any combination of 'v' (value),
-                          'a' (alarm), 'l' (log/archive), 'p' (property).
-                          Default is 'va'.
-    -n                    Retrieve enums as integers (default is strings).
-    --no-repeater         Do not spawn a Channel Access repeater daemon process.
-    --priority PRIORITY, -p PRIORITY
-                          Channel Access Virtual Circuit priority. Lowest is 0;
-                          highest is 99.
+    --format FORMAT       Python format string. Available tokens are {pv_name},
+                            {response}, {callback_count}. Additionally, if this
+                            data type includes time, {timestamp}, {timedelta} and
+                            usages like {timestamp:%Y-%m-%d %H:%M:%S} are
+                            supported.
+    --verbose, -v         Show DEBUG log messages.
+    --duration DURATION   Maximum number seconds to run before exiting. Runs
+                            indefinitely by default.
+    --maximum MAXIMUM     Maximum number of monitor events to process exiting.
+                            Unlimited by default.
     --timeout TIMEOUT, -w TIMEOUT
-                          Timeout ('wait') in seconds for server responses.
-    --verbose, -v         Verbose mode. (Use -vvv for more.)
-
+                            Timeout ('wait') in seconds for server responses.
+    -m MASK               Channel Access mask. Any combination of 'v' (value),
+                            'a' (alarm), 'l' (log/archive), 'p' (property).
+                            Default is 'va'.
+    --priority PRIORITY, -p PRIORITY
+                            Channel Access Virtual Circuit priority. Lowest is 0;
+                            highest is 99.
+    -n                    Retrieve enums as integers (default is strings).
+    --no-color            Suppress ANSI color codes in log messages.
+    --no-repeater         Do not spawn a Channel Access repeater daemon process.
 
 caproto-repeater
 ----------------
@@ -354,7 +382,7 @@ caproto-repeater
 .. code-block:: bash
 
     $ caproto-repeater -h
-    usage: caproto-repeater [-h] [-q | -v]
+    usage: caproto-repeater [-h] [-q | -v] [--no-color]
 
     Run a Channel Access Repeater. If the Repeater port is already in use, assume
     a Repeater is already running and exit. That port number is set by the
@@ -365,3 +393,4 @@ caproto-repeater
     -h, --help     show this help message and exit
     -q, --quiet    Suppress INFO log messages. (Still show WARNING or higher.)
     -v, --verbose  Verbose mode. (Use -vvv for more.)
+    --no-color     Suppress ANSI color codes in log messages.

@@ -45,7 +45,8 @@ creating a :class:`Context`.
     from caproto.threading.client import Context
     ctx = Context()
 
-The :class:`Context` object tracks the state of connections in progress.
+The :class:`Context` object caches connections, manages automatic
+re-connection, and tracks the state of connections in progress.
 We can use it to request new connections. Formulating requests for many PVs in
 a large batch is efficient. In this example we'll just ask for two PVs.
 
@@ -69,8 +70,8 @@ The Context displays aggregate information about the state of all connections.
 
     ctx
 
-Read and Write
---------------
+Read
+----
 
 Now, to read a PV:
 
@@ -110,19 +111,51 @@ Access particular fields in the response using attribute ("dot") access on ``res
     memory with no copying (if the data was received from the socket all at
     once) or one copy (if the data bridged multiple receipts).
 
+Write
+-----
+
 Let us set the value to ``1``.
 
 .. ipython:: python
 
     dt.write([1])
 
+By default, we send ``WriteNotifyResponse``, wait for a response, and return
+it. There are a couple others ways we can handle writes:
+
+* Return immediately, not asking for or waiting for a response.
+
+    .. code-block:: python
+
+        dt.write([1], wait=False)
+
+* Return immediately, not waiting for a response, but handing the response
+  (when it arrived) to some callback function, processed on a background
+  thread.
+
+    .. code-block:: python
+
+        def f(response):
+            print('got a response:', response)
+
+        dt.write([1], wait=False, callback=f)
+
+See the :meth:`PV.write` for more.
+
 Subscribe ("Monitor")
 ---------------------
 
 Let us now monitor a channel. The server updates the ``random_walk:x`` channel
-periodically. (The period is set by ``random_walk:dt``.) We can subscribe to
+periodically at some period set by ``random_walk:dt``. We can subscribe to
 updates and fan them out to one or more user-defined callback functions.
-The user-defined function msut accept one positional argument.
+First, we define a :class:`Subscription`.
+
+.. ipython:: python
+
+    sub = x.subscribe()
+
+Next, we define a callback function, a function that will be called whenever
+the server sends an update. It must accept one positional argument.
 
 .. ipython:: python
 
@@ -130,13 +163,14 @@ The user-defined function msut accept one positional argument.
     def f(response):
         responses.append(response)
 
+We register this function with ``sub``.
+
 .. ipython:: python
 
-    sub = x.subscribe()
     token = sub.add_callback(f)
 
-The ``token`` is just an integer which we can use to unsubscribe later. We can
-define a second callback
+The ``token`` is just an integer which we can use to remove ``f`` later. We can
+define a second callback:
 
 .. ipython:: python
 
@@ -155,20 +189,20 @@ After some time has passed, we will have accumulated some responses.
 .. ipython:: python
     :suppress:
 
-    import time; time.sleep(5)
+    import time; time.sleep(5)  # wait for responses to come in
 
 .. ipython:: python
 
     len(responses)
     values
 
-At any point we can remove a specific callback function
+At any point we can remove a specific callback function:
 
 .. ipython:: python
 
     sub.remove_callback(token)
 
-or clear all the callbacks on a subscription
+or clear all the callbacks on a subscription:
 
 .. ipython:: python
 
@@ -187,15 +221,23 @@ re-initiates updates. All of this is transparent to the user.
 
     The callback registry in :class:`Subscription`  only holds weak references
     to the user callback functions. If there are no other references to the
-    function, it will be silently removed and garbage collected. Therefore,
+    function, it will be silently garbage collected and removed. Therefore,
     constructions like this do not work:
 
     .. code-block:: python
 
         sub.add_callback(lambda response: print(response.data))
 
-    The lambda function will be promptly removed and garbage collected. This
-    can be surprising, but it is a standard approach for avoiding the
+    The lambda function will be promptly garbage collected by Python and
+    removed from ``sub`` by caproto. To avoid that, make a reference before
+    passing the function to :meth:`Subscription.add_callback`.
+    
+    .. code-block:: python
+
+        cb = lambda response: print(response.data)
+        sub.add_callback(cb)
+
+    This can be surprising, but it is a standard approach for avoiding the
     accidental costly accumulation of abandoned callbacks.
 
 Go Idle
@@ -237,15 +279,15 @@ about a given PV, turn up the verbosity of the ``PV.log`` logger:
     x.log.setLevel('DEBUG')
 
 To see the individual requests sent and responses received by the TCP
-connection support ``x`` (and any other PVs on that same Virtual Circuit) use
-the ``PV.circuit_manager.log`` logger:
+connection supporting ``x`` (and any other PVs on that same Virtual Circuit)
+use the ``PV.circuit_manager.log`` logger:
 
 .. code-block:: python
 
     x.circuit_manager.log.setLevel('DEBUG')
 
 For updates about the overall state of the Context (number of unanswered
-searches still await responses, etc.) use ``Context.log``:
+searches still awaiting responses, etc.) use ``Context.log``:
 
 .. code-block:: python
 
@@ -278,17 +320,23 @@ For more information see :ref:`loggers`.
 API Documentation
 =================
 
-.. autoclass:: SharedBroadcaster
-   :members:
-
 .. autoclass:: Context
-   :members:
+
+    .. automethod:: get_pvs
 
 .. autoclass:: PV
    :members:
 
 .. autoclass:: Subscription
-   :members:
+
+    .. automethod:: add_callback
+    .. automethod:: clear
+    .. automethod:: remove_callback
+
+The following are internal components. There API may change in the future.
 
 .. autoclass:: VirtualCircuitManager
+   :members:
+
+.. autoclass:: SharedBroadcaster
    :members:
