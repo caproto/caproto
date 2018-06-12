@@ -187,5 +187,4 @@ if __name__ == '__main__':
               'in time.'))
 
     ioc = JitterRead(**ioc_options)
-    print('PVs:', list(ioc.pvdb))
     run(ioc.pvdb, **run_options)
