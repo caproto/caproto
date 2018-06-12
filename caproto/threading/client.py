@@ -1478,6 +1478,8 @@ class PV:
             self.circuit_manager.send(command)
             return
 
+        if not notify:
+            return None
         event = threading.Event()
         ioid_info = dict(channel=self, event=event)
         if callback is not None:
