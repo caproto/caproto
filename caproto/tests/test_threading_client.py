@@ -572,7 +572,10 @@ def test_batch_read(context, ioc):
     for pv in pvs:
         pv.wait_for_connection()
     results = {}
-    stash_result = lambda name, response: results.update({name: response.data})
+
+    def stash_result(name, response):
+        results[name] = response.data
+
     with Batch() as b:
         for pv in pvs:
             b.read(pv, functools.partial(stash_result, pv.name))
@@ -585,7 +588,10 @@ def test_batch_write(context, ioc):
     for pv in pvs:
         pv.wait_for_connection()
     results = {}
-    stash_result = lambda name, response: results.update({name: response})
+
+    def stash_result(name, response):
+        results[name] = response
+
     with Batch() as b:
         for pv in pvs:
             b.write(pv, [4407], functools.partial(stash_result, pv.name))
