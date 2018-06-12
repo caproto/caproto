@@ -127,7 +127,7 @@ class MovingDot(PVGroup):
 
         dot = np.exp(-(X**2 + Y**2) / 2) * np.exp(- (x**2 + y**2) / 100**2)
 
-        I = self.parent.current.value
+        I = self.parent.current.value  # noqa
         e = self.exp.value
         measured = (self.parent.N_per_I_per_s * dot * e * I)
         ret = (back + np.random.poisson(measured))
