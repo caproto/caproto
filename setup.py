@@ -28,6 +28,7 @@ setup(name='caproto',
       description='a sans-I/O implementation of the EPICS Channel Access '
                   'protocol',
       packages=['caproto',
+                'caproto.asyncio',
                 'caproto.benchmarking',
                 'caproto.commandline',
                 'caproto.curio',
