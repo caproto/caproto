@@ -705,6 +705,12 @@ class Context:
                 f"pvs={len(self.pvs)} "
                 f"idle={len([1 for pv in self.pvs.values() if pv._idle])}>")
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.disconnect(wait=True)
+
     def get_pvs(self, *names, priority=0, connection_state_callback=None,
                 access_rights_callback=None):
         """
