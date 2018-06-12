@@ -834,25 +834,24 @@ class ChannelNumeric(ChannelData):
     lower_ctrl_limit = _read_only_property('lower_ctrl_limit')
 
     async def verify_value(self, data):
-        # if not isinstance(data, Iterable):
-        #     val = data
-        # elif len(data) == 1:
-        #     val = data[0]
-        # else:
-        #     # data is an array -- limits do not apply.
-        #     return data
-        # TODO Update tests or limits on example IOCs and re-instate this.
-        # if self.lower_ctrl_limit != self.upper_ctrl_limit:
-        #     if not self.lower_ctrl_limit <= val <= self.upper_ctrl_limit:
-        #         raise CannotExceedLimits(
-        #             f"Cannot write data {val}. Limits are set to "
-        #             f"{self.lower_ctrl_limit} and {self.upper_ctrl_limit}.")
-        # if self.lower_warning_limit != self.upper_warning_limit:
-        #     if not self.lower_ctrl_limit <= val <= self.upper_warning_limit:
-        #         warnings.warn(
-        #             f"Writing {val} outside warning limits which are are "
-        #             f"set to {self.lower_ctrl_limit} and "
-        #             f"{self.upper_warning_limit}.")
+        if not isinstance(data, Iterable):
+            val = data
+        elif len(data) == 1:
+            val, = data
+        else:
+            # data is an array -- limits do not apply.
+            return data
+        if self.lower_ctrl_limit != self.upper_ctrl_limit:
+            if not self.lower_ctrl_limit <= val <= self.upper_ctrl_limit:
+                raise CannotExceedLimits(
+                    f"Cannot write data {val}. Limits are set to "
+                    f"{self.lower_ctrl_limit} and {self.upper_ctrl_limit}.")
+        if self.lower_warning_limit != self.upper_warning_limit:
+            if not self.lower_ctrl_limit <= val <= self.upper_warning_limit:
+                warnings.warn(
+                    f"Writing {val} outside warning limits which are are "
+                    f"set to {self.lower_ctrl_limit} and "
+                    f"{self.upper_warning_limit}.")
         return data
 
     def _is_eligible(self, ss, flags, pair):
