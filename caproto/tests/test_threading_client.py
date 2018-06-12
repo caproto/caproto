@@ -11,7 +11,7 @@ import socket
 import getpass
 import threading
 
-from caproto.threading.client import (Context, SharedBroadcaster,
+from caproto.threading.client import (Context, SharedBroadcaster, Batch,
                                       ContextDisconnectedError)
 from caproto import ChannelType
 import caproto as ca
@@ -565,3 +565,49 @@ def test_multithreaded_many_subscribe(ioc, context, thread_count,
     for value_list in results:
         assert len(value_list) == 4
         assert list(value_list) == [initial_value, 1, 2, 3]
+
+
+def test_batch_read(context, ioc):
+    pvs = context.get_pvs(ioc.pvs['str'], ioc.pvs['int'], ioc.pvs['float'])
+    for pv in pvs:
+        pv.wait_for_connection()
+    results = {}
+
+    def stash_result(name, response):
+        results[name] = response.data
+
+    with Batch() as b:
+        for pv in pvs:
+            b.read(pv, functools.partial(stash_result, pv.name))
+    time.sleep(0.1)
+    assert set(results) == set(pv.name for pv in pvs)
+
+
+def test_batch_write(context, ioc):
+    pvs = context.get_pvs(ioc.pvs['int'], ioc.pvs['float'])
+    for pv in pvs:
+        pv.wait_for_connection()
+    results = {}
+
+    def stash_result(name, response):
+        results[name] = response
+
+    with Batch() as b:
+        for pv in pvs:
+            b.write(pv, [4407], functools.partial(stash_result, pv.name))
+    time.sleep(0.1)
+    assert set(results) == set(pv.name for pv in pvs)
+    for pv in pvs:
+        assert pv.read().data == [4407]
+
+
+def test_batch_write_no_callback(context, ioc):
+    pvs = context.get_pvs(ioc.pvs['int'], ioc.pvs['float'])
+    for pv in pvs:
+        pv.wait_for_connection()
+    with Batch() as b:
+        for pv in pvs:
+            b.write(pv, [4407])
+    time.sleep(0.1)
+    for pv in pvs:
+        assert pv.read().data == [4407]

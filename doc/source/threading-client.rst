@@ -240,6 +240,60 @@ re-initiates updates. All of this is transparent to the user.
     This can be surprising, but it is a standard approach for avoiding the
     accidental costly accumulation of abandoned callbacks.
 
+    This pitfall does not apply to callbacks passed to :meth:`PV.read` and
+    :meth:`PV.write` (or :meth:`Batch.read` and :meth:`Batch.write`) because
+    those are single-shot callbacks that do not persist beyond their first use.
+
+Batched Requests
+----------------
+
+Batching requests is efficient, and it sets up the server to perform these
+operations as closely-spaced in time as possible, within the limits of the
+protocol. Python's ``with`` syntax provides a natural way to specify a batch of
+requests --- reads, writes, or a mixture of both --- and execute them upon exit
+from the ``with`` block.
+
+Suppose we had a list of ``PV`` objects, ``pvs``, and we want to request
+readings in bulk. We can use a callback function to stash readings in a
+dictionary as they arrive.
+
+For convenience we'll demonstrate this using the two PVs we have handy ---
+``x`` and ``dt`` --- but an unlimited number may be used.
+
+.. ipython:: python
+
+    pvs = [x, dt]
+    from functools import partial
+    results = {}
+    def stash_result(name, response)
+        results[name] = response.data
+
+Now we'll use the :class:`Batch` context:
+
+.. ipython:: python
+
+    from caproto.threading.client import Batch
+    with Batch() as b:
+        for pv in pvs:
+            b.read(pv, partial(stash_result, pv.name))
+
+The requests will be sent in large batches (over the PVs' respective circuits)
+upon exiting the ``with`` block. The responses will be processed on a
+background thread. As the responses come in, the ``results`` dictionary will be
+updated.
+
+.. ipython:: python
+    :suppress:
+
+    time.sleep(0.1)
+
+
+.. ipython:: python
+
+    results
+
+See :class:`Batch` for more.
+
 Go Idle
 -------
 
@@ -332,6 +386,9 @@ API Documentation
     .. automethod:: add_callback
     .. automethod:: clear
     .. automethod:: remove_callback
+
+.. autoclass:: Batch
+   :members:
 
 The following are internal components. There API may change in the future.
 
