@@ -97,6 +97,8 @@ class Broadcaster:
         self.log.debug("Received datagram from %r with %d bytes.",
                        address, len(byteslike))
         commands = read_datagram(byteslike, address, self.their_role)
+        for command in commands:
+            self.log.debug("%d bytes -> %r", len(command), command)
         return commands
 
     def process_commands(self, commands):
