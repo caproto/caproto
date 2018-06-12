@@ -59,10 +59,8 @@ if __name__ == '__main__':
     ioc_options, run_options = ioc_arg_parser(
         default_prefix='currency_poll:',
         desc='Run an IOC with a periodically updating currency conversion.',
-        asyncio_lib='curio')
+        supported_async_libs=('curio',))
 
-    if run_options['module_name'] != 'caproto.curio.server':
-        raise ValueError("This example must be run with '--async-lib curio'.")
     # Initialize this async HTTP library.
     asks.init('curio')
 

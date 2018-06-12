@@ -936,7 +936,7 @@ class PVGroup(metaclass=PVGroupMeta):
 
 
 def ioc_arg_parser(*, desc, default_prefix, argv=None, macros=None,
-                   asyncio_lib='asyncio'):
+                   supported_async_libs=None):
     """
     A reusable ArgumentParser for basic example IOCs.
 
@@ -950,6 +950,10 @@ def ioc_arg_parser(*, desc, default_prefix, argv=None, macros=None,
     macros : dict, optional
         Maps macro names to default value (string) or None (indicating that
         this macro parameter is required).
+    supports_async_libs : list, optional
+        "White list" of supported server implementations. The first one will
+        be the default. If None specified, the parser will accept all of the
+        (hard-coded) choices.
     """
     if argv is None:
         argv = sys.argv
@@ -967,8 +971,9 @@ def ioc_arg_parser(*, desc, default_prefix, argv=None, macros=None,
                        help=argparse.SUPPRESS)
     parser.add_argument('--list-pvs', action='store_true',
                         help="At startup, log the list of PV names served.")
-    parser.add_argument('--async-lib', default=asyncio_lib,
-                        choices=('asyncio', 'curio', 'trio'),
+    choices = tuple(supported_async_libs or ('asyncio', 'curio', 'trio'))
+    parser.add_argument('--async-lib', default=choices[0],
+                        choices=choices,
                         help=("Which asynchronous library to use. "
                               "Default is curio."))
     default_intf = get_server_address_list()
