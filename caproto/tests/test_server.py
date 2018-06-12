@@ -9,7 +9,8 @@ import caproto as ca
 
 from caproto import ChannelType
 from .epics_test_utils import (run_caget, run_caput)
-from .conftest import array_types
+from .conftest import array_types, run_example_ioc
+from caproto.sync.client import write, ErrorResponseReceived
 
 
 caget_checks = sum(
@@ -272,3 +273,16 @@ def test_with_caput(backends, prefix, pvdb_from_server_example, server, pv,
             raise
 
     print('done')
+
+
+def test_limits_enforced(request, prefix):
+    pv = f'{prefix}pi'
+    run_example_ioc('caproto.ioc_examples.type_varieties', request=request,
+                    args=['--prefix', prefix],
+                    pv_to_check=pv)
+    write(pv, 3.101, notify=True)  # within limit
+    write(pv, 3.179, notify=True)  # within limit
+    with pytest.raises(ErrorResponseReceived):
+        write(pv, 3.09, notify=True)  # beyond limit
+    with pytest.raises(ErrorResponseReceived):
+        write(pv, 3.181, notify=True)  # beyond limit
