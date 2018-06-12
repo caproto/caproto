@@ -1381,8 +1381,7 @@ class PV:
             2.
         data_count : integer, optional
             Requested number of values. Default is the channel's native data
-            count, which can be checked in the Channel's attribute
-            :attr:`native_data_count`.
+            count.
         notify: boolean, optional
             Send a ``ReadNotifyRequest`` instead of a ``ReadRequest``. True by
             default.
@@ -1455,8 +1454,7 @@ class PV:
             channel's native data type. Default is Channel's native data type.
         data_count : integer, optional
             Requested number of values. Default is the channel's native data
-            count, which can be checked in the Channel's attribute
-            :attr:`native_data_count`.
+            count.
         """
         if notify is None:
             notify = (wait or callback is not None)
@@ -1520,8 +1518,7 @@ class PV:
             channel's native data type. Default is Channel's native data type.
         data_count : integer, optional
             Requested number of values. Default is the channel's native data
-            count, which can be checked in the Channel's attribute
-            :attr:`native_data_count`.
+            count.
         low, high, to : float, optional
             deprecated by Channel Access, not yet implemented by caproto
         mask :  SubscriptionType, optional
