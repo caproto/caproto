@@ -1790,6 +1790,112 @@ class Subscription(CallbackHandler):
             pass
 
 
+class Batch:
+    """
+    Accumulate requests and then issue them all in batch.
+
+    Parameters
+    ----------
+    timeout : number or None
+        Number of seconds to wait before ignoring late responses. Default
+        is 2.
+
+    Examples
+    --------
+    Read some PVs in batch and stash the readings in a dictionary as they
+    come in.
+
+    >>> readings = {}
+
+    >>> results = {}
+    >>> stash_result = lambda name, response: results.update({name: response.data})
+
+    >>> with Batch() as b:
+    ...     for pv in pvs:
+    ...         b.read(pv, functools.partial(stash_result, pv.name))
+    ...     # The requests are sent upon exiting this 'with' block.
+    ...
+
+    The ``results`` dictionary will be populated as responses come in.
+    """
+    def __init__(self, timeout=2):
+        self.timeout = timeout
+        self._commands = defaultdict(list)  # map each circuit to commands
+        self._ioid_infos = []
+
+    def __enter__(self):
+        return self
+
+    def read(self, pv, callback, data_type=None, data_count=None):
+        """Request a fresh reading as part of a batched request.
+
+        Notice that, unlike :meth:`PV.read`, the callback is required. (There
+        is no other way to get the result back from a batched read.)
+
+        Parameters
+        ----------
+        pv : PV
+        callback : callable
+            Expected signature: ``f(response)``
+        data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
+            Request specific data type or a class of data types, matched to the
+            channel's native data type. Default is Channel's native data type.
+        data_count : integer, optional
+            Requested number of values. Default is the channel's native data
+            count.
+        """
+        ioid = pv.circuit_manager._ioid_counter()
+        command = pv.channel.read(ioid=ioid,
+                                  data_type=data_type,
+                                  data_count=data_count,
+                                  notify=True)
+        self._commands[pv.circuit_manager].append(command)
+        # Stash the ioid to match the response to the request.
+        ioid_info = dict(channel=pv)
+        ioid_info['callback'] = callback
+        pv.circuit_manager.ioids[ioid] = ioid_info
+        self._ioid_infos.append(ioid_info)
+
+    def write(self, pv, data, callback=None, data_type=None, data_count=None):
+        """Write a new value as part of a batched request.
+
+        Parameters
+        ----------
+        pv : PV
+        data : Iterable
+            values to write
+        callback : callable
+            Expected signature: ``f(response)``
+        data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
+            Request specific data type or a class of data types, matched to the
+            channel's native data type. Default is Channel's native data type.
+        data_count : integer, optional
+            Requested number of values. Default is the channel's native data
+            count.
+        """
+        ioid = pv.circuit_manager._ioid_counter()
+        command = pv.channel.write(data=data,
+                                   ioid=ioid,
+                                   data_type=data_type,
+                                   data_count=data_count,
+                                   notify=callback is not None)
+        self._commands[pv.circuit_manager].append(command)
+        if callback:
+            # Stash the ioid to match the response to the request.
+            ioid_info = dict(channel=pv)
+            ioid_info['callback'] = callback
+            pv.circuit_manager.ioids[ioid] = ioid_info
+            self._ioid_infos.append(ioid_info)
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        timeout = self.timeout
+        deadline = time.monotonic() + timeout if timeout is not None else None
+        for ioid_info in self._ioid_infos:
+            ioid_info['deadline'] = deadline
+        for circuit_manager, commands in self._commands.items():
+            circuit_manager.send(*commands)
+
+
 # The signature of caproto._circuit.ClientChannel.subscribe, which is used to
 # resolve the (args, kwargs) of a Subscription into a unique key.
 SUBSCRIBE_SIG = Signature([
