@@ -1081,7 +1081,6 @@ class VirtualCircuitManager:
                               f"timeout."
                               )
             else:
-                chan = ioid_info['channel']
                 callback = ioid_info.get('callback')
                 if callback is not None:
                     self.context.user_callback_executor.submit(
@@ -1396,7 +1395,7 @@ class PV:
         # Stash the ioid to match the response to the request.
 
         event = threading.Event()
-        ioid_info = dict(channel=self, event=event)
+        ioid_info = dict(event=event)
         if callback is not None:
             ioid_info['callback'] = callback
 
@@ -1481,7 +1480,7 @@ class PV:
         if not notify:
             return None
         event = threading.Event()
-        ioid_info = dict(channel=self, event=event)
+        ioid_info = dict(event=event)
         if callback is not None:
             ioid_info['callback'] = callback
 
@@ -1853,8 +1852,7 @@ class Batch:
                                   notify=True)
         self._commands[pv.circuit_manager].append(command)
         # Stash the ioid to match the response to the request.
-        ioid_info = dict(channel=pv)
-        ioid_info['callback'] = callback
+        ioid_info = dict(callback=callback)
         pv.circuit_manager.ioids[ioid] = ioid_info
         self._ioid_infos.append(ioid_info)
 
@@ -1884,8 +1882,7 @@ class Batch:
         self._commands[pv.circuit_manager].append(command)
         if callback:
             # Stash the ioid to match the response to the request.
-            ioid_info = dict(channel=pv)
-            ioid_info['callback'] = callback
+            ioid_info = dict(callback=callback)
             pv.circuit_manager.ioids[ioid] = ioid_info
             self._ioid_infos.append(ioid_info)
 
