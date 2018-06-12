@@ -1087,13 +1087,14 @@ class VirtualCircuitManager:
                         callback, command)
 
             event = ioid_info.get('event')
-            # If PV.read() or PV.write() are waiting on this response,
-            # they hold a reference to ioid_info. We will use that to
-            # provide the response to them and then set the Event that they
-            # are waiting on.
-            ioid_info['response'] = command
             if event is not None:
-                event.set()
+                # If PV.read() or PV.write() are waiting on this response,
+                # they hold a reference to ioid_info. We will use that to
+                # provide the response to them and then set the Event that they
+                # are waiting on.
+                ioid_info['response'] = command
+                if event is not None:
+                    event.set()
 
         elif isinstance(command, ca.EventAddResponse):
             try:
