@@ -45,7 +45,7 @@ Other, intermediate combinations are also conveniently available:
    python3 -m pip install "caproto[standard]"  # includes numpy, netifaces
    python3 -m pip install "caproto[async]"  # includes the async libs
 
-Installation from Source
+Development Installation
 ========================
 
 .. code-block:: bash
@@ -59,3 +59,23 @@ To install all the optional dependencies as well, use:
 .. code-block:: bash
 
     pip install -e .[complete]
+
+For development, you will also want the dependencies for running the tests and
+building the documentation:
+
+.. code-block:: bash
+
+    pip install -U -r test-requirements.txt
+    pip install -U -r docs-requirements.txt
+
+To run the tests:
+
+.. code-block:: bash
+
+    python run_tests.py
+
+To build the documentation:
+
+.. code-block:: bash
+
+    make -C doc html
