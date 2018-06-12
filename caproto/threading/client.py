@@ -1087,7 +1087,7 @@ class VirtualCircuitManager:
                     self.context.user_callback_executor.submit(
                         callback, command)
 
-            event = ioid_info['event']
+            event = ioid_info.get('event')
             # If PV.read() or PV.write() are waiting on this response,
             # they hold a reference to ioid_info. We will use that to
             # provide the response to them and then set the Event that they
@@ -1153,7 +1153,9 @@ class VirtualCircuitManager:
             # Un-block any calls to PV.read() or PV.write() that are waiting on
             # responses that we now know will never arrive. They will check on
             # circuit health and raise appropriately.
-            ioid_info['event'].set()
+            event = ioid_info.get('event')
+            if event is not None:
+                event.set()
 
         self.all_created_pvnames.clear()
         for pv in self.pvs.values():
