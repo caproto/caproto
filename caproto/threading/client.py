@@ -1403,6 +1403,8 @@ class PV:
         deadline = time.monotonic() + timeout if timeout is not None else None
         ioid_info['deadline'] = deadline
         self.circuit_manager.send(command)
+        if not wait:
+            return
 
         # The circuit_manager will put a reference to the response into
         # ioid_info and then set event.
