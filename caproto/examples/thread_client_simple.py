@@ -5,7 +5,7 @@ import sys
 from caproto.threading.client import SharedBroadcaster, Context
 
 
-def main(pvname1='pi', pvname2='str'):
+def main(pvname1='int', pvname2='str'):
     '''Simple example which connects to two motorsim PVs (by default).
 
     It tests reading, writing, and subscriptions.
