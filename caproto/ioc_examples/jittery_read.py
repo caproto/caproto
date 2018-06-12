@@ -54,7 +54,7 @@ class PinHole(_JitterDetector):
 
 
 class Edge(_JitterDetector):
-        async def _read(self, instance):
+    async def _read(self, instance):
 
         sigma = 2.5
         center = 5
@@ -184,7 +184,7 @@ if __name__ == '__main__':
         default_prefix='jitter:',
         desc=('An IOC that provides a simulated pinhole, edge and slit '
               'with coupled with a shared global current that oscillates '
-              'in time.')
+              'in time.'))
 
     ioc = JitterRead(**ioc_options)
     print('PVs:', list(ioc.pvdb))
