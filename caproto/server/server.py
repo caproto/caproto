@@ -136,6 +136,13 @@ class PvpropertyEnum(PvpropertyData, ChannelEnum):
     ...
 
 
+class PvpropertyBoolEnum(PvpropertyData, ChannelEnum):
+    def __init__(self, *, enum_strings=None, **kwargs):
+        if enum_strings is None:
+            enum_strings = ['Off', 'On']
+        super().__init__(enum_strings=enum_strings, **kwargs)
+
+
 class PvpropertyReadOnlyData(PvpropertyData):
     def check_access(self, host, user):
         return AccessRights.READ
@@ -159,6 +166,13 @@ class PvpropertyStringRO(PvpropertyReadOnlyData, ChannelString):
 
 class PvpropertyEnumRO(PvpropertyReadOnlyData, ChannelEnum):
     ...
+
+
+class PvpropertyBoolEnumRO(PvpropertyReadOnlyData, ChannelEnum):
+    def __init__(self, *, enum_strings=None, **kwargs):
+        if enum_strings is None:
+            enum_strings = ['Off', 'On']
+        super().__init__(enum_strings=enum_strings, **kwargs)
 
 
 class PVSpec(namedtuple('PVSpec',
@@ -802,7 +816,10 @@ def channeldata_from_pvspec(group, pvspec):
              )
 
     cls = data_class_from_pvspec(group, pvspec)
-    kw = pvspec.cls_kwargs if pvspec.cls_kwargs is not None else {}
+    kw = dict(pvspec.cls_kwargs) if pvspec.cls_kwargs is not None else {}
+    if 'states' not in kw:
+        kw['states'] = group.states
+
     inst = cls(group=group, pvspec=pvspec, value=value,
                alarm=group.alarms[pvspec.alarm_group], pvname=full_pvname,
                **kw)
@@ -811,12 +828,28 @@ def channeldata_from_pvspec(group, pvspec):
 
 
 class PVGroup(metaclass=PVGroupMeta):
-    'Base class for a group of PVs'
+    '''
+    Class which groups a set of PVs for a high-level caproto server
+
+    Parameters
+    ----------
+    prefix : str
+        Prefix for all PVs in the group
+    macros : dict, optional
+        Dictionary of macro name to value
+    parent : PVGroup, optional
+        Parent PVGroup
+    name : str, optional
+        Name for the group, defaults to the class name
+    states : dict, optional
+        A dictionary of states used for channel filtering
+    '''
 
     type_map = {
         str: PvpropertyString,
         int: PvpropertyInteger,
         float: PvpropertyDouble,
+        bool: PvpropertyBoolEnum,
 
         ChannelType.STRING: PvpropertyString,
         ChannelType.LONG: PvpropertyInteger,
@@ -835,6 +868,7 @@ class PVGroup(metaclass=PVGroupMeta):
         str: '',
         int: 0,
         float: 0.0,
+        bool: False,
 
         ChannelType.STRING: '',
         ChannelType.LONG: 0,
@@ -843,8 +877,7 @@ class PVGroup(metaclass=PVGroupMeta):
         ChannelType.CHAR: '',
     }
 
-    def __init__(self, prefix, *, macros=None, parent=None, logger=None,
-                 name=None):
+    def __init__(self, prefix, *, macros=None, parent=None, name=None):
         self.parent = parent
         self.macros = macros if macros is not None else {}
         self.prefix = expand_macros(prefix, self.macros)
@@ -854,12 +887,18 @@ class PVGroup(metaclass=PVGroupMeta):
         self.attr_to_pvname = OrderedDict()
         self.groups = OrderedDict()
 
+        if not hasattr(self, 'states'):
+            if hasattr(self.parent, 'states'):
+                self.states = self.parent.states
+            else:
+                self.states = {}
+
         # Create logger name from parent or from module class
         self.name = (self.__class__.__name__
                      if name is None
                      else name)
         log_name = type(self).__name__
-        if self.parent:
+        if self.parent is not None:
             base = self.parent.log.name
             parent_log_prefix = f'{base}.'
             if log_name.startswith(parent_log_prefix):
@@ -867,7 +906,7 @@ class PVGroup(metaclass=PVGroupMeta):
         else:
             base = self.__class__.__module__
 
-        # Instantiate logger
+        # Instantiate the logger
         self.log = logging.getLogger(f'{base}.{log_name}')
         self._create_pvdb()
 

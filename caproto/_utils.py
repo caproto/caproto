@@ -581,7 +581,9 @@ def parse_channel_filter(filter_text):
     try:
         filter_ = json.loads(filter_text)
     except Exception as exc:
-        raise FilterValidationError("Unable to parse channel filter text as JSON") from exc
+        raise FilterValidationError(
+            f"Unable to parse channel filter text as JSON: "
+            f"{filter_text}") from exc
 
     valid_filters = {'ts', 'arr', 'sync', 'dbnd'}
     filter_keys = set(filter_.keys())
@@ -605,9 +607,9 @@ def parse_arr_shorthand_filter(filter_text):
             elements.append(int(elem))
     if len(elements) == 1:
         arr = ArrayFilter(s=elements[0], i=1, e=elements[0])
-    if len(elements) == 2:
+    elif len(elements) == 2:
         arr = ArrayFilter(s=elements[0], i=1, e=elements[1])
-    if len(elements) == 3:
+    elif len(elements) == 3:
         arr = ArrayFilter(s=elements[0], i=elements[1], e=elements[2])
     return arr
 

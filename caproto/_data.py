@@ -397,10 +397,9 @@ class ChannelAlarm:
 class ChannelData:
     data_type = ChannelType.LONG
 
-    def __init__(self, *, alarm=None,
-                 value=None, timestamp=None,
-                 string_encoding='latin-1',
-                 reported_record_type='caproto'):
+    def __init__(self, *, alarm=None, value=None, timestamp=None,
+                 string_encoding='latin-1', reported_record_type='caproto',
+                 states=None):
         '''Metadata and Data for a single caproto Channel
 
         Parameters
@@ -417,6 +416,9 @@ class ChannelData:
             querying the record type.  This can be set to mimic an actual
             record or be set to something arbitrary.
             Defaults to 'caproto'
+        states : dict, optional
+            Dictionary of server-wide states for the synchronize filter of
+            R3-15.
         '''
         if timestamp is None:
             timestamp = time.time()
@@ -441,6 +443,7 @@ class ChannelData:
         # Cache results of data_type conversions. This maps data_type to
         # (metdata, value). This is cleared each time publish() is called.
         self._content = {}
+        self._states = states
 
     value = _read_only_property('value')
     timestamp = _read_only_property('timestamp')
@@ -857,6 +860,7 @@ class ChannelNumeric(ChannelData):
 
     def _is_eligible(self, ss, flags, pair):
         out_of_band = True
+        valid_state = True
         if pair is not None:
             old, new = pair
             # Deal with the fact that these values might be Iterable or
@@ -884,11 +888,47 @@ class ChannelNumeric(ChannelData):
                     flags |= SubscriptionType.DBE_LOG
                     if abs_diff > self.value_atol:
                         flags |= SubscriptionType.DBE_VALUE
+                sync = ss.channel_filter.sync
+                if sync is not None:
+                    sync_mode, sync_state = sync.m, sync.s
+                    if self._states is None or sync_state not in self._states:
+                        valid_state = False
+                    elif sync_mode == 'before':
+                        # before: only the last value received before the state
+                        # changes from false to true is forwarded to the client
+                        valid_state = not self._states[sync_state]
+                        # TODO: "before" is effectively treated as "unless" now
+                    elif sync_mode == 'first':
+                        # first: only the first value received after the state
+                        # changes from true to false is forwarded to the client
+                        valid_state = False
+                        # TODO: "first" is unsupported
+                    elif sync_mode == 'while':
+                        # while: values are forwarded to the client as long as
+                        # the state is true
+                        valid_state = self._states[sync_state]
+                    elif sync_mode == 'last':
+                        # last: only the last value received before the state
+                        # changes from true to false is forwarded to the client
+                        valid_state = False
+                        # TODO: "last" is unsupported
+                    elif sync_mode == 'after':
+                        # after: only the first value received after the state
+                        # changes from true to false is forwarded to the client
+                        valid_state = self._states[sync_state]
+                        # TODO: "after" is effectively treated as "while" now
+                    elif sync_mode == 'unless':
+                        # unless: values are forwarded to the client as long as
+                        # the state is false
+                        valid_state = not self._states[sync_state]
+                    else:
+                        # unknown/unsupported sync mode
+                        valid_state = False
             else:
                 # epics-base explicitly says only scalar values are supported:
                 # https://github.com/epics-base/epics-base/blob/3.15/src/std/filters/dbnd.c#L70
                 flags |= (SubscriptionType.DBE_VALUE | SubscriptionType.DBE_LOG)
-        return out_of_band & ss.mask & flags
+        return valid_state & out_of_band & ss.mask & flags
 
 
 class ChannelInteger(ChannelNumeric):
