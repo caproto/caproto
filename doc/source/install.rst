@@ -74,6 +74,13 @@ To run the tests:
 
     python run_tests.py
 
+Any argument will be passed through to ``pytest``. These are arguments are
+commonly useful:
+
+* ``-v`` verbose
+* ``-s`` Do not capture stdout/err per test.
+* ``-k EXPRESSION`` Filter tests by pattern-matching test name.
+
 To build the documentation:
 
 .. code-block:: bash
