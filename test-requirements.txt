@@ -13,3 +13,4 @@ asv
 asks
 ophyd
 trio
+coloredlogs
