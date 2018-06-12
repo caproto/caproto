@@ -1807,11 +1807,10 @@ class Batch:
     Read some PVs in batch and stash the readings in a dictionary as they
     come in.
 
-    >>> readings = {}
-
     >>> results = {}
-    >>> stash_result = lambda name, response: results.update({name: response.data})
-
+    >>> def stash_result(name, response)
+    ...     results[name] = response.data
+    ...
     >>> with Batch() as b:
     ...     for pv in pvs:
     ...         b.read(pv, functools.partial(stash_result, pv.name))
