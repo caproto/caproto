@@ -935,7 +935,7 @@ class PVGroup(metaclass=PVGroupMeta):
         return value
 
 
-def ioc_arg_parser(*, desc, default_prefix, argv=None, macros=None):
+def ioc_arg_parser(*, desc, default_prefix='', argv=None, macros=None):
     """
     A reusable ArgumentParser for basic example IOCs.
 
@@ -943,7 +943,8 @@ def ioc_arg_parser(*, desc, default_prefix, argv=None, macros=None):
     ----------
     description : string
         Human-friendly description of what that IOC does
-    default_prefix : string
+    default_prefix : string, optional
+        Default ''
     args : list, optional
         Defaults to sys.argv
     macros : dict, optional
