@@ -336,6 +336,7 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
      ('caproto.ioc_examples.io_interrupt', 'IOInterruptIOC', {}),
      ('caproto.ioc_examples.macros', 'MacroifiedNames',
       dict(macros={'beamline': 'my_beamline', 'thing': 'thing'})),
+     ('caproto.ioc_examples.mini_beamline', 'MiniBeamline', {}),
      ('caproto.ioc_examples.random_walk', 'RandomWalkIOC', {}),
      ('caproto.ioc_examples.reading_counter', 'ReadingCounter', {}),
      ('caproto.ioc_examples.rpc_function', 'MyPVGroup', {}),
@@ -356,12 +357,16 @@ def test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
         'caproto.ioc_examples.io_interrupt',
     )
 
+    skip_if_no_numpy = ('caproto_ioc_examples.mini_beamline',)
+
     if (module_name == 'caproto.ioc_examples.io_interrupt' and
             async_lib == 'asyncio'):
         # TODO FIX ME
         raise pytest.xfail(reason='known not to work on asyncio')
     elif sys.platform == 'win32' and module_name in skip_on_windows:
         raise pytest.skip('win32 TODO')
+    if module_name in skip_if_no_numpy:
+        pytest.importorskip('numpy')
 
     return _test_ioc_examples(request, module_name, pvdb_class_name,
                               class_kwargs, prefix, async_lib)
