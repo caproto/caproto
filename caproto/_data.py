@@ -807,7 +807,7 @@ class ChannelNumeric(ChannelData):
                  upper_alarm_limit=0, upper_warning_limit=0,
                  lower_warning_limit=0, lower_alarm_limit=0,
                  upper_ctrl_limit=0, lower_ctrl_limit=0,
-                 value_rtol=0.001, log_rtol=0.001,
+                 value_atol=0.0, log_atol=0.0,
                  **kwargs):
 
         super().__init__(value=value, **kwargs)
@@ -820,8 +820,8 @@ class ChannelNumeric(ChannelData):
         self._data['lower_alarm_limit'] = lower_alarm_limit
         self._data['upper_ctrl_limit'] = upper_ctrl_limit
         self._data['lower_ctrl_limit'] = lower_ctrl_limit
-        self.value_rtol = value_rtol
-        self.log_rtol = log_rtol
+        self.value_atol = value_atol
+        self.log_atol = log_atol
 
     units = _read_only_property('units')
     upper_disp_limit = _read_only_property('upper_disp_limit')
@@ -877,13 +877,12 @@ class ChannelNumeric(ChannelData):
                         out_of_band = dbnd.d < abs((old - new) / old)
                     else:  # must be 'abs' -- was already validated
                         out_of_band = dbnd.d < abs(old - new)
-                # TODO Does epics normally set these limits in relative or
-                # absolute terms? We should probably support both (as numpy
-                # does).
-                rel_diff = abs((old - new) / old)
-                if rel_diff > self.log_rtol:
+                # We have verified that that EPICS considers DBE_LOG etc. to be
+                # an absolute (not relative) threshold.
+                abs_diff = abs(old - new)
+                if abs_diff > self.log_atol:
                     flags |= SubscriptionType.DBE_LOG
-                    if rel_diff > self.value_rtol:
+                    if abs_diff > self.value_atol:
                         flags |= SubscriptionType.DBE_VALUE
             else:
                 # epics-base explicitly says only scalar values are supported:
