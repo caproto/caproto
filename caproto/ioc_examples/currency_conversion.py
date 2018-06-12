@@ -39,7 +39,8 @@ class CurrencyConversionIOC(PVGroup):
 if __name__ == '__main__':
     ioc_options, run_options = ioc_arg_parser(
         default_prefix='currency:',
-        desc='Run an IOC that performs a currency conversion when read.')
+        desc='Run an IOC that performs a currency conversion when read.',
+        asyncio_lib='curio')
 
     if run_options['module_name'] != 'caproto.curio.server':
         raise ValueError("This example must be run with '--async-lib curio'.")
