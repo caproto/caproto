@@ -7,6 +7,7 @@ a single asyncio library.
 For an example server implementation, see caproto.curio.server
 '''
 import argparse
+import contextlib
 import copy
 import logging
 import inspect
@@ -909,6 +910,14 @@ class PVGroup(metaclass=PVGroupMeta):
         # Instantiate the logger
         self.log = logging.getLogger(f'{base}.{log_name}')
         self._create_pvdb()
+
+    @contextlib.contextmanager
+    def update_state(self, state, value):
+        for attr in self.attr_pvdb:
+            attr.take_snapshot(state, 'before')
+        yield  # Here the caller has the opportunity to update channels.
+        for attr in self.attr_pvdb:
+            attr.take_snapshot(state, 'after')
 
     def _create_pvdb(self):
         'Create the PV database for all subgroups and pvproperties'

@@ -438,15 +438,22 @@ class ChannelData:
         # updates.  (Each queue belongs to a Context.) Each value is itself a
         # dict, mapping data_types to the set of SubscriptionSpecs that request
         # that data_type.
-        self._queues = defaultdict(lambda: defaultdict(set))
+        self._queues = defaultdict(
+            lambda: defaultdict(
+                lambda: defaultdict(set)))
 
         # Cache results of data_type conversions. This maps data_type to
         # (metdata, value). This is cleared each time publish() is called.
         self._content = {}
         self._states = states
+        self._snapshots = defaultdict(dict)
 
     value = _read_only_property('value')
     timestamp = _read_only_property('timestamp')
+
+    def take_snapshot(self, state, mode):
+        # TODO Share references across modes.
+        self._snapshots[key][mode] = copy.deepcopy(self)
 
     @property
     def alarm(self):
@@ -467,7 +474,7 @@ class ChannelData:
             alarm.connect(self)
 
     async def subscribe(self, queue, sub_spec):
-        self._queues[queue][sub_spec.data_type].add(sub_spec)
+        self._queues[queue][sub_spec.channel_filter.sync][sub_spec.data_type].add(sub_spec)
         # Always send current reading immediately upon subscription.
         data_type = sub_spec.data_type
         try:
@@ -480,7 +487,7 @@ class ChannelData:
         await queue.put(((sub_spec,), metadata, values))
 
     async def unsubscribe(self, queue, sub_spec):
-        self._queues[queue][sub_spec.data_type].discard(sub_spec)
+        self._queues[queue][sub_spec.channel_filter.sync][sub_spec.data_type].discard(sub_spec)
 
     async def auth_read(self, hostname, username, data_type, *,
                         user_address=None):
@@ -624,33 +631,41 @@ class ChannelData:
         # instance state so that self.subscribe can also use it.
         self._content.clear()
 
-        for queue, data_types in self._queues.items():
+        for queue, syncs in self._queues.items():
             # queue belongs to a Context that is expecting to receive
             # updates of the form (sub_specs, metadata, values).
             # data_types is a dict grouping the sub_specs for this queue by
             # their data_type.
-            for data_type, sub_specs in data_types.items():
-                eligible = tuple(ss for ss in sub_specs
-                                 if self._is_eligible(ss, flags, pair))
-                if not eligible:
-                    continue
-                try:
-                    metdata, values = self._content[data_type]
-                except KeyError:
-                    # Do the expensive data type conversion and cache it in
-                    # case another queue or a future subscription wants the
-                    # same data type.
-                    metadata, values = await self._read(data_type)
-                    self._content[data_type] = metadata, values
+            for sync, data_types in syncs.items():
+                for data_type, sub_specs in data_types.items():
+                    eligible = tuple(ss for ss in sub_specs
+                                    if self._is_eligible(ss, flags, pair))
+                    if not eligible:
+                        continue
+                    if sync is None:
+                        channel_data = self
+                    else:
+                        try:
+                            channel_data = self._snapshots[sync.s][sync.m]
+                        except KeyError:
+                            continue
+                    try:
+                        metdata, values = self._content[data_type]
+                    except KeyError:
+                        # Do the expensive data type conversion and cache it in
+                        # case another queue or a future subscription wants the
+                        # same data type.
+                        metadata, values = await channel_data._read(data_type)
+                        channel_data._content[data_type] = metadata, values
 
-                # We have applied the deadband filter on this side of the
-                # queue, deciding while SubscriptionSpecs should get this
-                # update. We will apply the array filter on the other side of
-                # the queue, since each eligible SubscriptionSpec may want a
-                # different slice. Sending the whole array through the queue
-                # isn't any more expensive that sending a slice; this is just a
-                # reference.
-                await queue.put((eligible, metadata, values))
+                    # We have applied the deadband filter on this side of the
+                    # queue, deciding while SubscriptionSpecs should get this
+                    # update. We will apply the array filter on the other side
+                    # of the queue, since each eligible SubscriptionSpec may
+                    # want a different slice. Sending the whole array through
+                    # the queue isn't any more expensive that sending a slice;
+                    # this is just a reference.
+                    await queue.put((eligible, metadata, values))
 
     def _read_metadata(self, dbr_metadata):
         'Set all metadata fields of a given DBR type instance'
