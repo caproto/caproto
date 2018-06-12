@@ -155,9 +155,9 @@ class MovingDot(PVGroup):
                                read_only=True)
 
 
-class JitterRead(PVGroup):
+class MiniBeamline(PVGroup):
     """
-    When a PV is read add some noise.
+    A collection of detectors coupled to motors and an oscillating beam current
     """
 
     N_per_I_per_s = 200
@@ -181,10 +181,10 @@ class JitterRead(PVGroup):
 
 if __name__ == '__main__':
     ioc_options, run_options = ioc_arg_parser(
-        default_prefix='jitter:',
+        default_prefix='mini:',
         desc=('An IOC that provides a simulated pinhole, edge and slit '
               'with coupled with a shared global current that oscillates '
               'in time.'))
 
-    ioc = JitterRead(**ioc_options)
+    ioc = MiniBeamline(**ioc_options)
     run(ioc.pvdb, **run_options)
