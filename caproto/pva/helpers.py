@@ -265,5 +265,5 @@ class StructuredValueBase:
             raise ValueError('Does not contain standard timestamp')
 
         ts = self['timeStamp'].value
-        seconds, nanoseconds = ts['secondsPastEpoch'], ts['nanoseconds']
-        return datetime.datetime.fromtimestamp(seconds + nanoseconds * 1e-9)
+        posix_timestamp = ts['secondsPastEpoch'] + ts['nanoseconds'] * 1e-9
+        return datetime.datetime.fromtimestamp(posix_timestamp)

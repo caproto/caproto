@@ -525,6 +525,9 @@ def _deserialize_data_from_field_desc(fd, buf, *, endian, cache, nested_types,
     if bitset is not None:
         bitset_index = bitset_counter()
         if bitset_index not in bitset:
+            name = fd['name']
+            logger.debug(f'Index: %d offset: . Field: %s (%s)',
+                         bitset_index, fd['name'], fd['type_name'])
             return None
 
     offset = 0
@@ -594,6 +597,11 @@ def deserialize_data(fd, buf, *, endian, cache, nested_types=None,
     ret = dict()
     offset = 0
 
+    if bitset is not None and 0 in bitset:
+        # Full data structure to be deserialized
+        bitset = None
+        # TODO: can sub-structures be tagged in a similar way?
+
     if bitset_counter is None:
         bitset_counter = ThreadsafeCounter(initial_value=0)
     else:
@@ -612,8 +620,7 @@ def deserialize_data(fd, buf, *, endian, cache, nested_types=None,
             ret[field_name] = data
 
             if debug_logging:
-                logger.debug('Index: %d offset: %d Field: %s (%s) = %s',
-                             bitset_counter.value, offset, field_name,
+                logger.debug('Field: %s (%s) = %s', field_name,
                              fd['type_name'], repr(data)[:1000])
 
     return Decoded(data=ret, buffer=buf, offset=offset)
@@ -721,7 +728,7 @@ def deserialize_message_field(buf, type_name, field_name,
     # TODO create these definitions globally for all non-fixed-length array
     #      types (i introduced a weird e.g. int[] in type names which
     #      probably should be rethought)
-    declaration = '{} {}'.format(type_name, field_name)
+    declaration = f'{type_name} {field_name}'
     fd = definition_line_to_info(declaration, nested_types=nested_types,
                                  user_types=cache.user_types, has_fields=False)
     return deserialize_data(fd, buf, cache=cache, endian=endian, bitset=bitset)

@@ -286,6 +286,11 @@ class MessageBase:
             # Without additional fields, this is just a ctypes.Structure
             return Decoded(data=msg, buffer=buf, offset=offset)
 
+        if debug_logger:
+            debug_logger.debug('deserializing %s base_size=%s subcommand=%s '
+                               'payload=%s', cls, base_size,
+                               getattr(msg, 'subcommand', None), bytes(buf))
+
         for field_info in additional_fields:
             bitset = None
             if isinstance(field_info, (OptionalField, OptionalInterfaceField)):
@@ -354,6 +359,14 @@ class MessageBase:
 
             if is_nonstandard_array:
                 setattr(msg, field_info.name, values)
+
+            if debug_logger is not None:
+                if values:
+                    debug_logger.debug('%s (%s) = %s', field_info.name,
+                                       field_info.type, values)
+                else:
+                    debug_logger.debug('%s (%s) = %s', field_info.name,
+                                       field_info.type, value)
 
         return Decoded(data=msg, buffer=buf, offset=offset)
 
@@ -958,6 +971,7 @@ class ChannelMonitorResponse(ExtendedMessageBase):
         MonitorSubcommands.DEFAULT: [
             RequiredField('changed_bit_set', 'BitSet'),
             RequiredPVField('pv_data', 'PVField', bitset='changed_bit_set'),
+            # RequiredField('pv_data', 'PVField'),
             RequiredField('overrun_bitset', 'BitSet'),
         ],
         # MonitorSubcommands.START: [],
@@ -1279,7 +1293,8 @@ def bytes_needed_for_command(data, direction, cache, *, byte_order=None):
         return header, 0, SegmentFlag.UNSEGMENTED
 
 
-def read_from_bytestream(data, role, cache, *, byte_order=None):
+def read_from_bytestream(data, role, cache, *, byte_order=None,
+                         debug_logger=None):
     '''
     Parameters
     ----------
@@ -1320,12 +1335,15 @@ def read_from_bytestream(data, role, cache, *, byte_order=None):
         offset = message_start
         return bytearray(next_data), msg_class.from_buffer(data), offset, 0
 
-    data = memoryview(data)
     message_end = message_start + header.payload_size
 
     next_data = data[message_end:]
     cmd, _, off = msg_class.deserialize(data[message_start:message_end],
-                                        cache=cache)
+                                        cache=cache, debug_logger=debug_logger)
+
+    if off != header.payload_size:
+        raise RuntimeError(f'Failed to fully parse (parsed {off} payload size:'
+                           f' {header.payload_size})')
 
     cmd.header = header
     return bytearray(next_data), cmd, message_start + off, 0

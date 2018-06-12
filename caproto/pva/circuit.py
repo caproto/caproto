@@ -242,7 +242,8 @@ class VirtualCircuit:
         while True:
             res = read_from_bytestream(self._data, self.their_role,
                                        byte_order=self.fixed_recv_order,
-                                       cache=self.cache)
+                                       cache=self.cache, debug_logger=self.log)
+            # TODO remove debug_logger
             (self._data, command, bytes_consumed, num_bytes_needed) = res
             len_data = len(self._data)  # just for logging
             if type(command) is not NEED_DATA:

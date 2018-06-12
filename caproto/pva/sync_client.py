@@ -479,7 +479,9 @@ def monitor_cli():
                     continue
 
                 try:
-                    print(format_str.format(pv_name=pv_name, timestamp=timestamp, **val._values))
+                    print(format_str.format(pv_name=pv_name,
+                                            timestamp=timestamp,
+                                            **val._values))
                 except Exception as ex:
                     print('(print format failed)', ex, data)
 
