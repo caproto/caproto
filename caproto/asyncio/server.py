@@ -12,10 +12,44 @@ class ServerExit(Exception):
     ...
 
 
+def _get_asyncio_queue(loop):
+    class AsyncioQueue(asyncio.Queue):
+        '''
+        Asyncio queue modified for caproto server layer queue API compatibility
+
+        NOTE: This is bound to a single event loop for compatibility with
+        synchronous requests.
+        '''
+
+        async def async_get(self):
+            return await super().get()
+
+        async def async_put(self, value):
+            return await super().put(value)
+
+        def get(self):
+            future = asyncio.run_coroutine_threadsafe(self.async_get(), loop)
+            return future.result()
+
+        def put(self, value):
+            future = asyncio.run_coroutine_threadsafe(self.async_put(value), loop)
+            return future.result()
+
+    return AsyncioQueue
+
+
 class AsyncioAsyncLayer(AsyncLibraryLayer):
     name = 'asyncio'
     ThreadsafeQueue = None
     library = asyncio
+
+    def __init__(self, loop=None):
+        super().__init__()
+
+        if loop is None:
+            loop = asyncio.get_event_loop()
+
+        self.ThreadsafeQueue = _get_asyncio_queue(loop)
 
 
 class VirtualCircuit(_VirtualCircuit):
@@ -69,7 +103,7 @@ class VirtualCircuit(_VirtualCircuit):
 
 class Context(_Context):
     CircuitClass = VirtualCircuit
-    async_layer = AsyncioAsyncLayer
+    async_layer = None
     ServerExit = ServerExit
     TaskCancelled = asyncio.CancelledError
 
@@ -80,6 +114,7 @@ class Context(_Context):
         if loop is None:
             loop = asyncio.get_event_loop()
         self.loop = loop
+        self.async_layer = AsyncioAsyncLayer(self.loop)
         self.udp_sock = None
         self._server_tasks = []
 
@@ -176,7 +211,7 @@ class Context(_Context):
         tasks.append(self.loop.create_task(self.subscription_queue_loop()))
         tasks.append(self.loop.create_task(self.broadcast_beacon_loop()))
 
-        async_lib = AsyncioAsyncLayer()
+        async_lib = AsyncioAsyncLayer(self.loop)
         for name, method in self.startup_methods.items():
             self.log.debug('Calling startup method %r', name)
             tasks.append(self.loop.create_task(method(async_lib)))
