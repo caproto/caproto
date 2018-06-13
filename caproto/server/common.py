@@ -1,5 +1,6 @@
-from collections import defaultdict, deque, namedtuple
+from collections import defaultdict, deque, namedtuple, ChainMap
 import logging
+import time
 import caproto as ca
 from caproto import apply_arr_filter, get_environment_variables
 
@@ -183,7 +184,6 @@ class VirtualCircuit:
             chan = self.circuit.channels_sid[command.sid]
             db_entry = self.context[chan.name]
             return chan, db_entry
-
         if command is ca.DISCONNECTED:
             raise DisconnectedCircuit()
         elif isinstance(command, ca.VersionRequest):
@@ -211,7 +211,15 @@ class VirtualCircuit:
                 command.data_type, user_address=self.circuit.address)
             # This is a pass-through if arr is None.
             data = apply_arr_filter(chan.channel_filter.arr, data)
-
+            # If the timestamp feature is active swap the timestamp.
+            # Information must copied because not all clients will have the
+            # timestamp filter
+            if chan.channel_filter.ts and command.data_type in ca.time_types:
+                time_type = type(metadata)
+                now = ca.TimeStamp.from_unix_timestamp(time.time())
+                metadata = time_type(**ChainMap({'stamp': now},
+                                                dict((field, getattr(metadata, field))
+                                                     for field, _ in time_type._fields_)))
             notify = isinstance(command, ca.ReadNotifyRequest)
             return [chan.read(data=data, data_type=command.data_type,
                               data_count=len(data), status=1,
