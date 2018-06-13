@@ -148,3 +148,26 @@ def test_sync_filter(request, prefix, context, filter, initial, on, off):
     sub.clear()
     check_length(off)
     responses.clear()
+
+
+@pytest.mark.parametrize('filter, expected',
+                         [('{"dbnd": {"abs": 0.001}}', [3.14, 3.15, 3.16]),
+                          # TODO Cover more interesting cases.
+                          ])
+def test_dbnd_filter(request, ioc, context, filter, expected):
+
+    responses = []
+
+    def cache(response):
+        responses.append(response)
+
+    pv, = context.get_pvs(ioc.pvs['float'] + '.' + filter)
+    pv.wait_for_connection()
+
+    sub = pv.subscribe()
+    sub.add_callback(cache)
+    time.sleep(0.2)
+    pv.write((3.15,))
+    pv.write((3.16,))
+    time.sleep(0.2)
+    assert [res.data[0] for res in responses] == expected

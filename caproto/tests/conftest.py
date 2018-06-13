@@ -152,7 +152,7 @@ def epics_base_ioc(prefix, request):
     db = {
         ('{}waveform'.format(prefix), 'waveform'):
             dict(FTVL='LONG', NELM=4000),
-        ('{}float'.format(prefix), 'ai'): dict(VAL=1),
+        ('{}float'.format(prefix), 'ai'): dict(VAL=3.14),
         ('{}enum'.format(prefix), 'bi'):
             dict(VAL=1, ZNAM="zero", ONAM="one"),
         ('{}str'.format(prefix), 'stringout'): dict(VAL='test'),
