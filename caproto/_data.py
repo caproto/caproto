@@ -445,15 +445,47 @@ class ChannelData:
         # Cache results of data_type conversions. This maps data_type to
         # (metdata, value). This is cleared each time publish() is called.
         self._content = {}
-        self._states = states
+        self._states = namedtuple(states.keys())(**states)
         self._snapshots = defaultdict(dict)
 
     value = _read_only_property('value')
     timestamp = _read_only_property('timestamp')
 
-    def take_snapshot(self, state, mode):
-        # TODO Share references across modes.
-        self._snapshots[key][mode] = copy.deepcopy(self)
+    # "before" — only the last value received before the state changes from
+    #     false to true is forwarded to the client.
+    # "first" — only the first value received after the state changes from true
+    #     to false is forwarded to the client.
+    # "while" — values are forwarded to the client as long as the state is true.
+    # "last" — only the last value received before the state changes from true
+    #     to false is forwarded to the client.
+    # "after" — only the first value received after the state changes from true
+    #     to false is forwarded to the client.
+    # "unless" — values are forwarded to the client as long as the state is
+    #     false.
+
+    def pre_state_change(self, state, new_value):
+        snapshots = self._snapshots[state]
+        snapshots.clear()
+        snapshot = copy.deepcopy(self)
+        if new_value:
+            # We are changing from false to true.
+            snapshots['before'] = snapshot
+        else:
+            # We are changing from true to false.
+            snapshots['last'] = snapshot
+
+    def post_state_change(self, state, new_value):
+        snapshots = self._snapshots[state]
+        snapshots.clear()
+        snapshot = copy.deepcopy(self)
+        if new_value:
+            # We have changed from false to true.
+            snapshots['while'] = self
+            snapshots['after'] = FILL_AT_NEXT_WRITE
+        else:
+            # We have changed from true to false.
+            snapshots['unless'] = self
+            snapshots['first'] = FILL_AT_NEXT_WRITE
 
     @property
     def alarm(self):

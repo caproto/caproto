@@ -843,7 +843,8 @@ class PVGroup(metaclass=PVGroupMeta):
     name : str, optional
         Name for the group, defaults to the class name
     states : dict, optional
-        A dictionary of states used for channel filtering
+        A dictionary of states used for channel filtering. See
+        https://epics.anl.gov/base/R3-15/5-docs/filters.html
     '''
 
     type_map = {
@@ -914,10 +915,10 @@ class PVGroup(metaclass=PVGroupMeta):
     @contextlib.contextmanager
     def update_state(self, state, value):
         for attr in self.attr_pvdb:
-            attr.take_snapshot(state, 'before')
+            attr.pre_state_change(state, value)
         yield  # Here the caller has the opportunity to update channels.
         for attr in self.attr_pvdb:
-            attr.take_snapshot(state, 'after')
+            attr.post_state_change(state, value)
 
     def _create_pvdb(self):
         'Create the PV database for all subgroups and pvproperties'
