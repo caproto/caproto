@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
+from collections import namedtuple
 
 
 class StateIOC(PVGroup):
@@ -8,7 +9,7 @@ class StateIOC(PVGroup):
     # the remaining sync modes can be supported
     value = pvproperty(value=[1])
     toggle_state = pvproperty(value=[False])
-    state = pvproperty(value=[False], read_only=True)
+    states = namedtuple('States', 'a')(a=False)
 
     @value.startup
     async def value(self, instance, async_lib):
@@ -22,8 +23,8 @@ class StateIOC(PVGroup):
 
     @toggle_state.putter
     async def toggle_state(self, instance, value):
-        self.states['state'] = not self.states['state']
-        await self.state.write(value=self.states['state'])
+        async with self.update_state('a', not self.states.a):
+            ...
 
 
 if __name__ == '__main__':

@@ -7,7 +7,6 @@ a single asyncio library.
 For an example server implementation, see caproto.curio.server
 '''
 import argparse
-import contextlib
 import copy
 import logging
 import inspect
@@ -818,8 +817,6 @@ def channeldata_from_pvspec(group, pvspec):
 
     cls = data_class_from_pvspec(group, pvspec)
     kw = dict(pvspec.cls_kwargs) if pvspec.cls_kwargs is not None else {}
-    if 'states' not in kw:
-        kw['states'] = group.states
 
     inst = cls(group=group, pvspec=pvspec, value=value,
                alarm=group.alarms[pvspec.alarm_group], pvname=full_pvname,
@@ -895,6 +892,26 @@ class PVGroup(metaclass=PVGroupMeta):
             else:
                 self.states = {}
 
+        pv_group = self
+
+        class StateUpdateContext:
+            def __init__(self, state, value):
+                self.pv_group = pv_group
+                self.state = state
+                self.value = value
+
+            async def __aenter__(self):
+                for attr in pv_group.attr_pvdb.values():
+                    attr.pre_state_change(self.state, self.value)
+                pv_group.states = pv_group.states._replace(**{self.state: self.value})
+                return self
+
+            async def __aexit__(self, *args, **kwargs):
+                for attr in pv_group.attr_pvdb.values():
+                    attr.post_state_change(self.state, self.value)
+
+        self.update_state = StateUpdateContext
+
         # Create logger name from parent or from module class
         self.name = (self.__class__.__name__
                      if name is None
@@ -911,14 +928,6 @@ class PVGroup(metaclass=PVGroupMeta):
         # Instantiate the logger
         self.log = logging.getLogger(f'{base}.{log_name}')
         self._create_pvdb()
-
-    @contextlib.contextmanager
-    def update_state(self, state, value):
-        for attr in self.attr_pvdb:
-            attr.pre_state_change(state, value)
-        yield  # Here the caller has the opportunity to update channels.
-        for attr in self.attr_pvdb:
-            attr.post_state_change(state, value)
 
     def _create_pvdb(self):
         'Create the PV database for all subgroups and pvproperties'

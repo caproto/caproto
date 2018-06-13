@@ -4,6 +4,7 @@
 # data as a certain type, and they push updates into queues registered by a
 # higher-level server.
 from collections import defaultdict, Iterable
+import copy
 import enum
 import time
 import warnings
@@ -319,6 +320,14 @@ class ChannelAlarm:
             severity_to_acknowledge=severity_to_acknowledge,
             alarm_string=alarm_string)
 
+    def __setstate__(self, val):
+        self._channels = weakref.WeakSet()
+        self.string_encoding = val['string_encoding']
+        self._data = val['data']
+
+    def __getstate__(self):
+        return {'data': self._data, 'string_encoding': self.string_encoding}
+
     status = _read_only_property('status',
                                  doc='Current alarm status')
     severity = _read_only_property('severity',
@@ -398,8 +407,7 @@ class ChannelData:
     data_type = ChannelType.LONG
 
     def __init__(self, *, alarm=None, value=None, timestamp=None,
-                 string_encoding='latin-1', reported_record_type='caproto',
-                 states=None):
+                 string_encoding='latin-1', reported_record_type='caproto'):
         '''Metadata and Data for a single caproto Channel
 
         Parameters
@@ -416,9 +424,6 @@ class ChannelData:
             querying the record type.  This can be set to mimic an actual
             record or be set to something arbitrary.
             Defaults to 'caproto'
-        states : dict, optional
-            Dictionary of server-wide states for the synchronize filter of
-            R3-15.
         '''
         if timestamp is None:
             timestamp = time.time()
@@ -445,8 +450,30 @@ class ChannelData:
         # Cache results of data_type conversions. This maps data_type to
         # (metdata, value). This is cleared each time publish() is called.
         self._content = {}
-        self._states = namedtuple(states.keys())(**states)
         self._snapshots = defaultdict(dict)
+        self._fill_at_next_write = list()
+
+    def __setstate__(self, val):
+        self.timetstamp = val['timestamp']
+        self._alarm = val['alarm']
+        self.string_encoding = val['string_encoding']
+        self.reported_record_type = val['reported_record_type']
+        self._data = val['data']
+        self.string_encoding = val['string_encoding']
+        self._data = val['data']
+        self._queues = defaultdict(
+            lambda: defaultdict(
+                lambda: defaultdict(set)))
+        self._content = {}
+        self._snapshots = defaultdict(dict)
+        self._fill_at_next_write = list()
+
+    def __getstate__(self):
+        return {'timestamp': self.timestamp,
+                'alarm': self.alarm,
+                'string_encoding': self.string_encoding,
+                'reported_record_type': self.reported_record_type,
+                'data': self._data}
 
     value = _read_only_property('value')
     timestamp = _read_only_property('timestamp')
@@ -477,15 +504,14 @@ class ChannelData:
     def post_state_change(self, state, new_value):
         snapshots = self._snapshots[state]
         snapshots.clear()
-        snapshot = copy.deepcopy(self)
         if new_value:
             # We have changed from false to true.
             snapshots['while'] = self
-            snapshots['after'] = FILL_AT_NEXT_WRITE
+            self._fill_at_next_write.append((state, 'after'))
         else:
             # We have changed from true to false.
             snapshots['unless'] = self
-            snapshots['first'] = FILL_AT_NEXT_WRITE
+            self._fill_at_next_write.append((state, 'first'))
 
     @property
     def alarm(self):
@@ -641,6 +667,11 @@ class ChannelData:
         '''Set data from native Python types'''
         metadata['timestamp'] = metadata.get('timestamp', time.time())
         modified_value = await self.verify_value(value)
+        if self._fill_at_next_write:
+            snapshot = copy.deepcopy(self)
+            for state, mode in self._fill_at_next_write:
+                self._snapshots[state][mode] = snapshot
+            self._fill_at_next_write.clear()
         old = self._data['value']
         new = modified_value if modified_value is not None else value
         self._data['value'] = new
@@ -649,42 +680,8 @@ class ChannelData:
         await self.publish(flags, (old, new))
 
     def _is_eligible(self, ss, flags, pair):
-        valid_state = True
         sync = ss.channel_filter.sync
-        if sync is not None:
-            sync_mode, sync_state = sync.m, sync.s
-            if self._states is None or sync_state not in self._states:
-                valid_state = False
-            elif sync_mode == 'before':
-                # before: only the last value received before the state
-                # changes from false to true is forwarded to the client
-                valid_state = True
-            elif sync_mode == 'first':
-                # first: only the first value received after the state
-                # changes from true to false is forwarded to the client
-                valid_state = False
-                # TODO: "first" is unsupported
-            elif sync_mode == 'while':
-                # while: values are forwarded to the client as long as
-                # the state is true
-                valid_state = self._states[sync_state]
-            elif sync_mode == 'last':
-                # last: only the last value received before the state
-                # changes from true to false is forwarded to the client
-                valid_state = False
-                # TODO: "last" is unsupported
-            elif sync_mode == 'after':
-                # after: only the first value received after the state
-                # changes from true to false is forwarded to the client
-                valid_state = self._states[sync_state]
-                # TODO: "after" is effectively treated as "while" now
-            elif sync_mode == 'unless':
-                # unless: values are forwarded to the client as long as
-                # the state is false
-                valid_state = not self._states[sync_state]
-            else:
-                # unknown/unsupported sync mode
-                valid_state = False
+        valid_state = sync is not None and sync.m in self._snapshots[sync.s]
         return ss.mask & flags & valid_state
 
     async def publish(self, flags, pair):
@@ -706,7 +703,7 @@ class ChannelData:
             for sync, data_types in syncs.items():
                 for data_type, sub_specs in data_types.items():
                     eligible = tuple(ss for ss in sub_specs
-                                    if self._is_eligible(ss, flags, pair))
+                                     if self._is_eligible(ss, flags, pair))
                     if not eligible:
                         continue
                     if sync is None:
