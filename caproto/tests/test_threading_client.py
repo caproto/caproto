@@ -598,7 +598,7 @@ def test_batch_write(context, ioc):
     time.sleep(0.1)
     assert set(results) == set(pv.name for pv in pvs)
     for pv in pvs:
-        assert pv.read().data == [4407]
+        assert list(pv.read().data) == [4407]
 
 
 def test_batch_write_no_callback(context, ioc):
@@ -610,4 +610,4 @@ def test_batch_write_no_callback(context, ioc):
             b.write(pv, [4407])
     time.sleep(0.1)
     for pv in pvs:
-        assert pv.read().data == [4407]
+        assert list(pv.read().data) == [4407]
