@@ -585,9 +585,6 @@ class ClientChannel(_BaseChannel):
 
         pvrequest_data = field_description_to_value_dict(
             pvrequest_if, user_types={})
-        print()
-        print(pvrequest, pvrequest_if)
-        print(pvrequest_data)
 
         if ioid is None:
             ioid = self.circuit.new_ioid()

@@ -321,17 +321,18 @@ class MessageBase:
                         f'Interface unspecified for PVField key '
                         f'{field_info.name!r}') from None
 
-                if bitset is not None and debug_logging:
-                    serialization_logger.debug('Fields selected by bitset:')
-                    serialization_logger.debug('--------------------------')
-                    for line in intro.bitset_repr(bitset, interface,
-                                                  user_types={},
-                                                  only_selected=False):
-                        serialization_logger.debug(line)
+                if bitset is not None:
+                    if debug_logging:
+                        serialization_logger.debug('Fields selected by bitset:')
+                        serialization_logger.debug('--------------------------')
+                        for line in intro.bitset_repr(bitset, interface,
+                                                      user_types={},
+                                                      only_selected=False):
+                            serialization_logger.debug(line)
 
-                if 0 not in bitset:
-                    bitset = intro.bitset_fill(bitset, interface,
-                                               user_types={})
+                    if 0 not in bitset:
+                        bitset = intro.bitset_fill(bitset, interface,
+                                                   user_types={})
 
             is_nonstandard_array = isinstance(field_info,
                                               NonstandardArrayField)

@@ -252,7 +252,7 @@ def get_cli():
     fmt_group = parser.add_mutually_exclusive_group()
     parser.add_argument('pv_names', type=str, nargs='+',
                         help="PV (channel) name(s) separated by spaces")
-    parser.add_argument('--pvrequest', type=str, default='field(value)',
+    parser.add_argument('-r', '--pvrequest', type=str, default='field()',
                         help=("PVRequest"))
     fmt_group.add_argument('--terse', '-t', action='store_true',
                            help=("Display data only. Unpack scalars: "
@@ -282,7 +282,6 @@ def get_cli():
 
             pva.print_field_info(interface, user_types={},
                                  values={'': response.pv_data})
-
 
     except BaseException as exc:
         if args.verbose:
@@ -414,7 +413,7 @@ def monitor_cli():
     parser = argparse.ArgumentParser(description='Read the value of a PV.')
     parser.add_argument('pv_names', type=str, nargs='+',
                         help="PV (channel) name(s) separated by spaces")
-    parser.add_argument('--pvrequest', type=str, default='field(value)',
+    parser.add_argument('--pvrequest', type=str, default='field()',
                         help=("PVRequest"))
     fmt_group = parser.add_mutually_exclusive_group()
     fmt_group.add_argument('--terse', '-t', action='store_true',

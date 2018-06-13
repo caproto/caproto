@@ -481,10 +481,14 @@ def _deserialize_complex_data(fd, buf, *, endian, cache, nested_types,
             field_index, buf, off = _deserialize_size(buf, endian=endian)
             offset += off
 
-            fields = fd['fields']
-            selector_key = tuple(fields.keys())[field_index]
-            value_intf = fields[selector_key]
-
+            if field_index is None:
+                # No value selected by union
+                value_intf = None
+                selector_key = None
+            else:
+                fields = fd['fields']
+                selector_key = tuple(fields.keys())[field_index]
+                value_intf = fields[selector_key]
         if value_intf is None:
             # can be none for variant types
             di = None
@@ -528,7 +532,6 @@ def _deserialize_data_from_field_desc(fd, buf, *, endian, cache, nested_types,
     if bitset is not None:
         bitset_index = bitset_counter()
         if bitset_index not in bitset:
-            name = fd['name']
             logger.debug(f'Index: %d offset: . Field: %s (%s)',
                          bitset_index, fd['name'], fd['type_name'])
             return None

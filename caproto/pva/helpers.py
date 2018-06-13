@@ -158,6 +158,9 @@ class UnionSelectorItem:
 
         self.parent[self.key]['_selector_'] = value
 
+    def update(self, value):
+        self.parent[self.key]['_selector_'] = value['_selector_']
+
 
 class StructuredValueItem:
     def __init__(self, parent, key, fd):
@@ -176,7 +179,11 @@ class StructuredValueItem:
 
     def update(self, value):
         if self.fd['type_name'] in ('struct', 'union'):
-            self.parent[self.key].update(**value)
+            parent_value = self.parent[self.key]
+            if isinstance(parent_value, dict):
+                parent_value.update(**value)
+            else:
+                self.parent[self.key] = value
         else:
             self.value = value
 
