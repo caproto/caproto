@@ -567,6 +567,8 @@ DeadbandFilter = namedtuple('DeadbandFilter', 'm d')
 ArrayFilter = namedtuple('ArrayFilter', 's i e')
 SyncFilter = namedtuple('SyncFilter', 'm s')
 
+sync_modes = set(['before', 'first', 'while', 'last', 'after', 'unless'])
+
 
 def parse_channel_filter(filter_text):
     "Parse and validate filter_text into a ChannelFilter."
@@ -585,8 +587,20 @@ def parse_channel_filter(filter_text):
             f"Unable to parse channel filter text as JSON: "
             f"{filter_text}") from exc
 
+    # If there is a shorthand sync filter, that is the only filter allowed.
+    # Rewrite the filter to expand the shorthand and go through the normal
+    # codepath.
+    intersection = sync_modes & set(filter_)
+    if intersection:
+        if len(filter_) > 1:
+            raise FilterValidationError(
+                f"Found shorthand sync filter key {next(iter(intersection))} "
+                f"This must be the only key if present but additional keys "
+                f"were found: {filter_}")
+        (mode, state), = filter_.items()
+        filter_ = {"sync": {"m": mode, "s": state}}
     valid_filters = {'ts', 'arr', 'sync', 'dbnd'}
-    filter_keys = set(filter_.keys())
+    filter_keys = set(filter_)
     invalid_keys = filter_keys - valid_filters
     if invalid_keys:
         raise FilterValidationError(f'Unsupported filters: {invalid_keys}')
@@ -673,8 +687,7 @@ def parse_sync_filter(val):
         raise FilterValidationError(
             f"'sync' must include both 'm' and 's'. "
             f"Found keys {set(val.keys())}.")
-    valid_modes = set(['before', 'first', 'while', 'last', 'after', 'unless'])
-    if val['m'] not in valid_modes:
+    if val['m'] not in sync_modes:
         raise FilterValidationError(f"Unsupported mode in 'sync': "
                                     f"{val['m']}")
     if not isinstance(val['s'], str):
