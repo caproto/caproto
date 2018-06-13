@@ -4,12 +4,12 @@ from collections import namedtuple
 
 
 class StateIOC(PVGroup):
-    states = dict(state=False)
-    # NOTE: it may make more sense to have a threading.Event (etc) such that
-    # the remaining sync modes can be supported
-    value = pvproperty(value=[1])
-    toggle_state = pvproperty(value=[False])
     states = namedtuple('States', 'a')(a=False)
+    value = pvproperty(value=[1])
+
+    disable_state = pvproperty(value=[False])
+    enable_state = pvproperty(value=[False])
+    state = pvproperty(value=[False])
 
     @value.startup
     async def value(self, instance, async_lib):
@@ -19,11 +19,16 @@ class StateIOC(PVGroup):
                 # update the ChannelData instance and notify any subscribers
                 await instance.write(value=[i])
                 # Let the async library wait for the next iteration
-                await async_lib.library.sleep(0.25)
+                await async_lib.library.sleep(0.5)
 
-    @toggle_state.putter
-    async def toggle_state(self, instance, value):
-        async with self.update_state('a', not self.states.a):
+    @disable_state.putter
+    async def disable_state(self, instance, value):
+        async with self.update_state('a', False):
+            ...
+
+    @enable_state.putter
+    async def enable_state(self, instance, value):
+        async with self.update_state('a', True):
             ...
 
 

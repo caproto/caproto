@@ -104,7 +104,8 @@ MANY = object()
                           ])
 def test_sync_filter(request, prefix, context, filter, initial, on, off):
     value_name = f'{prefix}value'
-    toggle_state_name = f'{prefix}toggle_state'
+    enable_state_name = f'{prefix}enable_state'
+    disable_state_name = f'{prefix}disable_state'
     run_example_ioc('caproto.ioc_examples.states', request=request,
                     args=['--prefix', prefix],
                     pv_to_check=value_name)
@@ -119,10 +120,11 @@ def test_sync_filter(request, prefix, context, filter, initial, on, off):
         else:
             assert len(responses) == expected
 
-    value, toggle_state = context.get_pvs(value_name + '.' + filter,
-                                          toggle_state_name)
-    value.wait_for_connection()
-    toggle_state.wait_for_connection()
+    value, disable_state, enable_state = context.get_pvs(
+        value_name + '.' + filter, disable_state_name, enable_state_name)
+
+    for pv in (value, disable_state, enable_state):
+        pv.wait_for_connection()
 
     sub = value.subscribe()
 
@@ -134,7 +136,7 @@ def test_sync_filter(request, prefix, context, filter, initial, on, off):
     responses.clear()
 
     # state is on
-    toggle_state.write((1,))
+    enable_state.write((1,))
     sub.add_callback(cache)
     time.sleep(2)
     sub.clear()
@@ -142,7 +144,7 @@ def test_sync_filter(request, prefix, context, filter, initial, on, off):
     responses.clear()
 
     # state is off
-    toggle_state.write((0,))
+    disable_state.write((1,))
     sub.add_callback(cache)
     time.sleep(2)
     sub.clear()
