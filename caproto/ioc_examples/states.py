@@ -19,7 +19,7 @@ class StateIOC(PVGroup):
                 # update the ChannelData instance and notify any subscribers
                 await instance.write(value=[i])
                 # Let the async library wait for the next iteration
-                await async_lib.library.sleep(0.5)
+                await async_lib.library.sleep(0.25)
 
     @toggle_state.putter
     async def toggle_state(self, instance, value):

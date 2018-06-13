@@ -91,12 +91,60 @@ def test_ts_filter(request, prefix, context):
     event.wait(timeout=2)
 
 
-def test_sync(request, prefix):
-    pv = f'{prefix}toggle_state'
+MANY = object()
+
+
+@pytest.mark.parametrize('filter, initial, on, off',
+                         [('{"before": "a"}', 1, 1, 1),
+                          ('{"after": "a"}', 1, 1, 1),
+                          ('{"first": "a"}', 1, 1, 1),
+                          ('{"last": "a"}', 1, 1, 1),
+                          ('{"while": "a"}', 1, MANY, 1),
+                          ('{"unless": "a"}', MANY, 1, MANY),
+                          ])
+def test_sync_filter(request, prefix, context, filter, initial, on, off):
+    value_name = f'{prefix}value'
+    toggle_state_name = f'{prefix}toggle_state'
     run_example_ioc('caproto.ioc_examples.states', request=request,
                     args=['--prefix', prefix],
-                    pv_to_check=pv)
+                    pv_to_check=value_name)
     responses = []
 
     def cache(response):
         responses.append(response)
+
+    def check_length(expected):
+        if expected is MANY:
+            assert len(responses) > 1
+        else:
+            assert len(responses) == expected
+
+    value, toggle_state = context.get_pvs(value_name + '.' + filter,
+                                          toggle_state_name)
+    value.wait_for_connection()
+    toggle_state.wait_for_connection()
+
+    sub = value.subscribe()
+
+    # state is off
+    sub.add_callback(cache)
+    time.sleep(2)
+    sub.clear()
+    check_length(initial)
+    responses.clear()
+
+    # state is on
+    toggle_state.write((1,))
+    sub.add_callback(cache)
+    time.sleep(2)
+    sub.clear()
+    check_length(on)
+    responses.clear()
+
+    # state is off
+    toggle_state.write((0,))
+    sub.add_callback(cache)
+    time.sleep(2)
+    sub.clear()
+    check_length(off)
+    responses.clear()
