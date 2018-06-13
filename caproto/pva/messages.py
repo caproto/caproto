@@ -7,7 +7,7 @@ from collections import namedtuple
 from .const import (LITTLE_ENDIAN, BIG_ENDIAN)
 from .types import (TypeCode, Decoded)
 from .serialization import (serialize_message_field, deserialize_message_field,
-                            NullCache)
+                            NullCache, logger as serialization_logger)
 from .types import (c_byte, c_ubyte, c_short, c_ushort, c_int, c_uint)
 from .pvrequest import pvrequest_string_to_structure
 from . import introspection as intro
@@ -266,7 +266,7 @@ class MessageBase:
         return b''.join(buf)
 
     @classmethod
-    def deserialize(cls, buf, *, cache=NullCache, debug_logger=None):
+    def deserialize(cls, buf, *, cache=NullCache):
         base_size = ctypes.sizeof(cls)
         buflen = len(buf) - base_size
         buf = memoryview(buf)
@@ -286,10 +286,10 @@ class MessageBase:
             # Without additional fields, this is just a ctypes.Structure
             return Decoded(data=msg, buffer=buf, offset=offset)
 
-        if debug_logger:
-            debug_logger.debug('deserializing %s base_size=%s subcommand=%s '
-                               'payload=%s', cls, base_size,
-                               getattr(msg, 'subcommand', None), bytes(buf))
+        debug_logging = serialization_logger.isEnabledFor(logging.DEBUG)
+        serialization_logger.debug(
+            'deserializing %s base_size=%s subcommand=%s payload=%s', cls,
+            base_size, getattr(msg, 'subcommand', None), bytes(buf))
 
         for field_info in additional_fields:
             bitset = None
@@ -321,20 +321,17 @@ class MessageBase:
                         f'Interface unspecified for PVField key '
                         f'{field_info.name!r}') from None
 
-                if bitset is not None and debug_logger is not None:
-                    debug_logger.debug('Fields selected by bitset:')
-                    debug_logger.debug('--------------------------')
-                    for item in intro.walk_field_description_with_bitset(
-                            interface, bitset, user_types={},
-                            only_selected=False):
-                        indent = ' ' * item.depth
-                        fd = item.field_desc
-                        name_ = fd['name']
-                        type_ = fd['type_name']
-                        bitset_index = item.value
-                        marker = '*' if bitset_index in bitset else ' '
-                        debug_logger.debug(f'{marker} [{bitset_index:-3d}] '
-                                           f'{indent} {type_} {name_}')
+                if bitset is not None and debug_logging:
+                    serialization_logger.debug('Fields selected by bitset:')
+                    serialization_logger.debug('--------------------------')
+                    for line in intro.bitset_repr(bitset, interface,
+                                                  user_types={},
+                                                  only_selected=False):
+                        serialization_logger.debug(line)
+
+                if 0 not in bitset:
+                    bitset = intro.bitset_fill(bitset, interface,
+                                               user_types={})
 
             is_nonstandard_array = isinstance(field_info,
                                               NonstandardArrayField)
@@ -360,13 +357,12 @@ class MessageBase:
             if is_nonstandard_array:
                 setattr(msg, field_info.name, values)
 
-            if debug_logger is not None:
-                if values:
-                    debug_logger.debug('%s (%s) = %s', field_info.name,
-                                       field_info.type, values)
-                else:
-                    debug_logger.debug('%s (%s) = %s', field_info.name,
-                                       field_info.type, value)
+            if values:
+                serialization_logger.debug('%s (%s) = %s', field_info.name,
+                                           field_info.type, values)
+            else:
+                serialization_logger.debug('%s (%s) = %s', field_info.name,
+                                           field_info.type, value)
 
         return Decoded(data=msg, buffer=buf, offset=offset)
 
@@ -1339,7 +1335,7 @@ def read_from_bytestream(data, role, cache, *, byte_order=None,
 
     next_data = data[message_end:]
     cmd, _, off = msg_class.deserialize(data[message_start:message_end],
-                                        cache=cache, debug_logger=debug_logger)
+                                        cache=cache)
 
     if off != header.payload_size:
         raise RuntimeError(f'Failed to fully parse (parsed {off} payload size:'

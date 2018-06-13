@@ -434,6 +434,109 @@ def walk_field_description_with_values(fd, values, user_types, *, keys=None,
                     allow_none=allow_none)
 
 
+def bitset_fill(bitset, interface, *, user_types):
+    '''
+    Fill a bitset according to a field interface
+
+    Take, For example, the following field interface and its corresponding
+    bitset bits:
+
+        [  0]  struct epics:nt/NTScalarArray:1.0
+        [  1]   double value
+        [  2]   struct alarm
+        [  3]    int severity
+        [  4]    int status
+        [  5]    string message
+        [  6]   struct timeStamp
+        [  7]    long secondsPastEpoch
+        [  8]    int nanoseconds
+        [  9]    int userTag
+
+    Specifying 0 in the bitset would select the entire structure - obviating
+    the need for a bitset entirely. Selecting 2 (alarm) implies that 3, 4, and
+    5 (severity, status, message) are also selected.  The "fill" operation will
+    take those implications and return a fully-specified bitset.
+
+    Parameters
+    ----------
+    bitset : set
+    interface : dict
+    user_types : dict
+    '''
+
+    if bitset is None or 0 in bitset:
+        return None
+
+    last_depth = -1
+    parent_stack = []
+    output_bitset = set(bitset)
+
+    debug_flag = logger.isEnabledFor(logging.DEBUG)
+
+    for item in walk_field_description_with_bitset(
+            interface, bitset, user_types=user_types, only_selected=False):
+        indent = ' ' * item.depth
+        fd = item.field_desc
+        bitset_index = item.value
+        name = fd['name']
+        type_name = fd['type_name']
+
+        while last_depth > item.depth:
+            # moving back up the stack
+            parent_stack.pop(-1)
+            last_depth -= 1
+
+        try:
+            parent_name, parent_id, parent_selected = parent_stack[-1]
+        except IndexError:
+            parent_name, parent_id, parent_selected = '', -1, False
+
+        if item.depth == last_depth and parent_id == bitset_index - 1:
+            # parent was an empty struct
+            parent_stack.pop(-1)
+            parent_name, parent_id, parent_selected = parent_stack[-1]
+
+        # if the parent item is selected, this item is also selected
+        if parent_selected:
+            output_bitset.add(bitset_index)
+
+        # next entries
+        if type_name in ('struct', ):
+            parent_stack.append((name, bitset_index,
+                                 bitset_index in output_bitset))
+
+        last_depth = item.depth
+
+        if debug_flag:
+            if bitset_index in output_bitset and bitset_index in bitset:
+                marker = '* '
+            elif bitset_index in output_bitset:
+                marker = '*F'
+
+            marker = '*' if bitset_index in output_bitset else ' '
+            logger.debug('%s [%3d] %s %s %s.%s', marker, bitset_index, indent,
+                         type_name, parent_name, name)
+
+    return output_bitset
+
+
+def bitset_repr(bitset, interface, *, user_types=None, only_selected=False):
+    if user_types is None:
+        user_types = {}
+
+    for item in walk_field_description_with_bitset(
+            interface, bitset, user_types=user_types,
+            only_selected=only_selected):
+        indent = ' ' * item.depth
+        fd = item.field_desc
+        name = fd['name']
+        type_name = fd['type_name']
+        bitset_index = item.value
+        marker = ('*' if bitset is None or bitset_index in bitset
+                  else ' ')
+        yield f'{marker} [{bitset_index:-3d}] {indent} {type_name} {name}'
+
+
 def walk_field_description_with_bitset(
         fd, bitset, user_types, *, keys=None, depth=0, root=None, parent=None,
         bitset_counter=None, only_selected=True):
@@ -457,7 +560,7 @@ def walk_field_description_with_bitset(
     else:
         bitset_counter()
 
-    selected = bitset_counter.value in bitset
+    selected = bitset is None or bitset_counter.value in bitset
 
     if not only_selected or (only_selected and selected):
         type_name = fd['type_name']
@@ -479,7 +582,7 @@ def walk_field_description_with_bitset(
 
     fields = fd['fields']
 
-    if type_name == 'union' and bitset_counter.value in bitset:
+    if type_name == 'union' and selected:
         raise NotImplementedError('TODO bitset with union')
         # yield from walk_field_description_with_bitset(
         #     fd=sel_field, values=value, user_types=user_types,

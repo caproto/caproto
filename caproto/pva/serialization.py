@@ -464,6 +464,9 @@ def _deserialize_complex_data(fd, buf, *, endian, cache, nested_types,
                 bitset_counter()
                 continue
 
+            # TODO bitset will need to be cleared for complex 'any'
+            # deserialize_data below
+
             # get the field description
             value_intf, buf, off = deserialize_introspection_data(
                 buf, endian=endian, cache=cache, depth=1,

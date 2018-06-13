@@ -10,6 +10,7 @@ from collections import OrderedDict
 
 from caproto.pva.types import FieldArrayType
 from caproto.pva import (deserialize_introspection_data, SerializeCache)
+from caproto.pva import introspection as intro
 from caproto import pva
 
 
@@ -380,7 +381,6 @@ def test_structure_from_repr(lines, expected_hierarchy, expected_structure):
     assert struct_name in namespace
     # TODO
     # assert tuple(nested_types.keys()) == ()
-
 
 
 repr_with_data = [
@@ -927,6 +927,71 @@ def test_helper_basics(repr_text, expected_serialized, endian):
 
     # Round trip (3): compare serialized result of new instance
     assert new.serialize(endian=endian, cache=cache) == expected_serialized
+
+
+@pytest.mark.parametrize(
+    "bitset, expected, message",
+    [[None, None, 'None-full'],
+     [{0}, None, 'full'],
+     [{12}, {12, 13, 14, 15}, 'alarm'],
+     [{4}, {4, 5, 6, 7, 8, 9, 10, 11}, 'timestamp+below'],
+     [{4, 7}, {4, 5, 6, 7, 8, 9, 10, 11}, 'timestamp+below'],
+     [{4, 7, 12}, {4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}, 'timestamp+alarm'],
+     ]
+    # TODO unions explicitly not tested here
+)
+def test_bitset_fill(bitset, expected, message):
+    struct_repr = '''
+    struct testStruct
+        byte[] value = [1,2,3]
+        byte<16> boundedSizeArray = [4,5,6,7,8]
+        byte[4] fixedSizeArray = [9,10,11,12]
+        timeStamp_t timeStamp
+            long secondsPastEpoch = 0x1122334455667788
+            uint nanoSeconds = 0xAABBCCDD
+            uint userTag = 0xEEEEEEEE
+            test_t test
+                int severity = 0x11111111
+                int status = 0x22222222
+                string message = "Allo, Allo!"
+        alarm_t alarm
+            int severity = 0x11111111
+            int status = 0x22222222
+            string message = "Allo, Allo!"
+        any variantUnion = "String inside variant union."
+        alarm_t[] alarms = [(1, 2, 'a'), (3, 4, 'b')]
+    '''
+
+    '''
+        # Bitset for reference:
+        [  0]  struct testStruct
+        [  1]   byte value
+        [  2]   byte boundedSizeArray
+        [  3]   byte fixedSizeArray
+        [  4]   struct timeStamp
+        [  5]    long secondsPastEpoch
+        [  6]    uint nanoSeconds
+        [  7]    uint userTag
+        [  8]    struct alarm
+        [  9]     int severity
+        [ 10]     int status
+        [ 11]     string message
+        [ 12]   struct alarm
+        [ 13]    int severity
+        [ 14]    int status
+        [ 15]    string message
+        [ 16]   any variantUnion
+        [ 17]   struct alarm
+    '''
+    hierarchy = pva.parse_repr_lines(struct_repr)
+    fd = pva.structure_from_repr(hierarchy, user_types=pva.basic_types)
+
+    print()
+    print('Bitset: ', bitset, message)
+    filled_bitset = intro.bitset_fill(bitset, fd, user_types={})
+    for line in intro.bitset_repr(filled_bitset, fd, only_selected=False):
+        print(line)
+    assert filled_bitset == expected
 
 
 def setup_module():
