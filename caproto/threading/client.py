@@ -404,6 +404,8 @@ class SharedBroadcaster:
             self.listeners.remove(listener)
         except KeyError:
             pass
+        if not self.listeners:
+            self.disconnect()
 
     def disconnect(self, *, wait=True):
         if self.udp_sock is not None:
@@ -932,6 +934,9 @@ class Context:
                                    idx, total_circuits, circuit)
             self.log.debug('All circuits disconnected')
         finally:
+            # Remove from Broadcaster.
+            self.broadcaster.remove_listener(self)
+
             # clear any state about circuits and search results
             self.log.debug('Clearing circuit managers')
             self.circuit_managers.clear()
