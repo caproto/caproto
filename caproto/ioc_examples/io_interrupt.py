@@ -87,8 +87,7 @@ class IOInterruptIOC(PVGroup):
 if __name__ == '__main__':
     ioc_options, run_options = ioc_arg_parser(
         default_prefix='io:',
-        desc='Run an IOC that updates via I/O interrupt on key-press events.',
-        asyncio_lib='curio')
+        desc='Run an IOC that updates via I/O interrupt on key-press events.')
 
     ioc = IOInterruptIOC(**ioc_options)
     run(ioc.pvdb, **run_options)
