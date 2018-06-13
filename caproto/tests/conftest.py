@@ -157,6 +157,8 @@ def epics_base_ioc(prefix, request):
             dict(VAL=1, ZNAM="zero", ONAM="one"),
         ('{}str'.format(prefix), 'stringout'): dict(VAL='test'),
         ('{}int'.format(prefix), 'longout'): dict(VAL=1),
+        ('{}int2'.format(prefix), 'longout'): dict(VAL=1),
+        ('{}int3'.format(prefix), 'longout'): dict(VAL=1),
     }
 
     macros = {'P': prefix}
@@ -200,6 +202,8 @@ def epics_base_ioc(prefix, request):
 def caproto_ioc(prefix, request):
     name = 'Caproto type varieties example'
     pvs = dict(int=prefix + 'int',
+               int2=prefix + 'int2',
+               int3=prefix + 'int3',
                float=prefix + 'pi',
                str=prefix + 'str',
                enum=prefix + 'enum',

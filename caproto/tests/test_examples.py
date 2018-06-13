@@ -33,7 +33,7 @@ def test_thread_client_example(curio_server):
 
     @conftest.threaded_in_curio_wrapper
     def client():
-        example_main(pvname1=prefix + 'pi',
+        example_main(pvname1=prefix + 'int',
                      pvname2=prefix + 'str')
 
     with curio.Kernel() as kernel:
@@ -223,7 +223,7 @@ def test_curio_server_example(prefix, run_client):
 
     pvdb = {prefix + key: value
             for key, value in pvdb.items()}
-    pi_pv = prefix + 'pi'
+    pi_pv = prefix + 'int'
     broadcaster = client.SharedBroadcaster()
     ctx = client.Context(broadcaster)
 

@@ -50,12 +50,12 @@ def test_context_disconnect_is_terminal(context, ioc):
 
 
 def test_put_complete(backends, context, ioc):
-    pv, = context.get_pvs(ioc.pvs['float'])
+    pv, = context.get_pvs(ioc.pvs['int'])
     pv.wait_for_connection()
     assert pv.connected
 
     # start in a known initial state
-    pv.write((0.0, ), wait=True)
+    pv.write((0, ), wait=True)
     pv.read()
 
     responses = []
@@ -64,24 +64,24 @@ def test_put_complete(backends, context, ioc):
         responses.append(response)
 
     with pytest.raises(ValueError):
-        pv.write((0.1, ), notify=False, wait=True)
+        pv.write((1, ), notify=False, wait=True)
 
     with pytest.raises(ValueError):
-        pv.write((0.1, ), notify=False, callback=cb)
+        pv.write((1, ), notify=False, callback=cb)
 
     with pytest.raises(ValueError):
-        pv.write((0.1, ), notify=False, wait=True, callback=cb)
+        pv.write((1, ), notify=False, wait=True, callback=cb)
 
     # put and wait
-    pv.write((0.1, ), wait=True)
+    pv.write((1, ), wait=True)
     result = pv.read()
-    assert result.data[0] == 0.1
+    assert result.data[0] == 1
 
     # put and do not wait with callback
-    pv.write((0.4, ), wait=False, callback=cb)
+    pv.write((4, ), wait=False, callback=cb)
     while not responses:
         time.sleep(0.1)
-    pv.read().data == 0.4
+    pv.read().data == 4
 
 
 def test_specified_port(monkeypatch, context, ioc):
@@ -198,7 +198,7 @@ def test_server_crash(context, ioc_factory):
 def test_subscriptions(ioc, context):
     cntx = context
 
-    pv, = cntx.get_pvs(ioc.pvs['float'])
+    pv, = cntx.get_pvs(ioc.pvs['int'])
     pv.wait_for_connection()
 
     monitor_values = []
@@ -568,7 +568,7 @@ def test_multithreaded_many_subscribe(ioc, context, thread_count,
 
 
 def test_batch_read(context, ioc):
-    pvs = context.get_pvs(ioc.pvs['str'], ioc.pvs['int'], ioc.pvs['float'])
+    pvs = context.get_pvs(ioc.pvs['int'], ioc.pvs['int2'], ioc.pvs['int3'])
     for pv in pvs:
         pv.wait_for_connection()
     results = {}
@@ -584,7 +584,7 @@ def test_batch_read(context, ioc):
 
 
 def test_batch_write(context, ioc):
-    pvs = context.get_pvs(ioc.pvs['int'], ioc.pvs['float'])
+    pvs = context.get_pvs(ioc.pvs['int'], ioc.pvs['int2'], ioc.pvs['int3'])
     for pv in pvs:
         pv.wait_for_connection()
     results = {}
@@ -602,7 +602,7 @@ def test_batch_write(context, ioc):
 
 
 def test_batch_write_no_callback(context, ioc):
-    pvs = context.get_pvs(ioc.pvs['int'], ioc.pvs['float'])
+    pvs = context.get_pvs(ioc.pvs['int'], ioc.pvs['int2'], ioc.pvs['int3'])
     for pv in pvs:
         pv.wait_for_connection()
     with Batch() as b:
