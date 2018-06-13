@@ -157,6 +157,10 @@ class CaprotoValueError(ValueError, CaprotoError):
     ...
 
 
+class CaprotoEnvironmentSetupError(ValueError, CaprotoError):
+    ...
+
+
 class FilterValidationError(CaprotoValueError):
     ...
 
@@ -207,8 +211,17 @@ def get_environment_variables():
             result.get('EPICS_CAS_AUTO_BEACON_ADDR_LIST', '').upper() != 'NO'):
         warn("EPICS_CAS_BEACON_ADDR_LIST is set but will be ignored because "
              "EPICS_CAS_AUTO_BEACON_ADDR_LIST is not set to 'no'.")
-    for k, v in defaults.items():
-        result.setdefault(k, v)
+
+    for key, default_value in defaults.items():
+        type_of_env_var = type(default_value)
+        try:
+            result[key] = type_of_env_var(result[key])
+        except KeyError:
+            result[key] = default_value
+        except Exception as ex:
+            raise CaprotoEnvironmentSetupError(f'Environment variable {key} misconfigured: '
+                                               f'{ex.__class__.__name__} {ex}') from ex
+
     return result
 
 
