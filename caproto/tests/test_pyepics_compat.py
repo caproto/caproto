@@ -536,6 +536,8 @@ def test_put_string_waveform(pvnames):
         numpy.testing.assert_array_equal(get_value, put_value)
 
 
+@pytest.mark.skipif(os.environ.get("CAPROTO_SKIP_MOTORSIM_TESTS") is not None,
+                    reason='No motorsim IOC')
 @pytest.mark.skipif(sys.platform == 'win32',
                     reason='win32 motorsim IOC')
 def test_putcomplete(pvnames):
@@ -562,6 +564,8 @@ def test_putcomplete(pvnames):
     assert len(see_complete) > (len(vals) - 5)
 
 
+@pytest.mark.skipif(os.environ.get("CAPROTO_SKIP_MOTORSIM_TESTS") is not None,
+                    reason='No motorsim IOC')
 @pytest.mark.skipif(sys.platform == 'win32',
                     reason='win32 motorsim IOC')
 def test_putwait(pvnames):
@@ -840,6 +844,8 @@ def test_subarray_1elem(pvnames):
     assert len(val) == 1
 
 
+@pytest.mark.skipif(os.environ.get("CAPROTO_SKIP_MOTORSIM_TESTS") is not None,
+                    reason='No motorsim IOC')
 @pytest.mark.skipif(sys.platform == 'win32',
                     reason='win32 motorsim IOC')
 def test_pyepics_pv(context):

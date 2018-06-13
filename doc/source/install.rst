@@ -60,6 +60,9 @@ To install all the optional dependencies as well, use:
 
     pip install -e .[complete]
 
+Development
+===========
+
 For development, you will also want the dependencies for running the tests and
 building the documentation:
 
@@ -81,6 +84,12 @@ commonly useful:
 * ``-s`` Do not capture stdout/err per test.
 * ``-k EXPRESSION`` Filter tests by pattern-matching test name.
 
+Many of the tests test caproto against EPICS' reference implementation. They
+expect ``caget``, ``caput``, and ``softIoc`` executables to be available and
+for ``EPICS_BASE`` to be set.
+
+A small number of the tests test caproto against ``motorsim``. To skip these
+tests, set the environment variable ``CAPROTO_SKIP_MOTORSIM_TESTS=1``.
 To build the documentation:
 
 .. code-block:: bash

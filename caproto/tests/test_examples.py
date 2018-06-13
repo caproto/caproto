@@ -1,4 +1,5 @@
 import curio
+import os
 import pytest
 import trio
 import sys
@@ -10,6 +11,8 @@ from .conftest import default_setup_module as setup_module  # noqa
 from .conftest import default_teardown_module as teardown_module  # noqa
 
 
+@pytest.mark.skipif(os.environ.get("CAPROTO_SKIP_MOTORSIM_TESTS") is not None,
+                    reason='No motorsim IOC')
 # skip on windows - no motorsim ioc there just yet
 @pytest.mark.skipif(sys.platform == 'win32',
                     reason='win32 motorsim IOC')
@@ -19,6 +22,8 @@ def test_curio_client_example():
         kernel.run(main())
 
 
+@pytest.mark.skipif(os.environ.get("CAPROTO_SKIP_MOTORSIM_TESTS") is not None,
+                    reason='No motorsim IOC')
 # skip on windows - no motorsim ioc there just yet
 @pytest.mark.skipif(sys.platform == 'win32',
                     reason='win32 motorsim IOC')
