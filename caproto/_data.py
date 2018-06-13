@@ -503,7 +503,6 @@ class ChannelData:
 
     def post_state_change(self, state, new_value):
         snapshots = self._snapshots[state]
-        snapshots.clear()
         if new_value:
             # We have changed from false to true.
             snapshots['while'] = self
@@ -660,6 +659,12 @@ class ChannelData:
                                                  self.string_encoding)
             await self.write_metadata(publish=False, **metadata_dict)
 
+        if self._fill_at_next_write:
+            snapshot = copy.deepcopy(self)
+            for state, mode in self._fill_at_next_write:
+                self._snapshots[state][mode] = snapshot
+            self._fill_at_next_write.clear()
+
         # Send a new event to subscribers.
         await self.publish(flags, (old, new))
 
@@ -681,7 +686,7 @@ class ChannelData:
 
     def _is_eligible(self, ss, flags, pair):
         sync = ss.channel_filter.sync
-        valid_state = sync is not None and sync.m in self._snapshots[sync.s]
+        valid_state = sync is None or sync.m in self._snapshots[sync.s]
         return ss.mask & flags & valid_state
 
     async def publish(self, flags, pair):

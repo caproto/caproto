@@ -311,6 +311,10 @@ class Context:
         self.broadcaster = ca.Broadcaster(our_role=ca.SERVER)
 
         self.subscriptions = defaultdict(deque)
+        # Map Subscription to {'before': last_update, 'after': last_update}
+        # to silence duplicates for Subscriptions that use edge-triggered sync
+        # Channel Filter.
+        self.last_sync_edge_update = defaultdict(lambda: defaultdict(dict))
         self.beacon_count = 0
         self.environ = get_environment_variables()
 
@@ -452,6 +456,19 @@ class Context:
                                          data_count=data_count,
                                          subscriptionid=sub.subscriptionid,
                                          status=1)
+                # Special-case for edge-triggered modes of the sync Channel
+                # Filter (before, after, first, last). Only send the first
+                # update to each channel.
+                sync = sub.channel_filter.sync
+                if sync is not None:
+                    last_update = self.last_sync_edge_update[sub][sync.s].get(sync.m)
+                    if last_update and last_update == command:
+                        # This is a redundant update. Do not send.
+                        continue
+                    else:
+                        # Stash this and then send it.
+                        self.last_sync_edge_update[sub][sync.s][sync.m] = command
+
                 # Check that the Channel did not close at some point after
                 # this update started its flight.
                 if chan.states[ca.SERVER] is ca.CONNECTED:
