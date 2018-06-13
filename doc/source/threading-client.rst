@@ -265,7 +265,7 @@ For convenience we'll demonstrate this using the two PVs we have handy ---
     pvs = [x, dt]
     from functools import partial
     results = {}
-    def stash_result(name, response)
+    def stash_result(name, response):
         results[name] = response.data
 
 Now we'll use the :class:`Batch` context:

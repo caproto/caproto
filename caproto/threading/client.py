@@ -1808,7 +1808,7 @@ class Batch:
     come in.
 
     >>> results = {}
-    >>> def stash_result(name, response)
+    >>> def stash_result(name, response):
     ...     results[name] = response.data
     ...
     >>> with Batch() as b:
