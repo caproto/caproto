@@ -568,7 +568,7 @@ def test_multithreaded_many_subscribe(ioc, context, thread_count,
 
 
 def test_batch_read(context, ioc):
-    pvs = context.get_pvs(ioc.pvs['str'], ioc.pvs['int'], ioc.pvs['float'])
+    pvs = context.get_pvs(ioc.pvs['int'], ioc.pvs['int2'], ioc.pvs['int3'])
     for pv in pvs:
         pv.wait_for_connection()
     results = {}
@@ -584,7 +584,7 @@ def test_batch_read(context, ioc):
 
 
 def test_batch_write(context, ioc):
-    pvs = context.get_pvs(ioc.pvs['int'], ioc.pvs['float'])
+    pvs = context.get_pvs(ioc.pvs['int'], ioc.pvs['int2'], ioc.pvs['int3'])
     for pv in pvs:
         pv.wait_for_connection()
     results = {}
@@ -602,7 +602,7 @@ def test_batch_write(context, ioc):
 
 
 def test_batch_write_no_callback(context, ioc):
-    pvs = context.get_pvs(ioc.pvs['int'], ioc.pvs['float'])
+    pvs = context.get_pvs(ioc.pvs['int'], ioc.pvs['int2'], ioc.pvs['int3'])
     for pv in pvs:
         pv.wait_for_connection()
     with Batch() as b:

@@ -173,7 +173,7 @@ def test_with_caget(backends, prefix, pvdb_from_server_example, server, pv,
 
 
 caput_checks = [('int', '1', [1]),
-                ('pi', '3.18', [3.18]),
+                ('pi', '3.15', [3.15]),
                 ('enum', 'd', ['d']),
                 ('enum2', 'cc', ['cc']),
                 ('str', 'resolve', ['resolve']),
