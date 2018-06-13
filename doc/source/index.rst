@@ -23,7 +23,7 @@ go back to a 1988 meeting funded by the Reagan-era Strategic Defense Initiative
 
 The authors pronounce caproto "kah-proto" (not "C.A. proto"). It's fun to say.
 
-Try caproto in three lines
+Try caproto in four lines
 ==========================
 
 First verify that you have Python 3.6+.
@@ -33,13 +33,27 @@ First verify that you have Python 3.6+.
    python3 --version
 
 If necessary, install it by your method of choice (apt, Homebrew, conda, etc.).
-Now on to caproto:
+Now install caproto:
 
 .. code-block:: bash
 
-   python3 -m pip install "caproto[complete]"  # install caproto (and its optional dependencies)
-   python3 -m caproto.ioc_examples.simple &  # background a demo server
-   caproto-put simple:A 42  # run a command-line client
+   python3 -m pip install caproto
+
+In one terminal, start an EPICS Input-Output Controller (IOC), which is a
+server.
+
+.. code-block:: bash
+
+   python3 -m caproto.ioc_examples.simple --list-pvs
+
+In another, use the command-line client:
+
+.. code-block:: bash
+
+   caproto-put -c simple:A 42
+
+This sets the value to 42 and wait for it to "complete" (``-c``). Read more
+about the :doc:`command-line-client` and :doc:`iocs`.
 
 10 Reasons To Use Caproto and 1 Big Reason Not To
 =================================================
@@ -49,7 +63,7 @@ Why rewrite it from scratch in Python instead of just wrapping C?
 
 1. **Effortlessly Portable**: No required dependencies —-- even numpy is
    optional. Caproto just needs Python itself.
-2. **Easy to Install and Use**: See "Try caproto in three lines," above.
+2. **Easy to Install and Use**: See "Try caproto in four lines," above.
 3. **Handy for Debugging**: Programmatic access to convenient Python objects
    embodying every CA message sent and received.
 4. **Efficient**: Data is read directly from sockets into contiguous-memory
