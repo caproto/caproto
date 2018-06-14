@@ -45,8 +45,9 @@ class VirtualCircuit:
             await curio.spawn(self._receive_loop, daemon=True)
             await curio.spawn(self._command_queue_loop, daemon=True)
             # Send commands that initialize the Circuit.
-            await self.send(ca.VersionRequest(version=13,
-                                              priority=self.circuit.priority))
+            await self.send(ca.VersionRequest(
+                version=ca.DEFAULT_PROTOCOL_VERSION,
+                priority=self.circuit.priority))
             host_name = await socket.gethostname()
             await self.send(ca.HostNameRequest(name=host_name))
             client_name = getpass.getuser()
