@@ -400,7 +400,7 @@ class ChannelAlarm:
             flags |= SubscriptionType.DBE_ALARM
 
         for channel in self._channels:
-            await channel.publish(flags, None)
+            await channel.publish(flags)
 
 
 class ChannelData:
@@ -543,7 +543,7 @@ class ChannelData:
             # a future subscription wants the same data type.
             metadata, values = await self._read(data_type)
             self._content[data_type] = metadata, values
-        await queue.put(((sub_spec,), metadata, values))
+        await queue.put(((sub_spec,), metadata, values, 0))
 
     async def unsubscribe(self, queue, sub_spec):
         self._queues[queue][sub_spec.channel_filter.sync][sub_spec.data_type].discard(sub_spec)
@@ -643,7 +643,6 @@ class ChannelData:
                                    )
             raise
 
-        old = self._data['value']
         new = modified_value if modified_value is not None else value
         self._data['value'] = new
 
@@ -668,7 +667,7 @@ class ChannelData:
             self._fill_at_next_write.clear()
 
         # Send a new event to subscribers.
-        await self.publish(flags, (old, new))
+        await self.publish(flags)
 
     async def write(self, value, flags=0, **metadata):
         '''Set data from native Python types'''
@@ -679,19 +678,17 @@ class ChannelData:
             for state, mode in self._fill_at_next_write:
                 self._snapshots[state][mode] = snapshot
             self._fill_at_next_write.clear()
-        old = self._data['value']
         new = modified_value if modified_value is not None else value
         self._data['value'] = new
         await self.write_metadata(publish=False, **metadata)
         # Send a new event to subscribers.
-        await self.publish(flags, (old, new))
+        await self.publish(flags)
 
-    def _is_eligible(self, ss, flags, pair):
+    def _is_eligible(self, ss):
         sync = ss.channel_filter.sync
-        valid_state = sync is None or sync.m in self._snapshots[sync.s]
-        return ss.mask & flags & valid_state
+        return sync is None or sync.m in self._snapshots[sync.s]
 
-    async def publish(self, flags, pair):
+    async def publish(self, flags):
         # Each SubscriptionSpec specifies a certain data type it is interested
         # in and a mask. Send one update per queue per data_type if and only if
         # any subscriptions specs on a queue have a compatible mask.
@@ -710,7 +707,7 @@ class ChannelData:
             for sync, data_types in syncs.items():
                 for data_type, sub_specs in data_types.items():
                     eligible = tuple(ss for ss in sub_specs
-                                     if self._is_eligible(ss, flags, pair))
+                                     if self._is_eligible(ss))
                     if not eligible:
                         continue
                     if sync is None:
@@ -729,14 +726,12 @@ class ChannelData:
                         metadata, values = await channel_data._read(data_type)
                         channel_data._content[data_type] = metadata, values
 
-                    # We have applied the deadband filter on this side of the
-                    # queue, deciding while SubscriptionSpecs should get this
-                    # update. We will apply the array filter on the other side
+                    # We will apply the array filter and deadband on the other side
                     # of the queue, since each eligible SubscriptionSpec may
                     # want a different slice. Sending the whole array through
                     # the queue isn't any more expensive that sending a slice;
                     # this is just a reference.
-                    await queue.put((eligible, metadata, values))
+                    await queue.put((eligible, metadata, values, flags))
 
     def _read_metadata(self, dbr_metadata):
         'Set all metadata fields of a given DBR type instance'
@@ -809,7 +804,7 @@ class ChannelData:
             await self.alarm.write(status=status, severity=severity)
 
         if publish:
-            await self.publish(SubscriptionType.DBE_PROPERTY, None)
+            await self.publish(SubscriptionType.DBE_PROPERTY)
 
     @property
     def epics_timestamp(self):
@@ -943,41 +938,6 @@ class ChannelNumeric(ChannelData):
                     f"set to {self.lower_ctrl_limit} and "
                     f"{self.upper_warning_limit}.")
         return data
-
-    def _is_eligible(self, ss, flags, pair):
-        out_of_band = True
-        if pair is not None:
-            old, new = pair
-            # Deal with the fact that these values might be Iterable or
-            # not, which is dumb, but fixing it properly is a terrible can
-            # of worms. We just want to know if these are scalars.
-            if ((not isinstance(old, Iterable) or
-                    (isinstance(old, Iterable) and len(old) == 1)) and
-                (not isinstance(new, Iterable) or
-                    (isinstance(new, Iterable) and len(new) == 1))):
-                if isinstance(old, Iterable):
-                    old, = old
-                if isinstance(new, Iterable):
-                    new, = new
-                # Cool that was fun.
-                dbnd = ss.channel_filter.dbnd
-                if dbnd is not None:
-                    if dbnd.m == 'rel':
-                        out_of_band = dbnd.d < abs((old - new) / old)
-                    else:  # must be 'abs' -- was already validated
-                        out_of_band = dbnd.d < abs(old - new)
-                # We have verified that that EPICS considers DBE_LOG etc. to be
-                # an absolute (not relative) threshold.
-                abs_diff = abs(old - new)
-                if abs_diff > self.log_atol:
-                    flags |= SubscriptionType.DBE_LOG
-                    if abs_diff > self.value_atol:
-                        flags |= SubscriptionType.DBE_VALUE
-            else:
-                # epics-base explicitly says only scalar values are supported:
-                # https://github.com/epics-base/epics-base/blob/3.15/src/std/filters/dbnd.c#L70
-                flags |= (SubscriptionType.DBE_VALUE | SubscriptionType.DBE_LOG)
-        return super()._is_eligible(ss, flags, pair) & out_of_band
 
 
 class ChannelInteger(ChannelNumeric):
