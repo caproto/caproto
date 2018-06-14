@@ -1,6 +1,6 @@
-************************
-Input-Output Controllers
-************************
+*******************************
+Input-Output Controllers (IOCs)
+*******************************
 
 EPICS Input-Output Controllers (IOCs) expose an EPICS server. Behind the
 server, they may connect to a device driver, data-processing code, and/or
