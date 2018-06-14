@@ -903,7 +903,7 @@ class PVGroup(metaclass=PVGroupMeta):
             async def __aenter__(self):
                 for attr in pv_group.attr_pvdb.values():
                     attr.pre_state_change(self.state, self.value)
-                pv_group.states = pv_group.states._replace(**{self.state: self.value})
+                pv_group.states[self.state] = self.value
                 return self
 
             async def __aexit__(self, exc_type, exc_value, traceback):
@@ -928,6 +928,12 @@ class PVGroup(metaclass=PVGroupMeta):
         # Instantiate the logger
         self.log = logging.getLogger(f'{base}.{log_name}')
         self._create_pvdb()
+
+        # Prime the snapshots to the current state.
+        for key, val in self.states.items():
+            for attr in pv_group.attr_pvdb.values():
+                attr.pre_state_change(key, val)
+                attr.post_state_change(key, val)
 
     def _create_pvdb(self):
         'Create the PV database for all subgroups and pvproperties'

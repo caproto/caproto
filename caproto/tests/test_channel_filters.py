@@ -95,12 +95,12 @@ MANY = object()
 
 
 @pytest.mark.parametrize('filter, initial, on, off',
-                         [('{"before": "a"}', 1, 1, 1),
-                          ('{"after": "a"}', 1, 1, 1),
-                          ('{"first": "a"}', 1, 1, 1),
-                          ('{"last": "a"}', 1, 1, 1),
-                          ('{"while": "a"}', 1, MANY, 1),
-                          ('{"unless": "a"}', MANY, 1, MANY),
+                         [('{"before": "my_stately_state"}', 1, 1, 1),
+                          ('{"after": "my_stately_state"}', 1, 1, 1),
+                          ('{"first": "my_stately_state"}', 1, 1, 1),
+                          ('{"last": "my_stately_state"}', 1, 1, 1),
+                          ('{"while": "my_stately_state"}', 1, MANY, 1),
+                          ('{"unless": "my_stately_state"}', MANY, 1, MANY),
                           ])
 def test_sync_filter(request, prefix, context, filter, initial, on, off):
     value_name = f'{prefix}value'
