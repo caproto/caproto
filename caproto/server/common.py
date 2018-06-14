@@ -536,7 +536,7 @@ class Context:
 
     async def circuit_disconnected(self, circuit):
         '''Notification from circuit that its connection has closed'''
-        self.circuits.remove(circuit)
+        self.circuits.discard(circuit)
 
     @property
     def startup_methods(self):
@@ -588,10 +588,11 @@ class Context:
                 try:
                     await circuit.recv()
                 except DisconnectedCircuit:
+                    await self.circuit_disconnected(circuit)
                     break
         except KeyboardInterrupt as ex:
             self.log.debug('TCP handler received KeyboardInterrupt')
             raise self.ServerExit() from ex
         self.log.info('Disconnected from client at %s:%d.\n'
                       'Circuits currently connected: %d', *addr,
-                      len(self.circuits) - 1)
+                      len(self.circuits))
