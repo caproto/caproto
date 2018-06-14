@@ -19,6 +19,18 @@ class Menu(enum.IntEnum):
         return cls._string_tuple
 
 
+class NotImplementedMenu(Menu):
+    'These are placeholders for menus not yet converted.'
+    PLACEHOLDER = 0
+
+
+NotImplementedMenu._set_strings(
+    {
+        NotImplementedMenu.PLACEHOLDER: 'NOT_IMPLEMENTED',
+    }
+)
+
+
 class aSubEFLG(Menu):
     NEVER = 0  # 'NEVER'
     ON_CHANGE = 1  # 'ON CHANGE'
@@ -548,8 +560,106 @@ waveformPOST._set_strings(
 )
 
 
+acalcoutDOPT = NotImplementedMenu
+acalcoutINAV = NotImplementedMenu
+acalcoutOOPT = NotImplementedMenu
+acalcoutSIZE = NotImplementedMenu
+acalcoutWAIT = NotImplementedMenu
+asynAUTOCONNECT = NotImplementedMenu
+asynCONNECT = NotImplementedMenu
+asynENABLE = NotImplementedMenu
+asynEOMREASON = NotImplementedMenu
+asynFMT = NotImplementedMenu
+asynINTERFACE = NotImplementedMenu
+asynTMOD = NotImplementedMenu
+asynTRACE = NotImplementedMenu
+digitelBAKS = NotImplementedMenu
+digitelBKIN = NotImplementedMenu
+digitelCMOR = NotImplementedMenu
+digitelDSPL = NotImplementedMenu
+digitelKLCK = NotImplementedMenu
+digitelMODR = NotImplementedMenu
+digitelMODS = NotImplementedMenu
+digitelPTYP = NotImplementedMenu
+digitelS1MS = NotImplementedMenu
+digitelS1VS = NotImplementedMenu
+digitelS3BS = NotImplementedMenu
+digitelSET1 = NotImplementedMenu
+digitelTYPE = NotImplementedMenu
+epidFeedbackMode = NotImplementedMenu
+epidFeedbackState = NotImplementedMenu
+genSubEFLG = NotImplementedMenu
+genSubLFLG = NotImplementedMenu
+gpibACMD = NotImplementedMenu
+gpibUCMD = NotImplementedMenu
+mcaCHAS = NotImplementedMenu
+mcaERAS = NotImplementedMenu
+mcaMODE = NotImplementedMenu
+mcaREAD = NotImplementedMenu
+mcaREAD = NotImplementedMenu
+mcaREAD = NotImplementedMenu
+mcaSTRT = NotImplementedMenu
+mcaSTRT = NotImplementedMenu
+mcaSTRT = NotImplementedMenu
+mcaSTRT = NotImplementedMenu
+motorDIR = NotImplementedMenu
+motorFOFF = NotImplementedMenu
+motorRMOD = NotImplementedMenu
+motorSET = NotImplementedMenu
+motorSPMG = NotImplementedMenu
+motorSTUP = NotImplementedMenu
+motorTORQ = NotImplementedMenu
+motorUEIP = NotImplementedMenu
+scalcoutDOPT = NotImplementedMenu
+scalcoutINAV = NotImplementedMenu
+scalcoutOOPT = NotImplementedMenu
+scalcoutWAIT = NotImplementedMenu
+scalerCNT = NotImplementedMenu
+scalerCONT = NotImplementedMenu
+scalerD1 = NotImplementedMenu
+scalerG1 = NotImplementedMenu
+serialBAUD = NotImplementedMenu
+serialDBIT = NotImplementedMenu
+serialFCTL = NotImplementedMenu
+serialIX = NotImplementedMenu
+serialMCTL = NotImplementedMenu
+serialPRTY = NotImplementedMenu
+serialSBIT = NotImplementedMenu
+sscanACQM = NotImplementedMenu
+sscanACQT = NotImplementedMenu
+sscanCMND = NotImplementedMenu
+sscanDSTATE = NotImplementedMenu
+sscanFAZE = NotImplementedMenu
+sscanFFO = NotImplementedMenu
+sscanFPTS = NotImplementedMenu
+sscanLINKWAIT = NotImplementedMenu
+sscanNOYES = NotImplementedMenu
+sscanP1AR = NotImplementedMenu
+sscanP1NV = NotImplementedMenu
+sscanP1SM = NotImplementedMenu
+sscanPASM = NotImplementedMenu
+sscanPAUS = NotImplementedMenu
+sseqLNKV = NotImplementedMenu
+sseqSELM = NotImplementedMenu
+sseqWAIT = NotImplementedMenu
+swaitDOPT = NotImplementedMenu
+swaitINAV = NotImplementedMenu
+swaitOOPT = NotImplementedMenu
+tableGEOM = NotImplementedMenu
+tableSET = NotImplementedMenu
+timestampTST = NotImplementedMenu
+transformCOPT = NotImplementedMenu
+transformIVLA = NotImplementedMenu
+vmeAMOD = NotImplementedMenu
+vmeDSIZ = NotImplementedMenu
+vmeRDWT = NotImplementedMenu
+vsOFFON = NotImplementedMenu
+vsTYPE = NotImplementedMenu
+
+
 menus = {name: menu for name, menu in globals().items()
          if menu is not Menu and
-         inspect.isclass(menu) and
-         issubclass(menu, Menu)}
+         inspect.isclass(menu) and (issubclass(menu, Menu) or
+                                    menu is NotImplementedMenu)
+         }
 __all__ = ['menus'] + list(menus.keys())
