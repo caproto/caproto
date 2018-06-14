@@ -491,6 +491,7 @@ class ChannelData:
     #     false.
 
     def pre_state_change(self, state, new_value):
+        "This is called by the server when it enters its StateUpdateContext."
         snapshots = self._snapshots[state]
         snapshots.clear()
         snapshot = copy.deepcopy(self)
@@ -502,6 +503,7 @@ class ChannelData:
             snapshots['last'] = snapshot
 
     def post_state_change(self, state, new_value):
+        "This is called by the server when it exits its StateUpdateContext."
         snapshots = self._snapshots[state]
         if new_value:
             # We have changed from false to true.
