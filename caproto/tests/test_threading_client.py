@@ -611,3 +611,13 @@ def test_batch_write_no_callback(context, ioc):
     time.sleep(0.1)
     for pv in pvs:
         assert list(pv.read().data) == [4407]
+
+
+def test_write_accepts_scalar(context, ioc):
+    int_pv, str_pv = context.get_pvs(ioc.pvs['int'], ioc.pvs['str'])
+    for pv in (int_pv, str_pv):
+        pv.wait_for_connection()
+    int_pv.write(17, wait=True)
+    assert list(int_pv.read().data) == [17]
+    str_pv.write('caprotoss', wait=True)
+    assert list(str_pv.read().data) == [b'caprotoss']

@@ -489,8 +489,8 @@ def write(pv_name, data, *, notify=False, data_type=None, metadata=None,
     Parameters
     ----------
     pv_name : str
-    data : str, int, or float or a list of these
-        Value to write.
+    data : str, int, or float or any Iterable of these
+        Value(s) to write.
     notify : boolean, optional
         Request notification of completion and wait for it. False by default.
     data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
