@@ -237,6 +237,17 @@ def ioc(prefix, request):
     return ioc_
 
 
+@pytest.fixture(params=['caproto'], scope='function')
+def c_ioc(prefix, request):
+    'A fixture that runs more than one IOC: caproto, epics'
+    # Get a new prefix for each IOC type:
+    if request.param == 'caproto':
+        ioc_ = caproto_ioc(prefix, request)
+    elif request.param == 'epics-base':
+        ioc_ = epics_base_ioc(prefix, request)
+    return ioc_
+
+
 def start_repeater():
     global _repeater_process
     if _repeater_process is not None:
