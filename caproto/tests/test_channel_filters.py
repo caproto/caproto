@@ -154,6 +154,7 @@ def test_sync_filter(request, prefix, context, filter, initial, on, off):
 
 @pytest.mark.parametrize('filter, expected',
                          [('{"dbnd": {"abs": 0.001}}', [3.14, 3.15, 3.16]),
+                          ('{"dbnd": {"abs": 0.015}}', [3.14, 3.16]),
                           # TODO Cover more interesting cases.
                           ])
 def test_dbnd_filter(request, ioc, context, filter, expected):
