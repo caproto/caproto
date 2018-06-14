@@ -906,7 +906,7 @@ class PVGroup(metaclass=PVGroupMeta):
                 pv_group.states = pv_group.states._replace(**{self.state: self.value})
                 return self
 
-            async def __aexit__(self, *args, **kwargs):
+            async def __aexit__(self, exc_type, exc_value, traceback):
                 for attr in pv_group.attr_pvdb.values():
                     attr.post_state_change(self.state, self.value)
 
