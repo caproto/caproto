@@ -58,8 +58,9 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
         udp_sock.sendto(bytes_to_send, (host, repeater_port))
 
     logger.debug("Searching for '%s'....", pv_name)
-    bytes_to_send = b.send(ca.VersionRequest(0, 13),
-                           ca.SearchRequest(pv_name, 0, 13))
+    bytes_to_send = b.send(
+        ca.VersionRequest(0, ca.DEFAULT_PROTOCOL_VERSION),
+        ca.SearchRequest(pv_name, 0, ca.DEFAULT_PROTOCOL_VERSION))
 
     def send_search():
         for host in ca.get_address_list():
@@ -131,7 +132,9 @@ def make_channel(pv_name, udp_sock, priority, timeout):
 
     try:
         # Initialize our new TCP-based CA connection with a VersionRequest.
-        send(chan.circuit, ca.VersionRequest(priority=priority, version=13))
+        send(chan.circuit, ca.VersionRequest(
+            priority=priority,
+            version=ca.DEFAULT_PROTOCOL_VERSION))
         send(chan.circuit, chan.host_name(socket.gethostname()))
         send(chan.circuit, chan.client_name(getpass.getuser()))
         send(chan.circuit, chan.create())

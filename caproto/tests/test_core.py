@@ -83,7 +83,8 @@ def test_circuit_properties():
 
     # VersionRequest priority must match prio set above.
     with pytest.raises(ca.LocalProtocolError):
-        circuit.send(ca.VersionRequest(version=13, priority=2))
+        circuit.send(ca.VersionRequest(
+            version=ca.DEFAULT_PROTOCOL_VERSION, priority=2))
 
 
 def test_broadcaster():
@@ -159,10 +160,12 @@ def test_empty_datagram():
 
 
 def test_extract_address():
-    old_style = ca.SearchResponse(port=6666, ip='1.2.3.4', cid=0, version=13)
+    old_style = ca.SearchResponse(port=6666, ip='1.2.3.4', cid=0,
+                                  version=ca.DEFAULT_PROTOCOL_VERSION)
     old_style.header.parameter1 = 0xffffffff
     old_style.sender_address = ('5.6.7.8', 6666)
-    new_style = ca.SearchResponse(port=6666, ip='1.2.3.4', cid=0, version=13)
+    new_style = ca.SearchResponse(port=6666, ip='1.2.3.4', cid=0,
+                                  version=ca.DEFAULT_PROTOCOL_VERSION)
     ca.extract_address(old_style) == '1.2.3.4'
     ca.extract_address(new_style) == '5.6.7.8'
 
@@ -175,7 +178,8 @@ def test_register_convenience_method():
 def test_broadcaster_checks():
     b = ca.Broadcaster(ca.CLIENT)
     with pytest.raises(ca.LocalProtocolError):
-        b.send(ca.SearchRequest(name='LIRR', cid=0, version=13))
+        b.send(ca.SearchRequest(name='LIRR', cid=0,
+                                version=ca.DEFAULT_PROTOCOL_VERSION))
 
     b.send(ca.RepeaterRegisterRequest('1.2.3.4'))
     res = ca.RepeaterConfirmResponse('5.6.7.8')
@@ -183,19 +187,22 @@ def test_broadcaster_checks():
     assert commands[0] == res
     b.process_commands(commands)
 
-    req = ca.SearchRequest(name='LIRR', cid=0, version=13)
+    req = ca.SearchRequest(name='LIRR', cid=0,
+                           version=ca.DEFAULT_PROTOCOL_VERSION)
     with pytest.raises(ca.LocalProtocolError):
         b.send(req)
-    b.send(ca.VersionRequest(priority=0, version=13), req)
+    b.send(ca.VersionRequest(priority=0,
+                             version=ca.DEFAULT_PROTOCOL_VERSION), req)
 
-    res = ca.SearchResponse(port=6666, ip='1.2.3.4', cid=0, version=13)
+    res = ca.SearchResponse(port=6666, ip='1.2.3.4', cid=0,
+                            version=ca.DEFAULT_PROTOCOL_VERSION)
     addr = ('1.2.3.4', 6666)
     commands = b.recv(bytes(res), addr)
     # see changes to _broadcaster.py.  Apparently rsrv does not always conform
     # to the protocol and include a version response before search responsesq
     # with pytest.raises(ca.RemoteProtocolError):
     #     b.process_commands(commands)
-    # commands = b.recv(bytes(ca.VersionResponse(version=13)) + bytes(res), addr)
+    # commands = b.recv(bytes(ca.VersionResponse(version=ca.DEFAULT_PROTOCOL_VERSION)) + bytes(res), addr)
     b.process_commands(commands)  # this gets both
 
 

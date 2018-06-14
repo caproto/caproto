@@ -187,7 +187,7 @@ class VirtualCircuit:
         if command is ca.DISCONNECTED:
             raise DisconnectedCircuit()
         elif isinstance(command, ca.VersionRequest):
-            return [ca.VersionResponse(13)]
+            return [ca.VersionResponse(ca.DEFAULT_PROTOCOL_VERSION)]
         elif isinstance(command, ca.CreateChanRequest):
             db_entry = self.context[command.name]
             access = db_entry.check_access(self.client_hostname,
@@ -403,12 +403,15 @@ class Context:
                     # responding with an IP of `None` tells client to get IP
                     # address from the datagram.
                     search_replies.append(
-                        ca.SearchResponse(self.port, None, command.cid, 13)
+                        ca.SearchResponse(self.port, None, command.cid,
+                                          ca.DEFAULT_PROTOCOL_VERSION)
                     )
                 else:
                     if command.reply == ca.DO_REPLY:
                         search_replies.append(
-                            ca.NotFoundResponse(version=13, cid=command.cid)
+                            ca.NotFoundResponse(
+                                version=ca.DEFAULT_PROTOCOL_VERSION,
+                                cid=command.cid)
                         )
                     else:
                         # Not a known PV and no reply required

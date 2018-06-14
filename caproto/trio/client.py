@@ -68,7 +68,7 @@ class VirtualCircuit:
         self.nursery.start_soon(self._receive_loop)
         self.nursery.start_soon(self._command_queue_loop)
         # Send commands that initialize the Circuit.
-        await self.send(ca.VersionRequest(version=13,
+        await self.send(ca.VersionRequest(version=ca.DEFAULT_PROTOCOL_VERSION,
                                           priority=self.circuit.priority))
         host_name = socket.gethostname()
         await self.send(ca.HostNameRequest(name=host_name))
@@ -422,10 +422,12 @@ class SharedBroadcaster:
 
         while needs_search:
             self.log.debug('Searching for %r PVs....', len(needs_search))
-            requests = (ca.SearchRequest(name, search_id, 13)
+            requests = (ca.SearchRequest(name, search_id,
+                                         ca.DEFAULT_PROTOCOL_VERSION)
                         for search_id, name in needs_search)
             for batch in batch_requests(requests, SEARCH_MAX_DATAGRAM_BYTES):
-                await self.send(ca.EPICS_CA1_PORT, ca.VersionRequest(0, 13),
+                await self.send(ca.EPICS_CA1_PORT,
+                                ca.VersionRequest(0, ca.DEFAULT_PROTOCOL_VERSION),
                                 *batch)
 
             with trio.move_on_after(1):

@@ -611,7 +611,8 @@ class SharedBroadcaster:
             # filter to just things that need to go out
             def _construct_search_requests(items):
                 for search_id, it in items:
-                    yield ca.SearchRequest(it[0], search_id, 13)
+                    yield ca.SearchRequest(it[0], search_id,
+                                           ca.DEFAULT_PROTOCOL_VERSION)
                     it[-1] = t
 
             with self._search_lock:
@@ -628,7 +629,9 @@ class SharedBroadcaster:
 
             for batch in batch_requests(requests,
                                         SEARCH_MAX_DATAGRAM_BYTES):
-                self.send(ca.EPICS_CA1_PORT, ca.VersionRequest(0, 13), *batch)
+                self.send(ca.EPICS_CA1_PORT,
+                          ca.VersionRequest(0, ca.DEFAULT_PROTOCOL_VERSION),
+                          *batch)
 
             wait_time = max(0, RETRY_SEARCHES_PERIOD - (time.monotonic() - t))
             self._search_now.wait(wait_time)
@@ -1007,7 +1010,8 @@ class VirtualCircuitManager:
         if self.circuit.states[ca.SERVER] is ca.IDLE:
             self.socket = socket.create_connection(self.circuit.address)
             self.selector.add_socket(self.socket, self)
-            self.send(ca.VersionRequest(self.circuit.priority, 13),
+            self.send(ca.VersionRequest(self.circuit.priority,
+                                        ca.DEFAULT_PROTOCOL_VERSION),
                       ca.HostNameRequest(self.context.host_name),
                       ca.ClientNameRequest(self.context.client_name))
         else:

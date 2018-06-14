@@ -39,7 +39,6 @@ class RepeaterAlreadyRunning(RuntimeError):
 
 def check_clients(clients, skip=None):
     'Check clients by binding to their ports on specific interfaces'
-    # no_op = bytes(caproto.VersionRequest(priority=0, version=0).header)
     sock = None
     for port, host in clients.items():
         addr = (host, port)

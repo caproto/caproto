@@ -61,15 +61,16 @@ def test_nonet():
     # Search for pv1.
     # CA requires us to send a VersionRequest and a SearchRequest bundled into
     # one datagram.
-    bytes_to_send = cli_b.send(ca.VersionRequest(0, 13),
-                               ca.SearchRequest(pv1, 0, 13))
+    bytes_to_send = cli_b.send(ca.VersionRequest(0, ca.DEFAULT_PROTOCOL_VERSION),
+                               ca.SearchRequest(pv1, 0,
+                                                ca.DEFAULT_PROTOCOL_VERSION))
 
     commands = srv_b.recv(bytes_to_send, cli_addr)
     srv_b.process_commands(commands)
     ver_req, search_req = commands
-    bytes_to_send = srv_b.send(ca.VersionResponse(13),
-                               ca.SearchResponse(5064, None,
-                                                 search_req.cid, 13))
+    bytes_to_send = srv_b.send(
+        ca.VersionResponse(ca.DEFAULT_PROTOCOL_VERSION),
+        ca.SearchResponse(5064, None, search_req.cid, ca.DEFAULT_PROTOCOL_VERSION))
 
     # Receive a VersionResponse and SearchResponse.
     commands = iter(cli_b.recv(bytes_to_send, cli_addr))
@@ -90,16 +91,17 @@ def test_nonet():
     srv_circuit = ca.VirtualCircuit(our_role=ca.SERVER,
                                     address=address, priority=None)
 
-    cli_send(chan1.circuit, ca.VersionRequest(priority=0, version=13))
+    cli_send(chan1.circuit, ca.VersionRequest(priority=0,
+                                              version=ca.DEFAULT_PROTOCOL_VERSION))
 
     srv_recv(srv_circuit)
 
-    srv_send(srv_circuit, ca.VersionResponse(version=13))
+    srv_send(srv_circuit, ca.VersionResponse(version=ca.DEFAULT_PROTOCOL_VERSION))
     cli_recv(chan1.circuit)
     cli_send(chan1.circuit, ca.HostNameRequest('localhost'))
     cli_send(chan1.circuit, ca.ClientNameRequest('username'))
     cli_send(chan1.circuit, ca.CreateChanRequest(name=pv1, cid=chan1.cid,
-                                                 version=13))
+                                                 version=ca.DEFAULT_PROTOCOL_VERSION))
     assert chan1.states[ca.CLIENT] is ca.AWAIT_CREATE_CHAN_RESPONSE
     assert chan1.states[ca.SERVER] is ca.SEND_CREATE_CHAN_RESPONSE
 
