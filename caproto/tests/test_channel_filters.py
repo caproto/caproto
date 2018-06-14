@@ -158,14 +158,14 @@ def test_sync_filter(request, prefix, context, filter, initial, on, off):
                           ('{"dbnd": {"abs": 1}}', [3.14]),
                           # TODO Cover more interesting cases.
                           ])
-def test_dbnd_filter(request, c_ioc, context, filter, expected):
+def test_dbnd_filter(request, caproto_ioc, context, filter, expected):
 
     responses = []
 
     def cache(response):
         responses.append(response)
 
-    pv, = context.get_pvs(c_ioc.pvs['float'] + '.' + filter)
+    pv, = context.get_pvs(caproto_ioc.pvs['float'] + '.' + filter)
     pv.wait_for_connection()
 
     sub = pv.subscribe()
