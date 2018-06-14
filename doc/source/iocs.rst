@@ -163,35 +163,60 @@ client writes.
 It is easy to imagine extending this example to write a socket or a serial
 device rather than a file.
 
-Update Tallies When Each PV is Read
------------------------------------
+Random Walk
+-----------
 
-Above, we hooked into the IOC's writing behavior to customize it. Here, we
-customize its reading behavior.
+This example contains a PV ``random_walk:x`` that takes random steps at an
+update rate controlled by a second PV, ``random_walk:dt``.
 
-.. literalinclude:: ../../caproto/ioc_examples/reading_counter.py
+.. literalinclude:: ../../caproto/ioc_examples/random_walk.py
+
+I/O Interrupt
+-------------
+
+This example listens for key presses.
+
+.. literalinclude:: ../../caproto/ioc_examples/io_interrupt.py
 
 .. code-block:: bash
 
-    $ python3 -m caproto.ioc_examples.reading_counter --list-pvs
-    [I 18:26:38.169 server:93] Server starting up...
-    [I 18:26:38.170 server:109] Listening on 0.0.0.0:52687
-    [I 18:26:38.171 server:121] Server startup complete.
-    [I 18:26:38.171 server:123] PVs available:
-        reading_counter:A
-        reading_counter:B
+    $ python -m caproto.ioc_examples.io_interrupt --list-pvs
+    [I 10:18:57.643 server:132] Server starting up...
+    [I 10:18:57.644 server:145] Listening on 0.0.0.0:54583
+    [I 10:18:57.646 server:218] Server startup complete.
+    [I 10:18:57.646 server:220] PVs available:
+        io:keypress
+    * keypress method called at server startup
+    Started monitoring the keyboard outside of the async library
 
-.. ipython:: python
-    :suppress:
+Typing causes updates to be sent to any client subscribed to ``io:keypress``.
+If we monitoring using the commandline-client like so:
 
-    run_example('caproto.ioc_examples.reading_counter')
+.. code-block:: bash
 
-.. ipython:: python
+    $ caproto-monitor io:keypress
 
-    a, b = ctx.get_pvs('reading_counter:A', 'reading_counter:B')
-    a.read().data
-    a.read().data
-    a.read().data
+and go back to the server and type some keys:
+
+.. code-block:: bash
+
+    New keypress: 'a'
+    Saw new value on async side: 'a'
+    New keypress: 'b'
+    Saw new value on async side: 'b'
+    New keypress: 'c'
+    Saw new value on async side: 'c'
+    New keypress: 'd'
+    Saw new value on async side: 'd'
+
+the client will receive the updates:
+
+.. code-block:: bash
+
+    io:keypress                               2018-06-14 10:19:04 [b'd']
+    io:keypress                               2018-06-14 10:20:26 [b'a']
+    io:keypress                               2018-06-14 10:20:26 [b's']
+    io:keypress                               2018-06-14 10:20:26 [b'd']
 
 Macros for PV names
 -------------------
@@ -239,6 +264,92 @@ The help string for this IOC contains two extra entries at the bottom:
 
 Observe that the command line arguments fill in the PV names.
 
+Subgroups
+---------
+
+The PVGroup is designed to be nested, which provides a nice path toward future
+capability: IOCs that are natively "V7", encoding semantic structure for PV
+Access clients and decomposing into flat PVs for Channel Access clients.
+
+.. literalinclude:: ../../caproto/ioc_examples/subgroups.py
+
+.. code-block:: bash
+
+    $ python -m caproto.ioc_examples.subgroups --list-pvs
+    random using the descriptor getter is: <caproto.server.server.PvpropertyInteger object at 0x10928ffd0>
+    subgroup4 is: <__main__.MyPVGroup.group4.subgroup4 object at 0x10928fe10>
+    subgroup4.random is: <caproto.server.server.PvpropertyInteger object at 0x10928fef0>
+    [I 11:08:35.074 server:132] Server starting up...
+    [I 11:08:35.074 server:145] Listening on 0.0.0.0:63336
+    [I 11:08:35.076 server:218] Server startup complete.
+    [I 11:08:35.077 server:220] PVs available:
+        subgroups:random
+        subgroups:RECORD_LIKE1.RTYP
+        subgroups:RECORD_LIKE1.VAL
+        subgroups:RECORD_LIKE1.DESC
+        subgroups:recordlike2.RTYP
+        subgroups:recordlike2.VAL
+        subgroups:recordlike2.DESC
+        subgroups:group1:random
+        subgroups:group2-random
+        subgroups:group3_prefix:random
+        subgroups:group4:subgroup4:random
+
+.. _mocking_records_example:
+
+Mocking Records
+---------------
+
+See :doc:`mock-records`.
+
+.. literalinclude:: ../../caproto/ioc_examples/mocking_records.py
+
+.. code-block:: bash
+
+    python -m caproto.ioc_examples.mocking_records --list-pvs
+    PVs: ['mock:A', 'mock:B']
+    Fields of B: ['ACKS', 'ACKT', 'ASG', 'DESC', 'DISA', 'DISP', 'DISS', 'DISV', 'DTYP', 'EVNT', 'FLNK', 'LCNT', 'NAME', 'NSEV', 'NSTA', 'PACT', 'PHAS', 'PINI', 'PRIO', 'PROC', 'PUTF', 'RPRO', 'SCAN', 'SDIS', 'SEVR', 'TPRO', 'TSE', 'TSEL', 'UDF', 'RTYP', 'STAT', 'RVAL', 'INIT', 'MLST', 'LALM', 'ALST', 'LBRK', 'ORAW', 'ROFF', 'SIMM', 'SVAL', 'HYST', 'HIGH', 'HSV', 'HIHI', 'HHSV', 'LOLO', 'LLSV', 'LOW', 'LSV', 'AOFF', 'ASLO', 'EGUF', 'EGUL', 'LINR', 'EOFF', 'ESLO', 'SMOO', 'ADEL', 'PREC', 'EGU', 'HOPR', 'LOPR', 'MDEL', 'INP', 'SIOL', 'SIML', 'SIMS']
+    [I 11:07:48.635 server:132] Server starting up...
+    [I 11:07:48.636 server:145] Listening on 0.0.0.0:49637
+    [I 11:07:48.638 server:218] Server startup complete.
+    [I 11:07:48.638 server:220] PVs available:
+        mock:A
+        mock:B
+
+RPC Server from Python Function
+-------------------------------
+
+This automatically generates a SubGroup. In the future, this could be used to
+spin up a PVA RPC service. As is, for Channel Access, this provides an RPC
+function for single-user access.
+
+.. literalinclude:: ../../caproto/ioc_examples/rpc_function.py
+
+.. code-block:: bash
+
+ $ python -m caproto.ioc_examples.rpc_function --list-pvs
+
+    fixed_random using the descriptor getter is: <caproto.server.server.PvpropertyInteger object at 0x1041672b0>
+    get_random using the descriptor getter is: <caproto.server.server.get_random object at 0x1041675f8>
+    get_random is an autogenerated subgroup with PVs:
+        ('rpc:get_random:low', <caproto.server.server.PvpropertyInteger object at 0x104167358>)
+        ('rpc:get_random:high', <caproto.server.server.PvpropertyInteger object at 0x104167588>)
+        ('rpc:get_random:Status', <caproto.server.server.PvpropertyStringRO object at 0x104167320>)
+        ('rpc:get_random:Retval', <caproto.server.server.PvpropertyIntegerRO object at 0x104167550>)
+        ('rpc:get_random:Process', <caproto.server.server.PvpropertyInteger object at 0x1041672e8>)
+    OrderedDict([('rpc:fixed_random',
+                <caproto.server.server.PvpropertyInteger object at 0x1041672b0>),
+                ('rpc:get_random:low',
+                <caproto.server.server.PvpropertyInteger object at 0x104167358>),
+                ('rpc:get_random:high',
+                <caproto.server.server.PvpropertyInteger object at 0x104167588>),
+                ('rpc:get_random:Status',
+                <caproto.server.server.PvpropertyStringRO object at 0x104167320>),
+                ('rpc:get_random:Retval',
+                <caproto.server.server.PvpropertyIntegerRO object at 0x104167550>),
+                ('rpc:get_random:Process',
+                <caproto.server.server.PvpropertyInteger object at 0x1041672e8>)])
+
 "Inline" Style Read and Write Customization
 -------------------------------------------
 
@@ -274,6 +385,12 @@ behavior.
     randstr.read()
     randstr.read()
     randstr.read()
+
+More...
+-------
+
+Take a look around
+`the ``ioc_examples`` subpackage <https://github.com/NSLS-II/caproto/tree/master/caproto/ioc_examples>` for more examples not covered here.
 
 .. ipython:: python
     :suppress:

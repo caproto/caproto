@@ -2,8 +2,8 @@
 Release History
 ***************
 
-v0.1 (NEXT)
-===========
+v0.1.0 (2018-06-14)
+===================
 
 This initial release contains some fairly stable components and some very
 experimental ones.
