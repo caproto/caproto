@@ -9,6 +9,7 @@
 # - restart subscriptions
 # - ThreadPoolExecutor for processing user callbacks on read, write, subscribe
 import array
+from collections import Iterable
 import concurrent.futures
 import errno
 import functools
@@ -1449,8 +1450,8 @@ class PV:
 
         Parameters
         ----------
-        data : Iterable
-            values to write
+        data : str, int, or float or any Iterable of these
+            Value(s) to write.
         wait : boolean
             If True (default) block until a matching WriteNotifyResponse is
             received from the server. Raises TimeoutError if that response is
@@ -1471,6 +1472,10 @@ class PV:
             Requested number of values. Default is the channel's native data
             count.
         """
+        if not isinstance(data, Iterable) or isinstance(data, (str, bytes)):
+            data = [data]
+        if len(data) and isinstance(data[0], str):
+            data = [val.encode(STR_ENC) for val in data]
         if notify is None:
             notify = (wait or callback is not None)
         ioid = self.circuit_manager._ioid_counter()
@@ -1873,8 +1878,8 @@ class Batch:
         Parameters
         ----------
         pv : PV
-        data : Iterable
-            values to write
+        data : str, int, or float or any Iterable of these
+            Value(s) to write.
         callback : callable
             Expected signature: ``f(response)``
         data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
@@ -1884,6 +1889,10 @@ class Batch:
             Requested number of values. Default is the channel's native data
             count.
         """
+        if not isinstance(data, Iterable) or isinstance(data, (str, bytes)):
+            data = [data]
+        if len(data) and isinstance(data[0], str):
+            data = [val.encode(STR_ENC) for val in data]
         ioid = pv.circuit_manager._ioid_counter()
         command = pv.channel.write(data=data,
                                    ioid=ioid,
