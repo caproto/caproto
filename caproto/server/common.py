@@ -173,6 +173,8 @@ class VirtualCircuit:
         for sub_spec, sub in to_remove:
             self.subscriptions[sub_spec].remove(sub)
             self.context.subscriptions[sub_spec].remove(sub)
+            self.context.last_dead_band.pop(sub, None)
+            self.context.last_sync_edge_update.pop(sub, None)
             # Does anything else on the Context still care about sub_spec?
             # If not unsubscribe the Context's queue from the db_entry.
             if not self.context.subscriptions[sub_spec]:
