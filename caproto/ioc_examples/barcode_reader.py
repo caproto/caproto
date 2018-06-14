@@ -39,6 +39,6 @@ if __name__ == '__main__':
     ioc_options, run_options = ioc_arg_parser(
         default_prefix='bc:',
         desc='Run an IOC that updates when a barcode is read.',
-        asyncio_lib='asyncio')
-    ioc = BarcodeIOC(event_path='/dev/input/event25', **ioc_options)
+        supported_async_libs=('asyncio',))
+    ioc = BarcodeIOC(event_path='/dev/input/event17', **ioc_options)
     run(ioc.pvdb, **run_options)

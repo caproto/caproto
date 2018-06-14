@@ -950,7 +950,7 @@ def ioc_arg_parser(*, desc, default_prefix, argv=None, macros=None,
     macros : dict, optional
         Maps macro names to default value (string) or None (indicating that
         this macro parameter is required).
-    supports_async_libs : list, optional
+    supported_async_libs : list, optional
         "White list" of supported server implementations. The first one will
         be the default. If None specified, the parser will accept all of the
         (hard-coded) choices.
