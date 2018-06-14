@@ -143,6 +143,7 @@ learning exercises.
    pyepics-compat-client
    async-clients
    iocs
+   mock-records
    servers
 
 .. toctree::

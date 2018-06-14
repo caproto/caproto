@@ -295,8 +295,12 @@ Access clients and decomposing into flat PVs for Channel Access clients.
         subgroups:group3_prefix:random
         subgroups:group4:subgroup4:random
 
+.. _mocking_records_example:
+
 Mocking Records
 ---------------
+
+See :doc:`mock-records`.
 
 .. literalinclude:: ../../caproto/ioc_examples/mocking_records.py
 
