@@ -1,8 +1,9 @@
-from collections import defaultdict, deque, namedtuple, ChainMap
+from collections import defaultdict, deque, namedtuple, ChainMap, Iterable
 import logging
 import time
 import caproto as ca
 from caproto import apply_arr_filter, get_environment_variables
+from .._dbr import SubscriptionType
 
 
 class DisconnectedCircuit(Exception):
@@ -12,7 +13,8 @@ class DisconnectedCircuit(Exception):
 Subscription = namedtuple('Subscription', ('mask', 'channel_filter',
                                            'circuit', 'channel',
                                            'data_type',
-                                           'data_count', 'subscriptionid'))
+                                           'data_count', 'subscriptionid',
+                                           'db_entry'))
 SubscriptionSpec = namedtuple('SubscriptionSpec', ('db_entry', 'data_type',
                                                    'mask', 'channel_filter'))
 
@@ -171,6 +173,8 @@ class VirtualCircuit:
         for sub_spec, sub in to_remove:
             self.subscriptions[sub_spec].remove(sub)
             self.context.subscriptions[sub_spec].remove(sub)
+            self.context.last_dead_band.pop(sub, None)
+            self.context.last_sync_edge_update.pop(sub, None)
             # Does anything else on the Context still care about sub_spec?
             # If not unsubscribe the Context's queue from the db_entry.
             if not self.context.subscriptions[sub_spec]:
@@ -272,7 +276,8 @@ class VirtualCircuit:
                                circuit=self,
                                data_type=command.data_type,
                                data_count=command.data_count,
-                               subscriptionid=command.subscriptionid)
+                               subscriptionid=command.subscriptionid,
+                               db_entry=db_entry)
             sub_spec = SubscriptionSpec(
                 db_entry=db_entry,
                 data_type=command.data_type,
@@ -312,6 +317,11 @@ class Context:
         self.broadcaster = ca.Broadcaster(our_role=ca.SERVER)
 
         self.subscriptions = defaultdict(deque)
+        # Map Subscription to {'before': last_update, 'after': last_update}
+        # to silence duplicates for Subscriptions that use edge-triggered sync
+        # Channel Filter.
+        self.last_sync_edge_update = defaultdict(lambda: defaultdict(dict))
+        self.last_dead_band = {}
         self.beacon_count = 0
         self.environ = get_environment_variables()
 
@@ -431,7 +441,7 @@ class Context:
         while True:
             # This queue receives updates that match the db_entry, data_type
             # and mask ("subscription spec") of one or more subscriptions.
-            sub_specs, metadata, values = await self.subscription_queue.get()
+            sub_specs, metadata, values, flags = await self.subscription_queue.get()
             subs = []
             for sub_spec in sub_specs:
                 subs.extend(self.subscriptions[sub_spec])
@@ -439,6 +449,7 @@ class Context:
             # We have to make a new response for each channel because each may
             # have a different requested data_count.
             for sub in subs:
+                s_flags = flags
                 chan = sub.channel
 
                 # This is a pass-through if arr is None.
@@ -456,6 +467,53 @@ class Context:
                                          data_count=data_count,
                                          subscriptionid=sub.subscriptionid,
                                          status=1)
+
+                dbnd = sub.channel_filter.dbnd
+                if dbnd is not None:
+                    new = values
+                    old = self.last_dead_band.get(sub)
+                    if old is not None:
+                        if ((not isinstance(old, Iterable) or
+                             (isinstance(old, Iterable) and len(old) == 1)) and
+                            (not isinstance(new, Iterable) or
+                             (isinstance(new, Iterable) and len(new) == 1))):
+                            if isinstance(old, Iterable):
+                                old, = old
+                            if isinstance(new, Iterable):
+                                new, = new
+                            # Cool that was fun.
+                            if dbnd.m == 'rel':
+                                out_of_band = dbnd.d < abs((old - new) / old)
+                            else:  # must be 'abs' -- was already validated
+                                out_of_band = dbnd.d < abs(old - new)
+                            # We have verified that that EPICS considers DBE_LOG etc. to be
+                            # an absolute (not relative) threshold.
+                            abs_diff = abs(old - new)
+                            if abs_diff > sub.db_entry.log_atol:
+                                s_flags |= SubscriptionType.DBE_LOG
+                                if abs_diff > sub.db_entry.value_atol:
+                                    s_flags |= SubscriptionType.DBE_VALUE
+
+                            if not (out_of_band and (sub.mask & s_flags)):
+                                continue
+                            else:
+                                self.last_dead_band[sub] = new
+                    else:
+                        self.last_dead_band[sub] = new
+
+                # Special-case for edge-triggered modes of the sync Channel
+                # Filter (before, after, first, last). Only send the first
+                # update to each channel.
+                sync = sub.channel_filter.sync
+                if sync is not None:
+                    last_update = self.last_sync_edge_update[sub][sync.s].get(sync.m)
+                    if last_update and last_update == command:
+                        # This is a redundant update. Do not send.
+                        continue
+                    else:
+                        # Stash this and then send it.
+                        self.last_sync_edge_update[sub][sync.s][sync.m] = command
+
                 # Check that the Channel did not close at some point after
                 # this update started its flight.
                 if chan.states[ca.SERVER] is ca.CONNECTED:
@@ -484,7 +542,7 @@ class Context:
 
     async def circuit_disconnected(self, circuit):
         '''Notification from circuit that its connection has closed'''
-        self.circuits.remove(circuit)
+        self.circuits.discard(circuit)
 
     @property
     def startup_methods(self):
@@ -536,10 +594,11 @@ class Context:
                 try:
                     await circuit.recv()
                 except DisconnectedCircuit:
+                    await self.circuit_disconnected(circuit)
                     break
         except KeyboardInterrupt as ex:
             self.log.debug('TCP handler received KeyboardInterrupt')
             raise self.ServerExit() from ex
         self.log.info('Disconnected from client at %s:%d.\n'
                       'Circuits currently connected: %d', *addr,
-                      len(self.circuits) - 1)
+                      len(self.circuits))

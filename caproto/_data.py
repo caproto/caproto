@@ -4,6 +4,7 @@
 # data as a certain type, and they push updates into queues registered by a
 # higher-level server.
 from collections import defaultdict, Iterable
+import copy
 import enum
 import time
 import warnings
@@ -319,6 +320,14 @@ class ChannelAlarm:
             severity_to_acknowledge=severity_to_acknowledge,
             alarm_string=alarm_string)
 
+    def __setstate__(self, val):
+        self._channels = weakref.WeakSet()
+        self.string_encoding = val['string_encoding']
+        self._data = val['data']
+
+    def __getstate__(self):
+        return {'data': self._data, 'string_encoding': self.string_encoding}
+
     status = _read_only_property('status',
                                  doc='Current alarm status')
     severity = _read_only_property('severity',
@@ -391,16 +400,14 @@ class ChannelAlarm:
             flags |= SubscriptionType.DBE_ALARM
 
         for channel in self._channels:
-            await channel.publish(flags, None)
+            await channel.publish(flags)
 
 
 class ChannelData:
     data_type = ChannelType.LONG
 
-    def __init__(self, *, alarm=None,
-                 value=None, timestamp=None,
-                 string_encoding='latin-1',
-                 reported_record_type='caproto'):
+    def __init__(self, *, alarm=None, value=None, timestamp=None,
+                 string_encoding='latin-1', reported_record_type='caproto'):
         '''Metadata and Data for a single caproto Channel
 
         Parameters
@@ -436,14 +443,76 @@ class ChannelData:
         # updates.  (Each queue belongs to a Context.) Each value is itself a
         # dict, mapping data_types to the set of SubscriptionSpecs that request
         # that data_type.
-        self._queues = defaultdict(lambda: defaultdict(set))
+        self._queues = defaultdict(
+            lambda: defaultdict(
+                lambda: defaultdict(set)))
 
         # Cache results of data_type conversions. This maps data_type to
         # (metdata, value). This is cleared each time publish() is called.
         self._content = {}
+        self._snapshots = defaultdict(dict)
+        self._fill_at_next_write = list()
+
+    def __setstate__(self, val):
+        self.timetstamp = val['timestamp']
+        self._alarm = val['alarm']
+        self.string_encoding = val['string_encoding']
+        self.reported_record_type = val['reported_record_type']
+        self._data = val['data']
+        self.string_encoding = val['string_encoding']
+        self._data = val['data']
+        self._queues = defaultdict(
+            lambda: defaultdict(
+                lambda: defaultdict(set)))
+        self._content = {}
+        self._snapshots = defaultdict(dict)
+        self._fill_at_next_write = list()
+
+    def __getstate__(self):
+        return {'timestamp': self.timestamp,
+                'alarm': self.alarm,
+                'string_encoding': self.string_encoding,
+                'reported_record_type': self.reported_record_type,
+                'data': self._data}
 
     value = _read_only_property('value')
     timestamp = _read_only_property('timestamp')
+
+    # "before" — only the last value received before the state changes from
+    #     false to true is forwarded to the client.
+    # "first" — only the first value received after the state changes from true
+    #     to false is forwarded to the client.
+    # "while" — values are forwarded to the client as long as the state is true.
+    # "last" — only the last value received before the state changes from true
+    #     to false is forwarded to the client.
+    # "after" — only the first value received after the state changes from true
+    #     to false is forwarded to the client.
+    # "unless" — values are forwarded to the client as long as the state is
+    #     false.
+
+    def pre_state_change(self, state, new_value):
+        "This is called by the server when it enters its StateUpdateContext."
+        snapshots = self._snapshots[state]
+        snapshots.clear()
+        snapshot = copy.deepcopy(self)
+        if new_value:
+            # We are changing from false to true.
+            snapshots['before'] = snapshot
+        else:
+            # We are changing from true to false.
+            snapshots['last'] = snapshot
+
+    def post_state_change(self, state, new_value):
+        "This is called by the server when it exits its StateUpdateContext."
+        snapshots = self._snapshots[state]
+        if new_value:
+            # We have changed from false to true.
+            snapshots['while'] = self
+            self._fill_at_next_write.append((state, 'after'))
+        else:
+            # We have changed from true to false.
+            snapshots['unless'] = self
+            self._fill_at_next_write.append((state, 'first'))
 
     @property
     def alarm(self):
@@ -464,7 +533,7 @@ class ChannelData:
             alarm.connect(self)
 
     async def subscribe(self, queue, sub_spec):
-        self._queues[queue][sub_spec.data_type].add(sub_spec)
+        self._queues[queue][sub_spec.channel_filter.sync][sub_spec.data_type].add(sub_spec)
         # Always send current reading immediately upon subscription.
         data_type = sub_spec.data_type
         try:
@@ -474,10 +543,10 @@ class ChannelData:
             # a future subscription wants the same data type.
             metadata, values = await self._read(data_type)
             self._content[data_type] = metadata, values
-        await queue.put(((sub_spec,), metadata, values))
+        await queue.put(((sub_spec,), metadata, values, 0))
 
     async def unsubscribe(self, queue, sub_spec):
-        self._queues[queue][sub_spec.data_type].discard(sub_spec)
+        self._queues[queue][sub_spec.channel_filter.sync][sub_spec.data_type].discard(sub_spec)
 
     async def auth_read(self, hostname, username, data_type, *,
                         user_address=None):
@@ -574,7 +643,6 @@ class ChannelData:
                                    )
             raise
 
-        old = self._data['value']
         new = modified_value if modified_value is not None else value
         self._data['value'] = new
 
@@ -592,25 +660,35 @@ class ChannelData:
                                                  self.string_encoding)
             await self.write_metadata(publish=False, **metadata_dict)
 
+        if self._fill_at_next_write:
+            snapshot = copy.deepcopy(self)
+            for state, mode in self._fill_at_next_write:
+                self._snapshots[state][mode] = snapshot
+            self._fill_at_next_write.clear()
+
         # Send a new event to subscribers.
-        await self.publish(flags, (old, new))
+        await self.publish(flags)
 
     async def write(self, value, flags=0, **metadata):
         '''Set data from native Python types'''
         metadata['timestamp'] = metadata.get('timestamp', time.time())
         modified_value = await self.verify_value(value)
-        old = self._data['value']
+        if self._fill_at_next_write:
+            snapshot = copy.deepcopy(self)
+            for state, mode in self._fill_at_next_write:
+                self._snapshots[state][mode] = snapshot
+            self._fill_at_next_write.clear()
         new = modified_value if modified_value is not None else value
         self._data['value'] = new
         await self.write_metadata(publish=False, **metadata)
         # Send a new event to subscribers.
-        await self.publish(flags, (old, new))
+        await self.publish(flags)
 
-    def _is_eligible(self, ss, flags, pair):
-        # This is overridden in ChannelNumeric to check the contents of pair.
-        return ss.mask & flags
+    def _is_eligible(self, ss):
+        sync = ss.channel_filter.sync
+        return sync is None or sync.m in self._snapshots[sync.s]
 
-    async def publish(self, flags, pair):
+    async def publish(self, flags):
         # Each SubscriptionSpec specifies a certain data type it is interested
         # in and a mask. Send one update per queue per data_type if and only if
         # any subscriptions specs on a queue have a compatible mask.
@@ -621,33 +699,39 @@ class ChannelData:
         # instance state so that self.subscribe can also use it.
         self._content.clear()
 
-        for queue, data_types in self._queues.items():
+        for queue, syncs in self._queues.items():
             # queue belongs to a Context that is expecting to receive
             # updates of the form (sub_specs, metadata, values).
             # data_types is a dict grouping the sub_specs for this queue by
             # their data_type.
-            for data_type, sub_specs in data_types.items():
-                eligible = tuple(ss for ss in sub_specs
-                                 if self._is_eligible(ss, flags, pair))
-                if not eligible:
-                    continue
-                try:
-                    metdata, values = self._content[data_type]
-                except KeyError:
-                    # Do the expensive data type conversion and cache it in
-                    # case another queue or a future subscription wants the
-                    # same data type.
-                    metadata, values = await self._read(data_type)
-                    self._content[data_type] = metadata, values
+            for sync, data_types in syncs.items():
+                for data_type, sub_specs in data_types.items():
+                    eligible = tuple(ss for ss in sub_specs
+                                     if self._is_eligible(ss))
+                    if not eligible:
+                        continue
+                    if sync is None:
+                        channel_data = self
+                    else:
+                        try:
+                            channel_data = self._snapshots[sync.s][sync.m]
+                        except KeyError:
+                            continue
+                    try:
+                        metdata, values = self._content[data_type]
+                    except KeyError:
+                        # Do the expensive data type conversion and cache it in
+                        # case another queue or a future subscription wants the
+                        # same data type.
+                        metadata, values = await channel_data._read(data_type)
+                        channel_data._content[data_type] = metadata, values
 
-                # We have applied the deadband filter on this side of the
-                # queue, deciding while SubscriptionSpecs should get this
-                # update. We will apply the array filter on the other side of
-                # the queue, since each eligible SubscriptionSpec may want a
-                # different slice. Sending the whole array through the queue
-                # isn't any more expensive that sending a slice; this is just a
-                # reference.
-                await queue.put((eligible, metadata, values))
+                    # We will apply the array filter and deadband on the other side
+                    # of the queue, since each eligible SubscriptionSpec may
+                    # want a different slice. Sending the whole array through
+                    # the queue isn't any more expensive that sending a slice;
+                    # this is just a reference.
+                    await queue.put((eligible, metadata, values, flags))
 
     def _read_metadata(self, dbr_metadata):
         'Set all metadata fields of a given DBR type instance'
@@ -720,7 +804,7 @@ class ChannelData:
             await self.alarm.write(status=status, severity=severity)
 
         if publish:
-            await self.publish(SubscriptionType.DBE_PROPERTY, None)
+            await self.publish(SubscriptionType.DBE_PROPERTY)
 
     @property
     def epics_timestamp(self):
@@ -854,41 +938,6 @@ class ChannelNumeric(ChannelData):
                     f"set to {self.lower_ctrl_limit} and "
                     f"{self.upper_warning_limit}.")
         return data
-
-    def _is_eligible(self, ss, flags, pair):
-        out_of_band = True
-        if pair is not None:
-            old, new = pair
-            # Deal with the fact that these values might be Iterable or
-            # not, which is dumb, but fixing it properly is a terrible can
-            # of worms. We just want to know if these are scalars.
-            if ((not isinstance(old, Iterable) or
-                    (isinstance(old, Iterable) and len(old) == 1)) and
-                (not isinstance(new, Iterable) or
-                    (isinstance(new, Iterable) and len(new) == 1))):
-                if isinstance(old, Iterable):
-                    old, = old
-                if isinstance(new, Iterable):
-                    new, = new
-                # Cool that was fun.
-                dbnd = ss.channel_filter.dbnd
-                if dbnd is not None:
-                    if dbnd.m == 'rel':
-                        out_of_band = dbnd.d < abs((old - new) / old)
-                    else:  # must be 'abs' -- was already validated
-                        out_of_band = dbnd.d < abs(old - new)
-                # We have verified that that EPICS considers DBE_LOG etc. to be
-                # an absolute (not relative) threshold.
-                abs_diff = abs(old - new)
-                if abs_diff > self.log_atol:
-                    flags |= SubscriptionType.DBE_LOG
-                    if abs_diff > self.value_atol:
-                        flags |= SubscriptionType.DBE_VALUE
-            else:
-                # epics-base explicitly says only scalar values are supported:
-                # https://github.com/epics-base/epics-base/blob/3.15/src/std/filters/dbnd.c#L70
-                flags |= (SubscriptionType.DBE_VALUE | SubscriptionType.DBE_LOG)
-        return out_of_band & ss.mask & flags
 
 
 class ChannelInteger(ChannelNumeric):
