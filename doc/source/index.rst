@@ -74,7 +74,7 @@ Why rewrite it from scratch in Python instead of just wrapping C?
      you use it.
 
    For hard numbers, see the
-   `benchmarks <https://nsls-ii.github.io/caproto/bench/#/summarylist>`_.
+   `benchmarks <https://nsls-ii.github.io/caproto/bench/#/>`_.
 5. **Batteries Included**: Includes multiple server and client implementations
    with different concurrency strategies.
 
@@ -157,6 +157,6 @@ learning exercises.
    :maxdepth: 2
    :caption: Appendix
 
-   Performance Benchmarks <https://nsls-ii.github.io/caproto/bench/#/summarylist>
+   Performance Benchmarks <https://nsls-ii.github.io/caproto/bench/#/>
    references
    release-notes
