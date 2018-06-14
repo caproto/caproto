@@ -2,7 +2,7 @@ import inspect
 
 from .server import pvfunction, PVGroup
 from .._data import (ChannelDouble, ChannelEnum, ChannelChar,
-                     ChannelInteger, ChannelString)
+                     ChannelInteger, ChannelString, ChannelByte)
 from .menus import menus
 
 try:
@@ -244,15 +244,22 @@ def record_to_field_info(record_type):
 
     type_info = {
         'DBF_DEVICE': ChannelString,  # DTYP
+        'DBF_FLOAT': ChannelDouble,
         'DBF_DOUBLE': ChannelDouble,
         'DBF_FWDLINK': ChannelString,
         'DBF_INLINK': ChannelString,
         'DBF_LONG': ChannelInteger,
         'DBF_MENU': ChannelEnum,
+        'DBF_ENUM': ChannelEnum,
         'DBF_OUTLINK': ChannelString,
         'DBF_SHORT': ChannelInteger,
         'DBF_STRING': ChannelString,
-        'DBF_UCHAR': ChannelChar,
+        'DBF_CHAR': ChannelChar,
+
+        # unsigned types which don't actually have ChannelType equivalents:
+        'DBF_UCHAR': ChannelByte,
+        'DBF_ULONG': ChannelInteger,
+        'DBF_USHORT': ChannelInteger,
     }
 
     for name, field_info in field_dict.items():
@@ -276,7 +283,6 @@ def record_to_field_info(record_type):
             # note: ordered key assumption here (py3.6+)
             kwargs['enum_strings'] = (f'menus.{field_info.menu}'
                                       '.get_string_tuple()')
-            assert field_info.menu in menus, f'Unknown menu: {field_info.menu}'
 
         if prompt:
             kwargs['doc'] = repr(prompt)
@@ -323,6 +329,15 @@ def record_to_field_dict_code(record_type, *, skip_fields=None):
     yield '    }'
 
 
+dtype_overrides = {
+    # DBF_FLOAT is ChannelDouble -> DOUBLE; override with FLOAT
+    'DBF_FLOAT': 'FLOAT',
+    # DBF_SHORT is ChannelInteger -> LONG; override with SHORT
+    'DBF_SHORT': 'SHORT',
+    'DBF_USHORT': 'SHORT',
+}
+
+
 def record_to_high_level_group_code(record_type, *, skip_fields=None):
     'Record name -> yields code to create a PVGroup for all fields'
     if skip_fields is None:
@@ -339,17 +354,47 @@ def record_to_high_level_group_code(record_type, *, skip_fields=None):
     if record_type != 'base':
         yield f"    _record_type = '{record_type}'"
 
-    # yield f"    attr_separator = '.'"  # only for subgroups
-    # yield f"    kw['reported_record_type'] = '{record_type}'"  # TODO?
+    fields = {}
+
     for name, cls, kwargs, finfo in record_to_field_info(record_type):
+        fields[name] = (cls, kwargs, finfo)
         kwarg_string = ', '.join(f'{k}={v}' for k, v in kwargs.items())
-        yield from _format(f"{name} = pvproperty(name='{finfo.field}', "
-                           f"dtype=ChannelType.{cls.data_type.name}, "
-                           f"{kwarg_string})", indent=4)
+        dtype = dtype_overrides.get(cls.data_type.name, cls.data_type.name)
+        comment = False
+        if finfo.field in skip_fields:
+            comment = True
+        elif finfo.menu and finfo.menu not in menus:
+            comment = True
 
+        lines = _format(f"{name} = pvproperty(name="
+                        f"'{finfo.field}', "
+                        f"dtype=ChannelType.{dtype}, "
+                        f"{kwarg_string})", indent=4)
 
-if __name__ == '__main__':
-    for line in record_to_high_level_group_code('base'):
-        print(line)
-    for line in record_to_high_level_group_code('ai'):
-        print(line)
+        if comment:
+            for line in lines:
+                indent = len(line) - len(line.lstrip())
+                if indent >= 4:
+                    yield f'    # {line[4:]}'
+                else:
+                    yield f'# {line}'
+        else:
+            yield from lines
+
+    linkable = {
+        'display_precision': 'precision',
+        'hihi_alarm_limit': 'upper_alarm_limit',
+        'high_alarm_limit': 'upper_warning_limit',
+        'low_alarm_limit': 'lower_warning_limit',
+        'lolo_alarm_limit': 'lower_alarm_limit',
+        'high_operating_range': 'upper_ctrl_limit',
+        'low_operating_range': 'lower_ctrl_limit',
+        # 'alarm_deadband': '',
+        'archive_deadband': 'log_atol',
+        'monitor_deadband': 'value_atol',
+    }
+
+    for field_attr, channeldata_attr in linkable.items():
+        if field_attr not in fields:
+            continue
+        yield f"    _link_parent_attribute({field_attr}, '{channeldata_attr}')"
