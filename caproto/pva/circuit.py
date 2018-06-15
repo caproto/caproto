@@ -257,7 +257,7 @@ class VirtualCircuit:
                 self._segment_data.append(segmented)
                 continue
 
-            if type(command) is not NEED_DATA:
+            if command is not NEED_DATA:
                 self.log.debug("%d bytes -> %r", bytes_consumed, command)
                 yield command, None
             else:

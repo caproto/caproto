@@ -1,31 +1,44 @@
+import enum
 import ctypes
 import ipaddress
-import itertools
 from .._utils import (CaprotoKeyError, CaprotoValueError, CaprotoRuntimeError,
                       CaprotoError, ErrorResponseReceived,
-                      CLIENT, SERVER, make_sentinel,
+                      CLIENT, SERVER, _SimpleReprEnum,
                       LocalProtocolError, RemoteProtocolError,
                       ThreadsafeCounter)
 
 
-# Connection state
-CONNECTED = make_sentinel('CONNECTED')
-RESPONSIVE = make_sentinel('RESPONSIVE')
-UNRESPONSIVE = make_sentinel('UNRESPONSIVE')
-DISCONNECTED = make_sentinel('DISCONNECTED')
+class ConnectionState(_SimpleReprEnum):
+    # Connection state
+    CONNECTED = enum.auto()
+    RESPONSIVE = enum.auto()
+    UNRESPONSIVE = enum.auto()
+    DISCONNECTED = enum.auto()
 
-# Channel life-cycle
-NEVER_CONNECTED = make_sentinel('NEVER_CONNECTED')
-# also: CONNECTED, DISCONNECTED
-DESTROYED = make_sentinel('DESTROYED')
-NEED_DATA = make_sentinel('NEED_DATA')
-CLEAR_SEGMENTS = make_sentinel('CLEAR_SEGMENTS')
 
-# Channel request
-INIT = make_sentinel('INIT')
-READY = make_sentinel('READY')
-IN_PROGRESS = make_sentinel('IN_PROGRESS')
-# also: DISCONNECTED, DESTROYED
+class ChannelLifeCycle(_SimpleReprEnum):
+    # Channel life-cycle
+    NEVER_CONNECTED = enum.auto()
+    # also: CONNECTED, DISCONNECTED
+    DESTROYED = enum.auto()
+    NEED_DATA = enum.auto()
+    CLEAR_SEGMENTS = enum.auto()
+
+
+class ChannelRequest(_SimpleReprEnum):
+    # Channel request
+    INIT = enum.auto()
+    READY = enum.auto()
+    IN_PROGRESS = enum.auto()
+    # also: DISCONNECTED, DESTROYED
+
+
+globals().update(
+    {token: getattr(_enum, token)
+     for _enum in [ConnectionState, ChannelLifeCycle, ChannelRequest]
+     for token in dir(_enum)
+     if not token.startswith('_')
+     })
 
 
 def ubyte_array_to_ip(arr):

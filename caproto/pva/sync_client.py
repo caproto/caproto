@@ -8,8 +8,7 @@ import sys
 # from .._dbr import (field_types, ChannelType, native_type, SubscriptionType)
 
 # REBASE TODO this will go away - need to rebase
-from caproto import (get_address_list_with_ports, get_environment_variables,
-                     MAX_UDP_RECV)
+from caproto import (get_address_list, get_environment_variables, MAX_UDP_RECV)
 
 import ctypes
 import random
@@ -55,7 +54,7 @@ def recv(circuit):
     #                            bytes_received)
 
     for c, remaining in circuit.recv(bytes_received):
-        if type(c) is NEED_DATA:
+        if c is NEED_DATA:
             break
         circuit.process_command(c)
         commands.append(c)
@@ -98,8 +97,8 @@ def search(pv, logger, udp_sock, udp_port, timeout, max_retries=2):
             payload_size=len(payload)
         )
         bytes_to_send = bytes(header) + payload
-        for host, port in get_address_list_with_ports(
-                protocol='PVA', default_port=broadcast_port):
+        port = broadcast_port
+        for host in get_address_list(protocol='PVA'):
             udp_sock.sendto(bytes_to_send, (host, port))
             logger.debug('Search request sent to %r.', (host, port))
             logger.debug('%s', bytes_to_send)
