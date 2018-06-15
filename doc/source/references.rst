@@ -20,4 +20,4 @@ These resources were useful in the development of this project.
   `Python Binary I/O Handling <https://dabeaz.blogspot.com/2009/08/python-binary-io-handling.html>`_
 * `Beej's Guide to Network Programming <https://beej.us/guide/bgnet/html/single/bgnet.html>`_
 * Finally, you may also be interested in Michael Davidsaver's
-  `Channel Access protocol client/server in Python using Twisted Matrix <https://github.com/mdavidsaver/twistedca>`.
+  `Channel Access protocol client/server in Python using Twisted Matrix <https://github.com/mdavidsaver/twistedca>`_.
