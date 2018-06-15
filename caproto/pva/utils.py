@@ -19,6 +19,7 @@ NEVER_CONNECTED = make_sentinel('NEVER_CONNECTED')
 # also: CONNECTED, DISCONNECTED
 DESTROYED = make_sentinel('DESTROYED')
 NEED_DATA = make_sentinel('NEED_DATA')
+CLEAR_SEGMENTS = make_sentinel('CLEAR_SEGMENTS')
 
 # Channel request
 INIT = make_sentinel('INIT')

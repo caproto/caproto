@@ -26,7 +26,7 @@ from .messages import (Status, BeaconMessage, SetMarker, AcknowledgeMarker,
                        ChannelPutGetResponse)
 
 from .state import (ChannelState, CircuitState, RequestState, get_exception)
-from .utils import (CLIENT, SERVER, NEED_DATA, DISCONNECTED,
+from .utils import (CLIENT, SERVER, NEED_DATA, CLEAR_SEGMENTS, DISCONNECTED,
                     CaprotoKeyError, CaprotoValueError, CaprotoRuntimeError,
                     CaprotoError,
                     )
@@ -62,6 +62,7 @@ class VirtualCircuit:
         self.channels = {}  # map cid to Channel
         self.states = CircuitState(self.channels)
         self._data = bytearray()
+        self._segment_data = []
         self.channels_sid = {}  # map sid to Channel
         self._ioids = {}  # map ioid to Channel
         self.event_add_commands = {}  # map subscriptionid to EventAdd command
@@ -240,12 +241,22 @@ class VirtualCircuit:
         self._data += b''.join(buffers)
 
         while True:
-            res = read_from_bytestream(self._data, self.their_role,
-                                       byte_order=self.fixed_recv_order,
-                                       cache=self.cache, debug_logger=self.log)
-            # TODO remove debug_logger
-            (self._data, command, bytes_consumed, num_bytes_needed) = res
-            len_data = len(self._data)  # just for logging
+            decoded, num_bytes_needed, segmented = read_from_bytestream(
+                self._data, self.their_role, segment_data=self._segment_data,
+                byte_order=self.fixed_recv_order, cache=self.cache)
+
+            len_data = len(self._data)
+            command, self._data, bytes_consumed = decoded
+
+            if isinstance(self._data, memoryview):
+                self._data = bytearray(self._data)
+
+            if segmented is CLEAR_SEGMENTS:
+                self._segment_data.clear()
+            elif segmented is not None:
+                self._segment_data.append(segmented)
+                continue
+
             if type(command) is not NEED_DATA:
                 self.log.debug("%d bytes -> %r", bytes_consumed, command)
                 yield command, None

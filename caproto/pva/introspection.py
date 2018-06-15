@@ -57,8 +57,8 @@ def summarize_field_info(info, user_types, values=None, depth=0,
         value = ' = {!r}'.format(values[field_name])
         values = values[field_name]
         if truncate is not None:
-            if len(value) > truncate:
-                value = '{}...'.format(value[:truncate])
+            if len(value) > 2 * truncate:
+                value = '{}(...){}'.format(value[:truncate], value[-truncate:])
     else:
         value, values = '', {}
 

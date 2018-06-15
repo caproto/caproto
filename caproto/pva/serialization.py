@@ -626,8 +626,16 @@ def deserialize_data(fd, buf, *, endian, cache, nested_types=None,
             ret[field_name] = data
 
             if debug_logging:
-                logger.debug('Field: %s (%s) = %s', field_name,
-                             fd['type_name'], repr(data)[:1000])
+                try:
+                    _len = f' [{len(data)}]'
+                except TypeError:
+                    _len = ''
+
+                data_repr = repr(data)
+                if len(data_repr) > 200:
+                    data_repr = data_repr[:100] + '... ' + data_repr[-100:]
+                logger.debug('Field: %s (%s)%s = %s', field_name,
+                             fd['type_name'], _len, data_repr)
 
     return Decoded(data=ret, buffer=buf, offset=offset)
 

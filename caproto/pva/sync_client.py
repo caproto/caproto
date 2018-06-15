@@ -16,10 +16,11 @@ import random
 
 from caproto import pva
 from caproto import bcast_socket
-from caproto.pva import (CLIENT, SERVER, CONNECTED, NEED_DATA, DISCONNECTED,
-                         Broadcaster, QOSFlags, MessageTypeFlag, ErrorResponseReceived,
-                         CaprotoError, SearchResponse, VirtualCircuit,
-                         ClientChannel, ConnectionValidationRequest,
+from caproto.pva import (CLIENT, SERVER, CONNECTED, NEED_DATA, CLEAR_SEGMENTS,
+                         DISCONNECTED, Broadcaster, QOSFlags, MessageTypeFlag,
+                         ErrorResponseReceived, CaprotoError, SearchResponse,
+                         VirtualCircuit, ClientChannel,
+                         ConnectionValidationRequest,
                          ConnectionValidatedResponse, CreateChannelResponse,
                          ChannelFieldInfoResponse, ChannelGetResponse,
                          ChannelMonitorResponse, MonitorSubcommands,
@@ -48,12 +49,11 @@ def send(circuit, command):
 def recv(circuit):
     commands = collections.deque()
     bytes_received = sockets[circuit].recv(4096)
-    serialization_logger.debug('<- %d bytes: %r', len(bytes_received),
-                               bytes_received)
+    # serialization_logger.debug('<- %d bytes: %r', len(bytes_received),
+    #                            bytes_received)
 
     for c, remaining in circuit.recv(bytes_received):
         if type(c) is NEED_DATA:
-            # TODO isn't this wrong?
             break
         circuit.process_command(c)
         commands.append(c)
@@ -182,9 +182,9 @@ def make_channel(pv_name, logger, udp_sock, udp_port, timeout):
             try:
                 commands = recv(circuit)
                 if time.monotonic() - t > timeout:
-                    raise socket.timeout
+                    raise TimeoutError("Timeout while awaiting channel creation.")
             except socket.timeout:
-                raise TimeoutError("Timeout while awaiting channel creation.")
+                raise
 
             for command in commands:
                 if isinstance(command, ConnectionValidationRequest):
@@ -224,9 +224,10 @@ def read(chan, timeout, pvrequest):
     while True:
         try:
             commands = recv(chan.circuit)
-            if time.monotonic() - t > timeout:
-                raise socket.timeout
         except socket.timeout:
+            commands = []
+
+        if time.monotonic() - t > timeout:
             raise TimeoutError("Timeout while awaiting reading.")
 
         for command in commands:
@@ -262,14 +263,20 @@ def get_cli():
                               "responses."))
     parser.add_argument('--verbose', '-v', action='store_true',
                         help="Show DEBUG log messages.")
+    parser.add_argument('-vv', action='store_true',
+                        help=argparse.SUPPRESS)
     parser.add_argument('-vvv', action='store_true',
                         help=argparse.SUPPRESS)
 
     args = parser.parse_args()
     if args.verbose:
-        logging.getLogger('caproto.pva.put').setLevel('DEBUG')
-    if args.vvv:
+        logging.getLogger('caproto.pva.get').setLevel('DEBUG')
+    elif args.vv:
         logging.getLogger('caproto.pva').setLevel('DEBUG')
+        logging.getLogger('caproto.pva.serialization').setLevel('INFO')
+    elif args.vvv:
+        logging.getLogger('caproto.pva').setLevel('DEBUG')
+        logging.getLogger('caproto.pva.serialization').setLevel('DEBUG')
 
     try:
         for pv_name in args.pv_names:
@@ -284,7 +291,7 @@ def get_cli():
                                  values={'': response.pv_data})
 
     except BaseException as exc:
-        if args.verbose:
+        if args.verbose or args.vv or args.vvv:
             # Show the full traceback.
             raise
         else:
@@ -327,8 +334,9 @@ def get(pv_name, *, pvrequest, verbose=False, timeout=1):
         return read(chan, timeout, pvrequest=pvrequest)
     finally:
         try:
-            if chan.states[CLIENT] is CONNECTED:
-                send(chan.circuit, chan.disconnect())
+            ...
+            # if chan.states[CLIENT] is CONNECTED:
+            #     send(chan.circuit, chan.disconnect())
         finally:
             sockets[chan.circuit].close()
 
@@ -491,63 +499,6 @@ def monitor_cli():
         else:
             # Print a one-line error message.
             print(exc)
-
-
-
-# TODO TODO TODO segmentation in sync client
-
-def recv_message(sock, fixed_byte_order, server_byte_order, cache, buf,
-                 **deserialize_kw):
-    if not len(buf):
-        buf = bytearray(sock.recv(4096))
-        print('<-', buf)
-
-    header_cls = (pva.MessageHeaderLE
-                  if server_byte_order == pva.LITTLE_ENDIAN
-                  else pva.MessageHeaderBE)
-
-    header = header_cls.from_buffer(buf)
-    assert header.valid
-
-    if header.segment == pva.SegmentFlag.UNSEGMENTED:
-        header, buf, offset = header_cls.deserialize(buf, cache=cache)
-    else:
-        header_size = ctypes.sizeof(header_cls)
-
-        first_header = header
-
-        segmented_payload = []
-        while header.segment != pva.SegmentFlag.LAST:
-            while len(buf) < header_size:
-                buf += sock.recv(4096)
-
-            header = header_cls.from_buffer(buf)
-            assert header.valid
-            # TODO note, control messages can be interspersed here
-            assert first_header.message_command == header.message_command
-
-            buf = buf[header_size:]
-
-            segment_size = header.payload_size
-            while len(buf) < segment_size:
-                buf += sock.recv(max((4096, segment_size - len(buf))))
-
-            segmented_payload.append(buf[:segment_size])
-            buf = buf[segment_size:]
-
-        buf = bytearray(b''.join(segmented_payload))
-        print('Segmented message. Final payload length: {}'
-              ''.format(len(buf)))
-        header.payload_size = len(buf)
-
-    msg_class = header.get_message(pva.DirectionFlag.FROM_SERVER,
-                                   fixed_byte_order)
-
-    print()
-    print('<-', header)
-
-    assert len(buf) >= header.payload_size
-    return msg_class.deserialize(buf, cache=cache)
 
 
 if __name__ == '__main__':

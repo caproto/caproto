@@ -11,7 +11,8 @@ from .serialization import (serialize_message_field, deserialize_message_field,
 from .types import (c_byte, c_ubyte, c_short, c_ushort, c_int, c_uint)
 from .pvrequest import pvrequest_string_to_structure
 from . import introspection as intro
-from .utils import (ip_to_ubyte_array, ubyte_array_to_ip, SERVER, NEED_DATA)
+from .utils import (ip_to_ubyte_array, ubyte_array_to_ip, SERVER, NEED_DATA,
+                    CLEAR_SEGMENTS)
 
 
 basic_type_definitions = (
@@ -266,7 +267,7 @@ class MessageBase:
         return b''.join(buf)
 
     @classmethod
-    def deserialize(cls, buf, *, cache=NullCache):
+    def deserialize(cls, buf, *, cache=NullCache, header=None):
         base_size = ctypes.sizeof(cls)
         buflen = len(buf) - base_size
         buf = memoryview(buf)
@@ -365,6 +366,8 @@ class MessageBase:
                 serialization_logger.debug('%s (%s) = %s', field_info.name,
                                            field_info.type, value)
 
+        # Attach the header for future reference
+        msg.header = header
         return Decoded(data=msg, buffer=buf, offset=offset)
 
 
@@ -403,6 +406,8 @@ NonstandardArrayField = namedtuple('OptionalField', 'name type count_name')
 RequiredInterfaceField = namedtuple('RequiredField', 'name type data_field')
 OptionalInterfaceField = namedtuple('OptionalInterfaceField',
                                     'name type stop condition data_field')
+DeserializationResult = namedtuple('DeserializationResult',
+                                   'decoded bytes_needed segment_data')
 
 
 def SuccessField(name, type, stop=OptionalStopMarker.stop):
@@ -574,7 +579,7 @@ class BeaconMessage(ExtendedMessageBase):
     ]
 
 
-# NOTE: the following control messages do not have any elements quick require
+# NOTE: the following control messages do not have any elements which require
 # an endian setting. They are arbitrarily set to little-endian here for all
 # platforms.
 
@@ -1264,6 +1269,8 @@ def bytes_needed_for_command(data, direction, cache, *, byte_order=None):
     Returns
     -------
     (header, num_bytes_needed, segmented)
+
+    If segmented, num_bytes_needed only applies to the current segment.
     '''
 
     data_len = len(data)
@@ -1277,21 +1284,35 @@ def bytes_needed_for_command(data, direction, cache, *, byte_order=None):
                                  use_fixed_byte_order=byte_order)
     if issubclass(command, (SetByteOrder, )):
         # SetByteOrder uses the payload in a custom way
-        return header, 0, SegmentFlag.UNSEGMENTED
+        return header, 0, False
 
     total_size = _MessageHeaderSize + header.payload_size
-    if header.segment != SegmentFlag.UNSEGMENTED:
-        # At the very least, we need more than one header...
-        raise NotImplementedError('TODO')  # see simple_client.py
-    else:
-        # Do we have all the bytes in the payload?
-        if data_len < total_size:
-            return header, total_size - data_len, SegmentFlag.UNSEGMENTED
-        return header, 0, SegmentFlag.UNSEGMENTED
+    segmented = header.segment != SegmentFlag.UNSEGMENTED
+
+    if data_len < total_size:
+        return header, total_size - data_len, segmented
+    return header, 0, segmented
 
 
-def read_from_bytestream(data, role, cache, *, byte_order=None,
-                         debug_logger=None):
+def _deserialize_unsegmented_message(msg_class, data, header, cache, *,
+                                     payload_size=None):
+
+    if payload_size is None:
+        # Some messages use the header payload size in "special" ways, so allow
+        # overriding it as an argument.
+        payload_size = header.payload_size
+
+    cmd, _, off = msg_class.deserialize(data, cache=cache, header=header)
+
+    if off != payload_size:
+        raise RuntimeError(f'Number of bytes used in deserialization ({off}) '
+                           f'did not match full payload size: '
+                           f'{payload_size})')
+
+    return cmd, off
+
+
+def read_from_bytestream(data, role, segment_data, cache, *, byte_order=None):
     '''
     Parameters
     ----------
@@ -1318,29 +1339,75 @@ def read_from_bytestream(data, role, cache, *, byte_order=None,
         data, direction, cache=cache, byte_order=byte_order)
 
     if num_bytes_needed > 0:
-        return data, NEED_DATA, 0, num_bytes_needed
+        decoded = Decoded(data=NEED_DATA, buffer=data, offset=0)
+        return DeserializationResult(decoded=decoded,
+                                     bytes_needed=num_bytes_needed,
+                                     segment_data=None)
 
     msg_class = header.get_message(direction=direction,
                                    use_fixed_byte_order=byte_order)
 
-    # print('Header', repr(header), header.flags_as_enums)
     data = memoryview(data)
-    message_start = _MessageHeaderSize
-    next_data = data[message_start:]
-
+    payload_start = _MessageHeaderSize
     if issubclass(msg_class, (SetByteOrder, )):
-        offset = message_start
-        return bytearray(next_data), msg_class.from_buffer(data), offset, 0
+        message_start = 0
+        payload_size = _MessageHeaderSize
+    else:
+        message_start = payload_start
+        payload_size = header.payload_size
 
-    message_end = message_start + header.payload_size
-
+    message_end = message_start + payload_size
     next_data = data[message_end:]
-    cmd, _, off = msg_class.deserialize(data[message_start:message_end],
-                                        cache=cache)
+    payload_data = data[message_start:message_end]
 
-    if off != header.payload_size:
-        raise RuntimeError(f'Failed to fully parse (parsed {off} payload size:'
-                           f' {header.payload_size})')
+    if header.segment == SegmentFlag.UNSEGMENTED:
+        msg, offset = _deserialize_unsegmented_message(
+            msg_class=msg_class,
+            data=payload_data,
+            header=header,
+            cache=cache,
+            payload_size=payload_size,
+        )
+        return DeserializationResult(
+            Decoded(data=msg, buffer=next_data, offset=offset),
+            bytes_needed=0, segment_data=None,
+        )
 
-    cmd.header = header
-    return bytearray(next_data), cmd, message_start + off, 0
+    # Otherwise, we're dealing with a segmented message - a large message
+    # broken up over multiple segments.  Between segments, control messages
+    # can be interspersed according to the pvAccess specification. For
+    # (relative) simplicity, we then require the caller to keep track of these
+    # segments for us.
+
+    # TODO: docs indicate payloads should be aligned, but i can't confirm this
+    # if len(segment_data):
+    #     last_segment = segment_data[-1]
+    #     start_padding = 8 - (len(last_segment) % 8)
+    #     print('alignment padding', start_padding)
+    #     message_start += start_padding
+
+    if header.segment != SegmentFlag.LAST:
+        # Not the last segment - just return it; need at least another header
+        return DeserializationResult(
+            Decoded(data=NEED_DATA, buffer=next_data, offset=message_end),
+            bytes_needed=_MessageHeaderSize,
+            segment_data=bytes(payload_data),
+        )
+
+    # This is the last segment, combine all and deserialize.
+    full_payload = bytearray(b''.join(segment_data))
+    full_payload += payload_data
+
+    header.payload_size = len(full_payload)
+    msg, _ = _deserialize_unsegmented_message(
+        msg_class=msg_class,
+        data=memoryview(full_payload),
+        header=header,
+        cache=cache,
+        payload_size=header.payload_size,
+    )
+    return DeserializationResult(
+        Decoded(data=msg, buffer=next_data, offset=message_end),
+        bytes_needed=0,
+        segment_data=CLEAR_SEGMENTS,
+    )
