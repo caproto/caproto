@@ -23,6 +23,12 @@ go back to a 1988 meeting funded by the Reagan-era Strategic Defense Initiative
 
 The authors pronounce caproto "kah-proto" (not "C.A. proto"). It's fun to say.
 
+Caproto is intended as a friendly entry-point to EPICS. It may be useful for
+scientists who want to understand their hardware better, engineers learning
+more about the EPICS community, and "makers" interesting in using it for hobby
+projects --- EPICS has been used for brewing beer and keeping bees! At the same
+time, caproto is suitable for use at large experimental facilities.
+
 Try caproto in four lines
 ==========================
 
@@ -58,14 +64,16 @@ about the :doc:`command-line-client` and :doc:`iocs`.
 10 Reasons To Use Caproto and 1 Big Reason Not To
 =================================================
 
-Most existing EPICS tools are built on a well-established C library, *libca*.
-Why rewrite it from scratch in Python instead of just wrapping C?
+Most existing EPICS tools are built on well-established C and C++ libraries.
+Why write something from scratch in Python instead of just wrapping those?
 
-1. **Effortlessly Portable**: No required dependencies —-- even numpy is
-   optional. Caproto just needs Python itself.
+1. **Effortlessly Portable**: No required dependencies --- even numpy is
+   optional. Caproto just needs Python itself. We use it on Linux, OSX,
+   Windows, and RaspberryPi.
 2. **Easy to Install and Use**: See "Try caproto in four lines," above.
 3. **Handy for Debugging**: Programmatic access to convenient Python objects
-   embodying every CA message sent and received.
+   embodying every CA message sent and received. See the examples of verbose
+   logging with the :doc:`command-line-client`.
 4. **Efficient**: Data is read directly from sockets into contiguous-memory
    ctypes structures.
 
@@ -73,7 +81,7 @@ Why rewrite it from scratch in Python instead of just wrapping C?
    * Only pay a performance cost of human-friendly introspection if and when
      you use it.
 
-   For hard numbers, see the
+   For the numbers, see caproto's
    `benchmarks <https://nsls-ii.github.io/caproto/bench/#/>`_.
 5. **Batteries Included**: Includes multiple server and client implementations
    with different concurrency strategies.
