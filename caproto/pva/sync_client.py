@@ -34,7 +34,9 @@ sockets = {}
 env = get_environment_variables()
 broadcast_port = env['EPICS_PVA_BROADCAST_PORT']
 
+logger = logging.getLogger(__name__)
 serialization_logger = logging.getLogger('caproto.pva.serialization_debug')
+
 
 # Convenience functions that do both transport and caproto validation/ingest.
 def send(circuit, command):
@@ -61,18 +63,11 @@ def recv(circuit):
     return commands
 
 
-def make_broadcaster_socket(logger):
+def make_broadcaster_socket():
     'Returns (udp_sock, port)'
     udp_sock = bcast_socket()
-    port = 49152
-    while True:
-        try:
-            udp_sock.bind(('', port))
-        except IOError as ex:
-            port = random.randint(49152, 65535)
-        else:
-            break
-
+    udp_sock.bind(('', 0))
+    port = udp_sock.getsockname()[1]
     logger.debug('Bound to UDP port %d for search', port)
     return udp_sock, port
 
@@ -323,7 +318,7 @@ def get(pv_name, *, pvrequest, verbose=False, timeout=1):
     """
     logger = logging.getLogger('caproto.pva.get')
 
-    udp_sock, udp_port = make_broadcaster_socket(logger)
+    udp_sock, udp_port = make_broadcaster_socket()
     try:
         udp_sock.settimeout(timeout)
         chan = make_channel(pv_name, logger, udp_sock, udp_port, timeout)
@@ -334,9 +329,8 @@ def get(pv_name, *, pvrequest, verbose=False, timeout=1):
         return read(chan, timeout, pvrequest=pvrequest)
     finally:
         try:
-            ...
-            # if chan.states[CLIENT] is CONNECTED:
-            #     send(chan.circuit, chan.disconnect())
+            if chan.states[CLIENT] is CONNECTED:
+                send(chan.circuit, chan.disconnect())
         finally:
             sockets[chan.circuit].close()
 
@@ -398,7 +392,7 @@ def monitor(pv_name, *, pvrequest, verbose=False, timeout=1,
     """
     logger = logging.getLogger('caproto.pva.monitor')
 
-    udp_sock, udp_port = make_broadcaster_socket(logger)
+    udp_sock, udp_port = make_broadcaster_socket()
     try:
         udp_sock.settimeout(timeout)
         chan = make_channel(pv_name, logger, udp_sock, udp_port, timeout)
@@ -418,7 +412,7 @@ def monitor(pv_name, *, pvrequest, verbose=False, timeout=1,
 
 
 def monitor_cli():
-    parser = argparse.ArgumentParser(description='Read the value of a PV.')
+    parser = argparse.ArgumentParser(description='Monitor the value of a PV.')
     parser.add_argument('pv_names', type=str, nargs='+',
                         help="PV (channel) name(s) separated by spaces")
     parser.add_argument('--pvrequest', type=str, default='field()',
@@ -499,17 +493,3 @@ def monitor_cli():
         else:
             # Print a one-line error message.
             print(exc)
-
-
-if __name__ == '__main__':
-    logging.getLogger('caproto').setLevel(logging.DEBUG)
-    logging.basicConfig()
-
-    try:
-        pv = sys.argv[1]
-    except IndexError:
-        pv = 'TST:image1:Array'
-
-    # get(pv)
-    # get_cli()
-    monitor_cli()

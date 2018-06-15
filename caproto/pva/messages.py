@@ -571,8 +571,7 @@ class BeaconMessage(ExtendedMessageBase):
 
     _additional_fields_ = [
         RequiredField('protocol', 'string'),
-        OptionalField('server_status_if', 'FieldDesc',
-                      OptionalStopMarker.continue_, None),
+        RequiredField('server_status_if', 'FieldDesc'),
         OptionalField('server_status', 'PVField', OptionalStopMarker.continue_,
                       lambda msg, buf: (msg.server_status_if !=
                                         TypeCode.NULL_TYPE_CODE)),
