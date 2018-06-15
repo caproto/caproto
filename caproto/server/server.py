@@ -33,7 +33,7 @@ __all__ = ['AsyncLibraryLayer',
            'PvpropertyInteger', 'PvpropertyIntegerRO',
            'PvpropertyString', 'PvpropertyStringRO',
 
-           'ioc_arg_parser',
+           'ioc_arg_parser', 'template_arg_parser'
            ]
 
 
@@ -999,10 +999,10 @@ class PVGroup(metaclass=PVGroupMeta):
         return value
 
 
-def ioc_arg_parser(*, desc, default_prefix, argv=None, macros=None,
-                   supported_async_libs=None):
+def template_arg_parser(*, desc, default_prefix, argv=None, macros=None,
+                        supported_async_libs=None):
     """
-    A reusable ArgumentParser for basic example IOCs.
+    Construct a template arg parser for starting up an IOC
 
     Parameters
     ----------
@@ -1018,6 +1018,14 @@ def ioc_arg_parser(*, desc, default_prefix, argv=None, macros=None,
         "White list" of supported server implementations. The first one will
         be the default. If None specified, the parser will accept all of the
         (hard-coded) choices.
+
+    Returns
+    -------
+    parser : argparse.ArguementParser
+    split_args : callable[argparse.Namespace, Tuple[dict, dict]]
+        A helper function to extract and split the 'standard' CL arguments.
+        This function sets the logging level and returns the kwargs for
+        constructing the IOC and for the launching the server.
     """
     if argv is None:
         argv = sys.argv
@@ -1058,20 +1066,70 @@ def ioc_arg_parser(*, desc, default_prefix, argv=None, macros=None,
         else:
             parser.add_argument(f'--{name}', type=str, default=default_value,
                                 help="Macro substitution, optional")
-    args = parser.parse_args()
-    if args.vvv:
-        logging.getLogger('caproto').setLevel('DEBUG')
-    else:
-        if args.verbose:
-            level = 'DEBUG'
-        elif args.quiet:
-            level = 'WARNING'
+
+    def split_args(args):
+        """
+        Helper function to pull the standard information out of the
+        parsed args.
+
+        Returns
+        -------
+        ioc_options : dict
+            kwargs to be handed into the IOC init.
+
+        run_options : dict
+            kwargs to be handed to run
+        """
+        if args.vvv:
+            logging.getLogger('caproto').setLevel('DEBUG')
         else:
-            level = 'INFO'
-        logging.getLogger('caproto.ctx').setLevel(level)
-    ioc_options = {'prefix': args.prefix,
-                   'macros': {key: getattr(args, key) for key in macros}}
-    run_options = {'module_name': f'caproto.{args.async_lib}.server',
-                   'log_pv_names': args.list_pvs,
-                   'interfaces': args.interfaces}
-    return ioc_options, run_options
+            if args.verbose:
+                level = 'DEBUG'
+            elif args.quiet:
+                level = 'WARNING'
+            else:
+                level = 'INFO'
+            logging.getLogger('caproto.ctx').setLevel(level)
+
+        return ({'prefix': args.prefix,
+                 'macros': {key: getattr(args, key) for key in macros}},
+
+                {'module_name': f'caproto.{args.async_lib}.server',
+                 'log_pv_names': args.list_pvs,
+                 'interfaces': args.interfaces})
+
+    return parser, split_args
+
+
+def ioc_arg_parser(*, desc, default_prefix, argv=None, macros=None,
+                   supported_async_libs=None):
+    """
+    A reusable ArgumentParser for basic example IOCs.
+
+    Parameters
+    ----------
+    description : string
+        Human-friendly description of what that IOC does
+    default_prefix : string
+    args : list, optional
+        Defaults to sys.argv
+    macros : dict, optional
+        Maps macro names to default value (string) or None (indicating that
+        this macro parameter is required).
+    supported_async_libs : list, optional
+        "White list" of supported server implementations. The first one will
+        be the default. If None specified, the parser will accept all of the
+        (hard-coded) choices.
+
+    Returns
+    -------
+    ioc_options : dict
+        kwargs to be handed into the IOC init.
+
+    run_options : dict
+        kwargs to be handed to run
+    """
+    parser, split_args = template_arg_parser(desc=desc, default_prefix=default_prefix,
+                                             argv=argv, macros=macros,
+                                             supported_async_libs=supported_async_libs)
+    return split_args(parser.parse_args())
