@@ -49,7 +49,8 @@ if __name__ == '__main__':
         desc='Run an IOC that updates when a barcode is read.',
         supported_async_libs=('asyncio',))
 
-    parser.add_argument('--event', help='The file descriptor in /dev/input to use',
+    parser.add_argument('--event',
+                        help='The file descriptor in /dev/input to use',
                         required=True, type=str)
 
     args = parser.parse_args()
