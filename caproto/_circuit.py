@@ -433,6 +433,11 @@ class _BaseChannel:
         self.sid = None
         self.access_rights = None
 
+    def __repr__(self):
+        return (f"<{type(self).__name__} name={self.name!r} cid={self.cid} "
+                f"sid={self.sid} data_type={self.native_data_type} "
+                f"logger_name={self.log.name!r}>")
+
     @property
     def subscriptions(self):
         """
