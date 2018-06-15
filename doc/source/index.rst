@@ -25,7 +25,7 @@ The authors pronounce caproto "kah-proto" (not "C.A. proto"). It's fun to say.
 
 Caproto is intended as a friendly entry-point to EPICS. It may be useful for
 scientists who want to understand their hardware better, engineers learning
-more about the EPICS community, and "makers" interesting in using it for hobby
+more about the EPICS community, and "makers" interested in using it for hobby
 projects --- EPICS has been used for brewing beer and keeping bees! At the same
 time, caproto is suitable for use at large experimental facilities.
 

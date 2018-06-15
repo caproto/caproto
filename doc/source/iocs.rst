@@ -390,7 +390,7 @@ More...
 -------
 
 Take a look around
-`the ``ioc_examples`` subpackage <https://github.com/NSLS-II/caproto/tree/master/caproto/ioc_examples>` for more examples not covered here.
+`the ioc_examples subpackage <https://github.com/NSLS-II/caproto/tree/master/caproto/ioc_examples>`_ for more examples not covered here.
 
 .. ipython:: python
     :suppress:
