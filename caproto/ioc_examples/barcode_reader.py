@@ -2,11 +2,9 @@
 """
 This example requires a barcode reader and the Python library evdev.
 
-This only works on linux (as it uses the linux kernel input events).  You
-must edit this file to point at the correct file descriptor in /dev/input
-for your barcode reader.
+This only works on linux (as it uses the linux kernel input events).
 """
-from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
+from caproto.server import pvproperty, PVGroup, template_arg_parser, run
 from evdev import InputDevice, categorize
 
 
@@ -46,10 +44,15 @@ async def barcode_driver(dev):
 
 
 if __name__ == '__main__':
-    ioc_options, run_options = ioc_arg_parser(
+    parser, split_args = template_arg_parser(
         default_prefix='bc:',
         desc='Run an IOC that updates when a barcode is read.',
         supported_async_libs=('asyncio',))
-    # Edit this line to point at the correct event
-    ioc = BarcodeIOC(event_path='/dev/input/event17', **ioc_options)
+
+    parser.add_argument('--event', help='The file descriptor in /dev/input to use',
+                        required=True, type=str)
+
+    args = parser.parse_args()
+    ioc_options, run_options = split_args(args)
+    ioc = BarcodeIOC(event_path=args.event, **ioc_options)
     run(ioc.pvdb, **run_options)
