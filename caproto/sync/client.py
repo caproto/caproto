@@ -387,7 +387,7 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
                                      time_type)
             req = chan.subscribe(data_type=time_type, mask=sub.mask)
             send(chan.circuit, req)
-            sub_ids[req.subscriptionid] = sub
+            sub_ids[(chan.circuit, req.subscriptionid)] = sub
         logger.debug('Subscribed. Building socket selector.')
         try:
             circuits = set(chan.circuit for chan in channels.values())
@@ -417,7 +417,7 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
                         if response is ca.DISCONNECTED:
                             # TODO Re-connect.
                             raise CaprotoError("Disconnected")
-                        sub = sub_ids.get(response.subscriptionid)
+                        sub = sub_ids.get((circuit, response.subscriptionid))
                         if sub:
                             sub.process(response)
         except KeyboardInterrupt:
