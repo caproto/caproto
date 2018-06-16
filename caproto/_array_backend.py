@@ -16,8 +16,17 @@ class Array(array.ArrayType):
     __dict__ = {}
 
     def __init__(self, type_code, values, *, endian=default_endian):
-        super().__init__()
         self.endian = endian
+        super().__init__()
+
+    def __getitem__(self, slice_):
+        sliced = super().__getitem__(slice_)
+        if isinstance(slice_, int):
+            # This is just a single value, numerical or string.
+            return sliced
+        else:
+            # This is an array.ArrayType. We have to propagate the endianness.
+            return Array(self.typecode, sliced, endian=self.endian)
 
     def byteswap(self):
         self.endian = {'<': '>',
