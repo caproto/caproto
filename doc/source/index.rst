@@ -43,7 +43,7 @@ Now install caproto:
 
 .. code-block:: bash
 
-   python3 -m pip install caproto
+   python3 -m pip install -U caproto
 
 In one terminal, start an EPICS Input-Output Controller (IOC), which is a
 server.
