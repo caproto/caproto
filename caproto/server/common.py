@@ -522,7 +522,10 @@ class Context:
     async def broadcast_beacon_loop(self):
         self.log.debug('Will send beacons to %r',
                        [f'{h}:{p}' for h, p in self.beacon_socks.keys()])
-        beacon_period = self.environ['EPICS_CAS_BEACON_PERIOD']
+        MIN_BEACON_PERIOD = 0.02  # "RECOMMENDED" by the CA spec
+        BEACON_BACKOFF = 2  # "RECOMMENDED" by the CA spec
+        max_beacon_period = self.environ['EPICS_CAS_BEACON_PERIOD']
+        beacon_period = MIN_BEACON_PERIOD
         while True:
             for address, (interface, sock) in self.beacon_socks.items():
                 try:
@@ -538,6 +541,9 @@ class Context:
                         "EPICS_CAS_BEACON_ADDR_LIST=<addresses>.", address)
                     raise
             self.beacon_count += 1
+            if beacon_period < max_beacon_period:
+                beacon_period = min(max_beacon_period,
+                                    beacon_period * BEACON_BACKOFF)
             await self.async_layer.library.sleep(beacon_period)
 
     async def circuit_disconnected(self, circuit):
