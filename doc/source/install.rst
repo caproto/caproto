@@ -17,7 +17,7 @@ Installation Using Pip
 
 .. code-block:: bash
 
-   python3 -m pip install "caproto[complete]"
+   python3 -m pip install -U "caproto[complete]"
 
 Minimal Installation Using Pip
 ==============================
@@ -27,7 +27,7 @@ extremely lightweight installation, install caproto alone:
 
 .. code-block:: bash
 
-   python3 -m pip install caproto
+   python3 -m pip install -U caproto
 
 Caproto's command-line, synchronous, and threading clients will work in this
 mode, as will its asyncio server, because these rely only on built-in Python
@@ -42,8 +42,8 @@ Other, intermediate combinations are also conveniently available:
 
 .. code-block:: bash
 
-   python3 -m pip install "caproto[standard]"  # includes numpy, netifaces
-   python3 -m pip install "caproto[async]"  # includes the async libs
+   python3 -m pip install -U "caproto[standard]"  # includes numpy, netifaces
+   python3 -m pip install -U "caproto[async]"  # includes the async libs
 
 Development Installation
 ========================
@@ -68,8 +68,8 @@ building the documentation:
 
 .. code-block:: bash
 
-    pip install -U -r test-requirements.txt
-    pip install -U -r docs-requirements.txt
+    pip install -Ur test-requirements.txt
+    pip install -Ur docs-requirements.txt
 
 To run the tests:
 
@@ -90,6 +90,7 @@ for ``EPICS_BASE`` to be set.
 
 A small number of the tests test caproto against ``motorsim``. To skip these
 tests, set the environment variable ``CAPROTO_SKIP_MOTORSIM_TESTS=1``.
+
 To build the documentation:
 
 .. code-block:: bash

@@ -2,6 +2,22 @@
 Release History
 ***************
 
+v0.1.1 (2018-06-17)
+===================
+
+This is a bug-fix release following closely on the initial release. We
+recommend that all users update.
+
+* Fix straightforward but important bug in the synchronous client that broke
+  monitoring of multiple channels concurrently.
+* In servers, abide by the spec's recommendation that beacons should be issued
+  quickly at startup before backing off to a slower, steady rate.
+* Fix a bug that broke the array ("arr") channel filter if numpy was not
+  installed.
+* Add a new section to the documentation detailing caproto's compliance with
+  the Channel Access protocol and the feature parity of caproto's clients and
+  servers with respect to the reference implementations in epics-base.
+
 v0.1.0 (2018-06-14)
 ===================
 
