@@ -3,10 +3,23 @@ import copy
 import logging
 import sys
 import time
+import weakref
 import caproto as ca
 from caproto import (apply_arr_filter, get_environment_variables,
                      RemoteProtocolError)
 from .._dbr import SubscriptionType
+
+
+# ** Tuning this parameters will affect the servers' performance **
+# ** under high load. **
+# If the queue of subscriptions to has a new update ready within this timeout,
+# we consider ourselves under high load and trade accept some latency for some
+# efficiency.
+HIGH_LOAD_TIMEOUT = 0.01
+# When a batch of subscription updates has this many bytes or more, send it.
+# Decrease this number to improve latency under load; increase it to improve
+# efficiency.
+SUB_BATCH_THRESH = 2**16
 
 
 class DisconnectedCircuit(Exception):
@@ -24,6 +37,26 @@ SubscriptionSpec = namedtuple('SubscriptionSpec', ('db_entry', 'data_type',
 host_endian = ('>' if sys.byteorder == 'big' else '<')
 
 
+class BoundedSet(set):
+    def __init__(self, items=None, *, maxlen):
+        if items is None:
+            items = ()
+        super().__init__(items)
+        self.maxlen = maxlen
+
+    def add(self, item):
+        super().add(item)
+        if len(self) > self.maxlen:
+            self.pop()
+
+    def update(self, items):
+        super().update(items)
+        overage = len(self) - self.maxlen
+        if overage > 0:
+            for _ in range(overage):
+                self.pop()
+
+
 class VirtualCircuit:
     def __init__(self, circuit, client, context):
         self.connected = True
@@ -34,6 +67,14 @@ class VirtualCircuit:
         self.client_hostname = None
         self.client_username = None
         self.subscriptions = defaultdict(deque)
+        self.unexpired_updates = defaultdict(
+            lambda: BoundedSet(maxlen=ca.MAX_SUBSCRIPTION_BACKLOG))
+        # Subclasses are expected to define:
+        # self.command_queue = ...
+        # self.new_command_condition = ...
+        # self.subscription_queue = ...
+        # self.get_from_sub_queue_with_timeout = ...
+        # self.events_on = ...
 
     async def _on_disconnect(self):
         """Executed when disconnection detected"""
@@ -162,6 +203,82 @@ class VirtualCircuit:
                     await self.send(response_command)
 
             await self._wake_new_command()
+
+    async def subscription_queue_loop(self):
+        maybe_coroutine = self.events_on.set()
+        # The curio backend makes this an awaitable thing.
+        if maybe_coroutine is not None:
+            await maybe_coroutine
+        commands = deque()
+        commands_bytes = 0
+        while True:
+            send_now = False
+            try:
+                # We are covering two regimes of operation here. In the "slow
+                # producer" regime, the server is only occasionally sending
+                # updates, and it should optimize for low latency. In the "fast
+                # producer" regime, the server is flooded with updates that it
+                # needs to get out onto the wire as efficiently as possible,
+                # and it should sacrifice some latency in order to batch
+                # requests efficiently.
+                while True:
+                    ref = await self.get_from_sub_queue_with_timeout(HIGH_LOAD_TIMEOUT)
+                    if ref is None:
+                        # We have caught up with the producer. Stop batching,
+                        # and optimize for low latency.
+                        send_now = True
+                        if commands:
+                            # We have accumulated commands while previously in
+                            # the "fast producer" regime. Short-circuit and
+                            # send them.
+                            break
+
+                        # Block here until we have something to send...
+                        ref = await self.subscription_queue.get()
+
+                    command = ref()
+                    if command is None:
+                        # Quota for this subscription has been exceeded.  This
+                        # client is a slow consumer. To avoid letting it get
+                        # behind, drop this message on the floor and move on.
+                        # We are dropping "old news" in favor of prioritizing
+                        # getting the "latest news" out. Note that the
+                        # reference implementation in epics-base, rsrv, does
+                        # the opposite: it drops the new news and sends the old
+                        # news. Jeff Hill has stated clearly that this should
+                        # be considered an implementation detail, not part of
+                        # the specification. The C++ implementation can save
+                        # some memory by discarding the latest updates, but it
+                        # is more useful to discard the oldest updates. Python
+                        # might as well do the more useful thing, given that
+                        # its baseline memory usage is high.
+                        continue
+                    self.unexpired_updates[command.subscriptionid].discard(command)
+                    # Accumulate commands into a batch.
+                    commands.append(command)
+                    commands_bytes += len(command)
+                    # Send the batch if we are in low-latency / slow producer
+                    # mode (send_now=True) or the batch has reached max size.
+                    # But be sure _not_ to send it if it is empty (because all
+                    # the would-be contents were expired.)
+                    if commands and (send_now or commands_bytes > SUB_BATCH_THRESH):
+                        break
+            except self.TaskCancelled:
+                break
+            try:
+                len_commands = len(commands)
+                if len_commands > 1:
+                    self.log.info("High EventAddResponse load. Batch size: "
+                                  "%d commands (%d bytes).",
+                                  len_commands, commands_bytes)
+                await self.send(*commands)
+            except DisconnectedCircuit:
+                await self._on_disconnect()
+                self.circuit.disconnect()
+                await self.context.circuit_disconnected(self)
+                break
+            commands.clear()
+            commands_bytes = 0
 
     async def _cull_subscriptions(self, db_entry, func):
         # Iterate through each Subscription, passing each one to func(sub).
@@ -338,6 +455,21 @@ class VirtualCircuit:
             return [chan.unsubscribe(command.subscriptionid,
                                      data_type=command.data_type,
                                      data_count=data_count)]
+        elif isinstance(command, ca.EventsOnRequest):
+            maybe_coroutine = self.events_on.set()
+            # The curio backend makes this an awaitable thing.
+            if maybe_coroutine is not None:
+                await maybe_coroutine
+        elif isinstance(command, ca.EventsOffRequest):
+            # The client has signaled that it does not think it will be able to
+            # catch up to the backlog. Clear all updates queued to be sent...
+            self.unexpired_updates.clear()
+            # ...and tell the Context that any future updates from ChannelData
+            # should not be added to this circuit's queue until further notice.
+            maybe_coroutine = self.events_on.clear()
+            # The curio backend makes this an awaitable thing.
+            if maybe_coroutine is not None:
+                await maybe_coroutine
         elif isinstance(command, ca.ClearChannelRequest):
             chan, db_entry = get_db_entry()
             await self._cull_subscriptions(
@@ -491,6 +623,7 @@ class Context:
             # This queue receives updates that match the db_entry, data_type
             # and mask ("subscription spec") of one or more subscriptions.
             sub_specs, metadata, values, flags = await self.subscription_queue.get()
+
             subs = []
             for sub_spec in sub_specs:
                 subs.extend(self.subscriptions[sub_spec])
@@ -498,6 +631,13 @@ class Context:
             # We have to make a new response for each channel because each may
             # have a different requested data_count.
             for sub in subs:
+                circuit = sub.circuit
+                # If this circuit has been sent EventsOff by the client, do not
+                # queue any updates until the client sends EventsOn to signal
+                # that it has caught up.
+                if not circuit.events_on.is_set():
+                    continue
+
                 s_flags = flags
                 chan = sub.channel
 
@@ -567,10 +707,22 @@ class Context:
                         # Stash this and then send it.
                         self.last_sync_edge_update[sub][sync.s][sync.m] = command
 
-                # Check that the Channel did not close at some point after
-                # this update started its flight.
-                if chan.states[ca.SERVER] is ca.CONNECTED:
-                    await sub.circuit.send(command)
+                # This update will be put at the back of the line of updates to
+                # be sent.
+                #
+                # If len(unexpired_updates) == SUBSCRIPTION_BACKLOG_QUOTA, then
+                # the command at the front of the line will be kicked out. It
+                # is not literally removed from the queue but whenever it
+                # reaches the front of the line it will dropped on the floor
+                # instead of sent.
+
+                # This is a deque with a maxlen, containing only commands for
+                # this particular subscription.
+                circuit.unexpired_updates[sub.subscriptionid].add(command)
+
+                # This is a queue with the commands from _all_ subscriptions on
+                # this circuit.
+                await circuit.subscription_queue.put(weakref.ref(command))
 
     async def broadcast_beacon_loop(self):
         self.log.debug('Will send beacons to %r',
