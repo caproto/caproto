@@ -211,6 +211,7 @@ class VirtualCircuit:
             await maybe_coroutine
         commands = deque()
         commands_bytes = 0
+        num_expired = 0
         while True:
             send_now = False
             try:
@@ -252,6 +253,7 @@ class VirtualCircuit:
                         # is more useful to discard the oldest updates. Python
                         # might as well do the more useful thing, given that
                         # its baseline memory usage is high.
+                        num_expired += 1
                         continue
                     self.unexpired_updates[command.subscriptionid].discard(command)
                     # Accumulate commands into a batch.
@@ -267,6 +269,9 @@ class VirtualCircuit:
                 break
             try:
                 len_commands = len(commands)
+                if num_expired:
+                    self.log.warning("High EventAddResponse load. Dropped "
+                                     "%d responses.", num_expired)
                 if len_commands > 1:
                     self.log.info("High EventAddResponse load. Batch size: "
                                   "%d commands (%d bytes).",
@@ -279,6 +284,7 @@ class VirtualCircuit:
                 break
             commands.clear()
             commands_bytes = 0
+            num_expired = 0
 
     async def _cull_subscriptions(self, db_entry, func):
         # Iterate through each Subscription, passing each one to func(sub).
