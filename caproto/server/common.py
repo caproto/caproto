@@ -716,14 +716,15 @@ class Context:
                 # This update will be put at the back of the line of updates to
                 # be sent.
                 #
-                # If len(unexpired_updates) == SUBSCRIPTION_BACKLOG_QUOTA, then
-                # the command at the front of the line will be kicked out. It
-                # is not literally removed from the queue but whenever it
+                # If len(unexpired_updates[id]) == SUBSCRIPTION_BACKLOG_QUOTA,
+                # then the command at the front of the line will be kicked out.
+                # It is not literally removed from the queue but whenever it
                 # reaches the front of the line it will dropped on the floor
-                # instead of sent.
+                # instead of sent. This effectively prioritizes sending the
+                # client "new news" instead of "old news".
 
-                # This is a deque with a maxlen, containing only commands for
-                # this particular subscription.
+                # This is a BoundedSet, a set with a maxlen, containing only
+                # commands for this particular subscription.
                 circuit.unexpired_updates[sub.subscriptionid].add(command)
 
                 # This is a queue with the commands from _all_ subscriptions on
