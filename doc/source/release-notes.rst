@@ -2,6 +2,14 @@
 Release History
 ***************
 
+Unreleased
+==========
+
+* In the threading client, process user callbacks using one threadpool *per
+  circuit* instead of one threadpool for the entire context. Make the size of
+  the threadpool configurable via a new
+  :class:`~caproto.threading.client.Context` parameter, ``max_workers``.
+
 v0.1.1 (2018-06-17)
 ===================
 

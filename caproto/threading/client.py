@@ -7,6 +7,7 @@
 # - process search results
 # - TCP socket SelectorThread
 # - restart subscriptions
+# The VirtualCircuit has:
 # - ThreadPoolExecutor for processing user callbacks on read, write, subscribe
 import array
 from collections import Iterable
@@ -144,18 +145,6 @@ EVENT_ADD_BATCH_MAX_BYTES = 2**16
 RETRY_SEARCHES_PERIOD = 1
 RESTART_SUBS_PERIOD = 0.1
 STR_ENC = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
-
-# WARNING
-# Using more than 1 worker for processing user callbacks can avoid the jamming
-# up of callback-processing by any user callbacks that sleep or do I/O work
-# (i.e. things that release the GIL). BUT, parallelizing callback-processing
-# across multiple workers means that closely-spaced updates (~0.001 seconds)
-# may sometimes be processed out of order. Tasks are submitted to the pool of
-# workers in order, but that does not provide any guarantees about whether the
-# internal work in those tasks is completed in order. Providing better
-# guarantees, allowing the number of workers to be safely increased above 1,
-# will require significant additional complexity in caproto.
-MAX_USER_CALLBACK_WORKERS = os.environ.get('MAX_USER_CALLBACK_WORKERS', 1)
 
 
 class SelectorThread:
@@ -659,9 +648,21 @@ class Context:
         uses value of ``socket.gethostname()`` by default
     client_name : string, optional
         uses value of ``getpass.getuser()`` by default
+    max_workers : integer, optional
+        Number of worker threaders *per VirtualCircuit* for executing user
+        callbacks. Default is 1. For any number of workers, workers will
+        receive updates in the order which they are received from the server.
+        That is, work on each update will *begin* in sequential order.
+        Work-scheduling internal to the user callback is outside caproto's
+        control. If the number of workers is set to greater than 1, the work on
+        each update may not *finish* in a deterministic order. For example, if
+        workers are writing lines into a file, the only way to guarantee that
+        the lines are ordered properly is to use only one worker. If ordering
+        matters for your application, think carefully before increasing this
+        value from 1.
     """
     def __init__(self, broadcaster=None, *,
-                 host_name=None, client_name=None):
+                 host_name=None, client_name=None, max_workers=1):
         if broadcaster is None:
             broadcaster = SharedBroadcaster()
         self.broadcaster = broadcaster
@@ -670,6 +671,7 @@ class Context:
         self.host_name = host_name
         if client_name is None:
             client_name = getpass.getuser()
+        self.max_workers = max_workers
         self.client_name = client_name
         self.log = logging.getLogger(f'caproto.ctx.{id(self)}')
         self.pv_cache_lock = threading.RLock()
@@ -699,10 +701,6 @@ class Context:
         self.selector = SelectorThread(parent=self)
         self.selector.start()
         self._user_disconnected = False
-
-        self.user_callback_executor = concurrent.futures.ThreadPoolExecutor(
-            max_workers=MAX_USER_CALLBACK_WORKERS,
-            thread_name_prefix='user-callback-executor')
 
     def __repr__(self):
         return (f"<Context "
@@ -952,9 +950,6 @@ class Context:
             self.log.debug("Stopping Context's SelectorThread")
             self.selector.stop()
 
-            self.log.debug("Shutting down ThreadPoolExecutor for user callbacks")
-            self.user_callback_executor.shutdown()
-
             if wait:
                 self._process_search_results_thread.join()
                 self._activate_subscriptions_thread.join()
@@ -985,7 +980,8 @@ class VirtualCircuitManager:
                  'subscriptions', '_user_disconnected', '_ready', 'log',
                  'socket', 'selector', 'pvs', 'all_created_pvnames',
                  'dead', 'process_queue', 'processing',
-                 '_subscriptionid_counter', '__weakref__')
+                 '_subscriptionid_counter', 'user_callback_executor',
+                 '__weakref__')
 
     def __init__(self, context, circuit, selector, timeout=TIMEOUT):
         self.context = context
@@ -997,6 +993,9 @@ class VirtualCircuitManager:
         self.subscriptions = {}  # map subscriptionid to Subscription
         self.socket = None
         self.selector = selector
+        self.user_callback_executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=self.context.max_workers,
+            thread_name_prefix='user-callback-executor')
         self._user_disconnected = False
         # keep track of all PV names that are successfully connected to within
         # this circuit. This is to be cleared upon disconnection:
@@ -1099,8 +1098,7 @@ class VirtualCircuitManager:
             else:
                 callback = ioid_info.get('callback')
                 if callback is not None:
-                    self.context.user_callback_executor.submit(
-                        callback, command)
+                    self.user_callback_executor.submit(callback, command)
 
             event = ioid_info.get('event')
             if event is not None:
@@ -1200,6 +1198,9 @@ class VirtualCircuitManager:
                            '%s:%d' % self.circuit.address)
             self.context.reconnect(((chan.name, chan.circuit.priority)
                                     for chan in self.channels.values()))
+
+        self.log.debug("Shutting down ThreadPoolExecutor for user callbacks")
+        self.user_callback_executor.shutdown()
 
     def disconnect(self):
         self._user_disconnected = True
@@ -1641,7 +1642,7 @@ class CallbackHandler:
                 to_remove.append(cb_id)
                 continue
 
-            self.pv.circuit_manager.context.user_callback_executor.submit(
+            self.pv.circuit_manager.user_callback_executor.submit(
                 callback, *args, **kwargs)
 
         with self._callback_lock:
