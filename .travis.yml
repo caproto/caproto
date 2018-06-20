@@ -2,6 +2,7 @@ language: python
 python:
   - 3.6
   - nightly
+  - pypy3.5
 
 env:
   matrix:
