@@ -7,7 +7,7 @@ import versioneer
 # NOTE: This file must remain Python 2 compatible for the foreseeable future,
 # to ensure that we error out properly for people with outdated setuptools
 # and/or pip.
-if sys.version_info < (3, 6):
+if sys.version_info < (3, 5):
     error = """
 Caproto does not support Python 2.x, 3.0, 3.1, 3.2, 3.3, 3.4, or 3.5.
 Python 3.6 and above is required. Check your Python version like so:
@@ -69,7 +69,7 @@ setup(name='caproto',
               'caproto-spoof-beamline = caproto.ioc_examples.spoof_beamline:main',
           ],
       },
-      python_requires='>=3.6',
+      python_requires='>=3.5',
       classifiers=classifiers,
       extras_require=extras_require
       )
