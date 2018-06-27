@@ -193,7 +193,13 @@ class VirtualCircuit:
         elif isinstance(command, ca.VersionRequest):
             return [ca.VersionResponse(ca.DEFAULT_PROTOCOL_VERSION)]
         elif isinstance(command, ca.CreateChanRequest):
-            db_entry = self.context[command.name]
+            try:
+                db_entry = self.context[command.name]
+            except KeyError:
+                self.log.debug('Client requested invalid channel name: %s',
+                               command.name)
+                return [ca.CreateChFailResponse(cid=command.cid)]
+
             access = db_entry.check_access(self.client_hostname,
                                            self.client_username)
 
