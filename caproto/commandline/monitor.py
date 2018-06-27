@@ -86,7 +86,7 @@ def main():
     def callback(pv_name, response):
         tokens['callback_count'] += 1
         if args.format is None:
-            format_str = ("{pv_name: <40}  {timestamp:%Y-%m-%d %H:%M:%S} "
+            format_str = ("{pv_name: <40}  {timestamp:%Y-%m-%d %H:%M:%S.%f} "
                           "{response.data}")
         else:
             format_str = args.format
