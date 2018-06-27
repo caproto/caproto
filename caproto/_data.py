@@ -22,14 +22,15 @@ from ._backend import backend
 
 __all__ = ('Forbidden', 'ConversionError', 'ConversionDirection',
            'ChannelAlarm',
-           'ChannelData',
-           'ChannelEnum',
-           'ChannelNumeric',
-           'ChannelDouble',
            'ChannelByte',
            'ChannelChar',
-           'ChannelString',
+           'ChannelData',
+           'ChannelDouble',
+           'ChannelEnum',
            'ChannelInteger',
+           'ChannelNumeric',
+           'ChannelShort',
+           'ChannelString',
            )
 
 
@@ -938,6 +939,10 @@ class ChannelNumeric(ChannelData):
                     f"set to {self.lower_ctrl_limit} and "
                     f"{self.upper_warning_limit}.")
         return data
+
+
+class ChannelShort(ChannelNumeric):
+    data_type = ChannelType.INT
 
 
 class ChannelInteger(ChannelNumeric):
