@@ -343,7 +343,7 @@ class pvproperty:
                              *self.pvspec[3:])
         return self
 
-    def scan(self, period=1, *, subtract_elapsed=True, fail_on_error=False):
+    def scan(self, period, *, subtract_elapsed=True, fail_on_error=False):
         '''Periodically call a function to update a pvproperty.
 
         NOTE: This replaces the pvproperty startup function. Only one or the
