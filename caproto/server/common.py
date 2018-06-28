@@ -614,3 +614,7 @@ class Context:
         self.log.info('Disconnected from client at %s:%d.\n'
                       'Circuits currently connected: %d', *addr,
                       len(self.circuits))
+
+    def stop(self):
+        ...
+

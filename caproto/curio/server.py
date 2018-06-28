@@ -1,10 +1,12 @@
 import functools
-from ..server import AsyncLibraryLayer
+import threading
+
 import caproto as ca
 import curio
 import curio.network
 from curio import socket
 
+from ..server import AsyncLibraryLayer
 from ..server.common import (VirtualCircuit as _VirtualCircuit,
                              Context as _Context)
 
@@ -68,6 +70,8 @@ class Context(_Context):
 
     def __init__(self, pvdb, interfaces=None):
         super().__init__(pvdb, interfaces)
+        self._task_group = None
+        self._stop_event = threading.Event()
         self.command_bundle_queue = curio.Queue()
         self.subscription_queue = curio.UniversalQueue()
 
@@ -100,7 +104,8 @@ class Context(_Context):
             port, tcp_sockets = self._bind_tcp_sockets_with_consistent_port_number(
                 curio.network.tcp_server_socket)
             self.port = port
-            async with curio.TaskGroup() as g:
+            async with curio.TaskGroup() as self._task_group:
+                g = self._task_group
                 for interface, sock in tcp_sockets.items():
                     # Use run_server instead of tcp_server so we can hand in a
                     # socket that is already bound, avoiding a race between the
@@ -109,6 +114,8 @@ class Context(_Context):
                     self.log.info("Listening on %s:%d", interface, self.port)
                     await g.spawn(curio.network.run_server,
                                   sock, self.tcp_handler)
+
+                await g.spawn(self._await_stop)
                 await g.spawn(self.broadcaster_udp_server_loop)
                 await g.spawn(self.broadcaster_queue_loop)
                 await g.spawn(self.subscription_queue_loop)
@@ -130,6 +137,14 @@ class Context(_Context):
             raise ServerExit() from ex
         finally:
             self.log.info('Server exiting....')
+            self._task_group = None
+
+    async def _await_stop(self):
+        await curio.abide(self._stop_event.wait)
+        await self._task_group.cancel_remaining()
+
+    def stop(self):
+        self._stop_event.set()
 
 
 async def start_server(pvdb, *, interfaces=None, log_pv_names=False):
