@@ -164,13 +164,10 @@ class MiniBeamline(PVGroup):
 
     current = pvproperty(value=[500], dtype=float, read_only=True)
 
-    @current.startup
+    @current.scan(period=0.1)
     async def current(self, instance, async_lib):
-        f = (2 * np.pi) / 4
-        while True:
-            t = time.monotonic()
-            await instance.write(value=[500 + 25 * np.sin(t * f)])
-            await async_lib.library.sleep(.1)
+        current = 500 + 25 * np.sin(time.monotonic() * (2 * np.pi) / 4)
+        await instance.write(value=[current])
 
     ph = SubGroup(PinHole)
     edge = SubGroup(Edge)

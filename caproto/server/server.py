@@ -8,15 +8,18 @@ For an example server implementation, see caproto.curio.server
 '''
 import argparse
 import copy
-import logging
 import inspect
-from collections import (namedtuple, OrderedDict, defaultdict)
+import logging
 import sys
+import time
+
+from collections import (namedtuple, OrderedDict, defaultdict)
 from types import MethodType
 
 from .. import (ChannelDouble, ChannelInteger, ChannelString,
                 ChannelEnum, ChannelType, ChannelChar, ChannelAlarm,
-                AccessRights, get_server_address_list)
+                AccessRights, get_server_address_list,
+                AlarmStatus, AlarmSeverity)
 
 module_logger = logging.getLogger(__name__)
 
@@ -29,6 +32,7 @@ __all__ = ['AsyncLibraryLayer',
            'PvpropertyData', 'PvpropertyReadOnlyData',
            'PvpropertyChar', 'PvpropertyCharRO',
            'PvpropertyDouble', 'PvpropertyDoubleRO',
+           'PvpropertyBoolEnum', 'PvpropertyBoolEnumRO',
            'PvpropertyEnum', 'PvpropertyEnumRO',
            'PvpropertyInteger', 'PvpropertyIntegerRO',
            'PvpropertyString', 'PvpropertyStringRO',
@@ -339,6 +343,66 @@ class pvproperty:
         self.pvspec = PVSpec(self.pvspec.get, self.pvspec.put, startup,
                              *self.pvspec[3:])
         return self
+
+    def scan(self, period, *, subtract_elapsed=True, stop_on_error=False,
+             failure_severity=AlarmSeverity.MAJOR_ALARM):
+        '''Periodically call a function to update a pvproperty.
+
+        NOTE: This replaces the pvproperty startup function. Only one or the
+        other can be specified.
+
+        Parameters
+        ----------
+        period : float
+            Wait `period` seconds between calls to the scanned function
+        subtract_elapsed : bool, optional
+            Subtract the elapsed time of the previous call from the period for
+            the subsequent iteration
+        stop_on_error : bool, optional
+            Fail (and stop scanning) when unhandled exceptions occur
+
+        Returns
+        -------
+        wrapper : callable
+            A wrapper that should be used with an async function matching the
+            pvproperty startup function signature:
+                (group, instance, async_library)
+        '''
+        # TODO: maybe allow rate to be tied to a PV (e.g., a SCAN field?)
+        def wrapper(scan_function):
+            async def scanned_startup(group, prop, async_lib):
+                sleep = async_lib.library.sleep
+                while True:
+                    t0 = time.monotonic()
+
+                    try:
+                        await scan_function(group, prop, async_lib)
+                    except Exception as ex:
+                        prop.log.exception('Scan exception')
+                        await prop.alarm.write(status=AlarmStatus.SCAN,
+                                               severity=failure_severity,
+                                               )
+                        if stop_on_error:
+                            raise
+                    else:
+                        if ((prop.alarm.severity, prop.alarm.status) ==
+                                (failure_severity, AlarmStatus.SCAN)):
+                            await prop.alarm.write(
+                                status=AlarmStatus.NO_ALARM,
+                                severity=AlarmSeverity.NO_ALARM,
+                            )
+
+                    elapsed = time.monotonic() - t0
+                    sleep_time = (max(0, period - elapsed)
+                                  if subtract_elapsed
+                                  else period)
+                    await sleep(sleep_time)
+            return self.startup(scanned_startup)
+
+        if period <= 0:
+            raise ValueError('Scan period must be > 0')
+
+        return wrapper
 
     def __call__(self, get, put=None, startup=None):
         # handles case where pvproperty(**spec_kw)(getter, putter, startup) is
