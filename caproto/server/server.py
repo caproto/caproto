@@ -18,7 +18,8 @@ from types import MethodType
 
 from .. import (ChannelDouble, ChannelInteger, ChannelString,
                 ChannelEnum, ChannelType, ChannelChar, ChannelAlarm,
-                AccessRights, get_server_address_list)
+                AccessRights, get_server_address_list,
+                AlarmStatus, AlarmSeverity)
 
 module_logger = logging.getLogger(__name__)
 
@@ -343,7 +344,8 @@ class pvproperty:
                              *self.pvspec[3:])
         return self
 
-    def scan(self, period, *, subtract_elapsed=True, fail_on_error=False):
+    def scan(self, period, *, subtract_elapsed=True, stop_on_error=False,
+             failure_severity=AlarmSeverity.MAJOR_ALARM):
         '''Periodically call a function to update a pvproperty.
 
         NOTE: This replaces the pvproperty startup function. Only one or the
@@ -356,7 +358,7 @@ class pvproperty:
         subtract_elapsed : bool, optional
             Subtract the elapsed time of the previous call from the period for
             the subsequent iteration
-        fail_on_error : bool, optional
+        stop_on_error : bool, optional
             Fail (and stop scanning) when unhandled exceptions occur
 
         Returns
@@ -377,8 +379,18 @@ class pvproperty:
                         await scan_function(group, prop, async_lib)
                     except Exception as ex:
                         prop.log.exception('Scan exception')
-                        if fail_on_error:
+                        await prop.alarm.write(status=AlarmStatus.SCAN,
+                                               severity=failure_severity,
+                                               )
+                        if stop_on_error:
                             raise
+                    else:
+                        if ((prop.alarm.severity, prop.alarm.status) ==
+                                (failure_severity, AlarmStatus.SCAN)):
+                            await prop.alarm.write(
+                                status=AlarmStatus.NO_ALARM,
+                                severity=AlarmSeverity.NO_ALARM,
+                            )
 
                     elapsed = time.monotonic() - t0
                     sleep_time = (max(0, period - elapsed)
