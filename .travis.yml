@@ -68,6 +68,8 @@ script:
     then
       pip uninstall --yes numpy
     fi
+  - pip install git+https://github.com/klauer/catvs.git@py3k
+
   - coverage run --parallel-mode run_tests.py  -k 'not bench' --benchmark-disable --timeout=50
   - coverage combine --append
 
