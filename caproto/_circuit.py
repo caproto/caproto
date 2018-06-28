@@ -313,7 +313,8 @@ class VirtualCircuit:
                 chan.sid = command.sid
                 chan.protocol_version = self.protocol_version
                 self.channels_sid[chan.sid] = chan
-            elif isinstance(command, ClearChannelResponse):
+            elif isinstance(command, (ServerDisconnResponse,
+                                      ClearChannelResponse)):
                 self.channels_sid.pop(chan.sid)
                 self.channels.pop(chan.cid)
             elif isinstance(command, (ReadNotifyRequest, ReadRequest,
@@ -899,13 +900,13 @@ class ServerChannel(_BaseChannel):
 
     def disconnect(self):
         """
-        Generate a valid :class:`ServerDisconnResponse`.
+        Generate a valid :class:`ClearChannelResponse`
 
         Returns
         -------
-        ServerDisconnResponse
+        ClearChannelResposne
         """
-        command = ServerDisconnResponse(self.cid)
+        command = ClearChannelResponse(self.sid, self.cid)
         return command
 
 
