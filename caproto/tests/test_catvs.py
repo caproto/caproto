@@ -13,7 +13,7 @@ except ImportError:
 
 
 logger = logging.getLogger(__name__)
-
+# logging.getLogger('caproto').setLevel('DEBUG')
 
 def server_thread(context):
     async def server():
@@ -21,11 +21,13 @@ def server_thread(context):
         return await context.run(log_pv_names=True)
 
     print('calling curio.run')
-    curio.run(server)
+    kernel = curio.Kernel()
+    kernel.run(server)
 
 
-@pytest.fixture(scope='function')
-def catvs_ioc():
+@pytest.fixture(params=['curio'],  # 'trio', 'asyncio', 'epics-base'],
+                scope='function')
+def catvs_ioc(request):
     from caproto.ioc_examples.verify_with_catvs import CatvsIOC
     from caproto.curio.server import Context
 
@@ -38,6 +40,11 @@ def catvs_ioc():
     while getattr(context, 'port', None) is None:
         logger.info('Waiting on catvs test server...')
         time.sleep(0.1)
+
+    def stop_server():
+        context.stop()
+
+    request.addfinalizer(stop_server)
 
     port = context.port
     logger.info('catvs test server started up on port %d', port)
@@ -57,18 +64,30 @@ def hacked_teardown(test_inst):
     ...
 
 
-@pytest.mark.skipif(catvs is None, reason='catvs unavailable')
-def test_catvs(catvs_ioc):
-    from catvs.server.test_chan import TestChannel
+if catvs is not None:
+    def get_all_tests():
+        def get_tests(cls):
+            return [(cls, attr) for attr in dir(cls)
+                    if attr.startswith('test_')]
 
+        from catvs.server.test_chan import TestChannel
+        from catvs.server.test_ops import TestScalar, TestArray
+        return sum((get_tests(cls)
+                    for cls in [TestChannel, TestScalar, TestArray]),
+                   [])
+
+    all_tests = get_all_tests()
+
+else:
+    channel_tests = []
+
+
+@pytest.mark.skipif(catvs is None, reason='catvs unavailable')
+@pytest.mark.parametrize('test_class, test_name', all_tests)
+def test_catvs(catvs_ioc, test_class, test_name):
     pvgroup, context, server_thread = catvs_ioc
 
-    test_inst = TestChannel()
+    test_inst = test_class()
     hacked_setup(test_inst, context.port)
-    tests = [(attr, getattr(test_inst, attr))
-             for attr in dir(test_inst)
-             if attr.startswith('test_')]
-
-    for name, test in tests:
-        print('Running', name)
-        test()
+    test_func = getattr(test_inst, test_name)
+    test_func()
