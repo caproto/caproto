@@ -216,9 +216,14 @@ class VirtualCircuit:
             self.client_username = command.name
         elif isinstance(command, (ca.ReadNotifyRequest, ca.ReadRequest)):
             chan, db_entry = get_db_entry()
+            try:
+                data_type = command.data_type
+            except ValueError:
+                raise ca.RemoteProtocolError('Invalid data type')
+
             metadata, data = await db_entry.auth_read(
                 self.client_hostname, self.client_username,
-                command.data_type, user_address=self.circuit.address)
+                data_type, user_address=self.circuit.address)
             # This is a pass-through if arr is None.
             data = apply_arr_filter(chan.channel_filter.arr, data)
             # If the timestamp feature is active swap the timestamp.

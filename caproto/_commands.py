@@ -485,7 +485,13 @@ class Message(metaclass=_MetaDirectionalMessage):
         parameters = (signature.parameters if type(self) is not Message
                       else ['header'])
 
-        d = [(arg, repr(getattr(self, arg))) for arg in parameters]
+        def safe_repr(arg):
+            try:
+                return repr(getattr(self, arg))
+            except Exception as ex:
+                return f'(repr: {ex})'
+
+        d = [(arg, safe_repr(arg)) for arg in parameters]
         formatted_args = ", ".join(["{!s}={}".format(k, v)
                                     for k, v in d])
         return "{}({})".format(type(self).__name__, formatted_args)
