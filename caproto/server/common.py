@@ -192,6 +192,22 @@ class VirtualCircuit:
             raise DisconnectedCircuit()
         elif isinstance(command, ca.VersionRequest):
             return [ca.VersionResponse(ca.DEFAULT_PROTOCOL_VERSION)]
+        elif isinstance(command, ca.SearchRequest):
+            pv_name = command.name
+            try:
+                self.context[pv_name]
+            except KeyError:
+                if command.reply == ca.DO_REPLY:
+                    return [
+                        ca.NotFoundResponse(
+                            version=ca.DEFAULT_PROTOCOL_VERSION,
+                            cid=command.cid)
+                    ]
+            else:
+                return [
+                    ca.SearchResponse(self.context.port, None, command.cid,
+                                      ca.DEFAULT_PROTOCOL_VERSION)
+                ]
         elif isinstance(command, ca.CreateChanRequest):
             try:
                 db_entry = self.context[command.name]

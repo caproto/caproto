@@ -74,8 +74,10 @@ else:
 
         from catvs.server.test_chan import TestChannel
         from catvs.server.test_ops import TestScalar, TestArray
+        from catvs.server.test_search import TestSearchTCP, TestSearchUDP
         return sum((get_tests(cls)
-                    for cls in [TestChannel, TestScalar, TestArray]),
+                    for cls in [TestChannel, TestScalar, TestArray,
+                                TestSearchTCP, TestSearchUDP]),
                    [])
 
     all_tests = get_all_tests()
