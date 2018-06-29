@@ -878,7 +878,7 @@ class ServerChannel(_BaseChannel):
                                    subscriptionid, metadata=metadata)
         return command
 
-    def unsubscribe(self, subscriptionid, data_type=None):
+    def unsubscribe(self, subscriptionid, data_type=None, data_count=None):
         """
         Generate a valid :class:`EventCancelResponse`.
 
@@ -895,7 +895,10 @@ class ServerChannel(_BaseChannel):
         EventCancelResponse
         """
         data_type, _ = self._fill_defaults(data_type, None)
-        command = EventCancelResponse(data_type, self.sid, subscriptionid)
+        if data_count is None:
+            data_count = self.native_data_count
+        command = EventCancelResponse(data_type, self.sid, subscriptionid,
+                                      data_count)
         return command
 
     def disconnect(self):

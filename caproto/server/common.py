@@ -307,8 +307,10 @@ class VirtualCircuit:
             await self._cull_subscriptions(
                 db_entry,
                 lambda sub: sub.subscriptionid == command.subscriptionid)
+            data_count = len(db_entry.value)
             return [chan.unsubscribe(command.subscriptionid,
-                                     data_type=command.data_type)]
+                                     data_type=command.data_type,
+                                     data_count=data_count)]
         elif isinstance(command, ca.ClearChannelRequest):
             chan, db_entry = get_db_entry()
             await self._cull_subscriptions(

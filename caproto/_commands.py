@@ -1046,12 +1046,13 @@ class EventCancelResponse(Message):
     ID = 2
     HAS_PAYLOAD = False
 
-    def __init__(self, data_type, sid, subscriptionid):
-        # TODO: refactor, this does not exist
-        header = EventCancelResponseHeader(data_type, sid, subscriptionid)
+    def __init__(self, data_type, sid, subscriptionid, data_count):
+        header = EventCancelResponseHeader(data_type, data_count, sid,
+                                           subscriptionid)
         super().__init__(header)
 
     data_type = property(lambda self: ChannelType(self.header.data_type))
+    data_count = property(lambda self: self.header.data_count)
     sid = property(lambda self: self.header.parameter1)
     subscriptionid = property(lambda self: self.header.parameter2)
 
