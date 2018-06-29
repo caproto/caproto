@@ -64,7 +64,9 @@ def hacked_teardown(test_inst):
     ...
 
 
-if catvs is not None:
+if catvs is None:
+    all_tests = []
+else:
     def get_all_tests():
         def get_tests(cls):
             return [(cls, attr) for attr in dir(cls)
@@ -78,9 +80,6 @@ if catvs is not None:
 
     all_tests = get_all_tests()
 
-else:
-    channel_tests = []
-
 
 @pytest.mark.skipif(catvs is None, reason='catvs unavailable')
 @pytest.mark.parametrize('test_class, test_name', all_tests)
@@ -88,6 +87,22 @@ def test_catvs(catvs_ioc, test_class, test_name):
     pvgroup, context, server_thread = catvs_ioc
 
     test_inst = test_class()
+
+    def assert_equal(a, b, msg=None):
+        if msg is not None:
+            assert a == b, msg
+        else:
+            assert a == b
+
+    def assert_ca_equal(msg, **kwargs):
+        received = dict((name, getattr(msg, name))
+                        for name in kwargs)
+        expected = kwargs
+        assert received == expected
+
+    test_inst.assertEqual = assert_equal
+    test_inst.assertCAEqual = assert_ca_equal
+
     hacked_setup(test_inst, context.port)
     test_func = getattr(test_inst, test_name)
     test_func()
