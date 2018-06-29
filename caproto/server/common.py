@@ -224,6 +224,11 @@ class VirtualCircuit:
             metadata, data = await db_entry.auth_read(
                 self.client_hostname, self.client_username,
                 data_type, user_address=self.circuit.address)
+
+            old_version = self.circuit.protocol_version < 13
+            if command.data_count > 0 or old_version:
+                data = data[:command.data_count]
+
             # This is a pass-through if arr is None.
             data = apply_arr_filter(chan.channel_filter.arr, data)
             # If the timestamp feature is active swap the timestamp.
