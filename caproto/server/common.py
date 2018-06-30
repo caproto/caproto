@@ -450,16 +450,16 @@ class Context:
                         ca.SearchResponse(self.port, None, command.cid,
                                           ca.DEFAULT_PROTOCOL_VERSION)
                     )
-                else:
-                    if command.reply == ca.DO_REPLY:
-                        search_replies.append(
-                            ca.NotFoundResponse(
-                                version=ca.DEFAULT_PROTOCOL_VERSION,
-                                cid=command.cid)
-                        )
-                    else:
-                        # Not a known PV and no reply required
-                        ...
+                # else:
+                #     if command.reply == ca.DO_REPLY:
+                #         search_replies.append(
+                #             ca.NotFoundResponse(
+                #                 version=ca.DEFAULT_PROTOCOL_VERSION,
+                #                 cid=command.cid)
+                #         )
+                #     else:
+                #         # Not a known PV and no reply required
+                #         ...
 
         if search_replies:
             if version_requested:
