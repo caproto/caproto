@@ -357,8 +357,9 @@ class Context:
         self.last_sync_edge_update = defaultdict(lambda: defaultdict(dict))
         self.last_dead_band = {}
         self.beacon_count = 0
-        self.environ = get_environment_variables()
 
+        self.environ = get_environment_variables()
+        self.ca_server_port = self.environ['EPICS_CA_SERVER_PORT']
         ignore_addresses = self.environ['EPICS_CAS_IGNORE_ADDR_LIST']
         self.ignore_addresses = ignore_addresses.split(' ')
 
@@ -592,20 +593,19 @@ class Context:
                 if hasattr(instance, 'server_startup') and
                 instance.server_startup is not None}
 
-    def _bind_tcp_sockets_with_consistent_port_number(self, make_socket):
+    async def _bind_tcp_sockets_with_consistent_port_number(self, make_socket):
         # Find a random port number that is free on all self.interfaces,
         # and get a bound TCP socket with that port number on each
-        # interface. The argument `make_socket` is expected to be a
-        # synchronous callable with the signature
-        # `make_socket(interface, port)` that does whatever
-        # library-specific incantation is necessary to return a bound
-        # socket or raise an IOError.
+        # interface. The argument `make_socket` is expected to be a coroutine
+        # with the signature `make_socket(interface, port)` that does whatever
+        # library-specific incantation is necessary to return a bound socket or
+        # raise an IOError.
         tcp_sockets = {}  # maps interface to bound socket
         stashed_ex = None
-        for port in ca.random_ports(100):
+        for port in ca.random_ports(100, try_first=self.ca_server_port):
             try:
                 for interface in self.interfaces:
-                    s = make_socket(interface, port)
+                    s = await make_socket(interface, port)
                     tcp_sockets[interface] = s
             except IOError as ex:
                 stashed_ex = ex

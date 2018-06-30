@@ -79,7 +79,7 @@ class Context(_Context):
         for interface in self.interfaces:
             udp_sock = ca.bcast_socket(socket)
             try:
-                udp_sock.bind((interface, ca.EPICS_CA1_PORT))
+                udp_sock.bind((interface, self.ca_server_port))
             except Exception:
                 self.log.exception('UDP bind failure on interface %r',
                                    interface)
@@ -89,7 +89,7 @@ class Context(_Context):
         async with curio.TaskGroup() as g:
             for interface, udp_sock in self.udp_socks.items():
                 self.log.debug('Broadcasting on %s:%d', interface,
-                               ca.EPICS_CA1_PORT)
+                               self.ca_server_port)
                 await g.spawn(self._core_broadcaster_loop, udp_sock)
 
     async def run(self, *, log_pv_names=False):
@@ -101,9 +101,14 @@ class Context(_Context):
                 await sock.connect(address)
                 interface, _ = sock.getsockname()
                 self.beacon_socks[address] = (interface, sock)
-            port, tcp_sockets = self._bind_tcp_sockets_with_consistent_port_number(
-                curio.network.tcp_server_socket)
+
+            async def make_socket(interface, port):
+                return curio.network.tcp_server_socket(interface, port)
+
+            port, tcp_sockets = await self._bind_tcp_sockets_with_consistent_port_number(
+                make_socket)
             self.port = port
+
             async with curio.TaskGroup() as self._task_group:
                 g = self._task_group
                 for interface, sock in tcp_sockets.items():

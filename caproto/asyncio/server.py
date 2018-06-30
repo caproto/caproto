@@ -131,13 +131,13 @@ class Context(_Context):
         'Start the server'
         self.log.info('Server starting up...')
 
-        def make_socket(interface, port):
+        async def make_socket(interface, port):
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.setblocking(False)
             s.bind((interface, port))
             return s
-        port, tcp_sockets = self._bind_tcp_sockets_with_consistent_port_number(
+        port, tcp_sockets = await self._bind_tcp_sockets_with_consistent_port_number(
             make_socket)
         self.port = port
         tasks = []
@@ -198,7 +198,7 @@ class Context(_Context):
         for interface in self.interfaces:
             udp_sock = bcast_socket()
             try:
-                udp_sock.bind((interface, ca.EPICS_CA1_PORT))
+                udp_sock.bind((interface, self.ca_server_port))
             except Exception:
                 self.log.exception('UDP bind failure on interface %r',
                                    interface)
@@ -208,7 +208,7 @@ class Context(_Context):
                 BcastLoop, sock=udp_sock)
             self.udp_socks[interface] = TransportWrapper(transport)
             self.log.debug('Broadcasting on %s:%d', interface,
-                           ca.EPICS_CA1_PORT)
+                           self.ca_server_port)
 
         tasks.append(self.loop.create_task(self.broadcaster_queue_loop()))
         tasks.append(self.loop.create_task(self.subscription_queue_loop()))

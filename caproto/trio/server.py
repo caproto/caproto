@@ -90,7 +90,7 @@ class Context(_Context):
         for interface in self.interfaces:
             udp_sock = ca.bcast_socket(socket)
             try:
-                await udp_sock.bind((interface, ca.EPICS_CA1_PORT))
+                await udp_sock.bind((interface, self.ca_server_port))
             except Exception:
                 self.log.exception('UDP bind failure on interface %r',
                                    interface)
@@ -99,7 +99,7 @@ class Context(_Context):
 
         for interface, udp_sock in self.udp_socks.items():
             self.log.debug('Broadcasting on %s:%d', interface,
-                           ca.EPICS_CA1_PORT)
+                           self.ca_server_port)
             self.nursery.start_soon(self._core_broadcaster_loop, udp_sock)
 
         task_status.started()
@@ -137,31 +137,14 @@ class Context(_Context):
                     interface, _ = sock.getsockname()
                     self.beacon_socks[address] = (interface, sock)
 
-                # This reproduces the common with
-                # self._bind_tcp_sockets_with_consistent_port_number because
-                # trio makes socket binding async where asyncio and curio make
-                # it synchronous.
-                # Find a random port number that is free on all interfaces,
-                # and get a bound TCP socket with that port number on each
-                # interface.
-                tcp_sockets = {}  # maps interface to bound socket
-                stashed_ex = None
-                for port in ca.random_ports(100):
-                    try:
-                        for interface in self.interfaces:
-                            s = trio.socket.socket()
-                            await s.bind((interface, port))
-                            tcp_sockets[interface] = s
-                    except IOError as ex:
-                        stashed_ex = ex
-                        for s in tcp_sockets.values():
-                            s.close()
-                    else:
-                        self.port = port
-                        break
-                else:
-                    raise RuntimeError('No available ports and/or bind failed') from stashed_ex
-                # (End of reproduced code)
+                async def make_socket(interface, port):
+                    s = trio.socket.socket()
+                    await s.bind((interface, port))
+                    return s
+
+                res = await self._bind_tcp_sockets_with_consistent_port_number(
+                    make_socket)
+                port, tcp_sockets = res
 
                 for interface, listen_sock in tcp_sockets.items():
                     self.log.info("Listening on %s:%d", interface, self.port)

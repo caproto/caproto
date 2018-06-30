@@ -46,8 +46,10 @@ def catvs_ioc(request):
 
     request.addfinalizer(stop_server)
 
-    port = context.port
-    logger.info('catvs test server started up on port %d', port)
+    tcp_port = context.port
+    udp_port = context.ca_server_port
+    logger.info('catvs test server started up on port %d (udp port %d)',
+                tcp_port, udp_port)
     time.sleep(0.5)
     return pvgroup, context, thread
 
@@ -105,6 +107,8 @@ def test_catvs(catvs_ioc, test_class, test_name):
     test_inst.assertEqual = assert_equal
     test_inst.assertCAEqual = assert_ca_equal
 
-    hacked_setup(test_inst, context.port)
+    port = (context.ca_server_port if 'udp' in test_name.lower()
+            else context.port)
+    hacked_setup(test_inst, port)
     test_func = getattr(test_inst, test_name)
     test_func()
