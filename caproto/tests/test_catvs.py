@@ -1,3 +1,4 @@
+import os
 import threading
 import logging
 import time
@@ -11,16 +12,16 @@ try:
 except ImportError:
     catvs = None
 
+import caproto as ca
+from caproto.ioc_examples.verify_with_catvs import CatvsIOC
 
 logger = logging.getLogger(__name__)
 # logging.getLogger('caproto').setLevel('DEBUG')
 
 def server_thread(context):
     async def server():
-        print('running')
         return await context.run(log_pv_names=True)
 
-    print('calling curio.run')
     kernel = curio.Kernel()
     kernel.run(server)
 
@@ -28,10 +29,15 @@ def server_thread(context):
 @pytest.fixture(params=['curio'],  # 'trio', 'asyncio', 'epics-base'],
                 scope='function')
 def catvs_ioc(request):
-    from caproto.ioc_examples.verify_with_catvs import CatvsIOC
     from caproto.curio.server import Context
 
     pvgroup = CatvsIOC(prefix='')
+
+    # NOTE: catvs expects server tcp_port==udp_port, so make a weak attempt
+    # here to avoid clashing between servers
+    port = list(ca.random_ports(1))[0]
+    os.environ['EPICS_CA_SERVER_PORT'] = str(port)
+
     context = Context(pvgroup.pvdb, ['127.0.0.1'])
     thread = threading.Thread(target=server_thread, daemon=True,
                               args=(context, ))
