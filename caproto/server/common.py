@@ -290,8 +290,13 @@ class VirtualCircuit:
                         # returning none for write_status can just be
                         # considered laziness
                         write_status = True
+                    try:
+                        data_count = len(db_entry.value)
+                    except Exception:
+                        data_count = 0
                     response_command = chan.write(ioid=command.ioid,
-                                                  status=write_status)
+                                                  status=write_status,
+                                                  data_count=data_count)
 
                 if client_waiting:
                     await self.send(response_command)
