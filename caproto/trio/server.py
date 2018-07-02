@@ -174,7 +174,7 @@ class Context(_Context):
         finally:
             self.log.info('Server exiting....')
 
-    async def stop(self):
+    def stop(self):
         'Stop the server'
         nursery = self.nursery
         if nursery is None:

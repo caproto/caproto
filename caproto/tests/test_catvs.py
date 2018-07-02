@@ -51,6 +51,7 @@ def catvs_ioc(request):
     thread.start()
 
     def stop_server():
+        context.log.setLevel('INFO')
         context.stop()
 
     request.addfinalizer(stop_server)
