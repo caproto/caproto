@@ -207,7 +207,7 @@ class Context(_Context):
             transport, self.p = await self.loop.create_datagram_endpoint(
                 BcastLoop, sock=udp_sock)
             self.udp_socks[interface] = TransportWrapper(transport)
-            self.log.debug('Broadcasting on %s:%d', interface,
+            self.log.debug('UDP socket bound on %s:%d', interface,
                            self.ca_server_port)
 
         tasks.append(self.loop.create_task(self.broadcaster_queue_loop()))

@@ -370,6 +370,10 @@ class Context:
         # the specific tcp port in use by this server
         self.port = None
 
+        self.log.debug('EPICS_CA_SERVER_PORT set to %d. This is the UDP port '
+                       'to be used for searches, and the first TCP server port'
+                       ' to be tried.', self.ca_server_port)
+
         ignore_addresses = self.environ['EPICS_CAS_IGNORE_ADDR_LIST']
         self.ignore_addresses = ignore_addresses.split(' ')
 

@@ -84,6 +84,8 @@ class Context(_Context):
                 self.log.exception('UDP bind failure on interface %r',
                                    interface)
                 raise
+            self.log.debug('UDP socket bound on %s:%d', interface,
+                           self.ca_server_port)
             self.udp_socks[interface] = udp_sock
 
         async with curio.TaskGroup() as g:

@@ -74,6 +74,10 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
         logger.debug(f'Running script {args}')
     else:
         logger.debug(f'Running {module_name}')
+
+    if '-vvv' not in args:
+        args = list(args) + ['-vvv']
+
     os.environ['COVERAGE_PROCESS_START'] = '.coveragerc'
 
     p = subprocess.Popen([sys.executable, '-um', 'caproto.tests.example_runner',

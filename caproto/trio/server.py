@@ -95,6 +95,8 @@ class Context(_Context):
                 self.log.exception('UDP bind failure on interface %r',
                                    interface)
                 raise
+            self.log.debug('UDP socket bound on %s:%d', interface,
+                           self.ca_server_port)
             self.udp_socks[interface] = udp_sock
 
         for interface, udp_sock in self.udp_socks.items():

@@ -18,6 +18,7 @@ from caproto.ioc_examples.verify_with_catvs import CatvsIOC
 logger = logging.getLogger(__name__)
 # logging.getLogger('caproto').setLevel('DEBUG')
 
+
 def server_thread(context):
     async def server():
         return await context.run(log_pv_names=True)
@@ -36,21 +37,27 @@ def catvs_ioc(request):
     # NOTE: catvs expects server tcp_port==udp_port, so make a weak attempt
     # here to avoid clashing between servers
     port = list(ca.random_ports(1))[0]
-    os.environ['EPICS_CA_SERVER_PORT'] = str(port)
 
-    context = Context(pvgroup.pvdb, ['127.0.0.1'])
+    try:
+        # The environment variale only needs to e set for the initializer of
+        # Context.
+        os.environ['EPICS_CA_SERVER_PORT'] = str(port)
+        context = Context(pvgroup.pvdb, ['127.0.0.1'])
+    finally:
+        os.environ['EPICS_CA_SERVER_PORT'] = '5064'
+
     thread = threading.Thread(target=server_thread, daemon=True,
                               args=(context, ))
     thread.start()
-
-    while getattr(context, 'port', None) is None:
-        logger.info('Waiting on catvs test server...')
-        time.sleep(0.1)
 
     def stop_server():
         context.stop()
 
     request.addfinalizer(stop_server)
+
+    while getattr(context, 'port', None) is None:
+        logger.info('Waiting on catvs test server...')
+        time.sleep(0.1)
 
     tcp_port = context.port
     udp_port = context.ca_server_port
