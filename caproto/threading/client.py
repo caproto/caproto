@@ -736,7 +736,8 @@ class Context:
             Used by the server to triage subscription responses when under high
             load. 0 is lowest; 99 is highest.
         connection_state_callback : callable
-            Expected signature: ``f(state)`` where ``state`` is a string
+            Expected signature: ``f(pv, state)`` where ``pv`` is the instance
+            of ``PV`` whose state has changed and ``state`` is a string
         access_rights_callback : callable
             Expected signature: ``f(access_rights)`` where ``access_rights`` is
             a member of the caproto ``AccessRights`` enum
