@@ -364,7 +364,12 @@ class Context:
         self.beacon_count = 0
 
         self.environ = get_environment_variables()
+
+        # ca_server_port: the default tcp/udp port from the environment
         self.ca_server_port = self.environ['EPICS_CA_SERVER_PORT']
+        # the specific tcp port in use by this server
+        self.port = None
+
         ignore_addresses = self.environ['EPICS_CAS_IGNORE_ADDR_LIST']
         self.ignore_addresses = ignore_addresses.split(' ')
 

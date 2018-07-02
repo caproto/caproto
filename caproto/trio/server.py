@@ -144,7 +144,7 @@ class Context(_Context):
 
                 res = await self._bind_tcp_sockets_with_consistent_port_number(
                     make_socket)
-                port, tcp_sockets = res
+                self.port, tcp_sockets = res
 
                 for interface, listen_sock in tcp_sockets.items():
                     self.log.info("Listening on %s:%d", interface, self.port)
