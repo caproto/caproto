@@ -302,8 +302,6 @@ class VirtualCircuit:
                     await self.send(response_command)
 
             await self._start_write_task(handle_write)
-            # TODO pretty sure using the taskgroup will bog things down,
-            # but it suppresses an annoying warning message, so... there
         elif isinstance(command, ca.EventAddRequest):
             chan, db_entry = get_db_entry()
             # TODO no support for deprecated low/high/to
@@ -451,7 +449,7 @@ class Context:
         for command in commands:
             if isinstance(command, ca.VersionRequest):
                 version_requested = True
-            if isinstance(command, ca.SearchRequest):
+            elif isinstance(command, ca.SearchRequest):
                 pv_name = command.name
                 try:
                     known_pv = self[pv_name] is not None
@@ -465,16 +463,6 @@ class Context:
                         ca.SearchResponse(self.port, None, command.cid,
                                           ca.DEFAULT_PROTOCOL_VERSION)
                     )
-                # else:
-                #     if command.reply == ca.DO_REPLY:
-                #         search_replies.append(
-                #             ca.NotFoundResponse(
-                #                 version=ca.DEFAULT_PROTOCOL_VERSION,
-                #                 cid=command.cid)
-                #         )
-                #     else:
-                #         # Not a known PV and no reply required
-                #         ...
 
         if search_replies:
             if version_requested:
