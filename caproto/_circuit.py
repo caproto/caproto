@@ -894,9 +894,7 @@ class ServerChannel(_BaseChannel):
         -------
         EventCancelResponse
         """
-        data_type, _ = self._fill_defaults(data_type, None)
-        if data_count is None:
-            data_count = self.native_data_count
+        data_type, data_count = self._fill_defaults(data_type, data_count)
         command = EventCancelResponse(data_type, self.sid, subscriptionid,
                                       data_count)
         return command
