@@ -37,24 +37,39 @@ SubscriptionSpec = namedtuple('SubscriptionSpec', ('db_entry', 'data_type',
 host_endian = ('>' if sys.byteorder == 'big' else '<')
 
 
-class BoundedSet(set):
+class OrderedBoundedSet:
+    # This just implements the part of the set API that we need.
     def __init__(self, items=None, *, maxlen):
         if items is None:
             items = ()
-        super().__init__(items)
+        self._data = dict.fromkeys(items)
         self.maxlen = maxlen
 
+    def __len__(self):
+        return len(self._data)
+
     def add(self, item):
-        super().add(item)
+        self._data[item] = None
         if len(self) > self.maxlen:
             self.pop()
 
     def update(self, items):
-        super().update(items)
+        self._data.update(dict.fromkeys(items))
         overage = len(self) - self.maxlen
         if overage > 0:
             for _ in range(overage):
                 self.pop()
+
+    def pop(self):
+        item = next(iter(self._data))
+        self._data.pop(item)
+        return item
+
+    def discard(self, item):
+        try:
+            self._data.pop(item)
+        except KeyError:
+            pass
 
 
 class VirtualCircuit:
@@ -68,7 +83,7 @@ class VirtualCircuit:
         self.client_username = None
         self.subscriptions = defaultdict(deque)
         self.unexpired_updates = defaultdict(
-            lambda: BoundedSet(maxlen=ca.MAX_SUBSCRIPTION_BACKLOG))
+            lambda: OrderedBoundedSet(maxlen=ca.MAX_SUBSCRIPTION_BACKLOG))
         # Subclasses are expected to define:
         # self.QueueFull = ...
         # self.command_queue = ...
@@ -736,8 +751,8 @@ class Context:
                 # instead of sent. This effectively prioritizes sending the
                 # client "new news" instead of "old news".
 
-                # This is a BoundedSet, a set with a maxlen, containing only
-                # commands for this particular subscription.
+                # This is an OrderedBoundedSet, a set with a maxlen, containing
+                # only commands for this particular subscription.
                 circuit.unexpired_updates[sub.subscriptionid].add(command)
 
                 # This is a queue with the commands from _all_ subscriptions on
