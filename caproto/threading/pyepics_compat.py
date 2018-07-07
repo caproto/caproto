@@ -501,7 +501,8 @@ class PV:
         self._access_rights_changed(self._caproto_pv.channel.access_rights,
                                     forced=True)
 
-    def _access_rights_changed(self, access_rights, *, forced=False):
+    def _access_rights_changed(self, caproto_pv, access_rights, *,
+                               forced=False):
         read_access = AccessRights.READ in access_rights
         write_access = AccessRights.WRITE in access_rights
         access_strs = ('no access', 'read-only', 'write-only', 'read/write')

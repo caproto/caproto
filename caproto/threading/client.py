@@ -739,7 +739,8 @@ class Context:
             Expected signature: ``f(pv, state)`` where ``pv`` is the instance
             of ``PV`` whose state has changed and ``state`` is a string
         access_rights_callback : callable
-            Expected signature: ``f(access_rights)`` where ``access_rights`` is
+            Expected signature: ``f(pv, access_rights)`` where ``pv`` is the
+            instance of ``PV`` whose state has changed and ``access_rights`` is
             a member of the caproto ``AccessRights`` enum
 
         """
@@ -1291,7 +1292,7 @@ class PV:
             self._channel = val
 
     def access_rights_changed(self, rights):
-        self.access_rights_callback.process(rights)
+        self.access_rights_callback.process(self, rights)
 
     def connection_state_changed(self, state, channel):
         self.log.info('%s connection state changed to %s.', self.name, state)
