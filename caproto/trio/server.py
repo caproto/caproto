@@ -50,6 +50,7 @@ class VirtualCircuit(_VirtualCircuit):
     def __init__(self, circuit, client, context):
         super().__init__(circuit, client, context)
         self.nursery = context.nursery
+        self.QueueFull = trio.WouldBlock
         self.command_queue = trio.Queue(ca.MAX_COMMAND_BACKLOG)
         self.new_command_condition = trio.Condition()
         self.subscription_queue = trio.Queue(ca.MAX_TOTAL_SUBSCRIPTION_BACKLOG)

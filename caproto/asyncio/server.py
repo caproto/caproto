@@ -71,6 +71,7 @@ class VirtualCircuit(_VirtualCircuit):
 
         self._raw_client = client
         super().__init__(circuit, SockWrapper(loop, client), context)
+        self.QueueFull = asyncio.QueueFull
         self.command_queue = asyncio.Queue(ca.MAX_COMMAND_BACKLOG,
                                            loop=self.loop)
         self.new_command_condition = asyncio.Condition(loop=self.loop)

@@ -70,6 +70,7 @@ class VirtualCircuit:
         self.unexpired_updates = defaultdict(
             lambda: BoundedSet(maxlen=ca.MAX_SUBSCRIPTION_BACKLOG))
         # Subclasses are expected to define:
+        # self.QueueFull = ...
         # self.command_queue = ...
         # self.new_command_condition = ...
         # self.subscription_queue = ...
@@ -112,7 +113,19 @@ class VirtualCircuit:
 
         commands, _ = self.circuit.recv(bytes_received)
         for c in commands:
-            await self.command_queue.put(c)
+            try:
+                await self.command_queue.put(c)
+            except self.QueueFull:
+                # This client is fast and we are not keeping up. Better to kill
+                # the circuit (and let the client try again) than to let the
+                # whole server be OOM-ed.
+                await self._on_disconnect()
+                raise DisconnectedCircuit()
+                self.log.warning(f"Circuit {self!r} has a large backlog of "
+                                 f"received commands, evidently cannot keep "
+                                 f"with a fast client. Disconnecting circuit "
+                                 f"to avoid letting consume all available "
+                                 f"memory.")
         if not bytes_received:
             await self._on_disconnect()
             raise DisconnectedCircuit()
@@ -729,7 +742,12 @@ class Context:
 
                 # This is a queue with the commands from _all_ subscriptions on
                 # this circuit.
-                await circuit.subscription_queue.put(weakref.ref(command))
+                try:
+                    await circuit.subscription_queue.put(weakref.ref(command))
+                except self.QueueFull:
+                    # We have hit the overall max for subscription backlog.
+                    # TODO -- Warn. Maybe drain the queue to catch up?
+                    pass
 
     async def broadcast_beacon_loop(self):
         self.log.debug('Will send beacons to %r',

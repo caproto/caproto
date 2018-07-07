@@ -29,6 +29,18 @@ class UniversalQueue(curio.UniversalQueue):
         return await super().get()
 
 
+class QueueFull(Exception):
+    ...
+
+
+# Curio queues just block if they are full. We want one that raises.
+class QueueWithFullError(curio.Queue):
+    async def put(self, item):
+        if self.full():
+            raise QueueFull
+        await super().put(item)
+
+
 class CurioAsyncLayer(AsyncLibraryLayer):
     name = 'curio'
     ThreadsafeQueue = UniversalQueue
@@ -41,11 +53,13 @@ class VirtualCircuit(_VirtualCircuit):
 
     def __init__(self, circuit, client, context):
         super().__init__(circuit, client, context)
-        self.command_queue = curio.Queue(ca.MAX_COMMAND_BACKLOG)
+        self.QueueFull = QueueFull
+        self.command_queue = QueueWithFullError(ca.MAX_COMMAND_BACKLOG)
         self.new_command_condition = curio.Condition()
         self.pending_tasks = curio.TaskGroup()
         self.events_on = curio.Event()
-        self.subscription_queue = curio.Queue(ca.MAX_TOTAL_SUBSCRIPTION_BACKLOG)
+        self.subscription_queue = QueueWithFullError(
+            ca.MAX_TOTAL_SUBSCRIPTION_BACKLOG)
 
     async def run(self):
         await self.pending_tasks.spawn(self.command_queue_loop())
