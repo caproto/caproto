@@ -576,7 +576,6 @@ class Context:
                         "Failed to send beacon to %r. Try setting "
                         "EPICS_CAS_AUTO_BEACON_ADDR_LIST=no and "
                         "EPICS_CAS_BEACON_ADDR_LIST=<addresses>.", address)
-                    raise
             self.beacon_count += 1
             if beacon_period < max_beacon_period:
                 beacon_period = min(max_beacon_period,
