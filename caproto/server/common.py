@@ -335,7 +335,7 @@ class VirtualCircuit:
             await self._cull_subscriptions(
                 db_entry,
                 lambda sub: sub.channel == command.sid)
-            return [chan.disconnect()]
+            return [chan.clear()]
         elif isinstance(command, ca.EchoRequest):
             return [ca.EchoResponse()]
 

@@ -241,7 +241,7 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0, notify=True,
     finally:
         try:
             if chan.states[ca.CLIENT] is ca.CONNECTED:
-                send(chan.circuit, chan.disconnect())
+                send(chan.circuit, chan.clear())
         finally:
             sockets[chan.circuit].close()
 
@@ -428,7 +428,7 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
         try:
             for chan in channels.values():
                 if chan.states[ca.CLIENT] is ca.CONNECTED:
-                    send(chan.circuit, chan.disconnect())
+                    send(chan.circuit, chan.clear())
         finally:
             # Reinstate the timeout for channel cleanup.
             for chan in channels.values():
@@ -538,7 +538,7 @@ def write(pv_name, data, *, notify=False, data_type=None, metadata=None,
     finally:
         try:
             if chan.states[ca.CLIENT] is ca.CONNECTED:
-                send(chan.circuit, chan.disconnect())
+                send(chan.circuit, chan.clear())
         finally:
             sockets[chan.circuit].close()
 
@@ -622,7 +622,7 @@ def read_write_read(pv_name, data, *, notify=False,
     finally:
         try:
             if chan.states[ca.CLIENT] is ca.CONNECTED:
-                send(chan.circuit, chan.disconnect())
+                send(chan.circuit, chan.clear())
         finally:
             sockets[chan.circuit].close()
     return initial, res, final

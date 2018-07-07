@@ -272,22 +272,22 @@ generating valid commands.
     .. automethod:: host_name
     .. automethod:: client_name
     .. automethod:: create
-    .. automethod:: disconnect
     .. automethod:: read
     .. automethod:: write
     .. automethod:: subscribe
     .. automethod:: unsubscribe
+    .. automethod:: clear
 
 .. autoclass:: ServerChannel
 
     .. automethod:: version
     .. automethod:: create
     .. automethod:: create_fail
-    .. automethod:: disconnect
     .. automethod:: read
     .. automethod:: write
     .. automethod:: subscribe
     .. automethod:: unsubscribe
+    .. automethod:: clear
     .. automethod:: disconnect
 
 .. _payload_data_types:

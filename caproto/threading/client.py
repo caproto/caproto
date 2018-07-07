@@ -1385,7 +1385,7 @@ class PV:
             # after it acquires the lock.
             try:
                 self.channel_ready.clear()
-                self.circuit_manager.send(self.channel.disconnect())
+                self.circuit_manager.send(self.channel.clear())
             except OSError:
                 # the socket is dead-dead, do nothing
                 ...

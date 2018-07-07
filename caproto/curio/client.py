@@ -151,7 +151,7 @@ class Channel:
 
     async def disconnect(self):
         "Disconnect this Channel."
-        await self.circuit.send(self.channel.disconnect())
+        await self.circuit.send(self.channel.clear())
         while self.channel.states[ca.CLIENT] is ca.MUST_CLOSE:
             await self.wait_on_new_command()
 
