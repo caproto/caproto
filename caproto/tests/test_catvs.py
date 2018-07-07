@@ -99,11 +99,21 @@ else:
     all_tests = get_all_tests()
 
 
+SKIPPED = ('TestScalar-test_get_bad',
+           'TestScalar-test_put',
+           'TestArray-test_monitor_three_fixed',
+           'TestArray-test_monitor_zero_dynamic',
+           'TestArray-test_put',
+           )
+
+
 @pytest.mark.skipif(catvs is None, reason='catvs unavailable')
 @pytest.mark.parametrize('test_class, test_name', all_tests)
 def test_catvs(catvs_ioc, test_class, test_name):
-    pvgroup, context, server_thread = catvs_ioc
+    if f'{test_class.__name__}-{test_name}' in SKIPPED:
+        pytest.skip("known difference in behavior with epics-base")
 
+    pvgroup, context, server_thread = catvs_ioc
     test_inst = test_class()
 
     def assert_equal(a, b, msg=None):
