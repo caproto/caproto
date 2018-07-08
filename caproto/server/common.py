@@ -292,8 +292,8 @@ class VirtualCircuit:
                         write_status = True
                     try:
                         data_count = len(db_entry.value)
-                    except Exception:
-                        data_count = 0
+                    except (TypeError, ValueError):
+                        data_count = 0  # or maybe 1?
                     response_command = chan.write(ioid=command.ioid,
                                                   status=write_status,
                                                   data_count=data_count)
@@ -326,7 +326,10 @@ class VirtualCircuit:
             await self._cull_subscriptions(
                 db_entry,
                 lambda sub: sub.subscriptionid == command.subscriptionid)
-            data_count = len(db_entry.value)
+            try:
+                data_count = len(db_entry.value)
+            except (TypeError, ValueError):
+                data_count = 0  # or maybe 1?
             return [chan.unsubscribe(command.subscriptionid,
                                      data_type=command.data_type,
                                      data_count=data_count)]
