@@ -37,6 +37,7 @@ parameter_values = {
     'payload': [DBR_LONG(5)],
     'port': [4321],
     'priority': [0],
+    'reply': [ca.NO_REPLY],
     'server_port': [1234],
     'sid': [2],
     'status': [1],
