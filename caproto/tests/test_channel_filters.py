@@ -95,7 +95,7 @@ MANY = object()
 
 
 # TO DO --- These really should not be flaky!
-@pytest.mark.flaky(reruns=5, reruns_delay=2)
+@pytest.mark.flaky(reruns=10, reruns_delay=2)
 @pytest.mark.parametrize('filter, initial, on, off',
                          [('{"before": "my_stately_state"}', 1, 1, 1),
                           ('{"after": "my_stately_state"}', 1, 1, 1),
@@ -154,6 +154,8 @@ def test_sync_filter(request, prefix, context, filter, initial, on, off):
     responses.clear()
 
 
+# TO DO --- These really should not be flaky!
+@pytest.mark.flaky(reruns=5, reruns_delay=2)
 @pytest.mark.parametrize('filter, expected',
                          [('{"dbnd": {"abs": 0.001}}', [3.14, 3.15, 3.16]),
                           ('{"dbnd": {"abs": 0.015}}', [3.14, 3.16]),
