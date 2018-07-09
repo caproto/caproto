@@ -112,7 +112,7 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
     return p
 
 
-def poll_readiness(pv_to_check, attempts=15):
+def poll_readiness(pv_to_check, attempts=5):
     logger.debug(f'Checking PV {pv_to_check}')
     start_repeater()
     for attempt in range(attempts):
@@ -133,15 +133,24 @@ def run_softioc(request, db, additional_db=None, **kwargs):
     if additional_db is not None:
         db_text = '\n'.join((db_text, additional_db))
 
-    ioc_handler = ca.benchmarking.IocHandler()
-    ioc_handler.setup_ioc(db_text=db_text, max_array_bytes='10000000',
-                          **kwargs)
+    err = None
+    for attempt in range(3):
+        ioc_handler = ca.benchmarking.IocHandler()
+        ioc_handler.setup_ioc(db_text=db_text, max_array_bytes='10000000',
+                              **kwargs)
 
-    request.addfinalizer(ioc_handler.teardown)
+        request.addfinalizer(ioc_handler.teardown)
 
-    (pv_to_check, _), *_ = db
-    poll_readiness(pv_to_check)
-    return ioc_handler
+        (pv_to_check, _), *_ = db
+        try:
+            poll_readiness(pv_to_check)
+        except TimeoutError as err_:
+            err = err_
+        else:
+            return ioc_handler
+    else:
+        # ran out of retry attempts
+        raise err
 
 
 @pytest.fixture(scope='function')
