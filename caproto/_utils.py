@@ -379,6 +379,16 @@ def bcast_socket(socket_module=socket):
         ...
     else:
         sock.setsockopt(socket_module.SOL_SOCKET, socket_module.SO_REUSEPORT, 1)
+    stashed_ex = None
+    for port in random_ports(100):
+        try:
+            sock.bind('', port)
+        except IOError as ex:
+            stashed_ex = ex
+        else:
+            break
+    else:
+        raise RuntimeError('No available ports and/or bind failed') from stashed_ex
     return sock
 
 
