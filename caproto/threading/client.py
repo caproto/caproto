@@ -311,6 +311,7 @@ class SharedBroadcaster:
         self._id_counter = itertools.count(0)
         self.search_results = {}  # map name to (time, address)
         self.unanswered_searches = {}  # map search id (cid) to (name, queue)
+        self.server_protocol_versions = {}  # map address to protocol version
 
         self.listeners = weakref.WeakSet()
 
@@ -515,6 +516,7 @@ class SharedBroadcaster:
 
         # Save doing a 'self' lookup in the inner loop.
         search_results = self.search_results
+        server_protocol_versions = self.server_protocol_versions
         unanswered_searches = self.unanswered_searches
         queues = defaultdict(list)
         results_by_cid = deque(maxlen=1000)
@@ -571,6 +573,7 @@ class SharedBroadcaster:
                         # (Entries expire after STALE_SEARCH_EXPIRATION.)
                         self.log.debug('Found %s at %s', name, address)
                         search_results[name] = (address, now)
+                        server_protocol_versions[address] = command.version
             # Send the search results to the Contexts that asked for
             # them. This is probably more general than is has to be but
             # I'm playing it safe for now.
@@ -1016,6 +1019,11 @@ class VirtualCircuitManager:
         else:
             raise RuntimeError("Cannot connect. States are {} "
                                "".format(self.circuit.states))
+        # Old versions of the protocol do not send a VersionResponse at TCP
+        # connection time, so set this Event manually rather than waiting for
+        # it to be set by receipt of a VersionResponse.
+        if self.context.broadcaster.server_protocol_versions[self.circuit.address] < 12:
+            self._ready.set()
         ready = self._ready.wait(timeout=timeout)
         if not ready:
             raise TimeoutError("Circuit with server at {} did not "
