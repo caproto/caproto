@@ -497,7 +497,7 @@ class SharedBroadcaster:
                 else:
                     use_cached_search[address].append(name)
 
-            for addr, names in use_cached_search.items():
+            for address, names in use_cached_search.items():
                 results_queue.put((address, names))
 
             # Generate search_ids and stash them on Context state so they can
