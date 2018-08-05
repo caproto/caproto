@@ -9,6 +9,9 @@ Unreleased
   circuit* instead of one threadpool for the entire context. Make the size of
   the threadpool configurable via a new
   :class:`~caproto.threading.client.Context` parameter, ``max_workers``.
+* The expected signature of the ``access_rights_callback`` passed to
+  :class:`~caproto.threading.client.Context` has been changed from
+  ``f(access_rights)`` to ``f(pv, access_rights)``.
 
 v0.1.1 (2018-06-17)
 ===================
