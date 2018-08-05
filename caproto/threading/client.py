@@ -875,9 +875,12 @@ class Context:
         with self._lock_during_get_circuit_manager:
             cm = self.circuit_managers.get((address, priority), None)
             if cm is None or cm.dead.is_set():
-                circuit = ca.VirtualCircuit(our_role=ca.CLIENT,
-                                            address=address,
-                                            priority=priority)
+                version = self.broadcaster.server_protocol_versions[address]
+                circuit = ca.VirtualCircuit(
+                    our_role=ca.CLIENT,
+                    address=address,
+                    priority=priority,
+                    protocol_version=version)
                 cm = VirtualCircuitManager(self, circuit, self.selector)
                 self.circuit_managers[(address, priority)] = cm
             return cm
