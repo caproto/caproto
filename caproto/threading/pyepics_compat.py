@@ -287,7 +287,7 @@ class PV:
             nelm=ch.native_data_count,
             count=ch.native_data_count,
         )
-        self._access_rights_changed(ch.access_rights)
+        self._access_rights_changed(caproto_pv, ch.access_rights)
 
         if self.auto_monitor is None:
             mcount = count if count is not None else ch.native_data_count
@@ -498,7 +498,8 @@ class PV:
     @ensure_connection
     def force_read_access_rights(self):
         'Force a read of access rights, not relying on last event callback.'
-        self._access_rights_changed(self._caproto_pv.channel.access_rights,
+        self._access_rights_changed(self._caproto_pv,
+                                    self._caproto_pv.channel.access_rights,
                                     forced=True)
 
     def _access_rights_changed(self, caproto_pv, access_rights, *,
