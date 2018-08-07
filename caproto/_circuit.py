@@ -52,7 +52,8 @@ class VirtualCircuit:
         May be used by the server to prioritize requests when under high
         load. Lowest priority is 0; highest is 99.
     """
-    def __init__(self, our_role, address, priority):
+    def __init__(self, our_role, address, priority,
+                 protocol_version=DEFAULT_PROTOCOL_VERSION):
         self.our_role = our_role
         if our_role is CLIENT:
             self.their_role = SERVER
@@ -74,7 +75,7 @@ class VirtualCircuit:
             raise CaprotoRuntimeError("Client-side VirtualCircuit requires a "
                                       "non-None priority at initialization "
                                       "time.")
-        self.protocol_version = DEFAULT_PROTOCOL_VERSION
+        self.protocol_version = protocol_version
 
     @property
     def priority(self):
