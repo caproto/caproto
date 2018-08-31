@@ -13,6 +13,18 @@ Unreleased
   :class:`~caproto.threading.client.Context` has been changed from
   ``f(access_rights)`` to ``f(pv, access_rights)``.
 
+v0.1.2 (2018-08-31)
+===================
+
+This is a bug-fix release fixing some critical bugs. We recommend that all
+users ugprade.
+
+* Fix critical typo in threading client's search functionality that could cause
+  it to conflate addresses from different search responses and then attempt to
+  connect to the wrong server.
+* Fix handshake with servers and clients speaking Version 11 (or older) of the
+  protocol.
+
 v0.1.1 (2018-06-17)
 ===================
 
