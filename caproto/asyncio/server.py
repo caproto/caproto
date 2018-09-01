@@ -263,6 +263,13 @@ class Context(_Context):
             raise
         finally:
             self.log.info('Server exiting....')
+            shutdown_tasks = []
+            async_lib = AsyncioAsyncLayer(self.loop)
+            for name, method in self.shutdown_methods.items():
+                self.log.debug('Calling shutdown method %r', name)
+                task = self.loop.create_task(method(async_lib))
+                shutdown_tasks.append(task)
+            await asyncio.gather(*shutdown_tasks)
             for sock in self.tcp_sockets.values():
                 sock.close()
             for sock in self.udp_socks.values():

@@ -836,6 +836,14 @@ class Context:
                 if hasattr(instance, 'server_startup') and
                 instance.server_startup is not None}
 
+    @property
+    def shutdown_methods(self):
+        'Notify all ChannelData instances of the server shutdown'
+        return {name: instance.server_shutdown
+                for name, instance in self.pvdb.items()
+                if hasattr(instance, 'server_shutdown') and
+                instance.server_shutdown is not None}
+
     async def _bind_tcp_sockets_with_consistent_port_number(self, make_socket):
         # Find a random port number that is free on all self.interfaces,
         # and get a bound TCP socket with that port number on each

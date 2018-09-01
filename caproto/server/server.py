@@ -72,6 +72,12 @@ class PvpropertyData:
             self.server_startup = self._server_startup
             # bind the startup method to the group (used in server_startup)
             self.startup = MethodType(pvspec.startup, group)
+        if pvspec.shutdown is not None:
+            # enable the shutdown hook for this instance only:
+            self.server_shutdown = self._server_shutdown
+            # bind the shutdown method to the group (used in server_shutdown)
+            self.shutdown = MethodType(pvspec.shutdown, group)
+
 
         if doc is not None:
             self.__doc__ = doc
@@ -120,6 +126,9 @@ class PvpropertyData:
 
     async def _server_startup(self, async_lib):
         return await self.startup(self, async_lib)
+
+    async def _server_shutdown(self, async_lib):
+        return await self.shutdown(self, async_lib)
 
     def get_field(self, field):
         if not field or field == 'VAL':
@@ -198,7 +207,7 @@ class PvpropertyBoolEnumRO(PvpropertyReadOnlyData, ChannelEnum):
 
 
 class PVSpec(namedtuple('PVSpec',
-                        'get put startup attr name dtype value '
+                        'get put startup shutdown attr name dtype value '
                         'alarm_group read_only doc fields cls_kwargs')):
     '''PV information specification
 
@@ -211,6 +220,8 @@ class PVSpec(namedtuple('PVSpec',
     startup : async callable, optional
         Called at start of server; a hook for initialization and background
         processing
+    shutdown : async callable, optional
+        Called at shutdown of server; a hook for cleanup
     attr : str, optional
         The attribute name
     name : str, optional
@@ -233,7 +244,8 @@ class PVSpec(namedtuple('PVSpec',
     __slots__ = ()
     default_dtype = int
 
-    def __new__(cls, get=None, put=None, startup=None, attr=None, name=None,
+    def __new__(cls, get=None, put=None, startup=None, shutdown=None,
+                attr=None, name=None,
                 dtype=None, value=None, alarm_group=None, read_only=None,
                 doc=None, fields=None, cls_kwargs=None):
         if dtype is None:
@@ -269,7 +281,18 @@ class PVSpec(namedtuple('PVSpec',
                 raise RuntimeError('Invalid signature for startup {}: {}'
                                    ''.format(startup, sig))
 
+        if shutdown is not None:
+            assert inspect.iscoroutinefunction(shutdown), \
+                'required async def shutdown'
+            sig = inspect.signature(shutdown)
+            try:
+                sig.bind('group', 'instance', 'async_library')
+            except Exception as ex:
+                raise RuntimeError('Invalid signature for shutdown {}: {}'
+                                   ''.format(shutdown, sig))
+
         return super().__new__(cls, get=get, put=put, startup=startup,
+                               shutdown=shutdown,
                                attr=attr, name=name, dtype=dtype, value=value,
                                alarm_group=alarm_group, read_only=read_only,
                                doc=doc, fields=fields,
@@ -358,6 +381,8 @@ class pvproperty:
     startup : async callable, optional
         Called at start of server; a hook for initialization and background
         processing
+    shutdown : async callable, optional
+        Called at shutdown of server; a hook for cleanup
     name : str, optional
         The PV name (defaults to the attribute name of the pvproperty)
     dtype : ChannelType or builtin type, optional
@@ -376,8 +401,8 @@ class pvproperty:
         Keyword arguments for the ChannelData-based class
     '''
 
-    def __init__(self, get=None, put=None, startup=None, *, name=None,
-                 dtype=None, value=None, alarm_group=None, doc=None,
+    def __init__(self, get=None, put=None, startup=None, shutdown=None, *,
+                 name=None, dtype=None, value=None, alarm_group=None, doc=None,
                  read_only=None, field_spec=None, fields=None, **cls_kwargs):
         self.attr_name = None  # to be set later
 
@@ -394,7 +419,8 @@ class pvproperty:
         fields = (None if field_spec is None
                   else field_spec.fields)
 
-        self.pvspec = PVSpec(get=get, put=put, startup=startup, name=name,
+        self.pvspec = PVSpec(get=get, put=put, startup=startup,
+                             shutdown=shutdown, name=name,
                              dtype=dtype, value=value, alarm_group=alarm_group,
                              read_only=read_only, doc=doc, fields=fields,
                              cls_kwargs=cls_kwargs)
@@ -433,6 +459,13 @@ class pvproperty:
     def startup(self, startup):
         # update PVSpec with startup function
         self.pvspec = self.pvspec._replace(startup=startup)
+        return self
+
+    def shutdown(self, shutdown):
+        # update PVSpec with shutdown function
+        self.pvspec = PVSpec(self.pvspec.get, self.pvspec.put,
+                             self.pvspec.startup, shutdown,
+                             *self.pvspec[4:])
         return self
 
     def scan(self, period, *, subtract_elapsed=True, stop_on_error=False,
@@ -495,7 +528,7 @@ class pvproperty:
 
         return wrapper
 
-    def __call__(self, get, put=None, startup=None):
+    def __call__(self, get, put=None, startup=None, shutdown=None):
         # handles case where pvproperty(**spec_kw)(getter, putter, startup) is
         # used
         pvspec = self.pvspec
@@ -512,7 +545,7 @@ class pvproperty:
             if 'doc' not in self.spec_kw:
                 spec_kw['doc'] = get.__doc__
 
-        self.pvspec = PVSpec(get, put, startup, **spec_kw)
+        self.pvspec = PVSpec(get, put, startup, shutdown, **spec_kw)
         return self
 
     @classmethod
@@ -550,6 +583,10 @@ class NestedPvproperty(pvproperty):
 
     def startup(self, startup):
         super().startup(startup)
+        return self.parent
+
+    def shutdown(self, shutdown):
+        super().shutdown(shutdown)
         return self.parent
 
     @classmethod
