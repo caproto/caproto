@@ -173,6 +173,10 @@ class Context(_Context):
             self.log.info('Server task cancelled. Will shut down.')
         finally:
             self.log.info('Server exiting....')
+            for sock in self.tcp_sockets.values():
+                sock.close()
+            for sock in self.udp_socks.values():
+                sock.close()
 
     def stop(self):
         'Stop the server'
@@ -181,8 +185,6 @@ class Context(_Context):
             return
 
         nursery.cancel_scope.cancel()
-        for sock in self.tcp_sockets.values():
-            sock.close()
 
 
 async def start_server(pvdb, *, interfaces=None, log_pv_names=False):

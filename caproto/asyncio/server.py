@@ -171,6 +171,9 @@ class Context(_Context):
             async def sendto(self, bytes_to_send, addr_port):
                 self.transport.sendto(bytes_to_send, addr_port)
 
+            def close(self):
+                return self.transport.close()
+
         class ConnectedTransportWrapper:
             """Make an asyncio transport something you can call send on."""
             def __init__(self, transport, address):
@@ -239,8 +242,9 @@ class Context(_Context):
             raise
         finally:
             self.log.info('Server exiting....')
-            udp_sock.close()
             for sock in self.tcp_sockets.values():
+                sock.close()
+            for sock in self.udp_socks.values():
                 sock.close()
 
 
