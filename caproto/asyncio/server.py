@@ -256,9 +256,11 @@ def run(pvdb, *, interfaces=None, log_pv_names=False):
     A synchronous function that wraps start_server and exits cleanly.
     """
     loop = asyncio.get_event_loop()
-    try:
-        loop.run_until_complete(
+    task = loop.create_task(
             start_server(pvdb, interfaces=interfaces,
                          log_pv_names=log_pv_names))
+    try:
+        loop.run_until_complete(task)
     except KeyboardInterrupt:
-        return
+        task.cancel()
+        loop.run_until_complete(task)
