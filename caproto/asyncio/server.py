@@ -162,6 +162,9 @@ class Context(_Context):
                 self._tasks = tuple(t for t in self._tasks + (tsk,)
                                     if not t.done())
 
+            def error_received(self, exc):
+                self.log.error('BcastLoop received error', exc_info=exc)
+
         class TransportWrapper:
             """Make an asyncio transport something you can call sendto on."""
             def __init__(self, transport):
