@@ -107,13 +107,12 @@ class Context(_Context):
             async def make_socket(interface, port):
                 return curio.network.tcp_server_socket(interface, port)
 
-            port, tcp_sockets = await self._bind_tcp_sockets_with_consistent_port_number(
+            self.port, self.tcp_sockets = await self._bind_tcp_sockets_with_consistent_port_number(
                 make_socket)
-            self.port = port
 
             async with curio.TaskGroup() as self._task_group:
                 g = self._task_group
-                for interface, sock in tcp_sockets.items():
+                for interface, sock in self.tcp_sockets.items():
                     # Use run_server instead of tcp_server so we can hand in a
                     # socket that is already bound, avoiding a race between the
                     # moment we check for port availability and the moment the
@@ -152,6 +151,8 @@ class Context(_Context):
 
     def stop(self):
         self._stop_event.set()
+        for sock in self.tcp_sockets.values():
+            sock.close()
 
 
 async def start_server(pvdb, *, interfaces=None, log_pv_names=False):

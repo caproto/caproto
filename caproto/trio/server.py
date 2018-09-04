@@ -146,7 +146,7 @@ class Context(_Context):
 
                 res = await self._bind_tcp_sockets_with_consistent_port_number(
                     make_socket)
-                self.port, tcp_sockets = res
+                self.port, self.tcp_sockets = res
 
                 for interface, listen_sock in self.tcp_sockets.items():
                     self.log.info("Listening on %s:%d", interface, self.port)
@@ -181,6 +181,8 @@ class Context(_Context):
             return
 
         nursery.cancel_scope.cancel()
+        for sock in self.tcp_sockets.values():
+            sock.close()
 
 
 async def start_server(pvdb, *, interfaces=None, log_pv_names=False):

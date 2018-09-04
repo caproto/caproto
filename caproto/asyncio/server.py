@@ -136,11 +136,10 @@ class Context(_Context):
             s.setblocking(False)
             s.bind((interface, port))
             return s
-        port, tcp_sockets = await self._bind_tcp_sockets_with_consistent_port_number(
+        self.port, self.tcp_sockets = await self._bind_tcp_sockets_with_consistent_port_number(
             make_socket)
-        self.port = port
         tasks = []
-        for interface, sock in tcp_sockets.items():
+        for interface, sock in self.tcp_sockets.items():
             self.log.info("Listening on %s:%d", interface, self.port)
             tasks.append(self.loop.create_task(self.server_accept_loop(sock)))
 
@@ -237,10 +236,12 @@ class Context(_Context):
             return
         except Exception as ex:
             self.log.exception('Server error. Will shut down')
-            udp_sock.close()
             raise
         finally:
             self.log.info('Server exiting....')
+            udp_sock.close()
+            for sock in self.tcp_sockets.values():
+                sock.close()
 
 
 async def start_server(pvdb, *, interfaces=None, log_pv_names=False):
