@@ -148,7 +148,7 @@ class Context(_Context):
                     make_socket)
                 self.port, tcp_sockets = res
 
-                for interface, listen_sock in tcp_sockets.items():
+                for interface, listen_sock in self.tcp_sockets.items():
                     self.log.info("Listening on %s:%d", interface, self.port)
                     await self.nursery.start(self.server_accept_loop,
                                              listen_sock)

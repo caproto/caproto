@@ -115,7 +115,6 @@ class Context(_Context):
             loop = asyncio.get_event_loop()
         self.loop = loop
         self.async_layer = AsyncioAsyncLayer(self.loop)
-        self.udp_sock = None
         self._server_tasks = []
 
     async def server_accept_loop(self, sock):
