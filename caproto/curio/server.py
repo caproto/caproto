@@ -147,6 +147,8 @@ class Context(_Context):
                 await sock.close()
             for sock in self.udp_socks.values():
                 await sock.close()
+            for interface, sock in self.beacon_socks.values():
+                await sock.close()
             self._task_group = None
 
     async def _await_stop(self):
@@ -155,8 +157,6 @@ class Context(_Context):
 
     def stop(self):
         self._stop_event.set()
-        for sock in self.tcp_sockets.values():
-            sock.close()
 
 
 async def start_server(pvdb, *, interfaces=None, log_pv_names=False):

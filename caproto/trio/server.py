@@ -177,6 +177,8 @@ class Context(_Context):
                 sock.close()
             for sock in self.udp_socks.values():
                 sock.close()
+            for interface, sock in self.beacon_socks.values():
+                sock.close()
 
     def stop(self):
         'Stop the server'

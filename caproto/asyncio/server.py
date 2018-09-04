@@ -183,6 +183,9 @@ class Context(_Context):
             async def send(self, bytes_to_send):
                 self.transport.sendto(bytes_to_send, self.address)
 
+            def close(self):
+                return self.transport.close()
+
         for address in ca.get_beacon_address_list():
             # Connected sockets do not play well with asyncio, so connect to
             # one and then discard it.
@@ -245,6 +248,8 @@ class Context(_Context):
             for sock in self.tcp_sockets.values():
                 sock.close()
             for sock in self.udp_socks.values():
+                sock.close()
+            for interface, sock in self.beacon_socks.values():
                 sock.close()
 
 
