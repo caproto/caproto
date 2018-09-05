@@ -36,8 +36,8 @@ Breaking Changes
   ``f(access_rights)`` to ``f(pv, access_rights)``. This makes it consistent
   with the ``connection_callback``.
 * If a beacon fails to send, do not kill the server; just log the failure,
-  provide advise on how to fix the environment to omit the failed address,
-  and continue to run.
+  along with a suggestion on how to fix the environment to omit the failed
+  address, and continue to run.
 
 Bug Fixes
 ---------
@@ -49,7 +49,7 @@ Bug Fixes
   the server task exits. This fixes the runaway usage of file descriptors when
   the tests are run.
 * The servers send :class:`~caproto.CreateChFailResponse` when the client
-  requests a channel name taht does not exist on the server. They previously
+  requests a channel name that does not exist on the server. They previously
   did not respond.
 * The servers reply to :class:`~caproto.SearchRequest` messages sent over TCP.
   (UDP is more common, but TCP is allowed.) They previously did not respond.
