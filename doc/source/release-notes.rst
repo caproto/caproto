@@ -24,7 +24,7 @@ Features
 * Added ``pvproperty.scan``. See
   the `mini_beamline example IOC <https://github.com/NSLS-II/caproto/blob/master/caproto/ioc_examples/mini_beamline.py>`_
   for a usage example.
-* Support 'Short' an as alias for 'Int' in sever and data modules.
+* Add a server-side data source for ``ChannelType.INT`` (a.k.a SHORT) data.
 * The default printed output of the ``caproto-monitor`` CLI utility now
   includes microseconds.
 
