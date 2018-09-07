@@ -32,16 +32,14 @@ EPICS_CA_REPEATER_PORT. It defaults to the standard 5065. The current value is
     group.add_argument('-q', '--quiet', action='store_true',
                        help=("Suppress INFO log messages. "
                              "(Still show WARNING or higher.)"))
-    group.add_argument('-v', '--verbose', action='store_true',
+    group.add_argument('-v', '--verbose', action='count',
                        help="Verbose mode. (Use -vvv for more.)")
-    group.add_argument('-vvv', action='store_true',
-                       help=argparse.SUPPRESS)
     parser.add_argument('--no-color', action='store_true',
                         help="Suppress ANSI color codes in log messages.")
     args = parser.parse_args()
     if args.no_color:
         color_logs(False)
-    if args.vvv:
+    if args.verbose and args.verbose > 2:
         logging.getLogger('caproto').setLevel('DEBUG')
     else:
         if args.verbose:
@@ -54,7 +52,7 @@ EPICS_CA_REPEATER_PORT. It defaults to the standard 5065. The current value is
     try:
         run()
     except BaseException as exc:
-        if args.verbose or args.vvv:
+        if args.verbose:
             # Show the full traceback.
             raise
         else:

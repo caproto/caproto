@@ -23,10 +23,8 @@ def main():
     fmt_group = parser.add_mutually_exclusive_group()
     parser.add_argument('pv_names', type=str, nargs='+',
                         help="PV (channel) name(s) separated by spaces")
-    parser.add_argument('--verbose', '-v', action='store_true',
+    parser.add_argument('--verbose', '-v', action='count',
                         help="Verbose mode. (Use -vvv for more.)")
-    parser.add_argument('-vvv', action='store_true',
-                        help=argparse.SUPPRESS)
     fmt_group.add_argument('--format', type=str,
                            help=("Python format string. Available tokens are "
                                  "{pv_name} and {response}. Additionally, if "
@@ -79,8 +77,8 @@ def main():
     if args.verbose:
         logging.getLogger(f'caproto.ch').setLevel('DEBUG')
         logging.getLogger(f'caproto.ctx').setLevel('DEBUG')
-    if args.vvv:
-        logging.getLogger('caproto').setLevel('DEBUG')
+        if args.verbose > 2:
+            logging.getLogger('caproto').setLevel('DEBUG')
     data_type = args.d
     # data_type might be '0', 'STRING', or a class like 'control'.
     # The client functions accepts 0, ChannelType.STRING, or 'control'.
@@ -121,7 +119,7 @@ def main():
             print(format_str.format(**tokens))
 
     except BaseException as exc:
-        if args.verbose or args.vvv:
+        if args.verbose:
             # Show the full traceback.
             raise
         else:

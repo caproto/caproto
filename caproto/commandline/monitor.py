@@ -32,10 +32,8 @@ def main():
                                  "time, {timestamp}, {timedelta} and usages "
                                  "like {timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are"
                                  " supported."))
-    parser.add_argument('--verbose', '-v', action='store_true',
+    parser.add_argument('--verbose', '-v', action='count',
                         help="Show DEBUG log messages.")
-    parser.add_argument('-vvv', action='store_true',
-                        help=argparse.SUPPRESS)
     exit_group.add_argument('--duration', type=float, default=None,
                             help=("Maximum number seconds to run before "
                                   "exiting. Runs indefinitely by default."))
@@ -67,8 +65,8 @@ def main():
     if args.verbose:
         logging.getLogger('caproto.ch').setLevel('DEBUG')
         logging.getLogger(f'caproto.ctx').setLevel('DEBUG')
-    if args.vvv:
-        logging.getLogger('caproto').setLevel('DEBUG')
+        if args.verbose > 2:
+            logging.getLogger('caproto').setLevel('DEBUG')
 
     mask = 0
     if 'v' in args.m:
@@ -125,7 +123,7 @@ def main():
               force_int_enums=args.n,
               repeater=not args.no_repeater)
     except BaseException as exc:
-        if args.verbose or args.vvv:
+        if args.verbose:
             # Show the full traceback.
             raise
         else:

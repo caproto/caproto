@@ -25,10 +25,8 @@ def main():
                         help="PV (channel) name")
     parser.add_argument('data', type=str,
                         help="Value or values to write.")
-    parser.add_argument('--verbose', '-v', action='store_true',
+    parser.add_argument('--verbose', '-v', action='count',
                         help="Show DEBUG log messages.")
-    parser.add_argument('-vvv', action='store_true',
-                        help=argparse.SUPPRESS)
     fmt_group.add_argument('--format', type=str,
                            help=("Python format string. Available tokens are "
                                  "{pv_name}, {response} and {which} (Old/New)."
@@ -71,8 +69,8 @@ def main():
     if args.verbose:
         logging.getLogger(f'caproto.ch').setLevel('DEBUG')
         logging.getLogger(f'caproto.ctx').setLevel('DEBUG')
-    if args.vvv:
-        logging.getLogger('caproto').setLevel('DEBUG')
+        if args.verobse > 2:
+            logging.getLogger('caproto').setLevel('DEBUG')
     logger = logging.getLogger(f'caproto.ch.{args.pv_name}')
     try:
         data = ast.literal_eval(args.data)
@@ -116,7 +114,7 @@ def main():
             tokens['timestamp'] = dt
         print(format_str.format(which='New', **tokens))
     except BaseException as exc:
-        if args.verbose or args.vvv:
+        if args.verbose:
             # Show the full traceback.
             raise
         else:
