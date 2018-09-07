@@ -266,8 +266,7 @@ def run(pvdb, *, interfaces=None, log_pv_names=False):
     """
     loop = asyncio.get_event_loop()
     task = loop.create_task(
-            start_server(pvdb, interfaces=interfaces,
-                         log_pv_names=log_pv_names))
+        start_server(pvdb, interfaces=interfaces, log_pv_names=log_pv_names))
     try:
         loop.run_until_complete(task)
     except KeyboardInterrupt:
