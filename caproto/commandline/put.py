@@ -69,7 +69,7 @@ def main():
     if args.verbose:
         logging.getLogger(f'caproto.ch').setLevel('DEBUG')
         logging.getLogger(f'caproto.ctx').setLevel('DEBUG')
-        if args.verobse > 2:
+        if args.verbose> 2:
             logging.getLogger('caproto').setLevel('DEBUG')
     logger = logging.getLogger(f'caproto.ch.{args.pv_name}')
     try:
