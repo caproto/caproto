@@ -80,23 +80,22 @@ def python_to_epics(dtype, values, *, byteswap=True, convert_from=None):
     if dtype == ChannelType.STRING:
         return DbrStringArray(values).tobytes()
 
+    typecode = type_map[dtype]
     endian = getattr(values, 'endian', default_endian)
     if isinstance(values, array.array):
-        if byteswap and endian != '>':
-            # TODO if immutable, a separate big-endian version could be stored
-            # and sent (having only been swapped once)
-            arr = Array(values.typecode, values.tolist(), endian=endian)
-            arr.byteswap()
-            return arr
-        return values
+        if typecode == values.typecode and byteswap and endian == '>':
+            # Everything matches up - use the array as-is
+            return values
 
-    if convert_from is not None:
-        if convert_from in native_float_types and dtype in native_int_types:
-            values = [int(v) for v in values]
+        # Otherwise, convert to a list and process further below
+        values = values.tolist()
+
+    if convert_from in native_float_types and dtype in native_int_types:
+        values = [int(v) for v in values]
 
     # Make a new array with the system endianness
     endian = default_endian
-    arr = Array(type_map[dtype], values, endian=endian)
+    arr = Array(typecode, values, endian=endian)
     if byteswap and endian != '>':
         # Byteswap if it's not big endian
         arr.byteswap()
