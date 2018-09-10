@@ -107,9 +107,6 @@ SKIPPED = ('TestScalar-test_get_bad',
            )
 
 
-# This 'flaky' designation is unnecessarily blunt.
-# Only some appear to be flaky, related to monitoring.
-@pytest.mark.flaky(reruns=10, reruns_delay=2)
 @pytest.mark.skipif(catvs is None, reason='catvs unavailable')
 @pytest.mark.parametrize('test_class, test_name', all_tests)
 def test_catvs(catvs_ioc, test_class, test_name):
