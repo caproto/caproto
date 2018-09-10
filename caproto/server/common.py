@@ -1,5 +1,7 @@
 from collections import defaultdict, deque, namedtuple, ChainMap, Iterable
+import copy
 import logging
+import sys
 import time
 import caproto as ca
 from caproto import apply_arr_filter, get_environment_variables
@@ -17,6 +19,8 @@ Subscription = namedtuple('Subscription', ('mask', 'channel_filter',
                                            'db_entry'))
 SubscriptionSpec = namedtuple('SubscriptionSpec', ('db_entry', 'data_type',
                                                    'mask', 'channel_filter'))
+
+host_endian = ('>' if sys.byteorder == 'big' else '<')
 
 
 class VirtualCircuit:
@@ -511,6 +515,10 @@ class Context:
                 dbnd = sub.channel_filter.dbnd
                 if dbnd is not None:
                     new = values
+                    if hasattr(new, 'endian'):
+                        if new.endian != host_endian:
+                            new = copy.copy(new)
+                            new.byteswap()
                     old = self.last_dead_band.get(sub)
                     if old is not None:
                         if ((not isinstance(old, Iterable) or
