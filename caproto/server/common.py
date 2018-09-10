@@ -192,8 +192,30 @@ class VirtualCircuit:
             raise DisconnectedCircuit()
         elif isinstance(command, ca.VersionRequest):
             return [ca.VersionResponse(ca.DEFAULT_PROTOCOL_VERSION)]
+        elif isinstance(command, ca.SearchRequest):
+            pv_name = command.name
+            try:
+                self.context[pv_name]
+            except KeyError:
+                if command.reply == ca.DO_REPLY:
+                    return [
+                        ca.NotFoundResponse(
+                            version=ca.DEFAULT_PROTOCOL_VERSION,
+                            cid=command.cid)
+                    ]
+            else:
+                return [
+                    ca.SearchResponse(self.context.port, None, command.cid,
+                                      ca.DEFAULT_PROTOCOL_VERSION)
+                ]
         elif isinstance(command, ca.CreateChanRequest):
-            db_entry = self.context[command.name]
+            try:
+                db_entry = self.context[command.name]
+            except KeyError:
+                self.log.debug('Client requested invalid channel name: %s',
+                               command.name)
+                return [ca.CreateChFailResponse(cid=command.cid)]
+
             access = db_entry.check_access(self.client_hostname,
                                            self.client_username)
 
@@ -210,9 +232,19 @@ class VirtualCircuit:
             self.client_username = command.name
         elif isinstance(command, (ca.ReadNotifyRequest, ca.ReadRequest)):
             chan, db_entry = get_db_entry()
+            try:
+                data_type = command.data_type
+            except ValueError:
+                raise ca.RemoteProtocolError('Invalid data type')
+
             metadata, data = await db_entry.auth_read(
                 self.client_hostname, self.client_username,
-                command.data_type, user_address=self.circuit.address)
+                data_type, user_address=self.circuit.address)
+
+            old_version = self.circuit.protocol_version < 13
+            if command.data_count > 0 or old_version:
+                data = data[:command.data_count]
+
             # This is a pass-through if arr is None.
             data = apply_arr_filter(chan.channel_filter.arr, data)
             # If the timestamp feature is active swap the timestamp.
@@ -258,15 +290,18 @@ class VirtualCircuit:
                         # returning none for write_status can just be
                         # considered laziness
                         write_status = True
+                    try:
+                        data_count = len(db_entry.value)
+                    except (TypeError, ValueError):
+                        data_count = 0  # or maybe 1?
                     response_command = chan.write(ioid=command.ioid,
-                                                  status=write_status)
+                                                  status=write_status,
+                                                  data_count=data_count)
 
                 if client_waiting:
                     await self.send(response_command)
 
             await self._start_write_task(handle_write)
-            # TODO pretty sure using the taskgroup will bog things down,
-            # but it suppresses an annoying warning message, so... there
         elif isinstance(command, ca.EventAddRequest):
             chan, db_entry = get_db_entry()
             # TODO no support for deprecated low/high/to
@@ -291,14 +326,19 @@ class VirtualCircuit:
             await self._cull_subscriptions(
                 db_entry,
                 lambda sub: sub.subscriptionid == command.subscriptionid)
+            try:
+                data_count = len(db_entry.value)
+            except (TypeError, ValueError):
+                data_count = 0  # or maybe 1?
             return [chan.unsubscribe(command.subscriptionid,
-                                     data_type=command.data_type)]
+                                     data_type=command.data_type,
+                                     data_count=data_count)]
         elif isinstance(command, ca.ClearChannelRequest):
             chan, db_entry = get_db_entry()
             await self._cull_subscriptions(
                 db_entry,
                 lambda sub: sub.channel == command.sid)
-            return [chan.disconnect()]
+            return [chan.clear()]
         elif isinstance(command, ca.EchoRequest):
             return [ca.EchoResponse()]
 
@@ -323,7 +363,17 @@ class Context:
         self.last_sync_edge_update = defaultdict(lambda: defaultdict(dict))
         self.last_dead_band = {}
         self.beacon_count = 0
+
         self.environ = get_environment_variables()
+
+        # ca_server_port: the default tcp/udp port from the environment
+        self.ca_server_port = self.environ['EPICS_CA_SERVER_PORT']
+        # the specific tcp port in use by this server
+        self.port = None
+
+        self.log.debug('EPICS_CA_SERVER_PORT set to %d. This is the UDP port '
+                       'to be used for searches, and the first TCP server port'
+                       ' to be tried.', self.ca_server_port)
 
         ignore_addresses = self.environ['EPICS_CAS_IGNORE_ADDR_LIST']
         self.ignore_addresses = ignore_addresses.split(' ')
@@ -402,7 +452,7 @@ class Context:
         for command in commands:
             if isinstance(command, ca.VersionRequest):
                 version_requested = True
-            if isinstance(command, ca.SearchRequest):
+            elif isinstance(command, ca.SearchRequest):
                 pv_name = command.name
                 try:
                     known_pv = self[pv_name] is not None
@@ -416,16 +466,6 @@ class Context:
                         ca.SearchResponse(self.port, None, command.cid,
                                           ca.DEFAULT_PROTOCOL_VERSION)
                     )
-                else:
-                    if command.reply == ca.DO_REPLY:
-                        search_replies.append(
-                            ca.NotFoundResponse(
-                                version=ca.DEFAULT_PROTOCOL_VERSION,
-                                cid=command.cid)
-                        )
-                    else:
-                        # Not a known PV and no reply required
-                        ...
 
         if search_replies:
             if version_requested:
@@ -539,7 +579,6 @@ class Context:
                         "Failed to send beacon to %r. Try setting "
                         "EPICS_CAS_AUTO_BEACON_ADDR_LIST=no and "
                         "EPICS_CAS_BEACON_ADDR_LIST=<addresses>.", address)
-                    raise
             self.beacon_count += 1
             if beacon_period < max_beacon_period:
                 beacon_period = min(max_beacon_period,
@@ -558,20 +597,19 @@ class Context:
                 if hasattr(instance, 'server_startup') and
                 instance.server_startup is not None}
 
-    def _bind_tcp_sockets_with_consistent_port_number(self, make_socket):
+    async def _bind_tcp_sockets_with_consistent_port_number(self, make_socket):
         # Find a random port number that is free on all self.interfaces,
         # and get a bound TCP socket with that port number on each
-        # interface. The argument `make_socket` is expected to be a
-        # synchronous callable with the signature
-        # `make_socket(interface, port)` that does whatever
-        # library-specific incantation is necessary to return a bound
-        # socket or raise an IOError.
+        # interface. The argument `make_socket` is expected to be a coroutine
+        # with the signature `make_socket(interface, port)` that does whatever
+        # library-specific incantation is necessary to return a bound socket or
+        # raise an IOError.
         tcp_sockets = {}  # maps interface to bound socket
         stashed_ex = None
-        for port in ca.random_ports(100):
+        for port in ca.random_ports(100, try_first=self.ca_server_port):
             try:
                 for interface in self.interfaces:
-                    s = make_socket(interface, port)
+                    s = await make_socket(interface, port)
                     tcp_sockets[interface] = s
             except IOError as ex:
                 stashed_ex = ex
@@ -608,3 +646,6 @@ class Context:
         self.log.info('Disconnected from client at %s:%d.\n'
                       'Circuits currently connected: %d', *addr,
                       len(self.circuits))
+
+    def stop(self):
+        ...

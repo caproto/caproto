@@ -485,7 +485,13 @@ class Message(metaclass=_MetaDirectionalMessage):
         parameters = (signature.parameters if type(self) is not Message
                       else ['header'])
 
-        d = [(arg, repr(getattr(self, arg))) for arg in parameters]
+        def safe_repr(arg):
+            try:
+                return repr(getattr(self, arg))
+            except Exception as ex:
+                return f'(repr: {ex})'
+
+        d = [(arg, safe_repr(arg)) for arg in parameters]
         formatted_args = ", ".join(["{!s}={}".format(k, v)
                                     for k, v in d])
         return "{}({})".format(type(self).__name__, formatted_args)
@@ -580,7 +586,7 @@ class SearchRequest(Message):
     ID = 6
     HAS_PAYLOAD = True
 
-    def __init__(self, name, cid, version):
+    def __init__(self, name, cid, version, reply=NO_REPLY):
         size, payload = padded_string_payload(name)
         rec, _, field = name.partition('.')
         _len = len(rec)
@@ -589,8 +595,18 @@ class SearchRequest(Message):
                                     'on record names. The record {!r} is {} '
                                     'characters.'
                                     ''.format(MAX_RECORD_LENGTH, name, _len))
-        header = SearchRequestHeader(size, NO_REPLY, version, cid)
+        header = SearchRequestHeader(size, reply, version, cid)
         super().__init__(header, b'', payload)
+
+    @classmethod
+    def from_wire(cls, header, *buffers, sender_address=None):
+        # Special-case to handle the fact that data_type holds whether or not
+        # to reply to the request upon failure - this can cause part of the
+        # payload to be interpreted as metadata in from_buffer (TODO: is there
+        # a better place to special-case/fix this?)
+        payload_buffer = b''.join(buffers)
+        return cls.from_components(header, b'', payload_buffer,
+                                   sender_address=sender_address)
 
     payload_size = property(lambda self: self.header.payload_size)
     reply = property(lambda self: self.header.data_type)
@@ -1040,12 +1056,13 @@ class EventCancelResponse(Message):
     ID = 2
     HAS_PAYLOAD = False
 
-    def __init__(self, data_type, sid, subscriptionid):
-        # TODO: refactor, this does not exist
-        header = EventCancelResponseHeader(data_type, sid, subscriptionid)
+    def __init__(self, data_type, sid, subscriptionid, data_count):
+        header = EventCancelResponseHeader(data_type, data_count, sid,
+                                           subscriptionid)
         super().__init__(header)
 
     data_type = property(lambda self: ChannelType(self.header.data_type))
+    data_count = property(lambda self: self.header.data_count)
     sid = property(lambda self: self.header.parameter1)
     subscriptionid = property(lambda self: self.header.parameter2)
 

@@ -151,7 +151,7 @@ class Channel:
 
     async def disconnect(self):
         "Disconnect this Channel."
-        await self.circuit.send(self.channel.disconnect())
+        await self.circuit.send(self.channel.clear())
         while self.channel.states[ca.CLIENT] is ca.MUST_CLOSE:
             await self.wait_on_new_command()
 
@@ -238,6 +238,9 @@ class SharedBroadcaster:
         self.unanswered_searches = {}  # map search id (cid) to name
         self.search_results = {}  # map name to address
 
+        self.environ = ca.get_environment_variables()
+        self.ca_server_port = self.environ['EPICS_CA_SERVER_PORT']
+
     async def send(self, port, *commands):
         """
         Process a command and tranport it over the UDP socket.
@@ -322,7 +325,7 @@ class SharedBroadcaster:
         self.unanswered_searches[search_command.cid] = name
         # Wait for the SearchResponse.
         while search_command.cid in self.unanswered_searches:
-            await self.send(ca.EPICS_CA1_PORT, ver_command, search_command)
+            await self.send(self.ca_server_port, ver_command, search_command)
             await curio.ignore_after(1, self.wait_on_new_command)
         return name
 

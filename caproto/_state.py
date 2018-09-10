@@ -21,6 +21,7 @@ from ._commands import (AccessRightsResponse, ClearChannelRequest,
                         ReadRequest, ReadResponse,
                         ReadNotifyRequest, ReadNotifyResponse,
                         ServerDisconnResponse, VersionRequest, VersionResponse,
+                        SearchRequest, SearchResponse, NotFoundResponse,
                         WriteNotifyRequest, WriteNotifyResponse, WriteRequest,
                         EventsOnRequest, EventsOffRequest, CreateChFailResponse
                         )
@@ -59,6 +60,10 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
             VersionResponse: CONNECTED,
             VersionRequest: CONNECTED,
 
+            SearchResponse: CONNECTED,
+            SearchRequest: CONNECTED,
+            NotFoundResponse: CONNECTED,
+
             # Host and Client requests may come before or after we connect.
             HostNameRequest: CONNECTED,
             ClientNameRequest: CONNECTED,
@@ -96,6 +101,10 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
         CONNECTED: {
             VersionResponse: CONNECTED,
             VersionRequest: CONNECTED,
+
+            SearchResponse: CONNECTED,
+            SearchRequest: CONNECTED,
+            NotFoundResponse: CONNECTED,
 
             # Host and Client requests may come before or after we connect.
             HostNameRequest: CONNECTED,

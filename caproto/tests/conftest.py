@@ -74,6 +74,10 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
         logger.debug(f'Running script {args}')
     else:
         logger.debug(f'Running {module_name}')
+
+    if '-vvv' not in args:
+        args = list(args) + ['-vvv']
+
     os.environ['COVERAGE_PROCESS_START'] = '.coveragerc'
 
     p = subprocess.Popen([sys.executable, '-um', 'caproto.tests.example_runner',
@@ -108,7 +112,7 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
     return p
 
 
-def poll_readiness(pv_to_check, attempts=15):
+def poll_readiness(pv_to_check, attempts=5):
     logger.debug(f'Checking PV {pv_to_check}')
     start_repeater()
     for attempt in range(attempts):
@@ -129,15 +133,24 @@ def run_softioc(request, db, additional_db=None, **kwargs):
     if additional_db is not None:
         db_text = '\n'.join((db_text, additional_db))
 
-    ioc_handler = ca.benchmarking.IocHandler()
-    ioc_handler.setup_ioc(db_text=db_text, max_array_bytes='10000000',
-                          **kwargs)
+    err = None
+    for attempt in range(3):
+        ioc_handler = ca.benchmarking.IocHandler()
+        ioc_handler.setup_ioc(db_text=db_text, max_array_bytes='10000000',
+                              **kwargs)
 
-    request.addfinalizer(ioc_handler.teardown)
+        request.addfinalizer(ioc_handler.teardown)
 
-    (pv_to_check, _), *_ = db
-    poll_readiness(pv_to_check)
-    return ioc_handler
+        (pv_to_check, _), *_ = db
+        try:
+            poll_readiness(pv_to_check)
+        except TimeoutError as err_:
+            err = err_
+        else:
+            return ioc_handler
+    else:
+        # ran out of retry attempts
+        raise err
 
 
 @pytest.fixture(scope='function')
@@ -168,26 +181,39 @@ def epics_base_ioc(prefix, request):
 
     process = handler.processes[-1]
 
+    exit_lock = threading.RLock()
+    monitor_output = []
+
     def ioc_monitor():
         process.wait()
-        logger.info('''
-***********************************
-********IOC process exited!********
-******* Returned: %s ******
-***********************************''',
-                    process.returncode)
-        stdout, stderr = process.communicate()
-        if process.returncode != 0:
-            if stdout is not None:
-                for line in stdout.decode('latin-1').split('\n'):
-                    logger.debug('[Server-stdout] %s', line)
-            else:
-                logger.debug('No Server-stdout')
-            if stderr is not None:
-                for line in stderr.decode('latin-1').split('\n'):
-                    logger.debug('[Server-stderr] %s', line)
-            else:
-                logger.debug('No Server-stderr')
+        with exit_lock:
+            monitor_output.extend([
+                f'***********************************',
+                f'********IOC process exited!********',
+                f'******* Returned: {process.returncode} ******',
+                f'***********************************''',
+            ])
+
+            stdout, stderr = process.communicate()
+            if process.returncode != 0:
+                if stdout is not None:
+                    lines = [f'[Server-stdout] {line}'
+                             for line in stdout.decode('latin-1').split('\n')]
+                    monitor_output.extend(lines)
+
+                if stderr is not None:
+                    lines = [f'[Server-stderr] {line}'
+                             for line in stdout.decode('latin-1').split('\n')]
+                    monitor_output.extend(lines)
+
+    def ioc_monitor_output():
+        with exit_lock:
+            if monitor_output:
+                logger.debug('IOC monitor output:')
+                for line in monitor_output:
+                    logger.debug(line)
+
+    request.addfinalizer(ioc_monitor_output)
 
     threading.Thread(target=ioc_monitor).start()
     pvs = {pv[len(prefix):]: pv
@@ -394,7 +420,7 @@ def curio_server(prefix):
         except caproto.curio.server.ServerExit:
             logger.info('ServerExit caught; exiting')
         except Exception as ex:
-            logger.exception('Server failed')
+            logger.error('Server failed: %s %s', type(ex), ex)
             raise
 
     async def run_server(client, *, pvdb=caget_pvdb):
@@ -457,12 +483,10 @@ def server(request):
                 ctx = caproto.curio.server.Context(pvdb)
                 await ctx.run()
             except caproto.curio.server.ServerExit:
-                print('Server exited normally')
+                logger.info('Server exited normally')
             except Exception as ex:
-                print('Server failed', ex)
+                logger.error('Server failed: %s %s', type(ex), ex)
                 raise
-            finally:
-                print('Server exiting')
 
         async def run_server_and_client():
             try:
@@ -493,10 +517,8 @@ def server(request):
                 task_status.started(ctx)
                 await ctx.run()
             except Exception as ex:
-                print('Server failed', ex)
+                logger.error('Server failed: %s %s', type(ex), ex)
                 raise
-            finally:
-                print('Server exiting')
 
         async def run_server_and_client():
             async with trio.open_nursery() as test_nursery:
@@ -507,13 +529,12 @@ def server(request):
                         if threaded_client:
                             await trio.run_sync_in_worker_thread(client)
                         else:
-                            print('async client')
                             await client(test_nursery, server_context)
                     except TimeoutError:
                         continue
                     else:
                         break
-                await server_context.stop()
+                server_context.stop()
                 # don't leave the server running:
                 test_nursery.cancel_scope.cancel()
 
@@ -527,10 +548,8 @@ def server(request):
                 ctx = caproto.asyncio.server.Context(pvdb)
                 await ctx.run()
             except Exception as ex:
-                print(f'Server failed: {type(ex)}, {ex}', ex)
+                logger.error('Server failed: %s %s', type(ex), ex)
                 raise
-            finally:
-                print('Server exiting')
 
         async def run_server_and_client(loop):
             tsk = loop.create_task(asyncio_server_main())

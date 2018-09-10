@@ -299,6 +299,9 @@ class SharedBroadcaster:
             repeater. Default is 10.
         '''
         self.udp_sock = None
+        self.environ = ca.get_environment_variables()
+        self.ca_server_port = self.environ['EPICS_CA_SERVER_PORT']
+
         self._search_lock = threading.RLock()
         self._retry_unanswered_searches_thread = None
         # This Event ensures that we send a registration request before our
@@ -621,7 +624,7 @@ class SharedBroadcaster:
 
             for batch in batch_requests(requests,
                                         SEARCH_MAX_DATAGRAM_BYTES):
-                self.send(ca.EPICS_CA1_PORT,
+                self.send(self.ca_server_port,
                           ca.VersionRequest(0, ca.DEFAULT_PROTOCOL_VERSION),
                           *batch)
 
@@ -1382,7 +1385,7 @@ class PV:
             # after it acquires the lock.
             try:
                 self.channel_ready.clear()
-                self.circuit_manager.send(self.channel.disconnect())
+                self.circuit_manager.send(self.channel.clear())
             except OSError:
                 # the socket is dead-dead, do nothing
                 ...

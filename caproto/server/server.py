@@ -16,7 +16,7 @@ import time
 from collections import (namedtuple, OrderedDict, defaultdict)
 from types import MethodType
 
-from .. import (ChannelDouble, ChannelInteger, ChannelString,
+from .. import (ChannelDouble, ChannelShort, ChannelInteger, ChannelString,
                 ChannelEnum, ChannelType, ChannelChar, ChannelAlarm,
                 AccessRights, get_server_address_list,
                 AlarmStatus, AlarmSeverity)
@@ -124,6 +124,10 @@ class PvpropertyChar(PvpropertyData, ChannelChar):
     ...
 
 
+class PvpropertyShort(PvpropertyData, ChannelShort):
+    ...
+
+
 class PvpropertyInteger(PvpropertyData, ChannelInteger):
     ...
 
@@ -153,6 +157,10 @@ class PvpropertyReadOnlyData(PvpropertyData):
 
 
 class PvpropertyCharRO(PvpropertyReadOnlyData, ChannelChar):
+    ...
+
+
+class PvpropertyShortRO(PvpropertyReadOnlyData, ChannelShort):
     ...
 
 
@@ -915,6 +923,7 @@ class PVGroup(metaclass=PVGroupMeta):
         bool: PvpropertyBoolEnum,
 
         ChannelType.STRING: PvpropertyString,
+        ChannelType.INT: PvpropertyShort,
         ChannelType.LONG: PvpropertyInteger,
         ChannelType.DOUBLE: PvpropertyDouble,
         ChannelType.ENUM: PvpropertyEnum,
@@ -934,6 +943,7 @@ class PVGroup(metaclass=PVGroupMeta):
         bool: False,
 
         ChannelType.STRING: '',
+        ChannelType.INT: 0,
         ChannelType.LONG: 0,
         ChannelType.DOUBLE: 0.0,
         ChannelType.ENUM: 0,

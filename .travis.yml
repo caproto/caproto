@@ -68,7 +68,9 @@ script:
     then
       pip uninstall --yes numpy
     fi
-  - coverage run --parallel-mode run_tests.py  -k 'not bench' --benchmark-disable --timeout=50
+  - pip install git+https://github.com/klauer/catvs.git@py3k
+
+  - coverage run --parallel-mode run_tests.py  -k 'not bench' --benchmark-disable --timeout=50 -v
   - coverage combine --append
 
   - export ASV_ENV_NAME=${TRAVIS_PYTHON_VERSION}_${BASE}

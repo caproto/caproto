@@ -1,10 +1,12 @@
 import functools
-from ..server import AsyncLibraryLayer
+import threading
+
 import caproto as ca
 import curio
 import curio.network
 from curio import socket
 
+from ..server import AsyncLibraryLayer
 from ..server.common import (VirtualCircuit as _VirtualCircuit,
                              Context as _Context)
 
@@ -68,6 +70,8 @@ class Context(_Context):
 
     def __init__(self, pvdb, interfaces=None):
         super().__init__(pvdb, interfaces)
+        self._task_group = None
+        self._stop_event = threading.Event()
         self.command_bundle_queue = curio.Queue()
         self.subscription_queue = curio.UniversalQueue()
 
@@ -75,17 +79,19 @@ class Context(_Context):
         for interface in self.interfaces:
             udp_sock = ca.bcast_socket(socket)
             try:
-                udp_sock.bind((interface, ca.EPICS_CA1_PORT))
+                udp_sock.bind((interface, self.ca_server_port))
             except Exception:
                 self.log.exception('UDP bind failure on interface %r',
                                    interface)
                 raise
+            self.log.debug('UDP socket bound on %s:%d', interface,
+                           self.ca_server_port)
             self.udp_socks[interface] = udp_sock
 
         async with curio.TaskGroup() as g:
             for interface, udp_sock in self.udp_socks.items():
                 self.log.debug('Broadcasting on %s:%d', interface,
-                               ca.EPICS_CA1_PORT)
+                               self.ca_server_port)
                 await g.spawn(self._core_broadcaster_loop, udp_sock)
 
     async def run(self, *, log_pv_names=False):
@@ -97,11 +103,16 @@ class Context(_Context):
                 await sock.connect(address)
                 interface, _ = sock.getsockname()
                 self.beacon_socks[address] = (interface, sock)
-            port, tcp_sockets = self._bind_tcp_sockets_with_consistent_port_number(
-                curio.network.tcp_server_socket)
-            self.port = port
-            async with curio.TaskGroup() as g:
-                for interface, sock in tcp_sockets.items():
+
+            async def make_socket(interface, port):
+                return curio.network.tcp_server_socket(interface, port)
+
+            self.port, self.tcp_sockets = await self._bind_tcp_sockets_with_consistent_port_number(
+                make_socket)
+
+            async with curio.TaskGroup() as self._task_group:
+                g = self._task_group
+                for interface, sock in self.tcp_sockets.items():
                     # Use run_server instead of tcp_server so we can hand in a
                     # socket that is already bound, avoiding a race between the
                     # moment we check for port availability and the moment the
@@ -109,6 +120,8 @@ class Context(_Context):
                     self.log.info("Listening on %s:%d", interface, self.port)
                     await g.spawn(curio.network.run_server,
                                   sock, self.tcp_handler)
+
+                await g.spawn(self._await_stop)
                 await g.spawn(self.broadcaster_udp_server_loop)
                 await g.spawn(self.broadcaster_queue_loop)
                 await g.spawn(self.subscription_queue_loop)
@@ -130,6 +143,20 @@ class Context(_Context):
             raise ServerExit() from ex
         finally:
             self.log.info('Server exiting....')
+            for sock in self.tcp_sockets.values():
+                await sock.close()
+            for sock in self.udp_socks.values():
+                await sock.close()
+            for interface, sock in self.beacon_socks.values():
+                await sock.close()
+            self._task_group = None
+
+    async def _await_stop(self):
+        await curio.abide(self._stop_event.wait)
+        await self._task_group.cancel_remaining()
+
+    def stop(self):
+        self._stop_event.set()
 
 
 async def start_server(pvdb, *, interfaces=None, log_pv_names=False):

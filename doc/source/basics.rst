@@ -440,7 +440,7 @@ See how much more succinct our example becomes:
     recv()
 
     ### Clear
-    send(chan.disconnect())
+    send(chan.clear())
     recv()
 
 Here is the equivalent, a condensed copy of our work from previous sections:

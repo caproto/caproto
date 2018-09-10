@@ -115,7 +115,6 @@ class Context(_Context):
             loop = asyncio.get_event_loop()
         self.loop = loop
         self.async_layer = AsyncioAsyncLayer(self.loop)
-        self.udp_sock = None
         self._server_tasks = []
 
     async def server_accept_loop(self, sock):
@@ -131,17 +130,16 @@ class Context(_Context):
         'Start the server'
         self.log.info('Server starting up...')
 
-        def make_socket(interface, port):
+        async def make_socket(interface, port):
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.setblocking(False)
             s.bind((interface, port))
             return s
-        port, tcp_sockets = self._bind_tcp_sockets_with_consistent_port_number(
+        self.port, self.tcp_sockets = await self._bind_tcp_sockets_with_consistent_port_number(
             make_socket)
-        self.port = port
         tasks = []
-        for interface, sock in tcp_sockets.items():
+        for interface, sock in self.tcp_sockets.items():
             self.log.info("Listening on %s:%d", interface, self.port)
             tasks.append(self.loop.create_task(self.server_accept_loop(sock)))
 
@@ -173,6 +171,9 @@ class Context(_Context):
             async def sendto(self, bytes_to_send, addr_port):
                 self.transport.sendto(bytes_to_send, addr_port)
 
+            def close(self):
+                return self.transport.close()
+
         class ConnectedTransportWrapper:
             """Make an asyncio transport something you can call send on."""
             def __init__(self, transport, address):
@@ -181,6 +182,9 @@ class Context(_Context):
 
             async def send(self, bytes_to_send):
                 self.transport.sendto(bytes_to_send, self.address)
+
+            def close(self):
+                return self.transport.close()
 
         for address in ca.get_beacon_address_list():
             # Connected sockets do not play well with asyncio, so connect to
@@ -198,7 +202,7 @@ class Context(_Context):
         for interface in self.interfaces:
             udp_sock = bcast_socket()
             try:
-                udp_sock.bind((interface, ca.EPICS_CA1_PORT))
+                udp_sock.bind((interface, self.ca_server_port))
             except Exception:
                 self.log.exception('UDP bind failure on interface %r',
                                    interface)
@@ -207,8 +211,8 @@ class Context(_Context):
             transport, self.p = await self.loop.create_datagram_endpoint(
                 BcastLoop, sock=udp_sock)
             self.udp_socks[interface] = TransportWrapper(transport)
-            self.log.debug('Broadcasting on %s:%d', interface,
-                           ca.EPICS_CA1_PORT)
+            self.log.debug('UDP socket bound on %s:%d', interface,
+                           self.ca_server_port)
 
         tasks.append(self.loop.create_task(self.broadcaster_queue_loop()))
         tasks.append(self.loop.create_task(self.subscription_queue_loop()))
@@ -238,10 +242,15 @@ class Context(_Context):
             return
         except Exception as ex:
             self.log.exception('Server error. Will shut down')
-            udp_sock.close()
             raise
         finally:
             self.log.info('Server exiting....')
+            for sock in self.tcp_sockets.values():
+                sock.close()
+            for sock in self.udp_socks.values():
+                sock.close()
+            for interface, sock in self.beacon_socks.values():
+                sock.close()
 
 
 async def start_server(pvdb, *, interfaces=None, log_pv_names=False):
@@ -256,9 +265,10 @@ def run(pvdb, *, interfaces=None, log_pv_names=False):
     A synchronous function that wraps start_server and exits cleanly.
     """
     loop = asyncio.get_event_loop()
+    task = loop.create_task(
+        start_server(pvdb, interfaces=interfaces, log_pv_names=log_pv_names))
     try:
-        loop.run_until_complete(
-            start_server(pvdb, interfaces=interfaces,
-                         log_pv_names=log_pv_names))
+        loop.run_until_complete(task)
     except KeyboardInterrupt:
-        return
+        task.cancel()
+        loop.run_until_complete(task)

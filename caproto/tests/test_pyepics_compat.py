@@ -409,12 +409,14 @@ def no_simulator_updates(pvnames):
         time.sleep(0.5)
 
 
+@pytest.mark.flaky(reruns=5, reruns_delay=2)
 def testA_CreatePV(pvnames):
     print('Simple Test: create pv\n')
     pv = PV(pvnames.double_pv)
     assert pv is not None
 
 
+@pytest.mark.flaky(reruns=5, reruns_delay=2)
 def testA_CreatedWithConn(pvnames):
     print('Simple Test: create pv with conn callback\n')
     CONN_DAT = {}

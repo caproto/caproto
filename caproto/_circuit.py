@@ -313,7 +313,8 @@ class VirtualCircuit:
                 chan.sid = command.sid
                 chan.protocol_version = self.protocol_version
                 self.channels_sid[chan.sid] = chan
-            elif isinstance(command, ClearChannelResponse):
+            elif isinstance(command, (ServerDisconnResponse,
+                                      ClearChannelResponse)):
                 self.channels_sid.pop(chan.sid)
                 self.channels.pop(chan.cid)
             elif isinstance(command, (ReadNotifyRequest, ReadRequest,
@@ -573,7 +574,7 @@ class ClientChannel(_BaseChannel):
                                     self.protocol_version)
         return command
 
-    def disconnect(self):
+    def clear(self):
         """
         Generate a valid :class:`ClearChannelRequest`.
 
@@ -877,7 +878,7 @@ class ServerChannel(_BaseChannel):
                                    subscriptionid, metadata=metadata)
         return command
 
-    def unsubscribe(self, subscriptionid, data_type=None):
+    def unsubscribe(self, subscriptionid, data_type=None, data_count=None):
         """
         Generate a valid :class:`EventCancelResponse`.
 
@@ -893,13 +894,25 @@ class ServerChannel(_BaseChannel):
         -------
         EventCancelResponse
         """
-        data_type, _ = self._fill_defaults(data_type, None)
-        command = EventCancelResponse(data_type, self.sid, subscriptionid)
+        data_type, data_count = self._fill_defaults(data_type, data_count)
+        command = EventCancelResponse(data_type, self.sid, subscriptionid,
+                                      data_count)
+        return command
+
+    def clear(self):
+        """
+        Generate a valid :class:`ClearChannelResponse`
+
+        Returns
+        -------
+        ClearChannelResposne
+        """
+        command = ClearChannelResponse(self.sid, self.cid)
         return command
 
     def disconnect(self):
         """
-        Generate a valid :class:`ServerDisconnResponse`.
+        Generate a valid :class:`ServerDisconnResponse`
 
         Returns
         -------

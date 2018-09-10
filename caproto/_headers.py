@@ -370,7 +370,7 @@ def EventCancelRequestHeader(data_type, data_count, sid, subscriptionid):
             else MessageHeader(*struct_args))
 
 
-def EventCancelResponseHeader(data_type, sid, subscriptionid):
+def EventCancelResponseHeader(data_type, data_count, sid, subscriptionid):
     """
     Construct a ``MessageHeader`` for a EventCancelResponse command.
 
@@ -383,6 +383,9 @@ def EventCancelResponseHeader(data_type, sid, subscriptionid):
     data_type : integer
         Same value as CA_PROTO_EVENT_ADD request.
 
+    data_count : integer
+        Same value as CA_PROTO_EVENT_ADD request.
+
     sid : integer
         Same value as CA_PROTO_EVENT_ADD request.
 
@@ -390,7 +393,12 @@ def EventCancelResponseHeader(data_type, sid, subscriptionid):
         Same value as CA_PROTO_EVENT_ADD request.
 
     """
-    return MessageHeader(1, 0, data_type, 0, sid, subscriptionid)
+    struct_args = (1, 0, data_type, data_count, sid, subscriptionid)
+    # If payload_size or data_count cannot fit into a 16-bit integer, use the
+    # extended header.
+    return (ExtendedMessageHeader(*struct_args)
+            if any((data_count > 0xffff, ))
+            else MessageHeader(*struct_args))
 
 
 def ReadRequestHeader(data_type, data_count, sid, ioid):

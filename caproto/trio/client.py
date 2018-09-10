@@ -17,7 +17,8 @@ import trio
 
 from collections import OrderedDict, defaultdict
 from trio import socket
-from .._utils import batch_requests, CaprotoError, ThreadsafeCounter
+from .._utils import (batch_requests, CaprotoError, ThreadsafeCounter,
+                      get_environment_variables)
 from .._constants import (STALE_SEARCH_EXPIRATION, SEARCH_MAX_DATAGRAM_BYTES)
 
 
@@ -178,7 +179,7 @@ class Channel:
     async def disconnect(self):
         "Disconnect this Channel."
         if self.channel.states[ca.CLIENT] is ca.CONNECTED:
-            await self.circuit.send(self.channel.disconnect())
+            await self.circuit.send(self.channel.clear())
         while self.channel.states[ca.CLIENT] is ca.MUST_CLOSE:
             await self.wait_on_new_command()
 
@@ -269,6 +270,9 @@ class SharedBroadcaster:
         self.search_results = {}  # map name to address
         self.new_id = ThreadsafeCounter(
             dont_clash_with=self.unanswered_searches)
+
+        self.environ = get_environment_variables()
+        self.ca_server_port = self.environ['EPICS_CA_SERVER_PORT']
 
     async def send(self, port, *commands):
         """
@@ -389,7 +393,7 @@ class SharedBroadcaster:
         self.unanswered_searches[search_command.cid] = name
         # Wait for the SearchResponse.
         while search_command.cid in self.unanswered_searches:
-            await self.send(ca.EPICS_CA1_PORT, ver_command, search_command)
+            await self.send(self.ca_server_port, ver_command, search_command)
             with trio.move_on_after(1):
                 await self.wait_on_new_command()
         return name
@@ -426,7 +430,7 @@ class SharedBroadcaster:
                                          ca.DEFAULT_PROTOCOL_VERSION)
                         for search_id, name in needs_search)
             for batch in batch_requests(requests, SEARCH_MAX_DATAGRAM_BYTES):
-                await self.send(ca.EPICS_CA1_PORT,
+                await self.send(self.ca_server_port,
                                 ca.VersionRequest(0, ca.DEFAULT_PROTOCOL_VERSION),
                                 *batch)
 

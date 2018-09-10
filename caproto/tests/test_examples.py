@@ -374,6 +374,8 @@ def test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
                               class_kwargs, prefix, async_lib)
 
 
+# TO DO --- These really should not be flaky!
+@pytest.mark.flaky(reruns=10, reruns_delay=2)
 # These tests require numpy.
 @pytest.mark.skipif(sys.platform == 'win32',
                     reason='win32 AD IOC')

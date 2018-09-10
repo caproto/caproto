@@ -341,8 +341,10 @@ def ensure_bytes(s):
                                f"{type(s)}")
 
 
-def random_ports(num):
-    """Yield `num` random port numbers."""
+def random_ports(num, *, try_first=None):
+    """Yield `num` random port numbers, optionally `try_first`."""
+    if try_first is not None:
+        yield try_first
     for _ in range(num):
         yield random.randint(49152, 65535)
 
