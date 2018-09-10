@@ -154,8 +154,6 @@ def test_sync_filter(request, prefix, context, filter, initial, on, off):
     responses.clear()
 
 
-# TO DO --- These really should not be flaky!
-@pytest.mark.flaky(reruns=5, reruns_delay=2)
 @pytest.mark.parametrize('filter, expected',
                          [('{"dbnd": {"abs": 0.001}}', [3.14, 3.15, 3.16]),
                           ('{"dbnd": {"abs": 0.015}}', [3.14, 3.16]),
