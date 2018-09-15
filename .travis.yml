@@ -1,5 +1,14 @@
 language: python
+
+dist: xenial
+
+sudo:
+  - false
+  - true
+
+
 python:
+  - 3.7
   - 3.6
 
 env:
@@ -24,7 +33,14 @@ env:
 #   allow_failures:
 #     - env: BASE=3.16
 
-dist: trusty
+matrix:
+  exclude:
+    - python: 3.6
+      sudo: true
+
+    - python: 3.7
+      sudo: false
+
 addons:
   apt:
     packages:
