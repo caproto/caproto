@@ -1,3 +1,6 @@
+# The LogFormatter is adapted light from tornado, which is licensed under
+# Apache 2.0. See other_licenses/ in the repository directory.
+
 import logging
 import sys
 try:
@@ -10,14 +13,7 @@ try:
 except ImportError:
     curses = None
 
-
 __all__ = ('color_logs', 'plain_log_handler', 'color_log_handler')
-
-# The LogFormatter is adapted light from tornado, which is licensed under
-# Apache 2.0. See other_licenses/ in the repository directory.
-
-# A bunch of py2-safe stuff from Tornado that we do not need in py3 land.
-basestring_type = unicode_type = _safe_unicode = str
 
 
 def _stderr_supports_color():
@@ -39,7 +35,7 @@ def _stderr_supports_color():
 
 
 class LogFormatter(logging.Formatter):
-    """Log formatter used in Tornado.
+    """Log formatter used in Tornado, modified for Python3-only caproto.
     Key features of this formatter are:
     * Color support when logging to a terminal that supports it.
     * Timestamps on every log line.
@@ -81,7 +77,7 @@ class LogFormatter(logging.Formatter):
         .. versionchanged:: 3.2
            Added ``fmt`` and ``datefmt`` arguments.
         """
-        logging.Formatter.__init__(self, datefmt=datefmt)
+        super().__init__(datefmt=datefmt)
         self._fmt = fmt
 
         self._colors = {}
@@ -96,12 +92,10 @@ class LogFormatter(logging.Formatter):
                 # right conversion in python 3.
                 fg_color = (curses.tigetstr("setaf") or
                             curses.tigetstr("setf") or "")
-                if (3, 0) < sys.version_info < (3, 2, 3):
-                    fg_color = unicode_type(fg_color, "ascii")
 
                 for levelno, code in colors.items():
-                    self._colors[levelno] = unicode_type(curses.tparm(fg_color, code), "ascii")
-                self._normal = unicode_type(curses.tigetstr("sgr0"), "ascii")
+                    self._colors[levelno] = str(curses.tparm(fg_color, code), "ascii")
+                self._normal = str(curses.tigetstr("sgr0"), "ascii")
             else:
                 # If curses is not present (currently we'll only get here for
                 # colorama on windows), assume hard-coded ANSI color codes.
@@ -112,49 +106,22 @@ class LogFormatter(logging.Formatter):
             self._normal = ''
 
     def format(self, record):
-        try:
-            message = record.getMessage()
-            assert isinstance(message, basestring_type)  # guaranteed by logging
-            # Encoding notes:  The logging module prefers to work with character
-            # strings, but only enforces that log messages are instances of
-            # basestring.  In python 2, non-ascii bytestrings will make
-            # their way through the logging framework until they blow up with
-            # an unhelpful decoding error (with this formatter it happens
-            # when we attach the prefix, but there are other opportunities for
-            # exceptions further along in the framework).
-            #
-            # If a byte string makes it this far, convert it to unicode to
-            # ensure it will make it out to the logs.  Use repr() as a fallback
-            # to ensure that all byte strings can be converted successfully,
-            # but don't do it by default so we don't add extra quotes to ascii
-            # bytestrings.  This is a bit of a hacky place to do this, but
-            # it's worth it since the encoding errors that would otherwise
-            # result are so useless (and tornado is fond of using utf8-encoded
-            # byte strings wherever possible).
-            record.message = _safe_unicode(message)
-        except Exception as e:
-            record.message = "Bad message (%r): %r" % (e, record.__dict__)
-
+        record.message = record.getMessage()
         record.asctime = self.formatTime(record, self.datefmt)
 
-        if record.levelno in self._colors:
+        try:
             record.color = self._colors[record.levelno]
             record.end_color = self._normal
-        else:
-            record.color = record.end_color = ''
+        except KeyError:
+            record.color = ''
+            record.end_color = ''
 
         formatted = self._fmt % record.__dict__
 
-        if record.exc_info:
-            if not record.exc_text:
-                record.exc_text = self.formatException(record.exc_info)
+        if record.exc_info and not record.exc_text:
+            record.exc_text = self.formatException(record.exc_info)
         if record.exc_text:
-            # exc_text contains multiple lines.  We need to _safe_unicode
-            # each line separately so that non-utf8 bytes don't cause
-            # all the newlines to turn into '\n'.
-            lines = [formatted.rstrip()]
-            lines.extend(_safe_unicode(ln) for ln in record.exc_text.split('\n'))
-            formatted = '\n'.join(lines)
+            formatted = '{}\n{}'.format(formatted.rstrip(), record.exc_text)
         return formatted.replace("\n", "\n    ")
 
 

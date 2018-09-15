@@ -107,17 +107,24 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
         request.addfinalizer(stop_ioc)
 
     if pv_to_check:
-        poll_readiness(pv_to_check)
+        looks_like_areadetector = 'areadetector' in module_name
+        if looks_like_areadetector:
+            poll_timeout, poll_attempts = 5.0, 5
+        else:
+            poll_timeout, poll_attempts = 1.0, 5
+
+        poll_readiness(pv_to_check, timeout=poll_timeout,
+                       attempts=poll_attempts)
 
     return p
 
 
-def poll_readiness(pv_to_check, attempts=5):
+def poll_readiness(pv_to_check, attempts=5, timeout=1):
     logger.debug(f'Checking PV {pv_to_check}')
     start_repeater()
     for attempt in range(attempts):
         try:
-            read(pv_to_check, timeout=1, repeater=False)
+            read(pv_to_check, timeout=timeout, repeater=False)
         except TimeoutError:
             continue
         else:
