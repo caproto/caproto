@@ -87,7 +87,7 @@ async def run_caget(backend, pv, *, dbr_type=None):
     '''
     sep = '@'
     args = ['caget', '-F', sep,
-            '-w', '1.0' if sys.platform == 'win32' else '0.3',
+            '-w', '1.0',
             ]
 
     if dbr_type is None:
@@ -217,7 +217,7 @@ async def run_caput(backend, pv, value, *, async_put=True, as_string=False):
             '-' + (('c' if async_put else '') +
                    ('S' if as_string else '') +
                    'w'),
-            '1.0' if sys.platform == 'win32' else '0.3',
+            '1.0',
             pv]
 
     if isinstance(value, (list, tuple)):
