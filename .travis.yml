@@ -65,6 +65,8 @@ script:
     fi
   - pip install git+https://github.com/klauer/catvs.git@py3k
 
+  # give us an early warning of flake8 failure
+  - flake8 . || echo "flake8 FAILED!"
   - coverage run --parallel-mode run_tests.py  -k 'not bench' --benchmark-disable --timeout=100 -v
   - coverage combine --append
 
@@ -88,7 +90,7 @@ script:
   - pushd doc
   - make html
   - popd
-  - flake8 .
+  - flake8
 
   # Upload the docs to gh-pages.
   - if [[ $TRAVIS_PULL_REQUEST == false && $TRAVIS_REPO_SLUG == 'NSLS-II/caproto' && $PUBLISH_DOCS == 1 && $TRAVIS_BRANCH == 'master' ]]; then
