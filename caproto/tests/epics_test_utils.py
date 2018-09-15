@@ -16,7 +16,7 @@ import trio
 import caproto as ca
 
 
-async def run_epics_base_binary(backend, *args):
+async def run_epics_base_binary(backend, *args, max_attempts=3):
     '''Run an EPICS-base binary with the environment variables set
 
     Returns
@@ -24,8 +24,6 @@ async def run_epics_base_binary(backend, *args):
     stdout, stderr
         Decoded standard output and standard error text
     '''
-
-    import sys
     if sys.platform == 'win32':
         args = list(args)
     else:
@@ -40,12 +38,19 @@ async def run_epics_base_binary(backend, *args):
                EPICS_CA_AUTO_ADDR_LIST=epics_env['EPICS_CA_AUTO_ADDR_LIST'],
                EPICS_CA_ADDR_LIST=epics_env['EPICS_CA_ADDR_LIST'])
 
-    def runner():
+    def runner(attempt=0):
         e = os.environ.copy()
         e.update(env)
-        pipes = subprocess.Popen(args, env=e, stdout=subprocess.PIPE,
-                                 stderr=subprocess.PIPE)
-        return pipes.communicate()
+        with subprocess.Popen(args, env=e, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE) as proc:
+            raw_stdout, raw_stderr = proc.communicate()
+
+        if b'Channel connect timeout' in raw_stderr:
+            attempt += 1
+
+            if attempt < max_attempts:
+                return runner(attempt=attempt + 1)
+        return raw_stdout, raw_stderr
 
     if backend == 'curio':
         if sys.platform == 'win32':
@@ -61,14 +66,7 @@ async def run_epics_base_binary(backend, *args):
         raw_stdout, raw_stderr = await trio.run_sync_in_worker_thread(runner)
     elif backend == 'asyncio':
         loop = asyncio.get_event_loop()
-        if sys.platform == 'win32':
-            raw_stdout, raw_stderr = await loop.run_in_executor(None, runner)
-        else:
-            process = await asyncio.create_subprocess_exec(
-                *args, env=env, loop=loop,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE)
-            raw_stdout, raw_stderr = await process.communicate()
+        raw_stdout, raw_stderr = await loop.run_in_executor(None, runner)
     else:
         raise NotImplementedError('Unsupported async backend')
 
