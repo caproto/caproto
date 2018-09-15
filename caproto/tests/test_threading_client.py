@@ -436,7 +436,7 @@ def test_multithreaded_many_get_pvs(ioc, context, thread_count,
                                     multi_iterations):
     def _test(thread_id):
         pv, = context.get_pvs(ioc.pvs['int'])
-        pv.wait_for_connection(timeout=10)
+        pv.wait_for_connection(timeout=100)
 
         pvs[thread_id] = pv
         return pv.connected
@@ -451,7 +451,7 @@ def test_multithreaded_many_get_pvs(ioc, context, thread_count,
 def test_multithreaded_many_wait_for_connection(ioc, context, thread_count,
                                                 multi_iterations):
     def _test(thread_id):
-        pv.wait_for_connection(timeout=10)
+        pv.wait_for_connection(timeout=100)
         return pv.connected
 
     pv, = context.get_pvs(ioc.pvs['int'])
