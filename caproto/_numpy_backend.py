@@ -57,6 +57,8 @@ def python_to_epics(dtype, values, *, byteswap=True, convert_from=None):
     # NOTE: ignoring byteswap, storing everything as big-endian
     if dtype == ChannelType.STRING:
         return DbrStringArray(values).tobytes()
+    elif dtype == ChannelType.CHAR:
+        values = list(values)
 
     return np.asarray(values).astype(type_map[dtype])
 

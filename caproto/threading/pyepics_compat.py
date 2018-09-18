@@ -80,7 +80,6 @@ def _read_response_to_pyepics(full_type, command):
     info['value'] = _scalarify(value, command.data_type, command.data_count)
 
     if full_type in ca.char_types:
-        value = value.tobytes().partition(b'\x00')[0].decode(STR_ENC)
         info['char_value'] = value
     elif full_type in ca.string_types:
         value = [v.decode(STR_ENC).strip() for v in value]

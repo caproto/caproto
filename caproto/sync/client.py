@@ -443,8 +443,10 @@ def _write(chan, data, metadata, timeout, data_type, notify):
     if data and isinstance(data[0], str):
         data = [val.encode(STR_ENC) for val in data]
     logger.debug("Detected native data_type %r.", chan.native_data_type)
+    ntype = field_types['native'][chan.resolve_data_type(data_type)]
+    if ntype == ChannelType.CHAR:
+        data, = data
     # abundance of caution
-    ntype = field_types['native'][chan.native_data_type]
     if data_type is None:
         # Handle ENUM: If data is INT, carry on. If data is STRING,
         # write it specifically as STRING data_Type.

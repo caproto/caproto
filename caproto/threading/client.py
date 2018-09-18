@@ -1499,6 +1499,9 @@ class PV:
             data = [val.encode(STR_ENC) for val in data]
         if notify is None:
             notify = (wait or callback is not None)
+        ntype = ca.field_types['native'][self.channel.resolve_data_type(data_type)]
+        if ntype == ca.ChannelType.CHAR:
+            data, = data
         ioid = self.circuit_manager._ioid_counter()
         command = self.channel.write(data,
                                      ioid=ioid,
@@ -1914,6 +1917,9 @@ class Batch:
             data = [data]
         if len(data) and isinstance(data[0], str):
             data = [val.encode(STR_ENC) for val in data]
+        ntype = ca.field_types['native'][self.channel.resolve_data_type(data_type)]
+        if ntype == ca.ChannelType.CHAR:
+            data, = data
         ioid = pv.circuit_manager._ioid_counter()
         command = pv.channel.write(data=data,
                                    ioid=ioid,
