@@ -448,8 +448,18 @@ class _BaseChannel:
         return {k: v for k, v in self.circuit.event_add_commands.items()
                 if v.sid == self.sid}
 
-    def _fill_defaults(self, data_type, data_count):
-        # Boilerplate used in many convenience methods
+    def resolve_data_type(self, data_type):
+        """
+        Resolve flexible user input into a specific ChannelType member.
+
+        Parameters
+        ----------
+        data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID
+
+        Returns
+        -------
+        data_type : member of ChannelType
+        """
         if data_type is None:
             # Replace `None` default arg with actual default value.
             data_type = self.native_data_type
@@ -457,12 +467,16 @@ class _BaseChannel:
             # For example, if data_type is 'time', look up the 'time' type
             # corresponding to this channel's native data type.
             data_type = field_types[data_type.lower()][self.native_data_type]
+        return data_type
+
+    def _fill_defaults(self, data_type, data_count):
+        # Boilerplate used in many convenience methods
         if data_count is None:
             if self.protocol_version >= 13:
                 data_count = 0
             else:
                 data_count = self.native_data_count
-        return data_type, data_count
+        return self.resolve_data_type(data_type), data_count
 
     def state_changed(self, role, old_state, new_state, command):
         '''State changed callback for subclass usage'''
