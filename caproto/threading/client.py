@@ -1500,7 +1500,7 @@ class PV:
         if notify is None:
             notify = (wait or callback is not None)
         ntype = ca.field_types['native'][self.channel.resolve_data_type(data_type)]
-        if ntype == ca.ChannelType.CHAR:
+        if ntype == ca.ChannelType.CHAR and data and isinstance(data[0], (str, bytes)):
             data, = data
         ioid = self.circuit_manager._ioid_counter()
         command = self.channel.write(data,
