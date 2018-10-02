@@ -10,7 +10,7 @@ from collections import Iterable
 import caproto as ca
 from .client import (Context, SharedBroadcaster, AUTOMONITOR_MAXLENGTH,
                      STR_ENC)
-from caproto import AccessRights, field_types, ChannelType, SubscriptionType
+from caproto import AccessRights, field_types, ChannelType
 
 
 __all__ = ('PV', 'get_pv', 'caget', 'caput')
