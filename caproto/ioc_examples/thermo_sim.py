@@ -3,6 +3,7 @@ import argparse
 from caproto.server import pvproperty, PVGroup, template_arg_parser, run
 import numpy as np
 import time
+from textwrap import dedent
 
 
 class Thermo(PVGroup):
@@ -65,7 +66,7 @@ class Thermo(PVGroup):
 if __name__ == '__main__':
     parser, split_args = template_arg_parser(
         default_prefix='thermo:',
-        desc=Thermo.__doc__)
+        desc=dedent(Thermo.__doc__))
 
     def in_range(v):
         v = float(v)
