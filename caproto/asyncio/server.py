@@ -161,7 +161,7 @@ class Context(_Context):
                                     if not t.done())
 
             def error_received(self, exc):
-                self.log.error('BcastLoop received error', exc_info=exc)
+                self.parent.log.error('BcastLoop received error', exc_info=exc)
 
         class TransportWrapper:
             """Make an asyncio transport something you can call sendto on."""
