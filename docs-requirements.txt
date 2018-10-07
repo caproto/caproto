@@ -3,5 +3,5 @@ graphviz
 ipython<7
 matplotlib
 numpydoc
-sphinx==1.6.7
+sphinx==1.8.1
 sphinx_rtd_theme
