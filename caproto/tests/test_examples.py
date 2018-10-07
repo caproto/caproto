@@ -2,6 +2,7 @@ import curio
 import os
 import pytest
 import trio
+import time
 import sys
 
 import caproto as ca
@@ -466,3 +467,22 @@ def test_mocking_records(request, prefix):
     # does writing to .PREC update the ChannelData metadata?
     data = read(b, data_type=ca.ChannelType.CTRL_DOUBLE)
     assert data.metadata.precision == 4
+
+
+def test_mocking_records_subclass(request, prefix):
+    from .conftest import run_example_ioc
+    run_example_ioc('caproto.ioc_examples.mocking_records_subclass',
+                    request=request,
+                    args=['--prefix', prefix], pv_to_check=f'{prefix}motor1')
+
+    from caproto.sync.client import read, write
+    motor = f'{prefix}motor1'
+    motor_val = f'{motor}.VAL'
+    motor_rbv = f'{motor}.RBV'
+    motor_drbv = f'{motor}.DRBV'
+
+    write(motor_val, 100, notify=True)
+    # sleep for a few pollling periods:
+    time.sleep(0.5)
+    assert abs(read(motor_rbv).data[0] - 100) < 0.1
+    assert abs(read(motor_drbv).data[0] - 100) < 0.1

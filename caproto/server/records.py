@@ -3,10 +3,15 @@ Contains PVGroups representing all fields of EPICS base records (minus .VAL)
 '''
 
 import inspect
+import logging
 
 from .server import PVGroup, pvproperty
 from .._data import ChannelType
 from . import menus
+
+
+logger = logging.getLogger(__name__)
+records = {}
 
 
 def _link_parent_attribute(pvprop, parent_attr_name, *, read_only=False,
@@ -31,6 +36,14 @@ def _link_parent_attribute(pvprop, parent_attr_name, *, read_only=False,
                 await self.parent.write_metadata(**kw)
 
     return pvprop
+
+
+def register_record(cls):
+    'Register a record type to be used with pvproperty mock_record'
+    assert issubclass(cls, PVGroup)
+    records[cls._record_type] = cls
+    logger.debug('Registered record type %r', cls._record_type)
+    return cls
 
 
 class RecordFieldGroup(PVGroup):
@@ -174,6 +187,7 @@ class RecordFieldGroup(PVGroup):
         await self.parent.write(self.parent.value)
 
 
+@register_record
 class AiFields(RecordFieldGroup):
     _record_type = 'ai'
     # value = pvproperty(
@@ -324,6 +338,7 @@ class AiFields(RecordFieldGroup):
     #     await self.parent.write_metadata(precision=value)
 
 
+@register_record
 class AsubFields(RecordFieldGroup):
     _record_type = 'aSub'
     # value = pvproperty(
@@ -381,6 +396,7 @@ class AsubFields(RecordFieldGroup):
     _link_parent_attribute(display_precision, 'precision')
 
 
+@register_record
 class AaiFields(RecordFieldGroup):
     _record_type = 'aai'
     alarm_status = pvproperty(
@@ -449,6 +465,7 @@ class AaiFields(RecordFieldGroup):
     _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
 
 
+@register_record
 class AaoFields(RecordFieldGroup):
     _record_type = 'aao'
     alarm_status = pvproperty(
@@ -517,6 +534,7 @@ class AaoFields(RecordFieldGroup):
     _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
 
 
+@register_record
 class AcalcoutFields(RecordFieldGroup):
     _record_type = 'acalcout'
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Result')
@@ -680,6 +698,7 @@ class AcalcoutFields(RecordFieldGroup):
     _link_parent_attribute(monitor_deadband, 'value_atol')
 
 
+@register_record
 class AoFields(RecordFieldGroup):
     _record_type = 'ao'
     # value = pvproperty(
@@ -860,6 +879,7 @@ class AoFields(RecordFieldGroup):
     _link_parent_attribute(monitor_deadband, 'value_atol')
 
 
+@register_record
 class AsynFields(RecordFieldGroup):
     _record_type = 'asyn'
     # value = pvproperty(
@@ -1164,6 +1184,7 @@ class AsynFields(RecordFieldGroup):
         name='UI32OUT', dtype=ChannelType.LONG, doc='asynUInt32Digital output')
 
 
+@register_record
 class BiFields(RecordFieldGroup):
     _record_type = 'bi'
     # value = pvproperty(name='VAL', dtype=ChannelType.ENUM, doc='Current Value')
@@ -1234,6 +1255,7 @@ class BiFields(RecordFieldGroup):
         doc='Sim mode Alarm Svrty')
 
 
+@register_record
 class BoFields(RecordFieldGroup):
     _record_type = 'bo'
     # value = pvproperty(name='VAL', dtype=ChannelType.ENUM, doc='Current Value')
@@ -1328,6 +1350,7 @@ class BoFields(RecordFieldGroup):
         name='HIGH', dtype=ChannelType.DOUBLE, doc='Seconds to Hold High')
 
 
+@register_record
 class BusyFields(RecordFieldGroup):
     _record_type = 'busy'
     # value = pvproperty(name='VAL', dtype=ChannelType.ENUM, doc='Current Value')
@@ -1424,6 +1447,7 @@ class BusyFields(RecordFieldGroup):
         name='HIGH', dtype=ChannelType.DOUBLE, doc='Seconds to Hold High')
 
 
+@register_record
 class CalcFields(RecordFieldGroup):
     _record_type = 'calc'
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Result')
@@ -1502,6 +1526,7 @@ class CalcFields(RecordFieldGroup):
     _link_parent_attribute(monitor_deadband, 'value_atol')
 
 
+@register_record
 class CalcoutFields(RecordFieldGroup):
     _record_type = 'calcout'
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Result')
@@ -1629,6 +1654,7 @@ class CalcoutFields(RecordFieldGroup):
     _link_parent_attribute(monitor_deadband, 'value_atol')
 
 
+@register_record
 class CompressFields(RecordFieldGroup):
     _record_type = 'compress'
     alarm_status = pvproperty(
@@ -1694,6 +1720,7 @@ class CompressFields(RecordFieldGroup):
     _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
 
 
+@register_record
 class DfanoutFields(RecordFieldGroup):
     _record_type = 'dfanout'
     # value = pvproperty(
@@ -1804,6 +1831,7 @@ class DfanoutFields(RecordFieldGroup):
     _link_parent_attribute(monitor_deadband, 'value_atol')
 
 
+@register_record
 class DigitelFields(RecordFieldGroup):
     _record_type = 'digitel'
     # value = pvproperty(
@@ -2304,6 +2332,7 @@ class DigitelFields(RecordFieldGroup):
         name='HVTR', dtype=ChannelType.DOUBLE, doc='Voltage Display Hi')
 
 
+@register_record
 class EpidFields(RecordFieldGroup):
     _record_type = 'epid'
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Setpoint')
@@ -2472,6 +2501,7 @@ class EpidFields(RecordFieldGroup):
     _link_parent_attribute(monitor_deadband, 'value_atol')
 
 
+@register_record
 class EventFields(RecordFieldGroup):
     _record_type = 'event'
     # value = pvproperty(
@@ -2502,6 +2532,7 @@ class EventFields(RecordFieldGroup):
         doc='Sim mode Alarm Svrty')
 
 
+@register_record
 class FanoutFields(RecordFieldGroup):
     _record_type = 'fanout'
     # value = pvproperty(
@@ -2535,6 +2566,7 @@ class FanoutFields(RecordFieldGroup):
         doc='Select Mechanism')
 
 
+@register_record
 class GensubFields(RecordFieldGroup):
     _record_type = 'genSub'
     # value = pvproperty(
@@ -3510,6 +3542,7 @@ class GensubFields(RecordFieldGroup):
     _link_parent_attribute(display_precision, 'precision')
 
 
+@register_record
 class HistogramFields(RecordFieldGroup):
     _record_type = 'histogram'
     alarm_status = pvproperty(
@@ -3582,6 +3615,7 @@ class HistogramFields(RecordFieldGroup):
     _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
 
 
+@register_record
 class LonginFields(RecordFieldGroup):
     _record_type = 'longin'
     # value = pvproperty(name='VAL', dtype=ChannelType.LONG, doc='Current value')
@@ -3674,6 +3708,7 @@ class LonginFields(RecordFieldGroup):
     _link_parent_attribute(monitor_deadband, 'value_atol')
 
 
+@register_record
 class LongoutFields(RecordFieldGroup):
     _record_type = 'longout'
     # value = pvproperty(
@@ -3783,6 +3818,7 @@ class LongoutFields(RecordFieldGroup):
     _link_parent_attribute(monitor_deadband, 'value_atol')
 
 
+@register_record
 class MbbiFields(RecordFieldGroup):
     _record_type = 'mbbi'
     # value = pvproperty(name='VAL', dtype=ChannelType.ENUM, doc='Current Value')
@@ -3853,6 +3889,7 @@ class MbbiFields(RecordFieldGroup):
         name='SVAL', dtype=ChannelType.LONG, doc='Simulation Value')
 
 
+@register_record
 class MbbidirectFields(RecordFieldGroup):
     _record_type = 'mbbiDirect'
     # value = pvproperty(name='VAL', dtype=ChannelType.LONG, doc='Current Value')
@@ -3931,6 +3968,7 @@ class MbbidirectFields(RecordFieldGroup):
         doc='Sim mode Alarm Svrty')
 
 
+@register_record
 class MbboFields(RecordFieldGroup):
     _record_type = 'mbbo'
     # value = pvproperty(name='VAL', dtype=ChannelType.ENUM, doc='Desired Value')
@@ -4023,6 +4061,7 @@ class MbboFields(RecordFieldGroup):
         name='SIOL', dtype=ChannelType.STRING, doc='Sim Output Specifctn')
 
 
+@register_record
 class MbbodirectFields(RecordFieldGroup):
     _record_type = 'mbboDirect'
     # value = pvproperty(name='VAL', dtype=ChannelType.LONG, doc='Word')
@@ -4118,6 +4157,7 @@ class MbbodirectFields(RecordFieldGroup):
         doc='Sim mode Alarm Svrty')
 
 
+@register_record
 class MotorFields(RecordFieldGroup):
     _record_type = 'motor'
     # value = pvproperty(
@@ -4527,6 +4567,7 @@ class MotorFields(RecordFieldGroup):
     _link_parent_attribute(monitor_deadband, 'value_atol')
 
 
+@register_record
 class PermissiveFields(RecordFieldGroup):
     _record_type = 'permissive'
     # value = pvproperty(name='VAL', dtype=ChannelType.LONG, doc='Status')
@@ -4546,6 +4587,7 @@ class PermissiveFields(RecordFieldGroup):
         name='LABL', dtype=ChannelType.CHAR, max_length=20, doc='Button Label')
 
 
+@register_record
 class ScalcoutFields(RecordFieldGroup):
     _record_type = 'scalcout'
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Result')
@@ -4705,6 +4747,7 @@ class ScalcoutFields(RecordFieldGroup):
     _link_parent_attribute(monitor_deadband, 'value_atol')
 
 
+@register_record
 class ScanparmFields(RecordFieldGroup):
     _record_type = 'scanparm'
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Result')
@@ -4832,6 +4875,7 @@ class ScanparmFields(RecordFieldGroup):
     _link_parent_attribute(display_precision, 'precision')
 
 
+@register_record
 class SelFields(RecordFieldGroup):
     _record_type = 'sel'
     # value = pvproperty(
@@ -4923,6 +4967,7 @@ class SelFields(RecordFieldGroup):
     _link_parent_attribute(monitor_deadband, 'value_atol')
 
 
+@register_record
 class SeqFields(RecordFieldGroup):
     _record_type = 'seq'
     # value = pvproperty(
@@ -5018,6 +5063,7 @@ class SeqFields(RecordFieldGroup):
     _link_parent_attribute(display_precision, 'precision')
 
 
+@register_record
 class SscanFields(RecordFieldGroup):
     _record_type = 'sscan'
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Value Field')
@@ -5229,6 +5275,7 @@ class SscanFields(RecordFieldGroup):
         doc='Freeze Num of Points')
 
 
+@register_record
 class SseqFields(RecordFieldGroup):
     _record_type = 'sseq'
     # value = pvproperty(
@@ -5689,6 +5736,7 @@ class SseqFields(RecordFieldGroup):
     _link_parent_attribute(display_precision, 'precision')
 
 
+@register_record
 class StateFields(RecordFieldGroup):
     _record_type = 'state'
     # value = pvproperty(
@@ -5707,6 +5755,7 @@ class StateFields(RecordFieldGroup):
         read_only=True)
 
 
+@register_record
 class StringinFields(RecordFieldGroup):
     _record_type = 'stringin'
     # value = pvproperty(
@@ -5756,6 +5805,7 @@ class StringinFields(RecordFieldGroup):
         doc='Sim mode Alarm Svrty')
 
 
+@register_record
 class StringoutFields(RecordFieldGroup):
     _record_type = 'stringout'
     # value = pvproperty(
@@ -5817,6 +5867,7 @@ class StringoutFields(RecordFieldGroup):
         name='OUT', dtype=ChannelType.STRING, doc='Output Specification')
 
 
+@register_record
 class SubFields(RecordFieldGroup):
     _record_type = 'sub'
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Result')
@@ -6005,6 +6056,7 @@ class SubFields(RecordFieldGroup):
     _link_parent_attribute(monitor_deadband, 'value_atol')
 
 
+@register_record
 class SubarrayFields(RecordFieldGroup):
     _record_type = 'subArray'
     alarm_status = pvproperty(
@@ -6056,6 +6108,7 @@ class SubarrayFields(RecordFieldGroup):
     _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
 
 
+@register_record
 class SwaitFields(RecordFieldGroup):
     _record_type = 'swait'
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Value Field')
@@ -6156,6 +6209,7 @@ class SwaitFields(RecordFieldGroup):
     _link_parent_attribute(monitor_deadband, 'value_atol')
 
 
+@register_record
 class TableFields(RecordFieldGroup):
     _record_type = 'table'
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Result')
@@ -6790,6 +6844,7 @@ class TableFields(RecordFieldGroup):
     _link_parent_attribute(display_precision, 'precision')
 
 
+@register_record
 class TimestampFields(RecordFieldGroup):
     _record_type = 'timestamp'
     # value = pvproperty(
@@ -6815,6 +6870,7 @@ class TimestampFields(RecordFieldGroup):
         doc='Time Stamp Type')
 
 
+@register_record
 class TransformFields(RecordFieldGroup):
     _record_type = 'transform'
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Result')
@@ -6848,6 +6904,7 @@ class TransformFields(RecordFieldGroup):
     _link_parent_attribute(display_precision, 'precision')
 
 
+@register_record
 class VmeFields(RecordFieldGroup):
     _record_type = 'vme'
     # value = pvproperty(name='VAL', dtype=ChannelType.LONG, doc='Current value')
@@ -6884,6 +6941,7 @@ class VmeFields(RecordFieldGroup):
         name='ADDR', dtype=ChannelType.LONG, doc='VME address (hex)')
 
 
+@register_record
 class VsFields(RecordFieldGroup):
     _record_type = 'vs'
     # value = pvproperty(
@@ -7261,6 +7319,7 @@ class VsFields(RecordFieldGroup):
         name='LBLR', dtype=ChannelType.DOUBLE, doc='CGB Log10 Low Display')
 
 
+@register_record
 class WaveformFields(RecordFieldGroup):
     _record_type = 'waveform'
     alarm_status = pvproperty(
@@ -7336,10 +7395,4 @@ class WaveformFields(RecordFieldGroup):
     _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
 
 
-records = {record._record_type: record
-           for name, record in globals().items()
-           if inspect.isclass(record) and
-           issubclass(record, PVGroup) and
-           record not in (PVGroup, RecordFieldGroup)
-           }
 __all__ = ['records', 'RecordFieldGroup'] + list(records.keys())
