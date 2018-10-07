@@ -95,12 +95,12 @@ MANY = object()
 
 
 # TO DO --- These really should not be flaky!
-@pytest.mark.flaky(reruns=10, reruns_delay=2)
+@pytest.mark.xfail
 @pytest.mark.parametrize('filter, initial, on, off',
                          [('{"before": "my_stately_state"}', 1, 1, 1),
                           ('{"after": "my_stately_state"}', 1, 1, 1),
                           ('{"first": "my_stately_state"}', 1, 1, 1),
-                          pytest.mark.xfail(('{"last": "my_stately_state"}', 1, 1, 1)),
+                          ('{"last": "my_stately_state"}', 1, 1, 1),
                           ('{"while": "my_stately_state"}', 1, MANY, 1),
                           ('{"unless": "my_stately_state"}', MANY, 1, MANY),
                           ])
@@ -114,13 +114,15 @@ def test_sync_filter(request, prefix, context, filter, initial, on, off):
     responses = []
 
     def cache(response):
+        print('* response:', response.data)
         responses.append(response)
 
     def check_length(expected):
         if expected is MANY:
-            assert len(responses) > 1
+            assert len(responses) > 1, 'Expected many responses'
         else:
-            assert len(responses) == expected
+            assert len(responses) == expected, \
+                'Expected an exact number of responses'
 
     value, disable_state, enable_state = context.get_pvs(
         value_name + '.' + filter, disable_state_name, enable_state_name)
@@ -132,7 +134,7 @@ def test_sync_filter(request, prefix, context, filter, initial, on, off):
 
     # state is off
     sub.add_callback(cache)
-    time.sleep(2)
+    time.sleep(0.5)
     sub.clear()
     check_length(initial)
     responses.clear()
@@ -140,7 +142,7 @@ def test_sync_filter(request, prefix, context, filter, initial, on, off):
     # state is on
     enable_state.write((1,))
     sub.add_callback(cache)
-    time.sleep(2)
+    time.sleep(0.5)
     sub.clear()
     check_length(on)
     responses.clear()
@@ -148,7 +150,7 @@ def test_sync_filter(request, prefix, context, filter, initial, on, off):
     # state is off
     disable_state.write((1,))
     sub.add_callback(cache)
-    time.sleep(2)
+    time.sleep(0.5)
     sub.clear()
     check_length(off)
     responses.clear()
