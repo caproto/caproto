@@ -936,16 +936,15 @@ class Context:
             # disconnect any circuits we have
             circuits = list(self.circuit_managers.values())
             total_circuits = len(circuits)
+            disconnected = False
             for idx, circuit in enumerate(circuits, 1):
                 if circuit.connected:
                     self.log.debug('Disconnecting circuit %d/%d: %s',
                                    idx, total_circuits, circuit)
                     circuit.disconnect()
-                    self.log.debug('... Circuit %d disconnect complete.', idx)
-                else:
-                    self.log.debug('Circuit %d/%d was already disconnected: %s',
-                                   idx, total_circuits, circuit)
-            self.log.debug('All circuits disconnected')
+                    disconnected = True
+            if disconnected:
+                self.log.debug('All circuits disconnected')
         finally:
             # Remove from Broadcaster.
             self.broadcaster.remove_listener(self)
@@ -955,10 +954,9 @@ class Context:
             self.circuit_managers.clear()
 
             # disconnect the underlying state machine
-            self.log.debug('Removing Context from the broadcaster')
             self.broadcaster.remove_listener(self)
 
-            self.log.debug("Stopping Context's SelectorThread")
+            self.log.debug("Stopping SelectorThread of the context")
             self.selector.stop()
 
             if wait:
@@ -966,7 +964,7 @@ class Context:
                 self._activate_subscriptions_thread.join()
                 self.selector.thread.join()
 
-            self.log.debug('Disconnection complete')
+            self.log.debug('Context disconnection complete')
 
     def __del__(self):
         try:
