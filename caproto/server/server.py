@@ -81,6 +81,16 @@ class PvpropertyData:
         if mock_record is not None:
             from .records import records
             field_class = records[mock_record]
+            if self.pvspec.fields is not None:
+                new_dict = dict(field_class.__dict__)
+                for (field, field_attr), func in self.pvspec.fields:
+                    prop = new_dict[field]
+                    prop.pvspec = prop.pvspec._replace(**{field_attr: func})
+
+                field_class = type(
+                    field_class.__name__ + self.name.replace('.', '_'),
+                    (field_class, ), new_dict)
+
             self.field_inst = field_class(
                 prefix='', parent=self,
                 name=f'{self.name}.fields')
@@ -189,7 +199,7 @@ class PvpropertyBoolEnumRO(PvpropertyReadOnlyData, ChannelEnum):
 
 class PVSpec(namedtuple('PVSpec',
                         'get put startup attr name dtype value '
-                        'alarm_group read_only doc cls_kwargs')):
+                        'alarm_group read_only doc fields cls_kwargs')):
     '''PV information specification
 
     Parameters
@@ -215,6 +225,8 @@ class PVSpec(namedtuple('PVSpec',
         Read-only PV over channel access
     doc : str, optional
         Docstring associated with PV
+    fields : tuple, optional
+        Specification for record fields
     cls_kwargs : dict, optional
         Keyword arguments for the ChannelData-based class
     '''
@@ -223,7 +235,7 @@ class PVSpec(namedtuple('PVSpec',
 
     def __new__(cls, get=None, put=None, startup=None, attr=None, name=None,
                 dtype=None, value=None, alarm_group=None, read_only=None,
-                doc=None, cls_kwargs=None):
+                doc=None, fields=None, cls_kwargs=None):
         if dtype is None:
             dtype = (type(value[0]) if value is not None
                      else cls.default_dtype)
@@ -260,17 +272,78 @@ class PVSpec(namedtuple('PVSpec',
         return super().__new__(cls, get=get, put=put, startup=startup,
                                attr=attr, name=name, dtype=dtype, value=value,
                                alarm_group=alarm_group, read_only=read_only,
-                               doc=doc, cls_kwargs=cls_kwargs)
+                               doc=doc, fields=fields,
+                               cls_kwargs=cls_kwargs)
 
     def new_names(self, attr=None, name=None):
         if attr is None:
             attr = self.attr
         if name is None:
             name = self.name
-        return PVSpec(get=self.get, put=self.put, startup=self.startup,
-                      attr=attr, name=name, dtype=self.dtype, value=self.value,
-                      alarm_group=self.alarm_group, read_only=self.read_only,
-                      doc=self.doc, cls_kwargs=self.cls_kwargs)
+        return self._replace(attr=attr, name=name)
+
+
+class FieldProxy:
+    'pvproperty.fields.Field'
+    def __init__(self, field_spec, record_class, field_name):
+        self.field_spec = field_spec
+        self.record_class = record_class
+        self.field_name = field_name
+
+    def getter(self, getter):
+        self.field_spec._update(self.field_name, 'get', getter)
+        return self.field_spec.prop
+
+    def putter(self, putter):
+        self.field_spec._update(self.field_name, 'put', putter)
+        return self.field_spec.prop
+
+    def startup(self, startup):
+        self.field_spec._update(self.field_name, 'startup', startup)
+        return self.field_spec.prop
+
+    def __repr__(self):
+        return (f'<FieldProxy record={self.record_class.__name__} '
+                f'attr={self.field_name}>')
+
+
+class FieldSpec:
+    '''A field specification for a pvproperty record
+
+    Doubles as the .fields attribute of a pvproperty
+    '''
+
+    def __init__(self, prop, *, record_type=None):
+        self.prop = prop
+        self._record_type = record_type
+        self._fields = {}
+
+    def __getattr__(self, attr):
+        from .records import RecordFieldGroup, records
+        rec_class = records.get(self._record_type, RecordFieldGroup)
+        # Validate that the attribute is either the full field name or its
+        # corresponding friendly attribute name
+        if attr not in rec_class._pvs_:
+            # TODO: a map would be nice here
+            for real_attr, pvprop in rec_class._pvs_.items():
+                if pvprop.pvspec.name == attr:
+                    attr = real_attr
+                    break
+            else:
+                raise AttributeError(f'Unknown field specified: {attr}')
+        return FieldProxy(self, rec_class, attr)
+
+    @property
+    def fields(self):
+        return tuple(self._fields.items())
+
+    def _update(self, field, attr, value):
+        self._fields[(field, attr)] = value
+        self.prop.pvspec = self.prop.pvspec._replace(fields=self.fields)
+
+    def __repr__(self):
+        return (f'<FieldSpec record={self._record_type} '
+                f'fields={self.fields}>')
 
 
 class pvproperty:
@@ -297,22 +370,33 @@ class pvproperty:
         Read-only PV over channel access
     doc : str, optional
         Docstring associated with the property
+    fields : FieldSpec, optional
+        Specification for record fields
     **cls_kwargs :
         Keyword arguments for the ChannelData-based class
     '''
 
     def __init__(self, get=None, put=None, startup=None, *, name=None,
                  dtype=None, value=None, alarm_group=None, doc=None,
-                 read_only=None,
-                 **cls_kwargs):
+                 read_only=None, field_spec=None, fields=None, **cls_kwargs):
         self.attr_name = None  # to be set later
 
         if doc is None and get is not None:
             doc = get.__doc__
 
+        if field_spec is None:
+            if name is None or '.' not in name:
+                field_spec = FieldSpec(
+                    self,
+                    record_type=cls_kwargs.get('mock_record'))
+        self.field_spec = field_spec
+
+        fields = (None if field_spec is None
+                  else field_spec.fields)
+
         self.pvspec = PVSpec(get=get, put=put, startup=startup, name=name,
                              dtype=dtype, value=value, alarm_group=alarm_group,
-                             read_only=read_only, doc=doc,
+                             read_only=read_only, doc=doc, fields=fields,
                              cls_kwargs=cls_kwargs)
         self.__doc__ = doc
 
@@ -338,18 +422,17 @@ class pvproperty:
 
     def getter(self, get):
         # update PVSpec with getter
-        self.pvspec = PVSpec(get, *self.pvspec[1:])
+        self.pvspec = self.pvspec._replace(get=get)
         return self
 
     def putter(self, put):
         # update PVSpec with putter
-        self.pvspec = PVSpec(self.pvspec.get, put, *self.pvspec[2:])
+        self.pvspec = self.pvspec._replace(put=put)
         return self
 
     def startup(self, startup):
         # update PVSpec with startup function
-        self.pvspec = PVSpec(self.pvspec.get, self.pvspec.put, startup,
-                             *self.pvspec[3:])
+        self.pvspec = self.pvspec._replace(startup=startup)
         return self
 
     def scan(self, period, *, subtract_elapsed=True, stop_on_error=False,
@@ -437,6 +520,12 @@ class pvproperty:
         prop = cls()
         prop.pvspec = pvspec
         return prop
+
+    @property
+    def fields(self):
+        if self.field_spec is None:
+            raise AttributeError('No fields are allowed for this pvproperty')
+        return self.field_spec
 
 
 class NestedPvproperty(pvproperty):

@@ -3,8 +3,10 @@ from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
 
 
 class RecordMockingIOC(PVGroup):
+    # Define two records, an analog input (ai) record:
     A = pvproperty(value=[1.0], mock_record='ai')
-    B = pvproperty(value=[2.0], mock_record='ai',
+    # And an analog output (ao) record:
+    B = pvproperty(value=[2.0], mock_record='ao',
                    precision=3)
 
     @B.putter
@@ -14,11 +16,36 @@ class RecordMockingIOC(PVGroup):
             # an exception in the putter:
             raise ValueError('Invalid value!')
 
+    # It's also possible to modify some of the behavior of fields on a per-
+    # record basis. The following function is called whenever B.RVAL is put to:
+    @A.fields.current_raw_value.putter
+    async def A(fields, instance, value):
+        # However, somewhat confusingly, 'self' in this case is the fields
+        # associated with 'A'. To access the IOC (i.e., the main PV group)
+        # use the following:
+        ioc = fields.parent.group
+        print(f'A.RVAL: Writing values to A and B: {value}')
+        await ioc.B.write(value)
+        await ioc.A.write(value)
+
+
+    # Similarly, you can refer to the fields by their usual PV name:
+    @B.fields.RVAL.putter
+    async def B(fields, instance, value):
+        ioc = fields.parent.group
+        print(f'B.RVAL: Writing modified values to A, B')
+        await ioc.B.write(value + 10)
+        await ioc.A.write(value - 10)
+
+    # Now that the field specification has been set on B, it can be reused:
+    C = pvproperty(value=[2.0], mock_record='ao',
+                   precision=3, field_spec=B.field_spec)
+
 
 if __name__ == '__main__':
     ioc_options, run_options = ioc_arg_parser(
         default_prefix='mock:',
-        desc='Run an IOC that mocks at ai record.')
+        desc='Run an IOC that mocks an ai (analog input) record.')
 
     # Instantiate the IOC, assigning a prefix for the PV names.
     ioc = RecordMockingIOC(**ioc_options)
@@ -26,6 +53,9 @@ if __name__ == '__main__':
 
     # ... but what you don't see are all of the analog input record fields
     print('Fields of B:', list(ioc.B.fields.keys()))
+
+    print('Custom field specifications of A:', RecordMockingIOC.A.fields)
+    print('Custom field specifications of B:', RecordMockingIOC.B.fields)
 
     # Run IOC.
     run(ioc.pvdb, **run_options)
