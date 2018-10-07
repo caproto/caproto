@@ -9,6 +9,7 @@ def test_broadcast_address_list_from_interfaces():
     # env vars and calling get_address_list.
     env = os.environ.copy()
     try:
+        os.environ['EPICS_CA_ADDR_LIST'] = ''
         os.environ['EPICS_CA_AUTO_ADDR_LIST'] = 'YES'
         ca.get_address_list()
     finally:

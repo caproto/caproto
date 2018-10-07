@@ -205,8 +205,8 @@ def get_environment_variables():
         warn("EPICS_CA_ADDR_LIST is set but will be ignored because "
              "EPICS_CA_AUTO_ADDR_LIST is not set to 'no'. "
              "EPICS_CA_ADDR_LIST={!r} EPICS_CA_AUTO_ADDR_LIST={!r}"
-             "".format(result.get('EPICS_CA_AUTO_ADDR_LIST', ''),
-                       result.get('EPICS_CA_ADDR_LIST', ''))
+             "".format(result.get('EPICS_CA_ADDR_LIST', ''),
+                       result.get('EPICS_CA_AUTO_ADDR_LIST', ''))
              )
     if (result.get('EPICS_CAS_BEACON_ADDR_LIST') and
             result.get('EPICS_CAS_AUTO_BEACON_ADDR_LIST', '').upper() != 'NO'):

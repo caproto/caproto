@@ -10,20 +10,18 @@ class StateIOC(PVGroup):
     def __init__(self, *args, **kwargs):
         self.states = {'my_stately_state': False}
         super().__init__(*args, **kwargs)
+        self._value = 0
 
     @pvproperty()
     async def my_stately_state(self, instance):
         return self.states['my_stately_state']
 
-    @value.startup
+    @value.scan(period=0.1)
     async def value(self, instance, async_lib):
         'Periodically update the value'
-        while True:
-            for i in range(10):
-                # update the ChannelData instance and notify any subscribers
-                await instance.write(value=[i])
-                # Let the async library wait for the next iteration
-                await async_lib.library.sleep(0.5)
+        # update the ChannelData instance and notify any subscribers
+        self._value = (self._value + 1) % 10
+        await instance.write(value=[self._value])
 
     @disable_state.putter
     async def disable_state(self, instance, value):
