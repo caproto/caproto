@@ -5,7 +5,8 @@ import itertools
 import logging
 
 from ._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
-from ._utils import (CLIENT, SERVER, CaprotoValueError, LocalProtocolError)
+from ._utils import (CLIENT, SERVER, CaprotoValueError, LocalProtocolError,
+                     RemoteProtocolError)
 from ._state import get_exception
 from ._commands import (RepeaterConfirmResponse, RepeaterRegisterRequest,
                         SearchRequest, SearchResponse, VersionRequest,
@@ -96,7 +97,12 @@ class Broadcaster:
         """
         self.log.debug("Received datagram from %r with %d bytes.",
                        address, len(byteslike))
-        commands = read_datagram(byteslike, address, self.their_role)
+        try:
+            commands = read_datagram(byteslike, address, self.their_role)
+        except Exception as ex:
+            raise RemoteProtocolError(f'Broadcaster malformed packet received:'
+                                      f' {ex.__class__.__name__} {ex}') from ex
+
         for command in commands:
             self.log.debug("%d bytes -> %r", len(command), command)
         return commands

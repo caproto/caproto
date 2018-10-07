@@ -4,7 +4,8 @@ import logging
 import sys
 import time
 import caproto as ca
-from caproto import apply_arr_filter, get_environment_variables
+from caproto import (apply_arr_filter, get_environment_variables,
+                     RemoteProtocolError)
 from .._dbr import SubscriptionType
 
 
@@ -394,8 +395,12 @@ class Context:
             await self._broadcaster_recv_datagram(bytes_received, address)
 
     async def _broadcaster_recv_datagram(self, bytes_received, address):
-        if bytes_received:
-            commands = self.broadcaster.recv(bytes_received, address)
+        try:
+            if bytes_received:
+                commands = self.broadcaster.recv(bytes_received, address)
+        except RemoteProtocolError:
+            self.log.exception('Broadcaster received bad packet')
+        else:
             await self.command_bundle_queue.put((address, commands))
 
     async def broadcaster_queue_loop(self):
