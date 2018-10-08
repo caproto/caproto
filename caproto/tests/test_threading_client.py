@@ -377,8 +377,8 @@ def multi_iterations(request):
     return request.param
 
 
-def _multithreaded_exec(test_func, thread_count, *, start_timeout=5,
-                        end_timeout=2):
+def _multithreaded_exec(test_func, thread_count, *, start_timeout=10,
+                        end_timeout=20):
     threads = {}
     return_values = {i: None for i in range(thread_count)}
     start_barrier = threading.Barrier(parties=thread_count + 1)
@@ -506,12 +506,11 @@ def test_multithreaded_many_write(ioc, context, thread_count,
     sub.clear()
 
 
-@pytest.mark.xfail
 def test_multithreaded_many_subscribe(ioc, context, thread_count,
                                       multi_iterations):
     def _test(thread_id):
         if thread_id == 0:
-            init_barrier.wait(timeout=2)
+            init_barrier.wait(timeout=10)
             print('-- write thread initialized --')
             pv.write((1, ), wait=True)
             time.sleep(0.01)
@@ -520,7 +519,7 @@ def test_multithreaded_many_subscribe(ioc, context, thread_count,
             pv.write((3, ), wait=True)
             time.sleep(0.2)
             print('-- write thread hit sub barrier --')
-            sub_ended_barrier.wait(timeout=2)
+            sub_ended_barrier.wait(timeout=10)
             print('-- write thread exiting --')
             return [initial_value, 1, 2, 3]
 
@@ -534,11 +533,11 @@ def test_multithreaded_many_subscribe(ioc, context, thread_count,
         sub.add_callback(callback)
         time.sleep(0.2)  # Wait for EventAddRequest to be sent and processed.
         # print(thread_id, sub)
-        init_barrier.wait(timeout=2)
+        init_barrier.wait(timeout=10)
         # Everybody here? On my signal... SUBSCRIBE!! Ahahahahaha!
         # Destruction!!
         time.sleep(1)  # Wait for EventAddRequest to be sent and processed.
-        sub_ended_barrier.wait(timeout=2)
+        sub_ended_barrier.wait(timeout=10)
 
         sub.clear()
         return values[thread_id]
