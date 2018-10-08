@@ -390,8 +390,11 @@ class Context:
         pvdb = {}
         for name, instance in self.pvdb.items():
             pvdb[name] = instance
-            for field_name, field in instance.fields.items():
-                pvdb[f'{name}.{field_name}'] = field
+            if hasattr(instance, 'fields'):
+                # Note that we support PvpropertyData along with ChannelData
+                # instances here (which may not have fields)
+                for field_name, field in instance.fields.items():
+                    pvdb[f'{name}.{field_name}'] = field
         return pvdb
 
     async def _core_broadcaster_loop(self, udp_sock):

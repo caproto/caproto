@@ -2,7 +2,6 @@
 Contains PVGroups representing all fields of EPICS base records (minus .VAL)
 '''
 
-import inspect
 import logging
 
 from .server import PVGroup, pvproperty

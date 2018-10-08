@@ -17,7 +17,7 @@ class RecordMockingIOC(PVGroup):
             raise ValueError('Invalid value!')
 
     # It's also possible to modify some of the behavior of fields on a per-
-    # record basis. The following function is called whenever B.RVAL is put to:
+    # record basis. The following function is called whenever A.RVAL is put to:
     @A.fields.current_raw_value.putter
     async def A(fields, instance, value):
         # However, somewhat confusingly, 'self' in this case is the fields
@@ -27,7 +27,6 @@ class RecordMockingIOC(PVGroup):
         print(f'A.RVAL: Writing values to A and B: {value}')
         await ioc.B.write(value)
         await ioc.A.write(value)
-
 
     # Similarly, you can refer to the fields by their usual PV name:
     @B.fields.RVAL.putter
