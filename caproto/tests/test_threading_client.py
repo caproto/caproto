@@ -539,7 +539,7 @@ def test_multithreaded_many_subscribe(ioc, context, thread_count,
         else:
             raise Exception(f"{thread_id} never saw initial EventAddResponse")
         # print(thread_id, sub)
-        init_barrier.wait(timeout=2)
+        init_barrier.wait(timeout=20)
         # Everybody here? On my signal... SEND UPDATES!! Ahahahahaha!
         # Destruction!!
         # Wait <= 20 seconds until three more EventAddResponses are received.
@@ -550,7 +550,7 @@ def test_multithreaded_many_subscribe(ioc, context, thread_count,
         else:
             raise Exception(f"{thread_id} only got {len(values[thread_id])}"
                             f"EventAddResponses.")
-        sub_ended_barrier.wait(timeout=10)
+        sub_ended_barrier.wait(timeout=20)
 
         sub.clear()
         return values[thread_id]
