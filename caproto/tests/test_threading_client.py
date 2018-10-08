@@ -531,8 +531,8 @@ def test_multithreaded_many_subscribe(ioc, context, thread_count,
 
         sub = pv.subscribe()
         sub.add_callback(callback)
-        # Wait <= 2 seconds for EventAddRequest to be sent and processed.
-        for i in range(20):
+        # Wait <= 20 seconds until first EventAddResponse is received.
+        for i in range(200):
             if values[thread_id]:
                 break
             time.sleep(0.1)
@@ -542,7 +542,14 @@ def test_multithreaded_many_subscribe(ioc, context, thread_count,
         init_barrier.wait(timeout=2)
         # Everybody here? On my signal... SEND UPDATES!! Ahahahahaha!
         # Destruction!!
-        time.sleep(1)  # Wait for EventAddRequest to be sent and processed.
+        # Wait <= 20 seconds until three more EventAddResponses are received.
+        for i in range(200):
+            if len(values[thread_id]) == 4:
+                break
+            time.sleep(0.1)
+        else:
+            raise Exception(f"{thread_id} only got {len(values[thread_id])}"
+                            f"EventAddResponses.")
         sub_ended_barrier.wait(timeout=10)
 
         sub.clear()
