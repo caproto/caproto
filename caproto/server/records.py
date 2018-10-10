@@ -34,6 +34,7 @@ def _link_parent_attribute(pvprop, parent_attr_name, *, read_only=False,
 
 
 class RecordFieldGroup(PVGroup):
+    _scan_rate_sec = None
     alarm_acknowledge_severity = pvproperty(
         name='ACKS',
         dtype=ChannelType.ENUM,
@@ -116,7 +117,7 @@ class RecordFieldGroup(PVGroup):
         read_only=True)
     reprocess = pvproperty(
         name='RPRO', dtype=ChannelType.CHAR, doc='Reprocess', read_only=True)
-    scanning_rate = pvproperty(
+    scan_rate = pvproperty(
         name='SCAN',
         dtype=ChannelType.ENUM,
         enum_strings=menus.menuScan.get_string_tuple(),
@@ -168,6 +169,23 @@ class RecordFieldGroup(PVGroup):
         await self.current_alarm_severity.write(self._alarm.severity)
 
     # TODO: server single-char issue with caget?
+
+    @scan_rate.putter
+    async def scan_rate(self, instance, value):
+        idx, = value
+        scan_string = self.scan_rate.enum_strings[idx]
+        if scan_string in ('I/O Intr', 'Passive', 'Event'):
+            self._scan_rate_sec = 0
+        else:
+            self._scan_rate_sec = float(scan_string.split(' ')[0])
+
+        if hasattr(self.parent, 'scan_rate'):
+            self.parent.scan_rate = self._scan_rate_sec
+
+    @property
+    def scan_rate_sec(self):
+        'Record scan rate, in seconds (read-only)'
+        return self._scan_rate_sec
 
     @process_record.putter
     async def process_record(self, instance, value):
