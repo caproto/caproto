@@ -24,6 +24,7 @@ __all__ = ('read', 'write', 'subscribe', 'block', 'interrupt',
 logger = logging.getLogger('caproto.ctx')
 
 CA_SERVER_PORT = 5064  # just a default
+STR_ENC = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
 
 # Make a dict to hold our tcp sockets.
 sockets = {}
@@ -440,10 +441,12 @@ def _write(chan, data, metadata, timeout, data_type, notify):
     if not isinstance(data, Iterable) or isinstance(data, (str, bytes)):
         data = [data]
     if data and isinstance(data[0], str):
-        data = [val.encode('latin-1') for val in data]
+        data = [val.encode(STR_ENC) for val in data]
     logger.debug("Detected native data_type %r.", chan.native_data_type)
+    ntype = field_types['native'][chan.resolve_data_type(data_type)]
+    if ntype == ChannelType.CHAR:
+        data, = data
     # abundance of caution
-    ntype = field_types['native'][chan.native_data_type]
     if data_type is None:
         # Handle ENUM: If data is INT, carry on. If data is STRING,
         # write it specifically as STRING data_Type.

@@ -43,6 +43,8 @@ def epics_to_python(value, native_type, data_count, *, auto_byteswap=True):
 
     if native_type == ChannelType.STRING:
         return DbrStringArray.frombuffer(value, data_count)
+    elif native_type == ChannelType.CHAR:
+        return ''.join(map(chr, value))
 
     # Return an ndarray
     dt = type_map[native_type]
@@ -54,6 +56,8 @@ def python_to_epics(dtype, values, *, byteswap=True, convert_from=None):
     # NOTE: ignoring byteswap, storing everything as big-endian
     if dtype == ChannelType.STRING:
         return DbrStringArray(values).tobytes()
+    elif dtype == ChannelType.CHAR:
+        values = list(values)
 
     return np.asarray(values).astype(type_map[dtype])
 

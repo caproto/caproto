@@ -98,7 +98,10 @@ def _convert_char_values(values, to_dtype, string_encoding, enum_strings,
         values = values[0]
 
     if direction == ConversionDirection.FROM_WIRE:
-        values = values.tobytes()  # b''.join(values)
+        if isinstance(values, str):
+            values = values.encode()
+        else:
+            values = values.tobytes()  # b''.join(values)
 
     if to_dtype == ChannelType.STRING:
         if direction == ConversionDirection.TO_WIRE:
