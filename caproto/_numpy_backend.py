@@ -1,5 +1,5 @@
 import ctypes
-from ._backend import Backend, register_backend
+from ._backend import Backend, register_backend, convert_values
 from ._dbr import (ChannelType, DbrStringArray, native_types, DBR_TYPES)
 
 try:
@@ -72,6 +72,7 @@ def _setup():
                    type_map=type_map,
                    epics_to_python=epics_to_python,
                    python_to_epics=python_to_epics,
+                   convert_values=convert_values,
                    )
 
 
