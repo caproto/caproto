@@ -57,6 +57,9 @@ def python_to_epics(dtype, values, *, byteswap=True, convert_from=None):
     elif dtype == ChannelType.CHAR:
         if isinstance(values, bytes):
             return values
+        if isinstance(values[0], bytes):
+            assert len(values) == 1, "expected b'...', [b'...'], or [...]"
+            return values[0]
 
     return np.asarray(values).astype(type_map[dtype])
 
