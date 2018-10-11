@@ -17,12 +17,12 @@ class Thermo(PVGroup):
     Readonly PVs
     ------------
 
-    readback -> the current value
+    I -> the current value
 
     Control PVs
     -----------
 
-    setpoint -> where to go
+    SP -> where to go
     K -> the decay constant
     omega -> the oscillation frequency
     Tvar -> the scale of the oscillations
