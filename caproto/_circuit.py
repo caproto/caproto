@@ -8,7 +8,7 @@
 # Responses.
 import itertools
 import logging
-import collections
+from collections import deque, Iterable
 import os
 
 from ._commands import (AccessRightsResponse, CreateChFailResponse,
@@ -166,7 +166,7 @@ class VirtualCircuit:
         ``(commands, num_bytes_needed)``
         """
         total_received = sum(len(byteslike) for byteslike in buffers)
-        commands = collections.deque()
+        commands = deque()
         if total_received == 0:
             self.log.debug('Zero-length recv; sending disconnect notification')
             commands.append(DISCONNECTED)
@@ -655,9 +655,9 @@ class ClientChannel(_BaseChannel):
         if native_type(data_type) != ChannelType.CHAR:
             if not isinstance(data, Iterable) or isinstance(data, (str, bytes)):
                 data = [data]
-            if data and isinstance(data[0], str):
+            if len(data) and isinstance(data[0], str):
                 data = [val.encode(self.string_encoding) for val in data]
-        elif data and isinstance(data[0], str):
+        elif len(data) and isinstance(data[0], str):
                 data = data.encode(self.string_encoding)
         if data_count == 0:
             data_count = len(data)
@@ -831,9 +831,9 @@ class ServerChannel(_BaseChannel):
         if native_type(data_type) != ChannelType.CHAR:
             if not isinstance(data, Iterable) or isinstance(data, (str, bytes)):
                 data = [data]
-            if data and isinstance(data[0], str):
+            if len(data) and isinstance(data[0], str):
                 data = [val.encode(self.string_encoding) for val in data]
-        elif data and isinstance(data[0], str):
+        elif len(data) and isinstance(data[0], str):
                 data = data.encode(self.string_encoding)
         cls = ReadNotifyResponse if notify else ReadResponse
         command = cls(data, data_type, data_count, status, ioid,
