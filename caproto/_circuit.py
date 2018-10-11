@@ -828,13 +828,15 @@ class ServerChannel(_BaseChannel):
         ReadResponse or ReadNotifyResponse
         """
         data_type, data_count = self._fill_defaults(data_type, data_count)
-        if native_type(data_type) != ChannelType.CHAR:
-            if not isinstance(data, Iterable) or isinstance(data, (str, bytes)):
-                data = [data]
-            if len(data) and isinstance(data[0], str):
-                data = [val.encode(self.string_encoding) for val in data]
-        elif len(data) and isinstance(data[0], str):
-                data = data.encode(self.string_encoding)
+        # TODO: Un-comment this to make the server symmetric with the channel.
+        # Some work is needed to integrate it with the server/ChannelData.
+        # if native_type(data_type) != ChannelType.CHAR:
+        #     if not isinstance(data, Iterable) or isinstance(data, (str, bytes)):
+        #         data = [data]
+        #     if len(data) and isinstance(data[0], str):
+        #         data = [val.encode(self.string_encoding) for val in data]
+        # elif len(data) and isinstance(data[0], str):
+        #         data = data.encode(self.string_encoding)
         cls = ReadNotifyResponse if notify else ReadResponse
         command = cls(data, data_type, data_count, status, ioid,
                       metadata=metadata)
