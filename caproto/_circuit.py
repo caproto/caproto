@@ -658,7 +658,7 @@ class ClientChannel(_BaseChannel):
             if len(data) and isinstance(data[0], str):
                 data = [val.encode(self.string_encoding) for val in data]
         elif len(data) and isinstance(data[0], str):
-                data = data.encode(self.string_encoding)
+            data = data.encode(self.string_encoding)
         if data_count == 0:
             data_count = len(data)
         if ioid is None:
@@ -836,7 +836,7 @@ class ServerChannel(_BaseChannel):
         #     if len(data) and isinstance(data[0], str):
         #         data = [val.encode(self.string_encoding) for val in data]
         # elif len(data) and isinstance(data[0], str):
-        #         data = data.encode(self.string_encoding)
+        #     data = data.encode(self.string_encoding)
         cls = ReadNotifyResponse if notify else ReadResponse
         command = cls(data, data_type, data_count, status, ioid,
                       metadata=metadata)
