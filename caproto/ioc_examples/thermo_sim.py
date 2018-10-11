@@ -17,12 +17,12 @@ class Thermo(PVGroup):
     Readonly PVs
     ------------
 
-    I -> the current value
+    readback -> the current value
 
     Control PVs
     -----------
 
-    SP -> where to go
+    setpoint -> where to go
     K -> the decay constant
     omega -> the oscillation frequency
     Tvar -> the scale of the oscillations
@@ -33,32 +33,32 @@ class Thermo(PVGroup):
         self._T0 = time.monotonic()
         self.period = period
 
-    I = pvproperty(value=[0], dtype=float, read_only=True)
+    readback = pvproperty(value=[0], dtype=float, read_only=True, name='I')
 
-    SP = pvproperty(value=[100], dtype=float)
+    setpoint = pvproperty(value=[100], dtype=float, name='SP')
     K = pvproperty(value=[10], dtype=float)
     omega = pvproperty(value=[(np.pi)], dtype=float)
     Tvar = pvproperty(value=[10], dtype=float)
 
-    @I.startup
-    async def I(self, instance, async_lib):
+    @readback.startup
+    async def readback(self, instance, async_lib):
 
-        def t_rbv(SP, K, omega, Tvar):
+        def t_rbv(setpoint, K, omega, Tvar):
             t = time.monotonic()
             return ((Tvar *
                      np.exp(-(t - self._T0) / K) *
                      np.sin(omega * t)) +
-                    SP)
+                    setpoint)
 
         while True:
             T = t_rbv(**{k: getattr(self, k).value[0]
-                         for k in ['SP', 'K', 'omega', 'Tvar']})
+                         for k in ['setpoint', 'K', 'omega', 'Tvar']})
 
             await instance.write(value=[T])
             await async_lib.library.sleep(self.period)
 
-    @SP.putter
-    async def SP(self, instance, value):
+    @setpoint.putter
+    async def setpoint(self, instance, value):
         self._T0 = time.monotonic()
         return value
 
