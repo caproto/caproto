@@ -301,9 +301,9 @@ char_from_wire_tests = [
     [CHAR, FLOAT, b'\x05', [5.0], no_encoding],
     [CHAR, ENUM, b'\x01', [1], no_encoding],
     # like channelbytes (no encoding)
-    [CHAR, CHAR, b'abc', list(b'abc'), no_encoding],
+    [CHAR, CHAR, b'abc', b'abc', no_encoding],
     # like channelchar (with encoding)
-    [CHAR, CHAR, b'abc', ['abc'], ascii_encoding],
+    [CHAR, CHAR, b'abc', 'abc', ascii_encoding],
     [CHAR, LONG, b"x", [ord('x')], no_encoding],
     [CHAR, DOUBLE, b"x", [ord('x')], no_encoding],
 ]

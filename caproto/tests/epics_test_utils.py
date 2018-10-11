@@ -53,15 +53,7 @@ async def run_epics_base_binary(backend, *args, max_attempts=3):
         return raw_stdout, raw_stderr
 
     if backend == 'curio':
-        if sys.platform == 'win32':
-            raw_stdout, raw_stderr = await curio.run_in_thread(runner)
-        else:
-            p = curio.subprocess.Popen(args, env=env,
-                                       stdout=curio.subprocess.PIPE,
-                                       stderr=curio.subprocess.PIPE)
-            await p.wait()
-            raw_stdout = await p.stdout.read()
-            raw_stderr = await p.stderr.read()
+        raw_stdout, raw_stderr = await curio.run_in_thread(runner)
     elif backend == 'trio':
         raw_stdout, raw_stderr = await trio.run_sync_in_worker_thread(runner)
     elif backend == 'asyncio':

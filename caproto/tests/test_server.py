@@ -1,4 +1,3 @@
-import array
 import ast
 import datetime
 import sys
@@ -178,16 +177,15 @@ caput_checks = [('int', '1', [1]),
                 ('enum2', 'cc', ['cc']),
                 ('str', 'resolve', ['resolve']),
                 ('char', '51', b'3'),
-                ('chararray', 'testing', ['testing']),
-                # ('bytearray', 'testing', list(b'testing')),
+                ('chararray', 'testing', 'testing'),
+                ('bytearray', 'testing', b'testing'),
                 ('stra', ['char array'], ['char array']),
                 ]
 
 
 @pytest.mark.parametrize('pv, put_value, check_value', caput_checks)
-# @pytest.mark.parametrize('async_put', [True, False])
 def test_with_caput(backends, prefix, pvdb_from_server_example, server, pv,
-                    put_value, check_value, async_put=True):
+                    put_value, check_value):
 
     caget_pvdb = {prefix + pv_: value
                   for pv_, value in pvdb_from_server_example.items()
@@ -210,6 +208,7 @@ def test_with_caput(backends, prefix, pvdb_from_server_example, server, pv,
                                                                ca.ChannelChar)))
         db_new = db_entry.value
 
+        clean_func = None
         if isinstance(db_entry, (ca.ChannelInteger, ca.ChannelDouble)):
             def clean_func(v):
                 return [ast.literal_eval(v)]
@@ -222,17 +221,13 @@ def test_with_caput(backends, prefix, pvdb_from_server_example, server, pv,
         elif isinstance(db_entry, ca.ChannelByte):
             if pv.endswith('bytearray'):
                 def clean_func(v):
-                    try:
-                        import numpy
-                    except ImportError:
-                        return numpy.frombuffer(
-                            v.encode('latin-1'), dtype=numpy.uint8)
-                    else:
-                        return array.array('I', v.encode('latin-1'))
+                    return v.encode('latin-1')
             else:
                 def clean_func(v):
                     return chr(int(v)).encode('latin-1')
-        elif isinstance(db_entry, (ca.ChannelChar, ca.ChannelString)):
+        elif isinstance(db_entry, ca.ChannelChar):
+            ...
+        elif isinstance(db_entry, ca.ChannelString):
             if pv.endswith('stra'):
                 # database holds ['char array'], caput shows [len char array]
                 def clean_func(v):
@@ -241,12 +236,11 @@ def test_with_caput(backends, prefix, pvdb_from_server_example, server, pv,
                 # database holds ['string'], caput doesn't show it
                 def clean_func(v):
                     return [v]
-        else:
-            clean_func = None
 
         if clean_func is not None:
             for key in ('old', 'new'):
                 data[key] = clean_func(data[key])
+
         print('caput data', data)
         print('old from db', db_old)
         print('new from db', db_new)
