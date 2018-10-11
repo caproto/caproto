@@ -2,7 +2,6 @@
 # as three top-level functions: read, write, subscribe. They are comparatively
 # simple and naive, with no caching or concurrency, and therefore less
 # performant but more robust.
-from collections import Iterable
 import inspect
 import getpass
 import logging

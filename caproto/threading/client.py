@@ -10,7 +10,6 @@
 # The VirtualCircuit has:
 # - ThreadPoolExecutor for processing user callbacks on read, write, subscribe
 import array
-from collections import Iterable
 import concurrent.futures
 import errno
 import functools
