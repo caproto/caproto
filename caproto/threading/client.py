@@ -10,7 +10,6 @@
 # The VirtualCircuit has:
 # - ThreadPoolExecutor for processing user callbacks on read, write, subscribe
 import array
-from collections import Iterable
 import concurrent.futures
 import errno
 import functools
@@ -1491,10 +1490,6 @@ class PV:
             Requested number of values. Default is the channel's native data
             count.
         """
-        if not isinstance(data, Iterable) or isinstance(data, (str, bytes)):
-            data = [data]
-        if len(data) and isinstance(data[0], str):
-            data = [val.encode(STR_ENC) for val in data]
         if notify is None:
             notify = (wait or callback is not None)
         ioid = self.circuit_manager._ioid_counter()
@@ -1908,10 +1903,6 @@ class Batch:
             Requested number of values. Default is the channel's native data
             count.
         """
-        if not isinstance(data, Iterable) or isinstance(data, (str, bytes)):
-            data = [data]
-        if len(data) and isinstance(data[0], str):
-            data = [val.encode(STR_ENC) for val in data]
         ioid = pv.circuit_manager._ioid_counter()
         command = pv.channel.write(data=data,
                                    ioid=ioid,

@@ -56,6 +56,7 @@ __all__ = (  # noqa F822
     'CaprotoNotImplementedError',
     'CaprotoValueError',
     'CaprotoTypeError',
+    'CaprotoConversionError',
     'CaprotoRuntimeError',
     'ErrorResponseReceived',
     'SendAllRetry',
@@ -113,6 +114,11 @@ class States(_SimpleReprEnum):
     NEED_DATA = enum.auto()
 
 
+class ConversionDirection(_SimpleReprEnum):
+    FROM_WIRE = enum.auto()
+    TO_WIRE = enum.auto()
+
+
 globals().update(
     {token: getattr(_enum, token)
      for _enum in [Role, Direction, States]
@@ -155,6 +161,10 @@ class CaprotoNotImplementedError(NotImplementedError, CaprotoError):
 
 
 class CaprotoValueError(ValueError, CaprotoError):
+    ...
+
+
+class CaprotoConversionError(CaprotoValueError):
     ...
 
 

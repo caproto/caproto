@@ -1,5 +1,5 @@
 import ctypes
-from ._backend import Backend, register_backend
+from ._backend import Backend, register_backend, convert_values
 from ._dbr import (ChannelType, DbrStringArray, native_types, DBR_TYPES)
 
 try:
@@ -54,6 +54,12 @@ def python_to_epics(dtype, values, *, byteswap=True, convert_from=None):
     # NOTE: ignoring byteswap, storing everything as big-endian
     if dtype == ChannelType.STRING:
         return DbrStringArray(values).tobytes()
+    elif dtype == ChannelType.CHAR:
+        if isinstance(values, bytes):
+            return values
+        if isinstance(values[0], bytes):
+            assert len(values) == 1, "expected b'...', [b'...'], or [...]"
+            return values[0]
 
     return np.asarray(values).astype(type_map[dtype])
 
@@ -69,6 +75,7 @@ def _setup():
                    type_map=type_map,
                    epics_to_python=epics_to_python,
                    python_to_epics=python_to_epics,
+                   convert_values=convert_values,
                    )
 
 

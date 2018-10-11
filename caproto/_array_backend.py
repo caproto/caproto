@@ -1,10 +1,9 @@
 import array
 import ctypes
 import sys
-from ._backend import Backend, register_backend
-from ._dbr import (ChannelType, DbrStringArray,
-                   native_int_types, native_float_types,
-                   native_types, DBR_TYPES)
+from ._backend import Backend, register_backend, convert_values
+from ._dbr import (ChannelType, DbrStringArray, native_int_types,
+                   native_float_types, native_types, DBR_TYPES)
 
 
 default_endian = ('>' if sys.byteorder == 'big'
@@ -120,6 +119,7 @@ def _setup():
                    type_map=type_map,
                    epics_to_python=epics_to_python,
                    python_to_epics=python_to_epics,
+                   convert_values=convert_values,
                    )
 
 

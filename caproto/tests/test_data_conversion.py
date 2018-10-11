@@ -3,7 +3,7 @@ from inspect import isclass
 
 import pytest
 
-from .._data import convert_values, ConversionDirection
+from .._utils import ConversionDirection
 from .._dbr import ChannelType, DbrStringArray
 from .. import backend
 from .conftest import (array_types, assert_array_almost_equal)
@@ -30,14 +30,15 @@ CLASS_NAME = ChannelType.CLASS_NAME
 @pytest.mark.parametrize('ntype', (STSACK_STRING, CLASS_NAME))
 def test_special_types(backends, ntype):
     in_value = expected_value = 0.2
-    out_value = convert_values(values=in_value, from_dtype=ntype,
-                               to_dtype=ntype, direction=FROM_WIRE)
+    out_value = backend.convert_values(
+        values=in_value, from_dtype=ntype, to_dtype=ntype, direction=FROM_WIRE)
 
     assert out_value == expected_value
 
     with pytest.raises(ValueError):
-        out_value = convert_values(values=in_value, from_dtype=ntype,
-                                   to_dtype=STRING, direction=FROM_WIRE)
+        out_value = backend.convert_values(
+            values=in_value, from_dtype=ntype, to_dtype=STRING,
+            direction=FROM_WIRE)
 
 
 def run_conversion_test(values, from_dtype, to_dtype, expected,
@@ -48,12 +49,10 @@ def run_conversion_test(values, from_dtype, to_dtype, expected,
         print(f'Convert: {from_dtype.name} {values!r} -> {to_dtype.name} '
               f'(str encoding: {string_encoding})')
         print(f'Expecting: {expected!r}')
-        converted = convert_values(values, from_dtype=from_dtype,
-                                   to_dtype=to_dtype,
-                                   string_encoding=string_encoding,
-                                   enum_strings=enum_strings,
-                                   direction=direction,
-                                   auto_byteswap=False)
+        converted = backend.convert_values(
+            values, from_dtype=from_dtype, to_dtype=to_dtype,
+            string_encoding=string_encoding, enum_strings=enum_strings,
+            direction=direction, auto_byteswap=False)
         print(f'Converted: {converted!r}')
         return converted
 
@@ -301,9 +300,9 @@ char_from_wire_tests = [
     [CHAR, FLOAT, b'\x05', [5.0], no_encoding],
     [CHAR, ENUM, b'\x01', [1], no_encoding],
     # like channelbytes (no encoding)
-    [CHAR, CHAR, b'abc', list(b'abc'), no_encoding],
+    [CHAR, CHAR, b'abc', b'abc', no_encoding],
     # like channelchar (with encoding)
-    [CHAR, CHAR, b'abc', ['abc'], ascii_encoding],
+    [CHAR, CHAR, b'abc', 'abc', ascii_encoding],
     [CHAR, LONG, b"x", [ord('x')], no_encoding],
     [CHAR, DOUBLE, b"x", [ord('x')], no_encoding],
 ]

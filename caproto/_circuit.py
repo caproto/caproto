@@ -8,7 +8,8 @@
 # Responses.
 import itertools
 import logging
-import collections
+from collections import deque, Iterable
+import os
 
 from ._commands import (AccessRightsResponse, CreateChFailResponse,
                         ClearChannelRequest, ClearChannelResponse,
@@ -26,13 +27,15 @@ from ._utils import (CLIENT, SERVER, NEED_DATA, DISCONNECTED, CaprotoKeyError,
                      CaprotoValueError, CaprotoRuntimeError, CaprotoError,
                      parse_channel_filter, parse_record_field,
                      ChannelFilter)
-from ._dbr import (SubscriptionType, field_types)
+from ._dbr import (ChannelType, SubscriptionType, field_types, native_type)
 from ._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
 from ._status import CAStatus
 
 
 __all__ = ('VirtualCircuit', 'ClientChannel', 'ServerChannel',
            'extract_address')
+
+STRING_ENCODING = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
 
 
 class VirtualCircuit:
@@ -163,7 +166,7 @@ class VirtualCircuit:
         ``(commands, num_bytes_needed)``
         """
         total_received = sum(len(byteslike) for byteslike in buffers)
-        commands = collections.deque()
+        commands = deque()
         if total_received == 0:
             self.log.debug('Zero-length recv; sending disconnect notification')
             commands.append(DISCONNECTED)
@@ -413,10 +416,11 @@ class _BaseChannel:
     # Base class for ClientChannel and ServerChannel, which add convenience
     # methods for composing requests and repsponses, respectively. All of the
     # important code is here in the base class.
-    def __init__(self, name, circuit, cid=None):
+    def __init__(self, name, circuit, cid=None, string_encoding=STRING_ENCODING):
         self.log = logging.getLogger(f'caproto.ch.{name}.{circuit.priority}')
         self.protocol_version = circuit.protocol_version
         self.name = name
+        self.string_encoding = string_encoding
         modifiers = parse_record_field(name).modifiers
         if modifiers is not None:
             self.channel_filter = parse_channel_filter(modifiers.filter_)
@@ -510,8 +514,9 @@ class ClientChannel(_BaseChannel):
         Channnel name (PV)
     circuit : VirtualCircuit
     cid : integer, optional
-    protocol_version : integer, optional
-        Default is ``DEFAULT_PROTOCOL_VERSION``.
+    string_encoding : string
+        Default is 'latin-1' or value of ``CAPROTO_STRING_ENCODING``
+        environment variable.
     """
     def version(self):
         """
@@ -647,6 +652,13 @@ class ClientChannel(_BaseChannel):
         WriteNotifyRequest
         """
         data_type, data_count = self._fill_defaults(data_type, data_count)
+        if native_type(data_type) != ChannelType.CHAR:
+            if not isinstance(data, Iterable) or isinstance(data, (str, bytes)):
+                data = [data]
+            if len(data) and isinstance(data[0], str):
+                data = [val.encode(self.string_encoding) for val in data]
+        elif len(data) and isinstance(data[0], str):
+            data = data.encode(self.string_encoding)
         if data_count == 0:
             data_count = len(data)
         if ioid is None:
@@ -738,8 +750,9 @@ class ServerChannel(_BaseChannel):
         Channnel name (PV)
     circuit : VirtualCircuit
     cid : integer, optional
-    protocol_version : integer, optional
-        Default is ``DEFAULT_PROTOCOL_VERSION``.
+    string_encoding : string
+        Default is 'latin-1' or value of ``CAPROTO_STRING_ENCODING``
+        environment variable.
     """
     def version(self):
         """
@@ -815,6 +828,15 @@ class ServerChannel(_BaseChannel):
         ReadResponse or ReadNotifyResponse
         """
         data_type, data_count = self._fill_defaults(data_type, data_count)
+        # TODO: Un-comment this to make the server symmetric with the channel.
+        # Some work is needed to integrate it with the server/ChannelData.
+        # if native_type(data_type) != ChannelType.CHAR:
+        #     if not isinstance(data, Iterable) or isinstance(data, (str, bytes)):
+        #         data = [data]
+        #     if len(data) and isinstance(data[0], str):
+        #         data = [val.encode(self.string_encoding) for val in data]
+        # elif len(data) and isinstance(data[0], str):
+        #     data = data.encode(self.string_encoding)
         cls = ReadNotifyResponse if notify else ReadResponse
         command = cls(data, data_type, data_count, status, ioid,
                       metadata=metadata)
