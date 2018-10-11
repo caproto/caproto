@@ -9,6 +9,7 @@
 import itertools
 import logging
 import collections
+import os
 
 from ._commands import (AccessRightsResponse, CreateChFailResponse,
                         ClearChannelRequest, ClearChannelResponse,
@@ -26,13 +27,15 @@ from ._utils import (CLIENT, SERVER, NEED_DATA, DISCONNECTED, CaprotoKeyError,
                      CaprotoValueError, CaprotoRuntimeError, CaprotoError,
                      parse_channel_filter, parse_record_field,
                      ChannelFilter)
-from ._dbr import (SubscriptionType, field_types)
+from ._dbr import (ChannelType, SubscriptionType, field_types, native_type)
 from ._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
 from ._status import CAStatus
 
 
 __all__ = ('VirtualCircuit', 'ClientChannel', 'ServerChannel',
            'extract_address')
+
+STRING_ENCODING = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
 
 
 class VirtualCircuit:
@@ -647,6 +650,11 @@ class ClientChannel(_BaseChannel):
         WriteNotifyRequest
         """
         data_type, data_count = self._fill_defaults(data_type, data_count)
+        if native_type(data_type) != ChannelType.CHAR:
+            if not isinstance(data, Iterable) or isinstance(data, (str, bytes)):
+                data = [data]
+            if data and isinstance(data[0], str):
+                data = [val.encode(STRING_ENCODING) for val in data]
         if data_count == 0:
             data_count = len(data)
         if ioid is None:

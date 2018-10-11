@@ -437,10 +437,6 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
 
 
 def _write(chan, data, metadata, timeout, data_type, notify):
-    if not isinstance(data, Iterable) or isinstance(data, (str, bytes)):
-        data = [data]
-    if data and isinstance(data[0], str):
-        data = [val.encode('latin-1') for val in data]
     logger.debug("Detected native data_type %r.", chan.native_data_type)
     # abundance of caution
     ntype = field_types['native'][chan.native_data_type]
