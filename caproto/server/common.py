@@ -336,7 +336,7 @@ class VirtualCircuit:
                     to_remove.append((sub_spec, sub))
         for sub_spec, sub in to_remove:
             self.subscriptions[sub_spec].remove(sub)
-            del self.most_recent_updates[sub.subscriptionid]
+            self.most_recent_updates.pop(sub.subscriptionid, None)
             self.context.subscriptions[sub_spec].remove(sub)
             self.context.last_dead_band.pop(sub, None)
             self.context.last_sync_edge_update.pop(sub, None)
