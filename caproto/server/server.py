@@ -1111,10 +1111,8 @@ def template_arg_parser(*, desc, default_prefix, argv=None, macros=None,
     group.add_argument('-q', '--quiet', action='store_true',
                        help=("Suppress INFO log messages. "
                              "(Still show WARNING or higher.)"))
-    group.add_argument('-v', '--verbose', action='store_true',
-                       help="Verbose mode. (Use -vvv for more.)")
-    group.add_argument('-vvv', action='store_true',
-                       help=argparse.SUPPRESS)
+    group.add_argument('-v', '--verbose', action='count',
+                        help="Show more log messages. (Use -vvv for even more.)")
     parser.add_argument('--list-pvs', action='store_true',
                         help="At startup, log the list of PV names served.")
     choices = tuple(supported_async_libs or ('asyncio', 'curio', 'trio'))
@@ -1154,16 +1152,16 @@ def template_arg_parser(*, desc, default_prefix, argv=None, macros=None,
         run_options : dict
             kwargs to be handed to run
         """
-        if args.vvv:
+        if args.verbose > 1:
             logging.getLogger('caproto').setLevel('DEBUG')
         else:
             if args.verbose:
-                level = 'DEBUG'
+                logging.getLogger('caproto.ctx').setLevel('DEBUG')
+                logging.getLogger('caproto.circ').setLevel('INFO')
             elif args.quiet:
-                level = 'WARNING'
+                logging.getLogger('caproto').setLevel('WARNING')
             else:
-                level = 'INFO'
-            logging.getLogger('caproto.ctx').setLevel(level)
+                logging.getLogger('caproto.ctx').setLevel('INFO')
 
         return ({'prefix': args.prefix,
                  'macros': {key: getattr(args, key) for key in macros}},
