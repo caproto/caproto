@@ -622,3 +622,54 @@ def test_write_accepts_scalar(context, ioc):
     assert list(int_pv.read().data) == [17]
     str_pv.write('caprotoss', wait=True)
     assert list(str_pv.read().data) == [b'caprotoss']
+
+
+def test_events_off_and_on(ioc, context):
+    pv, = context.get_pvs(ioc.pvs['int'])
+    pv.wait_for_connection(timeout=10)
+
+    monitor_values = []
+
+    def callback(command, **kwargs):
+        assert isinstance(command, ca.EventAddResponse)
+        monitor_values.append(command.data[0])
+
+    sub = pv.subscribe()
+    sub.add_callback(callback)
+    time.sleep(0.2)  # Wait for EventAddRequest to be sent and processed.
+    pv.write((1, ), wait=True)
+    pv.write((2, ), wait=True)
+    pv.write((3, ), wait=True)
+    time.sleep(0.2)  # Wait for the last update to be processed.
+
+    for i in range(3):
+        if pv.read().data[0] == 3:
+            time.sleep(0.2)
+            break
+        else:
+            time.sleep(0.2)
+
+    assert monitor_values[1:] == [1, 2, 3]
+
+    pv.circuit_manager.events_off()
+    time.sleep(0.2)  # Wait for EventsOffRequest to be processed.
+    pv.write((4, ), wait=True)
+    pv.write((5, ), wait=True)
+    pv.write((6, ), wait=True)
+    time.sleep(0.2)  # Wait for the last update to be processed.
+    pv.circuit_manager.events_on()
+    time.sleep(0.2)  # Wait for EventsOnRequest to be processed.
+    # The last update, 6, should be sent at this time.
+
+    pv.write((7, ), wait=True)
+    pv.write((8, ), wait=True)
+    pv.write((9, ), wait=True)
+
+    for i in range(3):
+        if pv.read().data[0] == 7:
+            time.sleep(0.2)
+            break
+        else:
+            time.sleep(0.2)
+
+    assert monitor_values[1:] == [1, 2, 3, 6, 7, 8, 9]

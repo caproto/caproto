@@ -13,7 +13,7 @@ class RandomWalkIOC(PVGroup):
         while True:
             # compute next value
             x, = self.x.value
-            x += random.random()
+            x += 2 * random.random() - 1
 
             # update the ChannelData instance and notify any subscribers
             await instance.write(value=[x])

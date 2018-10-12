@@ -8,6 +8,9 @@ Unreleased
 Features
 --------
 
+* Under high load (with many subscription updates queued up to send) servers
+  batch subscriptions into blocks, trading a little latency for efficiency.
+  Under low load, servers prioritize low latency.
 * In the threading client, process user callbacks using one threadpool *per
   circuit* instead of one threadpool for the entire context. Make the size of
   the threadpool configurable via a new
@@ -16,8 +19,8 @@ Features
   `Python 3-compatible fork <https://github.com/klauer/catvs/tree/py3k>`_ of
   Michael Davidsaver's utility for testing Channel Access servers,
   `catvs <https://github.com/mdavidsaver/catvs>`_. This has generated several
-  bug fixes, included in the list below. There are a small number of known
-  failures wherein the best/correct behavior is arguable; see
+  fixes improving protocol compliance, list a section below. There are a small
+  number of known failures wherein the best/correct behavior is arguable; see
   `caproto#327 on GitHub <https://github.com/NSLS-II/caproto/pull/327>`_ for
   discussion. There may be more progress on these in future releases of
   caproto.
@@ -48,6 +51,10 @@ Bug Fixes
   sockets when the process exited. They now close their sockets explicitly when
   the server task exits. This fixes the runaway usage of file descriptors when
   the tests are run.
+
+Improved Protocol Compliance
+----------------------------
+
 * The servers send :class:`~caproto.CreateChFailResponse` when the client
   requests a channel name that does not exist on the server. They previously
   did not respond.
@@ -55,6 +62,9 @@ Bug Fixes
   (UDP is more common, but TCP is allowed.) They previously did not respond.
 * The :class:`~caproto.EventCancelResponse` message includes a ``data_count``.
 * The servers respect the ``data_count`` requested by the client.
+* Servers enforce quota per subscription to avoid one prolific subscription (or
+  slow client) from drowning out others.
+* Servers respect ``EventsOn`` and ``EventsOff`` requests.
 
 v0.1.2 (2018-08-31)
 ===================

@@ -71,10 +71,25 @@ class VirtualCircuit(_VirtualCircuit):
 
         self._raw_client = client
         super().__init__(circuit, SockWrapper(loop, client), context)
-        self.command_queue = asyncio.Queue()
-        self.new_command_condition = asyncio.Condition()
+        self.QueueFull = asyncio.QueueFull
+        self.command_queue = asyncio.Queue(ca.MAX_COMMAND_BACKLOG,
+                                           loop=self.loop)
+        self.new_command_condition = asyncio.Condition(loop=self.loop)
+        self.events_on = asyncio.Event(loop=self.loop)
+        self.subscription_queue = asyncio.Queue(
+            ca.MAX_TOTAL_SUBSCRIPTION_BACKLOG, loop=self.loop)
         self._cq_task = None
+        self._sq_task = None
         self._write_tasks = ()
+
+    async def get_from_sub_queue_with_timeout(self, timeout):
+        # Timeouts work very differently between our server implementations,
+        # so we do this little stub in its own method.
+        fut = asyncio.ensure_future(self.subscription_queue.get())
+        try:
+            return await asyncio.wait_for(fut, timeout, loop=self.loop)
+        except asyncio.TimeoutError:
+            return None
 
     async def send(self, *commands):
         if self.connected:
@@ -84,6 +99,7 @@ class VirtualCircuit(_VirtualCircuit):
 
     async def run(self):
         self._cq_task = self.loop.create_task(self.command_queue_loop())
+        self._sq_task = self.loop.create_task(self.subscription_queue_loop())
 
     async def _start_write_task(self, handle_write):
         tsk = self.loop.create_task(handle_write())
@@ -99,6 +115,8 @@ class VirtualCircuit(_VirtualCircuit):
         self._raw_client.close()
         if self._cq_task is not None:
             self._cq_task.cancel()
+        if self._sq_task is not None:
+            self._sq_task.cancel()
 
 
 class Context(_Context):
@@ -231,9 +249,9 @@ class Context(_Context):
         except asyncio.CancelledError:
             self.log.info('Server task cancelled. Will shut down.')
             udp_sock.close()
-            all_tasks = (tasks + self._server_tasks + [c._cq_task
-                                                       for c in self.circuits
-                                                       if c._cq_task is not None] +
+            all_tasks = (tasks + self._server_tasks +
+                         [c._cq_task for c in self.circuits if c._cq_task is not None] +
+                         [c._sq_task for c in self.circuits if c._sq_task is not None] +
                          [t for c in self.circuits for t in c._write_tasks] +
                          list(self.p._tasks))
             for t in all_tasks:

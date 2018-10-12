@@ -464,6 +464,9 @@ class Message(metaclass=_MetaDirectionalMessage):
     def __eq__(self, other):
         return bytes(self) == bytes(other)
 
+    def __hash__(self):
+        return hash(bytes(self))
+
     def __ne__(self, other):
         return bytes(self) != bytes(other)
 
@@ -958,7 +961,7 @@ class EventAddResponse(Message):
 
         Echoing the :data:`subscriptionid` in the :class:`EventAddRequest`
     """
-    __slots__ = ()
+    __slots__ = ('__weakref__',)
     ID = 1
     HAS_PAYLOAD = True
 

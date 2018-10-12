@@ -50,15 +50,29 @@ class VirtualCircuit(_VirtualCircuit):
     def __init__(self, circuit, client, context):
         super().__init__(circuit, client, context)
         self.nursery = context.nursery
-        self.command_queue = trio.Queue(1000)
+        self.QueueFull = trio.WouldBlock
+        self.command_queue = trio.Queue(ca.MAX_COMMAND_BACKLOG)
         self.new_command_condition = trio.Condition()
+        self.subscription_queue = trio.Queue(ca.MAX_TOTAL_SUBSCRIPTION_BACKLOG)
+        self.events_on = trio.Event()
 
     async def run(self):
         await self.nursery.start(self.command_queue_loop)
+        await self.nursery.start(self.subscription_queue_loop)
 
     async def command_queue_loop(self, task_status):
         task_status.started()
         await super().command_queue_loop()
+
+    async def subscription_queue_loop(self, task_status):
+        task_status.started()
+        await super().subscription_queue_loop()
+
+    async def get_from_sub_queue_with_timeout(self, timeout):
+        # Timeouts work very differently between our server implementations,
+        # so we do this little stub in its own method.
+        with trio.move_on_after(timeout):
+            return await self.subscription_queue.get()
 
     async def _on_disconnect(self):
         """Executed when disconnection detected"""

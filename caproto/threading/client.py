@@ -1072,6 +1072,21 @@ class VirtualCircuitManager:
             return ca.DISCONNECTED
         return num_bytes_needed
 
+    def events_off(self):
+        """
+        Suspend updates to all subscriptions on this circuit.
+
+        This may be useful if the server produces updates faster than the
+        client can processs them.
+        """
+        self.send(ca.EventsOffRequest())
+
+    def events_on(self):
+        """
+        Reactive updates to all subscriptions on this circuit.
+        """
+        self.send(ca.EventsOnRequest())
+
     def _process_command(self, command):
         try:
             self.circuit.process_command(command)

@@ -321,6 +321,21 @@ call ``go_idle()`` on any PV at any time, knowing that the PV will decline to
 disconnect if it is being actively used and that, if it is currently unused, it
 will transparently reconnect the next time it is used.
 
+Events Off and On
+-----------------
+
+If a given circuit produces updates faster than a client can process them, the
+client can suspend subscriptions on that circuit. This will causes the server
+to discard all backlogged updates and all new updates during the period of
+supsension. When the client reactives subscriptions, it will immediate receive
+the most recent update and then any future updates.
+
+.. code-block:: python
+
+   x.circuit_manager.events_off()
+   ...
+   x.circuit_manager.events_on()
+
 Loggers for Debugging
 ---------------------
 

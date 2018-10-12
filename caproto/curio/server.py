@@ -29,6 +29,18 @@ class UniversalQueue(curio.UniversalQueue):
         return await super().get()
 
 
+class QueueFull(Exception):
+    ...
+
+
+# Curio queues just block if they are full. We want one that raises.
+class QueueWithFullError(curio.Queue):
+    async def put(self, item):
+        if self.full():
+            raise QueueFull
+        await super().put(item)
+
+
 class CurioAsyncLayer(AsyncLibraryLayer):
     name = 'curio'
     ThreadsafeQueue = UniversalQueue
@@ -41,12 +53,17 @@ class VirtualCircuit(_VirtualCircuit):
 
     def __init__(self, circuit, client, context):
         super().__init__(circuit, client, context)
-        self.command_queue = curio.Queue()
+        self.QueueFull = QueueFull
+        self.command_queue = QueueWithFullError(ca.MAX_COMMAND_BACKLOG)
         self.new_command_condition = curio.Condition()
         self.pending_tasks = curio.TaskGroup()
+        self.events_on = curio.Event()
+        self.subscription_queue = QueueWithFullError(
+            ca.MAX_TOTAL_SUBSCRIPTION_BACKLOG)
 
     async def run(self):
         await self.pending_tasks.spawn(self.command_queue_loop())
+        await self.pending_tasks.spawn(self.subscription_queue_loop())
 
     async def _on_disconnect(self):
         """Executed when disconnection detected"""
@@ -60,6 +77,12 @@ class VirtualCircuit(_VirtualCircuit):
     async def _wake_new_command(self):
         async with self.new_command_condition:
             await self.new_command_condition.notify_all()
+
+    async def get_from_sub_queue_with_timeout(self, timeout):
+        # Timeouts work very differently between our server implementations,
+        # so we do this little stub in its own method.
+        # Returns weakref(EventAddResponse) or None
+        return await curio.ignore_after(timeout, self.subscription_queue.get)
 
 
 class Context(_Context):

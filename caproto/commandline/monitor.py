@@ -33,7 +33,7 @@ def main():
                                  "like {timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are"
                                  " supported."))
     parser.add_argument('--verbose', '-v', action='count',
-                        help="Show DEBUG log messages.")
+                        help="Show more log messages. (Use -vvv for even more.)")
     exit_group.add_argument('--duration', type=float, default=None,
                             help=("Maximum number seconds to run before "
                                   "exiting. Runs indefinitely by default."))
