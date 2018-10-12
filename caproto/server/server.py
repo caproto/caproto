@@ -1112,7 +1112,7 @@ def template_arg_parser(*, desc, default_prefix, argv=None, macros=None,
                        help=("Suppress INFO log messages. "
                              "(Still show WARNING or higher.)"))
     group.add_argument('-v', '--verbose', action='count',
-                        help="Show more log messages. (Use -vvv for even more.)")
+                       help="Show more log messages. (Use -vvv for even more.)")
     parser.add_argument('--list-pvs', action='store_true',
                         help="At startup, log the list of PV names served.")
     choices = tuple(supported_async_libs or ('asyncio', 'curio', 'trio'))
