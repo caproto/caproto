@@ -563,6 +563,20 @@ class Context:
         ignore_addresses = self.environ['EPICS_CAS_IGNORE_ADDR_LIST']
         self.ignore_addresses = ignore_addresses.split(' ')
 
+    @property
+    def pvdb_with_fields(self):
+        'Dynamically generated each time - use sparingly'
+        # TODO is static generation sufficient?
+        pvdb = {}
+        for name, instance in self.pvdb.items():
+            pvdb[name] = instance
+            if hasattr(instance, 'fields'):
+                # Note that we support PvpropertyData along with ChannelData
+                # instances here (which may not have fields)
+                for field_name, field in instance.fields.items():
+                    pvdb[f'{name}.{field_name}'] = field
+        return pvdb
+
     async def _core_broadcaster_loop(self, udp_sock):
         while True:
             try:
@@ -818,7 +832,7 @@ class Context:
     def startup_methods(self):
         'Notify all ChannelData instances of the server startup'
         return {name: instance.server_startup
-                for name, instance in self.pvdb.items()
+                for name, instance in self.pvdb_with_fields.items()
                 if hasattr(instance, 'server_startup') and
                 instance.server_startup is not None}
 
