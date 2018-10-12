@@ -26,7 +26,7 @@ def main():
     parser.add_argument('data', type=str,
                         help="Value or values to write.")
     parser.add_argument('--verbose', '-v', action='count',
-                        help="Show DEBUG log messages.")
+                        help="Show more log messages. (Use -vvv for even more.)")
     fmt_group.add_argument('--format', type=str,
                            help=("Python format string. Available tokens are "
                                  "{pv_name}, {response} and {which} (Old/New)."
