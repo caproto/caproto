@@ -288,6 +288,12 @@ class VirtualCircuit:
                     # Accumulate commands into a batch.
                     commands.append(command)
                     commands_bytes += len(command)
+                    if len(commands) == 1:
+                        # Set a dealine by which will must send this oldest
+                        # command in the batch, effecitvely a limit of latency.
+                        deadline = time.monotonic() + HIGH_LOAD_TIMEOUT
+                    elif deadline < time.monotonic():
+                        send_now = True
                     # Send the batch if we are in low-latency / slow producer
                     # mode (send_now=True) or the batch has reached max size.
                     # But be sure _not_ to send it if it is empty (because all
