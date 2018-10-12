@@ -1,5 +1,6 @@
 from collections import defaultdict, deque, namedtuple, ChainMap, Iterable
 import copy
+import itertools
 import logging
 import sys
 import time
@@ -56,9 +57,8 @@ class OrderedBoundedSet:
     def update(self, items):
         self._data.update(dict.fromkeys(items))
         overage = len(self) - self.maxlen
-        if overage > 0:
-            for _ in range(overage):
-                self.pop()
+        for item in itertools.islice(iter(self._data), overage):
+            self._data.pop(item)
 
     def pop(self):
         item = next(iter(self._data))
