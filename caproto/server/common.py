@@ -288,11 +288,12 @@ class VirtualCircuit:
                     # Accumulate commands into a batch.
                     commands.append(command)
                     commands_bytes += len(command)
+                    now = time.monotonic()
                     if len(commands) == 1:
                         # Set a dealine by which will must send this oldest
                         # command in the batch, effecitvely a limit of latency.
-                        deadline = time.monotonic() + HIGH_LOAD_TIMEOUT
-                    elif deadline < time.monotonic():
+                        deadline = now + HIGH_LOAD_TIMEOUT
+                    elif deadline < now:
                         send_now = True
                     # Send the batch if we are in low-latency / slow producer
                     # mode (send_now=True) or the batch has reached max size.
@@ -305,13 +306,12 @@ class VirtualCircuit:
             try:
                 len_commands = len(commands)
                 if num_expired:
-                    self.log.warning("High EventAddResponse load. Dropped "
-                                     "%d responses.", num_expired)
+                    self.log.warning("High load. Dropped %d responses.", num_expired)
                 if len_commands > 1:
                     self.log.info(
-                        "High EventAddResponse load. Batching with %f-second "
-                        "latency. Batch size: %d commands (%d bytes).",
-                        HIGH_LOAD_TIMEOUT, len_commands, commands_bytes)
+                        "High load. Batched %d commands (%dB) with %.4fs latency.",
+                        len_commands, commands_bytes,
+                        now - deadline + HIGH_LOAD_TIMEOUT)
                 await self.send(*commands)
             except DisconnectedCircuit:
                 await self._on_disconnect()
