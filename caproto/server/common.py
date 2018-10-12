@@ -762,8 +762,11 @@ class Context:
                     await circuit.subscription_queue.put(weakref.ref(command))
                 except self.QueueFull:
                     # We have hit the overall max for subscription backlog.
-                    # TODO -- Warn. Maybe drain the queue to catch up?
-                    pass
+                    circuit.log.warning(
+                        "Critically high EventAddResponse load. Dropping all "
+                        "queued responses on this circuit.")
+                    circuit.subscription_queue.clear()
+                    circuit.unexpired_updates.clear()
 
     async def broadcast_beacon_loop(self):
         self.log.debug('Will send beacons to %r',
