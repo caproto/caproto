@@ -187,6 +187,10 @@ class Context(_Context):
             self.log.info('Server task cancelled. Will shut down.')
         finally:
             self.log.info('Server exiting....')
+            async_lib = TrioAsyncLayer()
+            for name, method in self.shutdown_methods.items():
+                self.log.debug('Calling shutdown method %r', name)
+                await method(async_lib)
             for sock in self.tcp_sockets.values():
                 sock.close()
             for sock in self.udp_socks.values():

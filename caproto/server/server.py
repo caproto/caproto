@@ -78,7 +78,6 @@ class PvpropertyData:
             # bind the shutdown method to the group (used in server_shutdown)
             self.shutdown = MethodType(pvspec.shutdown, group)
 
-
         if doc is not None:
             self.__doc__ = doc
 
