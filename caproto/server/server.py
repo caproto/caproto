@@ -1152,16 +1152,16 @@ def template_arg_parser(*, desc, default_prefix, argv=None, macros=None,
         run_options : dict
             kwargs to be handed to run
         """
-        if args.verbose > 1:
-            logging.getLogger('caproto').setLevel('DEBUG')
-        else:
-            if args.verbose:
+        if args.verbose:
+            if args.verbose > 1:
+                logging.getLogger('caproto').setLevel('DEBUG')
+            else:
                 logging.getLogger('caproto.ctx').setLevel('DEBUG')
                 logging.getLogger('caproto.circ').setLevel('INFO')
-            elif args.quiet:
-                logging.getLogger('caproto').setLevel('WARNING')
-            else:
-                logging.getLogger('caproto.ctx').setLevel('INFO')
+        elif args.quiet:
+            logging.getLogger('caproto').setLevel('WARNING')
+        else:
+            logging.getLogger('caproto.ctx').setLevel('INFO')
 
         return ({'prefix': args.prefix,
                  'macros': {key: getattr(args, key) for key in macros}},
