@@ -24,7 +24,7 @@ def main():
     parser.add_argument('pv_names', type=str, nargs='+',
                         help="PV (channel) name(s) separated by spaces")
     parser.add_argument('--verbose', '-v', action='count',
-                        help="Verbose mode. (Use -vvv for more.)")
+                        help="Show more log messages. (Use -vvv for even more.)")
     fmt_group.add_argument('--format', type=str,
                            help=("Python format string. Available tokens are "
                                  "{pv_name} and {response}. Additionally, if "
