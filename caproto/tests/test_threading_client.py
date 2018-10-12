@@ -651,7 +651,6 @@ def test_events_off_and_on(ioc, context):
 
     assert monitor_values[1:] == [1, 2, 3]
 
-
     pv.circuit_manager.events_off()
     time.sleep(0.2)  # Wait for EventsOffRequest to be processed.
     pv.write((4, ), wait=True)

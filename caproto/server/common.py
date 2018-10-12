@@ -84,6 +84,7 @@ class VirtualCircuit:
         self.subscriptions = defaultdict(deque)
         self.unexpired_updates = defaultdict(
             lambda: OrderedBoundedSet(maxlen=ca.MAX_SUBSCRIPTION_BACKLOG))
+        self.most_recent_updates = {}
         # Subclasses are expected to define:
         # self.QueueFull = ...
         # self.command_queue = ...
@@ -329,6 +330,7 @@ class VirtualCircuit:
                     to_remove.append((sub_spec, sub))
         for sub_spec, sub in to_remove:
             self.subscriptions[sub_spec].remove(sub)
+            del self.most_recent_updates[sub.subscriptionid]
             self.context.subscriptions[sub_spec].remove(sub)
             self.context.last_dead_band.pop(sub, None)
             self.context.last_sync_edge_update.pop(sub, None)
@@ -491,6 +493,11 @@ class VirtualCircuit:
                                      data_type=command.data_type,
                                      data_count=data_count)]
         elif isinstance(command, ca.EventsOnRequest):
+            # Immediately send most recent updates for all subscriptions.
+            most_recent_updates = list(self.most_recent_updates.values())
+            self.most_recent_updates.clear()
+            if most_recent_updates:
+                await self.send(*most_recent_updates)
             maybe_coroutine = self.events_on.set()
             # The curio backend makes this an awaitable thing.
             if maybe_coroutine is not None:
@@ -667,12 +674,6 @@ class Context:
             # have a different requested data_count.
             for sub in subs:
                 circuit = sub.circuit
-                # If this circuit has been sent EventsOff by the client, do not
-                # queue any updates until the client sends EventsOn to signal
-                # that it has caught up.
-                if not circuit.events_on.is_set():
-                    continue
-
                 s_flags = flags
                 chan = sub.channel
 
@@ -751,6 +752,15 @@ class Context:
                 # reaches the front of the line it will dropped on the floor
                 # instead of sent. This effectively prioritizes sending the
                 # client "new news" instead of "old news".
+
+                # If this circuit has been sent EventsOff by the client, do not
+                # queue any updates until the client sends EventsOn to signal
+                # that it has caught up. But stash the most recent update for
+                # each subscription, which will immediately send when we turn
+                # events back on.
+                if not circuit.events_on.is_set():
+                    circuit.most_recent_updates[sub.subscriptionid] = command
+                    continue
 
                 # This is an OrderedBoundedSet, a set with a maxlen, containing
                 # only commands for this particular subscription.
