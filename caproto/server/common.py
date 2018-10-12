@@ -301,9 +301,10 @@ class VirtualCircuit:
                     self.log.warning("High EventAddResponse load. Dropped "
                                      "%d responses.", num_expired)
                 if len_commands > 1:
-                    self.log.info("High EventAddResponse load. Batch size: "
-                                  "%d commands (%d bytes).",
-                                  len_commands, commands_bytes)
+                    self.log.info(
+                        "High EventAddResponse load. Batching with %f-second "
+                        "latency. Batch size: %d commands (%d bytes).",
+                        HIGH_LOAD_TIMEOUT, len_commands, commands_bytes)
                 await self.send(*commands)
             except DisconnectedCircuit:
                 await self._on_disconnect()
