@@ -658,7 +658,10 @@ class ClientChannel(_BaseChannel):
             if len(data) and isinstance(data[0], str):
                 data = [val.encode(self.string_encoding) for val in data]
         elif len(data) and isinstance(data[0], str):
-            data = data.encode(self.string_encoding)
+            if isinstance(data, (list, tuple)):
+                data = [d.encode(self.string_encoding) for d in data]
+            else:
+                data = data.encode(self.string_encoding)
         if data_count == 0:
             data_count = len(data)
         if ioid is None:

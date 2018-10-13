@@ -304,6 +304,9 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
         (PvpropertyReadOnlyData, None),
         (ca.ChannelNumeric, [1]),
         (ca.ChannelString, ['USD']),
+        (ca.ChannelChar, ['USD']),
+        (ca.ChannelByte, [b'USD']),
+        (ca.ChannelEnum, [b'no']),
     ]
 
     skip_pvs = [('ophyd', ':exit')]
@@ -337,7 +340,9 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
 
 @pytest.mark.parametrize(
     'module_name, pvdb_class_name, class_kwargs',
-    [('caproto.ioc_examples.chirp', 'Chirp', {'ramprate': 0.75}),
+    [('caproto.ioc_examples.all_in_one', 'MyPVGroup',
+      dict(macros={'macro': 'expanded'})),
+     ('caproto.ioc_examples.chirp', 'Chirp', {'ramprate': 0.75}),
      ('caproto.ioc_examples.custom_write', 'CustomWrite', {}),
      ('caproto.ioc_examples.inline_style', 'InlineStyleIOC', {}),
      ('caproto.ioc_examples.io_interrupt', 'IOInterruptIOC', {}),
@@ -347,13 +352,12 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
      ('caproto.ioc_examples.random_walk', 'RandomWalkIOC', {}),
      ('caproto.ioc_examples.reading_counter', 'ReadingCounter', {}),
      ('caproto.ioc_examples.rpc_function', 'MyPVGroup', {}),
+     ('caproto.ioc_examples.scalars_and_arrays', 'ArrayIOC', {}),
      ('caproto.ioc_examples.scan_rate', 'MyPVGroup', {}),
-     ('caproto.ioc_examples.simple', 'SimpleIOC', {}),
-     ('caproto.ioc_examples.subgroups', 'MyPVGroup', {}),
      ('caproto.ioc_examples.setpoint_rbv_pair', 'Group', {}),
-     ('caproto.ioc_examples.all_in_one', 'MyPVGroup',
-      dict(macros={'macro': 'expanded'})),
+     ('caproto.ioc_examples.simple', 'SimpleIOC', {}),
      ('caproto.ioc_examples.startup_and_shutdown_hooks', 'StartupAndShutdown', {}),
+     ('caproto.ioc_examples.subgroups', 'MyPVGroup', {}),
      ]
 )
 @pytest.mark.parametrize('async_lib', ['curio', 'trio', 'asyncio'])
