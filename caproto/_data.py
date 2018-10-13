@@ -212,6 +212,7 @@ class ChannelData:
         self._fill_at_next_write = list()
 
     def calculate_length(self, value):
+        'Calculate the number of elements given a value'
         is_array = isinstance(value, (list, tuple) + backend.array_types)
         if is_array:
             return len(value)
@@ -222,10 +223,12 @@ class ChannelData:
 
     @property
     def length(self):
+        'The number of elements (length) of the current value'
         return self.calculate_length(self.value)
 
     @property
     def max_length(self):
+        'The maximum number of elements (length) this channel can hold'
         return self._max_length
 
     def preprocess_value(self, value):
@@ -734,7 +737,6 @@ class ChannelNumeric(ChannelData):
     lower_ctrl_limit = _read_only_property('lower_ctrl_limit')
 
     async def verify_value(self, data):
-        value = await super().verify_value(data)
         if not isinstance(data, Iterable):
             val = data
         elif len(data) == 1:
