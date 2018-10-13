@@ -488,11 +488,14 @@ class VirtualCircuit:
             await db_entry.subscribe(self.context.subscription_queue, sub_spec)
         elif isinstance(command, ca.EventCancelRequest):
             chan, db_entry = get_db_entry()
-            await self._cull_subscriptions(
+            removed = await self._cull_subscriptions(
                 db_entry,
                 lambda sub: sub.subscriptionid == command.subscriptionid)
-            # TODO: shouldn't this actually be the data_count requested?
-            data_count = db_entry.length
+            if removed:
+                _, removed_sub = removed[0]
+                data_count = removed_sub.data_count
+            else:
+                data_count = db_entry.length
             return [chan.unsubscribe(command.subscriptionid,
                                      data_type=command.data_type,
                                      data_count=data_count)]
