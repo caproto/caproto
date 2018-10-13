@@ -163,7 +163,9 @@ class RecordFieldGroup(PVGroup):
         super().__init__(prefix, **kw)
 
         parent = self.parent
+        # set .NAME
         self.record_name._data['value'] = parent.pvname
+        # set .RTYP
         self.record_type._data['value'] = self._record_type
 
         # automatic alarm handling
@@ -480,6 +482,8 @@ class AaiFields(RecordFieldGroup):
     _link_parent_attribute(display_precision, 'precision')
     _link_parent_attribute(high_operating_range, 'upper_ctrl_limit')
     _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
+    _link_parent_attribute(number_of_elements, 'max_length')
+    _link_parent_attribute(number_elements_read, 'length')
 
 
 @register_record
@@ -549,6 +553,8 @@ class AaoFields(RecordFieldGroup):
     _link_parent_attribute(display_precision, 'precision')
     _link_parent_attribute(high_operating_range, 'upper_ctrl_limit')
     _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
+    _link_parent_attribute(number_of_elements, 'max_length')
+    _link_parent_attribute(number_elements_read, 'length')
 
 
 @register_record
@@ -713,6 +719,7 @@ class AcalcoutFields(RecordFieldGroup):
     _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
     _link_parent_attribute(archive_deadband, 'log_atol')
     _link_parent_attribute(monitor_deadband, 'value_atol')
+    _link_parent_attribute(number_of_elements, 'max_length')
 
 
 @register_record
@@ -3609,7 +3616,7 @@ class HistogramFields(RecordFieldGroup):
         name='MDEL', dtype=ChannelType.LONG, doc='Monitor Count Deadband')
     monitor_seconds_dband = pvproperty(
         name='SDEL', dtype=ChannelType.DOUBLE, doc='Monitor Seconds Dband')
-    num_of_array_elements = pvproperty(
+    number_of_elements = pvproperty(
         name='NELM',
         dtype=ChannelType.LONG,
         doc='Num of Array Elements',
@@ -3630,6 +3637,7 @@ class HistogramFields(RecordFieldGroup):
     _link_parent_attribute(display_precision, 'precision')
     _link_parent_attribute(high_operating_range, 'upper_ctrl_limit')
     _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
+    _link_parent_attribute(number_of_elements, 'max_length')
 
 
 @register_record
@@ -6123,6 +6131,8 @@ class SubarrayFields(RecordFieldGroup):
     _link_parent_attribute(display_precision, 'precision')
     _link_parent_attribute(high_operating_range, 'upper_ctrl_limit')
     _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
+    _link_parent_attribute(maximum_elements, 'max_length')
+    _link_parent_attribute(number_of_elements, 'length')
 
 
 @register_record
@@ -7410,6 +7420,7 @@ class WaveformFields(RecordFieldGroup):
     _link_parent_attribute(display_precision, 'precision')
     _link_parent_attribute(high_operating_range, 'upper_ctrl_limit')
     _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
+    _link_parent_attribute(number_of_elements, 'max_length')
 
 
 __all__ = ['records', 'RecordFieldGroup'] + list(records.keys())
