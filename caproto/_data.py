@@ -194,6 +194,9 @@ class ChannelData:
         self.string_encoding = string_encoding
         self.reported_record_type = reported_record_type
 
+        if self._max_length is None:
+            self._max_length = self.calculate_length(value)
+
         value = self.preprocess_value(value)
         self._data = dict(value=value,
                           timestamp=timestamp)
@@ -238,16 +241,12 @@ class ChannelData:
         1. If length >= 2, ensure the value is a list
         2. If length == 1, ensure the value is an unpacked scalar
         3. Ensure len(value) <= length
-        4. Updates self.length if not specified (this happens during
-           the initializer)
 
         Raises
         ------
         CaprotoValueError
         '''
         is_array = isinstance(value, (list, tuple) + backend.array_types)
-        if self._max_length is None:
-            self._max_length = self.calculate_length(value)
         if is_array:
             if len(value) > self._max_length:
                 # TODO consider an exception for caproto-only environments that
