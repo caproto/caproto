@@ -171,11 +171,11 @@ def test_with_caget(backends, prefix, pvdb_from_server_example, server, pv,
     print('done')
 
 
-caput_checks = [('int', '1', [1]),
-                ('pi', '3.15', [3.15]),
-                ('enum', 'd', ['d']),
-                ('enum2', 'cc', ['cc']),
-                ('str', 'resolve', ['resolve']),
+caput_checks = [('int', '1', 1),
+                ('pi', '3.15', 3.15),
+                ('enum', 'd', 'd'),
+                ('enum2', 'cc', 'cc'),
+                ('str', 'resolve', 'resolve'),
                 ('char', '51', b'3'),
                 ('chararray', 'testing', 'testing'),
                 ('bytearray', 'testing', b'testing'),
@@ -211,19 +211,17 @@ def test_with_caput(backends, prefix, pvdb_from_server_example, server, pv,
         clean_func = None
         if isinstance(db_entry, (ca.ChannelInteger, ca.ChannelDouble)):
             def clean_func(v):
-                return [ast.literal_eval(v)]
+                return ast.literal_eval(v)
         elif isinstance(db_entry, (ca.ChannelEnum, )):
             def clean_func(v):
                 if ' ' not in v:
-                    return [v]
-                return [v.split(' ', 1)[1]]
-            # db_new = [db_entry.enum_strings[db_new[0]]]
+                    return v
+                return v.split(' ', 1)[1]
         elif isinstance(db_entry, ca.ChannelByte):
-            if pv.endswith('bytearray'):
-                def clean_func(v):
+            def clean_func(v):
+                if pv.endswith('bytearray'):
                     return v.encode('latin-1')
-            else:
-                def clean_func(v):
+                else:
                     return chr(int(v)).encode('latin-1')
         elif isinstance(db_entry, ca.ChannelChar):
             ...
@@ -232,10 +230,6 @@ def test_with_caput(backends, prefix, pvdb_from_server_example, server, pv,
                 # database holds ['char array'], caput shows [len char array]
                 def clean_func(v):
                     return [v.split(' ', 1)[1]]
-            else:
-                # database holds ['string'], caput doesn't show it
-                def clean_func(v):
-                    return [v]
 
         if clean_func is not None:
             for key in ('old', 'new'):

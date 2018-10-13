@@ -394,23 +394,6 @@ def test_special_ioc_examples(request, module_name, pvdb_class_name,
                               class_kwargs, prefix)
 
 
-# Use pytest-rerunfailures plugin to try these a couple times due to flaky
-# Google API calls. Ultimately, xfail.
-@pytest.mark.xfail()
-@pytest.mark.flaky(reruns=5, reruns_delay=2)
-@pytest.mark.parametrize(
-    'module_name, pvdb_class_name, class_kwargs',
-    [('caproto.ioc_examples.currency_conversion_polling', 'CurrencyPollingIOC',
-      {}),
-     ('caproto.ioc_examples.currency_conversion', 'CurrencyConversionIOC', {}),
-     ]
-)
-def test_flaky_ioc_examples(request, module_name, pvdb_class_name,
-                            class_kwargs, prefix):
-    return _test_ioc_examples(request, module_name, pvdb_class_name,
-                              class_kwargs, prefix)
-
-
 # skip on windows - no areadetector ioc there just yet
 @pytest.mark.skipif(sys.platform == 'win32',
                     reason='win32 AD IOC')
