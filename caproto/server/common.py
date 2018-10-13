@@ -387,7 +387,7 @@ class VirtualCircuit:
             return [ca.AccessRightsResponse(cid=command.cid,
                                             access_rights=access),
                     ca.CreateChanResponse(data_type=db_entry.data_type,
-                                          data_count=len(db_entry),
+                                          data_count=db_entry.max_length,
                                           cid=command.cid,
                                           sid=self.circuit.new_channel_id()),
                     ]
@@ -422,8 +422,9 @@ class VirtualCircuit:
                                                 dict((field, getattr(metadata, field))
                                                      for field, _ in time_type._fields_)))
             notify = isinstance(command, ca.ReadNotifyRequest)
+            data_count = db_entry.calculate_length(data)
             return [chan.read(data=data, data_type=command.data_type,
-                              data_count=len(data), status=1,
+                              data_count=data_count, status=1,
                               ioid=command.ioid, metadata=metadata,
                               notify=notify)
                     ]
@@ -455,13 +456,12 @@ class VirtualCircuit:
                         # returning none for write_status can just be
                         # considered laziness
                         write_status = True
-                    try:
-                        data_count = len(db_entry.value)
-                    except (TypeError, ValueError):
-                        data_count = 0  # or maybe 1?
-                    response_command = chan.write(ioid=command.ioid,
-                                                  status=write_status,
-                                                  data_count=data_count)
+
+                    response_command = chan.write(
+                        ioid=command.ioid,
+                        status=write_status,
+                        data_count=db_entry.current_length
+                    )
 
                 if client_waiting:
                     await self.send(response_command)
@@ -491,10 +491,8 @@ class VirtualCircuit:
             await self._cull_subscriptions(
                 db_entry,
                 lambda sub: sub.subscriptionid == command.subscriptionid)
-            try:
-                data_count = len(db_entry.value)
-            except (TypeError, ValueError):
-                data_count = 0  # or maybe 1?
+            # TODO: shouldn't this actually be the data_count requested?
+            data_count = db_entry.current_length
             return [chan.unsubscribe(command.subscriptionid,
                                      data_type=command.data_type,
                                      data_count=data_count)]

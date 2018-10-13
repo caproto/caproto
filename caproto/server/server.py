@@ -17,9 +17,12 @@ from collections import (namedtuple, OrderedDict, defaultdict)
 from types import MethodType
 
 from .. import (ChannelDouble, ChannelShort, ChannelInteger, ChannelString,
-                ChannelEnum, ChannelType, ChannelChar, ChannelAlarm,
+                ChannelEnum, ChannelType, ChannelChar, ChannelByte,
+                ChannelAlarm,
                 AccessRights, get_server_address_list,
                 AlarmStatus, AlarmSeverity)
+from .._backend import backend
+
 
 module_logger = logging.getLogger(__name__)
 
@@ -30,6 +33,7 @@ __all__ = ['AsyncLibraryLayer',
            'expand_macros', 'get_pv_pair_wrapper', 'pvfunction', 'pvproperty',
 
            'PvpropertyData', 'PvpropertyReadOnlyData',
+           'PvpropertyByte', 'PvpropertyByteRO',
            'PvpropertyChar', 'PvpropertyCharRO',
            'PvpropertyDouble', 'PvpropertyDoubleRO',
            'PvpropertyBoolEnum', 'PvpropertyBoolEnumRO',
@@ -136,11 +140,12 @@ class PvpropertyData:
             return self
         return self.fields[field]
 
-    def filtered(self, filter):
-        return self
-
 
 class PvpropertyChar(PvpropertyData, ChannelChar):
+    ...
+
+
+class PvpropertyByte(PvpropertyData, ChannelByte):
     ...
 
 
@@ -180,6 +185,10 @@ class PvpropertyCharRO(PvpropertyReadOnlyData, ChannelChar):
     ...
 
 
+class PvpropertyByteRO(PvpropertyReadOnlyData, ChannelByte):
+    ...
+
+
 class PvpropertyShortRO(PvpropertyReadOnlyData, ChannelShort):
     ...
 
@@ -209,7 +218,8 @@ class PvpropertyBoolEnumRO(PvpropertyReadOnlyData, ChannelEnum):
 
 class PVSpec(namedtuple('PVSpec',
                         'get put startup shutdown attr name dtype value '
-                        'alarm_group read_only doc fields cls_kwargs')):
+                        'max_length alarm_group read_only doc fields '
+                        'cls_kwargs')):
     '''PV information specification
 
     Parameters
@@ -231,6 +241,9 @@ class PVSpec(namedtuple('PVSpec',
         The data type
     value : any, optional
         The initial value
+    max_length : int, optional
+        The maximum possible length acceptable for the data.
+        By default, this is `len(value) or 1`
     alarm_group : str, optional
         The alarm group the PV should be attached to
     read_only : bool, optional
@@ -246,12 +259,16 @@ class PVSpec(namedtuple('PVSpec',
     default_dtype = int
 
     def __new__(cls, get=None, put=None, startup=None, shutdown=None,
-                attr=None, name=None,
-                dtype=None, value=None, alarm_group=None, read_only=None,
-                doc=None, fields=None, cls_kwargs=None):
+                attr=None, name=None, dtype=None, value=None, max_length=None,
+                alarm_group=None, read_only=None, doc=None, fields=None,
+                cls_kwargs=None):
         if dtype is None:
-            dtype = (type(value[0]) if value is not None
-                     else cls.default_dtype)
+            if value is None:
+                dtype = cls.default_dtype
+            elif isinstance(value, (list, tuple) + backend.array_types):
+                dtype = type(value[0])
+            else:
+                dtype = type(value)
 
         if get is not None:
             assert inspect.iscoroutinefunction(get), 'required async def get'
@@ -293,11 +310,10 @@ class PVSpec(namedtuple('PVSpec',
                                    ''.format(shutdown, sig))
 
         return super().__new__(cls, get=get, put=put, startup=startup,
-                               shutdown=shutdown,
-                               attr=attr, name=name, dtype=dtype, value=value,
+                               shutdown=shutdown, attr=attr, name=name,
+                               dtype=dtype, value=value, max_length=max_length,
                                alarm_group=alarm_group, read_only=read_only,
-                               doc=doc, fields=fields,
-                               cls_kwargs=cls_kwargs)
+                               doc=doc, fields=fields, cls_kwargs=cls_kwargs)
 
     def new_names(self, attr=None, name=None):
         if attr is None:
@@ -390,6 +406,9 @@ class pvproperty:
         The data type
     value : any, optional
         The initial value
+    max_length : int, optional
+        The maximum possible length acceptable for the data
+        By default, this is `len(value) or 1`
     alarm_group : str, optional
         The alarm group the PV should be attached to
     read_only : bool, optional
@@ -403,8 +422,9 @@ class pvproperty:
     '''
 
     def __init__(self, get=None, put=None, startup=None, shutdown=None, *,
-                 name=None, dtype=None, value=None, alarm_group=None, doc=None,
-                 read_only=None, field_spec=None, fields=None, **cls_kwargs):
+                 name=None, dtype=None, value=None, max_length=None,
+                 alarm_group=None, doc=None, read_only=None, field_spec=None,
+                 fields=None, **cls_kwargs):
         self.attr_name = None  # to be set later
 
         if doc is None and get is not None:
@@ -421,10 +441,10 @@ class pvproperty:
                   else field_spec.fields)
 
         self.pvspec = PVSpec(get=get, put=put, startup=startup,
-                             shutdown=shutdown, name=name,
-                             dtype=dtype, value=value, alarm_group=alarm_group,
-                             read_only=read_only, doc=doc, fields=fields,
-                             cls_kwargs=cls_kwargs)
+                             shutdown=shutdown, name=name, dtype=dtype,
+                             value=value, max_length=max_length,
+                             alarm_group=alarm_group, read_only=read_only,
+                             doc=doc, fields=fields, cls_kwargs=cls_kwargs)
         self.__doc__ = doc
 
     @property
@@ -1036,6 +1056,7 @@ def data_class_from_pvspec(group, pvspec):
     'Return the data class for a given PVSpec in a group'
     if pvspec.read_only:
         return group.type_map_read_only[pvspec.dtype]
+
     return group.type_map[pvspec.dtype]
 
 
@@ -1051,6 +1072,7 @@ def channeldata_from_pvspec(group, pvspec):
     kw = dict(pvspec.cls_kwargs) if pvspec.cls_kwargs is not None else {}
 
     inst = cls(group=group, pvspec=pvspec, value=value,
+               max_length=pvspec.max_length,
                alarm=group.alarms[pvspec.alarm_group], pvname=full_pvname,
                **kw)
     inst.__doc__ = pvspec.doc
@@ -1077,7 +1099,8 @@ class PVGroup(metaclass=PVGroupMeta):
     '''
 
     type_map = {
-        str: PvpropertyString,
+        str: PvpropertyChar,
+        bytes: PvpropertyByte,
         int: PvpropertyInteger,
         float: PvpropertyDouble,
         bool: PvpropertyBoolEnum,
