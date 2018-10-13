@@ -475,3 +475,17 @@ def test_mocking_records_subclass(request, prefix):
     time.sleep(0.5)
     assert abs(read(motor_rbv).data[0] - 100) < 0.1
     assert abs(read(motor_drbv).data[0] - 100) < 0.1
+
+
+def test_pvproperty_string_array(request, prefix):
+    from .conftest import run_example_ioc
+    run_example_ioc('caproto.ioc_examples.scalars_and_arrays',
+                    request=request,
+                    args=['--prefix', prefix], pv_to_check=f'{prefix}scalar_int')
+
+    from caproto.sync.client import read, write
+    array_string_pv = f'{prefix}array_string'
+
+    write(array_string_pv, ['array', 'of', 'strings'], notify=True)
+    time.sleep(0.5)
+    assert read(array_string_pv).data == [b'array', b'of', b'strings']

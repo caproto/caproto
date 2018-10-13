@@ -71,7 +71,7 @@ def _setup():
         assert type_map[_type].itemsize == _size
 
     return Backend(name='numpy',
-                   array_types=(np.ndarray, ),
+                   array_types=(np.ndarray, DbrStringArray),
                    type_map=type_map,
                    epics_to_python=epics_to_python,
                    python_to_epics=python_to_epics,
