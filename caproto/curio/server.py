@@ -119,7 +119,7 @@ class Context(_Context):
 
     async def run(self, *, log_pv_names=False):
         'Start the server'
-        self.log.info('Server starting up...')
+        self.log.info('Curio server starting up...')
         try:
             for address in ca.get_beacon_address_list():
                 sock = ca.bcast_socket(socket)

@@ -146,7 +146,7 @@ class Context(_Context):
 
     async def run(self, *, log_pv_names=False):
         'Start the server'
-        self.log.info('Server starting up...')
+        self.log.info('Asyncio server starting up...')
 
         async def make_socket(interface, port):
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
