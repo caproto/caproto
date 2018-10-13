@@ -4,7 +4,7 @@ from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
 
 class StartupAndShutdown(PVGroup):
     "An IOC that prints on startup and on shutdown"
-    thing = pvproperty(value=[2])
+    thing = pvproperty(value=2)
 
     @thing.startup
     async def thing(self, instance, async_lib):

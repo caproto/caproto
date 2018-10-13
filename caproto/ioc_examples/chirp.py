@@ -19,8 +19,8 @@ class Chirp(PVGroup):
         super().__init__(*args, **kwargs)
         self.ramprate = ramprate
 
-    chirp = pvproperty(value=[0], dtype=float, read_only=True)
-    steady = pvproperty(value=[0], dtype=float, read_only=True)
+    chirp = pvproperty(value=0, dtype=float, read_only=True)
+    steady = pvproperty(value=0, dtype=float, read_only=True)
 
     @chirp.startup
     async def chirp(self, instance, async_lib):
@@ -28,7 +28,7 @@ class Chirp(PVGroup):
         period = 0.5
         j = 0
         while True:
-            await instance.write(value=[j])
+            await instance.write(value=j)
             await async_lib.library.sleep(period)
             period *= rr
             j += 1
@@ -40,7 +40,7 @@ class Chirp(PVGroup):
     async def steady(self, instance, async_lib):
         period = .1
         for j in itertools.count():
-            await instance.write(value=[j % 1000])
+            await instance.write(value=j % 1000)
             await async_lib.library.sleep(period)
 
 

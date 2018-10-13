@@ -20,8 +20,8 @@ class ReadingCounter(PVGroup):
         await instance.write(self.tallies[pv_name])
         return instance.value
 
-    A = pvproperty(get=my_read, value=[0])
-    B = pvproperty(get=my_read, value=[0])
+    A = pvproperty(get=my_read, value=0)
+    B = pvproperty(get=my_read, value=0)
 
 
 if __name__ == '__main__':

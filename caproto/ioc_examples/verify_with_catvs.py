@@ -5,7 +5,7 @@ from caproto import ChannelType
 
 class CatvsIOC(PVGroup):
     "An IOC with two simple read/writable PVs"
-    ival = pvproperty(value=[42])
+    ival = pvproperty(value=42)
     aval = pvproperty(value=[0] * 5, dtype=ChannelType.INT)
 
 

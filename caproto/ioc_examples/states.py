@@ -3,9 +3,9 @@ from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
 
 
 class StateIOC(PVGroup):
-    value = pvproperty(value=[1])
-    disable_state = pvproperty(value=[False])
-    enable_state = pvproperty(value=[False])
+    value = pvproperty(value=1)
+    disable_state = pvproperty(value=False)
+    enable_state = pvproperty(value=False)
 
     def __init__(self, *args, **kwargs):
         self.states = {'my_stately_state': False}
@@ -21,7 +21,7 @@ class StateIOC(PVGroup):
         'Periodically update the value'
         # update the ChannelData instance and notify any subscribers
         self._value = (self._value + 1) % 10
-        await instance.write(value=[self._value])
+        await instance.write(value=self._value)
 
     @disable_state.putter
     async def disable_state(self, instance, value):
