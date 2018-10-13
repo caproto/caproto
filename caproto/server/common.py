@@ -460,7 +460,7 @@ class VirtualCircuit:
                     response_command = chan.write(
                         ioid=command.ioid,
                         status=write_status,
-                        data_count=db_entry.current_length
+                        data_count=db_entry.length
                     )
 
                 if client_waiting:
@@ -492,7 +492,7 @@ class VirtualCircuit:
                 db_entry,
                 lambda sub: sub.subscriptionid == command.subscriptionid)
             # TODO: shouldn't this actually be the data_count requested?
-            data_count = db_entry.current_length
+            data_count = db_entry.length
             return [chan.unsubscribe(command.subscriptionid,
                                      data_type=command.data_type,
                                      data_count=data_count)]
