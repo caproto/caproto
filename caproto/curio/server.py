@@ -166,6 +166,11 @@ class Context(_Context):
             raise ServerExit() from ex
         finally:
             self.log.info('Server exiting....')
+            async_lib = CurioAsyncLayer()
+            async with curio.TaskGroup() as task_group:
+                for name, method in self.shutdown_methods.items():
+                    self.log.debug('Calling shutdown method %r', name)
+                    await task_group.spawn(method, async_lib)
             for sock in self.tcp_sockets.values():
                 await sock.close()
             for sock in self.udp_socks.values():
