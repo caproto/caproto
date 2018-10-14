@@ -81,6 +81,8 @@ class PvpropertyData:
         if doc is not None:
             self.__doc__ = doc
 
+        self.record_type = mock_record
+
         super().__init__(**kwargs)
 
         if mock_record is not None:
@@ -425,6 +427,11 @@ class pvproperty:
                              cls_kwargs=cls_kwargs)
         self.__doc__ = doc
 
+    @property
+    def record_type(self):
+        'Record type if mocking a record (or None)'
+        return self.pvspec.cls_kwargs.get('mock_record', None)
+
     def __get__(self, instance, owner):
         if instance is None:
             return self.pvspec
@@ -468,7 +475,7 @@ class pvproperty:
         return self
 
     def scan(self, period, *, subtract_elapsed=True, stop_on_error=False,
-             failure_severity=AlarmSeverity.MAJOR_ALARM):
+             failure_severity=AlarmSeverity.MAJOR_ALARM, use_scan_field=False):
         '''Periodically call a function to update a pvproperty.
 
         NOTE: This replaces the pvproperty startup function. Only one or the
@@ -483,6 +490,9 @@ class pvproperty:
             the subsequent iteration
         stop_on_error : bool, optional
             Fail (and stop scanning) when unhandled exceptions occur
+        use_scan_field : bool, optional
+            Use the .SCAN field if this pvproperty is a mocked record.  Raises
+            ValueError if mock_record is not used.
 
         Returns
         -------
@@ -493,36 +503,61 @@ class pvproperty:
         '''
         # TODO: maybe allow rate to be tied to a PV (e.g., a SCAN field?)
         def wrapper(scan_function):
+            async def call_scan_function(group, prop, async_lib):
+                try:
+                    await scan_function(group, prop, async_lib)
+                except Exception as ex:
+                    prop.log.exception('Scan exception')
+                    await prop.alarm.write(status=AlarmStatus.SCAN,
+                                           severity=failure_severity,
+                                           )
+                    if stop_on_error:
+                        raise
+                else:
+                    if ((prop.alarm.severity, prop.alarm.status) ==
+                            (failure_severity, AlarmStatus.SCAN)):
+                        await prop.alarm.write(
+                            status=AlarmStatus.NO_ALARM,
+                            severity=AlarmSeverity.NO_ALARM,
+                        )
+
             async def scanned_startup(group, prop, async_lib):
+                if use_scan_field and period is not None:
+                    if prop.field_inst.scan_rate_sec is None:
+                        # This is a hook to allow setting of the default scan
+                        # rate through the 'period' argument of the decorator.
+                        prop.field_inst._scan_rate_sec = period
+                        # TODO: update .SCAN to reflect this number
+
                 sleep = async_lib.library.sleep
                 while True:
                     t0 = time.monotonic()
-
-                    try:
-                        await scan_function(group, prop, async_lib)
-                    except Exception as ex:
-                        prop.log.exception('Scan exception')
-                        await prop.alarm.write(status=AlarmStatus.SCAN,
-                                               severity=failure_severity,
-                                               )
-                        if stop_on_error:
-                            raise
+                    if use_scan_field:
+                        iter_time = prop.field_inst.scan_rate_sec
+                        if iter_time is None:
+                            iter_time = 0
                     else:
-                        if ((prop.alarm.severity, prop.alarm.status) ==
-                                (failure_severity, AlarmStatus.SCAN)):
-                            await prop.alarm.write(
-                                status=AlarmStatus.NO_ALARM,
-                                severity=AlarmSeverity.NO_ALARM,
-                            )
+                        iter_time = period
 
+                    if iter_time > 0:
+                        await call_scan_function(group, prop, async_lib)
+                    else:
+                        iter_time = 0.1
+                        # TODO: could the scan rate - or values in general -
+                        # have events tied with them so busy loops are
+                        # unnecessary?
                     elapsed = time.monotonic() - t0
-                    sleep_time = (max(0, period - elapsed)
+                    sleep_time = (max(0, iter_time - elapsed)
                                   if subtract_elapsed
-                                  else period)
+                                  else iter_time)
                     await sleep(sleep_time)
             return self.startup(scanned_startup)
 
-        if period <= 0:
+        if use_scan_field:
+            if not self.record_type:
+                raise ValueError('Must use mock_record in conjunction with '
+                                 'use_scan_field')
+        elif period <= 0:
             raise ValueError('Scan period must be > 0')
 
         return wrapper
