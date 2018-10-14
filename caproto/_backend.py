@@ -335,10 +335,11 @@ def convert_values(values, from_dtype, to_dtype, *, direction,
         else:
             return _decode_string_list(values, string_encoding)
     elif to_dtype == ChannelType.CHAR:
-        if string_encoding and isinstance(values[0], str):
-            return values
-        elif not string_encoding and isinstance(values[0], bytes):
-            return values
+        if len(values):
+            if string_encoding and isinstance(values[0], str):
+                return values
+            elif not string_encoding and isinstance(values[0], bytes):
+                return values
 
     byteswap = (auto_byteswap and direction == ConversionDirection.TO_WIRE)
     return backend.python_to_epics(to_dtype, values, byteswap=byteswap,

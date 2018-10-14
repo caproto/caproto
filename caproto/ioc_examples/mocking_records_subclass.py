@@ -22,7 +22,7 @@ class CustomMotorFields(MotorFields):
     # Then we are free to extend the fields as normal pvproperties:
     @user_readback_value.scan(period=0.1)
     async def user_readback_value(self, instance, async_lib):
-        setpoint, = self.parent.value
+        setpoint = self.parent.value
         pos = setpoint + random.random() / 100.0
         # Set the use, dial, and then raw readbacks:
         timestamp = time.time()
@@ -34,8 +34,8 @@ class CustomMotorFields(MotorFields):
 
 class RecordMockingIOC(PVGroup):
     # Define two records, an analog input (ai) record:
-    motor1 = pvproperty(value=[1.0], mock_record='my_motor')
-    motor2 = pvproperty(value=[2.0], mock_record='my_motor')
+    motor1 = pvproperty(value=1.0, mock_record='my_motor')
+    motor2 = pvproperty(value=2.0, mock_record='my_motor')
 
 
 if __name__ == '__main__':

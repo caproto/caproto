@@ -14,11 +14,11 @@ class RecordLike(PVGroup):
     attr_separator = ''
 
     # PV #1: {prefix}.RTYP
-    record_type = pvproperty(name='.RTYP', value=['ai'])
+    record_type = pvproperty(name='.RTYP', value='ai')
     # PV #2: {prefix}.VAL
-    value = pvproperty(name='.VAL', value=[1])
+    value = pvproperty(name='.VAL', value=1)
     # PV #3: {prefix}.DESC
-    description = pvproperty(name='.DESC', value=['Description'])
+    description = pvproperty(name='.DESC', value='Description')
 
 
 class MySubGroup(PVGroup):

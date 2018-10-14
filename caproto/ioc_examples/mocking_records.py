@@ -4,14 +4,14 @@ from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
 
 class RecordMockingIOC(PVGroup):
     # Define two records, an analog input (ai) record:
-    A = pvproperty(value=[1.0], mock_record='ai')
+    A = pvproperty(value=1.0, mock_record='ai')
     # And an analog output (ao) record:
-    B = pvproperty(value=[2.0], mock_record='ao',
+    B = pvproperty(value=2.0, mock_record='ao',
                    precision=3)
 
     @B.putter
     async def B(self, instance, value):
-        if list(value) == [1]:
+        if value == 1:
             # Mocked record will pick up the alarm status simply by use raising
             # an exception in the putter:
             raise ValueError('Invalid value!')
@@ -37,7 +37,7 @@ class RecordMockingIOC(PVGroup):
         await ioc.A.write(value - 10)
 
     # Now that the field specification has been set on B, it can be reused:
-    C = pvproperty(value=[2.0], mock_record='ao',
+    C = pvproperty(value=2.0, mock_record='ao',
                    precision=3, field_spec=B.field_spec)
 
 

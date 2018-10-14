@@ -21,7 +21,7 @@ class MyPVGroup(PVGroup):
         logger.debug('write single %r', value)
         return value
 
-    single = pvproperty(single_read, single_write, value=['b'])
+    single = pvproperty(single_read, single_write, value='b')
 
     async def read_int(self, instance):
         logger.debug('read_int of %s', instance.pvspec.attr)
@@ -29,18 +29,18 @@ class MyPVGroup(PVGroup):
 
     # a set of 3 PVs re-using the same spec-func
     # PV #2: {prefix}testa
-    testa = pvproperty(read_int, value=[1])
+    testa = pvproperty(read_int, value=1)
     # PV #3: {prefix}testa
-    testb = pvproperty(read_int, value=[2])
+    testb = pvproperty(read_int, value=2)
     # PV #4: {prefix}testa
-    testc = pvproperty(read_int, value=[3])
+    testc = pvproperty(read_int, value=3)
 
     # PV #5: {prefix}{macro}
-    macroified = pvproperty(value=[0], name='{macro}')
+    macroified = pvproperty(value=0, name='{macro}')
 
     # - section 2 - with new-style property-like PVs
     # PV #6: {prefix}newstyle
-    @pvproperty(value=['c'])
+    @pvproperty(value='c')
     async def newstyle(self, instance):
         logger.debug('read newstyle')
         return instance.value

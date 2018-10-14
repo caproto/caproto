@@ -34,12 +34,11 @@ class Group(PVGroup):
         'A nice random integer between 1000 and 2000'
         return random.randint(1000, 2000)
 
-    @pvfunction(default=[0])
+    @pvfunction(default=0)
     async def get_random(self,
                          low: int=100,
                          high: int=1000) -> int:
         'A configurable random number'
-        low, high = low[0], high[0]
         return random.randint(low, high)
 
 

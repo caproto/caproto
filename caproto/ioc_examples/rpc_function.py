@@ -19,7 +19,6 @@ class MyPVGroup(PVGroup):
                          low: int=100,
                          high: int=1000) -> int:
         'A configurable random number'
-        low, high = low[0], high[0]
         return random.randint(low, high)
 
 

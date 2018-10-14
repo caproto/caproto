@@ -24,8 +24,8 @@ class CustomWrite(PVGroup):
         print(f'Wrote {value} to {self.DIRECTORY / pv_name}')
         return value
 
-    A = pvproperty(put=my_write, value=[0])
-    B = pvproperty(put=my_write, value=[0])
+    A = pvproperty(put=my_write, value=0)
+    B = pvproperty(put=my_write, value=0)
 
 
 if __name__ == '__main__':

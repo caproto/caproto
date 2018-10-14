@@ -110,9 +110,9 @@ def _setup():
     try:
         import numpy
     except ImportError:
-        array_types = (Array, array.ArrayType, )
+        array_types = (Array, array.ArrayType, DbrStringArray)
     else:
-        array_types = (Array, array.ArrayType, numpy.ndarray)
+        array_types = (Array, array.ArrayType, numpy.ndarray, DbrStringArray)
 
     return Backend(name='array',
                    array_types=array_types,

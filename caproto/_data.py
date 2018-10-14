@@ -160,7 +160,8 @@ class ChannelData:
     data_type = ChannelType.LONG
 
     def __init__(self, *, alarm=None, value=None, timestamp=None,
-                 string_encoding='latin-1', reported_record_type='caproto'):
+                 max_length=None, string_encoding='latin-1',
+                 reported_record_type='caproto'):
         '''Metadata and Data for a single caproto Channel
 
         Parameters
@@ -170,6 +171,8 @@ class ChannelData:
         timestamp : float, optional
             Posix timestamp associated with the value
             Defaults to `time.time()`
+        max_length : int, optional
+            Maximum array length of the data
         string_encoding : str, optional
             Encoding to use for strings, used both in and out
         reported_record_type : str, optional
@@ -187,9 +190,14 @@ class ChannelData:
 
         # now use the setter to attach the alarm correctly:
         self.alarm = alarm
-
+        self._max_length = max_length
         self.string_encoding = string_encoding
         self.reported_record_type = reported_record_type
+
+        if self._max_length is None:
+            self._max_length = self.calculate_length(value)
+
+        value = self.preprocess_value(value)
         self._data = dict(value=value,
                           timestamp=timestamp)
         # This is a dict keyed on queues that will receive subscription
@@ -206,14 +214,66 @@ class ChannelData:
         self._snapshots = defaultdict(dict)
         self._fill_at_next_write = list()
 
+    def calculate_length(self, value):
+        'Calculate the number of elements given a value'
+        is_array = isinstance(value, (list, tuple) + backend.array_types)
+        if is_array:
+            return len(value)
+        if isinstance(value, (bytes, str, bytearray)):
+            if self.data_type == ChannelType.CHAR:
+                return len(value)
+        return 1
+
+    @property
+    def length(self):
+        'The number of elements (length) of the current value'
+        return self.calculate_length(self.value)
+
+    @property
+    def max_length(self):
+        'The maximum number of elements (length) this channel can hold'
+        return self._max_length
+
+    def preprocess_value(self, value):
+        '''Pre-process values destined for verify_value and write
+
+        A few basic things are done here, based on max_count:
+        1. If length >= 2, ensure the value is a list
+        2. If length == 1, ensure the value is an unpacked scalar
+        3. Ensure len(value) <= length
+
+        Raises
+        ------
+        CaprotoValueError
+        '''
+        is_array = isinstance(value, (list, tuple) + backend.array_types)
+        if is_array:
+            if len(value) > self._max_length:
+                # TODO consider an exception for caproto-only environments that
+                # can handle dynamically resized arrays (i.e., sizes greater
+                # than the initial max_length)?
+                raise CaprotoValueError(
+                    f'Value of length {len(value)} is too large for '
+                    f'{self.__class__.__name__}(max_length={self._max_length})'
+                )
+
+        if self._max_length == 1:
+            if is_array:
+                # scalar value in a list -> scalar value
+                return value[0]
+        elif not is_array:
+            # scalar value that should be in a list -> list
+            return [value]
+        return value
+
     def __setstate__(self, val):
-        self.timetstamp = val['timestamp']
+        self.timestamp = val['timestamp']
         self._alarm = val['alarm']
         self.string_encoding = val['string_encoding']
         self.reported_record_type = val['reported_record_type']
         self._data = val['data']
+        self._max_length = val['max_length']
         self.string_encoding = val['string_encoding']
-        self._data = val['data']
         self._queues = defaultdict(
             lambda: defaultdict(
                 lambda: defaultdict(set)))
@@ -226,7 +286,8 @@ class ChannelData:
                 'alarm': self.alarm,
                 'string_encoding': self.string_encoding,
                 'reported_record_type': self.reported_record_type,
-                'data': self._data}
+                'data': self._data,
+                'max_length': self._max_length}
 
     value = _read_only_property('value')
     timestamp = _read_only_property('timestamp')
@@ -388,6 +449,7 @@ class ChannelData:
             direction=ConversionDirection.FROM_WIRE)
 
         try:
+            value = self.preprocess_value(value)
             modified_value = await self.verify_value(value)
         except Exception as ex:
             # TODO: should allow exception to optionally pass alarm
@@ -425,6 +487,7 @@ class ChannelData:
 
     async def write(self, value, flags=0, **metadata):
         '''Set data from native Python types'''
+        value = self.preprocess_value(value)
         metadata['timestamp'] = metadata.get('timestamp', time.time())
         modified_value = await self.verify_value(value)
         if self._fill_at_next_write:
@@ -618,7 +681,7 @@ class ChannelEnum(ChannelData):
 
     async def verify_value(self, data):
         try:
-            return [self.enum_strings[data[0]]]
+            return self.enum_strings[data]
         except (IndexError, TypeError):
             ...
         return data
@@ -718,45 +781,56 @@ class ChannelByte(ChannelNumeric):
     # 'Limits' on chars do not make much sense and are rarely used.
     data_type = ChannelType.CHAR
 
-    def __init__(self, *, value=None, max_length=100, string_encoding=None,
-                 strip_null_terminator=True,
+    def __init__(self, *, string_encoding=None, strip_null_terminator=True,
                  **kwargs):
         if string_encoding is not None:
             raise ValueError('ChannelByte cannot have a string encoding')
 
-        super().__init__(value=value, string_encoding=None, **kwargs)
         self.strip_null_terminator = strip_null_terminator
-        self.max_length = max_length
+        super().__init__(string_encoding=None, **kwargs)
 
-    async def verify_value(self, data):
-        if isinstance(data, (list, ) + backend.array_types):
-            if not data:
+    def preprocess_value(self, value):
+        value = super().preprocess_value(value)
+
+        if isinstance(value, (list, tuple) + backend.array_types):
+            if not value:
                 return b''
-            elif len(data) == 1:
-                data = data[0]
+            elif len(value) == 1:
+                value = value[0]
             else:
-                data = b''.join(map(bytes, ([v] for v in data)))
+                value = b''.join(map(bytes, ([v] for v in value)))
 
-        if self.strip_null_terminator:
-            data = data.rstrip(b'\x00')
-
-        if isinstance(data, str):
+        if isinstance(value, str):
             raise ValueError('ChannelByte does not accept decoded strings')
 
-        return data
+        if self.strip_null_terminator:
+            value = value.rstrip(b'\x00')
+
+        return value
 
 
 class ChannelChar(ChannelData):
     'CHAR data which masquerades as a string'
     data_type = ChannelType.CHAR
 
-    def __init__(self, *, value=None, max_length=100,
-                 string_encoding='latin-1', **kwargs):
-        if isinstance(value, bytes):
-            value = value.decode(string_encoding)
+    def preprocess_value(self, value):
+        value = super().preprocess_value(value)
 
-        super().__init__(value=value, **kwargs)
-        self.max_length = max_length
+        if isinstance(value, (list, tuple) + backend.array_types):
+            if not value:
+                return b''
+            elif len(value) == 1:
+                value = value[0]
+            else:
+                value = b''.join(map(bytes, ([v] for v in value)))
+
+        if isinstance(value, bytes):
+            value = value.decode(self.string_encoding)
+
+        if not isinstance(value, str):
+            raise CaprotoValueError('Invalid string')
+
+        return value
 
     async def write(self, *args, flags=0, **kwargs):
         flags |= (SubscriptionType.DBE_LOG | SubscriptionType.DBE_VALUE)
@@ -771,21 +845,7 @@ class ChannelString(ChannelData):
     data_type = ChannelType.STRING
     # There is no CTRL or GR variant of STRING.
 
-    def __init__(self, *, alarm=None,
-                 value=None, timestamp=None,
-                 string_encoding='latin-1',
-                 reported_record_type='caproto'):
-        if isinstance(value, (str, bytes)):
-            if isinstance(value, bytes):
-                value = value.decode(string_encoding)
-            value = [value]
-        super().__init__(alarm=alarm, value=value, timestamp=timestamp,
-                         string_encoding=string_encoding,
-                         reported_record_type=reported_record_type)
-
     async def write(self, value, *, flags=0, **metadata):
-        if isinstance(value, (str, bytes)):
-            value = [value]
         flags |= (SubscriptionType.DBE_LOG | SubscriptionType.DBE_VALUE)
         await super().write(value, flags=flags, **metadata)
 

@@ -6,8 +6,8 @@ class MacroifiedNames(PVGroup):
     """
 
     """
-    placeholder1 = pvproperty(value=[0], name='{beamline}:{thing}.VAL')
-    placeholder2 = pvproperty(value=[0], name='{beamline}:{thing}.RBV')
+    placeholder1 = pvproperty(value=0, name='{beamline}:{thing}.VAL')
+    placeholder2 = pvproperty(value=0, name='{beamline}:{thing}.RBV')
 
 
 if __name__ == '__main__':

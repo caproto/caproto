@@ -144,7 +144,7 @@ class Context(_Context):
 
     async def run(self, *, log_pv_names=False):
         'Start the server'
-        self.log.info('Server starting up...')
+        self.log.info('Trio server starting up...')
         try:
             async with trio.open_nursery() as self.nursery:
                 for address in ca.get_beacon_address_list():

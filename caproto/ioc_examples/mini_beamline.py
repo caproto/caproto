@@ -15,18 +15,14 @@ def _arrayify(func):
 
 
 class _JitterDetector(PVGroup):
-
-    det = pvproperty(value=[0],
-                     dtype=float,
-                     read_only=True)
+    det = pvproperty(value=0, dtype=float, read_only=True)
 
     @det.getter
     async def det(self, instance):
         return (await self._read(instance))
 
-    mtr = pvproperty(value=[0], dtype=float)
-
-    exp = pvproperty(value=[1], dtype=float)
+    mtr = pvproperty(value=0, dtype=float)
+    exp = pvproperty(value=1, dtype=float)
 
     @exp.putter
     async def exp(self, instance, value):
@@ -35,9 +31,7 @@ class _JitterDetector(PVGroup):
 
 
 class PinHole(_JitterDetector):
-
     async def _read(self, instance):
-
         sigma = 5
         center = 0
         c = - 1 / (2 * sigma * sigma)
@@ -55,14 +49,13 @@ class PinHole(_JitterDetector):
 
 class Edge(_JitterDetector):
     async def _read(self, instance):
-
         sigma = 2.5
         center = 5
         c = 1 / sigma
 
         @_arrayify
         def jitter_read(m, e, I):
-            s = math.erfc(c * (-m[0] + center)) / 2
+            s = math.erfc(c * (-m + center)) / 2
             N = (self.parent.N_per_I_per_s * I * e * s)
             return np.random.poisson(N)
 
@@ -73,15 +66,14 @@ class Edge(_JitterDetector):
 
 class Slit(_JitterDetector):
     async def _read(self, instance):
-
         sigma = 2.5
         center = 7.5
         c = 1 / sigma
 
         @_arrayify
         def jitter_read(m, e, I):
-            s = (math.erfc(c * (m[0] - center)) -
-                 math.erfc(c * (m[0] + center))) / 2
+            s = (math.erfc(c * (m - center)) -
+                 math.erfc(c * (m + center))) / 2
 
             N = (self.parent.N_per_I_per_s * I * e * s)
             return np.random.poisson(N)
@@ -114,8 +106,8 @@ class MovingDot(PVGroup):
         if not self.shutter_open.value:
             await self.img_sum.write([back.sum()])
             return back.ravel()
-        x = self.mtrx.value[0]
-        y = self.mtry.value[0]
+        x = self.mtrx.value
+        y = self.mtry.value
 
         Y, X = np.ogrid[:N, :M]
 
@@ -134,22 +126,22 @@ class MovingDot(PVGroup):
         await self.img_sum.write([ret.sum()])
         return ret.ravel()
 
-    img_sum = pvproperty(value=[0], read_only=True, dtype=float)
-    mtrx = pvproperty(value=[0], dtype=float)
-    mtry = pvproperty(value=[0], dtype=float)
+    img_sum = pvproperty(value=0, read_only=True, dtype=float)
+    mtrx = pvproperty(value=0, dtype=float)
+    mtry = pvproperty(value=0, dtype=float)
 
-    exp = pvproperty(value=[1], dtype=float)
+    exp = pvproperty(value=1, dtype=float)
 
     @exp.putter
     async def exp(self, instance, value):
         value = np.clip(value, a_min=0, a_max=None)
         return value
 
-    shutter_open = pvproperty(value=[1], dtype=int)
+    shutter_open = pvproperty(value=1, dtype=int)
 
-    ArraySizeY_RBV = pvproperty(value=[N], dtype=int,
+    ArraySizeY_RBV = pvproperty(value=N, dtype=int,
                                 read_only=True)
-    ArraySizeX_RBV = pvproperty(value=[M], dtype=int,
+    ArraySizeX_RBV = pvproperty(value=M, dtype=int,
                                 read_only=True)
     ArraySize_RBV = pvproperty(value=[N, M], dtype=int,
                                read_only=True)
@@ -162,12 +154,12 @@ class MiniBeamline(PVGroup):
 
     N_per_I_per_s = 200
 
-    current = pvproperty(value=[500], dtype=float, read_only=True)
+    current = pvproperty(value=500, dtype=float, read_only=True)
 
     @current.scan(period=0.1)
     async def current(self, instance, async_lib):
         current = 500 + 25 * np.sin(time.monotonic() * (2 * np.pi) / 4)
-        await instance.write(value=[current])
+        await instance.write(value=current)
 
     ph = SubGroup(PinHole)
     edge = SubGroup(Edge)
