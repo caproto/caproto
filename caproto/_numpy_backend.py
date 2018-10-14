@@ -57,7 +57,7 @@ def python_to_epics(dtype, values, *, byteswap=True, convert_from=None):
     elif dtype == ChannelType.CHAR:
         if isinstance(values, bytes):
             return values
-        elif values and isinstance(values[0], bytes):
+        elif len(values) and isinstance(values[0], bytes):
             assert len(values) == 1, "expected b'...', [b'...'], or [...]"
             return values[0]
 
