@@ -6,7 +6,6 @@ import time
 from textwrap import dedent
 
 
-
 class Thermo(PVGroup):
     """
     Simulates (poorly) an oscillating temperature controller.
