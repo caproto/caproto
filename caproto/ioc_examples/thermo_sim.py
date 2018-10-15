@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-import argparse
-from caproto.server import pvproperty, PVGroup, template_arg_parser, run
+from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
 import numpy as np
 import time
 from textwrap import dedent
@@ -28,10 +27,9 @@ class Thermo(PVGroup):
     Tvar -> the scale of the oscillations
     """
 
-    def __init__(self, *args, period, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._T0 = time.monotonic()
-        self.period = period
 
     readback = pvproperty(value=0, dtype=float, read_only=True,
                           name='I',
@@ -65,22 +63,8 @@ class Thermo(PVGroup):
 
 
 if __name__ == '__main__':
-    parser, split_args = template_arg_parser(
+    ioc_options, run_options = ioc_arg_parser(
         default_prefix='thermo:',
         desc=dedent(Thermo.__doc__))
-
-    def in_range(v):
-        v = float(v)
-        if not (0 < v < 1):
-            raise argparse.ArguementTypeError(f" {v} not in range [0, 1]")
-        return v
-
-    parser.add_argument('--period',
-                        help='The update rate of the readback',
-                        type=float,
-                        default=0.1)
-
-    args = parser.parse_args()
-    ioc_options, run_options = split_args(args)
-    ioc = Thermo(period=args.period, **ioc_options)
+    ioc = Thermo(**ioc_options)
     run(ioc.pvdb, **run_options)
