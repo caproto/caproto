@@ -6,6 +6,7 @@ import time
 from textwrap import dedent
 
 
+
 class Thermo(PVGroup):
     """
     Simulates (poorly) an oscillating temperature controller.
@@ -33,29 +34,30 @@ class Thermo(PVGroup):
         self._T0 = time.monotonic()
         self.period = period
 
-    readback = pvproperty(value=[0], dtype=float, read_only=True, name='I')
+    readback = pvproperty(value=0, dtype=float, read_only=True,
+                          name='I',
+                          mock_record='ai')
 
-    setpoint = pvproperty(value=[100], dtype=float, name='SP')
-    K = pvproperty(value=[10], dtype=float)
-    omega = pvproperty(value=[(np.pi)], dtype=float)
-    Tvar = pvproperty(value=[10], dtype=float)
+    setpoint = pvproperty(value=100, dtype=float, name='SP')
+    K = pvproperty(value=10, dtype=float)
+    omega = pvproperty(value=np.pi, dtype=float)
+    Tvar = pvproperty(value=10, dtype=float)
 
-    @readback.startup
+    @readback.scan(period=.1, use_scan_field=True)
     async def readback(self, instance, async_lib):
 
-        def t_rbv(setpoint, K, omega, Tvar):
+        def t_rbv(T0, setpoint, K, omega, Tvar,):
             t = time.monotonic()
             return ((Tvar *
                      np.exp(-(t - self._T0) / K) *
                      np.sin(omega * t)) +
                     setpoint)
 
-        while True:
-            T = t_rbv(**{k: getattr(self, k).value[0]
-                         for k in ['setpoint', 'K', 'omega', 'Tvar']})
+        T = t_rbv(T0=self._T0,
+                  **{k: getattr(self, k).value
+                     for k in ['setpoint', 'K', 'omega', 'Tvar']})
 
-            await instance.write(value=[T])
-            await async_lib.library.sleep(self.period)
+        await instance.write(value=T)
 
     @setpoint.putter
     async def setpoint(self, instance, value):
