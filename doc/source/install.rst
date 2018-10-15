@@ -131,3 +131,8 @@ To get started on iOS:
 
     $ caproto-get simple:A
     simple:A                   [1]
+
+6. Some example IOCs are available in a separate repository, including access to the
+   accelerometer, GPS, and text-to-speech engine. See
+   `klauer/caproto_ios <https://github.com/klauer/caproto_ios>`_ for more
+   information.
