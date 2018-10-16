@@ -631,13 +631,12 @@ class Context:
                 self.log.exception('UDP server connection reset')
                 await self.async_layer.library.sleep(0.1)
                 continue
-
-            await self._broadcaster_recv_datagram(bytes_received, address)
+            if bytes_received:
+                await self._broadcaster_recv_datagram(bytes_received, address)
 
     async def _broadcaster_recv_datagram(self, bytes_received, address):
         try:
-            if bytes_received:
-                commands = self.broadcaster.recv(bytes_received, address)
+            commands = self.broadcaster.recv(bytes_received, address)
         except RemoteProtocolError:
             self.log.exception('Broadcaster received bad packet')
         else:
