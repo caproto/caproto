@@ -87,7 +87,7 @@ script:
   # give us an early warning of flake8 failure
   - flake8 . || echo "flake8 FAILED!"
   - caproto-repeater &
-  - coverage run --parallel-mode run_tests.py -k 'not bench' -n $(expr 1 + $(nproc)) --benchmark-disable --dist=loadfile --timeout=100 -v
+  - coverage run --parallel-mode run_tests.py -k 'not bench' -n $(expr 1 + $(nproc)) --benchmark-disable --dist=loadfile -v
   - coverage combine --append
 
   - export ASV_ENV_NAME=${TRAVIS_PYTHON_VERSION}_${BASE}
