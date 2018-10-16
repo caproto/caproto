@@ -27,9 +27,12 @@ _repeater_process = None
 
 REPEATER_PORT = 5065
 SERVER_HOST = '0.0.0.0'
+# make the logs noisy
 logger = logging.getLogger('caproto')
 logger.setLevel('DEBUG')
-
+# except for the broadcaster
+bcast_logger = logging.getLogger('caproto.bcast')
+bcast_logger.setLevel('INFO')
 
 array_types = (array.array,)
 try:
