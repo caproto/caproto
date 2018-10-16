@@ -1288,7 +1288,9 @@ def template_arg_parser(*, desc, default_prefix, argv=None, macros=None,
         argv = sys.argv
     if macros is None:
         macros = {}
-    parser = argparse.ArgumentParser(description=desc)
+    parser = argparse.ArgumentParser(
+        description=desc,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--prefix', type=str, default=default_prefix)
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-q', '--quiet', action='store_true',

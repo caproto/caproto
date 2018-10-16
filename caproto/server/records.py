@@ -186,7 +186,7 @@ class RecordFieldGroup(PVGroup):
 
     @scan_rate.putter
     async def scan_rate(self, instance, value):
-        idx, = value
+        idx = value
         scan_string = self.scan_rate.enum_strings[idx]
         if scan_string in ('I/O Intr', 'Passive', 'Event'):
             self._scan_rate_sec = 0
