@@ -182,10 +182,13 @@ class Context(_Context):
                 self.transport = transport
 
             def datagram_received(self, data, addr):
-                tsk = self.loop.create_task(self.parent._broadcaster_recv_datagram(
-                    data, addr))
-                self._tasks = tuple(t for t in self._tasks + (tsk,)
-                                    if not t.done())
+                if data:
+                    tsk = self.loop.create_task(
+                        self.parent._broadcaster_recv_datagram(
+                            data, addr))
+
+                    self._tasks = tuple(t for t in self._tasks + (tsk,)
+                                        if not t.done())
 
             def error_received(self, exc):
                 self.parent.log.error('BcastLoop received error', exc_info=exc)
