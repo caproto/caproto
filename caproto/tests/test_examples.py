@@ -342,6 +342,7 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
         value = read(pv, timeout=15)
         print(f'Read {pv} = {value}')
 
+
 # TODO sort out why these are flaky on travis
 @pytest.mark.flaky(reruns=2, reruns_delay=2)
 @pytest.mark.parametrize(
