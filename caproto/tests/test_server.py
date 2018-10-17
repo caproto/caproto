@@ -1,5 +1,6 @@
 import ast
 import datetime
+import time
 import sys
 
 import pytest
@@ -284,3 +285,19 @@ def test_char_write(request, prefix):
     write(pv, b'testtesttest', notify=True)
     response = read(pv)
     assert ''.join(chr(c) for c in response.data) == 'testtesttest'
+
+
+@pytest.mark.parametrize('async_lib', ['asyncio', 'curio', 'trio'])
+def test_write_without_notify(request, prefix, async_lib):
+    pv = f'{prefix}pi'
+    run_example_ioc('caproto.ioc_examples.type_varieties', request=request,
+                    args=['--prefix', prefix, '--async-lib', async_lib],
+                    pv_to_check=pv)
+    write(pv, 3.179, notify=False)
+    # We do not get notified so we have to poll for an update.
+    for attempt in range(20):
+        if read(pv).data[0] > 3.178:
+            break
+        time.sleep(0.1)
+    else:
+        raise AssertionError("Server never processed WriteRequest.")
