@@ -114,8 +114,6 @@ class VirtualCircuit(_VirtualCircuit):
     async def _on_disconnect(self):
         await super()._on_disconnect()
         self._raw_client.close()
-        if self._cq_task is not None:
-            self._cq_task.cancel()
         if self._sq_task is not None:
             self._sq_task.cancel()
 
