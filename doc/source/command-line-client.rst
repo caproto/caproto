@@ -261,10 +261,10 @@ caproto-get
 
     $ caproto-get -h
     usage: caproto-get [-h] [--verbose] [--format FORMAT] [--timeout TIMEOUT]
-                    [--notify] [--priority PRIORITY] [--terse] [--wide]
-                    [-d DATA_TYPE] [--list-types] [-n] [--no-color]
-                    [--no-repeater]
-                    pv_names [pv_names ...]
+                   [--notify] [--priority PRIORITY] [--terse] [--wide]
+                   [-d DATA_TYPE] [--list-types] [-n] [--no-color]
+                   [--no-repeater]
+                   pv_names [pv_names ...]
 
     Read the value of a PV.
 
@@ -273,7 +273,7 @@ caproto-get
 
     optional arguments:
     -h, --help            show this help message and exit
-    --verbose, -v         Verbose mode. (Use -vvv for more.)
+    --verbose, -v         Show more log messages. (Use -vvv for even more.)
     --format FORMAT       Python format string. Available tokens are {pv_name}
                             and {response}. Additionally, if this data type
                             includes time, {timestamp} and usages like
@@ -298,6 +298,7 @@ caproto-get
     --no-color            Suppress ANSI color codes in log messages.
     --no-repeater         Do not spawn a Channel Access repeater daemon process.
 
+
 caproto-put
 -----------
 
@@ -306,7 +307,8 @@ caproto-put
     $ caproto-put -h
     usage: caproto-put [-h] [--verbose] [--format FORMAT] [--timeout TIMEOUT]
                     [--notify] [--priority PRIORITY] [--terse] [--wide] [-n]
-                    [--no-color] [--no-repeater]
+                    [--array] [--array-pad ARRAY_PAD] [--no-color]
+                    [--no-repeater]
                     pv_name data
 
     Write a value to a PV.
@@ -317,7 +319,7 @@ caproto-put
 
     optional arguments:
     -h, --help            show this help message and exit
-    --verbose, -v         Show DEBUG log messages.
+    --verbose, -v         Show more log messages. (Use -vvv for even more.)
     --format FORMAT       Python format string. Available tokens are {pv_name},
                             {response} and {which} (Old/New).Additionally, this
                             data type includes time, {timestamp} and usages like
@@ -329,11 +331,15 @@ caproto-put
                             Channel Access Virtual Circuit priority. Lowest is 0;
                             highest is 99.
     --terse, -t           Display data only. Unpack scalars: [3.] -> 3.
-    --wide, -a, -l        Wide mode, showing 'name timestamp value
+    --wide, -l            Wide mode, showing 'name timestamp value
                             status'(implies -d 'time')
     -n                    Retrieve enums as integers (default is strings).
+    --array, -a           Interprets `data` as an array, delimited by space
+    --array-pad ARRAY_PAD
+                            Pad the array up to a specified length
     --no-color            Suppress ANSI color codes in log messages.
     --no-repeater         Do not spawn a Channel Access repeater daemon process.
+
 
 caproto-monitor
 ---------------
@@ -342,10 +348,10 @@ caproto-monitor
 
     $ caproto-monitor -h
     usage: caproto-monitor [-h] [--format FORMAT] [--verbose]
-                        [--duration DURATION | --maximum MAXIMUM]
-                        [--timeout TIMEOUT] [-m MASK] [--priority PRIORITY]
-                        [-n] [--no-color] [--no-repeater]
-                        pv_names [pv_names ...]
+                       [--duration DURATION | --maximum MAXIMUM]
+                       [--timeout TIMEOUT] [-m MASK] [--priority PRIORITY]
+                       [-n] [--no-color] [--no-repeater]
+                       pv_names [pv_names ...]
 
     Read the value of a PV.
 
@@ -359,7 +365,7 @@ caproto-monitor
                             data type includes time, {timestamp}, {timedelta} and
                             usages like {timestamp:%Y-%m-%d %H:%M:%S} are
                             supported.
-    --verbose, -v         Show DEBUG log messages.
+    --verbose, -v         Show more log messages. (Use -vvv for even more.)
     --duration DURATION   Maximum number seconds to run before exiting. Runs
                             indefinitely by default.
     --maximum MAXIMUM     Maximum number of monitor events to process exiting.
@@ -375,6 +381,7 @@ caproto-monitor
     -n                    Retrieve enums as integers (default is strings).
     --no-color            Suppress ANSI color codes in log messages.
     --no-repeater         Do not spawn a Channel Access repeater daemon process.
+
 
 caproto-repeater
 ----------------

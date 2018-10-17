@@ -2,8 +2,11 @@
 Release History
 ***************
 
-Unreleased
-==========
+v0.2.0 (2018-10-17)
+===================
+
+This release improves compliance with the protocol and server performance under
+high load.
 
 Features
 --------
@@ -11,6 +14,8 @@ Features
 * Under high load (with many subscription updates queued up to send) servers
   batch subscriptions into blocks, trading a little latency for efficiency.
   Under low load, servers prioritize low latency.
+* The servers' medium-verbose setting (``-v``) displays current load and
+  latency.
 * In the threading client, process user callbacks using one threadpool *per
   circuit* instead of one threadpool for the entire context. Make the size of
   the threadpool configurable via a new
@@ -30,6 +35,7 @@ Features
 * Add a server-side data source for ``ChannelType.INT`` (a.k.a SHORT) data.
 * The default printed output of the ``caproto-monitor`` CLI utility now
   includes microseconds.
+* There are several new `IOC examples <https://github.com/NSLS-II/caproto/tree/master/caproto/ioc_examples>`_.
 
 Breaking Changes
 ----------------
@@ -41,6 +47,10 @@ Breaking Changes
 * If a beacon fails to send, do not kill the server; just log the failure,
   along with a suggestion on how to fix the environment to omit the failed
   address, and continue to run.
+* In the high-level server, implemented with ``pvproperty``, PV values can be
+  defined as scalars. The accessor ``pvproperty.value`` now returns a scalar
+  instead of a length-1 list (API break), while ``write()`` accepts either list
+  or scalar.
 
 Bug Fixes
 ---------
@@ -65,6 +75,11 @@ Improved Protocol Compliance
 * Servers enforce quota per subscription to avoid one prolific subscription (or
   slow client) from drowning out others.
 * Servers respect ``EventsOn`` and ``EventsOff`` requests.
+* Servers differentiate between *current* length and *maximum* length of an
+  array, and they properly declare the *maximum* length in
+  :class:`~caproto.CreateChanResponse`. They formerly declared the *current*
+  length, which was not correct.
+* The ``caproto-put`` commandline utility now supports ``-a`` for arrays.
 
 v0.1.2 (2018-08-31)
 ===================
