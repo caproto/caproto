@@ -159,6 +159,8 @@ class VirtualCircuit:
             try:
                 command = await self.command_queue.get()
                 self.circuit.process_command(command)
+                if command is ca.DISCONNECTED:
+                    break
             except self.TaskCancelled:
                 break
             except ca.RemoteProtocolError as ex:

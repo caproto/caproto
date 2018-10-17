@@ -2,6 +2,7 @@ from ..server import AsyncLibraryLayer
 import caproto as ca
 import asyncio
 import socket
+import sys
 
 from ..server.common import (VirtualCircuit as _VirtualCircuit,
                              Context as _Context)
@@ -113,8 +114,6 @@ class VirtualCircuit(_VirtualCircuit):
     async def _on_disconnect(self):
         await super()._on_disconnect()
         self._raw_client.close()
-        if self._cq_task is not None:
-            self._cq_task.cancel()
         if self._sq_task is not None:
             self._sq_task.cancel()
 
@@ -205,13 +204,15 @@ class Context(_Context):
                 return self.transport.close()
 
         for address in ca.get_beacon_address_list():
-            # Connected sockets do not play well with asyncio, so connect to
-            # one and then discard it.
+            # Win wants a connected socket; UNIX wants an un-connected one.
             temp_sock = ca.bcast_socket(socket)
             temp_sock.connect(address)
             interface, _ = temp_sock.getsockname()
-            temp_sock.close()
-            sock = ca.bcast_socket(socket)
+            if sys.platform == 'win32':
+                sock = temp_sock
+            else:
+                temp_sock.close()
+                sock = ca.bcast_socket(socket)
             transport, _ = await self.loop.create_datagram_endpoint(
                 BcastLoop, sock=sock)
             wrapped_transport = ConnectedTransportWrapper(transport, address)
