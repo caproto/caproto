@@ -36,11 +36,6 @@ def main():
                                  "and usages like "
                                  "{timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are "
                                  "supported."))
-    parser.add_argument('--array', '-a', action='store_true',
-                        help=("Interprets `data` as an array, delimited by "
-                              "space"))
-    parser.add_argument('--array-pad', type=int, default=0,
-                        help=("Pad the array up to a specified length"))
     parser.add_argument('--timeout', '-w', type=float, default=1,
                         help=("Timeout ('wait') in seconds for server "
                               "responses."))
@@ -64,6 +59,11 @@ def main():
     parser.add_argument('-n', action='store_true',
                         help=("Retrieve enums as integers (default is "
                               "strings)."))
+    parser.add_argument('--array', '-a', action='store_true',
+                        help=("Interprets `data` as an array, delimited by "
+                              "space"))
+    parser.add_argument('--array-pad', type=int, default=0,
+                        help=("Pad the array up to a specified length"))
     parser.add_argument('--no-color', action='store_true',
                         help="Suppress ANSI color codes in log messages.")
     parser.add_argument('--no-repeater', action='store_true',
