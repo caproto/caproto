@@ -12,6 +12,9 @@ except ImportError:
     yapf = None
 
 
+max_code_columns = 79
+
+
 def underscore_to_camel_case(s):
     'Convert abc_def_ghi -> AbcDefGhi'
     def capitalize_first(substring):
@@ -19,49 +22,73 @@ def underscore_to_camel_case(s):
     return ''.join(map(capitalize_first, s.split('_')))
 
 
-def ophyd_component_to_caproto(attr, component, *, depth=0, dev=None):
+def replace_formatted_suffixes_with_macros(suffix):
+    'Take "{self._abc}" from a FormattedComponent and return "{abc}" for pvproperty'
+    class Replacer:
+        def __getattr__(self, attr):
+            attr = attr.lstrip('_')
+            return f'{{{attr}}}'
+    return suffix.format(self=Replacer())
+
+
+def ophyd_component_to_caproto(attr, component, *, uses_formatted_components,
+                               available_groups, depth=0, dev=None):
     import ophyd
 
     indent = '    ' * depth
     sig = getattr(dev, attr) if dev is not None else None
 
+    if isinstance(component, ophyd.FormattedComponent):
+        try:
+            suffix = replace_formatted_suffixes_with_macros(component.suffix)
+        except Exception:
+            suffix = component.suffix
+    else:
+        suffix = getattr(component, 'suffix', None)
+
     if isinstance(component, ophyd.DynamicDeviceComponent):
         to_describe = sig if sig is not None else component
 
-        cpt_dict = ophyd_device_to_caproto_ioc(to_describe, depth=depth)
+        cpt_dict = ophyd_device_to_caproto_ioc(
+            to_describe, depth=depth, available_groups=available_groups,
+            uses_formatted_components=uses_formatted_components)
         cpt_name, = cpt_dict.keys()
+        subgroup_line = f"{attr} = SubGroup({cpt_name}, prefix='')"
+        if available_groups is not None and to_describe in available_groups:
+            return {'': list(_format(subgroup_line, indent=4 * depth))}
+
+        available_groups.add(to_describe)
+
         cpt_dict[''] = [
             '',
-            f"{indent}{attr} = SubGroup({cpt_name}, prefix='')",
+            indent + subgroup_line,
             '',
         ]
         return cpt_dict
 
     elif issubclass(component.cls, ophyd.Device):
-        kwargs = dict()
-        if isinstance(component, ophyd.FormattedComponent):
-            # TODO Component vs FormattedComponent
-            kwargs['name'] = "''"
-
         to_describe = sig if sig is not None else component.cls
 
-        cpt_dict = ophyd_device_to_caproto_ioc(to_describe, depth=depth)
+        cpt_dict = ophyd_device_to_caproto_ioc(
+            to_describe, depth=depth, available_groups=available_groups,
+            uses_formatted_components=uses_formatted_components)
         cpt_name, = cpt_dict.keys()
+
+        subgroup_line = (f"{attr} = SubGroup({cpt_name}, "
+                         f"prefix='{suffix}')")
+        if available_groups is not None and to_describe in available_groups:
+            return {'': list(_format(subgroup_line, indent=4 * depth))}
+
+        available_groups.add(to_describe)
+
         cpt_dict[''] = [
             '',
-            (f"{indent}{attr} = SubGroup({cpt_name}, "
-             f"prefix='{component.suffix}')"),
+            indent + subgroup_line,
             '',
         ]
         return cpt_dict
 
-    kwargs = dict(name=repr(component.suffix))
-
-    if isinstance(component, ophyd.FormattedComponent):
-        # TODO Component vs FormattedComponent
-        kwargs['name'] = "''"
-    else:  # if hasattr(component, 'suffix'):
-        kwargs['name'] = repr(component.suffix)
+    kwargs = dict(name=repr(suffix))
 
     if sig and sig.connected:
         value = sig.get()
@@ -92,7 +119,9 @@ def ophyd_component_to_caproto(attr, component, *, depth=0, dev=None):
                 ...
 
         kwargs['dtype'] = type(value).__name__
-        if max_length > 1:
+        if max_length == 1 and value is not None:
+            kwargs['value'] = repr(value)
+        elif max_length > 1:
             kwargs['max_length'] = max_length
     else:
         cpt_kwargs = getattr(component, 'kwargs', {})
@@ -102,8 +131,19 @@ def ophyd_component_to_caproto(attr, component, *, depth=0, dev=None):
         else:
             kwargs['dtype'] = 'unknown'
 
-    # if component.__doc__:
-    #     kwargs['doc'] = repr(component.__doc__)
+    if component.__doc__:
+        ignore_docs = {
+            'Component attribute',
+            'FormattedComponent attribute',
+            'ADComponent',
+            'AreaDetector Component',
+            'A descriptor representing a device',
+        }
+
+        if any(component.__doc__.startswith(s) for s in ignore_docs):
+            ...
+        else:
+            kwargs['doc'] = repr(component.__doc__)
 
     if issubclass(component.cls, ophyd.EpicsSignalRO):
         kwargs['read_only'] = True
@@ -122,8 +162,36 @@ def ophyd_component_to_caproto(attr, component, *, depth=0, dev=None):
     return {'': list(_format(line, indent=4 * depth))}
 
 
-def ophyd_device_to_caproto_ioc(dev, *, depth=0):
+def find_formatted_components(cls, *, depth=0):
+    'Find all FormattedComponents in an ophyd Device tree'
     import ophyd
+
+    if not inspect.isclass(cls):
+        cls = cls.__class__
+
+    if isinstance(cls, ophyd.DynamicDeviceComponent):
+        return
+    else:
+        attr_components = cls._sig_attrs
+
+    for attr, component in attr_components.items():
+        if isinstance(component, ophyd.DynamicDeviceComponent):
+            ...
+        elif isinstance(component, ophyd.FormattedComponent):
+            yield depth, component
+        elif issubclass(component.cls, ophyd.Device):
+            yield from find_formatted_components(component.cls,
+                                                 depth=depth + 1)
+
+
+def ophyd_device_to_caproto_ioc(dev, *, depth=0, available_groups=None,
+                                uses_formatted_components=None):
+    'Convert an ophyd.Device to a caproto.PVGroup IOC'
+    import ophyd
+
+    if uses_formatted_components is None:
+        uses_formatted_components = any(depth > 0
+                                        for depth, cpt in find_formatted_components(dev))
 
     if isinstance(dev, ophyd.DynamicDeviceComponent):
         # DynamicDeviceComponent: attr: (sig_cls, prefix, kwargs)
@@ -152,10 +220,13 @@ def ophyd_device_to_caproto_ioc(dev, *, depth=0):
     dev_lines = ['',
                  f"{indent}class {dev_name}(PVGroup):"]
 
+    available_groups = set()
+
     for attr, component in attr_components.items():
-        cpt_lines = ophyd_component_to_caproto(attr, component,
-                                               depth=depth + 1,
-                                               dev=dev)
+        cpt_lines = ophyd_component_to_caproto(
+            attr, component, depth=depth + 1, dev=dev,
+            available_groups=available_groups,
+            uses_formatted_components=uses_formatted_components)
         if isinstance(cpt_lines, dict):
             # new device/sub-group, for now add it on
             for new_dev, lines in cpt_lines.items():
@@ -306,21 +377,25 @@ def record_to_field_info(record_type):
         yield name, type_class, kwargs, field_info
 
 
-def _format(line, *, indent=0):
+def _format(lines, *, indent=0):
     '''Format Python code lines, with a specific indent
 
     NOTE: Uses yapf if available
     '''
     prefix = ' ' * indent
     if yapf is None:
-        yield prefix + line
+        if isinstance(lines, str):
+            yield prefix + lines
+        else:
+            for line in lines:
+                yield prefix + line
     else:
         from yapf.yapflib.yapf_api import FormatCode
         from yapf.yapflib.style import _style
 
         # TODO study awkward yapf api more closely
-        _style['COLUMN_LIMIT'] = 79 - indent
-        for formatted_line in FormatCode(line)[0].split('\n'):
+        _style['COLUMN_LIMIT'] = max_code_columns - indent
+        for formatted_line in FormatCode(lines)[0].split('\n'):
             if formatted_line:
                 yield prefix + formatted_line.rstrip()
 
