@@ -54,10 +54,13 @@ def ophyd_component_to_caproto(attr, component, *, uses_formatted_components,
             uses_formatted_components=uses_formatted_components)
         cpt_name, = cpt_dict.keys()
         subgroup_line = f"{attr} = SubGroup({cpt_name}, prefix='')"
-        if available_groups is not None and to_describe in available_groups:
+        if any((i, component) in available_groups for i in range(0, depth + 1)):
+            # TODO: we could actually have individual groups for each of these
+            #       while it's inefficient, it could give different default
+            #       values for each instance
             return {'': list(_format(subgroup_line, indent=4 * depth))}
 
-        available_groups.add(to_describe)
+        available_groups.add((depth, component))
 
         cpt_dict[''] = [
             '',
@@ -76,10 +79,10 @@ def ophyd_component_to_caproto(attr, component, *, uses_formatted_components,
 
         subgroup_line = (f"{attr} = SubGroup({cpt_name}, "
                          f"prefix='{suffix}')")
-        if available_groups is not None and to_describe in available_groups:
+        if any((i, component.cls) in available_groups for i in range(0, depth + 1)):
             return {'': list(_format(subgroup_line, indent=4 * depth))}
 
-        available_groups.add(to_describe)
+        available_groups.add((depth, component.cls))
 
         cpt_dict[''] = [
             '',
@@ -220,7 +223,8 @@ def ophyd_device_to_caproto_ioc(dev, *, depth=0, available_groups=None,
     dev_lines = ['',
                  f"{indent}class {dev_name}(PVGroup):"]
 
-    available_groups = set()
+    if available_groups is None:
+        available_groups = set()
 
     for attr, component in attr_components.items():
         cpt_lines = ophyd_component_to_caproto(
