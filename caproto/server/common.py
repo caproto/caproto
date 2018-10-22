@@ -21,6 +21,9 @@ HIGH_LOAD_TIMEOUT = 0.01
 # Decrease this number to improve latency under load; increase it to improve
 # efficiency.
 SUB_BATCH_THRESH = 2**16
+# If a Read[Notify]Request or EventAddRequest is received, wait for up to this
+# long for the currently-processing Write[Notify]Request to finish.
+WRITE_LOCK_TIMEOUT = 0.001
 
 
 class DisconnectedCircuit(Exception):
@@ -94,6 +97,7 @@ class VirtualCircuit:
         # self.subscription_queue = ...
         # self.get_from_sub_queue_with_timeout = ...
         # self.events_on = ...
+        # self.write_event = ...
 
     async def _on_disconnect(self):
         """Executed when disconnection detected"""
@@ -416,6 +420,12 @@ class VirtualCircuit:
             except ValueError:
                 raise ca.RemoteProtocolError('Invalid data type')
 
+            # If we are in the middle of processing a Write[Notify]Request,
+            # allow a bit of time for that to (maybe) finish. Some requests
+            # may take a long time, so give up rather quickly to avoid
+            # introducing too much latency.
+            await self.write_event.wait(timeout=WRITE_LOCK_TIMEOUT)
+
             metadata, data = await db_entry.auth_read(
                 self.client_hostname, self.client_username,
                 data_type, user_address=self.circuit.address)
@@ -479,7 +489,10 @@ class VirtualCircuit:
                     )
                     if client_waiting:
                         await self.send(response_command)
+                finally:
+                    self.write_event.clear()
 
+            self.write_event.set()
             await self._start_write_task(handle_write)
         elif isinstance(command, ca.EventAddRequest):
             chan, db_entry = get_db_entry()
@@ -499,6 +512,13 @@ class VirtualCircuit:
                 channel_filter=chan.channel_filter)
             self.subscriptions[sub_spec].append(sub)
             self.context.subscriptions[sub_spec].append(sub)
+
+            # If we are in the middle of processing a Write[Notify]Request,
+            # allow a bit of time for that to (maybe) finish. Some requests
+            # may take a long time, so give up rather quickly to avoid
+            # introducing too much latency.
+            await self.write_event.wait(timeout=WRITE_LOCK_TIMEOUT)
+
             await db_entry.subscribe(self.context.subscription_queue, sub_spec)
         elif isinstance(command, ca.EventCancelRequest):
             chan, db_entry = get_db_entry()

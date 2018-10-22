@@ -12,6 +12,18 @@ class ServerExit(Exception):
     ...
 
 
+class Event(trio.Event):
+    async def wait(self, timeout=None):
+        if timeout is not None:
+            with trio.move_on_after(timeout):
+                super().wait()
+                return True
+            return False
+        else:
+            super().wait()
+            return True
+
+
 def _universal_queue(portal, max_len=1000):
     class UniversalQueue:
         def __init__(self):
@@ -54,6 +66,7 @@ class VirtualCircuit(_VirtualCircuit):
         self.command_queue = trio.Queue(ca.MAX_COMMAND_BACKLOG)
         self.new_command_condition = trio.Condition()
         self.subscription_queue = trio.Queue(ca.MAX_TOTAL_SUBSCRIPTION_BACKLOG)
+        self.write_event = Event()
         self.events_on = trio.Event()
 
     async def run(self):
