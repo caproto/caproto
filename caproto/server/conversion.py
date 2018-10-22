@@ -85,10 +85,11 @@ def dtype_information_from_epicssignal(sig):
         import numpy as np
         value = np.zeros(1, dtype=value.dtype).tolist()[0]
     else:
-        try:
-            value = value[0]
-        except (IndexError, TypeError):
-            ...
+        if not isinstance(value, (str, bytes)):
+            try:
+                value = value[0]
+            except (IndexError, TypeError):
+                ...
 
     info = dict(dtype=type(value).__name__)
     if max_length == 1 and value is not None:
