@@ -460,7 +460,7 @@ class VirtualCircuit:
                     cid = self.circuit.channels_sid[command.sid].cid
                     response_command = ca.ErrorResponse(
                         command, cid,
-                        status=ca.CAStatus.ECA_INTERNAL,
+                        status=ca.CAStatus.ECA_PUTFAIL,
                         error_message=('Python exception: {} {}'
                                        ''.format(type(ex).__name__, ex))
                     )
