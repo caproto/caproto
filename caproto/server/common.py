@@ -464,6 +464,7 @@ class VirtualCircuit:
                         error_message=('Python exception: {} {}'
                                        ''.format(type(ex).__name__, ex))
                     )
+                    await self.send(response_command)
                 else:
                     if write_status is None:
                         # errors can be passed back by exceptions, and
@@ -476,9 +477,8 @@ class VirtualCircuit:
                         status=write_status,
                         data_count=db_entry.length
                     )
-
-                if client_waiting:
-                    await self.send(response_command)
+                    if client_waiting:
+                        await self.send(response_command)
 
             await self._start_write_task(handle_write)
         elif isinstance(command, ca.EventAddRequest):
