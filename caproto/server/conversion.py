@@ -3,6 +3,7 @@ import inspect
 from .server import pvfunction, PVGroup
 from .._data import (ChannelDouble, ChannelEnum, ChannelChar,
                      ChannelInteger, ChannelString, ChannelByte)
+from .._utils import parse_record_field
 from .menus import menus
 
 try:
@@ -31,8 +32,70 @@ def replace_formatted_suffixes_with_macros(suffix):
     return suffix.format(self=Replacer())
 
 
-def ophyd_component_to_caproto(attr, component, *, uses_formatted_components,
-                               available_groups, depth=0, dev=None):
+
+def get_docstring_from_ophyd_component(component, *, sig=None):
+    doc = component.__doc__
+    ignore_docs = {
+        'Component attribute',
+        'FormattedComponent attribute',
+        'ADComponent',
+        'AreaDetector Component',
+        'A descriptor representing a device',
+    }
+
+    if any(component.__doc__.startswith(s) for s in ignore_docs):
+        doc = None
+
+    if sig and sig.connected:
+        rec = parse_record_field(sig._read_pv.pvname)
+        if rec.field in ('VAL', None):
+            from ophyd import EpicsSignalRO
+            try:
+                doc = EpicsSignalRO(f'{rec.record}.DESC').get()
+            except TimeoutError:
+                ...
+
+    return doc
+
+
+def dtype_information_from_epicssignal(sig):
+    value = sig.get()
+
+    def array_checker(value):
+        try:
+            import numpy as np
+            return isinstance(value, np.ndarray)
+        except ImportError:
+            return False
+
+    try:
+        # NELM reflects the actual maximum length of the value, as opposed
+        # to the current length
+        max_length = sig._read_pv.nelm
+    except Exception as ex:
+        max_length = 1
+
+    if array_checker(value):
+        # hack, as value can be a zero-length array
+        # FUTURE_TODO: support numpy types directly in pvproperty type map
+        import numpy as np
+        value = np.zeros(1, dtype=value.dtype).tolist()[0]
+    else:
+        try:
+            value = value[0]
+        except (IndexError, TypeError):
+            ...
+
+    info = dict(dtype=type(value).__name__)
+    if max_length == 1 and value is not None:
+        info['value'] = repr(value)
+    elif max_length > 1:
+        info['max_length'] = max_length
+    return info
+
+
+def ophyd_component_to_caproto(attr, component, *, available_groups, ancestors,
+                               depth=0, dev=None):
     import ophyd
 
     indent = '    ' * depth
@@ -46,21 +109,24 @@ def ophyd_component_to_caproto(attr, component, *, uses_formatted_components,
     else:
         suffix = getattr(component, 'suffix', None)
 
+    parent = ancestors[-1]
+
     if isinstance(component, ophyd.DynamicDeviceComponent):
         to_describe = sig if sig is not None else component
 
         cpt_dict = ophyd_device_to_caproto_ioc(
             to_describe, depth=depth, available_groups=available_groups,
-            uses_formatted_components=uses_formatted_components)
+            ancestors=list(ancestors) + [component])
         cpt_name, = cpt_dict.keys()
         subgroup_line = f"{attr} = SubGroup({cpt_name}, prefix='')"
-        if any((i, component) in available_groups for i in range(0, depth + 1)):
+
+        if any((ancestor, component) in available_groups for ancestor in ancestors):
             # TODO: we could actually have individual groups for each of these
             #       while it's inefficient, it could give different default
             #       values for each instance
             return {'': list(_format(subgroup_line, indent=4 * depth))}
 
-        available_groups.add((depth, component))
+        available_groups.add((parent, component))
 
         cpt_dict[''] = [
             '',
@@ -74,15 +140,15 @@ def ophyd_component_to_caproto(attr, component, *, uses_formatted_components,
 
         cpt_dict = ophyd_device_to_caproto_ioc(
             to_describe, depth=depth, available_groups=available_groups,
-            uses_formatted_components=uses_formatted_components)
+            ancestors=list(ancestors) + [component])
         cpt_name, = cpt_dict.keys()
 
         subgroup_line = (f"{attr} = SubGroup({cpt_name}, "
                          f"prefix='{suffix}')")
-        if any((i, component.cls) in available_groups for i in range(0, depth + 1)):
+        if any((ancestor, component.cls) in available_groups for ancestor in ancestors):
             return {'': list(_format(subgroup_line, indent=4 * depth))}
 
-        available_groups.add((depth, component.cls))
+        available_groups.add((parent, component.cls))
 
         cpt_dict[''] = [
             '',
@@ -94,38 +160,7 @@ def ophyd_component_to_caproto(attr, component, *, uses_formatted_components,
     kwargs = dict(name=repr(suffix))
 
     if sig and sig.connected:
-        value = sig.get()
-
-        def array_checker(value):
-            try:
-                import numpy as np
-                return isinstance(value, np.ndarray)
-            except ImportError:
-                return False
-
-        try:
-            # NELM reflects the actual maximum length of the value, as opposed
-            # to the current length
-            max_length = sig._read_pv.nelm
-        except Exception:
-            max_length = 1
-
-        if array_checker(value):
-            # hack, as value can be a zero-length array
-            # FUTURE_TODO: support numpy types directly in pvproperty type map
-            import numpy as np
-            value = np.zeros(1, dtype=value.dtype).tolist()[0]
-        else:
-            try:
-                value = value[0]
-            except (IndexError, TypeError):
-                ...
-
-        kwargs['dtype'] = type(value).__name__
-        if max_length == 1 and value is not None:
-            kwargs['value'] = repr(value)
-        elif max_length > 1:
-            kwargs['max_length'] = max_length
+        kwargs.update(**dtype_information_from_epicssignal(sig))
     else:
         cpt_kwargs = getattr(component, 'kwargs', {})
         is_string = cpt_kwargs.get('string', False)
@@ -134,19 +169,9 @@ def ophyd_component_to_caproto(attr, component, *, uses_formatted_components,
         else:
             kwargs['dtype'] = 'unknown'
 
-    if component.__doc__:
-        ignore_docs = {
-            'Component attribute',
-            'FormattedComponent attribute',
-            'ADComponent',
-            'AreaDetector Component',
-            'A descriptor representing a device',
-        }
-
-        if any(component.__doc__.startswith(s) for s in ignore_docs):
-            ...
-        else:
-            kwargs['doc'] = repr(component.__doc__)
+    doc = get_docstring_from_ophyd_component(component, sig=sig)
+    if doc:
+        kwargs['doc'] = repr(doc)
 
     if issubclass(component.cls, ophyd.EpicsSignalRO):
         kwargs['read_only'] = True
@@ -165,36 +190,10 @@ def ophyd_component_to_caproto(attr, component, *, uses_formatted_components,
     return {'': list(_format(line, indent=4 * depth))}
 
 
-def find_formatted_components(cls, *, depth=0):
-    'Find all FormattedComponents in an ophyd Device tree'
-    import ophyd
-
-    if not inspect.isclass(cls):
-        cls = cls.__class__
-
-    if isinstance(cls, ophyd.DynamicDeviceComponent):
-        return
-    else:
-        attr_components = cls._sig_attrs
-
-    for attr, component in attr_components.items():
-        if isinstance(component, ophyd.DynamicDeviceComponent):
-            ...
-        elif isinstance(component, ophyd.FormattedComponent):
-            yield depth, component
-        elif issubclass(component.cls, ophyd.Device):
-            yield from find_formatted_components(component.cls,
-                                                 depth=depth + 1)
-
-
 def ophyd_device_to_caproto_ioc(dev, *, depth=0, available_groups=None,
-                                uses_formatted_components=None):
+                                ancestors=None):
     'Convert an ophyd.Device to a caproto.PVGroup IOC'
     import ophyd
-
-    if uses_formatted_components is None:
-        uses_formatted_components = any(depth > 0
-                                        for depth, cpt in find_formatted_components(dev))
 
     if isinstance(dev, ophyd.DynamicDeviceComponent):
         # DynamicDeviceComponent: attr: (sig_cls, prefix, kwargs)
@@ -226,11 +225,16 @@ def ophyd_device_to_caproto_ioc(dev, *, depth=0, available_groups=None,
     if available_groups is None:
         available_groups = set()
 
+    if ancestors is None:
+        ancestors = [cls]
+    else:
+        ancestors.append(cls)
+
     for attr, component in attr_components.items():
         cpt_lines = ophyd_component_to_caproto(
             attr, component, depth=depth + 1, dev=dev,
             available_groups=available_groups,
-            uses_formatted_components=uses_formatted_components)
+            ancestors=ancestors)
         if isinstance(cpt_lines, dict):
             # new device/sub-group, for now add it on
             for new_dev, lines in cpt_lines.items():
