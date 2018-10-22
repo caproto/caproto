@@ -81,6 +81,8 @@ class VirtualCircuit:
         self.context = context
         self.client_hostname = None
         self.client_username = None
+        # The structure of self.subscriptions is:
+        # {SubscriptionSpec: deque([Subscription, Subscription, ...]), ...}
         self.subscriptions = defaultdict(deque)
         self.unexpired_updates = defaultdict(
             lambda: OrderedBoundedSet(maxlen=ca.MAX_SUBSCRIPTION_BACKLOG))
@@ -313,7 +315,18 @@ class VirtualCircuit:
                         "High load. Batched %d commands (%dB) with %.4fs latency.",
                         len_commands, commands_bytes,
                         now - deadline + HIGH_LOAD_TIMEOUT)
-                await self.send(*commands)
+
+                # Ensure at the last possible moment that we don't send
+                # respones for Subscriptions that have been canceled at some
+                # time after the response was queued. The important thing is
+                # that no EventAddResponse be sent after the corresponding
+                # EventCancelResponse.
+                all_subscription_ids = set(sub.subscriptionid
+                                           for subs in self.subscriptions.values()
+                                               for sub in subs)
+                culled_commands = (command for command in commands
+                                   if command.subscriptionid in all_subscription_ids)
+                await self.send(*culled_commands)
             except DisconnectedCircuit:
                 await self._on_disconnect()
                 self.circuit.disconnect()
