@@ -47,13 +47,17 @@ def get_docstring_from_ophyd_component(component, *, sig=None):
         doc = None
 
     if sig and sig.connected:
-        rec = parse_record_field(sig._read_pv.pvname)
-        if rec.field in ('VAL', None):
-            from ophyd import EpicsSignalRO
-            try:
-                doc = EpicsSignalRO(f'{rec.record}.DESC').get()
-            except TimeoutError:
-                ...
+        try:
+            rec = parse_record_field(sig._read_pv.pvname)
+        except AttributeError:
+            ...
+        else:
+            if rec.field in ('VAL', None):
+                from ophyd import EpicsSignalRO
+                try:
+                    doc = EpicsSignalRO(f'{rec.record}.DESC').get()
+                except TimeoutError:
+                    ...
 
     return doc
 
