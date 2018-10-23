@@ -543,6 +543,8 @@ class VirtualCircuit:
             # The curio backend makes this an awaitable thing.
             if maybe_coroutine is not None:
                 await maybe_coroutine
+            self.circuit.log.info("Client at %s:%d has turned events on.",
+                                  *self.circuit.address)
         elif isinstance(command, ca.EventsOffRequest):
             # The client has signaled that it does not think it will be able to
             # catch up to the backlog. Clear all updates queued to be sent...
@@ -553,6 +555,8 @@ class VirtualCircuit:
             # The curio backend makes this an awaitable thing.
             if maybe_coroutine is not None:
                 await maybe_coroutine
+            self.circuit.log.info("Client at %s:%d has turned events off.",
+                                  *self.circuit.address)
         elif isinstance(command, ca.ClearChannelRequest):
             chan, db_entry = get_db_entry()
             await self._cull_subscriptions(
@@ -909,8 +913,7 @@ class Context:
         cavc = ca.VirtualCircuit(ca.SERVER, addr, None)
         circuit = self.CircuitClass(cavc, client, self)
         self.circuits.add(circuit)
-        self.log.info('Connected to new client at %s:%d.\n'
-                      'Circuits currently connected: %d', *addr,
+        self.log.info('Connected to new client at %s:%d (total: %d).', *addr,
                       len(self.circuits))
 
         await circuit.run()
@@ -925,8 +928,7 @@ class Context:
         except KeyboardInterrupt as ex:
             self.log.debug('TCP handler received KeyboardInterrupt')
             raise self.ServerExit() from ex
-        self.log.info('Disconnected from client at %s:%d.\n'
-                      'Circuits currently connected: %d', *addr,
+        self.log.info('Disconnected from client at %s:%d (total: %d).', *addr,
                       len(self.circuits))
 
     def stop(self):
