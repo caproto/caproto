@@ -54,7 +54,7 @@ def fabricate_channel(key):
     elif 'BlockingCallbacks' in key:
         return ChannelEnum(value=0, enum_strings=['No', 'Yes'])
     elif 'ImageMode' in key:
-        return ChannelEnum(value=0, enum_strings=['Single', 'Multiple', 'Continious'])
+        return ChannelEnum(value=0, enum_strings=['Single', 'Multiple', 'Continuous'])
     elif 'TriggerMode' in key:
         return ChannelEnum(value=0, enum_strings=['Internal', 'External'])
     return ChannelData(value=0)
