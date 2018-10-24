@@ -329,7 +329,7 @@ class VirtualCircuit:
                     self.log.info(
                         "High load. Batched %d commands (%dB) with %.4fs latency.",
                         len_commands, commands_bytes,
-                        now - deadline + HIGH_LOAD_TIMEOUT)
+                        now - deadline + latency_limit)
 
                 # Ensure at the last possible moment that we don't send
                 # respones for Subscriptions that have been canceled at some
