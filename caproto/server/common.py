@@ -291,7 +291,6 @@ class VirtualCircuit:
                         # its baseline memory usage is high.
                         num_expired += 1
                         continue
-                    self.unexpired_updates[command.subscriptionid].discard(command)
                     # Accumulate commands into a batch.
                     commands.append(command)
                     commands_bytes += len(command)
