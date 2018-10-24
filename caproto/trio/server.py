@@ -16,11 +16,11 @@ class Event(trio.Event):
     async def wait(self, timeout=None):
         if timeout is not None:
             with trio.move_on_after(timeout):
-                super().wait()
+                await super().wait()
                 return True
             return False
         else:
-            super().wait()
+            await super().wait()
             return True
 
 
