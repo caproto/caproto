@@ -18,9 +18,12 @@ from .._dbr import SubscriptionType
 # efficiency.
 HIGH_LOAD_TIMEOUT = 0.01
 # When a batch of subscription updates has this many bytes or more, send it.
-# Decrease this number to improve latency under load; increase it to improve
-# efficiency.
 SUB_BATCH_THRESH = 2**16
+# Tune this to change the max time between packets. If it's too high, the
+# client will experience long gaps when the server is under load. If it's too
+# low, the *overall* latency will be higher because the server will have to
+# waste time bundling many small packets.
+MAX_LATENCY = 1
 # If a Read[Notify]Request or EventAddRequest is received, wait for up to this
 # long for the currently-processing Write[Notify]Request to finish.
 WRITE_LOCK_TIMEOUT = 0.001
@@ -248,6 +251,7 @@ class VirtualCircuit:
         commands = deque()
         commands_bytes = 0
         num_expired = 0
+        latency_limit = HIGH_LOAD_TIMEOUT
         while True:
             send_now = False
             try:
@@ -272,6 +276,11 @@ class VirtualCircuit:
 
                         # Block here until we have something to send...
                         ref = await self.subscription_queue.get()
+
+                        # And, since we are in "slow producer" mode, reset the
+                        # limit in preparation for the next time we enter "fast
+                        # producer" mode.
+                        latency_limit = HIGH_LOAD_TIMEOUT
 
                     command = ref()
                     if command is None:
@@ -298,14 +307,17 @@ class VirtualCircuit:
                     if len(commands) == 1:
                         # Set a dealine by which will must send this oldest
                         # command in the batch, effecitvely a limit of latency.
-                        deadline = now + HIGH_LOAD_TIMEOUT
+                        deadline = now + latency_limit
                     elif deadline < now:
                         send_now = True
+                    if commands_bytes > SUB_BATCH_THRESH:
+                        send_now = True
                     # Send the batch if we are in low-latency / slow producer
-                    # mode (send_now=True) or the batch has reached max size.
-                    # But be sure _not_ to send it if it is empty (because all
-                    # the would-be contents were expired.)
-                    if commands and (send_now or commands_bytes > SUB_BATCH_THRESH):
+                    # mode, or if the high-latency deadline has passed, or if
+                    # the batch has reached max size.  But be sure _not_ to
+                    # send it if it is empty (because all the would-be contents
+                    # were expired.)
+                    if commands and send_now:
                         break
             except self.TaskCancelled:
                 break
@@ -330,6 +342,12 @@ class VirtualCircuit:
                 culled_commands = (command for command in commands
                                    if command.subscriptionid in all_subscription_ids)
                 await self.send(*culled_commands)
+
+                # When we are stuck in the "fast producer" regime,
+                # stuggling to push updates out, send larger and larger
+                # pakcets by increasing the allowed latency between each
+                # send until we either catch up or reach MAX_LATENCY.
+                latency_limit = min(MAX_LATENCY, latency_limit * 2)
             except DisconnectedCircuit:
                 await self._on_disconnect()
                 self.circuit.disconnect()
