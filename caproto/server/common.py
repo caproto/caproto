@@ -44,40 +44,6 @@ SubscriptionSpec = namedtuple('SubscriptionSpec', ('db_entry', 'data_type',
 host_endian = ('>' if sys.byteorder == 'big' else '<')
 
 
-class OrderedBoundedSet:
-    # This just implements the part of the set API that we need.
-    def __init__(self, items=None, *, maxlen):
-        if items is None:
-            items = ()
-        self._data = dict.fromkeys(items)
-        self.maxlen = maxlen
-
-    def __len__(self):
-        return len(self._data)
-
-    def add(self, item):
-        self._data[item] = None
-        if len(self) > self.maxlen:
-            self.pop()
-
-    def update(self, items):
-        self._data.update(dict.fromkeys(items))
-        overage = len(self) - self.maxlen
-        for item in itertools.islice(iter(self._data), overage):
-            self._data.pop(item)
-
-    def pop(self):
-        item = next(iter(self._data))
-        self._data.pop(item)
-        return item
-
-    def discard(self, item):
-        try:
-            self._data.pop(item)
-        except KeyError:
-            pass
-
-
 class VirtualCircuit:
     def __init__(self, circuit, client, context):
         self.connected = True
@@ -91,7 +57,7 @@ class VirtualCircuit:
         # {SubscriptionSpec: deque([Subscription, Subscription, ...]), ...}
         self.subscriptions = defaultdict(deque)
         self.unexpired_updates = defaultdict(
-            lambda: OrderedBoundedSet(maxlen=ca.MAX_SUBSCRIPTION_BACKLOG))
+            lambda: deque(maxlen=ca.MAX_SUBSCRIPTION_BACKLOG))
         self.most_recent_updates = {}
         # Subclasses are expected to define:
         # self.QueueFull = ...
@@ -840,7 +806,7 @@ class Context:
 
                 # This is an OrderedBoundedSet, a set with a maxlen, containing
                 # only commands for this particular subscription.
-                circuit.unexpired_updates[sub.subscriptionid].add(command)
+                circuit.unexpired_updates[sub.subscriptionid].append(command)
 
                 # This is a queue with the commands from _all_ subscriptions on
                 # this circuit.
