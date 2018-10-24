@@ -215,11 +215,12 @@ class VirtualCircuit:
         if maybe_coroutine is not None:
             await maybe_coroutine
         commands = deque()
-        commands_bytes = 0
-        num_expired = 0
         latency_limit = HIGH_LOAD_TIMEOUT
         while True:
             send_now = False
+            commands.clear()
+            commands_bytes = 0
+            num_expired = 0
             try:
                 # We are covering two regimes of operation here. In the "slow
                 # producer" regime, the server is only occasionally sending
@@ -319,9 +320,6 @@ class VirtualCircuit:
                 self.circuit.disconnect()
                 await self.context.circuit_disconnected(self)
                 break
-            commands.clear()
-            commands_bytes = 0
-            num_expired = 0
 
     async def _cull_subscriptions(self, db_entry, func):
         # Iterate through each Subscription, passing each one to func(sub).
@@ -502,7 +500,8 @@ class VirtualCircuit:
             # introducing too much latency.
             await self.write_event.wait(timeout=WRITE_LOCK_TIMEOUT)
 
-            await db_entry.subscribe(self.context.subscription_queue, sub_spec)
+            await db_entry.subscribe(self.context.subscription_queue, sub_spec,
+                                     command.subscriptionid)
         elif isinstance(command, ca.EventCancelRequest):
             chan, db_entry = get_db_entry()
             removed = await self._cull_subscriptions(
@@ -706,11 +705,25 @@ class Context:
         while True:
             # This queue receives updates that match the db_entry, data_type
             # and mask ("subscription spec") of one or more subscriptions.
-            sub_specs, metadata, values, flags = await self.subscription_queue.get()
+            sub_specs, metadata, values, flags, sub_id = await self.subscription_queue.get()
 
             subs = []
-            for sub_spec in sub_specs:
-                subs.extend(self.subscriptions[sub_spec])
+            if sub_id is None:
+                # broadcast to all
+                for sub_spec in sub_specs:
+                    subs.extend(self.subscriptions[sub_spec])
+            else:
+                sub_spec = sub_specs[0]
+                subs = [sub
+                        for sub_spec in sub_specs
+                        for sub in self.subscriptions[sub_spec]
+                        if sub.subscriptionid == sub_id
+                        ]
+                if len(subs) != 1:
+                    self.log.debug('Unexpected subscription count: %d; '
+                                   'skipping. Subscription may be lost',
+                                   len(subs))
+                    continue
             # Pack the data and metadata into an EventAddResponse and send it.
             # We have to make a new response for each channel because each may
             # have a different requested data_count.
