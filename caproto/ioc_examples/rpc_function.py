@@ -16,8 +16,8 @@ class MyPVGroup(PVGroup):
 
     @pvfunction(default=[0])
     async def get_random(self,
-                         low: int=100,
-                         high: int=1000) -> int:
+                         low: int = 100,
+                         high: int = 1000) -> int:
         'A configurable random number'
         return random.randint(low, high)
 

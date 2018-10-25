@@ -237,7 +237,7 @@ def pytest_benchmark_update_json(config, benchmarks, output_json):
 
         logger.info('Saving asv-style JSON to %s', asv_path)
         save_asv_results(asv_path, **results)
-    except Exception as ex:
+    except Exception:
         logger.exception('Failed to update pytest benchmark json; '
                          'asv results not saved')
 

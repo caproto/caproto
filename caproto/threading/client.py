@@ -336,7 +336,7 @@ class SharedBroadcaster:
         try:
             # Always attempt registration on initialization, but allow failures
             self._register()
-        except Exception as ex:
+        except Exception:
             self.log.exception('Broadcaster registration failed on init')
 
     def _should_attempt_registration(self):
@@ -1244,7 +1244,7 @@ class VirtualCircuitManager:
         sock, self.socket = self.socket, None
         try:
             sock.shutdown(socket.SHUT_WR)
-        except OSError as ex:
+        except OSError:
             pass
         self.log.debug('Circuit manager disconnected by user')
 

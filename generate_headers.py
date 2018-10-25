@@ -17,7 +17,7 @@ Param = namedtuple('Param', ['standard_name', 'field', 'value', 'description'])
 Command = namedtuple('Command', ['name', 'description',
                                  'input_params', 'struct_args'])
 
-COMMAND_NAME_PATTERN = re.compile("Command identifier for ([A-Z_]+)\.?")
+COMMAND_NAME_PATTERN = re.compile("Command identifier for ([A-Z_]+).?")
 
 
 def validate(params):

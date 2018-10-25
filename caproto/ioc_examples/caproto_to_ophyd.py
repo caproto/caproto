@@ -36,8 +36,8 @@ class Group(PVGroup):
 
     @pvfunction(default=0)
     async def get_random(self,
-                         low: int=100,
-                         high: int=1000) -> int:
+                         low: int = 100,
+                         high: int = 1000) -> int:
         'A configurable random number'
         return random.randint(low, high)
 
@@ -59,7 +59,7 @@ class get_randomDevice(ophyd.Device):
     process = Cpt(EpicsSignal, 'Process',
                   doc="Parameter <class 'int'> Process")
 
-    def call(self, low: int=100, high: int=1000):
+    def call(self, low: int = 100, high: int = 1000):
         'A configurable random number'
         self.low.put(low, wait=True)
         self.high.put(high, wait=True)
