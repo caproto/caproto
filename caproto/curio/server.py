@@ -18,7 +18,7 @@ class ServerExit(curio.KernelExit):
 class Event(curio.Event):
     async def wait(self, timeout=None):
         if timeout is not None:
-            with curio.ignore_after(timeout):
+            async with curio.ignore_after(timeout):
                 await super().wait()
                 return True
             return False
