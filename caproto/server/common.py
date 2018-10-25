@@ -709,21 +709,25 @@ class Context:
 
             subs = []
             if sub_id is None:
-                # broadcast to all
+                # Broadcast to all Subscriptions for the relevant
+                # SubscriptionSpec(s).
                 for sub_spec in sub_specs:
                     subs.extend(self.subscriptions[sub_spec])
             else:
-                sub_spec = sub_specs[0]
+                # A specific sub_id has been specified, which means this update
+                # is due to a *new* Subscription, and should only go to that
+                # specific Subscription. Other Subscriptions have already been
+                # sent this update and should not receive it again. Find which
+                # Subscription that is....
+                sub_spec, = sub_specs
+                # TODO Store Subscriptions in a parallel data structure to make
+                # this lookup faster. It happens in a couple places.
                 subs = [sub
                         for sub_spec in sub_specs
                         for sub in self.subscriptions[sub_spec]
                         if sub.subscriptionid == sub_id
                         ]
-                if len(subs) != 1:
-                    self.log.debug('Unexpected subscription count: %d; '
-                                   'skipping. Subscription may be lost',
-                                   len(subs))
-                    continue
+                assert len(subs) == 1
             # Pack the data and metadata into an EventAddResponse and send it.
             # We have to make a new response for each channel because each may
             # have a different requested data_count.
