@@ -34,7 +34,7 @@ __all__ = ('Forbidden',
 
 SubscriptionUpdate = namedtuple('SubscriptionUpdate',
                                 ('sub_specs', 'metadata', 'values',
-                                'flags', 'sub_id'))
+                                 'flags', 'sub_id'))
 
 
 class Forbidden(CaprotoError):

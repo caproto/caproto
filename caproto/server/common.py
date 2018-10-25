@@ -1,6 +1,5 @@
 from collections import defaultdict, deque, namedtuple, ChainMap, Iterable
 import copy
-import itertools
 import logging
 import sys
 import time
