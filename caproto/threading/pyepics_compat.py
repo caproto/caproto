@@ -224,8 +224,8 @@ class PV:
         )
 
         if self._caproto_pv.connected:
-            # connection state callback was already called
-            self._connection_established(self._caproto_pv)
+            # connection state callback was already called but we didn't see it
+            self._connection_state_changed(self._caproto_pv, 'connected')
 
     @property
     def connected(self):
