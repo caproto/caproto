@@ -3,7 +3,7 @@
 # metadata. They perform data type conversions in response to requests to read
 # data as a certain type, and they push updates into queues registered by a
 # higher-level server.
-from collections import defaultdict, Iterable
+from collections import defaultdict, Iterable, namedtuple
 import copy
 import time
 import warnings
@@ -31,6 +31,10 @@ __all__ = ('Forbidden',
            'ChannelShort',
            'ChannelString',
            )
+
+SubscriptionUpdate = namedtuple('SubscriptionUpdate',
+                                ('sub_specs', 'metadata', 'values',
+                                'flags', 'sub_id'))
 
 
 class Forbidden(CaprotoError):
@@ -357,7 +361,7 @@ class ChannelData:
             # a future subscription wants the same data type.
             metadata, values = await self._read(data_type)
             self._content[data_type] = metadata, values
-        await queue.put(((sub_spec,), metadata, values, 0, sub_id))
+        await queue.put(SubscriptionUpdate((sub_spec,), metadata, values, 0, sub_id))
 
     async def unsubscribe(self, queue, sub_spec):
         self._queues[queue][sub_spec.channel_filter.sync][sub_spec.data_type].discard(sub_spec)
@@ -548,7 +552,7 @@ class ChannelData:
                     # want a different slice. Sending the whole array through
                     # the queue isn't any more expensive that sending a slice;
                     # this is just a reference.
-                    await queue.put((eligible, metadata, values, flags, None))
+                    await queue.put(SubscriptionUpdate(eligible, metadata, values, flags, None))
 
     def _read_metadata(self, dbr_metadata):
         'Set all metadata fields of a given DBR type instance'
