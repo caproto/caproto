@@ -423,12 +423,16 @@ class SharedBroadcaster:
         bytes_to_send = self.broadcaster.send(*commands)
         for host in ca.get_address_list():
             self.broadcaster.log.debug('sending bytes to %s', host)
-            if ':' in host:
-                host, _, specified_port = host.partition(':')
-                self.udp_sock.sendto(bytes_to_send, (host,
-                                                     int(specified_port)))
-            else:
-                self.udp_sock.sendto(bytes_to_send, (host, port))
+            try:
+                if ':' in host:
+                    host, _, specified_port = host.partition(':')
+                    self.udp_sock.sendto(bytes_to_send, (host,
+                                                         int(specified_port)))
+                else:
+                    self.udp_sock.sendto(bytes_to_send, (host, port))
+            except OSError as ex:
+                raise OSError(f'{ex} while sending {len(bytes_to_send)} '
+                              f'bytes to {host}:{port}') from ex
 
     def get_cached_search_result(self, name, *,
                                  threshold=STALE_SEARCH_EXPIRATION):
@@ -621,10 +625,11 @@ class SharedBroadcaster:
             if items:
                 self.log.debug('Sending %d SearchRequests', len(items))
 
+            version_req = ca.VersionRequest(0, ca.DEFAULT_PROTOCOL_VERSION)
             for batch in batch_requests(requests,
-                                        SEARCH_MAX_DATAGRAM_BYTES):
+                                        SEARCH_MAX_DATAGRAM_BYTES - len(version_req)):
                 self.send(self.ca_server_port,
-                          ca.VersionRequest(0, ca.DEFAULT_PROTOCOL_VERSION),
+                          version_req,
                           *batch)
 
             wait_time = max(0, RETRY_SEARCHES_PERIOD - (time.monotonic() - t))

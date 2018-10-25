@@ -17,11 +17,9 @@ MAX_RECORD_LENGTH = 59  # from 3.14 on
 MAX_UDP_RECV = 0xffff - 16
 
 STALE_SEARCH_EXPIRATION = 10.0
-# In theory (0xffff - 16) is allowed but in practice this can be too high
-# without special system configuration. For more info on this and to see where
-# this number comes from refer to
-# https://stackoverflow.com/a/35335138/1221924
-SEARCH_MAX_DATAGRAM_BYTES = 9216
+
+# Max of ethernet and 802.{2,3} MTU 1500 - 20(IP header) - 8(UDP header)
+SEARCH_MAX_DATAGRAM_BYTES = 1472
 
 # Servers send beacons at some maximum interval. ("Maximum delay between
 # beacons will be limited by server specified parameter, but is commonly 15
