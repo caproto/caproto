@@ -472,7 +472,7 @@ class VirtualCircuit:
                 finally:
                     self.write_event.clear()
 
-            self.write_event.set()
+            await self.write_event.set()
             await self._start_write_task(handle_write)
         elif isinstance(command, ca.EventAddRequest):
             chan, db_entry = get_db_entry()
