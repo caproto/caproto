@@ -52,6 +52,7 @@ __all__ = (  # noqa F822
     'ProtocolError',
     'LocalProtocolError',
     'RemoteProtocolError',
+    'CaprotoTimeoutError',
     'CaprotoKeyError',
     'CaprotoNotImplementedError',
     'CaprotoValueError',
@@ -149,6 +150,10 @@ class RemoteProtocolError(ProtocolError):
     """
     Your remote peer tried to do something that caproto thinks is illegal.
     """
+    ...
+
+
+class CaprotoTimeoutError(TimeoutError, CaprotoError):
     ...
 
 

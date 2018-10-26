@@ -33,7 +33,7 @@ import caproto as ca
 from .._constants import (MAX_ID, STALE_SEARCH_EXPIRATION,
                           SEARCH_MAX_DATAGRAM_BYTES)
 from .._utils import (batch_requests, CaprotoError, ThreadsafeCounter,
-                      socket_bytes_available)
+                      socket_bytes_available, CaprotoTimeoutError)
 
 
 print = partial(print, flush=True)
@@ -54,8 +54,8 @@ def ensure_connected(func):
         elif isinstance(self, Subscription):
             pv = self.pv
         else:
-            raise TypeError("ensure_connected is intended to decorate methods "
-                            "of PV and Subscription.")
+            raise CaprotoTypeError("ensure_connected is intended to decorate "
+                                   "methods of PV and Subscription.")
         # This `2` matches the default in read, write, wait_for_connection.
         raw_timeout = timeout = kwargs.get('timeout', 2)
         if timeout is not None:
@@ -71,8 +71,8 @@ def ensure_connected(func):
                 # Channel.
                 ready = pv.circuit_ready.wait(timeout=timeout)
                 if not ready:
-                    raise TimeoutError(f"Could not connect within "
-                                       f"{raw_timeout}-second timeout.")
+                    raise CaprotoTimeoutError(f"{pv} could not connect within "
+                                              f"{raw_timeout}-second timeout.")
                 with pv.component_lock:
                     cm = pv.circuit_manager
                     cid = cm.circuit.new_channel_id()
@@ -88,8 +88,8 @@ def ensure_connected(func):
                     timeout = deadline - time.monotonic()
                 ready = pv.channel_ready.wait(timeout=timeout)
                 if not ready:
-                    raise TimeoutError(f"Could not connect within "
-                                       f"{raw_timeout}-second timeout.")
+                    raise CaprotoTimeoutError(f"{pv} could not connect within "
+                                              f"{raw_timeout}-second timeout.")
                 if timeout is not None:
                     timeout = deadline - time.monotonic()
                     kwargs['timeout'] = timeout
@@ -1036,9 +1036,9 @@ class VirtualCircuitManager:
             self._ready.set()
         ready = self._ready.wait(timeout=timeout)
         if not ready:
-            raise TimeoutError("Circuit with server at {} did not "
-                               "connected within {}-second timeout."
-                               "".format(self.circuit.address, timeout))
+            raise CaprotoTimeoutError("Circuit with server at {} did not "
+                                      "connected within {}-second timeout."
+                                      "".format(self.circuit.address, timeout))
 
     def __repr__(self):
         return (f"<VirtualCircuitManager circuit={self.circuit} "
@@ -1362,13 +1362,13 @@ class PV:
         Parameters
         ----------
         timeout : float
-            Seconds before a TimeoutError is raised. Default is 2.
+            Seconds before a CaprotoTimeoutError is raised. Default is 2.
         """
         if not self.circuit_ready.wait(timeout=timeout):
-            raise TimeoutError("No servers responded to a search for a "
-                               "channel named {!r} within {}-second "
-                               "timeout."
-                               "".format(self.name, timeout))
+            raise CaprotoTimeoutError("No servers responded to a search for a "
+                                      "channel named {!r} within {}-second "
+                                      "timeout."
+                                      "".format(self.name, timeout))
 
     @ensure_connected
     def wait_for_connection(self, *, timeout=2):
@@ -1421,16 +1421,17 @@ class PV:
         ----------
         wait : boolean
             If True (default) block until a matching response is
-            received from the server. Raises TimeoutError if that response is
-            not received within the time specified by the `timeout` parameter.
+            received from the server. Raises CaprotoTimeoutError if that
+            response is not received within the time specified by the `timeout`
+            parameter.
         callback : callable or None
             Called with the response as its argument when received.
         timeout : number or None
-            Number of seconds to wait before raising TimeoutError. Default is
+            Number of seconds to wait before raising CaprotoTimeoutError.
+            Default is 2.
         data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
             Request specific data type or a class of data types, matched to the
             channel's native data type. Default is Channel's native data type.
-            2.
         data_count : integer, optional
             Requested number of values. Default is the channel's native data
             count.
@@ -1469,7 +1470,7 @@ class PV:
                 # in hopes of getting a working circuit until our `timeout` has
                 # been used up.
                 raise DeadCircuitError()
-            raise TimeoutError(
+            raise CaprotoTimeoutError(
                 f"Server at {self.circuit_manager.circuit.address} did "
                 f"not respond to attempt to read channel named "
                 f"{self.name!r} within {timeout}-second timeout."
@@ -1494,13 +1495,14 @@ class PV:
             Value(s) to write.
         wait : boolean
             If True (default) block until a matching WriteNotifyResponse is
-            received from the server. Raises TimeoutError if that response is
-            not received within the time specified by the `timeout` parameter.
+            received from the server. Raises CaprotoTimeoutError if that
+            response is not received within the time specified by the `timeout`
+            parameter.
         callback : callable or None
             Called with the WriteNotifyResponse as its argument when received.
         timeout : number or None
-            Number of seconds to wait before raising TimeoutError. Default is
-            2.
+            Number of seconds to wait before raising CaprotoTimeoutError.
+            Default is 2.
         notify : boolean or None
             If None (default), set to True if wait=True or callback is set.
             Can be manually set to True or False. Will raise ValueError if set
@@ -1557,7 +1559,7 @@ class PV:
                 # in hopes of getting a working circuit until our `timeout` has
                 # been used up.
                 raise DeadCircuitError()
-            raise TimeoutError(
+            raise CaprotoTimeoutError(
                 f"Server at {self.circuit_manager.circuit.address} did "
                 f"not respond to attempt to write to channel named "
                 f"{self.name!r} within {timeout}-second timeout. The ioid of "

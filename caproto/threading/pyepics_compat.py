@@ -10,7 +10,7 @@ from collections import Iterable
 import caproto as ca
 from .client import (Context, SharedBroadcaster, AUTOMONITOR_MAXLENGTH,
                      STR_ENC)
-from caproto import AccessRights, field_types, ChannelType
+from caproto import AccessRights, field_types, ChannelType, CaprotoTimeoutError
 
 
 __all__ = ('PV', 'get_pv', 'caget', 'caput')
@@ -259,9 +259,9 @@ class PV:
         ok = ok and self.connected
 
         if not ok:
-            raise TimeoutError(f'{self.pvname} failed to connect within '
-                               f'{timeout} seconds '
-                               f'(caproto={self._caproto_pv})')
+            raise CaprotoTimeoutError(f'{self.pvname} failed to connect within '
+                                      f'{timeout} seconds '
+                                      f'(caproto={self._caproto_pv})')
 
         return True
 
