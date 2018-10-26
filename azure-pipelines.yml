@@ -27,12 +27,6 @@ jobs:
       versionSpec: '$(python.version)'
       architecture: 'x64'
 
-  # tmux is already available
-  # - bash: |
-  #     sudo apt-get update
-  #     sudo apt-get install procserv
-  #   displayName: Install Linux dependencies
-
   - bash: |
       pushd /home
       sudo ln -sf $USER travis
@@ -44,12 +38,9 @@ jobs:
       /sbin/ifconfig
       ip addr
       env
-      echo $HOME
-      echo $CI_SCRIPTS
-      echo $TRAVIS_BUILD_DIR
       pwd
       cp azure_env.sh $HOME
-      # this does not work:
+      # this does not yet work:
       echo 'source $HOME/azure_env.sh' >> "$HOME/.bashrc"
       echo 'source $HOME/.bashrc' >> "$HOME/.bash_profile"
     displayName: 'Show the environment'
@@ -57,6 +48,7 @@ jobs:
   - bash: |
       python -m pip install --upgrade pip
       pip install -r test-requirements.txt
+      pip install git+https://github.com/klauer/catvs.git@py3k
       pip install pyepics numpy
       pip install --quiet --upgrade cython
     displayName: 'Install Python dependencies'
@@ -75,33 +67,31 @@ jobs:
 
   - bash: |
       source $HOME/azure_env.sh
-      ldd ~/epics/${BASE_VER}/base/bin/linux-x86_64/caget
-      ldd ~/epics/${BASE_VER}/iocs/pyepics-test-ioc/bin/linux-x86_64/testioc
-      ldd ~/epics/${BASE_VER}/iocs/motorsim/bin/linux-x86_64/mtrSim
-      ldd ~/epics/${BASE_VER}/support/areadetector/${AREADETECTOR_VER}/ADSimDetector/iocs/simDetectorIOC/bin/linux-x86_64/simDetectorApp
-    displayName: 'what libraries?!'
+      python -c "from caproto.tests.conftest import run_example_ioc; run_example_ioc('caproto.ioc_examples.simple', request=None, args=['--prefix', 'azure_test:', '--async-lib', 'trio'], pv_to_check='azure_test:A')"
+      sleep 2
+      caproto-get -vvv azure_test:A
+      caget azure_test:pi
+      sleep 2
+      killall python
+    displayName: 'simple caproto IOC test'
 
   - bash: |
       source $HOME/azure_env.sh
       echo "EPICS bin contents:"
       ls ${EPICS_BIN_PATH}
       echo "Starting IOCs..."
-      # bash ${CI_SCRIPTS}/run-epics-iocs-on-tmux.sh
-      # timeout 30s bash $CI_SCRIPTS/run-motorsim-ioc.sh
-      # timeout 30s bash $CI_SCRIPTS/run-pyepics-test-ioc.sh
       cp -f ${AREA_DETECTOR_PATH}/ADCore/iocBoot/EXAMPLE_commonPlugins.cmd ${AREA_DETECTOR_PATH}/ADCore/iocBoot/commonPlugins.cmd
-      bash ${CI_SCRIPTS}/run-epics-iocs.sh
-      # timeout 30s bash $CI_SCRIPTS/run-sim-detector-ioc.sh
-      # displayName: 'Run EPICS IOCs'
-      # - bash: |
-      # source $HOME/azure_env.sh
+      bash ${CI_SCRIPTS}/run-epics-iocs-on-tmux.sh
+    displayName: 'Run IOCs on tmux'
+
+  - bash: |
       coverage run --parallel-mode run_tests.py  -k 'not bench' --benchmark-disable --timeout=100 -v --junitxml=junit/test-results.xml -x
-    displayName: 'IOCs/pytest'
+    displayName: 'pytest'
 
   - bash: |
       coverage combine --append
       coverage report -m
-    displayName: 'coverage'
+    displayName: 'Report coverage'
 
   - task: PublishTestResults@2
     inputs:
