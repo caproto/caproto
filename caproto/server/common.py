@@ -109,13 +109,13 @@ class VirtualCircuit:
                 # This client is fast and we are not keeping up. Better to kill
                 # the circuit (and let the client try again) than to let the
                 # whole server be OOM-ed.
-                await self._on_disconnect()
-                raise DisconnectedCircuit()
                 self.log.warning(f"Circuit {self!r} has a large backlog of "
                                  f"received commands, evidently cannot keep "
                                  f"with a fast client. Disconnecting circuit "
                                  f"to avoid letting consume all available "
                                  f"memory.")
+                await self._on_disconnect()
+                raise DisconnectedCircuit()
         if not bytes_received:
             await self._on_disconnect()
             raise DisconnectedCircuit()
