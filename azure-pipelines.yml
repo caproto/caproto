@@ -1,0 +1,124 @@
+# Python package
+# Create and test a Python package on multiple Python versions.
+# Add steps that analyze code, save the dist with the build record, publish to a PyPI-compatible index, and more:
+# https://docs.microsoft.com/azure/devops/pipelines/languages/python
+# vi: sw=2 ts=2 sts=2 expandtab
+
+variables:
+    EPICS_ON_TRAVIS_TAG: '0.8.1'
+    EPICS_ON_TRAVIS_PKG: '0.8.1/epics-ci-0.8.1_R7.0.1.1_pva_areadetector3-2_motor6-10.tar.bz2'
+  
+jobs:
+
+- job: 'Test'
+  pool:
+    vmImage: 'Ubuntu 16.04'
+  strategy:
+    matrix:
+      Python36:
+        python.version: '3.6'
+      Python37:
+        python.version: '3.7'
+    maxParallel: 4
+
+  steps:
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '$(python.version)'
+      architecture: 'x64'
+
+  # tmux is already available
+  # - bash: |
+  #     sudo apt-get update
+  #     sudo apt-get install procserv
+  #   displayName: Install Linux dependencies
+
+  - bash: |
+      pushd /home
+      sudo ln -sf $USER travis
+      ls -la /home
+      popd
+    displayName: 'Pretend azure is travis'
+
+  - bash: |
+      /sbin/ifconfig
+      ip addr
+      env
+      echo $HOME
+      echo $CI_SCRIPTS
+      echo $TRAVIS_BUILD_DIR
+      pwd
+      cp azure_env.sh $HOME
+      # this does not work:
+      echo 'source $HOME/azure_env.sh' >> "$HOME/.bashrc"
+      echo 'source $HOME/.bashrc' >> "$HOME/.bash_profile"
+    displayName: 'Show the environment'
+
+  - bash: |
+      python -m pip install --upgrade pip
+      pip install -r test-requirements.txt
+      pip install pyepics numpy
+      pip install --quiet --upgrade cython
+    displayName: 'Install Python dependencies'
+
+  - bash: |
+      pip install .
+    displayName: 'Install caproto'
+
+  - bash: |
+      export CI_TOP="$HOME/ci"
+      # git clone --single-branch --branch ${EPICS_ON_TRAVIS_TAG} --depth 1 https://github.com/klauer/epics-on-travis ${CI_TOP}
+      git clone --single-branch --branch master --depth 1 https://github.com/klauer/epics-on-travis ${CI_TOP}
+      source $HOME/azure_env.sh
+      bash ${CI_TOP}/install-from-release.sh "${EPICS_ON_TRAVIS_URL}"
+    displayName: 'Install EPICS dependencies'
+
+  - bash: |
+      source $HOME/azure_env.sh
+      ldd ~/epics/${BASE_VER}/base/bin/linux-x86_64/caget
+      ldd ~/epics/${BASE_VER}/iocs/pyepics-test-ioc/bin/linux-x86_64/testioc
+      ldd ~/epics/${BASE_VER}/iocs/motorsim/bin/linux-x86_64/mtrSim
+      ldd ~/epics/${BASE_VER}/support/areadetector/${AREADETECTOR_VER}/ADSimDetector/iocs/simDetectorIOC/bin/linux-x86_64/simDetectorApp
+    displayName: 'what libraries?!'
+
+  - bash: |
+      source $HOME/azure_env.sh
+      echo "EPICS bin contents:"
+      ls ${EPICS_BIN_PATH}
+      echo "Starting IOCs..."
+      # bash ${CI_SCRIPTS}/run-epics-iocs-on-tmux.sh
+      # timeout 30s bash $CI_SCRIPTS/run-motorsim-ioc.sh
+      # timeout 30s bash $CI_SCRIPTS/run-pyepics-test-ioc.sh
+      cp -f ${AREA_DETECTOR_PATH}/ADCore/iocBoot/EXAMPLE_commonPlugins.cmd ${AREA_DETECTOR_PATH}/ADCore/iocBoot/commonPlugins.cmd
+      bash ${CI_SCRIPTS}/run-epics-iocs.sh
+      # timeout 30s bash $CI_SCRIPTS/run-sim-detector-ioc.sh
+      # displayName: 'Run EPICS IOCs'
+      # - bash: |
+      # source $HOME/azure_env.sh
+      coverage run --parallel-mode run_tests.py  -k 'not bench' --benchmark-disable --timeout=100 -v --junitxml=junit/test-results.xml -x
+    displayName: 'IOCs/pytest'
+
+  - bash: |
+      coverage combine --append
+      coverage report -m
+    displayName: 'coverage'
+
+  - task: PublishTestResults@2
+    inputs:
+      testResultsFiles: '**/test-results.xml'
+      testRunTitle: 'Python $(python.version)'
+    condition: succeededOrFailed()
+
+- job: 'Publish'
+  dependsOn: 'Test'
+  pool:
+    vmImage: 'Ubuntu 16.04'
+
+  steps:
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '3.x'
+      architecture: 'x64'
+
+  - script: python setup.py sdist
+    displayName: 'Build sdist'
