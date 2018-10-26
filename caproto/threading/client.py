@@ -1455,6 +1455,7 @@ class PV:
         deadline = time.monotonic() + timeout if timeout is not None else None
         ioid_info['deadline'] = deadline
         self.circuit_manager.send(command)
+        self.log.debug(f"{self.name!r}: {command}")
         if not wait:
             return
 
@@ -1474,6 +1475,7 @@ class PV:
                 f"{self.name!r} within {timeout}-second timeout."
             )
 
+        self.log.debug(f"{self.name!r}: {ioid_info['response']}")
         return ioid_info['response']
 
     @ensure_connected
@@ -1541,6 +1543,7 @@ class PV:
         ioid_info['deadline'] = deadline
         # do not need to lock this, locking happens in circuit command
         self.circuit_manager.send(command)
+        self.log.debug(f"{self.name!r}: {command}")
         if not wait:
             return
 
@@ -1560,6 +1563,7 @@ class PV:
                 f"{self.name!r} within {timeout}-second timeout. The ioid of "
                 f"the expected response is {ioid}."
             )
+        self.log.debug(f"{self.name!r}: {ioid_info['response']}")
         return ioid_info['response']
 
     def subscribe(self, data_type=None, data_count=None,
@@ -1775,14 +1779,15 @@ class Subscription(CallbackHandler):
             else:
                 self.pv.circuit_manager.send(command)
 
-    def process(self, *args, **kwargs):
+    def process(self, command):
         # TODO here i think we can decouple PV update rates and callback
         # handling rates, if desirable, to not bog down performance.
         # As implemented below, updates are blocking further messages from
         # the CA servers from processing. (-> ThreadPool, etc.)
 
-        super().process(*args, **kwargs)
-        self.most_recent_response = (args, kwargs)
+        super().process(command)
+        self.log.debug(f"{self.pv.name!r}: {command}")
+        self.most_recent_response = command
 
     def add_callback(self, func):
         """
@@ -1811,9 +1816,8 @@ class Subscription(CallbackHandler):
                 # Send it the most recent response, unless we are still waiting
                 # for that first response from the server.
                 if self.most_recent_response is not None:
-                    args, kwargs = self.most_recent_response
                     try:
-                        func(*args, **kwargs)
+                        func(self.most_recent_response)
                     except Exception as ex:
                         print(ex)
 
