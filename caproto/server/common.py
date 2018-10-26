@@ -298,7 +298,7 @@ class VirtualCircuit:
                         now - deadline + latency_limit)
 
                 # Ensure at the last possible moment that we don't send
-                # respones for Subscriptions that have been canceled at some
+                # responses for Subscriptions that have been canceled at some
                 # time after the response was queued. The important thing is
                 # that no EventAddResponse be sent after the corresponding
                 # EventCancelResponse.
@@ -456,18 +456,18 @@ class VirtualCircuit:
                     )
                     await self.send(response_command)
                 else:
-                    if write_status is None:
-                        # errors can be passed back by exceptions, and
-                        # returning none for write_status can just be
-                        # considered laziness
-                        write_status = True
-
-                    response_command = chan.write(
-                        ioid=command.ioid,
-                        status=write_status,
-                        data_count=db_entry.length
-                    )
                     if client_waiting:
+                        if write_status is None:
+                            # errors can be passed back by exceptions, and
+                            # returning none for write_status can just be
+                            # considered laziness
+                            write_status = True
+
+                        response_command = chan.write(
+                            ioid=command.ioid,
+                            status=write_status,
+                            data_count=db_entry.length
+                        )
                         await self.send(response_command)
                 finally:
                     self.write_event.clear()
