@@ -1455,7 +1455,7 @@ class PV:
         deadline = time.monotonic() + timeout if timeout is not None else None
         ioid_info['deadline'] = deadline
         self.circuit_manager.send(command)
-        self.log.debug(f"{self.name!r}: {command}")
+        self.log.debug("%r: %r", self.name, command)
         if not wait:
             return
 
@@ -1475,7 +1475,7 @@ class PV:
                 f"{self.name!r} within {timeout}-second timeout."
             )
 
-        self.log.debug(f"{self.name!r}: {ioid_info['response']}")
+        self.log.debug("%r: %r", self.name, ioid_info['response'])
         return ioid_info['response']
 
     @ensure_connected
@@ -1543,7 +1543,7 @@ class PV:
         ioid_info['deadline'] = deadline
         # do not need to lock this, locking happens in circuit command
         self.circuit_manager.send(command)
-        self.log.debug(f"{self.name!r}: {command}")
+        self.log.debug("%r: %r", self.name, command)
         if not wait:
             return
 
@@ -1563,7 +1563,7 @@ class PV:
                 f"{self.name!r} within {timeout}-second timeout. The ioid of "
                 f"the expected response is {ioid}."
             )
-        self.log.debug(f"{self.name!r}: {ioid_info['response']}")
+        self.log.debug("%r: %r", self.name, ioid_info['response'])
         return ioid_info['response']
 
     def subscribe(self, data_type=None, data_count=None,
@@ -1786,7 +1786,7 @@ class Subscription(CallbackHandler):
         # the CA servers from processing. (-> ThreadPool, etc.)
 
         super().process(command)
-        self.log.debug(f"{self.pv.name!r}: {command}")
+        self.log.debug("%r: %r", self.pv.name, command)
         self.most_recent_response = command
 
     def add_callback(self, func):
