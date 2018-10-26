@@ -1524,7 +1524,20 @@ class PV:
                                      notify=notify,
                                      data_type=data_type,
                                      data_count=data_count)
-        if not notify:
+        if notify:
+            event = threading.Event()
+            ioid_info = dict(event=event)
+            if callback is not None:
+                ioid_info['callback'] = callback
+
+            self.circuit_manager.ioids[ioid] = ioid_info
+
+            deadline = time.monotonic() + timeout if timeout is not None else None
+            ioid_info['deadline'] = deadline
+            # do not need to lock this, locking happens in circuit command
+            self.circuit_manager.send(command)
+            self.log.debug("%r: %r", self.name, command)
+        else:
             if wait or callback is not None:
                 raise CaprotoValueError("Must set notify=True in order to use "
                                         "`wait` or `callback` because, without a "
@@ -1532,22 +1545,8 @@ class PV:
                                         "server, there is nothing to wait on or to "
                                         "trigger a callback.")
             self.circuit_manager.send(command)
-            return
+            self.log.debug("%r: %r", self.name, command)
 
-        if not notify:
-            return None
-        event = threading.Event()
-        ioid_info = dict(event=event)
-        if callback is not None:
-            ioid_info['callback'] = callback
-
-        self.circuit_manager.ioids[ioid] = ioid_info
-
-        deadline = time.monotonic() + timeout if timeout is not None else None
-        ioid_info['deadline'] = deadline
-        # do not need to lock this, locking happens in circuit command
-        self.circuit_manager.send(command)
-        self.log.debug("%r: %r", self.name, command)
         if not wait:
             return
 
