@@ -28,9 +28,9 @@ SEARCH_MAX_DATAGRAM_BYTES = 1472
 # https://epics.anl.gov/docs/CAproto.html#secVCUnresponsive
 SERVER_MIA_PRESUMED_DEAD = 60  # seconds
 
-MAX_TOTAL_SUBSCRIPTION_BACKLOG = 1000  # total per circuit not per subscription
-MAX_SUBSCRIPTION_BACKLOG = 100  # per subscription
-MAX_COMMAND_BACKLOG = 1000
+MAX_TOTAL_SUBSCRIPTION_BACKLOG = 10000  # total per circuit not per subscription
+MAX_SUBSCRIPTION_BACKLOG = 1000  # per subscription
+MAX_COMMAND_BACKLOG = 10000
 
 
 DO_REPLY = 10
