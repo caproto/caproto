@@ -47,7 +47,7 @@ def check_clients(clients, skip=None):
                                  socket.IPPROTO_UDP)
         try:
             sock.bind(addr)
-        except Exception as ex:
+        except Exception:
             # in use, still taken by client
             ...
         else:
@@ -97,7 +97,7 @@ def _run_repeater(server_sock, bind_addr):
         try:
             commands = broadcaster.recv(msg, addr)
             broadcaster.process_commands(commands)
-        except Exception as ex:
+        except Exception:
             logger.exception('Failed to process incoming datagram')
             continue
 
@@ -150,7 +150,7 @@ def _run_repeater(server_sock, bind_addr):
                 try:
                     server_sock.sendto(bytes_to_broadcast, (other_host,
                                                             other_port))
-                except Exception as ex:
+                except Exception:
                     to_remove.append((other_host, other_port))
 
         if to_remove:

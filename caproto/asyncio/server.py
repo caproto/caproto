@@ -259,7 +259,7 @@ class Context(_Context):
                 t.cancel()
             await asyncio.wait(all_tasks)
             return
-        except Exception as ex:
+        except Exception:
             self.log.exception('Server error. Will shut down')
             raise
         finally:

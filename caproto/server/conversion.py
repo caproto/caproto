@@ -77,7 +77,7 @@ def ophyd_component_to_caproto(attr, component, *, depth=0, dev=None):
             # NELM reflects the actual maximum length of the value, as opposed
             # to the current length
             max_length = sig._read_pv.nelm
-        except Exception as ex:
+        except Exception:
             max_length = 1
 
         if array_checker(value):

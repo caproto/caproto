@@ -275,7 +275,7 @@ class PVSpec(namedtuple('PVSpec',
             sig = inspect.signature(get)
             try:
                 sig.bind('group', 'instance')
-            except Exception as ex:
+            except Exception:
                 raise RuntimeError('Invalid signature for getter {}: {}'
                                    ''.format(get, sig))
 
@@ -285,7 +285,7 @@ class PVSpec(namedtuple('PVSpec',
             sig = inspect.signature(put)
             try:
                 sig.bind('group', 'instance', 'value')
-            except Exception as ex:
+            except Exception:
                 raise RuntimeError('Invalid signature for putter {}: {}'
                                    ''.format(put, sig))
 
@@ -295,7 +295,7 @@ class PVSpec(namedtuple('PVSpec',
             sig = inspect.signature(startup)
             try:
                 sig.bind('group', 'instance', 'async_library')
-            except Exception as ex:
+            except Exception:
                 raise RuntimeError('Invalid signature for startup {}: {}'
                                    ''.format(startup, sig))
 
@@ -305,7 +305,7 @@ class PVSpec(namedtuple('PVSpec',
             sig = inspect.signature(shutdown)
             try:
                 sig.bind('group', 'instance', 'async_library')
-            except Exception as ex:
+            except Exception:
                 raise RuntimeError('Invalid signature for shutdown {}: {}'
                                    ''.format(shutdown, sig))
 
@@ -526,7 +526,7 @@ class pvproperty:
             async def call_scan_function(group, prop, async_lib):
                 try:
                     await scan_function(group, prop, async_lib)
-                except Exception as ex:
+                except Exception:
                     prop.log.exception('Scan exception')
                     await prop.alarm.write(status=AlarmStatus.SCAN,
                                            severity=failure_severity,

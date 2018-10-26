@@ -451,7 +451,7 @@ class ChannelData:
         try:
             value = self.preprocess_value(value)
             modified_value = await self.verify_value(value)
-        except Exception as ex:
+        except Exception:
             # TODO: should allow exception to optionally pass alarm
             # status/severity through exception instance
             await self.alarm.write(status=AlarmStatus.WRITE,

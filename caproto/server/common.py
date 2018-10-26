@@ -124,7 +124,7 @@ class VirtualCircuit:
         """
         try:
             bytes_received = await self.client.recv(4096)
-        except (ConnectionResetError, ConnectionAbortedError) as ex:
+        except (ConnectionResetError, ConnectionAbortedError):
             bytes_received = []
 
         commands, _ = self.circuit.recv(bytes_received)
@@ -198,9 +198,8 @@ class VirtualCircuit:
                                    "unrecoverable way.", exc_info=ex)
                     # TODO: Kill the circuit.
                     break
-            except Exception as ex:
-                self.log.error('Circuit command queue evaluation failed',
-                               exc_info=ex)
+            except Exception:
+                self.log.exception('Circuit command queue evaluation failed')
                 continue
 
             try:
@@ -219,8 +218,8 @@ class VirtualCircuit:
                                        'disconnection: %s', command)
                     break
 
-                self.log.error('Server failed to process command: %s',
-                               command, exc_info=ex)
+                self.log.exception('Server failed to process command: %s',
+                                   command)
 
                 if hasattr(command, 'sid'):
                     cid = self.circuit.channels_sid[command.sid].cid
