@@ -437,7 +437,7 @@ class ChannelData:
             await self.alarm.write(must_acknowledge_transient=metadata.value)
             return
         elif data_type in (ChannelType.STSACK_STRING, ChannelType.CLASS_NAME):
-            raise ValueError('Bad request')
+            raise CaprotoValueError('Bad request')
 
         timestamp = time.time()
         native_from = native_type(data_type)
@@ -784,7 +784,7 @@ class ChannelByte(ChannelNumeric):
     def __init__(self, *, string_encoding=None, strip_null_terminator=True,
                  **kwargs):
         if string_encoding is not None:
-            raise ValueError('ChannelByte cannot have a string encoding')
+            raise CaprotoValueError('ChannelByte cannot have a string encoding')
 
         self.strip_null_terminator = strip_null_terminator
         super().__init__(string_encoding=None, **kwargs)
@@ -801,7 +801,7 @@ class ChannelByte(ChannelNumeric):
                 value = b''.join(map(bytes, ([v] for v in value)))
 
         if isinstance(value, str):
-            raise ValueError('ChannelByte does not accept decoded strings')
+            raise CaprotoValueError('ChannelByte does not accept decoded strings')
 
         if self.strip_null_terminator:
             value = value.rstrip(b'\x00')

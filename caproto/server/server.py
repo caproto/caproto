@@ -20,7 +20,8 @@ from .. import (ChannelDouble, ChannelShort, ChannelInteger, ChannelString,
                 ChannelEnum, ChannelType, ChannelChar, ChannelByte,
                 ChannelAlarm,
                 AccessRights, get_server_address_list,
-                AlarmStatus, AlarmSeverity)
+                AlarmStatus, AlarmSeverity, CaprotoRuntimeError,
+                CaprotoValueError, CaprotoTypeError, CaprotoAttributeError)
 from .._backend import backend
 
 
@@ -276,8 +277,8 @@ class PVSpec(namedtuple('PVSpec',
             try:
                 sig.bind('group', 'instance')
             except Exception:
-                raise RuntimeError('Invalid signature for getter {}: {}'
-                                   ''.format(get, sig))
+                raise CaprotoRuntimeError('Invalid signature for getter {}: {}'
+                                          ''.format(get, sig))
 
         if put is not None:
             assert inspect.iscoroutinefunction(put), 'required async def put'
@@ -286,8 +287,8 @@ class PVSpec(namedtuple('PVSpec',
             try:
                 sig.bind('group', 'instance', 'value')
             except Exception:
-                raise RuntimeError('Invalid signature for putter {}: {}'
-                                   ''.format(put, sig))
+                raise CaprotoRuntimeError('Invalid signature for putter {}: {}'
+                                          ''.format(put, sig))
 
         if startup is not None:
             assert inspect.iscoroutinefunction(startup), \
@@ -296,8 +297,8 @@ class PVSpec(namedtuple('PVSpec',
             try:
                 sig.bind('group', 'instance', 'async_library')
             except Exception:
-                raise RuntimeError('Invalid signature for startup {}: {}'
-                                   ''.format(startup, sig))
+                raise CaprotoRuntimeError('Invalid signature for startup {}: {}'
+                                          ''.format(startup, sig))
 
         if shutdown is not None:
             assert inspect.iscoroutinefunction(shutdown), \
@@ -306,8 +307,8 @@ class PVSpec(namedtuple('PVSpec',
             try:
                 sig.bind('group', 'instance', 'async_library')
             except Exception:
-                raise RuntimeError('Invalid signature for shutdown {}: {}'
-                                   ''.format(shutdown, sig))
+                raise CaprotoRuntimeError('Invalid signature for shutdown {}: {}'
+                                          ''.format(shutdown, sig))
 
         return super().__new__(cls, get=get, put=put, startup=startup,
                                shutdown=shutdown, attr=attr, name=name,
@@ -370,7 +371,7 @@ class FieldSpec:
                     attr = real_attr
                     break
             else:
-                raise AttributeError(f'Unknown field specified: {attr}')
+                raise CaprotoAttributeError(f'Unknown field specified: {attr}')
         return FieldProxy(self, rec_class, attr)
 
     @property
@@ -575,10 +576,10 @@ class pvproperty:
 
         if use_scan_field:
             if not self.record_type:
-                raise ValueError('Must use mock_record in conjunction with '
-                                 'use_scan_field')
+                raise CaprotoValueError('Must use mock_record in conjunction with '
+                                        'use_scan_field')
         elif period <= 0:
-            raise ValueError('Scan period must be > 0')
+            raise CaprotoValueError('Scan period must be > 0')
 
         return wrapper
 
@@ -611,7 +612,7 @@ class pvproperty:
     @property
     def fields(self):
         if self.field_spec is None:
-            raise AttributeError('No fields are allowed for this pvproperty')
+            raise CaprotoAttributeError('No fields are allowed for this pvproperty')
         return self.field_spec
 
 
@@ -721,7 +722,7 @@ class SubGroup:
         elif isinstance(info, pvproperty):
             return info.pvspec
         else:
-            raise TypeError(f'Unknown type for pvspec: {info!r}')
+            raise CaprotoTypeError(f'Unknown type for pvspec: {info!r}')
 
     def _generate_class_dict(self):
         'Create the class dictionary from all PVSpecs'
@@ -748,7 +749,7 @@ class SubGroup:
 
         bad_items = set(group_dict).intersection(set(dir(self)))
         if bad_items:
-            raise ValueError(f'Cannot use these attribute names: {bad_items}')
+            raise CaprotoValueError(f'Cannot use these attribute names: {bad_items}')
 
     def __call__(self, group=None, *, prefix=None, macros=None, doc=None):
         # handles case where a single definition is used multiple times
@@ -882,7 +883,7 @@ class pvfunction(SubGroup):
         except TypeError:
             default = [default]
         except Exception:
-            raise ValueError(f'Invalid default value for parameter {param}')
+            raise CaprotoValueError(f'Invalid default value for parameter {param}')
         else:
             # ensure we copy any arrays as default parameters, lest we give
             # some developers a heart attack
@@ -997,7 +998,7 @@ class PVGroupMeta(type):
             elif isinstance(value, SubGroup):
                 subgroup_cls = value.group_cls
                 if subgroup_cls is None:
-                    raise RuntimeError('Internal error; subgroup class unset?')
+                    raise CaprotoRuntimeError('Internal error; subgroup class unset?')
                 for sub_attr, value in subgroup_cls._pvs_.items():
                     yield '.'.join([attr, sub_attr]), value
 
@@ -1047,7 +1048,7 @@ class PVGroupMeta(type):
 
                 bad_kw = set(pvspec.cls_kwargs) - prop_cls._valid_init_kw
                 if bad_kw:
-                    raise ValueError(f'Bad kw for class {prop_cls}: {bad_kw}')
+                    raise CaprotoValueError(f'Bad kw for class {prop_cls}: {bad_kw}')
 
         return cls
 
@@ -1233,9 +1234,9 @@ class PVGroup(metaclass=PVGroupMeta):
                 first_seen = self.pvdb[pvname]
                 if hasattr(first_seen, 'pvspec'):
                     first_seen = first_seen.pvspec.attr
-                raise RuntimeError(f'{pvname} defined multiple times: '
-                                   f'now in attr: {attr} '
-                                   f'originally: {first_seen}')
+                raise CaprotoRuntimeError(f'{pvname} defined multiple times: '
+                                          f'now in attr: {attr} '
+                                          f'originally: {first_seen}')
 
             # full pvname -> ChannelData instance
             self.pvdb[pvname] = channeldata

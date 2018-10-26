@@ -10,7 +10,9 @@ from collections import Iterable
 import caproto as ca
 from .client import (Context, SharedBroadcaster, AUTOMONITOR_MAXLENGTH,
                      STR_ENC)
-from caproto import AccessRights, field_types, ChannelType
+from caproto import (AccessRights, field_types, ChannelType,
+                     CaprotoTimeoutError, CaprotoValueError,
+                     CaprotoRuntimeError, CaprotoNotImplementedError)
 
 
 __all__ = ('PV', 'get_pv', 'caget', 'caput')
@@ -107,7 +109,7 @@ def _pyepics_get_value(value, string_value, full_type, native_count, *,
         return string_value
     if as_string and full_type in ca.enum_types:
         if enum_strings is None:
-            raise ValueError('Enum strings unset')
+            raise CaprotoValueError('Enum strings unset')
         ret = []
         for r in value:
             try:
@@ -173,7 +175,7 @@ class PV:
         if context is None:
             context = self._default_context
         if context is None:
-            raise RuntimeError("must have a valid context")
+            raise CaprotoRuntimeError("must have a valid context")
         self._context = context
         self.pvname = pvname.strip()
         self.form = form.lower()
@@ -234,7 +236,7 @@ class PV:
 
     def force_connect(self, pvname=None, chid=None, conn=True, **kws):
         # not quite sure what this is for in pyepics
-        raise NotImplementedError
+        raise CaprotoNotImplementedError
 
     def wait_for_connection(self, timeout=None):
         """wait for a connection that started with connect() to finish
@@ -259,9 +261,9 @@ class PV:
         ok = ok and self.connected
 
         if not ok:
-            raise TimeoutError(f'{self.pvname} failed to connect within '
-                               f'{timeout} seconds '
-                               f'(caproto={self._caproto_pv})')
+            raise CaprotoTimeoutError(f'{self.pvname} failed to connect within '
+                                      f'{timeout} seconds '
+                                      f'(caproto={self._caproto_pv})')
 
         return True
 
@@ -433,7 +435,7 @@ class PV:
                 try:
                     value = self.enum_strs.index(value)
                 except ValueError:
-                    raise ValueError('{} is not in Enum ({}'.format(
+                    raise CaprotoValueError('{} is not in Enum ({}'.format(
                         value, self.enum_strs))
 
         if isinstance(value, str):
@@ -569,9 +571,9 @@ class PV:
         has a unique index (small integer) that is returned by
         add_callback.  This index is needed to remove a callback."""
         if not callable(callback):
-            raise ValueError()
+            raise CaprotoValueError()
         if index is not None:
-            raise ValueError("why do this")
+            raise CaprotoValueError("why do this")
         index = next(self._cb_count)
         self.callbacks[index] = (callback, kw)
 
@@ -984,7 +986,7 @@ def caput_many(pvlist, values, wait=False, connection_timeout=None,
     was exceeded.
     """
     if len(pvlist) != len(values):
-        raise ValueError("List of PV names must be equal to list of values.")
+        raise CaprotoValueError("List of PV names must be equal to list of values.")
 
     # context = PV._default_context
     # TODO: context.get_pvs(...)

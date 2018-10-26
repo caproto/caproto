@@ -33,7 +33,9 @@ import caproto as ca
 from .._constants import (MAX_ID, STALE_SEARCH_EXPIRATION,
                           SEARCH_MAX_DATAGRAM_BYTES)
 from .._utils import (batch_requests, CaprotoError, ThreadsafeCounter,
-                      socket_bytes_available)
+                      socket_bytes_available, CaprotoTimeoutError,
+                      CaprotoTypeError, CaprotoRuntimeError, CaprotoValueError,
+                      CaprotoKeyError)
 
 
 print = partial(print, flush=True)
@@ -54,8 +56,8 @@ def ensure_connected(func):
         elif isinstance(self, Subscription):
             pv = self.pv
         else:
-            raise TypeError("ensure_connected is intended to decorate methods "
-                            "of PV and Subscription.")
+            raise CaprotoTypeError("ensure_connected is intended to decorate "
+                                   "methods of PV and Subscription.")
         # This `2` matches the default in read, write, wait_for_connection.
         raw_timeout = timeout = kwargs.get('timeout', 2)
         if timeout is not None:
@@ -71,8 +73,8 @@ def ensure_connected(func):
                 # Channel.
                 ready = pv.circuit_ready.wait(timeout=timeout)
                 if not ready:
-                    raise TimeoutError(f"Could not connect within "
-                                       f"{raw_timeout}-second timeout.")
+                    raise CaprotoTimeoutError(f"{pv} could not connect within "
+                                              f"{raw_timeout}-second timeout.")
                 with pv.component_lock:
                     cm = pv.circuit_manager
                     cid = cm.circuit.new_channel_id()
@@ -88,8 +90,8 @@ def ensure_connected(func):
                     timeout = deadline - time.monotonic()
                 ready = pv.channel_ready.wait(timeout=timeout)
                 if not ready:
-                    raise TimeoutError(f"Could not connect within "
-                                       f"{raw_timeout}-second timeout.")
+                    raise CaprotoTimeoutError(f"{pv} could not connect within "
+                                              f"{raw_timeout}-second timeout.")
                 if timeout is not None:
                     timeout = deadline - time.monotonic()
                     kwargs['timeout'] = timeout
@@ -183,7 +185,7 @@ class SelectorThread:
 
     def start(self):
         if self._close_event.is_set():
-            raise RuntimeError("Cannot be restarted once stopped.")
+            raise CaprotoRuntimeError("Cannot be restarted once stopped.")
         self.thread = threading.Thread(target=self, daemon=True,
                                        name='selector')
         self.thread.start()
@@ -191,7 +193,7 @@ class SelectorThread:
     def add_socket(self, sock, target_obj):
         with self._socket_map_lock:
             if sock in self.socket_to_id:
-                raise ValueError('Socket already added')
+                raise CaprotoValueError('Socket already added')
 
             sock.setblocking(False)
 
@@ -455,7 +457,7 @@ class SharedBroadcaster:
 
             # Clean up expired result.
             self.search_results.pop(name, None)
-            raise KeyError(f'{name!r}: stale search result')
+            raise CaprotoKeyError(f'{name!r}: stale search result')
 
         return address
 
@@ -1027,8 +1029,8 @@ class VirtualCircuitManager:
                       ca.HostNameRequest(self.context.host_name),
                       ca.ClientNameRequest(self.context.client_name))
         else:
-            raise RuntimeError("Cannot connect. States are {} "
-                               "".format(self.circuit.states))
+            raise CaprotoRuntimeError("Cannot connect. States are {} "
+                                      "".format(self.circuit.states))
         # Old versions of the protocol do not send a VersionResponse at TCP
         # connection time, so set this Event manually rather than waiting for
         # it to be set by receipt of a VersionResponse.
@@ -1036,9 +1038,9 @@ class VirtualCircuitManager:
             self._ready.set()
         ready = self._ready.wait(timeout=timeout)
         if not ready:
-            raise TimeoutError("Circuit with server at {} did not "
-                               "connected within {}-second timeout."
-                               "".format(self.circuit.address, timeout))
+            raise CaprotoTimeoutError("Circuit with server at {} did not "
+                                      "connected within {}-second timeout."
+                                      "".format(self.circuit.address, timeout))
 
     def __repr__(self):
         return (f"<VirtualCircuitManager circuit={self.circuit} "
@@ -1362,13 +1364,13 @@ class PV:
         Parameters
         ----------
         timeout : float
-            Seconds before a TimeoutError is raised. Default is 2.
+            Seconds before a CaprotoTimeoutError is raised. Default is 2.
         """
         if not self.circuit_ready.wait(timeout=timeout):
-            raise TimeoutError("No servers responded to a search for a "
-                               "channel named {!r} within {}-second "
-                               "timeout."
-                               "".format(self.name, timeout))
+            raise CaprotoTimeoutError("No servers responded to a search for a "
+                                      "channel named {!r} within {}-second "
+                                      "timeout."
+                                      "".format(self.name, timeout))
 
     @ensure_connected
     def wait_for_connection(self, *, timeout=2):
@@ -1421,16 +1423,17 @@ class PV:
         ----------
         wait : boolean
             If True (default) block until a matching response is
-            received from the server. Raises TimeoutError if that response is
-            not received within the time specified by the `timeout` parameter.
+            received from the server. Raises CaprotoTimeoutError if that
+            response is not received within the time specified by the `timeout`
+            parameter.
         callback : callable or None
             Called with the response as its argument when received.
         timeout : number or None
-            Number of seconds to wait before raising TimeoutError. Default is
+            Number of seconds to wait before raising CaprotoTimeoutError.
+            Default is 2.
         data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
             Request specific data type or a class of data types, matched to the
             channel's native data type. Default is Channel's native data type.
-            2.
         data_count : integer, optional
             Requested number of values. Default is the channel's native data
             count.
@@ -1455,6 +1458,7 @@ class PV:
         deadline = time.monotonic() + timeout if timeout is not None else None
         ioid_info['deadline'] = deadline
         self.circuit_manager.send(command)
+        self.log.debug("%r: %r", self.name, command)
         if not wait:
             return
 
@@ -1468,12 +1472,13 @@ class PV:
                 # in hopes of getting a working circuit until our `timeout` has
                 # been used up.
                 raise DeadCircuitError()
-            raise TimeoutError(
+            raise CaprotoTimeoutError(
                 f"Server at {self.circuit_manager.circuit.address} did "
                 f"not respond to attempt to read channel named "
                 f"{self.name!r} within {timeout}-second timeout."
             )
 
+        self.log.debug("%r: %r", self.name, ioid_info['response'])
         return ioid_info['response']
 
     @ensure_connected
@@ -1492,13 +1497,14 @@ class PV:
             Value(s) to write.
         wait : boolean
             If True (default) block until a matching WriteNotifyResponse is
-            received from the server. Raises TimeoutError if that response is
-            not received within the time specified by the `timeout` parameter.
+            received from the server. Raises CaprotoTimeoutError if that
+            response is not received within the time specified by the `timeout`
+            parameter.
         callback : callable or None
             Called with the WriteNotifyResponse as its argument when received.
         timeout : number or None
-            Number of seconds to wait before raising TimeoutError. Default is
-            2.
+            Number of seconds to wait before raising CaprotoTimeoutError.
+            Default is 2.
         notify : boolean or None
             If None (default), set to True if wait=True or callback is set.
             Can be manually set to True or False. Will raise ValueError if set
@@ -1518,29 +1524,29 @@ class PV:
                                      notify=notify,
                                      data_type=data_type,
                                      data_count=data_count)
-        if not notify:
-            if wait or callback is not None:
-                raise ValueError("Must set notify=True in order to use "
-                                 "`wait` or `callback` because, without a "
-                                 "notification of 'put-completion' from the "
-                                 "server, there is nothing to wait on or to "
-                                 "trigger a callback.")
+        if notify:
+            event = threading.Event()
+            ioid_info = dict(event=event)
+            if callback is not None:
+                ioid_info['callback'] = callback
+
+            self.circuit_manager.ioids[ioid] = ioid_info
+
+            deadline = time.monotonic() + timeout if timeout is not None else None
+            ioid_info['deadline'] = deadline
+            # do not need to lock this, locking happens in circuit command
             self.circuit_manager.send(command)
-            return
+            self.log.debug("%r: %r", self.name, command)
+        else:
+            if wait or callback is not None:
+                raise CaprotoValueError("Must set notify=True in order to use "
+                                        "`wait` or `callback` because, without a "
+                                        "notification of 'put-completion' from the "
+                                        "server, there is nothing to wait on or to "
+                                        "trigger a callback.")
+            self.circuit_manager.send(command)
+            self.log.debug("%r: %r", self.name, command)
 
-        if not notify:
-            return None
-        event = threading.Event()
-        ioid_info = dict(event=event)
-        if callback is not None:
-            ioid_info['callback'] = callback
-
-        self.circuit_manager.ioids[ioid] = ioid_info
-
-        deadline = time.monotonic() + timeout if timeout is not None else None
-        ioid_info['deadline'] = deadline
-        # do not need to lock this, locking happens in circuit command
-        self.circuit_manager.send(command)
         if not wait:
             return
 
@@ -1554,12 +1560,13 @@ class PV:
                 # in hopes of getting a working circuit until our `timeout` has
                 # been used up.
                 raise DeadCircuitError()
-            raise TimeoutError(
+            raise CaprotoTimeoutError(
                 f"Server at {self.circuit_manager.circuit.address} did "
                 f"not respond to attempt to write to channel named "
                 f"{self.name!r} within {timeout}-second timeout. The ioid of "
                 f"the expected response is {ioid}."
             )
+        self.log.debug("%r: %r", self.name, ioid_info['response'])
         return ioid_info['response']
 
     def subscribe(self, data_type=None, data_count=None,
@@ -1775,14 +1782,15 @@ class Subscription(CallbackHandler):
             else:
                 self.pv.circuit_manager.send(command)
 
-    def process(self, *args, **kwargs):
+    def process(self, command):
         # TODO here i think we can decouple PV update rates and callback
         # handling rates, if desirable, to not bog down performance.
         # As implemented below, updates are blocking further messages from
         # the CA servers from processing. (-> ThreadPool, etc.)
 
-        super().process(*args, **kwargs)
-        self.most_recent_response = (args, kwargs)
+        super().process(command)
+        self.log.debug("%r: %r", self.pv.name, command)
+        self.most_recent_response = command
 
     def add_callback(self, func):
         """
@@ -1811,9 +1819,8 @@ class Subscription(CallbackHandler):
                 # Send it the most recent response, unless we are still waiting
                 # for that first response from the server.
                 if self.most_recent_response is not None:
-                    args, kwargs = self.most_recent_response
                     try:
-                        func(*args, **kwargs)
+                        func(self.most_recent_response)
                     except Exception as ex:
                         print(ex)
 

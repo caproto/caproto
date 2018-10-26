@@ -14,7 +14,7 @@ import weakref
 
 import caproto as ca
 from .._dbr import (field_types, ChannelType, native_type, SubscriptionType)
-from .._utils import ErrorResponseReceived, CaprotoError
+from .._utils import ErrorResponseReceived, CaprotoError, CaprotoTimeoutError
 from .repeater import spawn_repeater
 
 
@@ -79,10 +79,10 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
             retry_at = time.monotonic() + retry_timeout
 
         if time.monotonic() - t > timeout:
-            raise TimeoutError(f"Timed out while awaiting a response "
-                               f"from the search for {pv_name!r}. Search "
-                               f"requests were sent to this address list: "
-                               f"{ca.get_address_list()}.")
+            raise CaprotoTimeoutError(f"Timed out while awaiting a response "
+                                      f"from the search for {pv_name!r}. Search "
+                                      f"requests were sent to this address list: "
+                                      f"{ca.get_address_list()}.")
 
     # Initial search attempt
     send_search()
@@ -144,7 +144,8 @@ def make_channel(pv_name, udp_sock, priority, timeout):
                 if time.monotonic() - t > timeout:
                     raise socket.timeout
             except socket.timeout:
-                raise TimeoutError("Timeout while awaiting channel creation.")
+                raise CaprotoTimeoutError("Timeout while awaiting channel "
+                                          "creation.")
             if chan.states[ca.CLIENT] is ca.CONNECTED:
                 log.info('%s connected' % pv_name)
                 break
@@ -176,7 +177,7 @@ def _read(chan, timeout, data_type, notify, force_int_enums):
             commands = []
 
         if time.monotonic() - t > timeout:
-            raise TimeoutError("Timeout while awaiting reading.")
+            raise CaprotoTimeoutError("Timeout while awaiting reading.")
 
         for command in commands:
             if (isinstance(command, (ca.ReadResponse, ca.ReadNotifyResponse)) and
@@ -458,7 +459,7 @@ def _write(chan, data, metadata, timeout, data_type, notify):
                 commands = []
 
             if time.monotonic() - t > timeout:
-                raise TimeoutError("Timeout while awaiting write reply.")
+                raise CaprotoTimeoutError("Timeout while awaiting write reply.")
 
             for command in commands:
                 if (isinstance(command, ca.WriteNotifyResponse) and

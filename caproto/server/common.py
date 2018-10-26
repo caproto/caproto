@@ -7,7 +7,7 @@ import time
 import weakref
 import caproto as ca
 from caproto import (apply_arr_filter, get_environment_variables,
-                     RemoteProtocolError)
+                     RemoteProtocolError, CaprotoKeyError, CaprotoRuntimeError)
 from .._dbr import SubscriptionType
 
 
@@ -638,14 +638,14 @@ class Context:
             try:
                 inst = self.pvdb[rec]
             except KeyError:
-                raise KeyError(f'Neither record nor field exists: '
-                               f'{rec_field}')
+                raise CaprotoKeyError(f'Neither record nor field exists: '
+                                      f'{rec_field}')
 
             try:
                 inst = inst.get_field(field)
             except (AttributeError, KeyError):
-                raise KeyError(f'Neither record nor field exists: '
-                               f'{rec_field}')
+                raise CaprotoKeyError(f'Neither record nor field exists: '
+                                      f'{rec_field}')
 
             # Cache record.FIELD for later usage
             self.pvdb[rec_field] = inst
@@ -868,7 +868,7 @@ class Context:
             else:
                 break
         else:
-            raise RuntimeError('No available ports and/or bind failed') from stashed_ex
+            raise CaprotoRuntimeError('No available ports and/or bind failed') from stashed_ex
         return port, tcp_sockets
 
     async def tcp_handler(self, client, addr):
