@@ -209,10 +209,10 @@ class VirtualCircuit:
             await self._wake_new_command()
 
     async def subscription_queue_loop(self):
-        maybe_coroutine = self.events_on.set()
+        maybe_awaitable = self.events_on.set()
         # The curio backend makes this an awaitable thing.
-        if maybe_coroutine is not None:
-            await maybe_coroutine
+        if maybe_awaitable is not None:
+            await maybe_awaitable
         commands = deque()
         latency_limit = HIGH_LOAD_TIMEOUT
         while True:
@@ -472,7 +472,10 @@ class VirtualCircuit:
                 finally:
                     self.write_event.clear()
 
-            await self.write_event.set()
+            maybe_awaitable = self.write_event.set()
+            # The curio backend makes this an awaitable thing.
+            if maybe_awaitable is not None:
+                await maybe_awaitable
             await self._start_write_task(handle_write)
         elif isinstance(command, ca.EventAddRequest):
             chan, db_entry = get_db_entry()
@@ -520,10 +523,10 @@ class VirtualCircuit:
             self.most_recent_updates.clear()
             if most_recent_updates:
                 await self.send(*most_recent_updates)
-            maybe_coroutine = self.events_on.set()
+            maybe_awaitable = self.events_on.set()
             # The curio backend makes this an awaitable thing.
-            if maybe_coroutine is not None:
-                await maybe_coroutine
+            if maybe_awaitable is not None:
+                await maybe_awaitable
             self.circuit.log.info("Client at %s:%d has turned events on.",
                                   *self.circuit.address)
         elif isinstance(command, ca.EventsOffRequest):
@@ -532,10 +535,7 @@ class VirtualCircuit:
             self.unexpired_updates.clear()
             # ...and tell the Context that any future updates from ChannelData
             # should not be added to this circuit's queue until further notice.
-            maybe_coroutine = self.events_on.clear()
-            # The curio backend makes this an awaitable thing.
-            if maybe_coroutine is not None:
-                await maybe_coroutine
+            self.events_on.clear()
             self.circuit.log.info("Client at %s:%d has turned events off.",
                                   *self.circuit.address)
         elif isinstance(command, ca.ClearChannelRequest):
