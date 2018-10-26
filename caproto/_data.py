@@ -34,7 +34,7 @@ __all__ = ('Forbidden',
 
 SubscriptionUpdate = namedtuple('SubscriptionUpdate',
                                 ('sub_specs', 'metadata', 'values',
-                                 'flags', 'sub_id'))
+                                 'flags', 'sub'))
 
 
 class Forbidden(CaprotoError):
@@ -350,7 +350,7 @@ class ChannelData:
         if alarm is not None:
             alarm.connect(self)
 
-    async def subscribe(self, queue, sub_spec, sub_id):
+    async def subscribe(self, queue, sub_spec, sub):
         self._queues[queue][sub_spec.channel_filter.sync][sub_spec.data_type].add(sub_spec)
         # Always send current reading immediately upon subscription.
         data_type = sub_spec.data_type
@@ -361,7 +361,7 @@ class ChannelData:
             # a future subscription wants the same data type.
             metadata, values = await self._read(data_type)
             self._content[data_type] = metadata, values
-        await queue.put(SubscriptionUpdate((sub_spec,), metadata, values, 0, sub_id))
+        await queue.put(SubscriptionUpdate((sub_spec,), metadata, values, 0, sub))
 
     async def unsubscribe(self, queue, sub_spec):
         self._queues[queue][sub_spec.channel_filter.sync][sub_spec.data_type].discard(sub_spec)

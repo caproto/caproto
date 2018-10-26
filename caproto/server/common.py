@@ -304,7 +304,7 @@ class VirtualCircuit:
                 # EventCancelResponse.
                 all_subscription_ids = set(sub.subscriptionid
                                            for subs in self.subscriptions.values()
-                                               for sub in subs)
+                                           for sub in subs)
                 culled_commands = (command for command in commands
                                    if command.subscriptionid in all_subscription_ids)
                 await self.send(*culled_commands)
@@ -503,7 +503,7 @@ class VirtualCircuit:
             await self.write_event.wait(timeout=WRITE_LOCK_TIMEOUT)
 
             await db_entry.subscribe(self.context.subscription_queue, sub_spec,
-                                     command.subscriptionid)
+                                     sub)
         elif isinstance(command, ca.EventCancelRequest):
             chan, db_entry = get_db_entry()
             removed = await self._cull_subscriptions(
@@ -704,29 +704,21 @@ class Context:
         while True:
             # This queue receives updates that match the db_entry, data_type
             # and mask ("subscription spec") of one or more subscriptions.
-            sub_specs, metadata, values, flags, sub_id = await self.subscription_queue.get()
+            sub_specs, metadata, values, flags, sub = await self.subscription_queue.get()
 
             subs = []
-            if sub_id is None:
+            if sub is None:
                 # Broadcast to all Subscriptions for the relevant
                 # SubscriptionSpec(s).
                 for sub_spec in sub_specs:
                     subs.extend(self.subscriptions[sub_spec])
             else:
-                # A specific sub_id has been specified, which means this update
-                # is due to a *new* Subscription, and should only go to that
-                # specific Subscription. Other Subscriptions have already been
-                # sent this update and should not receive it again. Find which
-                # Subscription that is....
+                # A specific Subscription has been specified, which means this
+                # specific update was prompted by Subscription being new, not
+                # prompted by a new value. The update should only be sent to
+                # that specific Subscription.
+                subs = (sub,)
                 sub_spec, = sub_specs
-                # TODO Store Subscriptions in a parallel data structure to make
-                # this lookup faster. It happens in a couple places.
-                subs = [sub
-                        for sub_spec in sub_specs
-                        for sub in self.subscriptions[sub_spec]
-                        if sub.subscriptionid == sub_id
-                        ]
-                assert len(subs) == 1
             # Pack the data and metadata into an EventAddResponse and send it.
             # We have to make a new response for each channel because each may
             # have a different requested data_count.
