@@ -54,6 +54,7 @@ __all__ = (  # noqa F822
     'RemoteProtocolError',
     'CaprotoTimeoutError',
     'CaprotoKeyError',
+    'CaprotoAttributeError',
     'CaprotoNotImplementedError',
     'CaprotoValueError',
     'CaprotoTypeError',
@@ -154,6 +155,10 @@ class RemoteProtocolError(ProtocolError):
 
 
 class CaprotoTimeoutError(TimeoutError, CaprotoError):
+    ...
+
+
+class CaprotoAttributeError(AttributeError, CaprotoError):
     ...
 
 
@@ -312,7 +317,7 @@ def get_netifaces_addresses():
     Yields (address, broadcast_address)
     '''
     if netifaces is None:
-        raise RuntimeError('netifaces unavailable')
+        raise CaprotoRuntimeError('netifaces unavailable')
 
     for iface in netifaces.interfaces():
         interface = netifaces.ifaddresses(iface)
@@ -402,7 +407,7 @@ def bcast_socket(socket_module=socket):
 def buffer_list_slice(*buffers, offset):
     'Helper function for slicing a list of buffers'
     if offset < 0:
-        raise ValueError('Negative offset')
+        raise CaprotoValueError('Negative offset')
 
     buffers = tuple(memoryview(b).cast('b') for b in buffers)
 
@@ -415,8 +420,8 @@ def buffer_list_slice(*buffers, offset):
 
         start = end
 
-    raise ValueError('Offset beyond end of buffers (total length={} offset={})'
-                     ''.format(end, offset))
+    raise CaprotoValueError('Offset beyond end of buffers '
+                            '(total length={} offset={})'.format(end, offset))
 
 
 def incremental_buffer_list_slice(*buffers):

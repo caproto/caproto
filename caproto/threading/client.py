@@ -33,7 +33,9 @@ import caproto as ca
 from .._constants import (MAX_ID, STALE_SEARCH_EXPIRATION,
                           SEARCH_MAX_DATAGRAM_BYTES)
 from .._utils import (batch_requests, CaprotoError, ThreadsafeCounter,
-                      socket_bytes_available, CaprotoTimeoutError)
+                      socket_bytes_available, CaprotoTimeoutError,
+                      CaprotoTypeError, CaprotoRuntimeError, CaprotoValueError,
+                      CaprotoKeyError)
 
 
 print = partial(print, flush=True)
@@ -183,7 +185,7 @@ class SelectorThread:
 
     def start(self):
         if self._close_event.is_set():
-            raise RuntimeError("Cannot be restarted once stopped.")
+            raise CaprotoRuntimeError("Cannot be restarted once stopped.")
         self.thread = threading.Thread(target=self, daemon=True,
                                        name='selector')
         self.thread.start()
@@ -191,7 +193,7 @@ class SelectorThread:
     def add_socket(self, sock, target_obj):
         with self._socket_map_lock:
             if sock in self.socket_to_id:
-                raise ValueError('Socket already added')
+                raise CaprotoValueError('Socket already added')
 
             sock.setblocking(False)
 
@@ -455,7 +457,7 @@ class SharedBroadcaster:
 
             # Clean up expired result.
             self.search_results.pop(name, None)
-            raise KeyError(f'{name!r}: stale search result')
+            raise CaprotoKeyError(f'{name!r}: stale search result')
 
         return address
 
@@ -1027,8 +1029,8 @@ class VirtualCircuitManager:
                       ca.HostNameRequest(self.context.host_name),
                       ca.ClientNameRequest(self.context.client_name))
         else:
-            raise RuntimeError("Cannot connect. States are {} "
-                               "".format(self.circuit.states))
+            raise CaprotoRuntimeError("Cannot connect. States are {} "
+                                      "".format(self.circuit.states))
         # Old versions of the protocol do not send a VersionResponse at TCP
         # connection time, so set this Event manually rather than waiting for
         # it to be set by receipt of a VersionResponse.
@@ -1524,11 +1526,11 @@ class PV:
                                      data_count=data_count)
         if not notify:
             if wait or callback is not None:
-                raise ValueError("Must set notify=True in order to use "
-                                 "`wait` or `callback` because, without a "
-                                 "notification of 'put-completion' from the "
-                                 "server, there is nothing to wait on or to "
-                                 "trigger a callback.")
+                raise CaprotoValueError("Must set notify=True in order to use "
+                                        "`wait` or `callback` because, without a "
+                                        "notification of 'put-completion' from the "
+                                        "server, there is nothing to wait on or to "
+                                        "trigger a callback.")
             self.circuit_manager.send(command)
             return
 

@@ -25,6 +25,7 @@ from ._commands import (AccessRightsResponse, CreateChFailResponse,
 from ._state import (ChannelState, CircuitState, get_exception)
 from ._utils import (CLIENT, SERVER, NEED_DATA, DISCONNECTED, CaprotoKeyError,
                      CaprotoValueError, CaprotoRuntimeError, CaprotoError,
+                     CaprotoTypeError,
                      parse_channel_filter, parse_record_field,
                      ChannelFilter)
 from ._dbr import (ChannelType, SubscriptionType, field_types, native_type)
@@ -952,8 +953,8 @@ def extract_address(search_response):
     Extract the (host, port) from a SearchResponse.
     """
     if type(search_response) is not SearchResponse:
-        raise TypeError("expected SearchResponse, not {!r}"
-                        "".format(type(search_response).__name__))
+        raise CaprotoTypeError("expected SearchResponse, not {!r}"
+                               "".format(type(search_response).__name__))
     if search_response.header.parameter1 == 0xffffffff:
         # The CA spec tells us that this sentinel value means we
         # should fall back to using the address of the sender of
