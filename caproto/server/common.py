@@ -828,7 +828,7 @@ class Context:
                 # this circuit.
                 try:
                     await circuit.subscription_queue.put(weakref.ref(command))
-                except self.QueueFull:
+                except circuit.QueueFull:
                     # We have hit the overall max for subscription backlog.
                     circuit.log.warning(
                         "Critically high EventAddResponse load. Dropping all "
