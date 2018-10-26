@@ -314,7 +314,7 @@ class PV:
             try:
                 if connected:
                     self._connection_established(caproto_pv)
-            except Exception as ex:
+            except Exception:
                 raise
             finally:
                 self._connect_event.set()
