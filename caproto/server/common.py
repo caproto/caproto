@@ -129,6 +129,12 @@ class VirtualCircuit:
               caproto.ErrorResponse
         2. Update Channel state if applicable.
         """
+        # The write_event will be cleared when a write is scheduled and set
+        # when one completes.
+        maybe_awaitable = self.write_event.set()
+        # The curio backend makes this an awaitable thing.
+        if maybe_awaitable is not None:
+            await maybe_awaitable
         while True:
             try:
                 command = await self.command_queue.get()
@@ -470,12 +476,12 @@ class VirtualCircuit:
                         )
                         await self.send(response_command)
                 finally:
-                    self.write_event.clear()
+                    maybe_awaitable = self.write_event.set()
+                    # The curio backend makes this an awaitable thing.
+                    if maybe_awaitable is not None:
+                        await maybe_awaitable
 
-            maybe_awaitable = self.write_event.set()
-            # The curio backend makes this an awaitable thing.
-            if maybe_awaitable is not None:
-                await maybe_awaitable
+            self.write_event.clear()
             await self._start_write_task(handle_write)
         elif isinstance(command, ca.EventAddRequest):
             chan, db_entry = get_db_entry()
@@ -500,7 +506,8 @@ class VirtualCircuit:
             # allow a bit of time for that to (maybe) finish. Some requests
             # may take a long time, so give up rather quickly to avoid
             # introducing too much latency.
-            await self.write_event.wait(timeout=WRITE_LOCK_TIMEOUT)
+            if not self.write_event.is_set():
+                await self.write_event.wait(timeout=WRITE_LOCK_TIMEOUT)
 
             await db_entry.subscribe(self.context.subscription_queue, sub_spec,
                                      sub)
