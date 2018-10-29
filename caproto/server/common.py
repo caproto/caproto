@@ -724,7 +724,7 @@ class Context:
                 # specific update was prompted by Subscription being new, not
                 # prompted by a new value. The update should only be sent to
                 # that specific Subscription.
-                subs = (sub,)
+                subs = [sub]
                 sub_spec, = sub_specs
             # Pack the data and metadata into an EventAddResponse and send it.
             # We have to make a new response for each channel because each may
