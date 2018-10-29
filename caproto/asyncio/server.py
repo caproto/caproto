@@ -13,6 +13,16 @@ class ServerExit(Exception):
     ...
 
 
+class Event(asyncio.Event):
+    "Implement the ``timeout`` keyword to wait(), as in threading.Event."
+    async def wait(self, timeout=None):
+        try:
+            await asyncio.wait_for(super().wait(), timeout)
+        except asyncio.TimeoutError:  # somehow not just a TimeoutError...
+            pass
+        return self.is_set()
+
+
 def _get_asyncio_queue(loop):
     class AsyncioQueue(asyncio.Queue):
         '''
@@ -79,6 +89,7 @@ class VirtualCircuit(_VirtualCircuit):
         self.events_on = asyncio.Event(loop=self.loop)
         self.subscription_queue = asyncio.Queue(
             ca.MAX_TOTAL_SUBSCRIPTION_BACKLOG, loop=self.loop)
+        self.write_event = Event(loop=self.loop)
         self._cq_task = None
         self._sq_task = None
         self._write_tasks = ()

@@ -1,6 +1,5 @@
 from collections import defaultdict, deque, namedtuple, ChainMap, Iterable
 import copy
-import itertools
 import logging
 import sys
 import time
@@ -18,9 +17,15 @@ from .._dbr import SubscriptionType
 # efficiency.
 HIGH_LOAD_TIMEOUT = 0.01
 # When a batch of subscription updates has this many bytes or more, send it.
-# Decrease this number to improve latency under load; increase it to improve
-# efficiency.
 SUB_BATCH_THRESH = 2**16
+# Tune this to change the max time between packets. If it's too high, the
+# client will experience long gaps when the server is under load. If it's too
+# low, the *overall* latency will be higher because the server will have to
+# waste time bundling many small packets.
+MAX_LATENCY = 1
+# If a Read[Notify]Request or EventAddRequest is received, wait for up to this
+# long for the currently-processing Write[Notify]Request to finish.
+WRITE_LOCK_TIMEOUT = 0.001
 
 
 class DisconnectedCircuit(Exception):
@@ -38,40 +43,6 @@ SubscriptionSpec = namedtuple('SubscriptionSpec', ('db_entry', 'data_type',
 host_endian = ('>' if sys.byteorder == 'big' else '<')
 
 
-class OrderedBoundedSet:
-    # This just implements the part of the set API that we need.
-    def __init__(self, items=None, *, maxlen):
-        if items is None:
-            items = ()
-        self._data = dict.fromkeys(items)
-        self.maxlen = maxlen
-
-    def __len__(self):
-        return len(self._data)
-
-    def add(self, item):
-        self._data[item] = None
-        if len(self) > self.maxlen:
-            self.pop()
-
-    def update(self, items):
-        self._data.update(dict.fromkeys(items))
-        overage = len(self) - self.maxlen
-        for item in itertools.islice(iter(self._data), overage):
-            self._data.pop(item)
-
-    def pop(self):
-        item = next(iter(self._data))
-        self._data.pop(item)
-        return item
-
-    def discard(self, item):
-        try:
-            self._data.pop(item)
-        except KeyError:
-            pass
-
-
 class VirtualCircuit:
     def __init__(self, circuit, client, context):
         self.connected = True
@@ -81,9 +52,11 @@ class VirtualCircuit:
         self.context = context
         self.client_hostname = None
         self.client_username = None
+        # The structure of self.subscriptions is:
+        # {SubscriptionSpec: deque([Subscription, Subscription, ...]), ...}
         self.subscriptions = defaultdict(deque)
         self.unexpired_updates = defaultdict(
-            lambda: OrderedBoundedSet(maxlen=ca.MAX_SUBSCRIPTION_BACKLOG))
+            lambda: deque(maxlen=ca.MAX_SUBSCRIPTION_BACKLOG))
         self.most_recent_updates = {}
         # Subclasses are expected to define:
         # self.QueueFull = ...
@@ -92,6 +65,7 @@ class VirtualCircuit:
         # self.subscription_queue = ...
         # self.get_from_sub_queue_with_timeout = ...
         # self.events_on = ...
+        # self.write_event = ...
 
     async def _on_disconnect(self):
         """Executed when disconnection detected"""
@@ -135,13 +109,13 @@ class VirtualCircuit:
                 # This client is fast and we are not keeping up. Better to kill
                 # the circuit (and let the client try again) than to let the
                 # whole server be OOM-ed.
-                await self._on_disconnect()
-                raise DisconnectedCircuit()
                 self.log.warning(f"Circuit {self!r} has a large backlog of "
                                  f"received commands, evidently cannot keep "
                                  f"with a fast client. Disconnecting circuit "
                                  f"to avoid letting consume all available "
                                  f"memory.")
+                await self._on_disconnect()
+                raise DisconnectedCircuit()
         if not bytes_received:
             await self._on_disconnect()
             raise DisconnectedCircuit()
@@ -155,6 +129,12 @@ class VirtualCircuit:
               caproto.ErrorResponse
         2. Update Channel state if applicable.
         """
+        # The write_event will be cleared when a write is scheduled and set
+        # when one completes.
+        maybe_awaitable = self.write_event.set()
+        # The curio backend makes this an awaitable thing.
+        if maybe_awaitable is not None:
+            await maybe_awaitable
         while True:
             try:
                 command = await self.command_queue.get()
@@ -235,15 +215,17 @@ class VirtualCircuit:
             await self._wake_new_command()
 
     async def subscription_queue_loop(self):
-        maybe_coroutine = self.events_on.set()
+        maybe_awaitable = self.events_on.set()
         # The curio backend makes this an awaitable thing.
-        if maybe_coroutine is not None:
-            await maybe_coroutine
+        if maybe_awaitable is not None:
+            await maybe_awaitable
         commands = deque()
-        commands_bytes = 0
-        num_expired = 0
+        latency_limit = HIGH_LOAD_TIMEOUT
         while True:
             send_now = False
+            commands.clear()
+            commands_bytes = 0
+            num_expired = 0
             try:
                 # We are covering two regimes of operation here. In the "slow
                 # producer" regime, the server is only occasionally sending
@@ -267,6 +249,11 @@ class VirtualCircuit:
                         # Block here until we have something to send...
                         ref = await self.subscription_queue.get()
 
+                        # And, since we are in "slow producer" mode, reset the
+                        # limit in preparation for the next time we enter "fast
+                        # producer" mode.
+                        latency_limit = HIGH_LOAD_TIMEOUT
+
                     command = ref()
                     if command is None:
                         # Quota for this subscription has been exceeded.  This
@@ -285,7 +272,6 @@ class VirtualCircuit:
                         # its baseline memory usage is high.
                         num_expired += 1
                         continue
-                    self.unexpired_updates[command.subscriptionid].discard(command)
                     # Accumulate commands into a batch.
                     commands.append(command)
                     commands_bytes += len(command)
@@ -293,14 +279,17 @@ class VirtualCircuit:
                     if len(commands) == 1:
                         # Set a dealine by which will must send this oldest
                         # command in the batch, effecitvely a limit of latency.
-                        deadline = now + HIGH_LOAD_TIMEOUT
+                        deadline = now + latency_limit
                     elif deadline < now:
                         send_now = True
+                    if commands_bytes > SUB_BATCH_THRESH:
+                        send_now = True
                     # Send the batch if we are in low-latency / slow producer
-                    # mode (send_now=True) or the batch has reached max size.
-                    # But be sure _not_ to send it if it is empty (because all
-                    # the would-be contents were expired.)
-                    if commands and (send_now or commands_bytes > SUB_BATCH_THRESH):
+                    # mode, or if the high-latency deadline has passed, or if
+                    # the batch has reached max size.  But be sure _not_ to
+                    # send it if it is empty (because all the would-be contents
+                    # were expired.)
+                    if commands and send_now:
                         break
             except self.TaskCancelled:
                 break
@@ -312,16 +301,30 @@ class VirtualCircuit:
                     self.log.info(
                         "High load. Batched %d commands (%dB) with %.4fs latency.",
                         len_commands, commands_bytes,
-                        now - deadline + HIGH_LOAD_TIMEOUT)
-                await self.send(*commands)
+                        now - deadline + latency_limit)
+
+                # Ensure at the last possible moment that we don't send
+                # responses for Subscriptions that have been canceled at some
+                # time after the response was queued. The important thing is
+                # that no EventAddResponse be sent after the corresponding
+                # EventCancelResponse.
+                all_subscription_ids = set(sub.subscriptionid
+                                           for subs in self.subscriptions.values()
+                                           for sub in subs)
+                culled_commands = (command for command in commands
+                                   if command.subscriptionid in all_subscription_ids)
+                await self.send(*culled_commands)
+
+                # When we are stuck in the "fast producer" regime,
+                # stuggling to push updates out, send larger and larger
+                # pakcets by increasing the allowed latency between each
+                # send until we either catch up or reach MAX_LATENCY.
+                latency_limit = min(MAX_LATENCY, latency_limit * 2)
             except DisconnectedCircuit:
                 await self._on_disconnect()
                 self.circuit.disconnect()
                 await self.context.circuit_disconnected(self)
                 break
-            commands.clear()
-            commands_bytes = 0
-            num_expired = 0
 
     async def _cull_subscriptions(self, db_entry, func):
         # Iterate through each Subscription, passing each one to func(sub).
@@ -403,6 +406,12 @@ class VirtualCircuit:
             except ValueError:
                 raise ca.RemoteProtocolError('Invalid data type')
 
+            # If we are in the middle of processing a Write[Notify]Request,
+            # allow a bit of time for that to (maybe) finish. Some requests
+            # may take a long time, so give up rather quickly to avoid
+            # introducing too much latency.
+            await self.write_event.wait(timeout=WRITE_LOCK_TIMEOUT)
+
             metadata, data = await db_entry.auth_read(
                 self.client_hostname, self.client_username,
                 data_type, user_address=self.circuit.address)
@@ -447,26 +456,32 @@ class VirtualCircuit:
                     cid = self.circuit.channels_sid[command.sid].cid
                     response_command = ca.ErrorResponse(
                         command, cid,
-                        status=ca.CAStatus.ECA_INTERNAL,
+                        status=ca.CAStatus.ECA_PUTFAIL,
                         error_message=('Python exception: {} {}'
                                        ''.format(type(ex).__name__, ex))
                     )
-                else:
-                    if write_status is None:
-                        # errors can be passed back by exceptions, and
-                        # returning none for write_status can just be
-                        # considered laziness
-                        write_status = True
-
-                    response_command = chan.write(
-                        ioid=command.ioid,
-                        status=write_status,
-                        data_count=db_entry.length
-                    )
-
-                if client_waiting:
                     await self.send(response_command)
+                else:
+                    if client_waiting:
+                        if write_status is None:
+                            # errors can be passed back by exceptions, and
+                            # returning none for write_status can just be
+                            # considered laziness
+                            write_status = True
 
+                        response_command = chan.write(
+                            ioid=command.ioid,
+                            status=write_status,
+                            data_count=db_entry.length
+                        )
+                        await self.send(response_command)
+                finally:
+                    maybe_awaitable = self.write_event.set()
+                    # The curio backend makes this an awaitable thing.
+                    if maybe_awaitable is not None:
+                        await maybe_awaitable
+
+            self.write_event.clear()
             await self._start_write_task(handle_write)
         elif isinstance(command, ca.EventAddRequest):
             chan, db_entry = get_db_entry()
@@ -486,7 +501,16 @@ class VirtualCircuit:
                 channel_filter=chan.channel_filter)
             self.subscriptions[sub_spec].append(sub)
             self.context.subscriptions[sub_spec].append(sub)
-            await db_entry.subscribe(self.context.subscription_queue, sub_spec)
+
+            # If we are in the middle of processing a Write[Notify]Request,
+            # allow a bit of time for that to (maybe) finish. Some requests
+            # may take a long time, so give up rather quickly to avoid
+            # introducing too much latency.
+            if not self.write_event.is_set():
+                await self.write_event.wait(timeout=WRITE_LOCK_TIMEOUT)
+
+            await db_entry.subscribe(self.context.subscription_queue, sub_spec,
+                                     sub)
         elif isinstance(command, ca.EventCancelRequest):
             chan, db_entry = get_db_entry()
             removed = await self._cull_subscriptions(
@@ -506,20 +530,21 @@ class VirtualCircuit:
             self.most_recent_updates.clear()
             if most_recent_updates:
                 await self.send(*most_recent_updates)
-            maybe_coroutine = self.events_on.set()
+            maybe_awaitable = self.events_on.set()
             # The curio backend makes this an awaitable thing.
-            if maybe_coroutine is not None:
-                await maybe_coroutine
+            if maybe_awaitable is not None:
+                await maybe_awaitable
+            self.circuit.log.info("Client at %s:%d has turned events on.",
+                                  *self.circuit.address)
         elif isinstance(command, ca.EventsOffRequest):
             # The client has signaled that it does not think it will be able to
             # catch up to the backlog. Clear all updates queued to be sent...
             self.unexpired_updates.clear()
             # ...and tell the Context that any future updates from ChannelData
             # should not be added to this circuit's queue until further notice.
-            maybe_coroutine = self.events_on.clear()
-            # The curio backend makes this an awaitable thing.
-            if maybe_coroutine is not None:
-                await maybe_coroutine
+            self.events_on.clear()
+            self.circuit.log.info("Client at %s:%d has turned events off.",
+                                  *self.circuit.address)
         elif isinstance(command, ca.ClearChannelRequest):
             chan, db_entry = get_db_entry()
             await self._cull_subscriptions(
@@ -686,11 +711,21 @@ class Context:
         while True:
             # This queue receives updates that match the db_entry, data_type
             # and mask ("subscription spec") of one or more subscriptions.
-            sub_specs, metadata, values, flags = await self.subscription_queue.get()
+            sub_specs, metadata, values, flags, sub = await self.subscription_queue.get()
 
             subs = []
-            for sub_spec in sub_specs:
-                subs.extend(self.subscriptions[sub_spec])
+            if sub is None:
+                # Broadcast to all Subscriptions for the relevant
+                # SubscriptionSpec(s).
+                for sub_spec in sub_specs:
+                    subs.extend(self.subscriptions[sub_spec])
+            else:
+                # A specific Subscription has been specified, which means this
+                # specific update was prompted by Subscription being new, not
+                # prompted by a new value. The update should only be sent to
+                # that specific Subscription.
+                subs = [sub]
+                sub_spec, = sub_specs
             # Pack the data and metadata into an EventAddResponse and send it.
             # We have to make a new response for each channel because each may
             # have a different requested data_count.
@@ -786,13 +821,13 @@ class Context:
 
                 # This is an OrderedBoundedSet, a set with a maxlen, containing
                 # only commands for this particular subscription.
-                circuit.unexpired_updates[sub.subscriptionid].add(command)
+                circuit.unexpired_updates[sub.subscriptionid].append(command)
 
                 # This is a queue with the commands from _all_ subscriptions on
                 # this circuit.
                 try:
                     await circuit.subscription_queue.put(weakref.ref(command))
-                except self.QueueFull:
+                except circuit.QueueFull:
                     # We have hit the overall max for subscription backlog.
                     circuit.log.warning(
                         "Critically high EventAddResponse load. Dropping all "
@@ -876,8 +911,7 @@ class Context:
         cavc = ca.VirtualCircuit(ca.SERVER, addr, None)
         circuit = self.CircuitClass(cavc, client, self)
         self.circuits.add(circuit)
-        self.log.info('Connected to new client at %s:%d.\n'
-                      'Circuits currently connected: %d', *addr,
+        self.log.info('Connected to new client at %s:%d (total: %d).', *addr,
                       len(self.circuits))
 
         await circuit.run()
@@ -892,8 +926,7 @@ class Context:
         except KeyboardInterrupt as ex:
             self.log.debug('TCP handler received KeyboardInterrupt')
             raise self.ServerExit() from ex
-        self.log.info('Disconnected from client at %s:%d.\n'
-                      'Circuits currently connected: %d', *addr,
+        self.log.info('Disconnected from client at %s:%d (total: %d).', *addr,
                       len(self.circuits))
 
     def stop(self):

@@ -15,6 +15,18 @@ class ServerExit(curio.KernelExit):
     ...
 
 
+class Event(curio.Event):
+    async def wait(self, timeout=None):
+        if timeout is not None:
+            async with curio.ignore_after(timeout):
+                await super().wait()
+                return True
+            return False
+        else:
+            await super().wait()
+            return True
+
+
 class UniversalQueue(curio.UniversalQueue):
     def put(self, value):
         super().put(value)
@@ -60,6 +72,7 @@ class VirtualCircuit(_VirtualCircuit):
         self.events_on = curio.Event()
         self.subscription_queue = QueueWithFullError(
             ca.MAX_TOTAL_SUBSCRIPTION_BACKLOG)
+        self.write_event = Event()
 
     async def run(self):
         await self.pending_tasks.spawn(self.command_queue_loop())
