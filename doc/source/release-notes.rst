@@ -19,7 +19,7 @@ Bug Fixes
 * Reduce the maximum size of a datagram of search requests to match the typical
   Maximum Transmission Unit seen in the wild.
 * Fix a bug in the pyepics-compatibility layer that caused the connection
-  callbacks never to be called.
+  callbacks never to be called when underlying ``caproto.threading.client.PV``s were reused.
 * Fix a typo in the PV names in the ``spoof_beamline`` IOC.
 * Never send an ``EventAddResponse`` after a matching ``EventCancelResponse``
   has been sent.
@@ -27,8 +27,8 @@ Bug Fixes
 * If a circuit has an oversized backlog of received commands to process, log a
   WARNING before disconnecting.
 
-Server Perforance Tuning
-------------------------
+Server Performance Tuning
+-------------------------
 
 * Increase the max backlog of subscription updates queued up to send (both
   updates per specific Subscription and total updates per circuit) by a factor
@@ -43,11 +43,10 @@ Server Perforance Tuning
   in less than 0.001 seconds, the read will reflect the new value. This
   behavior is in the spirit of, but distinct from, EPICS' "synchronous writes."
   EPICS allows a device to block while writing if it promises to finish quickly
-  (< 100 microseconds). We take a different approach, making all writes
+  (< 0.1 miliseconds). We take a different approach, making all writes
   asynchronous. This ensures that an accidentally-slow write cannot lock up the
-  server. It adds latency to some reads, up to a hard maximum of 1000
-  microseconds, giving the effect of synchronous write whenever the write
-  finishes fast.
+  server. It adds latency to some reads, up to a hard maximum of 1 milisecond,
+  giving the effect of synchronous write whenever the write finishes fast.
 
 The release also includes one small new feature: in the threading client,
 DEBUG-level logging of channels/PVs ``caproto.ch`` now logs (non-batch)
