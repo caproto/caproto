@@ -336,6 +336,8 @@ the most recent update and then any future updates.
    ...
    x.circuit_manager.events_on()
 
+.. _threading_loggers:
+
 Loggers for Debugging
 ---------------------
 
@@ -367,6 +369,14 @@ or, equivalently:
 .. code-block:: python
 
     x.context.log.setLevel('DEBUG')
+
+To log (non-batch) read/write requests and read/write/event responses for *all*
+PVs, access the channel logger by name like so:
+
+.. code-block:: python
+
+   import logging
+   logging.getLogger('caproto.ch').setLevel('DEBUG')
 
 Finally, to turn on *maximal* debugging, use:
 

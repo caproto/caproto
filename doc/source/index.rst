@@ -160,6 +160,7 @@ learning exercises.
 
    basics
    api
+   loggers
 
 .. toctree::
    :maxdepth: 2
