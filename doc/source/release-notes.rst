@@ -19,7 +19,7 @@ Bug Fixes
 * Reduce the maximum size of a datagram of search requests to match the typical
   Maximum Transmission Unit seen in the wild.
 * Fix a bug in the pyepics-compatibility layer that caused the connection
-  callbacks never to be called when underlying ``caproto.threading.client.PV``s were reused.
+  callbacks never to be called when underlying ``caproto.threading.client.PV``'s were reused.
 * Fix a typo in the PV names in the ``spoof_beamline`` IOC.
 * Never send an ``EventAddResponse`` after a matching ``EventCancelResponse``
   has been sent.
