@@ -2,6 +2,58 @@
 Release History
 ***************
 
+v0.2.1 (2018-10-29)
+===================
+
+This release tunes server performance under high load and fixes several subtle
+bugs in the server identified via
+`acctst <https://epics.anl.gov/base/R3-16/2-docs/CAref.html#acctst>`_,
+the server acceptance test that ships with ``epics-base``.
+
+Bug Fixes
+---------
+
+* When a new Subscription is added, send the most recent value immediately but
+  only to the *new* Subscription. Previous releases sent redundant messages
+  to *all* Subscriptions that had similar parameters.
+* Reduce the maximum size of a datagram of search requests to match the typical
+  Maximum Transmission Unit seen in the wild.
+* Fix a bug in the pyepics-compatibility layer that caused the connection
+  callbacks never to be called.
+* Fix a typo in the PV names in the ``spoof_beamline`` IOC.
+* Never send an ``EventAddResponse`` after a matching ``EventCancelResponse``
+  has been sent.
+* Always send a response to a failed write, and include the correct error code.
+* If a circuit has an oversized backlog of received commands to process, log a
+  WARNING before disconnecting.
+
+Server Perforance Tuning
+------------------------
+
+* Increase the max backlog of subscription updates queued up to send (both
+  updates per specific Subscription and total updates per circuit) by a factor
+  of 10. Likewise for the max backlog of received commands queued up to
+  process.
+* When under sustained high load of subscription updates to send, iteratively
+  double the latency between packets up to at most 1 second to achieve higher
+  overall throughput (more commands per packet, less overhead).
+* When a ``Read[Notify]Request`` arrives on the heels of a
+  ``Write[Notify]Request``, wait for up to 0.001 seconds for the write to
+  process before reading the current value. If the write happens to complete
+  in less than 0.001 seconds, the read will reflect the new value. This
+  behavior is in the spirit of, but distinct from, EPICS' "synchronous writes."
+  EPICS allows a device to block while writing if it promises to finish quickly
+  (< 100 microseconds). We take a different approach, making all writes
+  asynchronous. This ensures that an accidentally-slow write cannot lock up the
+  server. It adds latency to some reads, up to a hard maximum of 1000
+  microseconds, giving the effect of synchronous write whenever the write
+  finishes fast.
+
+The release also includes one small new feature: in the threading client,
+DEBUG-level logging of channels/PVs ``caproto.ch`` now logs (non-batch)
+read/write requests and read/write/event responses. Related --- there is
+expanded documentation on :doc:`loggers`.
+
 v0.2.0 (2018-10-17)
 ===================
 
@@ -55,6 +107,8 @@ Breaking Changes
 Bug Fixes
 ---------
 
+* A critical bug CHAR-type payload serialization which made caproto clients
+  unusable with CHAR-type channels has been fixed.
 * The asyncio server now executes its cleanup code when interrupted with SIGINT
   (Ctrl+C).
 * All three servers were relying on the operating system to clean up their
