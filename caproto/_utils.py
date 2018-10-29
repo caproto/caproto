@@ -60,6 +60,7 @@ __all__ = (  # noqa F822
     'CaprotoTypeError',
     'CaprotoConversionError',
     'CaprotoRuntimeError',
+    'CaprotoNetworkError',
     'ErrorResponseReceived',
     'SendAllRetry',
     'RecordModifiers',
@@ -191,6 +192,10 @@ class CaprotoTypeError(TypeError, CaprotoError):
 
 
 class CaprotoRuntimeError(RuntimeError, CaprotoError):
+    ...
+
+
+class CaprotoNetworkError(OSError, CaprotoError):
     ...
 
 

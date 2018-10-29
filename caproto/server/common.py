@@ -6,7 +6,8 @@ import time
 import weakref
 import caproto as ca
 from caproto import (apply_arr_filter, get_environment_variables,
-                     RemoteProtocolError, CaprotoKeyError, CaprotoRuntimeError)
+                     RemoteProtocolError, CaprotoKeyError, CaprotoRuntimeError,
+                     CaprotoNetworkError)
 from .._dbr import SubscriptionType
 
 
@@ -705,7 +706,10 @@ class Context:
                 bytes_to_send = self.broadcaster.send(*search_replies)
 
             for udp_sock in self.udp_socks.values():
-                await udp_sock.sendto(bytes_to_send, addr)
+                try:
+                    await udp_sock.sendto(bytes_to_send, addr)
+                except OSError as exc:
+                    raise CaprotoNetworkError(f"Failed to send to {addr}") from exc
 
     async def subscription_queue_loop(self):
         while True:

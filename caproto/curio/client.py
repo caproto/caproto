@@ -249,10 +249,18 @@ class SharedBroadcaster:
         for host in ca.get_address_list():
             if ':' in host:
                 host, _, specified_port = host.partition(':')
-                await self.udp_sock.sendto(bytes_to_send,
-                                           (host, int(specified_port)))
+                try:
+                    await self.udp_sock.sendto(bytes_to_send,
+                                               (host, int(specified_port)))
+                except OSError as exc:
+                    raise ca.CaprotoNetworkError(
+                        f"Failed to send to {(host, specified_port)}") from exc
             else:
-                await self.udp_sock.sendto(bytes_to_send, (host, port))
+                try:
+                    await self.udp_sock.sendto(bytes_to_send, (host, port))
+                except OSError as exc:
+                    raise ca.CaprotoNetworkError(
+                        f"Failed to send to {(host, port)}") from exc
 
     async def register(self):
         "Register this client with the CA Repeater."
