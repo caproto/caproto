@@ -143,7 +143,10 @@ class ContextDisconnectedError(ThreadingClientException):
 AUTOMONITOR_MAXLENGTH = 65536
 TIMEOUT = 2
 EVENT_ADD_BATCH_MAX_BYTES = 2**16
-RETRY_SEARCHES_PERIOD = 1
+MIN_RETRY_SEARCHES_INTERVAL = 0.03
+MAX_RETRY_SEARCHES_INTERVAL = 5
+SEARCH_RETIREMENT_AGE = 8 * 60
+RETRY_RETIRED_SEARCHES_INTERVAL = 60
 RESTART_SUBS_PERIOD = 0.1
 STR_ENC = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
 
@@ -314,7 +317,7 @@ class SharedBroadcaster:
 
         self._id_counter = itertools.count(0)
         self.search_results = {}  # map name to (time, address)
-        self.unanswered_searches = {}  # map search id (cid) to (name, queue)
+        self.unanswered_searches = {}  # map search id (cid) to (name, queue, retirement_deadline)
         self.server_protocol_versions = {}  # map address to protocol version
 
         self.listeners = weakref.WeakSet()
@@ -501,11 +504,13 @@ class SharedBroadcaster:
             # Generate search_ids and stash them on Context state so they can
             # be used to match SearchResponses with SearchRequests.
             search_ids = []
+            # Search requests that are past their retirement deadline with no
+            # results will be searched for less frequently.
+            retirement_deadline = time.monotonic() + SEARCH_RETIREMENT_AGE
             for name in needs_search:
                 search_id = new_id()
                 search_ids.append(search_id)
-                # make this a list because we are going to mutate it later
-                unanswered_searches[search_id] = [name, results_queue, 0]
+                unanswered_searches[search_id] = (name, results_queue, retirement_deadline)
         self._search_now.set()
 
     def received(self, bytes_recv, address):
@@ -595,10 +600,23 @@ class SharedBroadcaster:
         """
         Periodically (re-)send a SearchRequest for all unanswered searches.
 
-        When the self._search_now Event is set, stop waiting and re-issue
-        SearchRequests immediately.
         """
+        # Each time new searches are added, the self._search_now Event is set,
+        # and we reissue *all* unanswered searches.
+        #
+        # We then frequently retry the unanswered searches that are younger
+        # than SEARCH_RETIREMENT_AGE, backing off from an interval of
+        # MIN_RETRY_SEARCHES_INTERVAL to MAX_RETRY_SEARCHES_INTERVAL. The
+        # interval is reset to MIN_RETRY_SEARCHES_INTERVAL each time new
+        # searches are added.
+        #
+        # For the searches older than SEARCH_RETIREMENT_AGE, we adopt a slower
+        # period to minimize network traffic. We only resend every
+        # RETRY_RETIRED_SEARCHES_INTERVAL or, again, whenever new searches
+        # are added.
         self.log.debug('Broadcaster search-retry thread has started.')
+        time_to_check_on_retirees = time.monotonic() + RETRY_RETIRED_SEARCHES_INTERVAL
+        interval = MIN_RETRY_SEARCHES_INTERVAL
         while not self._close_event.is_set():
             try:
                 self._searching_enabled.wait(0.5)
@@ -613,12 +631,17 @@ class SharedBroadcaster:
                 for search_id, it in items:
                     yield ca.SearchRequest(it[0], search_id,
                                            ca.DEFAULT_PROTOCOL_VERSION)
-                    it[-1] = t
 
             with self._search_lock:
-                items = list((search_id, it)
-                             for search_id, it in self.unanswered_searches.items()
-                             if (t - it[-1]) > RETRY_SEARCHES_PERIOD / 2)
+                if t >= time_to_check_on_retirees:
+                    items = list(self.unanswered_searches.items())
+                    time_to_check_on_retirees += RETRY_RETIRED_SEARCHES_INTERVAL
+                else:
+                    # Skip over searches that haven't gotten any results in
+                    # SEARCH_RETIREMENT_AGE.
+                    items = list((search_id, it)
+                                 for search_id, it in self.unanswered_searches.items()
+                                 if (it[-1] > t))
             requests = _construct_search_requests(items)
 
             if not self._searching_enabled.is_set():
@@ -634,8 +657,14 @@ class SharedBroadcaster:
                           version_req,
                           *batch)
 
-            wait_time = max(0, RETRY_SEARCHES_PERIOD - (time.monotonic() - t))
-            self._search_now.wait(wait_time)
+            wait_time = max(0, interval - (time.monotonic() - t))
+            # Double the interval for the next loop.
+            interval = min(2 * interval, MAX_RETRY_SEARCHES_INTERVAL)
+            if self._search_now.wait(wait_time):
+                # New searches have been requested. Reset the interval between
+                # subseqent searches and force a check on the "retirees".
+                time_to_check_on_retirees = t
+                interval = MIN_RETRY_SEARCHES_INTERVAL
             self._search_now.clear()
 
         self.log.debug('Broadcaster search-retry thread has exited.')
