@@ -530,6 +530,16 @@ class SharedBroadcaster:
                 if item[0] in names:
                     del self.unanswered_searches[search_id]
 
+    def search_now(self):
+        """
+        Force the Broadcaster to reissue all unanswered search requests now.
+
+        Left to its own devices, the Broadcaster will do this at regular
+        intervals automatically. This method is intended primarily for
+        debugging and should not be needed in normal use.
+        """
+        self._search_now.set()
+
     def received(self, bytes_recv, address):
         "Receive and process and next command broadcasted over UDP."
         if bytes_recv:
