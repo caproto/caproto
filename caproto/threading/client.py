@@ -513,6 +513,23 @@ class SharedBroadcaster:
                 unanswered_searches[search_id] = (name, results_queue, retirement_deadline)
         self._search_now.set()
 
+    def cancel(self, *names):
+        """
+        Cancel searches for these names.
+
+        Parameters
+        ----------
+        *names : strings
+            any number of PV names
+
+        Any PV instances that were awaiting these results will be stuck until
+        :meth:`get_pvs` is called again.
+        """
+        with self._search_lock:
+            for search_id, item in list(self.unanswered_searches.items()):
+                if item[0] in names:
+                    del self.unanswered_searches[search_id]
+
     def received(self, bytes_recv, address):
         "Receive and process and next command broadcasted over UDP."
         if bytes_recv:
