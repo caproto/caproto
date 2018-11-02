@@ -594,12 +594,17 @@ class SharedBroadcaster:
                     address = (command.address, command.server_port)
                     if address not in self.last_beacon:
                         # We made a new friend!
+                        self.log.info("Watching Beacons from %s:%d",
+                                      *address)
                         self._new_server_found()
                     else:
                         interval = now - self.last_beacon[address]
                         if interval < self.last_beacon_interval.get(address, 0) / 4:
                             # Beacons are arriving *faster*? The server at this
                             # address may have restarted.
+                            self.log.info(
+                                "Beacon anomaly: %s:%d may have restarted.",
+                                *address)
                             self._new_server_found()
                         self.last_beacon_interval[address] = interval
                     self.last_beacon[address] = now
@@ -676,10 +681,10 @@ class SharedBroadcaster:
             if not responsive:
                 self.log.debug("Broadcaster found %s unresponsive.", circuit_manager)
                 circuit_manager.log.warning(
-                    "Server at %r is unresponsive. Disconnecting "
+                    "Server at %s:%d is unresponsive. Disconnecting "
                     "circuit manager %r. PVs will automatically begin "
                     "attempting to reconnect to a responsive server.",
-                    address, circuit_manager)
+                    *address, circuit_manager)
                 circuit_manager.disconnect()
                 self.last_beacon.pop(address)
                 self.last_beacon_interval.pop(address, None)
@@ -689,22 +694,26 @@ class SharedBroadcaster:
 
         while not self._close_event.is_set():
             now = time.monotonic()
-            for unresponsive_address, t in self.last_beacon.items():
+            for unresponsive_address, t in list(self.last_beacon.items()):
                 if now - t > self.environ['EPICS_CA_CONN_TMO']:
                     # We have not received a Beacon from this server in too
                     # long. Prompt all circuits to this address to send an
                     # EchoRequest and to then disconnect if they do not
                     # receive a timely response.
-                    for listener in self.listeners:
+                    self.log.info(
+                        "Beacon anomaly: No Beacons from %s:%d in %.1f seconds.",
+                        *unresponsive_address, now - t)
+                    for listener in list(self.listeners):
                         for (address, _), circuit_manager in list(listener.circuit_managers.items()):
                             if address == unresponsive_address:
                                 if address not in checking:
                                     checking.add(address)
+                                    name = f'disconnect_if_unresponsive_{circuit_manager}'
                                     threading.Thread(
                                         target=disconnect_if_unresponsive,
                                         args=(circuit_manager,),
                                         daemon=True,
-                                        name=f'disconnect_if_unresponsive_{circuit_manager}').start()
+                                        name=name).start()
 
             time.sleep(0.5)
 
