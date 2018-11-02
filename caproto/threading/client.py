@@ -31,7 +31,7 @@ from functools import partial
 from collections import defaultdict, deque
 import caproto as ca
 from .._constants import (MAX_ID, STALE_SEARCH_EXPIRATION,
-                          SEARCH_MAX_DATAGRAM_BYTES)
+                          SEARCH_MAX_DATAGRAM_BYTES, RESPONSIVENESS_TIMEOUT)
 from .._utils import (batch_requests, CaprotoError, ThreadsafeCounter,
                       socket_bytes_available, CaprotoTimeoutError,
                       CaprotoTypeError, CaprotoRuntimeError, CaprotoValueError,
@@ -317,7 +317,7 @@ class SharedBroadcaster:
 
         self._id_counter = itertools.count(0)
         self.search_results = {}  # map name to (time, address)
-        self.unanswered_searches = {}  # map search id (cid) to (name, queue, retirement_deadline)
+        self.unanswered_searches = {}  # map search id (cid) to [name, queue, retirement_deadline]
         self.server_protocol_versions = {}  # map address to protocol version
 
         self.listeners = weakref.WeakSet()
@@ -325,6 +325,8 @@ class SharedBroadcaster:
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
         self.log = self.broadcaster.log
         self.command_bundle_queue = Queue()
+        self.last_beacon = {}
+        self.last_beacon_interval = {}
 
         # an event to tear down and clean up the broadcaster
         self._close_event = threading.Event()
@@ -334,6 +336,11 @@ class SharedBroadcaster:
         self._command_thread = threading.Thread(target=self.command_loop,
                                                 daemon=True, name='command')
         self._command_thread.start()
+
+        self._check_for_unresponsive_servers_thread = threading.Thread(
+            target=self._check_for_unresponsive_servers,
+            daemon=True, name='check_for_unresponsive_servers')
+        self._check_for_unresponsive_servers_thread.start()
 
         self._registration_retry_time = registration_retry_time
         self._registration_last_sent = 0
@@ -510,7 +517,9 @@ class SharedBroadcaster:
             for name in needs_search:
                 search_id = new_id()
                 search_ids.append(search_id)
-                unanswered_searches[search_id] = (name, results_queue, retirement_deadline)
+                # The value is a list because we mutate it to update the
+                # retirement deadline sometimes.
+                unanswered_searches[search_id] = [name, results_queue, retirement_deadline]
         self._search_now.set()
 
     def cancel(self, *names):
@@ -580,7 +589,21 @@ class SharedBroadcaster:
             queues.clear()
             now = time.monotonic()
             for command in commands:
-                if isinstance(command, ca.VersionResponse):
+                if isinstance(command, ca.Beacon):
+                    now = time.monotonic()
+                    address = (command.address, command.server_port)
+                    if address not in self.last_beacon:
+                        # We made a new friend!
+                        self._new_server_found()
+                    else:
+                        interval = now - self.last_beacon[address]
+                        if interval < self.last_beacon_interval.get(address, 0) / 4:
+                            # Beacons are arriving *faster*? The server at this
+                            # address may have restarted.
+                            self._new_server_found()
+                        self.last_beacon_interval[address] = interval
+                    self.last_beacon[address] = now
+                elif isinstance(command, ca.VersionResponse):
                     # Per the specification, in CA < 4.11, VersionResponse does
                     # not include minor version number (it is always 0) and is
                     # interpreted as an echo command that carries no data.
@@ -608,12 +631,13 @@ class SharedBroadcaster:
                             continue
                         else:
                             if name in self.search_results:
-                                accepted_address = self.search_results[name]
+                                accepted_address, _ = self.search_results[name]
                                 new_address = ca.extract_address(command)
-                                self.log.warning("PV %s with cid %d found on multiple servers. "
-                                                 "Accepted address is %s. "
-                                                 "Also found on %s",
-                                                 name, cid, accepted_address, new_address)
+                                self.log.warning(
+                                    "PV %s with cid %d found on multiple servers. "
+                                    "Accepted address is %s:%d. "
+                                    "Also found on %s:%d",
+                                    name, cid, *accepted_address, *new_address)
                     else:
                         results_by_cid.append((cid, name))
                         address = ca.extract_address(command)
@@ -631,6 +655,60 @@ class SharedBroadcaster:
                     queue.put((address, names))
 
         self.log.debug('Broadcaster command loop has exited.')
+
+    def _new_server_found(self):
+        # Bring all the unanswered seraches out of retirement
+        # to see if we have a new match.
+        retirement_deadline = time.monotonic() + SEARCH_RETIREMENT_AGE
+        with self._search_lock:
+            for item in self.unanswered_searches.values():
+                item[-1] = retirement_deadline
+
+    def _check_for_unresponsive_servers(self):
+        self.log.debug('Broadcaster check for unresponsive servers loop is running.')
+
+        checking = set()
+
+        def disconnect_if_unresponsive(circuit_manager):
+            self.log.debug("Broadcaster checking responsivness of %s.", circuit_manager)
+            responsive = circuit_manager.check_responsiveness()
+            address = circuit_manager.circuit.address
+            if not responsive:
+                self.log.debug("Broadcaster found %s unresponsive.", circuit_manager)
+                circuit_manager.log.warning(
+                    "Server at %r is unresponsive. Disconnecting "
+                    "circuit manager %r. PVs will automatically begin "
+                    "attempting to reconnect to a responsive server.",
+                    address, circuit_manager)
+                circuit_manager.disconnect()
+                self.last_beacon.pop(address)
+                self.last_beacon_interval.pop(address, None)
+            else:
+                self.log.debug("Broadcaster found %s responsive.", circuit_manager)
+            checking.remove(address)
+
+        while not self._close_event.is_set():
+            now = time.monotonic()
+            for unresponsive_address, t in self.last_beacon.items():
+                if now - t > self.environ['EPICS_CA_CONN_TMO']:
+                    # We have not received a Beacon from this server in too
+                    # long. Prompt all circuits to this address to send an
+                    # EchoRequest and to then disconnect if they do not
+                    # receive a timely response.
+                    for listener in self.listeners:
+                        for (address, _), circuit_manager in list(listener.circuit_managers.items()):
+                            if address == unresponsive_address:
+                                if address not in checking:
+                                    checking.add(address)
+                                    threading.Thread(
+                                        target=disconnect_if_unresponsive,
+                                        args=(circuit_manager,),
+                                        daemon=True,
+                                        name=f'disconnect_if_unresponsive_{circuit_manager}').start()
+
+            time.sleep(0.5)
+
+        self.log.debug('Broadcaster check for unresponsive servers loop has exited.')
 
     def _retry_unanswered_searches(self):
         """
@@ -752,7 +830,7 @@ class Context:
         self.client_name = client_name
         self.log = logging.getLogger(f'caproto.ctx.{id(self)}')
         self.pv_cache_lock = threading.RLock()
-        self.circuit_managers = {}  # keyed on address
+        self.circuit_managers = {}  # keyed on ((host, port), priority)
         self._lock_during_get_circuit_manager = threading.RLock()
         self.pvs = {}  # (name, priority) -> pv
         # name -> set of pvs  --- with varied priority
@@ -1061,7 +1139,7 @@ class VirtualCircuitManager:
                  'socket', 'selector', 'pvs', 'all_created_pvnames',
                  'dead', 'process_queue', 'processing',
                  '_subscriptionid_counter', 'user_callback_executor',
-                 '__weakref__')
+                 '_responsiveness_event', '__weakref__')
 
     def __init__(self, context, circuit, selector, timeout=TIMEOUT):
         self.context = context
@@ -1084,6 +1162,7 @@ class VirtualCircuitManager:
         self._ioid_counter = ThreadsafeCounter()
         self._subscriptionid_counter = ThreadsafeCounter()
         self._ready = threading.Event()
+        self._responsiveness_event = threading.Event()
 
         # Connect.
         if self.circuit.states[ca.SERVER] is ca.IDLE:
@@ -1158,6 +1237,13 @@ class VirtualCircuitManager:
         Reactive updates to all subscriptions on this circuit.
         """
         self.send(ca.EventsOnRequest())
+
+    def check_responsiveness(self):
+        if not self.connected:
+            return False
+        self._responsiveness_event.clear()
+        self.send(ca.EchoRequest())
+        return self._responsiveness_event.wait(timeout=RESPONSIVENESS_TIMEOUT)
 
     def _process_command(self, command):
         try:
@@ -1247,6 +1333,8 @@ class VirtualCircuitManager:
             pv = self.pvs[command.cid]
             pv.connection_state_changed('disconnected', None)
             # NOTE: pv remains valid until server goes down
+        elif isinstance(command, ca.EchoResponse):
+            self._responsiveness_event.set()
         else:
             self.log.debug('other command %s', command)
 

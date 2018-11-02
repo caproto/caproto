@@ -107,8 +107,8 @@ class VirtualCircuit:
         return self.address[1]
 
     def __repr__(self):
-        return (f"<VirtualCircuit host={self.host} port={self.port} "
-                f"our_role={self.our_role}> logger_name={self.log.name}>")
+        return (f"<VirtualCircuit host={self.host!r} port={self.port} "
+                f"our_role={self.our_role}> logger_name={self.log.name!r}>")
 
     @property
     def key(self):
