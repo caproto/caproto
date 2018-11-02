@@ -1135,7 +1135,7 @@ class VirtualCircuitManager:
     this is rarely necessary.
     """
     __slots__ = ('context', 'circuit', 'channels', 'ioids', '_ioid_counter',
-                 'subscriptions', '_user_disconnected', '_ready', 'log',
+                 'subscriptions', '_ready', 'log',
                  'socket', 'selector', 'pvs', 'all_created_pvnames',
                  'dead', 'process_queue', 'processing',
                  '_subscriptionid_counter', 'user_callback_executor',
@@ -1154,7 +1154,6 @@ class VirtualCircuitManager:
         self.user_callback_executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=self.context.max_workers,
             thread_name_prefix='user-callback-executor')
-        self._user_disconnected = False
         # keep track of all PV names that are successfully connected to within
         # this circuit. This is to be cleared upon disconnection:
         self.all_created_pvnames = []
@@ -1377,21 +1376,19 @@ class VirtualCircuitManager:
             except OSError:
                 pass
 
-        if not self._user_disconnected:
-            # If the user didn't request disconnection, kick off attempt to
-            # reconnect all PVs via fresh circuit(s).
-            self.log.debug('Kicking off reconnection attempts for %d PVs '
-                           'disconnected from %s....',
-                           len(self.channels),
-                           '%s:%d' % self.circuit.address)
-            self.context.reconnect(((chan.name, chan.circuit.priority)
-                                    for chan in self.channels.values()))
+        # If the user didn't request disconnection, kick off attempt to
+        # reconnect all PVs via fresh circuit(s).
+        self.log.debug('Kicking off reconnection attempts for %d PVs '
+                        'disconnected from %s....',
+                        len(self.channels),
+                        '%s:%d' % self.circuit.address)
+        self.context.reconnect(((chan.name, chan.circuit.priority)
+                                for chan in self.channels.values()))
 
         self.log.debug("Shutting down ThreadPoolExecutor for user callbacks")
         self.user_callback_executor.shutdown()
 
     def disconnect(self):
-        self._user_disconnected = True
         self._disconnected()
         if self.socket is None:
             return
