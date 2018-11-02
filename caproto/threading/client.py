@@ -1494,7 +1494,7 @@ class PV:
     def __repr__(self):
         if self._idle:
             state = "(idle)"
-        elif self.circuit_manager is None:
+        elif self.circuit_manager is None or self.circuit_manager.dead.is_set():
             state = "(searching....)"
         else:
             state = (f"address={self.circuit_manager.circuit.address}, "
