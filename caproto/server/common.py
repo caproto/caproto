@@ -709,7 +709,8 @@ class Context:
                 try:
                     await udp_sock.sendto(bytes_to_send, addr)
                 except OSError as exc:
-                    raise CaprotoNetworkError(f"Failed to send to {addr}") from exc
+                    host, port = addr
+                    raise CaprotoNetworkError(f"Failed to send to {host}:{port}") from exc
 
     async def subscription_queue_loop(self):
         while True:

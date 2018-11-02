@@ -139,7 +139,7 @@ def _run_repeater(server_sock, bind_addr):
                     server_sock.sendto(confirmation_bytes, (host, port))
                 except OSError as exc:
                     raise caproto.CaprotoNetworkError(
-                        f"Failed to send to {(host, port)}") from exc
+                        f"Failed to send to {host}:{port}") from exc
 
                 remove_clients = list(check_clients(clients, skip=port))
                 _update_all(clients, servers, remove_clients=remove_clients)
