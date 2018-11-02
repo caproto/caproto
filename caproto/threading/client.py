@@ -1390,8 +1390,8 @@ class VirtualCircuitManager:
         # reconnect all PVs via fresh circuit(s).
         self.log.debug('Kicking off reconnection attempts for %d PVs '
                        'disconnected from %s....',
-                        len(self.channels),
-                        '%s:%d' % self.circuit.address)
+                       len(self.channels),
+                       '%s:%d' % self.circuit.address)
         self.context.reconnect(((chan.name, chan.circuit.priority)
                                 for chan in self.channels.values()))
 
