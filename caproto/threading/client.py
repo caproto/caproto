@@ -672,6 +672,7 @@ class SharedBroadcaster:
     def _check_for_unresponsive_servers(self):
         self.log.debug('Broadcaster check for unresponsive servers loop is running.')
 
+        MARGIN = 1  # extra time (seconds) allowed between Beacons
         checking = set()
 
         def disconnect_if_unresponsive(circuit_manager):
@@ -695,7 +696,7 @@ class SharedBroadcaster:
         while not self._close_event.is_set():
             now = time.monotonic()
             for unresponsive_address, t in list(self.last_beacon.items()):
-                if now - t > self.environ['EPICS_CA_CONN_TMO']:
+                if now - t > self.environ['EPICS_CA_CONN_TMO'] + MARGIN:
                     # We have not received a Beacon from this server in too
                     # long. Prompt all circuits to this address to send an
                     # EchoRequest and to then disconnect if they do not
