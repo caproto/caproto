@@ -1386,8 +1386,7 @@ class VirtualCircuitManager:
             except OSError:
                 pass
 
-        # If the user didn't request disconnection, kick off attempt to
-        # reconnect all PVs via fresh circuit(s).
+        # Kick off attempt to reconnect all PVs via fresh circuit(s).
         self.log.debug('Kicking off reconnection attempts for %d PVs '
                        'disconnected from %s....',
                        len(self.channels),
