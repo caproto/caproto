@@ -27,7 +27,8 @@ import time
 import warnings
 
 import caproto
-from caproto._constants import MAX_UDP_RECV, SERVER_MIA_PRESUMED_DEAD
+from caproto._constants import MAX_UDP_RECV
+from caproto._utils import get_environment_variables
 
 
 logger = logging.getLogger('caproto.repeater')
@@ -56,8 +57,11 @@ def check_clients(clients, skip=None):
             yield addr
 
 
+checkin_threshold = get_environment_variables()['EPICS_CA_CONN_TMO']
+
+
 def _update_all(clients, servers, *, remove_clients=None,
-                checkin_threshold=SERVER_MIA_PRESUMED_DEAD):
+                checkin_threshold=checkin_threshold):
     'Update client and server dicts (remove clients, check heartbeat)'
     nclients_init, nservers_init = len(clients), len(servers)
     if remove_clients:
