@@ -54,7 +54,10 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
 
     repeater_port = os.environ.get('EPICS_CA_REPEATER_PORT', 5065)
     for host in ca.get_address_list():
-        udp_sock.sendto(bytes_to_send, (host, repeater_port))
+        try:
+            udp_sock.sendto(bytes_to_send, (host, repeater_port))
+        except OSError as exc:
+            raise ca.CaprotoNetworkError(f"Failed to send to {host}:{repeater_port}") from exc
 
     logger.debug("Searching for '%s'....", pv_name)
     bytes_to_send = b.send(
@@ -68,7 +71,11 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
                 dest = (host, int(specified_port))
             else:
                 dest = (host, CA_SERVER_PORT)
-            udp_sock.sendto(bytes_to_send, dest)
+            try:
+                udp_sock.sendto(bytes_to_send, dest)
+            except OSError as exc:
+                host, port = dest
+                raise ca.CaprotoNetworkError(f"Failed to send to {host}:{port}") from exc
             logger.debug('Search request sent to %r.', dest)
 
     def check_timeout():

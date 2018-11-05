@@ -197,7 +197,11 @@ class Context(_Context):
                 self.transport = transport
 
             async def sendto(self, bytes_to_send, addr_port):
-                self.transport.sendto(bytes_to_send, addr_port)
+                try:
+                    self.transport.sendto(bytes_to_send, addr_port)
+                except OSError as exc:
+                    host, port = addr_port
+                    raise ca.CaprotoNetworkError(f"Failed to send to {host}:{port}") from exc
 
             def close(self):
                 return self.transport.close()
@@ -209,7 +213,12 @@ class Context(_Context):
                 self.address = address
 
             async def send(self, bytes_to_send):
-                self.transport.sendto(bytes_to_send, self.address)
+                try:
+                    self.transport.sendto(bytes_to_send, self.address)
+                except OSError as exc:
+                    host, port = self.address
+                    raise ca.CaprotoNetworkError(
+                        f"Failed to send to {host}:{port}") from exc
 
             def close(self):
                 return self.transport.close()
