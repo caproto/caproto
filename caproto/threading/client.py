@@ -35,7 +35,7 @@ from .._constants import (MAX_ID, STALE_SEARCH_EXPIRATION,
 from .._utils import (batch_requests, CaprotoError, ThreadsafeCounter,
                       socket_bytes_available, CaprotoTimeoutError,
                       CaprotoTypeError, CaprotoRuntimeError, CaprotoValueError,
-                      CaprotoKeyError)
+                      CaprotoKeyError, CaprotoNetworkError)
 
 
 print = partial(print, flush=True)
@@ -433,8 +433,8 @@ class SharedBroadcaster:
                 else:
                     self.udp_sock.sendto(bytes_to_send, (host, port))
             except OSError as ex:
-                raise OSError(f'{ex} while sending {len(bytes_to_send)} '
-                              f'bytes to {host}:{port}') from ex
+                raise CaprotoNetworkError(
+                    f'{ex} while sending {len(bytes_to_send)} bytes to {host}:{port}') from ex
 
     def get_cached_search_result(self, name, *,
                                  threshold=STALE_SEARCH_EXPIRATION):
