@@ -23,7 +23,7 @@ SEARCH_MAX_DATAGRAM_BYTES = 1472
 
 # How long to wait between EchoRequest and EchoResponse before concluding that
 # server is unresponsive.
-RESPONSIVENESS_TIMEOUT = 2  # seconds
+RESPONSIVENESS_TIMEOUT = 5  # seconds
 
 MAX_TOTAL_SUBSCRIPTION_BACKLOG = 10000  # total per circuit not per subscription
 MAX_SUBSCRIPTION_BACKLOG = 1000  # per subscription
