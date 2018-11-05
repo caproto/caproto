@@ -1188,7 +1188,7 @@ class VirtualCircuitManager:
                  'socket', 'selector', 'pvs', 'all_created_pvnames',
                  'dead', 'process_queue', 'processing',
                  '_subscriptionid_counter', 'user_callback_executor',
-                 '_responsiveness_event', 'last_tcp_receipt', '__weakref__')
+                 'last_tcp_receipt', '__weakref__')
 
     def __init__(self, context, circuit, selector, timeout=TIMEOUT):
         self.context = context
@@ -1211,7 +1211,6 @@ class VirtualCircuitManager:
         self._ioid_counter = ThreadsafeCounter()
         self._subscriptionid_counter = ThreadsafeCounter()
         self._ready = threading.Event()
-        self._responsiveness_event = threading.Event()
 
         # Connect.
         if self.circuit.states[ca.SERVER] is ca.IDLE:
@@ -1377,7 +1376,10 @@ class VirtualCircuitManager:
             pv.connection_state_changed('disconnected', None)
             # NOTE: pv remains valid until server goes down
         elif isinstance(command, ca.EchoResponse):
-            self._responsiveness_event.set()
+            # The important effect here is that it will have updated
+            # self.last_tcp_receipt when the bytes flowed through
+            # self.received.
+            ...
         else:
             self.log.debug('other command %s', command)
 
