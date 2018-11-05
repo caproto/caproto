@@ -33,11 +33,14 @@ Supported:
   interfaces and ports.
 * Connection caching
 * Automatic reconnection
-* Batching of requests for efficiency
+* Batch of requests for efficiency.
+* Monitor server beacons to notice new CA servers on the network or servers
+  that have become responsive. Respond accordingly.
+* Adapt rate of sending ``SearchRequest``, accounting for how long a request
+  has gone unanswered and for the appearance of new servers on the network.
 
 TO DO:
 
-* Back-off of unanswered search requests
 * "Flow control" --- automatic temporary suspension of subscriptions when
   under high load using ``EventsOn`` and ``EventsOff``
 
