@@ -674,7 +674,7 @@ class SharedBroadcaster:
 
         MARGIN = 1  # extra time (seconds) allowed between Beacons
         checking = dict()  # map address to deadline for check to resolve
-        servers = dict()  # map address to list of VirtualCircuitManagers
+        servers = defaultdict(weakref.WeakSet)  # map address to VirtualCircuitManagers
         last_heard = dict()  # map address to time of last response
 
         # Make locals to save getattr lookups in the loop.
@@ -692,10 +692,9 @@ class SharedBroadcaster:
 
             # Map each server address to VirtualCircuitManagers connected to
             # that address, across all Contexts ("listeners").
-            servers = defaultdict(list)  # map address to VirtualCircuitManagers
             for listener in listeners:
                 for (address, _), circuit_manager in listener.circuit_managers.items():
-                    servers[address].append(circuit_manager)
+                    servers[address].add(circuit_manager)
 
             # When is the last time we heard from each server, either via a
             # Beacon or from TCP packets related to user activity or any
