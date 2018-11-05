@@ -673,49 +673,89 @@ class SharedBroadcaster:
         self.log.debug('Broadcaster check for unresponsive servers loop is running.')
 
         MARGIN = 1  # extra time (seconds) allowed between Beacons
-        checking = set()
+        checking = dict()  # map address to deadline for check to resolve
+        servers = dict()  # map address to list of VirtualCircuitManagers
+        last_heard = dict()  # map address to time of last response
 
-        def disconnect_if_unresponsive(circuit_manager):
-            self.log.debug("Broadcaster checking responsivness of %s.", circuit_manager)
-            responsive = circuit_manager.check_responsiveness()
-            address = circuit_manager.circuit.address
-            if not responsive:
-                self.log.debug("Broadcaster found %s unresponsive.", circuit_manager)
-                circuit_manager.log.warning(
-                    "Server at %s:%d is unresponsive. Disconnecting "
-                    "circuit manager %r. PVs will automatically begin "
-                    "attempting to reconnect to a responsive server.",
-                    *address, circuit_manager)
-                circuit_manager.disconnect()
-                self.last_beacon.pop(address)
-                self.last_beacon_interval.pop(address, None)
-            else:
-                self.log.debug("Broadcaster found %s responsive.", circuit_manager)
-            checking.remove(address)
+        # Make locals to save getattr lookups in the loop.
+        last_beacon = self.last_beacon
+        listeners = self.listeners
 
         while not self._close_event.is_set():
+            servers.clear()
+            last_heard.clear()
             now = time.monotonic()
-            for unresponsive_address, t in list(self.last_beacon.items()):
-                if now - t > self.environ['EPICS_CA_CONN_TMO'] + MARGIN:
-                    # We have not received a Beacon from this server in too
-                    # long. Prompt all circuits to this address to send an
-                    # EchoRequest and to then disconnect if they do not
-                    # receive a timely response.
-                    self.log.info(
-                        "Beacon anomaly: No Beacons from %s:%d in %.1f seconds.",
-                        *unresponsive_address, now - t)
-                    for listener in list(self.listeners):
-                        for (address, _), circuit_manager in list(listener.circuit_managers.items()):
-                            if address == unresponsive_address:
-                                if address not in checking:
-                                    checking.add(address)
-                                    name = f'disconnect_if_unresponsive_{circuit_manager}'
-                                    threading.Thread(
-                                        target=disconnect_if_unresponsive,
-                                        args=(circuit_manager,),
-                                        daemon=True,
-                                        name=name).start()
 
+            # We are interested in identifying servers that we have not heard
+            # from since some time cutoff in the past.
+            cutoff = now - (self.environ['EPICS_CA_CONN_TMO'] + MARGIN)
+
+            # Map each server address to VirtualCircuitManagers connected to
+            # that address, across all Contexts ("listeners").
+            servers = defaultdict(list)  # map address to VirtualCircuitManagers
+            for listener in listeners:
+                for (address, _), circuit_manager in listener.circuit_managers.items():
+                    servers[address].append(circuit_manager)
+
+            # When is the last time we heard from each server, either via a
+            # Beacon or from TCP packets related to user activity or any
+            # circuit?
+            for address, circuit_managers in servers.items():
+                last_tcp_receipt = (cm.last_tcp_receipt for cm in circuit_managers)
+                last_heard[address] = max((last_beacon.get(address, 0),
+                                           *last_tcp_receipt))
+
+                # If is has been too long --- and if we aren't already checking
+                # on this server --- try to prompt a response over TCP by
+                # sending an EchoRequest.
+                if last_heard[address] < cutoff and address not in checking:
+                    # Record that we are checking on this address and set a
+                    # deadline for a response.
+                    checking[address] = now + RESPONSIVENESS_TIMEOUT
+                    self.log.debug(
+                        "Missed Beacons from %s:%d. Sending EchoRequest to "
+                        "check that server is responsive.", *address)
+                    # Send on all circuits. One might be less backlogged
+                    # with queued commands than the others and thus able to
+                    # respond faster. In the majority of cases there will only
+                    # be one circuit per server anyway, so this is a minor
+                    # distinction.
+                    for circuit_manager in circuit_managers:
+                        try:
+                            circuit_manager.send(ca.EchoRequest())
+                        except Exception:
+                            # Send failed. Server is likely dead, but we'll
+                            # catch that shortly; no need to handle it
+                            # specially here.
+                            pass
+
+            # Check to see if any of our ongoing checks have resolved or
+            # failed to resolve within the allowed response window.
+            for address, deadline in list(checking.items()):
+                if last_heard[address] > cutoff:
+                    # It's alive!
+                    checking.pop(address)
+                elif deadline < now:
+                    # No circuit connected to the server at this address has
+                    # sent Beacons or responded to the EchoRequest. We assume
+                    # it is unresponsive. The EPICS specification says the
+                    # behavior is undefined at this point. We choose to
+                    # disconnect all circuits from that server so that PVs can
+                    # attempt to connect to a new server, such as a failover
+                    # backup.
+                    for circuit_manager in servers[address]:
+                        if circuit_manager.connected:
+                            circuit_manager.log.warning(
+                                "Server at %s:%d is unresponsive. "
+                                "Disconnecting circuit manager %r. PVs will "
+                                "automatically begin attempting to reconnect "
+                                "to a responsive server.",
+                                *address, circuit_manager)
+                            circuit_manager.disconnect()
+                    checking.pop(address)
+                # else:
+                #     # We are still waiting to give the server time to respond
+                #     # to the EchoRequest.
             time.sleep(0.5)
 
         self.log.debug('Broadcaster check for unresponsive servers loop has exited.')
@@ -1149,7 +1189,7 @@ class VirtualCircuitManager:
                  'socket', 'selector', 'pvs', 'all_created_pvnames',
                  'dead', 'process_queue', 'processing',
                  '_subscriptionid_counter', 'user_callback_executor',
-                 '_responsiveness_event', '__weakref__')
+                 '_responsiveness_event', 'last_tcp_receipt', '__weakref__')
 
     def __init__(self, context, circuit, selector, timeout=TIMEOUT):
         self.context = context
@@ -1164,6 +1204,7 @@ class VirtualCircuitManager:
         self.user_callback_executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=self.context.max_workers,
             thread_name_prefix='user-callback-executor')
+        self.last_tcp_receipt = None
         # keep track of all PV names that are successfully connected to within
         # this circuit. This is to be cleared upon disconnection:
         self.all_created_pvnames = []
@@ -1222,6 +1263,7 @@ class VirtualCircuitManager:
         """Receive and process and next command from the virtual circuit.
 
         This will be run on the recv thread"""
+        self.last_tcp_receipt = time.monotonic()
         commands, num_bytes_needed = self.circuit.recv(bytes_recv)
 
         for c in commands:
@@ -1246,13 +1288,6 @@ class VirtualCircuitManager:
         Reactive updates to all subscriptions on this circuit.
         """
         self.send(ca.EventsOnRequest())
-
-    def check_responsiveness(self):
-        if not self.connected:
-            return False
-        self._responsiveness_event.clear()
-        self.send(ca.EchoRequest())
-        return self._responsiveness_event.wait(timeout=RESPONSIVENESS_TIMEOUT)
 
     def _process_command(self, command):
         try:
