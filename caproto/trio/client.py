@@ -280,16 +280,21 @@ class SharedBroadcaster:
         """
         bytes_to_send = self.broadcaster.send(*commands)
         for host in ca.get_address_list():
+            if ':' in host:
+                host, _, port_as_str = host.partition(':')
+                specified_port = int(port_as_str)
+            else:
+                specified_port = port
+            self.broadcaster.log.debug(
+                'Sending %d bytes to %s:%d',
+                len(bytes_to_send), host, specified_port)
             try:
-                if ':' in host:
-                    host, _, port_as_str = host.partition(':')
-                    port = int(port_as_str)
-                    await self.udp_sock.sendto(bytes_to_send, (host, port))
-                else:
-                    await self.udp_sock.sendto(bytes_to_send, (host, port))
-            except OSError as exc:
+                await self.udp_sock.sendto(bytes_to_send,
+                                           (host, specified_port))
+            except OSError as ex:
                 raise ca.CaprotoNetworkError(
-                    f"Failed to send to {host}:{port}") from exc
+                    f'{ex} while sending {len(bytes_to_send)} bytes to '
+                    f'{host}:{specified_port}') from ex
 
     async def disconnect(self):
         'Disconnect the broadcaster and stop listening'

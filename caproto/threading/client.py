@@ -434,12 +434,12 @@ class SharedBroadcaster:
         """
         bytes_to_send = self.broadcaster.send(*commands)
         for host in ca.get_address_list():
+            if ':' in host:
+                host, _, port_as_str = host.partition(':')
+                specified_port = int(port_as_str)
+            else:
+                specified_port = port
             try:
-                if ':' in host:
-                    host, _, port_as_str = host.partition(':')
-                    specified_port = int(port_as_str)
-                else:
-                    specified_port = port
                 self.broadcaster.log.debug(
                     'Sending %d bytes to %s:%d',
                     len(bytes_to_send), host, specified_port)
