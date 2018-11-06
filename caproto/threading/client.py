@@ -1390,7 +1390,7 @@ class VirtualCircuitManager:
         # Ensure that this method is idempotent.
         if self.dead.is_set():
             return
-        self.log.debug('Virtual circuit with %s:%d has disconnected.',
+        self.log.debug('Virtual circuit with address %s:%d has disconnected.',
                        *self.circuit.address)
         # Update circuit state. This will be reflected on all PVs, which
         # continue to hold a reference to this disconnected circuit.
