@@ -1543,11 +1543,10 @@ class PV:
 
     @property
     def connected(self):
-        with self.component_lock:
-            channel = self.channel
-            if channel is None:
-                return False
-            return channel.states[ca.CLIENT] is ca.CONNECTED
+        channel = self.channel
+        if channel is None:
+            return False
+        return channel.states[ca.CLIENT] is ca.CONNECTED
 
     def wait_for_search(self, *, timeout=2):
         """
