@@ -797,7 +797,7 @@ class ChannelByte(ChannelNumeric):
         value = super().preprocess_value(value)
 
         if isinstance(value, (list, tuple) + backend.array_types):
-            if not value:
+            if not len(value):
                 return b''
             elif len(value) == 1:
                 value = value[0]
@@ -821,7 +821,7 @@ class ChannelChar(ChannelData):
         value = super().preprocess_value(value)
 
         if isinstance(value, (list, tuple) + backend.array_types):
-            if not value:
+            if not len(value):
                 return b''
             elif len(value) == 1:
                 value = value[0]
