@@ -233,7 +233,7 @@ class PV:
     @property
     def connected(self):
         'Connection state'
-        return self._caproto_pv.connected
+        return self._caproto_pv.connected and self._connect_event.is_set()
 
     def force_connect(self, pvname=None, chid=None, conn=True, **kws):
         # not quite sure what this is for in pyepics
@@ -320,7 +320,8 @@ class PV:
             except Exception:
                 raise
             finally:
-                self._connect_event.set()
+                if connected:
+                    self._connect_event.set()
 
         # todo move to async connect logic
         for cb in self.connection_callbacks:
