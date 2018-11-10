@@ -36,7 +36,7 @@ from .._utils import (batch_requests, CaprotoError, ThreadsafeCounter,
                       socket_bytes_available, CaprotoTimeoutError,
                       CaprotoTypeError, CaprotoRuntimeError, CaprotoValueError,
                       CaprotoKeyError, CaprotoNetworkError)
-from .util import RLock, Event
+from .util import RLock, Event, Telemetry
 
 
 print = partial(print, flush=True)
@@ -1182,14 +1182,15 @@ class VirtualCircuitManager:
     internally by the Context. Its methods may be touched by user code, but
     this is rarely necessary.
     """
-    __slots__ = ('context', 'circuit', 'channels', 'ioids', '_ioid_counter',
-                 'subscriptions', '_ready', 'log',
-                 'socket', 'selector', 'pvs', 'all_created_pvnames',
-                 'dead', 'process_queue', 'processing',
-                 '_subscriptionid_counter', 'user_callback_executor',
-                 'last_tcp_receipt', '__weakref__')
+    # __slots__ = ('context', 'circuit', 'channels', 'ioids', '_ioid_counter',
+    #              'subscriptions', '_ready', 'log',
+    #              'socket', 'selector', 'pvs', 'all_created_pvnames',
+    #              'dead', 'process_queue', 'processing',
+    #              '_subscriptionid_counter', 'user_callback_executor',
+    #              'last_tcp_receipt', '__weakref__')
 
     def __init__(self, context, circuit, selector, timeout=TIMEOUT):
+        self._pseudo_send_event = Telemetry('how-long-sendall-takes')
         self.context = context
         self.circuit = circuit  # a caproto.VirtualCircuit
         self.log = circuit.log
@@ -1254,7 +1255,8 @@ class VirtualCircuitManager:
         # be send, and convert them to buffers.
         buffers_to_send = self.circuit.send(*commands)
         # Send bytes over the wire using some caproto utilities.
-        ca.send_all(buffers_to_send, self._socket_send)
+        with self._pseudo_send_event:
+            ca.send_all(buffers_to_send, self._socket_send)
 
     def received(self, bytes_recv, address):
         """Receive and process and next command from the virtual circuit.

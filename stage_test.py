@@ -35,7 +35,7 @@ if False:
 else:
     import logging
     # logging.getLogger('caproto').setLevel('DEBUG')
-    for _ in range(10):
+    for _ in range(100):
         tc.stage(); tc.unstage()
     from caproto.threading.util import show_wait_times
     show_wait_times(0.001)
