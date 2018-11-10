@@ -97,30 +97,28 @@ def ensure_connected(func):
                     timeout = deadline - time.monotonic()
                     kwargs['timeout'] = timeout
                 self._idle = False
-                with pv.component_lock:
-                    cm = pv.circuit_manager
-                    try:
-                        return func(self, *args, **kwargs)
-                    except DeadCircuitError:
-                        # Something in func tried operate on the circuit after
-                        # it died. The context will automatically build us a
-                        # new circuit. Try again.
-                        self.log.debug('Caught DeadCircuitError. '
+                cm = pv.circuit_manager
+                try:
+                    return func(self, *args, **kwargs)
+                except DeadCircuitError:
+                    # Something in func tried operate on the circuit after
+                    # it died. The context will automatically build us a
+                    # new circuit. Try again.
+                    self.log.debug('Caught DeadCircuitError. '
+                                   'Retrying %s.', func.__name__)
+                    continue
+                except TimeoutError:
+                    # The circuit may have died after func was done calling
+                    # methods on it but before we received some response we
+                    # were expecting. The context will automatically build
+                    # us a new circuit. Try again.
+                    if cm.dead.is_set():
+                        self.log.debug('Caught TimeoutError due to dead '
+                                       'circuit. '
                                        'Retrying %s.', func.__name__)
                         continue
-                    except TimeoutError:
-                        # The circuit may have died after func was done calling
-                        # methods on it but before we received some response we
-                        # were expecting. The context will automatically build
-                        # us a new circuit. Try again.
-                        if cm.dead.is_set():
-                            self.log.debug('Caught TimeoutError due to dead '
-                                           'circuit. '
-                                           'Retrying %s.', func.__name__)
-                            continue
-                        # The circuit is fine -- this is a real error.
-                        raise
-                raise
+                    # The circuit is fine -- this is a real error.
+                    raise
 
         finally:
             with pv._in_use:
@@ -1636,11 +1634,10 @@ class PV:
             Send a ``ReadNotifyRequest`` instead of a ``ReadRequest``. True by
             default.
         """
-        ioid = self.circuit_manager._ioid_counter()
-        command = self.channel.read(ioid=ioid,
-                                    data_type=data_type,
-                                    data_count=data_count,
-                                    notify=notify)
+        cm, chan = self._circuit_manager, self._channel
+        ioid = cm._ioid_counter()
+        command = chan.read(ioid=ioid, data_type=data_type,
+                            data_count=data_count, notify=notify)
         # Stash the ioid to match the response to the request.
 
         event = threading.Event()
@@ -1648,11 +1645,11 @@ class PV:
         if callback is not None:
             ioid_info['callback'] = callback
 
-        self.circuit_manager.ioids[ioid] = ioid_info
+        cm.ioids[ioid] = ioid_info
 
         deadline = time.monotonic() + timeout if timeout is not None else None
         ioid_info['deadline'] = deadline
-        self.circuit_manager.send(command)
+        cm.send(command)
         self.log.debug("%r: %r", self.name, command)
         if not wait:
             return
@@ -1660,7 +1657,7 @@ class PV:
         # The circuit_manager will put a reference to the response into
         # ioid_info and then set event.
         if not event.wait(timeout=timeout):
-            if self.circuit_manager.dead.is_set():
+            if cm.dead.is_set():
                 # This circuit has died sometime during this function call.
                 # The exception raised here will be caught by
                 # @ensure_connected, which will retry the function call a
@@ -1668,7 +1665,7 @@ class PV:
                 # been used up.
                 raise DeadCircuitError()
             raise CaprotoTimeoutError(
-                f"Server at {self.circuit_manager.circuit.address} did "
+                f"Server at {cm.circuit.address} did "
                 f"not respond to attempt to read channel named "
                 f"{self.name!r} within {timeout}-second timeout."
             )
@@ -1711,26 +1708,24 @@ class PV:
             Requested number of values. Default is the channel's native data
             count.
         """
+        cm, chan = self._circuit_manager, self._channel
         if notify is None:
             notify = (wait or callback is not None)
-        ioid = self.circuit_manager._ioid_counter()
-        command = self.channel.write(data,
-                                     ioid=ioid,
-                                     notify=notify,
-                                     data_type=data_type,
-                                     data_count=data_count)
+        ioid = cm._ioid_counter()
+        command = chan.write(data, ioid=ioid, notify=notify,
+                             data_type=data_type, data_count=data_count)
         if notify:
             event = threading.Event()
             ioid_info = dict(event=event)
             if callback is not None:
                 ioid_info['callback'] = callback
 
-            self.circuit_manager.ioids[ioid] = ioid_info
+            cm.ioids[ioid] = ioid_info
 
             deadline = time.monotonic() + timeout if timeout is not None else None
             ioid_info['deadline'] = deadline
             # do not need to lock this, locking happens in circuit command
-            self.circuit_manager.send(command)
+            cm.send(command)
             self.log.debug("%r: %r", self.name, command)
         else:
             if wait or callback is not None:
@@ -1739,7 +1734,7 @@ class PV:
                                         "notification of 'put-completion' from the "
                                         "server, there is nothing to wait on or to "
                                         "trigger a callback.")
-            self.circuit_manager.send(command)
+            cm.send(command)
             self.log.debug("%r: %r", self.name, command)
 
         if not wait:
@@ -1748,7 +1743,7 @@ class PV:
         # The circuit_manager will put a reference to the response into
         # ioid_info and then set event.
         if not event.wait(timeout=timeout):
-            if self.circuit_manager.dead.is_set():
+            if cm.dead.is_set():
                 # This circuit has died sometime during this function call.
                 # The exception raised here will be caught by
                 # @ensure_connected, which will retry the function call a
@@ -1756,7 +1751,7 @@ class PV:
                 # been used up.
                 raise DeadCircuitError()
             raise CaprotoTimeoutError(
-                f"Server at {self.circuit_manager.circuit.address} did "
+                f"Server at {cm.circuit.address} did "
                 f"not respond to attempt to write to channel named "
                 f"{self.name!r} within {timeout}-second timeout. The ioid of "
                 f"the expected response is {ioid}."
@@ -1915,15 +1910,16 @@ class Subscription(CallbackHandler):
     def _subscribe(self, timeout=2):
         """This is called automatically after the first callback is added.
         """
-        with self._callback_lock:
-            has_callbacks = bool(self.callbacks)
-        if has_callbacks:
-            cm = self.pv.circuit_manager
-            ctx = cm.context
-            with ctx.subscriptions_lock:
-                ctx.subscriptions_to_activate[cm].add(self)
-            ctx.activate_subscriptions_now.set()
-        return has_callbacks
+        with self.pv.component_lock:
+            with self._callback_lock:
+                has_callbacks = bool(self.callbacks)
+            if has_callbacks:
+                cm = self.pv.circuit_manager
+                ctx = cm.context
+                with ctx.subscriptions_lock:
+                    ctx.subscriptions_to_activate[cm].add(self)
+                ctx.activate_subscriptions_now.set()
+            return has_callbacks
 
     @ensure_connected
     def compose_command(self, timeout=2):
@@ -1931,19 +1927,18 @@ class Subscription(CallbackHandler):
         with self._callback_lock:
             if not self.callbacks:
                 return None
-            subscriptionid = self.pv.circuit_manager._subscriptionid_counter()
-            command = self.pv.channel.subscribe(data_type=self.data_type,
-                                                data_count=self.data_count,
-                                                low=self.low,
-                                                high=self.high,
-                                                to=self.to,
-                                                mask=self.mask,
-                                                subscriptionid=subscriptionid)
+            cm, chan = self.pv._circuit_manager, self.pv._channel
+            subscriptionid = cm._subscriptionid_counter()
+            command = chan.subscribe(data_type=self.data_type,
+                                     data_count=self.data_count, low=self.low,
+                                     high=self.high, to=self.to,
+                                     mask=self.mask,
+                                     subscriptionid=subscriptionid)
             subscriptionid = command.subscriptionid
             self.subscriptionid = subscriptionid
         # The circuit_manager needs to know the subscriptionid so that it can
         # route responses to this request.
-        self.pv.circuit_manager.subscriptions[subscriptionid] = self
+        cm.subscriptions[subscriptionid] = self
         return command
 
     def clear(self):
