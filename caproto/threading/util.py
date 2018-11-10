@@ -8,40 +8,27 @@ debug = True
 
 if debug:
     all_locks = []
+    all_events = []
 
     class _Lock:
         def __init__(self, name):
-            self.times = []
+            self.hold_times = []
+            self.acquire_times = []
             self.name = name
             all_locks.append(self)
 
         def __enter__(self):
-            ret = self.lock.__enter__()
             f = io.StringIO()
             traceback.print_stack(file=f)
-            stack_string = ''
-            self.times.append([f, time.time()])
-            return ret
+            pre_acquire = time.time()
+            self.lock.acquire()
+            acquired = time.time()
+            self.acquire_times.append([f, pre_acquire, acquired])
+            self.hold_times.append([f, acquired])
 
         def __exit__(self, exc_type, exc_value, tb):
-            self.times[-1].append(time.time())
-            return self.lock.__exit__(exc_type, exc_value, tb)
-
-    def show_wait_times(threshold):
-        for lock in all_locks:
-            print(lock.name)
-            total = 0
-            for item in lock.times:
-                try:
-                    tb, start, stop = item
-                except ValueError:
-                    continue
-                elapsed = stop - start
-                if elapsed >= threshold:
-                    print(f'+ {elapsed:.3f}')  #   {tb.getvalue()}')
-                total += elapsed
-            if total > 0.001:
-                print(f'  total={total:.3f}')
+            self.hold_times[-1].append(time.time())
+            self.lock.release()
 
     class RLock(_Lock):
         def __init__(self, name):
@@ -51,12 +38,58 @@ if debug:
     class Lock(_Lock):
         def __init__(self, name):
             self.lock = threading.Lock()
+
+    class Event(threading.Event):
+        def __init__(self, name):
+            super().__init__()
+            self.name = name
+            self.wait_times = []
+            all_events.append(self)
+
+        def wait(self, timeout=None):
+            # f = io.StringIO()
+            # traceback.print_stack(file=f)
+            start = time.time()
+            ret = super().wait(timeout=timeout)
+            stop = time.time()
+            self.wait_times.append([None, start, stop])
+            return ret
+
+    def show_wait_times(threshold, *, show_stack=False):
+        for obj in all_locks + all_events:
+            print(obj.name)
+            if isinstance(obj, _Lock):
+                types = [('hold', obj.hold_times),
+                         ('acquire', obj.acquire_times)]
+            else:
+                types = [('wait', obj.wait_times),
+                         ]
+
+            for time_type, list_ in types:
+                total = 0
+                for item in list_:
+                    try:
+                        stack, start, stop = item
+                    except ValueError:
+                        continue
+                    elapsed = stop - start
+                    if elapsed >= threshold:
+                        print(f'+ {time_type} {elapsed:.3f}')
+                        if show_stack and stack is not None:
+                            print(f'Stack: {stack.getvalue()}')
+                    total += elapsed
+                if total > 0.001:
+                    print(f'  -> {obj.name} {time_type} total={total:.3f}')
+
 else:
     def RLock(name):
         return threading.RLock()
 
     def Lock(name):
         return threading.Lock()
+
+    def Event(name):
+        return threading.Event()
 
     def show_wait_times(threshold):
         ...

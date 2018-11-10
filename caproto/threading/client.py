@@ -36,7 +36,7 @@ from .._utils import (batch_requests, CaprotoError, ThreadsafeCounter,
                       socket_bytes_available, CaprotoTimeoutError,
                       CaprotoTypeError, CaprotoRuntimeError, CaprotoValueError,
                       CaprotoKeyError, CaprotoNetworkError)
-from .util import RLock
+from .util import RLock, Event
 
 
 print = partial(print, flush=True)
@@ -156,7 +156,7 @@ class SelectorThread:
     """
     def __init__(self, *, parent=None):
         self.thread = None  # set by the `start` method
-        self._close_event = threading.Event()
+        self._close_event = Event('selector/close_event')
         self.selector = selectors.DefaultSelector()
 
         if sys.platform == 'win32':
@@ -309,10 +309,10 @@ class SharedBroadcaster:
         self._retry_unanswered_searches_thread = None
         # This Event ensures that we send a registration request before our
         # first search request.
-        self._searching_enabled = threading.Event()
+        self._searching_enabled = Event('bcast/searching_enabled')
         # This Event lets us nudge the search thread when the user asks for new
         # PVs (via Context.get_pvs).
-        self._search_now = threading.Event()
+        self._search_now = Event('bcast/search_now')
 
         self._id_counter = itertools.count(0)
         self.search_results = {}  # map name to (time, address)
@@ -328,7 +328,7 @@ class SharedBroadcaster:
         self.last_beacon_interval = {}
 
         # an event to tear down and clean up the broadcaster
-        self._close_event = threading.Event()
+        self._close_event = Event('bcast/close_event')
         self.selector = SelectorThread(parent=self)
 
         self.selector.start()
@@ -886,10 +886,10 @@ class Context:
         self.broadcaster.add_listener(self)
         self._search_results_queue = Queue()
         # an event to close and clean up the whole context
-        self._close_event = threading.Event()
+        self._close_event = Event('context/close_event')
         self.subscriptions_lock = RLock('subscriptions_lock')
         self.subscriptions_to_activate = defaultdict(set)
-        self.activate_subscriptions_now = threading.Event()
+        self.activate_subscriptions_now = Event('context/activate_subscriptions_now')
 
         self._process_search_results_thread = threading.Thread(
             target=self._process_search_results_loop,
@@ -1206,10 +1206,10 @@ class VirtualCircuitManager:
         # keep track of all PV names that are successfully connected to within
         # this circuit. This is to be cleared upon disconnection:
         self.all_created_pvnames = []
-        self.dead = threading.Event()
+        self.dead = Event('vcm/dead')
         self._ioid_counter = ThreadsafeCounter()
         self._subscriptionid_counter = ThreadsafeCounter()
-        self._ready = threading.Event()
+        self._ready = Event('vcm/_ready')
 
         # Connect.
         if self.circuit.states[ca.SERVER] is ca.IDLE:
@@ -1480,8 +1480,8 @@ class PV:
         self.log = logging.getLogger(f'caproto.ch.{name}.{priority}')
         # Use this lock whenever we touch circuit_manager or channel.
         self.component_lock = RLock(self.name + '/component_lock')
-        self.circuit_ready = threading.Event()
-        self.channel_ready = threading.Event()
+        self.circuit_ready = Event(self.name + '/circuit_ready')
+        self.channel_ready = Event(self.name + '/channel_ready')
         self.connection_state_callback = CallbackHandler(self)
         self.access_rights_callback = CallbackHandler(self)
 
@@ -1640,7 +1640,7 @@ class PV:
                             data_count=data_count, notify=notify)
         # Stash the ioid to match the response to the request.
 
-        event = threading.Event()
+        event = Event(self.name + '/read')
         ioid_info = dict(event=event)
         if callback is not None:
             ioid_info['callback'] = callback
@@ -1715,7 +1715,7 @@ class PV:
         command = chan.write(data, ioid=ioid, notify=notify,
                              data_type=data_type, data_count=data_count)
         if notify:
-            event = threading.Event()
+            event = Event(self.name + '/write')
             ioid_info = dict(event=event)
             if callback is not None:
                 ioid_info['callback'] = callback

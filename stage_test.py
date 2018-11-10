@@ -6,9 +6,9 @@ import ophyd
 pe = ophyd.load_cl('pyepics', False)
 ca = ophyd.load_cl('caproto', False)
 
-class TesterPyepics(Device):
-   a = Cpt(EpicsSignal, 'mtr1.OFF', cl=pe)
-   b = Cpt(EpicsSignal, 'mtr2.OFF', cl=pe)
+# class TesterPyepics(Device):
+#    a = Cpt(EpicsSignal, 'mtr1.OFF', cl=pe)
+#    b = Cpt(EpicsSignal, 'mtr2.OFF', cl=pe)
 
 class TesterCaproto(Device):
    a = Cpt(EpicsSignal, 'mtr1.OFF', cl=ca)
@@ -19,9 +19,9 @@ tc = TesterCaproto('sim:', name='tc')
 tc.stage_sigs['a'] = 1
 tc.stage_sigs['b'] = 1
 
-tp = TesterPyepics('sim:', name='tp')
-tp.stage_sigs['a'] = 1
-tp.stage_sigs['b'] = 1
+# tp = TesterPyepics('sim:', name='tp')
+# tp.stage_sigs['a'] = 1
+# tp.stage_sigs['b'] = 1
 
 
 if False:
@@ -35,7 +35,7 @@ if False:
 else:
     import logging
     # logging.getLogger('caproto').setLevel('DEBUG')
-    for i in range(10):
+    for _ in range(10):
         tc.stage(); tc.unstage()
     from caproto.threading.util import show_wait_times
-    show_wait_times(0.01)
+    show_wait_times(0.001)
