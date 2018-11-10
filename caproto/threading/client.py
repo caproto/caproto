@@ -36,6 +36,7 @@ from .._utils import (batch_requests, CaprotoError, ThreadsafeCounter,
                       socket_bytes_available, CaprotoTimeoutError,
                       CaprotoTypeError, CaprotoRuntimeError, CaprotoValueError,
                       CaprotoKeyError, CaprotoNetworkError)
+from .util import RLock
 
 
 print = partial(print, flush=True)
@@ -165,7 +166,7 @@ class SelectorThread:
             dummy_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.selector.register(dummy_socket, selectors.EVENT_READ)
 
-        self._socket_map_lock = threading.RLock()
+        self._socket_map_lock = RLock('socket_map_lock')
         self.objects = weakref.WeakValueDictionary()
         self.id_to_socket = {}
         self.socket_to_id = {}
@@ -306,7 +307,7 @@ class SharedBroadcaster:
         self.environ = ca.get_environment_variables()
         self.ca_server_port = self.environ['EPICS_CA_SERVER_PORT']
 
-        self._search_lock = threading.RLock()
+        self._search_lock = RLock('search_lock')
         self._retry_unanswered_searches_thread = None
         # This Event ensures that we send a registration request before our
         # first search request.
@@ -878,9 +879,9 @@ class Context:
         self.max_workers = max_workers
         self.client_name = client_name
         self.log = logging.getLogger(f'caproto.ctx.{id(self)}')
-        self.pv_cache_lock = threading.RLock()
+        self.pv_cache_lock = RLock('pv_cache_lock')
         self.circuit_managers = {}  # keyed on ((host, port), priority)
-        self._lock_during_get_circuit_manager = threading.RLock()
+        self._lock_during_get_circuit_manager = RLock('lock_during_get_circuit_manager')
         self.pvs = {}  # (name, priority) -> pv
         # name -> set of pvs  --- with varied priority
         self.pvs_needing_circuits = defaultdict(set)
@@ -888,7 +889,7 @@ class Context:
         self._search_results_queue = Queue()
         # an event to close and clean up the whole context
         self._close_event = threading.Event()
-        self.subscriptions_lock = threading.RLock()
+        self.subscriptions_lock = RLock('subscriptions_lock')
         self.subscriptions_to_activate = defaultdict(set)
         self.activate_subscriptions_now = threading.Event()
 
@@ -1480,7 +1481,7 @@ class PV:
         self.context = context
         self.log = logging.getLogger(f'caproto.ch.{name}.{priority}')
         # Use this lock whenever we touch circuit_manager or channel.
-        self.component_lock = threading.RLock()
+        self.component_lock = RLock(self.name + '/component_lock')
         self.circuit_ready = threading.Event()
         self.channel_ready = threading.Event()
         self.connection_state_callback = CallbackHandler(self)
@@ -1834,7 +1835,7 @@ class CallbackHandler:
         self.callbacks = {}
         self.pv = pv
         self._callback_id = 0
-        self._callback_lock = threading.RLock()
+        self._callback_lock = RLock(pv.name + '/callback_lock')
 
     def add_callback(self, func):
 

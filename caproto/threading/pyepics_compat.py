@@ -13,6 +13,7 @@ from .client import (Context, SharedBroadcaster, AUTOMONITOR_MAXLENGTH,
 from caproto import (AccessRights, field_types, ChannelType,
                      CaprotoTimeoutError, CaprotoValueError,
                      CaprotoRuntimeError, CaprotoNotImplementedError)
+from .util import RLock
 
 
 __all__ = ('PV', 'get_pv', 'caget', 'caput')
@@ -183,7 +184,7 @@ class PV:
         self.auto_monitor = auto_monitor
         self.ftype = None
         self._connect_event = threading.Event()
-        self._state_lock = threading.RLock()
+        self._state_lock = RLock(self.pvname + '/state_lock')
         self.connection_timeout = connection_timeout
         self.default_count = count
         self._auto_monitor_sub = None
