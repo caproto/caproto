@@ -1359,12 +1359,12 @@ class VirtualCircuitManager:
         elif isinstance(command, ca.CreateChanResponse):
             pv = self.pvs[command.cid]
             chan = self.channels[command.cid]
-            pv.connection_state_changed('connected', chan)
             self.all_created_pvnames.append(pv.name)
             with pv.component_lock:
                 pv.channel = chan
                 cm = pv.circuit_manager
                 pv.channel_ready.set()
+            pv.connection_state_changed('connected', chan)
             # If we have just revived an existing PV whose
             # VirtualCircuit died and reconnected, we are now ready to
             # reinstate its Subsciprtions. If this is a new PV, it
