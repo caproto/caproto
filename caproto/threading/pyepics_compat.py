@@ -182,6 +182,7 @@ class PV:
         self.verbose = verbose
         self.auto_monitor = auto_monitor
         self.ftype = None
+        self._connected = False
         self._connect_event = threading.Event()
         self._state_lock = threading.RLock()
         self.connection_timeout = connection_timeout
