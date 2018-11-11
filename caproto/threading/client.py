@@ -1336,8 +1336,7 @@ class VirtualCircuitManager:
                 # provide the response to them and then set the Event that they
                 # are waiting on.
                 ioid_info['response'] = command
-                if event is not None:
-                    event.set()
+                event.set()
 
         elif isinstance(command, ca.EventAddResponse):
             try:
