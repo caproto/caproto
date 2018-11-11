@@ -95,8 +95,8 @@ class Broadcaster:
         -------
         commands : list
         """
-        self.log.debug("Received datagram from %r with %d bytes.",
-                       address, len(byteslike))
+        self.log.debug("Received datagram from %s:%d with %d bytes.",
+                       *address, len(byteslike))
         try:
             commands = read_datagram(byteslike, address, self.their_role)
         except Exception as ex:
