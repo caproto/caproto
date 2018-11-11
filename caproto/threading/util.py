@@ -99,7 +99,8 @@ if debug:
                             print(f'Stack: {stack.getvalue()}')
                     total += elapsed
                 if total > 0.001 and len(list_) > 1:
-                    print(f'-> {obj.name} {time_type} total={total:.3f}')
+                    print(f'-> {obj.name} {time_type} total={total:.3f} '
+                          f'count={len(list_)}')
 
 else:
     def RLock(name):

@@ -40,6 +40,8 @@ from .util import RLock, Event, Telemetry
 
 
 print = partial(print, flush=True)
+debug_print = print
+# debug_print = (lambda *args, **kw: None)
 
 
 CIRCUIT_DEATH_ATTEMPTS = 3
@@ -1253,9 +1255,9 @@ class VirtualCircuitManager:
     def send(self, *commands):
         # Turn the crank: inform the VirtualCircuit that these commands will
         # be send, and convert them to buffers.
-        buffers_to_send = self.circuit.send(*commands)
-        # Send bytes over the wire using some caproto utilities.
         with self._pseudo_send_event:
+            buffers_to_send = self.circuit.send(*commands)
+            # Send bytes over the wire using some caproto utilities.
             ca.send_all(buffers_to_send, self._socket_send)
 
     def received(self, bytes_recv, address):
@@ -1263,7 +1265,13 @@ class VirtualCircuitManager:
 
         This will be run on the recv thread"""
         self.last_tcp_receipt = time.monotonic()
+        t0 = time.time()
         commands, num_bytes_needed = self.circuit.recv(bytes_recv)
+        t1 = time.time()
+        reads = (c.ioid for c in commands
+                 if isinstance(c, (ca.ReadNotifyResponse, ca.ReadResponse)))
+        for ioid in reads:
+            print(f'{ioid} {t1} recv readresponse (recv took {t1-t0:.3} s)')
 
         for c in commands:
             self._process_command(c)
@@ -1331,11 +1339,11 @@ class VirtualCircuitManager:
                 # provide the response to them and then set the Event that they
                 # are waiting on.
                 ioid_info['response'] = command
+                debug_print(command.ioid, time.time(), 'read set')
                 event.set()
             callback = ioid_info.get('callback')
             if callback is not None:
                 self.user_callback_executor.submit(callback, command)
-
         elif isinstance(command, ca.EventAddResponse):
             try:
                 sub = self.subscriptions[command.subscriptionid]
@@ -1633,6 +1641,8 @@ class PV:
             Send a ``ReadNotifyRequest`` instead of a ``ReadRequest``. True by
             default.
         """
+        debug_print()
+        debug_print(None, time.time(), 'read request')
         cm, chan = self._circuit_manager, self._channel
         ioid = cm._ioid_counter()
         command = chan.read(ioid=ioid, data_type=data_type,
@@ -1648,10 +1658,12 @@ class PV:
 
         deadline = time.monotonic() + timeout if timeout is not None else None
         ioid_info['deadline'] = deadline
+        debug_print(ioid, time.time(), 'read send')
         cm.send(command)
         self.log.debug("%r: %r", self.name, command)
         if not wait:
             return
+        debug_print(ioid, time.time(), 'read sent')
 
         # The circuit_manager will put a reference to the response into
         # ioid_info and then set event.
@@ -1669,6 +1681,7 @@ class PV:
                 f"{self.name!r} within {timeout}-second timeout."
             )
 
+        debug_print(ioid, time.time(), 'read continues')
         self.log.debug("%r: %r", self.name, ioid_info['response'])
         return ioid_info['response']
 
