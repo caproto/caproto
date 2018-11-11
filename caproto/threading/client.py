@@ -1320,14 +1320,9 @@ class VirtualCircuitManager:
             if deadline is not None and time.monotonic() > deadline:
                 self.log.warn(f"ignoring late response with "
                               f"ioid={command.ioid} because it arrived "
-                              f"{time.monotonic() - ioid_info['deadline']} "
-                              f"seconds after the deadline specified by the "
-                              f"timeout."
-                              )
-            else:
-                callback = ioid_info.get('callback')
-                if callback is not None:
-                    self.user_callback_executor.submit(callback, command)
+                              f"{time.monotonic() - deadline} seconds after "
+                              f"the deadline specified by the timeout.")
+                return
 
             event = ioid_info.get('event')
             if event is not None:
@@ -1337,6 +1332,9 @@ class VirtualCircuitManager:
                 # are waiting on.
                 ioid_info['response'] = command
                 event.set()
+            callback = ioid_info.get('callback')
+            if callback is not None:
+                self.user_callback_executor.submit(callback, command)
 
         elif isinstance(command, ca.EventAddResponse):
             try:
