@@ -2,6 +2,39 @@
 Release History
 ***************
 
+Unreleased
+==========
+
+Features
+--------
+
+The threading client---and, thereby, the pyepics-compatible shim---have
+greater feature parity with epics-base.
+
+* In previous releases, the client resent any unanswered ``SearchRequests`` at
+  a fast regular rate forever. Now, it backs off from that initial rate and
+  rests at a slow interval to avoid creating too much wasteful network traffic.
+  There is a new method,
+  :meth:`~caproto.threading.client.SharedBroadcaster.cancel`, for manually
+  canceling some requests altogether if a response is never excepected (e.g. a
+  typo). There is also a new method for manually resending all unanswered
+  search requests,
+  :meth:`~caproto.threading.client.SharedBroadcaster.search_now`,
+  primarily for debugging. All unanswered search requests are automatically
+  resent when the user searches for a new PV or when a new server appears on
+  the network (see next point).
+* The client monitors server beacons to notice changes in the CA servers on the
+  network. When a new server appears, all standing unanswered search requests
+  are given a fresh start and immediately resent. If a server does not send a
+  beacon within the expected interval and has also not sent any TCP packets
+  related to user activity during that interval, the client silently initiates
+  an Echo. If the server still does not respond, it is deemed unresponsive. The
+  client logs a warning and disconnects all circuits from that server so that
+  their PVs can begin attempting to reconnect to a responsive server.
+
+The detail and consistency of the exceptions raised by the clients has also
+been improved.
+
 v0.2.1 (2018-10-29)
 ===================
 
