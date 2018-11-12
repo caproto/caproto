@@ -103,6 +103,9 @@ class ChannelAlarm:
     alarm_string = _read_only_property('alarm_string',
                                        doc='String associated with alarm')
 
+    def __repr__(self):
+        return f'<ChannelAlarm(status={self.status}, severity={self.severity})>'
+
     def connect(self, channel_data):
         self._channels.add(channel_data)
 
