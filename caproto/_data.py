@@ -725,12 +725,16 @@ class ChannelNumeric(ChannelData):
         self.log_atol = log_atol
 
     units = _read_only_property('units')
+
     upper_disp_limit = _read_only_property('upper_disp_limit')
     lower_disp_limit = _read_only_property('lower_disp_limit')
+
     upper_alarm_limit = _read_only_property('upper_alarm_limit')
+    lower_alarm_limit = _read_only_property('lower_alarm_limit')
+
     upper_warning_limit = _read_only_property('upper_warning_limit')
     lower_warning_limit = _read_only_property('lower_warning_limit')
-    lower_alarm_limit = _read_only_property('lower_alarm_limit')
+
     upper_ctrl_limit = _read_only_property('upper_ctrl_limit')
     lower_ctrl_limit = _read_only_property('lower_ctrl_limit')
 

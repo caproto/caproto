@@ -335,11 +335,14 @@ class AiFields(RecordFieldGroup):
         doc='Sim mode Alarm Svrty')
 
     _link_parent_attribute(hihi_alarm_limit, 'upper_alarm_limit')
+    _link_parent_attribute(lolo_alarm_limit, 'lower_alarm_limit')
+
     _link_parent_attribute(high_alarm_limit, 'upper_warning_limit')
     _link_parent_attribute(low_alarm_limit, 'lower_warning_limit')
-    _link_parent_attribute(lolo_alarm_limit, 'lower_alarm_limit')
+
     _link_parent_attribute(high_operating_range, 'upper_ctrl_limit')
     _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
+
     _link_parent_attribute(archive_deadband, 'log_atol')
     _link_parent_attribute(monitor_deadband, 'value_atol')
 
