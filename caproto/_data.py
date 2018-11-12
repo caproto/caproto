@@ -768,13 +768,69 @@ class ChannelNumeric(ChannelData):
             if not self.lower_ctrl_limit <= val <= self.upper_ctrl_limit:
                 raise CannotExceedLimits(
                     f"Cannot write data {val}. Limits are set to "
-                    f"{self.lower_ctrl_limit} and {self.upper_ctrl_limit}.")
-        if self.lower_warning_limit != self.upper_warning_limit:
-            if not self.lower_ctrl_limit <= val <= self.upper_warning_limit:
-                warnings.warn(
-                    f"Writing {val} outside warning limits which are are "
-                    f"set to {self.lower_ctrl_limit} and "
-                    f"{self.upper_warning_limit}.")
+                    f"{self.lower_ctrl_limit} and {self.upper_ctrl_limit}."
+                )
+
+        async def limit_checker(
+                value,
+                lo_attr, hi_attr,
+                lo_status, hi_status,
+                lo_severity_attr,
+                hi_severity_attr,
+                dflt_lo_severity,
+                dflt_hi_severity):
+
+            def limit_getter(limit_attr, severity_attr, dflt_severity):
+                sev = dflt_severity
+                limit = getattr(self, limit_attr)
+
+                sev_prop = getattr(
+                    getattr(self, 'field_inst', None),
+                    severity_attr, None)
+                if sev_prop is not None:
+                    sev = sev_prop.enum_strings.index(sev_prop.value)
+                return limit, AlarmSeverity(sev)
+
+            lo_limit, lo_severity = limit_getter(
+                lo_attr, lo_severity_attr, dflt_lo_severity)
+            hi_limit, hi_severity = limit_getter(
+                hi_attr, hi_severity_attr, dflt_hi_severity)
+            if lo_limit != hi_limit:
+                if value <= lo_limit:
+                    await self.alarm.write(status=lo_status,
+                                           severity=lo_severity)
+                    return False
+                elif hi_limit <= value:
+                    await self.alarm.write(status=hi_status,
+                                           severity=hi_severity)
+                    return False
+
+            await self.alarm.write(status=AlarmStatus.NO_ALARM,
+                                   severity=AlarmSeverity.NO_ALARM)
+            return True
+
+        # this is HIHI and LOLO limits
+        ok = await limit_checker(val,
+                                 'lower_alarm_limit',
+                                 'upper_alarm_limit',
+                                 AlarmStatus.LOLO,
+                                 AlarmStatus.HIHI,
+                                 'lolo_severity',
+                                 'hihi_severity',
+                                 AlarmSeverity.MAJOR_ALARM,
+                                 AlarmSeverity.MAJOR_ALARM)
+        if ok:
+            # this is HIGH and LOW limits
+            await limit_checker(val,
+                                'lower_warning_limit',
+                                'upper_warning_limit',
+                                AlarmStatus.LOW,
+                                AlarmStatus.HIGH,
+                                'low_severity',
+                                'high_severity',
+                                AlarmSeverity.MINOR_ALARM,
+                                AlarmSeverity.MINOR_ALARM)
+
         return data
 
 
