@@ -302,9 +302,10 @@ class SharedBroadcaster:
             The time, in seconds, between attempts made to register with the
             repeater. Default is 10.
         '''
-        self.udp_sock = None
         self.environ = ca.get_environment_variables()
         self.ca_server_port = self.environ['EPICS_CA_SERVER_PORT']
+
+        self.udp_sock = ca.bcast_socket()
 
         self._search_lock = threading.RLock()
         self._retry_unanswered_searches_thread = None
@@ -330,9 +331,11 @@ class SharedBroadcaster:
 
         # an event to tear down and clean up the broadcaster
         self._close_event = threading.Event()
-        self.selector = SelectorThread(parent=self)
 
+        self.selector = SelectorThread(parent=self)
+        self.selector.add_socket(self.udp_sock, self)
         self.selector.start()
+
         self._command_thread = threading.Thread(target=self.command_loop,
                                                 daemon=True, name='command')
         self._command_thread.start()
@@ -344,9 +347,6 @@ class SharedBroadcaster:
 
         self._registration_retry_time = registration_retry_time
         self._registration_last_sent = 0
-
-        self.udp_sock = ca.bcast_socket()
-        self.selector.add_socket(self.udp_sock, self)
 
         try:
             # Always attempt registration on initialization, but allow failures
@@ -411,7 +411,6 @@ class SharedBroadcaster:
         self.search_results.clear()
         self._registration_last_sent = 0
         self._searching_enabled.clear()
-        self.udp_sock = None
         self.broadcaster.disconnect()
         self.selector.stop()
         if wait:
