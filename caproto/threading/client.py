@@ -1255,7 +1255,11 @@ class VirtualCircuitManager:
         # be send, and convert them to buffers.
         buffers_to_send = self.circuit.send(*commands)
         # Send bytes over the wire using some caproto utilities.
-        ca.send_all(buffers_to_send, self._socket_send)
+        if len(buffers_to_send) == 1:
+            b, = buffers_to_send
+            self.socket.sendall(b)
+        else:
+            ca.send_all(buffers_to_send, self._socket_send)
 
     def received(self, bytes_recv, address):
         """Receive and process and next command from the virtual circuit.
