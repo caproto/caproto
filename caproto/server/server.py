@@ -124,6 +124,7 @@ class PvpropertyData:
         return await self._read(data_type)
 
     async def verify_value(self, value):
+        value = await super().verify_value(value)
         if self.pvspec.put is None:
             self.log.debug('group verify value for %s: %r', self.name, value)
         else:
