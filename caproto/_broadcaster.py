@@ -47,7 +47,6 @@ class Broadcaster:
         # track for the Broadcaster. We don't need a full state machine, just
         # one flag to check whether we have yet registered with a repeater.
         self._registered = False
-        self._attempted_registration = False
         self._search_id_counter = itertools.count(0)
         self.log = logging.getLogger(f"caproto.bcast")
 
@@ -130,18 +129,7 @@ class Broadcaster:
             This input will be mutated: command will be appended at the end.
         """
         # All commands go through here.
-        if isinstance(command, RepeaterRegisterRequest):
-            self._attempted_registration = True
-        elif isinstance(command, RepeaterConfirmResponse):
-            self._registered = True
-        elif (role is CLIENT and
-              self.our_role is CLIENT and
-              not self._attempted_registration):
-            raise LocalProtocolError("Client must send a "
-                                     "RegisterRepeaterRequest before any "
-                                     "other commands (saw: {})"
-                                     "".format(type(command).__name__))
-        elif isinstance(command, SearchRequest):
+        if isinstance(command, SearchRequest):
             if VersionRequest not in map(type, history):
                 err = get_exception(self.our_role, command)
                 raise err("A broadcasted SearchResponse must be preceded by a "
@@ -155,6 +143,8 @@ class Broadcaster:
             #     raise err("A broadcasted SearchResponse must be preceded by "
             #               "a VersionResponse in the same datagram.")
             self.unanswered_searches.pop(command.cid, None)
+        elif isinstance(command, RepeaterConfirmResponse):
+            self._registered = True
 
         history.append(command)
 
@@ -212,21 +202,11 @@ class Broadcaster:
         if ip is None:
             ip = '0.0.0.0'
         command = RepeaterRegisterRequest(ip)
-
-        # NOTE: consider this enough for a registration attempt.
-        # TODO this is required for moving forward with the threading client,
-        # and may be implemented better in the future
-        self._attempted_registration = True
         return command
 
     def disconnect(self):
         self._registered = False
-        self._attempted_registration = False
 
     @property
     def registered(self):
         return self._registered
-
-    @property
-    def attempted_registration(self):
-        return self._attempted_registration
