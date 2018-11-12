@@ -181,13 +181,12 @@ class VirtualCircuit:
              command,
              num_bytes_needed) = read_from_bytestream(self._data,
                                                       self.their_role)
-            len_data = len(self._data)  # just for logging
             if command is not NEED_DATA:
                 self.log.debug("%d bytes -> %r", len(command), command)
                 commands.append(command)
             else:
-                self.log.debug("%d bytes are cached. Need more bytes to parse "
-                               "next command.", len_data)
+                # Less than a full command's worth of bytes are cached. Wait
+                # for more bytes to come in before continuing parsing.
                 break
         return commands, num_bytes_needed
 
