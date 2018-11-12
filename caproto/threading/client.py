@@ -1906,16 +1906,11 @@ class Subscription(CallbackHandler):
     def _subscribe(self, timeout=2):
         """This is called automatically after the first callback is added.
         """
-        with self.pv.component_lock:
-            with self._callback_lock:
-                has_callbacks = bool(self.callbacks)
-            if has_callbacks:
-                cm = self.pv.circuit_manager
-                ctx = cm.context
-                with ctx.subscriptions_lock:
-                    ctx.subscriptions_to_activate[cm].add(self)
-                ctx.activate_subscriptions_now.set()
-            return has_callbacks
+        cm = self.pv.circuit_manager
+        ctx = cm.context
+        with ctx.subscriptions_lock:
+            ctx.subscriptions_to_activate[cm].add(self)
+        ctx.activate_subscriptions_now.set()
 
     @ensure_connected
     def compose_command(self, timeout=2):
@@ -1992,23 +1987,25 @@ class Subscription(CallbackHandler):
         token : int
             Integer token that can be passed to :meth:`remove_callback`.
         """
-        cb_id = super().add_callback(func)
         with self._callback_lock:
-            if self.subscriptionid is None:
-                # This is the first callback. Set up a subscription, which
-                # should elicit a response from the server soon giving the
-                # current value to this func (and any other funcs added in the
-                # mean time).
-                self._subscribe()
-            else:
-                # This callback is piggy-backing onto an existing subscription.
-                # Send it the most recent response, unless we are still waiting
-                # for that first response from the server.
-                if self.most_recent_response is not None:
-                    try:
-                        func(self.most_recent_response)
-                    except Exception as ex:
-                        print(ex)
+            was_empty = not self.callbacks
+            cb_id = super().add_callback(func)
+            most_recent_response = self.most_recent_response
+        if was_empty:
+            # This is the first callback. Set up a subscription, which
+            # should elicit a response from the server soon giving the
+            # current value to this func (and any other funcs added in the
+            # mean time).
+            self._subscribe()
+        else:
+            # This callback is piggy-backing onto an existing subscription.
+            # Send it the most recent response, unless we are still waiting
+            # for that first response from the server.
+            if most_recent_response is not None:
+                try:
+                    func(most_recent_response)
+                except Exception as ex:
+                    print(ex)
 
         return cb_id
 
@@ -2027,6 +2024,7 @@ class Subscription(CallbackHandler):
             if not self.callbacks:
                 # Go dormant.
                 self._unsubscribe()
+                self.most_recent_response = None
 
     def __del__(self):
         try:
