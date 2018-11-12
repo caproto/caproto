@@ -40,8 +40,8 @@ from .util import RLock, Event, Telemetry
 
 
 print = partial(print, flush=True)
-debug_print = print
-# debug_print = (lambda *args, **kw: None)
+# debug_print = print
+debug_print = (lambda *args, **kw: None)
 
 
 CIRCUIT_DEATH_ATTEMPTS = 3

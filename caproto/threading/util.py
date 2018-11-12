@@ -3,7 +3,7 @@ import threading
 import time
 import traceback
 
-debug = True
+debug = False
 
 
 if debug:
@@ -111,6 +111,19 @@ else:
 
     def Event(name):
         return threading.Event()
+
+    class Telemetry:
+        def __init__(self, name):
+            super().__init__()
+
+        def record_time(self, t0, t1):
+            self.wait_times.append([None, t0, t1])
+
+        def __enter__(self):
+            ...
+
+        def __exit__(self, exc_type, exc_value, tb):
+            ...
 
     def show_wait_times(threshold):
         ...
