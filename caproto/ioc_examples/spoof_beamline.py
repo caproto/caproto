@@ -70,7 +70,6 @@ def fabricate_channel(key):
     return ChannelDouble(value=0.0)
 
 
-
 def main():
     print('''
 *** WARNING ***
