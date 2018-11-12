@@ -73,8 +73,9 @@ def ensure_connected(func):
                 # Channel.
                 ready = pv.circuit_ready.wait(timeout=timeout)
                 if not ready:
-                    raise CaprotoTimeoutError(f"{pv} could not connect within "
-                                              f"{raw_timeout}-second timeout.")
+                    raise CaprotoTimeoutError(
+                        f"{pv} could not connect within "
+                        f"{float(raw_timeout):.3}-second timeout.")
                 with pv.component_lock:
                     cm = pv.circuit_manager
                     cid = cm.circuit.new_channel_id()
@@ -90,8 +91,9 @@ def ensure_connected(func):
                     timeout = deadline - time.monotonic()
                 ready = pv.channel_ready.wait(timeout=timeout)
                 if not ready:
-                    raise CaprotoTimeoutError(f"{pv} could not connect within "
-                                              f"{raw_timeout}-second timeout.")
+                    raise CaprotoTimeoutError(
+                        f"{pv} could not connect within "
+                        f"{float(raw_timeout):.3}-second timeout.")
                 if timeout is not None:
                     timeout = deadline - time.monotonic()
                     kwargs['timeout'] = timeout
@@ -432,17 +434,20 @@ class SharedBroadcaster:
         """
         bytes_to_send = self.broadcaster.send(*commands)
         for host in ca.get_address_list():
-            self.broadcaster.log.debug('sending bytes to %s', host)
+            if ':' in host:
+                host, _, port_as_str = host.partition(':')
+                specified_port = int(port_as_str)
+            else:
+                specified_port = port
             try:
-                if ':' in host:
-                    host, _, specified_port = host.partition(':')
-                    self.udp_sock.sendto(bytes_to_send, (host,
-                                                         int(specified_port)))
-                else:
-                    self.udp_sock.sendto(bytes_to_send, (host, port))
+                self.broadcaster.log.debug(
+                    'Sending %d bytes to %s:%d',
+                    len(bytes_to_send), host, specified_port)
+                self.udp_sock.sendto(bytes_to_send, (host, specified_port))
             except OSError as ex:
                 raise CaprotoNetworkError(
-                    f'{ex} while sending {len(bytes_to_send)} bytes to {host}:{port}') from ex
+                    f'{ex} while sending {len(bytes_to_send)} bytes to '
+                    f'{host}:{specified_port}') from ex
 
     def get_cached_search_result(self, name, *,
                                  threshold=STALE_SEARCH_EXPIRATION):
@@ -647,7 +652,7 @@ class SharedBroadcaster:
                         queues[queue].append(name)
                         # Cache this to save time on future searches.
                         # (Entries expire after STALE_SEARCH_EXPIRATION.)
-                        self.log.debug('Found %s at %s', name, address)
+                        self.log.debug('Found %s at %s:%d', name, *address)
                         search_results[name] = (address, now)
                         server_protocol_versions[address] = command.version
             # Send the search results to the Contexts that asked for
@@ -1230,9 +1235,10 @@ class VirtualCircuitManager:
             self._ready.set()
         ready = self._ready.wait(timeout=timeout)
         if not ready:
-            raise CaprotoTimeoutError("Circuit with server at {} did not "
-                                      "connected within {}-second timeout."
-                                      "".format(self.circuit.address, timeout))
+            host, port = self.circuit.address
+            raise CaprotoTimeoutError(f"Circuit with server at {host}:{port} "
+                                      f"did not connect within "
+                                      f"{float(timeout):.3}-second timeout.")
 
     def __repr__(self):
         return (f"<VirtualCircuitManager circuit={self.circuit} "
@@ -1317,10 +1323,10 @@ class VirtualCircuitManager:
             ioid_info = self.ioids.pop(command.ioid)
             deadline = ioid_info['deadline']
             if deadline is not None and time.monotonic() > deadline:
-                self.log.warn(f"ignoring late response with "
-                              f"ioid={command.ioid} because it arrived "
-                              f"{time.monotonic() - deadline} seconds after "
-                              f"the deadline specified by the timeout.")
+                self.log.warn("Ignoring late response with ioid=%d because "
+                              "it arrived %.3f seconds after the deadline "
+                              "specified by the timeout.", command.ioid,
+                              time.monotonic() - deadline)
                 return
 
             event = ioid_info.get('event')
@@ -1384,8 +1390,8 @@ class VirtualCircuitManager:
         # Ensure that this method is idempotent.
         if self.dead.is_set():
             return
-        self.log.debug('Virtual circuit with %s has disconnected.',
-                       '%s:%d' % (self.circuit.address))
+        self.log.debug('Virtual circuit with address %s:%d has disconnected.',
+                       *self.circuit.address)
         # Update circuit state. This will be reflected on all PVs, which
         # continue to hold a reference to this disconnected circuit.
         self.circuit.disconnect()
@@ -1421,9 +1427,8 @@ class VirtualCircuitManager:
 
         # Kick off attempt to reconnect all PVs via fresh circuit(s).
         self.log.debug('Kicking off reconnection attempts for %d PVs '
-                       'disconnected from %s....',
-                       len(self.channels),
-                       '%s:%d' % self.circuit.address)
+                       'disconnected from %s:%d....',
+                       len(self.channels), *self.circuit.address)
         self.context.reconnect(((chan.name, chan.circuit.priority)
                                 for chan in self.channels.values()))
 
@@ -1559,9 +1564,9 @@ class PV:
         """
         if not self.circuit_ready.wait(timeout=timeout):
             raise CaprotoTimeoutError("No servers responded to a search for a "
-                                      "channel named {!r} within {}-second "
+                                      "channel named {!r} within {:.3}-second "
                                       "timeout."
-                                      "".format(self.name, timeout))
+                                      "".format(self.name, float(timeout)))
 
     @ensure_connected
     def wait_for_connection(self, *, timeout=2):
@@ -1662,10 +1667,12 @@ class PV:
                 # in hopes of getting a working circuit until our `timeout` has
                 # been used up.
                 raise DeadCircuitError()
+            host, port = cm.circuit.address
             raise CaprotoTimeoutError(
-                f"Server at {cm.circuit.address} did "
+                f"Server at {host}:{port} did "
                 f"not respond to attempt to read channel named "
-                f"{self.name!r} within {timeout}-second timeout."
+                f"{self.name!r} within {float(timeout):.3}-second timeout. "
+                f"The ioid of the expected response is {ioid}."
             )
 
         self.log.debug("%r: %r", self.name, ioid_info['response'])
@@ -1748,11 +1755,12 @@ class PV:
                 # in hopes of getting a working circuit until our `timeout` has
                 # been used up.
                 raise DeadCircuitError()
+            host, port = cm.circuit.address
             raise CaprotoTimeoutError(
-                f"Server at {cm.circuit.address} did "
+                f"Server at {host}:{port} did "
                 f"not respond to attempt to write to channel named "
-                f"{self.name!r} within {timeout}-second timeout. The ioid of "
-                f"the expected response is {ioid}."
+                f"{self.name!r} within {float(timeout):.3}-second timeout. "
+                f"The ioid of the expected response is {ioid}."
             )
         self.log.debug("%r: %r", self.name, ioid_info['response'])
         return ioid_info['response']
