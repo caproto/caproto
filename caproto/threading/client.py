@@ -1217,6 +1217,8 @@ class VirtualCircuitManager:
         # Connect.
         if self.circuit.states[ca.SERVER] is ca.IDLE:
             self.socket = socket.create_connection(self.circuit.address)
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+            self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             self.selector.add_socket(self.socket, self)
             self.send(ca.VersionRequest(self.circuit.priority,
                                         ca.DEFAULT_PROTOCOL_VERSION),
