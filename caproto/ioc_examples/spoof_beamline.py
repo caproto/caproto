@@ -2,7 +2,8 @@
 from caproto.server import ioc_arg_parser, run
 
 from collections import defaultdict
-from caproto import ChannelData, ChannelString, ChannelEnum, ChannelChar
+from caproto import (ChannelString, ChannelEnum, ChannelDouble,
+                     ChannelChar, ChannelData)
 import re
 
 
@@ -66,7 +67,7 @@ def fabricate_channel(key):
     elif ('file' in key.lower() and 'number' not in key.lower() and
           'mode' not in key.lower()):
         return ChannelChar(value='a' * 250)
-    return ChannelData(value=0)
+    return ChannelDouble(value=0.0)
 
 
 def main():
