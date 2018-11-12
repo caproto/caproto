@@ -345,6 +345,9 @@ class SharedBroadcaster:
         self._registration_retry_time = registration_retry_time
         self._registration_last_sent = 0
 
+        self.udp_sock = ca.bcast_socket()
+        self.selector.add_socket(self.udp_sock, self)
+
         try:
             # Always attempt registration on initialization, but allow failures
             self._register()
@@ -368,9 +371,6 @@ class SharedBroadcaster:
 
     def _register(self):
         'Send a registration request to the repeater'
-        if self.udp_sock is None:
-            self._create_sock()
-
         self._registration_last_sent = time.monotonic()
         command = self.broadcaster.register()
 
@@ -384,15 +384,6 @@ class SharedBroadcaster:
                 self._id_counter = itertools.count(0)
                 continue
             return i
-
-    def _create_sock(self):
-        # UDP socket broadcasting to CA servers
-        if self.udp_sock is not None:
-            udp_sock, self.udp_sock = self.udp_sock, None
-            self.selector.remove_socket(udp_sock)
-
-        self.udp_sock = ca.bcast_socket()
-        self.selector.add_socket(self.udp_sock, self)
 
     def add_listener(self, listener):
         with self._search_lock:
