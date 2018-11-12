@@ -6,6 +6,7 @@ import logging
 
 from .server import PVGroup, pvproperty
 from .._data import ChannelType
+from .._dbr import AlarmSeverity
 from . import menus
 
 
@@ -204,6 +205,58 @@ class RecordFieldGroup(PVGroup):
     @process_record.putter
     async def process_record(self, instance, value):
         await self.parent.write(self.parent.value)
+
+
+class _Limits(PVGroup):
+    high_alarm_limit = pvproperty(
+        name='HIGH', dtype=ChannelType.DOUBLE, doc='High Alarm Limit')
+    high_severity = pvproperty(
+        name='HSV',
+        dtype=ChannelType.ENUM,
+        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
+        doc='High Severity',
+        value=menus.menuAlarmSevr.get_string_tuple()[
+            AlarmSeverity.MINOR_ALARM])
+    hihi_alarm_limit = pvproperty(
+        name='HIHI', dtype=ChannelType.DOUBLE, doc='Hihi Alarm Limit')
+    hihi_severity = pvproperty(
+        name='HHSV',
+        dtype=ChannelType.ENUM,
+        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
+        doc='Hihi Severity',
+        value=menus.menuAlarmSevr.get_string_tuple()[
+            AlarmSeverity.MAJOR_ALARM])
+    lolo_alarm_limit = pvproperty(
+        name='LOLO', dtype=ChannelType.DOUBLE, doc='Lolo Alarm Limit')
+    lolo_severity = pvproperty(
+        name='LLSV',
+        dtype=ChannelType.ENUM,
+        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
+        doc='Lolo Severity',
+        value=menus.menuAlarmSevr.get_string_tuple()[
+            AlarmSeverity.MAJOR_ALARM])
+    low_alarm_limit = pvproperty(
+        name='LOW', dtype=ChannelType.DOUBLE, doc='Low Alarm Limit')
+    low_severity = pvproperty(
+        name='LSV',
+        dtype=ChannelType.ENUM,
+        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
+        doc='Low Severity',
+        value=menus.menuAlarmSevr.get_string_tuple()[
+            AlarmSeverity.MINOR_ALARM])
+    high_operating_range = pvproperty(
+        name='HOPR', dtype=ChannelType.DOUBLE, doc='High Operating Range')
+    low_operating_range = pvproperty(
+        name='LOPR', dtype=ChannelType.DOUBLE, doc='Low Operating Range')
+
+    _link_parent_attribute(hihi_alarm_limit, 'upper_alarm_limit')
+    _link_parent_attribute(lolo_alarm_limit, 'lower_alarm_limit')
+
+    _link_parent_attribute(high_alarm_limit, 'upper_warning_limit')
+    _link_parent_attribute(low_alarm_limit, 'lower_warning_limit')
+
+    _link_parent_attribute(high_operating_range, 'upper_ctrl_limit')
+    _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
 
 
 @register_record
