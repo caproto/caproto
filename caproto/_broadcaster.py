@@ -5,7 +5,7 @@ import itertools
 import logging
 
 from ._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
-from ._utils import (CLIENT, SERVER, CaprotoValueError, LocalProtocolError,
+from ._utils import (CLIENT, SERVER, CaprotoValueError,
                      RemoteProtocolError)
 from ._state import get_exception
 from ._commands import (RepeaterConfirmResponse, RepeaterRegisterRequest,
