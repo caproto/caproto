@@ -1359,10 +1359,10 @@ class VirtualCircuitManager:
             pv.connection_state_changed('connected', chan)
             # If we have just revived an existing PV whose
             # VirtualCircuit died and reconnected, we are now ready to
-            # reinstate its Subsciprtions. If this is a new PV, it
-            # won't have any Subscriptions.
+            # reinstate its Subsciprtions.
             for sub in pv.subscriptions.values():
-                self.context.subscriptions_to_activate[cm].add(sub)
+                if sub.needs_reactivation:
+                    self.context.subscriptions_to_activate[cm].add(sub)
         elif isinstance(command, (ca.ServerDisconnResponse,
                                   ca.ClearChannelResponse)):
             pv = self.pvs[command.cid]
@@ -1517,6 +1517,9 @@ class PV:
     def connection_state_changed(self, state, channel):
         self.log.info('%s connection state changed to %s.', self.name, state)
         self.connection_state_callback.process(self, state)
+        if state == 'disconnected':
+            for sub in self.subscriptions.values():
+                sub.needs_reactivation = True
 
     def __repr__(self):
         if self._idle:
@@ -1894,6 +1897,17 @@ class Subscription(CallbackHandler):
         self.mask = mask
         self.subscriptionid = None
         self.most_recent_response = None
+        self._needs_reactivation = False
+
+    @property
+    def needs_reactivation(self):
+        with self._callback_lock:
+            return self._needs_reactivation
+
+    @needs_reactivation.setter
+    def needs_reactivation(self, val):
+        with self._callback_lock:
+            self._needs_reactivation = val
 
     @property
     def log(self):
@@ -2025,6 +2039,7 @@ class Subscription(CallbackHandler):
                 # Go dormant.
                 self._unsubscribe()
                 self.most_recent_response = None
+                self.needs_reactivation = False
 
     def __del__(self):
         try:
