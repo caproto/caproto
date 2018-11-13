@@ -2019,7 +2019,10 @@ class Subscription(CallbackHandler):
                 try:
                     func(most_recent_response)
                 except Exception as ex:
-                    print(ex)
+                    self.log.exception(
+                        "Exception raised during processing most recent "
+                        "response %r with new callback %r",
+                        most_recent_response, func)
 
         return cb_id
 
