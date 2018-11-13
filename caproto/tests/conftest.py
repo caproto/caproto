@@ -230,7 +230,6 @@ def _epics_base_ioc(prefix, request):
                            type='epics-base')
 
 
-
 def _caproto_ioc(prefix, request):
     name = 'Caproto type varieties example'
     pvs = dict(int=prefix + 'int',
@@ -247,8 +246,10 @@ def _caproto_ioc(prefix, request):
     return SimpleNamespace(process=process, prefix=prefix, name=name, pvs=pvs,
                            type='caproto')
 
+
 caproto_ioc = pytest.fixture(scope='function')(_caproto_ioc)
 epics_base_ioc = pytest.fixture(scope='function')(_epics_base_ioc)
+
 
 @pytest.fixture(params=['caproto', 'epics-base'], scope='function')
 def ioc_factory(prefix, request):
