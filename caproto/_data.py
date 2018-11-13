@@ -788,7 +788,10 @@ class ChannelNumeric(ChannelData):
                     getattr(self, 'field_inst', None),
                     severity_attr, None)
                 if sev_prop is not None:
-                    sev = sev_prop.enum_strings.index(sev_prop.value)
+                    # TODO sort out where ints are getting through...
+                    if isinstance(sev_prop.value, str):
+                        sev = sev_prop.enum_strings.index(sev_prop.value)
+
                 return limit, AlarmSeverity(sev)
 
             lo_limit, lo_severity = limit_getter(
