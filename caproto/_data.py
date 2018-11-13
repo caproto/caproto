@@ -6,7 +6,6 @@
 from collections import defaultdict, Iterable, namedtuple
 import copy
 import time
-import warnings
 import weakref
 
 from ._dbr import (DBR_TYPES, ChannelType, native_type, native_types,
