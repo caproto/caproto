@@ -77,10 +77,10 @@ class ChannelAlarm:
             severity_to_acknowledge=severity_to_acknowledge,
             alarm_string=alarm_string)
 
-    def __setstate__(self, val):
+    def __setstate__(self, state):
         self._channels = weakref.WeakSet()
-        self.string_encoding = val['string_encoding']
-        self._data = val['data']
+        self.string_encoding = state['string_encoding']
+        self._data = state['data']
 
     def __getstate__(self):
         return {'data': self._data, 'string_encoding': self.string_encoding}
@@ -270,14 +270,14 @@ class ChannelData:
             return [value]
         return value
 
-    def __setstate__(self, val):
-        self.timestamp = val['timestamp']
-        self._alarm = val['alarm']
-        self.string_encoding = val['string_encoding']
-        self.reported_record_type = val['reported_record_type']
-        self._data = val['data']
-        self._max_length = val['max_length']
-        self.string_encoding = val['string_encoding']
+    def __setstate__(self, state):
+        self.data['timestamp'] = state['timestamp']
+        self._alarm = state['alarm']
+        self.string_encoding = state['string_encoding']
+        self.reported_record_type = state['reported_record_type']
+        self._data = state['data']
+        self._max_length = state['max_length']
+        self.string_encoding = state['string_encoding']
         self._queues = defaultdict(
             lambda: defaultdict(
                 lambda: defaultdict(set)))
@@ -683,6 +683,15 @@ class ChannelEnum(ChannelData):
 
     enum_strings = _read_only_property('enum_strings')
 
+    def __getstate__(self):
+        state = super().__getstate__()
+        state['enum_strings'] = self.enum_strings
+        return state
+
+    def __setstate__(self, state):
+        super().__setstate__(state)
+        self._data['enum_strings'] = state['enum_strings']
+
     async def verify_value(self, data):
         try:
             return self.enum_strings[data]
@@ -739,6 +748,35 @@ class ChannelNumeric(ChannelData):
     upper_ctrl_limit = _read_only_property('upper_ctrl_limit')
     lower_ctrl_limit = _read_only_property('lower_ctrl_limit')
 
+    def __getstate__(self):
+        state = super().__getstate__()
+        state.update(
+            units=self.units,
+            upper_disp_limit=self.upper_disp_limit,
+            lower_disp_limit=self.lower_disp_limit,
+            upper_alarm_limit=self.upper_alarm_limit,
+            lower_alarm_limit=self.lower_alarm_limit,
+            upper_warning_limit=self.upper_warning_limit,
+            lower_warning_limit=self.lower_warning_limit,
+            upper_ctrl_limit=self.upper_ctrl_limit,
+            lower_ctrl_limit=self.lower_ctrl_limit,
+        )
+        return state
+
+    def __setstate__(self, state):
+        super().__setstate__(state)
+        self._data.update(
+            units=state['units'],
+            upper_disp_limit=state['upper_disp_limit'],
+            lower_disp_limit=state['lower_disp_limit'],
+            upper_alarm_limit=state['upper_alarm_limit'],
+            lower_alarm_limit=state['lower_alarm_limit'],
+            upper_warning_limit=state['upper_warning_limit'],
+            lower_warning_limit=state['lower_warning_limit'],
+            upper_ctrl_limit=state['upper_ctrl_limit'],
+            lower_ctrl_limit=state['lower_ctrl_limit'],
+        )
+
     async def verify_value(self, data):
         if not isinstance(data, Iterable):
             val = data
@@ -778,6 +816,17 @@ class ChannelDouble(ChannelNumeric):
         self._data['precision'] = precision
 
     precision = _read_only_property('precision')
+
+    def __getstate__(self):
+        state = super().__getstate__()
+        state['precision'] = self.precision
+        return state
+
+    def __setstate__(self, state):
+        super().__setstate__(state)
+        self._data.update(
+            precision=state['precision'],
+        )
 
 
 class ChannelByte(ChannelNumeric):
