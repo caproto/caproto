@@ -771,7 +771,7 @@ class ChannelNumeric(ChannelData):
                     f"{self.lower_ctrl_limit} and {self.upper_ctrl_limit}."
                 )
 
-        async def limit_checker(
+        def limit_checker(
                 value,
                 lo_attr, hi_attr,
                 lo_status, hi_status,
@@ -797,39 +797,37 @@ class ChannelNumeric(ChannelData):
                 hi_attr, hi_severity_attr, dflt_hi_severity)
             if lo_limit != hi_limit:
                 if value <= lo_limit:
-                    await self.alarm.write(status=lo_status,
-                                           severity=lo_severity)
-                    return False
-                elif hi_limit <= value:
-                    await self.alarm.write(status=hi_status,
-                                           severity=hi_severity)
-                    return False
+                    return lo_status, lo_severity
 
-            await self.alarm.write(status=AlarmStatus.NO_ALARM,
-                                   severity=AlarmSeverity.NO_ALARM)
-            return True
+                elif hi_limit <= value:
+                    return hi_status, hi_severity
+
+            return AlarmStatus.NO_ALARM, AlarmSeverity.NO_ALARM
 
         # this is HIHI and LOLO limits
-        ok = await limit_checker(val,
-                                 'lower_alarm_limit',
-                                 'upper_alarm_limit',
-                                 AlarmStatus.LOLO,
-                                 AlarmStatus.HIHI,
-                                 'lolo_severity',
-                                 'hihi_severity',
-                                 AlarmSeverity.MAJOR_ALARM,
-                                 AlarmSeverity.MAJOR_ALARM)
-        if ok:
+        asts, asver = limit_checker(val,
+                                    'lower_alarm_limit',
+                                    'upper_alarm_limit',
+                                    AlarmStatus.LOLO,
+                                    AlarmStatus.HIHI,
+                                    'lolo_severity',
+                                    'hihi_severity',
+                                    AlarmSeverity.MAJOR_ALARM,
+                                    AlarmSeverity.MAJOR_ALARM)
+        # if HIHI and LOLO did not trigger as alarm, see if HIGH and LOW do
+        if asts is AlarmStatus.NO_ALARM:
             # this is HIGH and LOW limits
-            await limit_checker(val,
-                                'lower_warning_limit',
-                                'upper_warning_limit',
-                                AlarmStatus.LOW,
-                                AlarmStatus.HIGH,
-                                'low_severity',
-                                'high_severity',
-                                AlarmSeverity.MINOR_ALARM,
-                                AlarmSeverity.MINOR_ALARM)
+            asts, asver = limit_checker(val,
+                                        'lower_warning_limit',
+                                        'upper_warning_limit',
+                                        AlarmStatus.LOW,
+                                        AlarmStatus.HIGH,
+                                        'low_severity',
+                                        'high_severity',
+                                        AlarmSeverity.MINOR_ALARM,
+                                        AlarmSeverity.MINOR_ALARM)
+
+        await self.alarm.write(status=asts, severity=asver)
 
         return data
 
