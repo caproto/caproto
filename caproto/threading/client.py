@@ -1513,7 +1513,9 @@ class PV:
         self.connection_state_callback.process(self, state)
         if state == 'disconnected':
             for sub in self.subscriptions.values():
-                sub.needs_reactivation = True
+                with sub.callback_lock:
+                    if sub.callbacks:
+                        sub.needs_reactivation = True
         if state == 'connected':
             cm = self.circuit_manager
             ctx = cm.context
