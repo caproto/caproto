@@ -1357,12 +1357,6 @@ class VirtualCircuitManager:
                 cm = pv.circuit_manager
                 pv.channel_ready.set()
             pv.connection_state_changed('connected', chan)
-            # If we have just revived an existing PV whose
-            # VirtualCircuit died and reconnected, we are now ready to
-            # reinstate its Subsciprtions.
-            for sub in pv.subscriptions.values():
-                if sub.needs_reactivation:
-                    self.context.subscriptions_to_activate[cm].add(sub)
         elif isinstance(command, (ca.ServerDisconnResponse,
                                   ca.ClearChannelResponse)):
             pv = self.pvs[command.cid]
@@ -1520,6 +1514,15 @@ class PV:
         if state == 'disconnected':
             for sub in self.subscriptions.values():
                 sub.needs_reactivation = True
+        if state == 'connected':
+            cm = self.circuit_manager
+            ctx = cm.context
+            with ctx.subscriptions_lock:
+                for sub in self.subscriptions.values():
+                    with sub.callback_lock:
+                        if sub.needs_reactivation:
+                            ctx.subscriptions_to_activate[cm].add(sub)
+                            sub.needs_reactivation = False
 
     def __repr__(self):
         if self._idle:
@@ -1829,7 +1832,7 @@ class CallbackHandler:
         self.callbacks = {}
         self.pv = pv
         self._callback_id = 0
-        self._callback_lock = threading.RLock()
+        self.callback_lock = threading.RLock()
 
     def add_callback(self, func):
 
@@ -1842,14 +1845,14 @@ class CallbackHandler:
             # TODO: strong reference to non-instance methods?
             ref = weakref.ref(func, removed)
 
-        with self._callback_lock:
+        with self.callback_lock:
             cb_id = self._callback_id
             self._callback_id += 1
             self.callbacks[cb_id] = ref
         return cb_id
 
     def remove_callback(self, token):
-        with self._callback_lock:
+        with self.callback_lock:
             self.callbacks.pop(token, None)
 
     def process(self, *args, **kwargs):
@@ -1858,7 +1861,7 @@ class CallbackHandler:
         ThreadPoolExecutor and then returns.
         """
         to_remove = []
-        with self._callback_lock:
+        with self.callback_lock:
             callbacks = list(self.callbacks.items())
 
         for cb_id, ref in callbacks:
@@ -1870,7 +1873,7 @@ class CallbackHandler:
             self.pv.circuit_manager.user_callback_executor.submit(
                 callback, *args, **kwargs)
 
-        with self._callback_lock:
+        with self.callback_lock:
             for remove_id in to_remove:
                 self.callbacks.pop(remove_id, None)
 
@@ -1897,17 +1900,7 @@ class Subscription(CallbackHandler):
         self.mask = mask
         self.subscriptionid = None
         self.most_recent_response = None
-        self._needs_reactivation = False
-
-    @property
-    def needs_reactivation(self):
-        with self._callback_lock:
-            return self._needs_reactivation
-
-    @needs_reactivation.setter
-    def needs_reactivation(self, val):
-        with self._callback_lock:
-            self._needs_reactivation = val
+        self.needs_reactivation = False
 
     @property
     def log(self):
@@ -1929,7 +1922,7 @@ class Subscription(CallbackHandler):
     @ensure_connected
     def compose_command(self, timeout=2):
         "This is used by the Context to re-subscribe in bulk after dropping."
-        with self._callback_lock:
+        with self.callback_lock:
             if not self.callbacks:
                 return None
             cm, chan = self.pv._circuit_manager, self.pv._channel
@@ -1950,7 +1943,7 @@ class Subscription(CallbackHandler):
         """
         Remove all callbacks.
         """
-        with self._callback_lock:
+        with self.callback_lock:
             for cb_id in list(self.callbacks):
                 self.remove_callback(cb_id)
         # Once self.callbacks is empty, self.remove_callback calls
@@ -1960,7 +1953,7 @@ class Subscription(CallbackHandler):
         """
         This is automatically called if the number of callbacks goes to 0.
         """
-        with self._callback_lock:
+        with self.callback_lock:
             if self.subscriptionid is None:
                 # Already unsubscribed.
                 return
@@ -2001,7 +1994,7 @@ class Subscription(CallbackHandler):
         token : int
             Integer token that can be passed to :meth:`remove_callback`.
         """
-        with self._callback_lock:
+        with self.callback_lock:
             was_empty = not self.callbacks
             cb_id = super().add_callback(func)
             most_recent_response = self.most_recent_response
@@ -2036,7 +2029,7 @@ class Subscription(CallbackHandler):
         token : integer
             Token returned by :meth:`add_callback`.
         """
-        with self._callback_lock:
+        with self.callback_lock:
             super().remove_callback(token)
             if not self.callbacks:
                 # Go dormant.
