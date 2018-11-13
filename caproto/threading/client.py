@@ -1354,7 +1354,6 @@ class VirtualCircuitManager:
             self.all_created_pvnames.append(pv.name)
             with pv.component_lock:
                 pv.channel = chan
-                cm = pv.circuit_manager
                 pv.channel_ready.set()
             pv.connection_state_changed('connected', chan)
         elif isinstance(command, (ca.ServerDisconnResponse,
@@ -2013,7 +2012,7 @@ class Subscription(CallbackHandler):
             if most_recent_response is not None:
                 try:
                     func(most_recent_response)
-                except Exception as ex:
+                except Exception:
                     self.log.exception(
                         "Exception raised during processing most recent "
                         "response %r with new callback %r",
