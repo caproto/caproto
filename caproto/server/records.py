@@ -3576,7 +3576,7 @@ class LonginFields(RecordFieldGroup, _LimitsLong):
 
 
 @register_record
-class LongoutFields(RecordFieldGroup):
+class LongoutFields(RecordFieldGroup, _LimitsLong):
     _record_type = 'longout'
     # value = pvproperty(
     #     name='VAL', dtype=ChannelType.LONG, doc='Desired Output')
@@ -3608,40 +3608,8 @@ class LongoutFields(RecordFieldGroup):
         doc='Simulation Mode')
     alarm_deadband = pvproperty(
         name='HYST', dtype=ChannelType.LONG, doc='Alarm Deadband')
-    high_alarm_limit = pvproperty(
-        name='HIGH', dtype=ChannelType.LONG, doc='High Alarm Limit')
-    high_severity = pvproperty(
-        name='HSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='High Severity')
-    hihi_alarm_limit = pvproperty(
-        name='HIHI', dtype=ChannelType.LONG, doc='Hihi Alarm Limit')
-    hihi_severity = pvproperty(
-        name='HHSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='Hihi Severity')
-    lolo_alarm_limit = pvproperty(
-        name='LOLO', dtype=ChannelType.LONG, doc='Lolo Alarm Limit')
-    lolo_severity = pvproperty(
-        name='LLSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='Lolo Severity')
-    low_alarm_limit = pvproperty(
-        name='LOW', dtype=ChannelType.LONG, doc='Low Alarm Limit')
-    low_severity = pvproperty(
-        name='LSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='Low Severity')
     archive_deadband = pvproperty(
         name='ADEL', dtype=ChannelType.LONG, doc='Archive Deadband')
-    high_operating_range = pvproperty(
-        name='HOPR', dtype=ChannelType.LONG, doc='High Operating Range')
-    low_operating_range = pvproperty(
-        name='LOPR', dtype=ChannelType.LONG, doc='Low Operating Range')
     monitor_deadband = pvproperty(
         name='MDEL', dtype=ChannelType.LONG, doc='Monitor Deadband')
     units_name = pvproperty(
@@ -3675,12 +3643,6 @@ class LongoutFields(RecordFieldGroup):
         doc='Output Mode Select')
     output_specification = pvproperty(
         name='OUT', dtype=ChannelType.STRING, doc='Output Specification')
-    _link_parent_attribute(hihi_alarm_limit, 'upper_alarm_limit')
-    _link_parent_attribute(high_alarm_limit, 'upper_warning_limit')
-    _link_parent_attribute(low_alarm_limit, 'lower_warning_limit')
-    _link_parent_attribute(lolo_alarm_limit, 'lower_alarm_limit')
-    _link_parent_attribute(high_operating_range, 'upper_ctrl_limit')
-    _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
     _link_parent_attribute(archive_deadband, 'log_atol')
     _link_parent_attribute(monitor_deadband, 'value_atol')
 
