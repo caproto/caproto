@@ -271,7 +271,7 @@ class ChannelData:
         return value
 
     def __setstate__(self, state):
-        self.data['timestamp'] = state['timestamp']
+        self._data['timestamp'] = state['timestamp']
         self._alarm = state['alarm']
         self.string_encoding = state['string_encoding']
         self.reported_record_type = state['reported_record_type']
