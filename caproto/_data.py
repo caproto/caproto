@@ -202,6 +202,8 @@ class ChannelData:
             alarm = ChannelAlarm()
 
         self._alarm = None
+        self._status = None
+        self._severity = None
 
         # now use the setter to attach the alarm correctly:
         self.alarm = alarm
@@ -480,7 +482,11 @@ class ChannelData:
                                    severity=AlarmSeverity.MAJOR_ALARM,
                                    )
             raise
+        finally:
+            alarm_md = self._collect_alarm()
 
+        # issues of over-riding user passed in data here!
+        metadata.update(alarm_md)
         metadata.setdefault('timestamp', time.time())
 
         if self._fill_at_next_write:
@@ -631,12 +637,37 @@ class ChannelData:
     @property
     def status(self):
         '''Alarm status'''
-        return self.alarm.status
+        return (self.alarm.status
+                if self._status is None
+                else self._status)
+
+    @status.setter
+    def status(self, value):
+        self._status = AlarmStatus(value)
 
     @property
     def severity(self):
         '''Alarm severity'''
-        return self.alarm.severity
+        return (self.alarm.severity
+                if self._severity is None
+                else self._severity)
+
+    @severity.setter
+    def severity(self, value):
+        self._severity = AlarmSeverity(value)
+
+    def _collect_alarm(self):
+        out = {}
+        if self._status is not None:
+            out['status'] = self._status
+        if self._severity is not None:
+            out['severity'] = self._severity
+
+        self._clear_cached_alarms()
+        return out
+
+    def _clear_cached_alarms(self):
+            self._status = self._severity = None
 
     def __len__(self):
         try:
@@ -833,7 +864,8 @@ class ChannelNumeric(ChannelData):
                                         AlarmSeverity.MINOR_ALARM,
                                         AlarmSeverity.MINOR_ALARM)
 
-        await self.alarm.write(status=asts, severity=asver)
+        self.status = asts
+        self.severity = asver
 
         return data
 
