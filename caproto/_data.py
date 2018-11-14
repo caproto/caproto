@@ -77,13 +77,16 @@ class ChannelAlarm:
             severity_to_acknowledge=severity_to_acknowledge,
             alarm_string=alarm_string)
 
-    def __setstate__(self, state):
-        self._channels = weakref.WeakSet()
-        self.string_encoding = state['string_encoding']
-        self._data = state['data']
-
-    def __getstate__(self):
-        return {'data': self._data, 'string_encoding': self.string_encoding}
+    def __getnewargs_ex__(self):
+        kwargs = {
+            'status': self.status,
+            'severity': self.severity,
+            'must_acknowledge_transient': self.must_acknowledge_transient,
+            'severity_to_acknowledge': self.severity_to_acknowledge,
+            'alarm_string': self.alarm_string,
+            'string_encoding': self.string_encoding,
+        }
+        return ((), kwargs)
 
     status = _read_only_property('status',
                                  doc='Current alarm status')
@@ -270,28 +273,15 @@ class ChannelData:
             return [value]
         return value
 
-    def __setstate__(self, state):
-        self._data['timestamp'] = state['timestamp']
-        self._alarm = state['alarm']
-        self.string_encoding = state['string_encoding']
-        self.reported_record_type = state['reported_record_type']
-        self._data = state['data']
-        self._max_length = state['max_length']
-        self.string_encoding = state['string_encoding']
-        self._queues = defaultdict(
-            lambda: defaultdict(
-                lambda: defaultdict(set)))
-        self._content = {}
-        self._snapshots = defaultdict(dict)
-        self._fill_at_next_write = list()
-
-    def __getstate__(self):
-        return {'timestamp': self.timestamp,
-                'alarm': self.alarm,
-                'string_encoding': self.string_encoding,
-                'reported_record_type': self.reported_record_type,
-                'data': self._data,
-                'max_length': self._max_length}
+    def __getnewargs_ex__(self):
+        # ref: https://docs.python.org/3/library/pickle.html
+        kwargs = {'timestamp': self.timestamp,
+                  'alarm': self.alarm,
+                  'string_encoding': self.string_encoding,
+                  'reported_record_type': self.reported_record_type,
+                  'data': self._data,
+                  'max_length': self._max_length}
+        return ((), kwargs)
 
     value = _read_only_property('value')
     timestamp = _read_only_property('timestamp')
@@ -683,14 +673,10 @@ class ChannelEnum(ChannelData):
 
     enum_strings = _read_only_property('enum_strings')
 
-    def __getstate__(self):
-        state = super().__getstate__()
-        state['enum_strings'] = self.enum_strings
-        return state
-
-    def __setstate__(self, state):
-        super().__setstate__(state)
-        self._data['enum_strings'] = state['enum_strings']
+    def __getnewargs_ex__(self):
+        args, kwargs = super().__getnewargs_ex__()
+        kwargs['enum_strings'] = self.enum_strings
+        return (args, kwargs)
 
     async def verify_value(self, data):
         try:
@@ -748,9 +734,9 @@ class ChannelNumeric(ChannelData):
     upper_ctrl_limit = _read_only_property('upper_ctrl_limit')
     lower_ctrl_limit = _read_only_property('lower_ctrl_limit')
 
-    def __getstate__(self):
-        state = super().__getstate__()
-        state.update(
+    def __getnewargs_ex__(self):
+        args, kwargs = super().__getnewargs_ex__()
+        kwargs.update(
             units=self.units,
             upper_disp_limit=self.upper_disp_limit,
             lower_disp_limit=self.lower_disp_limit,
@@ -761,21 +747,7 @@ class ChannelNumeric(ChannelData):
             upper_ctrl_limit=self.upper_ctrl_limit,
             lower_ctrl_limit=self.lower_ctrl_limit,
         )
-        return state
-
-    def __setstate__(self, state):
-        super().__setstate__(state)
-        self._data.update(
-            units=state['units'],
-            upper_disp_limit=state['upper_disp_limit'],
-            lower_disp_limit=state['lower_disp_limit'],
-            upper_alarm_limit=state['upper_alarm_limit'],
-            lower_alarm_limit=state['lower_alarm_limit'],
-            upper_warning_limit=state['upper_warning_limit'],
-            lower_warning_limit=state['lower_warning_limit'],
-            upper_ctrl_limit=state['upper_ctrl_limit'],
-            lower_ctrl_limit=state['lower_ctrl_limit'],
-        )
+        return (args, kwargs)
 
     async def verify_value(self, data):
         if not isinstance(data, Iterable):
@@ -817,16 +789,10 @@ class ChannelDouble(ChannelNumeric):
 
     precision = _read_only_property('precision')
 
-    def __getstate__(self):
-        state = super().__getstate__()
-        state['precision'] = self.precision
-        return state
-
-    def __setstate__(self, state):
-        super().__setstate__(state)
-        self._data.update(
-            precision=state['precision'],
-        )
+    def __getnewargs_ex__(self):
+        args, kwargs = super().__getnewargs_ex__()
+        kwargs['precision'] = self.precision
+        return (args, kwargs)
 
 
 class ChannelByte(ChannelNumeric):

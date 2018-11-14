@@ -1,7 +1,8 @@
 import ast
+import copy
 import datetime
-import time
 import sys
+import time
 
 import pytest
 
@@ -318,11 +319,17 @@ def test_write_without_notify(request, prefix, async_lib):
      (ca.ChannelString, {'value': 'abcd'}),
      ]
 )
-def test_smoke_getstate_setstate(cls, kwargs):
-    instance = cls(**kwargs)
-    state1 = instance.__getstate__()
+def test_data_copy(cls, kwargs):
+    inst1 = cls(**kwargs)
+    _, args1 = inst1.__getnewargs_ex__()
 
-    new_instance = cls(**kwargs)
-    new_instance.__setstate__(state1)
-    state2 = new_instance.__getstate__()
-    assert state1 == state2
+    inst2 = copy.deepcopy(inst1)
+    _, args2 = inst2.__getnewargs_ex__()
+
+    def patch_alarm(args):
+        if 'alarm' in args:
+            args['alarm'] = args['alarm'].__getnewargs_ex__()
+
+    patch_alarm(args1)
+    patch_alarm(args2)
+    assert args1 == args2
