@@ -302,9 +302,10 @@ class SharedBroadcaster:
             The time, in seconds, between attempts made to register with the
             repeater. Default is 10.
         '''
-        self.udp_sock = None
         self.environ = ca.get_environment_variables()
         self.ca_server_port = self.environ['EPICS_CA_SERVER_PORT']
+
+        self.udp_sock = ca.bcast_socket()
 
         self._search_lock = threading.RLock()
         self._retry_unanswered_searches_thread = None
@@ -330,9 +331,11 @@ class SharedBroadcaster:
 
         # an event to tear down and clean up the broadcaster
         self._close_event = threading.Event()
-        self.selector = SelectorThread(parent=self)
 
+        self.selector = SelectorThread(parent=self)
+        self.selector.add_socket(self.udp_sock, self)
         self.selector.start()
+
         self._command_thread = threading.Thread(target=self.command_loop,
                                                 daemon=True, name='command')
         self._command_thread.start()
@@ -368,9 +371,6 @@ class SharedBroadcaster:
 
     def _register(self):
         'Send a registration request to the repeater'
-        if self.udp_sock is None:
-            self._create_sock()
-
         self._registration_last_sent = time.monotonic()
         command = self.broadcaster.register()
 
@@ -384,15 +384,6 @@ class SharedBroadcaster:
                 self._id_counter = itertools.count(0)
                 continue
             return i
-
-    def _create_sock(self):
-        # UDP socket broadcasting to CA servers
-        if self.udp_sock is not None:
-            udp_sock, self.udp_sock = self.udp_sock, None
-            self.selector.remove_socket(udp_sock)
-
-        self.udp_sock = ca.bcast_socket()
-        self.selector.add_socket(self.udp_sock, self)
 
     def add_listener(self, listener):
         with self._search_lock:
@@ -420,7 +411,6 @@ class SharedBroadcaster:
         self.search_results.clear()
         self._registration_last_sent = 0
         self._searching_enabled.clear()
-        self.udp_sock = None
         self.broadcaster.disconnect()
         self.selector.stop()
         if wait:
@@ -1364,15 +1354,8 @@ class VirtualCircuitManager:
             self.all_created_pvnames.append(pv.name)
             with pv.component_lock:
                 pv.channel = chan
-                cm = pv.circuit_manager
                 pv.channel_ready.set()
             pv.connection_state_changed('connected', chan)
-            # If we have just revived an existing PV whose
-            # VirtualCircuit died and reconnected, we are now ready to
-            # reinstate its Subsciprtions. If this is a new PV, it
-            # won't have any Subscriptions.
-            for sub in pv.subscriptions.values():
-                self.context.subscriptions_to_activate[cm].add(sub)
         elif isinstance(command, (ca.ServerDisconnResponse,
                                   ca.ClearChannelResponse)):
             pv = self.pvs[command.cid]
@@ -1527,6 +1510,20 @@ class PV:
     def connection_state_changed(self, state, channel):
         self.log.info('%s connection state changed to %s.', self.name, state)
         self.connection_state_callback.process(self, state)
+        if state == 'disconnected':
+            for sub in self.subscriptions.values():
+                with sub.callback_lock:
+                    if sub.callbacks:
+                        sub.needs_reactivation = True
+        if state == 'connected':
+            cm = self.circuit_manager
+            ctx = cm.context
+            with ctx.subscriptions_lock:
+                for sub in self.subscriptions.values():
+                    with sub.callback_lock:
+                        if sub.needs_reactivation:
+                            ctx.subscriptions_to_activate[cm].add(sub)
+                            sub.needs_reactivation = False
 
     def __repr__(self):
         if self._idle:
@@ -1836,7 +1833,7 @@ class CallbackHandler:
         self.callbacks = {}
         self.pv = pv
         self._callback_id = 0
-        self._callback_lock = threading.RLock()
+        self.callback_lock = threading.RLock()
 
     def add_callback(self, func):
 
@@ -1849,14 +1846,14 @@ class CallbackHandler:
             # TODO: strong reference to non-instance methods?
             ref = weakref.ref(func, removed)
 
-        with self._callback_lock:
+        with self.callback_lock:
             cb_id = self._callback_id
             self._callback_id += 1
             self.callbacks[cb_id] = ref
         return cb_id
 
     def remove_callback(self, token):
-        with self._callback_lock:
+        with self.callback_lock:
             self.callbacks.pop(token, None)
 
     def process(self, *args, **kwargs):
@@ -1865,7 +1862,7 @@ class CallbackHandler:
         ThreadPoolExecutor and then returns.
         """
         to_remove = []
-        with self._callback_lock:
+        with self.callback_lock:
             callbacks = list(self.callbacks.items())
 
         for cb_id, ref in callbacks:
@@ -1877,7 +1874,7 @@ class CallbackHandler:
             self.pv.circuit_manager.user_callback_executor.submit(
                 callback, *args, **kwargs)
 
-        with self._callback_lock:
+        with self.callback_lock:
             for remove_id in to_remove:
                 self.callbacks.pop(remove_id, None)
 
@@ -1904,6 +1901,7 @@ class Subscription(CallbackHandler):
         self.mask = mask
         self.subscriptionid = None
         self.most_recent_response = None
+        self.needs_reactivation = False
 
     @property
     def log(self):
@@ -1916,21 +1914,16 @@ class Subscription(CallbackHandler):
     def _subscribe(self, timeout=2):
         """This is called automatically after the first callback is added.
         """
-        with self.pv.component_lock:
-            with self._callback_lock:
-                has_callbacks = bool(self.callbacks)
-            if has_callbacks:
-                cm = self.pv.circuit_manager
-                ctx = cm.context
-                with ctx.subscriptions_lock:
-                    ctx.subscriptions_to_activate[cm].add(self)
-                ctx.activate_subscriptions_now.set()
-            return has_callbacks
+        cm = self.pv.circuit_manager
+        ctx = cm.context
+        with ctx.subscriptions_lock:
+            ctx.subscriptions_to_activate[cm].add(self)
+        ctx.activate_subscriptions_now.set()
 
     @ensure_connected
     def compose_command(self, timeout=2):
         "This is used by the Context to re-subscribe in bulk after dropping."
-        with self._callback_lock:
+        with self.callback_lock:
             if not self.callbacks:
                 return None
             cm, chan = self.pv._circuit_manager, self.pv._channel
@@ -1951,7 +1944,7 @@ class Subscription(CallbackHandler):
         """
         Remove all callbacks.
         """
-        with self._callback_lock:
+        with self.callback_lock:
             for cb_id in list(self.callbacks):
                 self.remove_callback(cb_id)
         # Once self.callbacks is empty, self.remove_callback calls
@@ -1961,7 +1954,7 @@ class Subscription(CallbackHandler):
         """
         This is automatically called if the number of callbacks goes to 0.
         """
-        with self._callback_lock:
+        with self.callback_lock:
             if self.subscriptionid is None:
                 # Already unsubscribed.
                 return
@@ -2002,23 +1995,28 @@ class Subscription(CallbackHandler):
         token : int
             Integer token that can be passed to :meth:`remove_callback`.
         """
-        cb_id = super().add_callback(func)
-        with self._callback_lock:
-            if self.subscriptionid is None:
-                # This is the first callback. Set up a subscription, which
-                # should elicit a response from the server soon giving the
-                # current value to this func (and any other funcs added in the
-                # mean time).
-                self._subscribe()
-            else:
-                # This callback is piggy-backing onto an existing subscription.
-                # Send it the most recent response, unless we are still waiting
-                # for that first response from the server.
-                if self.most_recent_response is not None:
-                    try:
-                        func(self.most_recent_response)
-                    except Exception as ex:
-                        print(ex)
+        with self.callback_lock:
+            was_empty = not self.callbacks
+            cb_id = super().add_callback(func)
+            most_recent_response = self.most_recent_response
+        if was_empty:
+            # This is the first callback. Set up a subscription, which
+            # should elicit a response from the server soon giving the
+            # current value to this func (and any other funcs added in the
+            # mean time).
+            self._subscribe()
+        else:
+            # This callback is piggy-backing onto an existing subscription.
+            # Send it the most recent response, unless we are still waiting
+            # for that first response from the server.
+            if most_recent_response is not None:
+                try:
+                    func(most_recent_response)
+                except Exception:
+                    self.log.exception(
+                        "Exception raised during processing most recent "
+                        "response %r with new callback %r",
+                        most_recent_response, func)
 
         return cb_id
 
@@ -2032,11 +2030,13 @@ class Subscription(CallbackHandler):
         token : integer
             Token returned by :meth:`add_callback`.
         """
-        with self._callback_lock:
+        with self.callback_lock:
             super().remove_callback(token)
             if not self.callbacks:
                 # Go dormant.
                 self._unsubscribe()
+                self.most_recent_response = None
+                self.needs_reactivation = False
 
     def __del__(self):
         try:
