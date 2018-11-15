@@ -464,9 +464,9 @@ class ChannelData:
                                                  self.string_encoding)
             metadata_dict.setdefault('timestamp', timestamp)
 
-        return (await self.write(value, flags, **metadata_dict))
+        return (await self.write(value, flags=flags, **metadata_dict))
 
-    async def write(self, value, flags=0, **metadata):
+    async def write(self, value, *, flags=0, **metadata):
         '''Set data from native Python types'''
         try:
             value = self.preprocess_value(value)
