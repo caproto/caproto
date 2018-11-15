@@ -125,7 +125,7 @@ class ChannelAlarm:
                     must_acknowledge_transient=None,
                     severity_to_acknowledge=None,
                     alarm_string=None, caller=None,
-                    flags=0):
+                    flags=0, publish=True):
         data = self._data
 
         if status is not None:
@@ -161,8 +161,14 @@ class ChannelAlarm:
             data['alarm_string'] = alarm_string
             flags |= SubscriptionType.DBE_ALARM
 
+        if publish:
+            await self.publish(flags)
+
+    async def publish(self, flags, *, except_for=()):
+
         for channel in self._channels:
-            await channel.publish(flags)
+            if channel not in except_for:
+                await channel.publish(flags)
 
 
 class ChannelData:
@@ -614,7 +620,8 @@ class ChannelData:
 
         if any(alarm_val is not None
                for alarm_val in (status, severity)):
-            await self.alarm.write(status=status, severity=severity)
+            await self.alarm.write(status=status, severity=severity,
+                                   publish=publish)
 
         if publish:
             await self.publish(SubscriptionType.DBE_PROPERTY)
