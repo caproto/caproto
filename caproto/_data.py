@@ -77,13 +77,16 @@ class ChannelAlarm:
             severity_to_acknowledge=severity_to_acknowledge,
             alarm_string=alarm_string)
 
-    def __setstate__(self, val):
-        self._channels = weakref.WeakSet()
-        self.string_encoding = val['string_encoding']
-        self._data = val['data']
-
-    def __getstate__(self):
-        return {'data': self._data, 'string_encoding': self.string_encoding}
+    def __getnewargs_ex__(self):
+        kwargs = {
+            'status': self.status,
+            'severity': self.severity,
+            'must_acknowledge_transient': self.must_acknowledge_transient,
+            'severity_to_acknowledge': self.severity_to_acknowledge,
+            'alarm_string': self.alarm_string,
+            'string_encoding': self.string_encoding,
+        }
+        return ((), kwargs)
 
     status = _read_only_property('status',
                                  doc='Current alarm status')
@@ -270,28 +273,15 @@ class ChannelData:
             return [value]
         return value
 
-    def __setstate__(self, val):
-        self.timestamp = val['timestamp']
-        self._alarm = val['alarm']
-        self.string_encoding = val['string_encoding']
-        self.reported_record_type = val['reported_record_type']
-        self._data = val['data']
-        self._max_length = val['max_length']
-        self.string_encoding = val['string_encoding']
-        self._queues = defaultdict(
-            lambda: defaultdict(
-                lambda: defaultdict(set)))
-        self._content = {}
-        self._snapshots = defaultdict(dict)
-        self._fill_at_next_write = list()
-
-    def __getstate__(self):
-        return {'timestamp': self.timestamp,
-                'alarm': self.alarm,
-                'string_encoding': self.string_encoding,
-                'reported_record_type': self.reported_record_type,
-                'data': self._data,
-                'max_length': self._max_length}
+    def __getnewargs_ex__(self):
+        # ref: https://docs.python.org/3/library/pickle.html
+        kwargs = {'timestamp': self.timestamp,
+                  'alarm': self.alarm,
+                  'string_encoding': self.string_encoding,
+                  'reported_record_type': self.reported_record_type,
+                  'data': self._data,
+                  'max_length': self._max_length}
+        return ((), kwargs)
 
     value = _read_only_property('value')
     timestamp = _read_only_property('timestamp')
@@ -683,6 +673,11 @@ class ChannelEnum(ChannelData):
 
     enum_strings = _read_only_property('enum_strings')
 
+    def __getnewargs_ex__(self):
+        args, kwargs = super().__getnewargs_ex__()
+        kwargs['enum_strings'] = self.enum_strings
+        return (args, kwargs)
+
     async def verify_value(self, data):
         try:
             return self.enum_strings[data]
@@ -739,6 +734,21 @@ class ChannelNumeric(ChannelData):
     upper_ctrl_limit = _read_only_property('upper_ctrl_limit')
     lower_ctrl_limit = _read_only_property('lower_ctrl_limit')
 
+    def __getnewargs_ex__(self):
+        args, kwargs = super().__getnewargs_ex__()
+        kwargs.update(
+            units=self.units,
+            upper_disp_limit=self.upper_disp_limit,
+            lower_disp_limit=self.lower_disp_limit,
+            upper_alarm_limit=self.upper_alarm_limit,
+            lower_alarm_limit=self.lower_alarm_limit,
+            upper_warning_limit=self.upper_warning_limit,
+            lower_warning_limit=self.lower_warning_limit,
+            upper_ctrl_limit=self.upper_ctrl_limit,
+            lower_ctrl_limit=self.lower_ctrl_limit,
+        )
+        return (args, kwargs)
+
     async def verify_value(self, data):
         if not isinstance(data, Iterable):
             val = data
@@ -778,6 +788,11 @@ class ChannelDouble(ChannelNumeric):
         self._data['precision'] = precision
 
     precision = _read_only_property('precision')
+
+    def __getnewargs_ex__(self):
+        args, kwargs = super().__getnewargs_ex__()
+        kwargs['precision'] = self.precision
+        return (args, kwargs)
 
 
 class ChannelByte(ChannelNumeric):

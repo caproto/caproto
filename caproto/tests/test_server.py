@@ -1,7 +1,8 @@
 import ast
+import copy
 import datetime
-import time
 import sys
+import time
 
 import pytest
 
@@ -301,3 +302,34 @@ def test_write_without_notify(request, prefix, async_lib):
         time.sleep(0.1)
     else:
         raise AssertionError("Server never processed WriteRequest.")
+
+
+@pytest.mark.parametrize(
+    'cls, kwargs',
+    [(ca.ChannelAlarm, {}),
+     (ca.ChannelData, {}),
+     (ca.ChannelByte, {'value': b'b'}),
+     (ca.ChannelChar, {'value': 'b', 'string_encoding': 'latin-1'}),
+     (ca.ChannelDouble, {'value': 0.1}),
+     (ca.ChannelEnum, {'value': 'a', 'string_encoding': 'latin-1',
+                       'enum_strings': ['a', 'b', 'c']}),
+     (ca.ChannelInteger, {'value': 5}),
+     (ca.ChannelNumeric, {'value': 5}),
+     (ca.ChannelShort, {'value': 5}),
+     (ca.ChannelString, {'value': 'abcd'}),
+     ]
+)
+def test_data_copy(cls, kwargs):
+    inst1 = cls(**kwargs)
+    _, args1 = inst1.__getnewargs_ex__()
+
+    inst2 = copy.deepcopy(inst1)
+    _, args2 = inst2.__getnewargs_ex__()
+
+    def patch_alarm(args):
+        if 'alarm' in args:
+            args['alarm'] = args['alarm'].__getnewargs_ex__()
+
+    patch_alarm(args1)
+    patch_alarm(args2)
+    assert args1 == args2
