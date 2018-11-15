@@ -450,22 +450,8 @@ class ChannelData:
             enum_strings=getattr(self, 'enum_strings', None),
             direction=ConversionDirection.FROM_WIRE)
 
-        try:
-            value = self.preprocess_value(value)
-            modified_value = await self.verify_value(value)
-        except Exception:
-            # TODO: should allow exception to optionally pass alarm
-            # status/severity through exception instance
-            await self.alarm.write(status=AlarmStatus.WRITE,
-                                   severity=AlarmSeverity.MAJOR_ALARM,
-                                   )
-            raise
-
-        new = modified_value if modified_value is not None else value
-        self._data['value'] = new
-
         if metadata is None:
-            self._data['timestamp'] = timestamp
+            metadata_dict = {'timestamp': timestamp}
         else:
             # Convert `metadata` to bytes-like (or pass it through).
             md_payload = parse_metadata(metadata, data_type)
@@ -476,32 +462,43 @@ class ChannelData:
             dbr_metadata = DBR_TYPES[data_type].from_buffer(md_payload)
             metadata_dict = dbr_metadata_to_dict(dbr_metadata,
                                                  self.string_encoding)
-            await self.write_metadata(publish=False, **metadata_dict)
+            metadata_dict.setdefault('timestamp', timestamp)
 
-        if self._fill_at_next_write:
-            snapshot = copy.deepcopy(self)
-            for state, mode in self._fill_at_next_write:
-                self._snapshots[state][mode] = snapshot
-            self._fill_at_next_write.clear()
-
-        # Send a new event to subscribers.
-        await self.publish(flags)
+        return (await self.write(value, flags, **metadata_dict))
 
     async def write(self, value, flags=0, **metadata):
         '''Set data from native Python types'''
-        value = self.preprocess_value(value)
-        metadata['timestamp'] = metadata.get('timestamp', time.time())
-        modified_value = await self.verify_value(value)
+        try:
+            value = self.preprocess_value(value)
+            modified_value = await self.verify_value(value)
+        except GeneratorExit:
+            raise
+        except Exception:
+            # TODO: should allow exception to optionally pass alarm
+            # status/severity through exception instance
+            await self.alarm.write(status=AlarmStatus.WRITE,
+                                   severity=AlarmSeverity.MAJOR_ALARM,
+                                   )
+            raise
+
+        metadata.setdefault('timestamp', time.time())
+
         if self._fill_at_next_write:
             snapshot = copy.deepcopy(self)
             for state, mode in self._fill_at_next_write:
                 self._snapshots[state][mode] = snapshot
             self._fill_at_next_write.clear()
+
         new = modified_value if modified_value is not None else value
+
+        # TODO the next 5 lines should be done in one move
         self._data['value'] = new
         await self.write_metadata(publish=False, **metadata)
         # Send a new event to subscribers.
         await self.publish(flags)
+        # and publish any linked alarms
+        if 'status' in metadata or 'severity' in metadata:
+            await self.alarm.publish(flags, except_for=(self,))
 
     def _is_eligible(self, ss):
         sync = ss.channel_filter.sync
