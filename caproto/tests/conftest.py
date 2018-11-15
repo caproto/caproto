@@ -166,8 +166,7 @@ def prefix():
     return str(uuid.uuid4())[:8] + ':'
 
 
-@pytest.fixture(scope='function')
-def epics_base_ioc(prefix, request):
+def _epics_base_ioc(prefix, request):
     name = 'Waveform and standard record IOC'
     db = {
         ('{}waveform'.format(prefix), 'waveform'):
@@ -231,8 +230,7 @@ def epics_base_ioc(prefix, request):
                            type='epics-base')
 
 
-@pytest.fixture(scope='function')
-def caproto_ioc(prefix, request):
+def _caproto_ioc(prefix, request):
     name = 'Caproto type varieties example'
     pvs = dict(int=prefix + 'int',
                int2=prefix + 'int2',
@@ -249,14 +247,18 @@ def caproto_ioc(prefix, request):
                            type='caproto')
 
 
+caproto_ioc = pytest.fixture(scope='function')(_caproto_ioc)
+epics_base_ioc = pytest.fixture(scope='function')(_epics_base_ioc)
+
+
 @pytest.fixture(params=['caproto', 'epics-base'], scope='function')
 def ioc_factory(prefix, request):
     'A fixture that runs more than one IOC: caproto, epics'
     # Get a new prefix for each IOC type:
     if request.param == 'caproto':
-        return functools.partial(caproto_ioc, prefix, request)
+        return functools.partial(_caproto_ioc, prefix, request)
     elif request.param == 'epics-base':
-        return functools.partial(epics_base_ioc, prefix, request)
+        return functools.partial(_epics_base_ioc, prefix, request)
 
 
 @pytest.fixture(params=['caproto', 'epics-base'], scope='function')
@@ -264,9 +266,10 @@ def ioc(prefix, request):
     'A fixture that runs more than one IOC: caproto, epics'
     # Get a new prefix for each IOC type:
     if request.param == 'caproto':
-        ioc_ = caproto_ioc(prefix, request)
+        ioc_ = _caproto_ioc(prefix, request)
     elif request.param == 'epics-base':
-        ioc_ = epics_base_ioc(prefix, request)
+        ioc_ = _epics_base_ioc(prefix, request)
+
     return ioc_
 
 

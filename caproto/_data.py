@@ -6,7 +6,6 @@
 from collections import defaultdict, Iterable, namedtuple
 import copy
 import time
-import warnings
 import weakref
 
 from ._dbr import (DBR_TYPES, ChannelType, native_type, native_types,
@@ -103,6 +102,9 @@ class ChannelAlarm:
     alarm_string = _read_only_property('alarm_string',
                                        doc='String associated with alarm')
 
+    def __repr__(self):
+        return f'<ChannelAlarm(status={self.status}, severity={self.severity})>'
+
     def connect(self, channel_data):
         self._channels.add(channel_data)
 
@@ -123,7 +125,7 @@ class ChannelAlarm:
                     must_acknowledge_transient=None,
                     severity_to_acknowledge=None,
                     alarm_string=None, caller=None,
-                    flags=0):
+                    flags=0, publish=True):
         data = self._data
 
         if status is not None:
@@ -159,8 +161,14 @@ class ChannelAlarm:
             data['alarm_string'] = alarm_string
             flags |= SubscriptionType.DBE_ALARM
 
+        if publish:
+            await self.publish(flags)
+
+    async def publish(self, flags, *, except_for=()):
+
         for channel in self._channels:
-            await channel.publish(flags)
+            if channel not in except_for:
+                await channel.publish(flags)
 
 
 class ChannelData:
@@ -194,6 +202,8 @@ class ChannelData:
             alarm = ChannelAlarm()
 
         self._alarm = None
+        self._status = None
+        self._severity = None
 
         # now use the setter to attach the alarm correctly:
         self.alarm = alarm
@@ -442,22 +452,8 @@ class ChannelData:
             enum_strings=getattr(self, 'enum_strings', None),
             direction=ConversionDirection.FROM_WIRE)
 
-        try:
-            value = self.preprocess_value(value)
-            modified_value = await self.verify_value(value)
-        except Exception:
-            # TODO: should allow exception to optionally pass alarm
-            # status/severity through exception instance
-            await self.alarm.write(status=AlarmStatus.WRITE,
-                                   severity=AlarmSeverity.MAJOR_ALARM,
-                                   )
-            raise
-
-        new = modified_value if modified_value is not None else value
-        self._data['value'] = new
-
         if metadata is None:
-            self._data['timestamp'] = timestamp
+            metadata_dict = {'timestamp': timestamp}
         else:
             # Convert `metadata` to bytes-like (or pass it through).
             md_payload = parse_metadata(metadata, data_type)
@@ -468,32 +464,47 @@ class ChannelData:
             dbr_metadata = DBR_TYPES[data_type].from_buffer(md_payload)
             metadata_dict = dbr_metadata_to_dict(dbr_metadata,
                                                  self.string_encoding)
-            await self.write_metadata(publish=False, **metadata_dict)
+            metadata_dict.setdefault('timestamp', timestamp)
 
-        if self._fill_at_next_write:
-            snapshot = copy.deepcopy(self)
-            for state, mode in self._fill_at_next_write:
-                self._snapshots[state][mode] = snapshot
-            self._fill_at_next_write.clear()
+        return (await self.write(value, flags=flags, **metadata_dict))
 
-        # Send a new event to subscribers.
-        await self.publish(flags)
-
-    async def write(self, value, flags=0, **metadata):
+    async def write(self, value, *, flags=0, **metadata):
         '''Set data from native Python types'''
-        value = self.preprocess_value(value)
-        metadata['timestamp'] = metadata.get('timestamp', time.time())
-        modified_value = await self.verify_value(value)
+        try:
+            value = self.preprocess_value(value)
+            modified_value = await self.verify_value(value)
+        except GeneratorExit:
+            raise
+        except Exception:
+            # TODO: should allow exception to optionally pass alarm
+            # status/severity through exception instance
+            await self.alarm.write(status=AlarmStatus.WRITE,
+                                   severity=AlarmSeverity.MAJOR_ALARM,
+                                   )
+            raise
+        finally:
+            alarm_md = self._collect_alarm()
+
+        # issues of over-riding user passed in data here!
+        metadata.update(alarm_md)
+        metadata.setdefault('timestamp', time.time())
+
         if self._fill_at_next_write:
             snapshot = copy.deepcopy(self)
             for state, mode in self._fill_at_next_write:
                 self._snapshots[state][mode] = snapshot
             self._fill_at_next_write.clear()
+
         new = modified_value if modified_value is not None else value
+
+        # TODO the next 5 lines should be done in one move
         self._data['value'] = new
         await self.write_metadata(publish=False, **metadata)
         # Send a new event to subscribers.
         await self.publish(flags)
+        # and publish any linked alarms
+        if 'status' in metadata or 'severity' in metadata:
+            await self.alarm.publish(flags, except_for=(self,))
 
     def _is_eligible(self, ss):
         sync = ss.channel_filter.sync
@@ -612,7 +623,8 @@ class ChannelData:
 
         if any(alarm_val is not None
                for alarm_val in (status, severity)):
-            await self.alarm.write(status=status, severity=severity)
+            await self.alarm.write(status=status, severity=severity,
+                                   publish=publish)
 
         if publish:
             await self.publish(SubscriptionType.DBE_PROPERTY)
@@ -625,12 +637,37 @@ class ChannelData:
     @property
     def status(self):
         '''Alarm status'''
-        return self.alarm.status
+        return (self.alarm.status
+                if self._status is None
+                else self._status)
+
+    @status.setter
+    def status(self, value):
+        self._status = AlarmStatus(value)
 
     @property
     def severity(self):
         '''Alarm severity'''
-        return self.alarm.severity
+        return (self.alarm.severity
+                if self._severity is None
+                else self._severity)
+
+    @severity.setter
+    def severity(self, value):
+        self._severity = AlarmSeverity(value)
+
+    def _collect_alarm(self):
+        out = {}
+        if self._status is not None:
+            out['status'] = self._status
+        if self._severity is not None:
+            out['severity'] = self._severity
+
+        self._clear_cached_alarms()
+        return out
+
+    def _clear_cached_alarms(self):
+            self._status = self._severity = None
 
     def __len__(self):
         try:
@@ -725,12 +762,16 @@ class ChannelNumeric(ChannelData):
         self.log_atol = log_atol
 
     units = _read_only_property('units')
+
     upper_disp_limit = _read_only_property('upper_disp_limit')
     lower_disp_limit = _read_only_property('lower_disp_limit')
+
     upper_alarm_limit = _read_only_property('upper_alarm_limit')
+    lower_alarm_limit = _read_only_property('lower_alarm_limit')
+
     upper_warning_limit = _read_only_property('upper_warning_limit')
     lower_warning_limit = _read_only_property('lower_warning_limit')
-    lower_alarm_limit = _read_only_property('lower_alarm_limit')
+
     upper_ctrl_limit = _read_only_property('upper_ctrl_limit')
     lower_ctrl_limit = _read_only_property('lower_ctrl_limit')
 
@@ -761,13 +802,71 @@ class ChannelNumeric(ChannelData):
             if not self.lower_ctrl_limit <= val <= self.upper_ctrl_limit:
                 raise CannotExceedLimits(
                     f"Cannot write data {val}. Limits are set to "
-                    f"{self.lower_ctrl_limit} and {self.upper_ctrl_limit}.")
-        if self.lower_warning_limit != self.upper_warning_limit:
-            if not self.lower_ctrl_limit <= val <= self.upper_warning_limit:
-                warnings.warn(
-                    f"Writing {val} outside warning limits which are are "
-                    f"set to {self.lower_ctrl_limit} and "
-                    f"{self.upper_warning_limit}.")
+                    f"{self.lower_ctrl_limit} and {self.upper_ctrl_limit}."
+                )
+
+        def limit_checker(
+                value,
+                lo_attr, hi_attr,
+                lo_status, hi_status,
+                lo_severity_attr,
+                hi_severity_attr,
+                dflt_lo_severity,
+                dflt_hi_severity):
+
+            def limit_getter(limit_attr, severity_attr, dflt_severity):
+                sev = dflt_severity
+                limit = getattr(self, limit_attr)
+
+                sev_prop = getattr(
+                    getattr(self, 'field_inst', None),
+                    severity_attr, None)
+                if sev_prop is not None:
+                    # TODO sort out where ints are getting through...
+                    if isinstance(sev_prop.value, str):
+                        sev = sev_prop.enum_strings.index(sev_prop.value)
+
+                return limit, AlarmSeverity(sev)
+
+            lo_limit, lo_severity = limit_getter(
+                lo_attr, lo_severity_attr, dflt_lo_severity)
+            hi_limit, hi_severity = limit_getter(
+                hi_attr, hi_severity_attr, dflt_hi_severity)
+            if lo_limit != hi_limit:
+                if value <= lo_limit:
+                    return lo_status, lo_severity
+
+                elif hi_limit <= value:
+                    return hi_status, hi_severity
+
+            return AlarmStatus.NO_ALARM, AlarmSeverity.NO_ALARM
+
+        # this is HIHI and LOLO limits
+        asts, asver = limit_checker(val,
+                                    'lower_alarm_limit',
+                                    'upper_alarm_limit',
+                                    AlarmStatus.LOLO,
+                                    AlarmStatus.HIHI,
+                                    'lolo_severity',
+                                    'hihi_severity',
+                                    AlarmSeverity.MAJOR_ALARM,
+                                    AlarmSeverity.MAJOR_ALARM)
+        # if HIHI and LOLO did not trigger as alarm, see if HIGH and LOW do
+        if asts is AlarmStatus.NO_ALARM:
+            # this is HIGH and LOW limits
+            asts, asver = limit_checker(val,
+                                        'lower_warning_limit',
+                                        'upper_warning_limit',
+                                        AlarmStatus.LOW,
+                                        AlarmStatus.HIGH,
+                                        'low_severity',
+                                        'high_severity',
+                                        AlarmSeverity.MINOR_ALARM,
+                                        AlarmSeverity.MINOR_ALARM)
+
+        self.status = asts
+        self.severity = asver
+
         return data
 
 

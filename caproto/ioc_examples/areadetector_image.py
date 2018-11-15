@@ -15,8 +15,17 @@ async def get_images(w, h):
             yield img
 
 
+class SC(ophyd.areadetector.cam.SimDetectorCam):
+    pool_max_buffers = None
+
+
+class IP(ophyd.ImagePlugin):
+    pool_max_buffers = None
+
+
 class Detector(ophyd.SimDetector):
-    image1 = ophyd.Component(ophyd.ImagePlugin, 'image1:')
+    image1 = ophyd.Component(IP, 'image1:')
+    cam = ophyd.Component(SC, 'cam1:')
 
 
 pvproperty_with_rbv = get_pv_pair_wrapper(setpoint_suffix='',
