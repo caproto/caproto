@@ -42,6 +42,10 @@ Improved Alarm Support
 ----------------------
 
 * Value-based alarms are supported by all servers.
+* LOLO, LO, HI, and HIHI alarm status fields of mocked records are respected.
+* Channel limit metadata (upper_alarm_limit, upper_warning_limit, etc.) is now
+  integrated with alarms.
+
 
 Bug Fixes and Performance Improvements
 --------------------------------------
