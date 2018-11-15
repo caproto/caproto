@@ -49,8 +49,8 @@ Bug Fixes and Performance Improvements
 * The socket settings ``SO_KEEPALIVE`` and ``TCP_NODELAY`` are used in the
   threading client TCP sockets, making it consistent with epics-base and removing a 40ms
   overhead that can occur when sending small packets.
-* Some unnecessary locking was removed from the threadling client, resolving
-  a deadlock and improving performance.
+* Some unnecessary locking was removed from the threading client, resolving
+  a deadlock observed in ophyd and improving performance.
 * The ``spoof_beamline`` IOC is aware of more components of Area Detector and
   defaults to float-type channels instead of integer-type.
 * A rare but possible race condition that caused a subscription to be activated
