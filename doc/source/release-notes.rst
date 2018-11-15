@@ -32,10 +32,16 @@ greater feature parity with epics-base.
   client logs a warning and disconnects all circuits from that server so that
   their PVs can begin attempting to reconnect to a responsive server.
 
-v0.2.2 (2018-11-12)
+v0.2.2 (2018-11-15)
 ===================
 
-The release improves the performance of the threading client.
+The release improves the performance of the threading client and adds support
+for value-based alarms.
+
+Improved Alarm Support
+----------------------
+
+* Value-based alarms are supported by all servers.
 
 Bug Fixes and Performance Improvements
 --------------------------------------
@@ -49,6 +55,8 @@ Bug Fixes and Performance Improvements
   defaults to float-type channels instead of integer-type.
 * A rare but possible race condition that caused a subscription to be activated
   twice (thus getting two responses for each update) has been resolved.
+* The ``ChannelData`` objects are serializable with pickle.
+* A bug in length-checking that affected zero-length data has been fixed.
 
 The detail and consistency of the exceptions raised by the clients has also
 been improved.
