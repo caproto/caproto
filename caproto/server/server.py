@@ -21,7 +21,8 @@ from .. import (ChannelDouble, ChannelShort, ChannelInteger, ChannelString,
                 ChannelAlarm,
                 AccessRights, get_server_address_list,
                 AlarmStatus, AlarmSeverity, CaprotoRuntimeError,
-                CaprotoValueError, CaprotoTypeError, CaprotoAttributeError)
+                CaprotoValueError, CaprotoTypeError, CaprotoAttributeError,
+                __version__)
 from .._backend import backend
 
 
@@ -1292,7 +1293,8 @@ def template_arg_parser(*, desc, default_prefix, argv=None, macros=None,
         macros = {}
     parser = argparse.ArgumentParser(
         description=desc,
-        formatter_class=argparse.RawDescriptionHelpFormatter)
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=f'caproto version {__version__}')
     parser.add_argument('--prefix', type=str, default=default_prefix)
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-q', '--quiet', action='store_true',

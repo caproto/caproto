@@ -16,11 +16,12 @@ import sys
 from datetime import datetime
 import logging
 from ..sync.client import read_write_read
-from .. import color_logs
+from .. import color_logs, __version__
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Write a value to a PV.')
+    parser = argparse.ArgumentParser(description='Write a value to a PV.',
+                                     epilog=f'caproto version {__version__}')
     fmt_group = parser.add_mutually_exclusive_group()
     parser.add_argument('pv_name', type=str,
                         help="PV (channel) name")

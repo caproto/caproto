@@ -13,12 +13,13 @@ Python session, do not import this module; instead import caproto.sync.client.
 import argparse
 from datetime import datetime
 import logging
-from .. import ChannelType, color_logs, field_types
+from .. import ChannelType, color_logs, field_types, __version__
 from ..sync.client import read
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Read the value of a PV.')
+    parser = argparse.ArgumentParser(description='Read the value of a PV.',
+                                     epilog=f'caproto version {__version__}')
     parser.register('action', 'list_types', _ListTypesAction)
     fmt_group = parser.add_mutually_exclusive_group()
     parser.add_argument('pv_names', type=str, nargs='+',

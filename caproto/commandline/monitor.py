@@ -16,11 +16,12 @@ import functools
 import logging
 import time
 from ..sync.client import subscribe, block
-from .. import SubscriptionType, color_logs
+from .. import SubscriptionType, color_logs, __version__
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Read the value of a PV.')
+    parser = argparse.ArgumentParser(description='Read the value of a PV.',
+                                     epilog=f'caproto version {__version__}')
     fmt_group = parser.add_mutually_exclusive_group()
     exit_group = parser.add_mutually_exclusive_group()
     parser.add_argument('pv_names', type=str, nargs='+',

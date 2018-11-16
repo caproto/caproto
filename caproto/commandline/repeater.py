@@ -15,7 +15,7 @@ import argparse
 import logging
 import os
 from ..sync.repeater import run
-from .. import color_logs
+from .. import color_logs, __version__
 
 
 def main():
@@ -26,7 +26,8 @@ Run a Channel Access Repeater.
 If the Repeater port is already in use, assume a Repeater is already running
 and exit. That port number is set by the environment variable
 EPICS_CA_REPEATER_PORT. It defaults to the standard 5065. The current value is
-{}.""".format(os.environ.get('EPICS_CA_REPEATER_PORT', 5065)))
+{}.""".format(os.environ.get('EPICS_CA_REPEATER_PORT', 5065)),
+        epilog=f'caproto version {__version__}')
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-q', '--quiet', action='store_true',
