@@ -38,7 +38,7 @@ EPICS_CA_REPEATER_PORT. It defaults to the standard 5065. The current value is
                        help="Verbose mode. (Use -vvv for more.)")
     parser.add_argument('--no-color', action='store_true',
                         help="Suppress ANSI color codes in log messages.")
-    parser.add_argument('--version', action='show_version',
+    parser.add_argument('--version', '-V', action='show_version',
                         default=argparse.SUPPRESS,
                         help="Show caproto version and exit.")
     args = parser.parse_args()

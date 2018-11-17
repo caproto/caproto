@@ -62,7 +62,7 @@ def main():
     parser.add_argument('--no-repeater', action='store_true',
                         help=("Do not spawn a Channel Access repeater daemon "
                               "process."))
-    parser.add_argument('--version', action='show_version',
+    parser.add_argument('--version', '-V', action='show_version',
                         default=argparse.SUPPRESS,
                         help="Show caproto version and exit.")
     args = parser.parse_args()
