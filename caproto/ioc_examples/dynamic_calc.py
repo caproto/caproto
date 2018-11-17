@@ -5,15 +5,15 @@ from caproto import ChannelDouble
 import ast
 
 
-def extract_names(code):
-    m = ast.parse(code)
-    c = compile(code, '', 'eval')
+def extract_names(code_string):
+    ast_node = ast.parse(code_string)
+    code_object = compile(code_string, '', 'eval')
     # TODO also skip np namespace
-    return c, set(n.id for n in ast.walk(m)
-                  if isinstance(n, ast.Name))
+    return code_object, set(node.id for node in ast.walk(ast_node)
+                            if isinstance(node, ast.Name))
 
 
-class SmartCalc(PVGroup):
+class DynamicCalc(PVGroup):
     formula = pvproperty(value='')
     proc = pvproperty(value=0)
     output = pvproperty(value=0.0)
@@ -26,9 +26,9 @@ class SmartCalc(PVGroup):
 
     @formula.putter
     async def formula(self, instance, value):
-        c, names = extract_names(value)
+        code_object, names = extract_names(value)
 
-        self.c = c
+        self.code_object = code_object
         self.names = names
 
         self._pvdb.clear()
@@ -41,10 +41,10 @@ class SmartCalc(PVGroup):
 
     @proc.putter
     async def proc(self, instance, value):
-        lcls = {n: self._pvdb[f'{self.prefix}{n}'].value
-                for n in self.names}
+        locals_ = {n: self._pvdb[f'{self.prefix}{n}'].value
+                  for n in self.names}
 
-        ret = eval(self.c, lcls)
+        ret = eval(self.code_object, locals_)
         await self.output.write(ret)
 
         return 0
@@ -54,5 +54,5 @@ if __name__ == '__main__':
     ioc_options, run_options = ioc_arg_parser(
         default_prefix='dyncalc:',
         desc="Run an IOC that dynamically adds channels for the formula")
-    ioc = SmartCalc(**ioc_options)
+    ioc = DynamicCalc(**ioc_options)
     run(ioc.out_db, **run_options)
