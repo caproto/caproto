@@ -17,11 +17,13 @@ from datetime import datetime
 import logging
 from ..sync.client import read_write_read
 from .. import color_logs, __version__
+from .._utils import ShowVersionAction
 
 
 def main():
     parser = argparse.ArgumentParser(description='Write a value to a PV.',
                                      epilog=f'caproto version {__version__}')
+    parser.register('action', 'show_version', ShowVersionAction)
     fmt_group = parser.add_mutually_exclusive_group()
     parser.add_argument('pv_name', type=str,
                         help="PV (channel) name")
@@ -70,6 +72,9 @@ def main():
     parser.add_argument('--no-repeater', action='store_true',
                         help=("Do not spawn a Channel Access repeater daemon "
                               "process."))
+    parser.add_argument('--version', action='show_version',
+                        default=argparse.SUPPRESS,
+                        help="Show caproto version and exit.")
     args = parser.parse_args()
     if args.no_color:
         color_logs(False)
