@@ -16,11 +16,14 @@ import functools
 import logging
 import time
 from ..sync.client import subscribe, block
-from .. import SubscriptionType, color_logs
+from .. import SubscriptionType, color_logs, __version__
+from .._utils import ShowVersionAction
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Read the value of a PV.')
+    parser = argparse.ArgumentParser(description='Read the value of a PV.',
+                                     epilog=f'caproto version {__version__}')
+    parser.register('action', 'show_version', ShowVersionAction)
     fmt_group = parser.add_mutually_exclusive_group()
     exit_group = parser.add_mutually_exclusive_group()
     parser.add_argument('pv_names', type=str, nargs='+',
@@ -59,6 +62,9 @@ def main():
     parser.add_argument('--no-repeater', action='store_true',
                         help=("Do not spawn a Channel Access repeater daemon "
                               "process."))
+    parser.add_argument('--version', '-V', action='show_version',
+                        default=argparse.SUPPRESS,
+                        help="Show caproto version and exit.")
     args = parser.parse_args()
     if args.no_color:
         color_logs(False)

@@ -1,6 +1,7 @@
 # This module includes all exceptions raised by caproto, sentinel objects used
 # throughout the package (see detailed comment below), various network-related
 # helper functions, and other miscellaneous utilities.
+import argparse
 import array
 import collections
 import os
@@ -13,6 +14,9 @@ import threading
 from collections import namedtuple
 from contextlib import contextmanager
 from warnings import warn
+
+from ._version import get_versions
+__version__ = get_versions()['version']
 
 try:
     import fcntl
@@ -67,6 +71,7 @@ __all__ = (  # noqa F822
     'RecordModifier',
     'RecordAndField',
     'ThreadsafeCounter',
+    '__version__',
      # sentinels dynamically defined and added to globals() below
     'CLIENT', 'SERVER', 'RESPONSE', 'REQUEST', 'NEED_DATA',
     'SEND_SEARCH_REQUEST', 'AWAIT_SEARCH_RESPONSE',
@@ -842,3 +847,24 @@ def named_temporary_file(*args, delete=True, **kwargs):
         finally:
             if delete:
                 os.unlink(f.name)
+
+
+class ShowVersionAction(argparse.Action):
+    # a special action that allows the usage --version to override
+    # any 'required args' requirements, the same way that --help does
+
+    def __init__(self,
+                 option_strings,
+                 dest=argparse.SUPPRESS,
+                 default=argparse.SUPPRESS,
+                 help=None):
+        super().__init__(
+            option_strings=option_strings,
+            dest=dest,
+            default=default,
+            nargs=0,
+            help=help)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        print(__version__)
+        parser.exit()
