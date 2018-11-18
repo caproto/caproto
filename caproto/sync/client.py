@@ -26,6 +26,7 @@ CA_SERVER_PORT = 5064  # just a default
 
 # Make a dict to hold our tcp sockets.
 sockets = {}
+circuits = {}
 
 _permission_to_block = []  # mutable state shared by block and interrupt
 
@@ -129,20 +130,30 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
 def make_channel(pv_name, udp_sock, priority, timeout):
     log = logging.getLogger(f'caproto.ch.{pv_name}.{priority}')
     address = search(pv_name, udp_sock, timeout)
-    circuit = ca.VirtualCircuit(our_role=ca.CLIENT,
-                                address=address,
-                                priority=priority)
+    try:
+        circuit = circuits[(address, priority)]
+    except KeyError:
+
+        circuit = circuits[(address, priority)] = ca.VirtualCircuit(
+            our_role=ca.CLIENT,
+            address=address,
+            priority=priority)
+
     chan = ca.ClientChannel(pv_name, circuit)
-    sockets[chan.circuit] = socket.create_connection(chan.circuit.address,
-                                                     timeout)
+    new = False
+    if chan.circuit not in sockets:
+        new = True
+        sockets[chan.circuit] = socket.create_connection(chan.circuit.address,
+                                                         timeout)
 
     try:
-        # Initialize our new TCP-based CA connection with a VersionRequest.
-        send(chan.circuit, ca.VersionRequest(
-            priority=priority,
-            version=ca.DEFAULT_PROTOCOL_VERSION))
-        send(chan.circuit, chan.host_name(socket.gethostname()))
-        send(chan.circuit, chan.client_name(getpass.getuser()))
+        if new:
+            # Initialize our new TCP-based CA connection with a VersionRequest.
+            send(chan.circuit, ca.VersionRequest(
+                priority=priority,
+                version=ca.DEFAULT_PROTOCOL_VERSION))
+            send(chan.circuit, chan.host_name(socket.gethostname()))
+            send(chan.circuit, chan.client_name(getpass.getuser()))
         send(chan.circuit, chan.create())
         t = time.monotonic()
         while True:
