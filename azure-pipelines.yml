@@ -85,7 +85,8 @@ jobs:
     displayName: 'Run IOCs on tmux'
 
   - bash: |
-      coverage run --parallel-mode run_tests.py  -k 'not bench' --benchmark-disable --timeout=100 -v --junitxml=junit/test-results.xml -x
+      source $HOME/azure_env.sh
+      coverage run --parallel-mode run_tests.py  -k 'not bench' --benchmark-disable --timeout=100 -v --junitxml=junit/test-results.xml
     displayName: 'pytest'
 
   - bash: |
