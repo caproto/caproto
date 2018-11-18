@@ -173,6 +173,8 @@ def make_channel(pv_name, udp_sock, priority, timeout):
 
     except BaseException:
         sockets[chan.circuit].close()
+        del sockets[chan.circuit]
+        del circuits[(chan.circuit.address, chan.circuit.priority)]
         raise
     return chan
 
@@ -262,6 +264,8 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0, notify=True,
                 send(chan.circuit, chan.clear())
         finally:
             sockets[chan.circuit].close()
+            del sockets[chan.circuit]
+            del circuits[(chan.circuit.address, chan.circuit.priority)]
 
 
 def subscribe(pv_name, priority=0, data_type=None, data_count=None,
@@ -452,6 +456,8 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
             for chan in channels.values():
                 sockets[chan.circuit].settimeout(timeout)
                 sockets[chan.circuit].close()
+                del sockets[chan.circuit]
+                del circuits[(chan.circuit.address, chan.circuit.priority)]
 
 
 def _write(chan, data, metadata, timeout, data_type, notify):
@@ -555,6 +561,8 @@ def write(pv_name, data, *, notify=False, data_type=None, metadata=None,
                 send(chan.circuit, chan.clear())
         finally:
             sockets[chan.circuit].close()
+            del sockets[chan.circuit]
+            del circuits[(chan.circuit.address, chan.circuit.priority)]
 
 
 def read_write_read(pv_name, data, *, notify=False,
@@ -639,6 +647,8 @@ def read_write_read(pv_name, data, *, notify=False,
                 send(chan.circuit, chan.clear())
         finally:
             sockets[chan.circuit].close()
+            del sockets[chan.circuit]
+            del circuits[(chan.circuit.address, chan.circuit.priority)]
     return initial, res, final
 
 
