@@ -1449,7 +1449,7 @@ class PV:
     object.
     """
     __slots__ = ('name', 'priority', 'context', '_circuit_manager', '_channel',
-                 'circuit_ready', 'channel_ready',
+                 'circuit_ready', 'channel_ready', 'access_rights',
                  'access_rights_callback', 'subscriptions',
                  'command_bundle_queue', 'component_lock', '_idle', '_in_use',
                  '_usages', 'connection_state_callback', 'log',
@@ -1463,6 +1463,7 @@ class PV:
         self.name = name
         self.priority = priority
         self.context = context
+        self.access_rights = None  # will be overwritten with AccessRights
         self.log = logging.getLogger(f'caproto.ch.{name}.{priority}')
         # Use this lock whenever we touch circuit_manager or channel.
         self.component_lock = threading.RLock()
@@ -1505,6 +1506,7 @@ class PV:
             self._channel = val
 
     def access_rights_changed(self, rights):
+        self.access_rights = rights
         self.access_rights_callback.process(self, rights)
 
     def connection_state_changed(self, state, channel):
