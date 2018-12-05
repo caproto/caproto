@@ -57,7 +57,7 @@ def assert_array_almost_equal(arr1, arr2):
 
 
 def run_example_ioc(module_name, *, request, pv_to_check, args=None,
-                    stdin=None, stdout=None, stderr=None):
+                    stdin=None, stdout=None, stderr=None, very_verbose=True):
     '''Run an example IOC by module name as a subprocess
 
     Parameters
@@ -75,7 +75,7 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
     else:
         logger.debug(f'Running {module_name}')
 
-    if '-vvv' not in args:
+    if '-vvv' not in args and very_verbose:
         args = list(args) + ['-vvv']
 
     os.environ['COVERAGE_PROCESS_START'] = '.coveragerc'
