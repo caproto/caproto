@@ -26,6 +26,7 @@ CA_SERVER_PORT = 5064  # just a default
 
 # Make a dict to hold our tcp sockets.
 sockets = {}
+global_circuits = {}
 
 _permission_to_block = []  # mutable state shared by block and interrupt
 
@@ -129,20 +130,30 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
 def make_channel(pv_name, udp_sock, priority, timeout):
     log = logging.getLogger(f'caproto.ch.{pv_name}.{priority}')
     address = search(pv_name, udp_sock, timeout)
-    circuit = ca.VirtualCircuit(our_role=ca.CLIENT,
-                                address=address,
-                                priority=priority)
+    try:
+        circuit = global_circuits[(address, priority)]
+    except KeyError:
+
+        circuit = global_circuits[(address, priority)] = ca.VirtualCircuit(
+            our_role=ca.CLIENT,
+            address=address,
+            priority=priority)
+
     chan = ca.ClientChannel(pv_name, circuit)
-    sockets[chan.circuit] = socket.create_connection(chan.circuit.address,
-                                                     timeout)
+    new = False
+    if chan.circuit not in sockets:
+        new = True
+        sockets[chan.circuit] = socket.create_connection(chan.circuit.address,
+                                                         timeout)
 
     try:
-        # Initialize our new TCP-based CA connection with a VersionRequest.
-        send(chan.circuit, ca.VersionRequest(
-            priority=priority,
-            version=ca.DEFAULT_PROTOCOL_VERSION))
-        send(chan.circuit, chan.host_name(socket.gethostname()))
-        send(chan.circuit, chan.client_name(getpass.getuser()))
+        if new:
+            # Initialize our new TCP-based CA connection with a VersionRequest.
+            send(chan.circuit, ca.VersionRequest(
+                priority=priority,
+                version=ca.DEFAULT_PROTOCOL_VERSION))
+            send(chan.circuit, chan.host_name(socket.gethostname()))
+            send(chan.circuit, chan.client_name(getpass.getuser()))
         send(chan.circuit, chan.create())
         t = time.monotonic()
         while True:
@@ -162,6 +173,8 @@ def make_channel(pv_name, udp_sock, priority, timeout):
 
     except BaseException:
         sockets[chan.circuit].close()
+        del sockets[chan.circuit]
+        del global_circuits[(chan.circuit.address, chan.circuit.priority)]
         raise
     return chan
 
@@ -251,6 +264,8 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0, notify=True,
                 send(chan.circuit, chan.clear())
         finally:
             sockets[chan.circuit].close()
+            del sockets[chan.circuit]
+            del global_circuits[(chan.circuit.address, chan.circuit.priority)]
 
 
 def subscribe(pv_name, priority=0, data_type=None, data_count=None,
@@ -441,6 +456,8 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
             for chan in channels.values():
                 sockets[chan.circuit].settimeout(timeout)
                 sockets[chan.circuit].close()
+                del sockets[chan.circuit]
+                del global_circuits[(chan.circuit.address, chan.circuit.priority)]
 
 
 def _write(chan, data, metadata, timeout, data_type, notify):
@@ -544,6 +561,8 @@ def write(pv_name, data, *, notify=False, data_type=None, metadata=None,
                 send(chan.circuit, chan.clear())
         finally:
             sockets[chan.circuit].close()
+            del sockets[chan.circuit]
+            del global_circuits[(chan.circuit.address, chan.circuit.priority)]
 
 
 def read_write_read(pv_name, data, *, notify=False,
@@ -628,6 +647,8 @@ def read_write_read(pv_name, data, *, notify=False,
                 send(chan.circuit, chan.clear())
         finally:
             sockets[chan.circuit].close()
+            del sockets[chan.circuit]
+            del global_circuits[(chan.circuit.address, chan.circuit.priority)]
     return initial, res, final
 
 

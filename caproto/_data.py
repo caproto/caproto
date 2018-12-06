@@ -658,9 +658,9 @@ class ChannelData:
 
     def _collect_alarm(self):
         out = {}
-        if self._status is not None:
+        if self._status is not None and self._status != self.alarm.status:
             out['status'] = self._status
-        if self._severity is not None:
+        if self._severity is not None and self._status != self.alarm.status:
             out['severity'] = self._severity
 
         self._clear_cached_alarms()
