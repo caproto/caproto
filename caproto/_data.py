@@ -280,7 +280,7 @@ class ChannelData:
 
         if self._max_length == 1:
             if is_array:
-                if value:
+                if len(value):
                     # scalar value in a list -> scalar value
                     return value[0]
                 else:
