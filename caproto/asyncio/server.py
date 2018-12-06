@@ -2,11 +2,9 @@ from ..server import AsyncLibraryLayer
 import caproto as ca
 import asyncio
 import socket
-import sys
 
 from ..server.common import (VirtualCircuit as _VirtualCircuit,
                              Context as _Context)
-from .._utils import bcast_socket
 
 
 class ServerExit(Exception):
@@ -224,31 +222,16 @@ class Context(_Context):
                 return self.transport.close()
 
         for address in ca.get_beacon_address_list():
-            # Win wants a connected socket; UNIX wants an un-connected one.
-            temp_sock = ca.bcast_socket(socket)
-            temp_sock.connect(address)
-            interface, _ = temp_sock.getsockname()
-            if sys.platform == 'win32':
-                sock = temp_sock
-            else:
-                temp_sock.close()
-                sock = ca.bcast_socket(socket)
             transport, _ = await self.loop.create_datagram_endpoint(
-                BcastLoop, sock=sock)
+                BcastLoop, remote_addr=address, allow_broadcast=True,
+                reuse_address=True, reuse_port=True)
             wrapped_transport = ConnectedTransportWrapper(transport, address)
             self.beacon_socks[address] = (interface, wrapped_transport)
 
         for interface in self.interfaces:
-            udp_sock = bcast_socket()
-            try:
-                udp_sock.bind((interface, self.ca_server_port))
-            except Exception:
-                self.log.exception('UDP bind failure on interface %r',
-                                   interface)
-                raise
-
             transport, self.p = await self.loop.create_datagram_endpoint(
-                BcastLoop, sock=udp_sock)
+                BcastLoop, local_addr=(interface, self.ca_server_port),
+                allow_broadcast=True, reuse_address=True, reuse_port=True)
             self.udp_socks[interface] = TransportWrapper(transport)
             self.log.debug('UDP socket bound on %s:%d', interface,
                            self.ca_server_port)
@@ -269,7 +252,6 @@ class Context(_Context):
             await asyncio.gather(*tasks)
         except asyncio.CancelledError:
             self.log.info('Server task cancelled. Will shut down.')
-            udp_sock.close()
             all_tasks = (tasks + self._server_tasks +
                          [c._cq_task for c in self.circuits if c._cq_task is not None] +
                          [c._sq_task for c in self.circuits if c._sq_task is not None] +
