@@ -83,8 +83,8 @@ pvdb = {'pi': ca.ChannelDouble(value=3.14,
         'waveform': ca.ChannelData(value=np.random.poisson(100, 4000)),
         'empty_string': ca.ChannelString(value='', string_encoding='latin-1'),
         'empty_bytes': ca.ChannelByte(value=b''),
-        'empty_char': ca.ChannelChar(value=b'', max_length=1),
-        'empty_float': ca.ChannelDouble(value=[], max_length=5),
+        'empty_char': ca.ChannelChar(value=b''),
+        'empty_float': ca.ChannelDouble(value=[], max_length=2),
         }
 
 

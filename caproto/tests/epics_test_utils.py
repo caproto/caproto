@@ -136,7 +136,10 @@ async def run_caget(backend, pv, *, dbr_type=None):
                         )
         else:
             print(lines[0].split(sep))
-            pv, timestamp, value, stat, sevr = lines[0].split(sep)
+            pv, timestamp, *value, stat, sevr = lines[0].split(sep)
+            if len(value) == 1:
+                value = value[0]
+
             info = dict(pv=pv,
                         timestamp=timestamp,
                         value=value,

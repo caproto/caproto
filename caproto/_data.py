@@ -212,7 +212,11 @@ class ChannelData:
         self.reported_record_type = reported_record_type
 
         if self._max_length is None:
-            self._max_length = self.calculate_length(value)
+            # Use the current length as maximum, if unspecified.
+            self._max_length = max(self.calculate_length(value), 1)
+            # It is possible to pass in a zero-length array to start with.
+            # However, it is not useful to have an empty value forever, so the
+            # minimum length here is required to be at least 1.
 
         value = self.preprocess_value(value)
         self._data = dict(value=value,
@@ -276,8 +280,12 @@ class ChannelData:
 
         if self._max_length == 1:
             if is_array:
-                # scalar value in a list -> scalar value
-                return value[0]
+                if value:
+                    # scalar value in a list -> scalar value
+                    return value[0]
+                else:
+                    raise CaprotoValueError(
+                        'Cannot set a scalar to an empty array')
         elif not is_array:
             # scalar value that should be in a list -> list
             return [value]

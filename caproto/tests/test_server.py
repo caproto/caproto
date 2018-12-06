@@ -289,13 +289,23 @@ def test_empties_with_caget(request, caproto_ioc):
         assert info['value'] == ''
 
         info = await run_caget('asyncio', caproto_ioc.pvs['empty_bytes'])
-        assert info['value'] == ''
+        # NOTE: this zero is not a value, it's actually the length:
+        # $ caget  type_varieties:empty_bytes
+        # type_varieties:empty_bytes     0
+        # $ caget -#0  type_varieties:empty_bytes
+        # type_varieties:empty_bytes     0
+        # $ caget -#1  type_varieties:empty_bytes
+        # type_varieties:empty_bytes     1 0
+        assert info['value'] == '0'
 
         info = await run_caget('asyncio', caproto_ioc.pvs['empty_char'])
-        assert info['value'] == ''
+        assert info['value'] == '0'
 
         info = await run_caget('asyncio', caproto_ioc.pvs['empty_float'])
-        assert info['value'] == [0, 0, 0, 0, 0]
+        # NOTE: 2 below is length, with 2 elements of 0
+        assert info['value'] == ['2', '0', '0']
+        # TODO: somehow caget gets the max_length instead of the current
+        # length.  caproto-get does not have this issue.
 
     asyncio.get_event_loop().run_until_complete(test())
 
