@@ -41,7 +41,6 @@ __all__ = (  # noqa F822
     'get_server_address_list',
     'get_beacon_address_list',
     'get_netifaces_addresses',
-    'broadcast_address_list_from_interfaces',
     'ensure_bytes',
     'random_ports',
     'bcast_socket',
@@ -267,7 +266,7 @@ def get_address_list():
     addr_list = env['EPICS_CA_ADDR_LIST']
 
     if not addr_list or auto_addr_list.lower() == 'yes':
-        return broadcast_address_list_from_interfaces()
+        return ['255.255.255.255']
 
     return addr_list.split(' ')
 
@@ -315,8 +314,7 @@ def get_beacon_address_list():
         return (addr, beacon_port)
 
     if not addr_list or auto_addr_list.lower() == 'yes':
-        return [get_addr_port(addr) for addr in
-                broadcast_address_list_from_interfaces()]
+        return [('255.255.255.255', beacon_port)]
 
     return [get_addr_port(addr) for addr in addr_list.split(' ')]
 
@@ -345,18 +343,6 @@ def get_netifaces_addresses():
                     yield (addr, addr)
                 elif peer is not None:
                     yield (peer, peer)
-
-
-def broadcast_address_list_from_interfaces():
-    '''Get a list of broadcast addresses using netifaces
-
-    If netifaces is unavailable, the standard IPv4 255.255.255.255 broadcast
-    address is returned.
-    '''
-    if netifaces is None:
-        return ['255.255.255.255']
-
-    return [bcast for addr, bcast in get_netifaces_addresses()]
 
 
 def ensure_bytes(s):
