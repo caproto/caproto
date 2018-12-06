@@ -129,13 +129,19 @@ async def run_caget(backend, pv, *, dbr_type=None):
 
     if wide_mode:
         print('lines')
-        print(lines[0].split(sep))
-        pv, timestamp, value, stat, sevr = lines[0].split(sep)
-        info = dict(pv=pv,
-                    timestamp=timestamp,
-                    value=value,
-                    status=stat,
-                    severity=sevr)
+        if '*** CA error' in lines[0]:
+            error_message = lines[0]
+            info = dict(pv=pv,
+                        value=error_message[error_message.index('*'):]
+                        )
+        else:
+            print(lines[0].split(sep))
+            pv, timestamp, value, stat, sevr = lines[0].split(sep)
+            info = dict(pv=pv,
+                        timestamp=timestamp,
+                        value=value,
+                        status=stat,
+                        severity=sevr)
     else:
         info = dict(pv=lines[0])
         in_enum_section = False

@@ -1,4 +1,5 @@
 import ast
+import asyncio
 import copy
 import datetime
 import sys
@@ -265,11 +266,8 @@ def test_with_caput(backends, prefix, pvdb_from_server_example, server, pv,
     print('done')
 
 
-def test_limits_enforced(request, prefix):
-    pv = f'{prefix}pi'
-    run_example_ioc('caproto.ioc_examples.type_varieties', request=request,
-                    args=['--prefix', prefix],
-                    pv_to_check=pv)
+def test_limits_enforced(request, caproto_ioc):
+    pv = caproto_ioc.pvs['float']
     write(pv, 3.101, notify=True)  # within limit
     write(pv, 3.179, notify=True)  # within limit
     with pytest.raises(ErrorResponseReceived):
@@ -278,11 +276,32 @@ def test_limits_enforced(request, prefix):
         write(pv, 3.181, notify=True)  # beyond limit
 
 
-def test_char_write(request, prefix):
-    pv = f'{prefix}chararray'
-    run_example_ioc('caproto.ioc_examples.type_varieties', request=request,
-                    args=['--prefix', prefix],
-                    pv_to_check=pv)
+def test_empties_with_caproto_client(request, caproto_ioc):
+    assert read(caproto_ioc.pvs['empty_string']).data == [b'']
+    assert list(read(caproto_ioc.pvs['empty_bytes']).data) == []
+    assert list(read(caproto_ioc.pvs['empty_char']).data) == []
+    assert list(read(caproto_ioc.pvs['empty_float']).data) == []
+
+
+def test_empties_with_caget(request, caproto_ioc):
+    async def test():
+        info = await run_caget('asyncio', caproto_ioc.pvs['empty_string'])
+        assert info['value'] == ''
+
+        info = await run_caget('asyncio', caproto_ioc.pvs['empty_bytes'])
+        assert info['value'] == ''
+
+        info = await run_caget('asyncio', caproto_ioc.pvs['empty_char'])
+        assert info['value'] == ''
+
+        info = await run_caget('asyncio', caproto_ioc.pvs['empty_float'])
+        assert info['value'] == [0, 0, 0, 0, 0]
+
+    asyncio.get_event_loop().run_until_complete(test())
+
+
+def test_char_write(request, caproto_ioc):
+    pv = caproto_ioc.pvs['chararray']
     write(pv, b'testtesttest', notify=True)
     response = read(pv)
     assert ''.join(chr(c) for c in response.data) == 'testtesttest'

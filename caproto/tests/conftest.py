@@ -241,7 +241,12 @@ def _caproto_ioc(prefix, request):
                float=prefix + 'pi',
                str=prefix + 'str',
                enum=prefix + 'enum',
-               waveform=prefix + 'waveform'
+               waveform=prefix + 'waveform',
+               chararray=prefix + 'chararray',
+               empty_string=prefix + 'empty_string',
+               empty_bytes=prefix + 'empty_bytes',
+               empty_char=prefix + 'empty_char',
+               empty_float=prefix + 'empty_float',
                )
     process = run_example_ioc('caproto.ioc_examples.type_varieties',
                               request=request,
