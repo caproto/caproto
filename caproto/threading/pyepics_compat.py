@@ -10,7 +10,7 @@ from collections import Iterable
 import caproto as ca
 from .client import (Context, SharedBroadcaster, AUTOMONITOR_MAXLENGTH,
                      STR_ENC)
-from caproto import (AccessRights, field_types, ChannelType,
+from caproto import (AccessRights, field_types, ChannelType, SubscriptionType,
                      CaprotoTimeoutError, CaprotoValueError,
                      CaprotoRuntimeError, CaprotoNotImplementedError)
 
@@ -130,6 +130,10 @@ def _pyepics_get_value(value, string_value, full_type, native_count, *,
         return value.tolist()
 
     return value
+
+
+DEFAULT_SUBSCRIPTION_MASK = (SubscriptionType.DBE_VALUE |
+                             SubscriptionType.DBE_ALARM)
 
 
 class PV:
@@ -306,8 +310,11 @@ class PV:
             if count is None:
                 count = self.default_count
 
+            mask = (DEFAULT_SUBSCRIPTION_MASK if self.auto_monitor is True
+                    else self.auto_monitor)
             self._auto_monitor_sub = self._caproto_pv.subscribe(
-                data_type=self.typefull, data_count=count)
+                data_type=self.typefull, data_count=count,
+                mask=mask)
             self._auto_monitor_sub.add_callback(self.__on_changes)
 
     def _connection_state_changed(self, caproto_pv, state):
