@@ -2,6 +2,7 @@ from ..server import AsyncLibraryLayer
 import caproto as ca
 import asyncio
 import socket
+import sys
 
 from ..server.common import (VirtualCircuit as _VirtualCircuit,
                              Context as _Context)
@@ -221,17 +222,19 @@ class Context(_Context):
             def close(self):
                 return self.transport.close()
 
+        reuse_port = sys.platform not in ('win32', )
         for address in ca.get_beacon_address_list():
             transport, _ = await self.loop.create_datagram_endpoint(
                 BcastLoop, remote_addr=address, allow_broadcast=True,
-                reuse_address=True, reuse_port=True)
+                reuse_address=True, reuse_port=reuse_port)
             wrapped_transport = ConnectedTransportWrapper(transport, address)
             self.beacon_socks[address] = (interface, wrapped_transport)
 
         for interface in self.interfaces:
             transport, self.p = await self.loop.create_datagram_endpoint(
                 BcastLoop, local_addr=(interface, self.ca_server_port),
-                allow_broadcast=True, reuse_address=True, reuse_port=True)
+                allow_broadcast=True, reuse_address=True,
+                reuse_port=reuse_port)
             self.udp_socks[interface] = TransportWrapper(transport)
             self.log.debug('UDP socket bound on %s:%d', interface,
                            self.ca_server_port)
