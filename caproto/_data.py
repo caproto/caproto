@@ -922,6 +922,8 @@ class ChannelByte(ChannelNumeric):
             raise CaprotoValueError('ChannelByte does not accept decoded strings')
 
         if self.strip_null_terminator:
+            if not isinstance(value, bytes):
+                value = value.tobytes()
             value = value.rstrip(b'\x00')
 
         return value
