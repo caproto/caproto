@@ -33,6 +33,10 @@ class DisconnectedCircuit(Exception):
     ...
 
 
+class LoopExit(Exception):
+    ...
+
+
 Subscription = namedtuple('Subscription', ('mask', 'channel_filter',
                                            'circuit', 'channel',
                                            'data_type',
@@ -121,99 +125,113 @@ class VirtualCircuit:
             await self._on_disconnect()
             raise DisconnectedCircuit()
 
-    async def command_queue_loop(self):
+    async def _command_queue_iteration(self, command):
         """
-        Coroutine which feeds from the circuit command queue.
+        Coroutine which evaluates one item from the circuit command queue.
 
         1. Dispatch and validate through caproto.VirtualCircuit.process_command
             - Upon server failure, respond to the client with
               caproto.ErrorResponse
         2. Update Channel state if applicable.
         """
+        try:
+            self.circuit.process_command(command)
+        except ca.RemoteProtocolError as ex:
+            if hasattr(command, 'sid'):
+                sid = command.sid
+                cid = self.circuit.channels_sid[sid].cid
+            elif hasattr(command, 'cid'):
+                cid = command.cid
+                sid = self.circuit.channels[cid].sid
+
+            else:
+                cid, sid = None, None
+
+            if cid is not None:
+                try:
+                    await self.send(ca.ServerDisconnResponse(cid=cid))
+                except Exception:
+                    self.log.exception(
+                        "Client broke the protocol in a recoverable way, but "
+                        "channel disconnection of cid=%d sid=%d failed.", cid,
+                        sid)
+                    raise LoopExit('Recoverable protocol error failure')
+                else:
+                    self.log.exception(
+                        "Client broke the protocol in a recoverable way. "
+                        "Disconnected channel cid=%d sid=%d but keeping the "
+                        "circuit alive.", cid, sid)
+
+                await self._wake_new_command()
+                return
+            else:
+                self.log.exception(
+                    "Client broke the protocol in an unrecoverable way.")
+                # TODO: Kill the circuit.
+                raise LoopExit('Unrecoverable protocol error')
+        except Exception:
+            self.log.exception('Circuit command queue evaluation failed')
+            # Internal error - ignore for now
+            return
+
+        if command is ca.DISCONNECTED:
+            raise DisconnectedCircuit()
+
+        try:
+            response = await self._process_command(command)
+            return response
+        except Exception as ex:
+            if not self.connected:
+                if not isinstance(command, ca.ClearChannelRequest):
+                    self.log.error('Server error after client '
+                                   'disconnection: %s', command)
+                raise LoopExit('Server error after client disconnection')
+
+            self.log.exception('Server failed to process command: %s',
+                               command)
+
+            if hasattr(command, 'sid'):
+                cid = self.circuit.channels_sid[command.sid].cid
+                error_message = f'Python exception: {type(ex).__name__} {ex}'
+                return [ca.ErrorResponse(command, cid,
+                                         status=ca.CAStatus.ECA_INTERNAL,
+                                         error_message=error_message)
+                        ]
+
+    async def command_queue_loop(self):
+        """Reference implementation of the command queue loop
+
+        Note
+        ----
+        Assumes self.command_bundle_queue functions as an async queue with
+        awaitable .get()
+
+        Async library implementations can (and should) reimplement this.
+        Coroutine which evaluates one item from the circuit command queue.
+        """
+
         # The write_event will be cleared when a write is scheduled and set
         # when one completes.
         maybe_awaitable = self.write_event.set()
         # The curio backend makes this an awaitable thing.
         if maybe_awaitable is not None:
             await maybe_awaitable
-        while True:
-            try:
+
+        try:
+            while True:
                 command = await self.command_queue.get()
-                self.circuit.process_command(command)
-                if command is ca.DISCONNECTED:
-                    break
-            except self.TaskCancelled:
-                break
-            except ca.RemoteProtocolError as ex:
-                if hasattr(command, 'sid'):
-                    sid = command.sid
-                    cid = self.circuit.channels_sid[sid].cid
-                elif hasattr(command, 'cid'):
-                    cid = command.cid
-                    sid = self.circuit.channels[cid].sid
-
-                else:
-                    cid, sid = None, None
-
-                if cid is not None:
-                    try:
-                        await self.send(ca.ServerDisconnResponse(cid=cid))
-                    except Exception:
-                        self.log.error(
-                            "Client broke the protocol in a recoverable "
-                            "way, but channel disconnection of cid=%d sid=%d "
-                            "failed.", cid, sid,
-                            exc_info=ex)
-                        break
-                    else:
-                        self.log.error(
-                            "Client broke the protocol in a recoverable "
-                            "way. Disconnected channel cid=%d sid=%d "
-                            "but keeping the circuit alive.", cid, sid,
-                            exc_info=ex)
-
-                    await self._wake_new_command()
-                    continue
-                else:
-                    self.log.error("Client broke the protocol in an "
-                                   "unrecoverable way.", exc_info=ex)
-                    # TODO: Kill the circuit.
-                    break
-            except Exception:
-                self.log.exception('Circuit command queue evaluation failed')
-                continue
-
-            try:
-                response_command = await self._process_command(command)
-                if response_command is not None:
-                    await self.send(*response_command)
-            except DisconnectedCircuit:
-                await self._on_disconnect()
-                self.circuit.disconnect()
-                await self.context.circuit_disconnected(self)
-                break
-            except Exception as ex:
-                if not self.connected:
-                    if not isinstance(command, ca.ClearChannelRequest):
-                        self.log.error('Server error after client '
-                                       'disconnection: %s', command)
-                    break
-
-                self.log.exception('Server failed to process command: %s',
-                                   command)
-
-                if hasattr(command, 'sid'):
-                    cid = self.circuit.channels_sid[command.sid].cid
-
-                    response_command = ca.ErrorResponse(
-                        command, cid,
-                        status=ca.CAStatus.ECA_INTERNAL,
-                        error_message=('Python exception: {} {}'
-                                       ''.format(type(ex).__name__, ex))
-                    )
-                    await self.send(response_command)
-
-            await self._wake_new_command()
+                response = await self._command_queue_iteration(command)
+                if response is not None:
+                    await self.send(*response)
+                await self._wake_new_command()
+        except DisconnectedCircuit:
+            await self._on_disconnect()
+            self.circuit.disconnect()
+            await self.context.circuit_disconnected(self)
+        except self.TaskCancelled:
+            ...
+        except LoopExit:
+            ...
 
     async def subscription_queue_loop(self):
         maybe_awaitable = self.events_on.set()
@@ -626,12 +644,19 @@ class Context:
             await self.command_bundle_queue.put((address, commands))
 
     async def broadcaster_queue_loop(self):
+        '''Reference broadcaster queue loop implementation
+
+        Note
+        ----
+        Assumes self.command_bundle_queue functions as an async queue with
+        awaitable .get()
+
+        Async library implementations can (and should) reimplement this.
+        '''
         while True:
             try:
                 addr, commands = await self.command_bundle_queue.get()
-                self.broadcaster.process_commands(commands)
-                if addr not in self.ignore_addresses:
-                    await self._broadcaster_evaluate(addr, commands)
+                await self._broadcaster_queue_iteration(addr, commands)
             except self.TaskCancelled:
                 break
             except Exception as ex:
@@ -677,7 +702,11 @@ class Context:
             self.pvdb[rec_field] = inst
         return inst
 
-    async def _broadcaster_evaluate(self, addr, commands):
+    async def _broadcaster_queue_iteration(self, addr, commands):
+        self.broadcaster.process_commands(commands)
+        if addr in self.ignore_addresses:
+            return
+
         search_replies = []
         version_requested = False
         for command in commands:
