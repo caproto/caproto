@@ -175,7 +175,7 @@ class VirtualCircuit:
             return
 
         if command is ca.DISCONNECTED:
-            raise DisconnectedCircuit()
+            raise DisconnectedCircuit
 
         try:
             response = await self._process_command(command)

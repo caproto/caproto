@@ -5,7 +5,8 @@ import trio
 from trio import socket
 
 from ..server.common import (VirtualCircuit as _VirtualCircuit,
-                             Context as _Context)
+                             Context as _Context, LoopExit,
+                             DisconnectedCircuit)
 
 
 class ServerExit(Exception):
@@ -22,6 +23,15 @@ class Event(trio.Event):
         else:
             await super().wait()
             return True
+
+
+def _open_memory_channel(max_items):
+    '''Wrapper around trio.open_memory_channel, which patches the send channel
+    for queue-like compatibility'''
+    send, recv = trio.open_memory_channel(max_items)
+    # monkey-patch here for compatibility with a regular queue:
+    send.put = send.send
+    return send, recv
 
 
 def _universal_queue(portal, max_len=1000):
@@ -63,7 +73,11 @@ class VirtualCircuit(_VirtualCircuit):
         super().__init__(circuit, client, context)
         self.nursery = context.nursery
         self.QueueFull = trio.WouldBlock
-        self.command_queue = trio.Queue(ca.MAX_COMMAND_BACKLOG)
+
+        self.command_chan = _open_memory_channel(ca.MAX_COMMAND_BACKLOG)
+        send, recv = self.command_chan
+        self.command_queue = send
+
         self.new_command_condition = trio.Condition()
         self.subscription_queue = trio.Queue(ca.MAX_TOTAL_SUBSCRIPTION_BACKLOG)
         self.write_event = Event()
@@ -74,8 +88,28 @@ class VirtualCircuit(_VirtualCircuit):
         await self.nursery.start(self.subscription_queue_loop)
 
     async def command_queue_loop(self, task_status):
-        task_status.started()
-        await super().command_queue_loop()
+        self.write_event.set()
+
+        send, recv = self.command_chan
+        async with send:
+            async with recv:
+                task_status.started()
+                try:
+                    async for command in recv:
+                        response = await self._command_queue_iteration(command)
+                        if response is not None:
+                            await self.send(*response)
+                        await self._wake_new_command()
+                except DisconnectedCircuit:
+                    await self._on_disconnect()
+                    self.circuit.disconnect()
+                    await self.context.circuit_disconnected(self)
+                except trio.Cancelled:
+                    ...
+                except LoopExit:
+                    ...
+                except Exception:
+                    print('exiting')
 
     async def subscription_queue_loop(self, task_status):
         task_status.started()
@@ -109,8 +143,13 @@ class Context(_Context):
     def __init__(self, pvdb, interfaces=None):
         super().__init__(pvdb, interfaces)
         self.nursery = None
-        self.command_bundle_queue = trio.Queue(1000)
-        self.subscription_queue = trio.Queue(1000)
+        self.command_chan = _open_memory_channel(ca.MAX_COMMAND_BACKLOG)
+        send, recv = self.command_chan
+        self.command_bundle_queue = send
+
+        self.subscription_chan = _open_memory_channel(ca.MAX_TOTAL_SUBSCRIPTION_BACKLOG)
+        send, recv = self.subscription_chan
+        self.subscription_queue = send
         self.beacon_sock = ca.bcast_socket(socket)
 
     async def broadcaster_udp_server_loop(self, task_status):
@@ -134,26 +173,41 @@ class Context(_Context):
         task_status.started()
 
     async def broadcaster_queue_loop(self, task_status):
-        task_status.started()
-        await super().broadcaster_queue_loop()
+        send, recv = self.command_chan
+        async with send:
+            async with recv:
+                try:
+                    task_status.started()
+                    async for addr, commands in recv:
+                        await super()._broadcaster_queue_iteration(addr, commands)
+                except trio.Cancelled:
+                    ...
+                except LoopExit:
+                    ...
 
     async def subscription_queue_loop(self, task_status):
-        task_status.started()
-        await super().subscription_queue_loop()
+        send, recv = self.subscription_chan
+        async with send:
+            async with recv:
+                task_status.started()
+                async for item in recv:
+                    sub_specs, metadata, values, flags, sub = item
+                    await self._subscription_queue_iteration(
+                        sub_specs, metadata, values, flags, sub)
 
     async def broadcast_beacon_loop(self, task_status):
         task_status.started()
         await super().broadcast_beacon_loop()
 
     async def server_accept_loop(self, listen_sock, *, task_status):
-            try:
-                listen_sock.listen()
-                task_status.started()
-                while True:
-                    client_sock, addr = await listen_sock.accept()
-                    self.nursery.start_soon(self.tcp_handler, client_sock, addr)
-            finally:
-                listen_sock.close()
+        try:
+            listen_sock.listen()
+            task_status.started()
+            while True:
+                client_sock, addr = await listen_sock.accept()
+                self.nursery.start_soon(self.tcp_handler, client_sock, addr)
+        finally:
+            listen_sock.close()
 
     async def run(self, *, log_pv_names=False):
         'Start the server'
@@ -175,14 +229,16 @@ class Context(_Context):
                     make_socket)
                 self.port, self.tcp_sockets = res
 
-                for interface, listen_sock in self.tcp_sockets.items():
-                    self.log.info("Listening on %s:%d", interface, self.port)
-                    await self.nursery.start(self.server_accept_loop,
-                                             listen_sock)
                 await self.nursery.start(self.broadcaster_udp_server_loop)
                 await self.nursery.start(self.broadcaster_queue_loop)
                 await self.nursery.start(self.subscription_queue_loop)
                 await self.nursery.start(self.broadcast_beacon_loop)
+
+                # Only after all loops have been started, begin listening:
+                for interface, listen_sock in self.tcp_sockets.items():
+                    self.log.info("Listening on %s:%d", interface, self.port)
+                    await self.nursery.start(self.server_accept_loop,
+                                             listen_sock)
 
                 async_lib = TrioAsyncLayer()
                 for name, method in self.startup_methods.items():
