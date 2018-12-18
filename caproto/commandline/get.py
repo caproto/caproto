@@ -13,7 +13,7 @@ Python session, do not import this module; instead import caproto.sync.client.
 import argparse
 from datetime import datetime
 import logging
-from .. import ChannelType, color_logs, field_types, __version__
+from .. import ChannelType, set_handler, field_types, __version__
 from ..sync.client import read
 from .._utils import ShowVersionAction
 
@@ -79,7 +79,7 @@ def main():
                         help="Show caproto version and exit.")
     args = parser.parse_args()
     if args.no_color:
-        color_logs(False)
+        set_handler(color=False)
     if args.verbose:
         logging.getLogger(f'caproto.ch').setLevel('DEBUG')
         logging.getLogger(f'caproto.ctx').setLevel('DEBUG')
