@@ -1,12 +1,15 @@
 import functools
-from ..server import AsyncLibraryLayer
+import collections
+
 import caproto as ca
 import trio
 from trio import socket
 
+from ..server import AsyncLibraryLayer
 from ..server.common import (VirtualCircuit as _VirtualCircuit,
                              Context as _Context, LoopExit,
                              DisconnectedCircuit)
+from .util import open_memory_channel
 
 
 class ServerExit(Exception):
@@ -25,19 +28,10 @@ class Event(trio.Event):
             return True
 
 
-def _open_memory_channel(max_items):
-    '''Wrapper around trio.open_memory_channel, which patches the send channel
-    for queue-like compatibility'''
-    send, recv = trio.open_memory_channel(max_items)
-    # monkey-patch here for compatibility with a regular queue:
-    send.put = send.send
-    return send, recv
-
-
 def _universal_queue(portal, max_len=1000):
     class UniversalQueue:
         def __init__(self):
-            self._send, self._recv = _open_memory_channel(max_len)
+            self._send, self._recv = open_memory_channel(max_len)
             self.portal = portal
 
         def put(self, value):
@@ -74,18 +68,16 @@ class VirtualCircuit(_VirtualCircuit):
         self.nursery = context.nursery
         self.QueueFull = trio.WouldBlock
 
-        self.command_chan = _open_memory_channel(ca.MAX_COMMAND_BACKLOG)
-        send, recv = self.command_chan
+        self.command_chan = open_memory_channel(ca.MAX_COMMAND_BACKLOG)
 
         # For compatibility with server common:
-        self.command_queue = send
+        self.command_queue = self.command_chan.send
 
         self.new_command_condition = trio.Condition()
-        self.subscription_chan = _open_memory_channel(ca.MAX_TOTAL_SUBSCRIPTION_BACKLOG)
+        self.subscription_chan = open_memory_channel(ca.MAX_TOTAL_SUBSCRIPTION_BACKLOG)
 
-        send, recv = self.subscription_chan
         # For compatibility with server common:
-        self.subscription_queue = send
+        self.subscription_queue = self.subscription_chan.send
 
         self.write_event = Event()
         self.events_on = trio.Event()
@@ -154,13 +146,11 @@ class Context(_Context):
     def __init__(self, pvdb, interfaces=None):
         super().__init__(pvdb, interfaces)
         self.nursery = None
-        self.command_chan = _open_memory_channel(ca.MAX_COMMAND_BACKLOG)
-        send, recv = self.command_chan
-        self.command_bundle_queue = send
+        self.command_chan = open_memory_channel(ca.MAX_COMMAND_BACKLOG)
+        self.command_bundle_queue = self.command_chan.send
 
-        self.subscription_chan = _open_memory_channel(ca.MAX_TOTAL_SUBSCRIPTION_BACKLOG)
-        send, recv = self.subscription_chan
-        self.subscription_queue = send
+        self.subscription_chan = open_memory_channel(ca.MAX_TOTAL_SUBSCRIPTION_BACKLOG)
+        self.subscription_queue = self.subscription_chan.send
         self.beacon_sock = ca.bcast_socket(socket)
 
     async def broadcaster_udp_server_loop(self, task_status):
