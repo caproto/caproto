@@ -136,7 +136,7 @@ class VirtualCircuit:
         """
         try:
             self.circuit.process_command(command)
-        except ca.RemoteProtocolError as ex:
+        except ca.RemoteProtocolError:
             if hasattr(command, 'sid'):
                 sid = command.sid
                 cid = self.circuit.channels_sid[sid].cid
