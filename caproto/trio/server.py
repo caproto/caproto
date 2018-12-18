@@ -37,20 +37,20 @@ def _open_memory_channel(max_items):
 def _universal_queue(portal, max_len=1000):
     class UniversalQueue:
         def __init__(self):
-            self.queue = trio.Queue(max_len)
+            self._send, self._recv = _open_memory_channel(max_len)
             self.portal = portal
 
         def put(self, value):
-            self.portal.run(self.queue.put, value)
+            self.portal.run(self._send.send, value)
 
         async def async_put(self, value):
-            await self.queue.put(value)
+            await self._send.send(value)
 
         def get(self):
-            return self.portal.run(self.queue.get)
+            return self.portal.run(self._recv.receive)
 
         async def async_get(self):
-            return await self.queue.get()
+            return await self._recv.receive()
 
     return UniversalQueue
 
@@ -76,10 +76,17 @@ class VirtualCircuit(_VirtualCircuit):
 
         self.command_chan = _open_memory_channel(ca.MAX_COMMAND_BACKLOG)
         send, recv = self.command_chan
+
+        # For compatibility with server common:
         self.command_queue = send
 
         self.new_command_condition = trio.Condition()
-        self.subscription_queue = trio.Queue(ca.MAX_TOTAL_SUBSCRIPTION_BACKLOG)
+        self.subscription_chan = _open_memory_channel(ca.MAX_TOTAL_SUBSCRIPTION_BACKLOG)
+
+        send, recv = self.subscription_chan
+        # For compatibility with server common:
+        self.subscription_queue = send
+
         self.write_event = Event()
         self.events_on = trio.Event()
 
@@ -115,11 +122,15 @@ class VirtualCircuit(_VirtualCircuit):
         task_status.started()
         await super().subscription_queue_loop()
 
-    async def get_from_sub_queue_with_timeout(self, timeout):
+    async def get_from_sub_queue(self, timeout=None):
         # Timeouts work very differently between our server implementations,
         # so we do this little stub in its own method.
+        _, recv = self.subscription_chan
+        if timeout is None:
+            return await recv.receive()
+
         with trio.move_on_after(timeout):
-            return await self.subscription_queue.get()
+            return await recv.receive()
 
     async def _on_disconnect(self):
         """Executed when disconnection detected"""

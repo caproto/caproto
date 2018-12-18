@@ -68,7 +68,7 @@ class VirtualCircuit:
         # self.command_queue = ...
         # self.new_command_condition = ...
         # self.subscription_queue = ...
-        # self.get_from_sub_queue_with_timeout = ...
+        # self.get_from_sub_queue = ...
         # self.events_on = ...
         # self.write_event = ...
 
@@ -254,7 +254,7 @@ class VirtualCircuit:
                 # and it should sacrifice some latency in order to batch
                 # requests efficiently.
                 while True:
-                    ref = await self.get_from_sub_queue_with_timeout(HIGH_LOAD_TIMEOUT)
+                    ref = await self.get_from_sub_queue(timeout=HIGH_LOAD_TIMEOUT)
                     if ref is None:
                         # We have caught up with the producer. Stop batching,
                         # and optimize for low latency.
@@ -266,7 +266,7 @@ class VirtualCircuit:
                             break
 
                         # Block here until we have something to send...
-                        ref = await self.subscription_queue.get()
+                        ref = await self.get_from_sub_queue(timeout=None)
 
                         # And, since we are in "slow producer" mode, reset the
                         # limit in preparation for the next time we enter "fast
@@ -742,6 +742,16 @@ class Context:
                     raise CaprotoNetworkError(f"Failed to send to {host}:{port}") from exc
 
     async def subscription_queue_loop(self):
+        """Reference implementation of the subscription queue loop
+
+        Note
+        ----
+        Assumes self.subscription-queue functions as an async queue with
+        awaitable .get()
+
+        Async library implementations can (and should) reimplement this.
+        Coroutine which evaluates one item from the circuit command queue.
+        """
         while True:
             # This queue receives updates that match the db_entry, data_type
             # and mask ("subscription spec") of one or more subscriptions.
