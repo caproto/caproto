@@ -92,7 +92,7 @@ class VirtualCircuit(_VirtualCircuit):
         self._sq_task = None
         self._write_tasks = ()
 
-    async def get_from_sub_queue_with_timeout(self, timeout):
+    async def get_from_sub_queue(self, timeout=None):
         # Timeouts work very differently between our server implementations,
         # so we do this little stub in its own method.
         fut = asyncio.ensure_future(self.subscription_queue.get())
