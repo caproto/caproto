@@ -15,8 +15,8 @@ import ast
 import sys
 from datetime import datetime
 import logging
+from .. import set_handler, __version__
 from ..sync.client import read_write_read
-from .. import color_logs, __version__
 from .._utils import ShowVersionAction
 
 
@@ -77,7 +77,7 @@ def main():
                         help="Show caproto version and exit.")
     args = parser.parse_args()
     if args.no_color:
-        color_logs(False)
+        set_handler(color=False)
     if args.verbose:
         logging.getLogger(f'caproto.ch').setLevel('DEBUG')
         logging.getLogger(f'caproto.ctx').setLevel('DEBUG')

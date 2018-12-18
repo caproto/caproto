@@ -3,6 +3,7 @@
 
 import logging
 import sys
+import warnings
 try:
     import colorama
     colorama.init()
@@ -13,7 +14,7 @@ try:
 except ImportError:
     curses = None
 
-__all__ = ('color_logs', 'plain_log_handler', 'color_log_handler')
+__all__ = ('color_logs', 'set_handler')
 
 
 def _stderr_supports_color():
@@ -128,14 +129,6 @@ class LogFormatter(logging.Formatter):
 plain_log_format = "[%(levelname)1.1s %(asctime)s.%(msecs)03d %(module)s:%(lineno)d] %(message)s"
 color_log_format = ("%(color)s[%(levelname)1.1s %(asctime)s.%(msecs)03d "
                     "%(module)s:%(lineno)d]%(end_color)s %(message)s")
-log_date_format = "%H:%M:%S"
-logger = logging.getLogger('caproto')
-color_log_handler = logging.StreamHandler(sys.stdout)
-color_log_handler.setFormatter(
-    LogFormatter(color_log_format, datefmt=log_date_format))
-plain_log_handler = logging.StreamHandler(sys.stdout)
-plain_log_handler.setFormatter(
-    logging.Formatter(plain_log_format, datefmt=log_date_format))
 
 
 def color_logs(color):
@@ -144,14 +137,69 @@ def color_logs(color):
 
     If False, do the opposite.
     """
-    if color:
-        to_remove, to_add = plain_log_handler, color_log_handler
+    warnings.warn(f"The function color_logs is deprecated. "
+                  f"Use `set_handler(color={color})` instead.")
+    set_handler(color=color)
+
+
+logger = logging.getLogger('caproto')
+current_handler = None  # overwritten below
+
+
+def set_handler(file=sys.stdout, datefmt='%H:%M:%S', color=True):
+    """
+    Set a new handler on the ``logging.getLogger('caproto')`` logger.
+
+    This function is run at import time with default paramters. If it is run
+    again by the user, the handler from the previous invocation is removed (if
+    still present) and replaced.
+
+    Parameters
+    ----------
+    file : object with ``write`` method or filename string
+        Default is ``sys.stdout``.
+    datefmt : string
+        Date format. Default is ``'%H:%M:%S'``.
+    color : boolean
+        Use ANSI color codes. True by default.
+
+    Returns
+    -------
+    handler : logging.Handler
+        The handler, which has already been added to the 'caproto' logger.
+
+    Examples
+    --------
+    Log to a file.
+
+    >>> set_handler(file='/tmp/what_is_happening.txt')
+
+    Include the date along with the time. (The log messages will always include
+    microseconds, which are configured separately, not as part of 'datefmt'.)
+
+    >>> set_handler(datefmt="%Y-%m-%d %H:%M:%S")
+
+    Turn off ANSI color codes.
+
+    >>> set_handler(color=False)
+    """
+    global current_handler
+    if isinstance(file, str):
+        handler = logging.FileHandler(file)
     else:
-        to_remove, to_add = color_log_handler, plain_log_handler
-    if to_remove in logger.handlers:
-        logger.removeHandler(to_remove)
-    if to_add not in logger.handlers:
-        logger.addHandler(to_add)
+        handler = logging.StreamHandler(file)
+    if color:
+        format = color_log_format
+    else:
+        format = plain_log_format
+    handler.setFormatter(
+        LogFormatter(format, datefmt=datefmt))
+    if current_handler in logger.handlers:
+        logger.removeHandler(current_handler)
+    logger.addHandler(handler)
+    current_handler = handler
+    return handler
 
 
-color_logs(True)
+# Add a handler with the default parameters at import time.
+current_handler = set_handler()

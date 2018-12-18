@@ -15,7 +15,7 @@ import argparse
 import logging
 import os
 from ..sync.repeater import run
-from .. import color_logs, __version__
+from .. import set_handler, __version__
 from .._utils import ShowVersionAction
 
 
@@ -43,7 +43,7 @@ EPICS_CA_REPEATER_PORT. It defaults to the standard 5065. The current value is
                         help="Show caproto version and exit.")
     args = parser.parse_args()
     if args.no_color:
-        color_logs(False)
+        set_handler(color=False)
     if args.verbose and args.verbose > 2:
         logging.getLogger('caproto').setLevel('DEBUG')
     else:
