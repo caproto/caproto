@@ -21,6 +21,8 @@ from .._utils import (batch_requests, CaprotoError, ThreadsafeCounter,
                       get_environment_variables)
 from .._constants import (STALE_SEARCH_EXPIRATION, SEARCH_MAX_DATAGRAM_BYTES)
 
+from .util import open_memory_channel
+
 
 class TrioClientError(CaprotoError):
     ...
@@ -57,7 +59,7 @@ class VirtualCircuit:
         self.subscriptionids = {}  # map subscriptionid to Channel
         self.connected = True
         self.socket = None
-        self.command_queue = trio.Queue(capacity=1000)
+        self.command_chan = open_memory_channel(1000)
         self.new_command_condition = trio.Condition()
         self._socket_lock = trio.Lock()
 
@@ -78,6 +80,7 @@ class VirtualCircuit:
 
     async def _receive_loop(self):
         num_bytes_needed = 0
+        sender = self.command_chan.send
         while True:
             bytes_to_recv = max(32768, num_bytes_needed)
             bytes_received = await self.socket.receive_some(bytes_to_recv)
@@ -86,12 +89,13 @@ class VirtualCircuit:
                 break
             commands, num_bytes_needed = self.circuit.recv(bytes_received)
             for c in commands:
-                await self.command_queue.put(c)
+                await sender.send(c)
 
     async def _command_queue_loop(self):
+        receiver = self.command_chan.receive
         while True:
             try:
-                command = await self.command_queue.get()
+                command = await receiver.receive()
                 self.circuit.process_command(command)
             except Exception as ex:
                 self.log.error('Command queue evaluation failed: {!r}'
