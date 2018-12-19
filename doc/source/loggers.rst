@@ -67,20 +67,7 @@ can, of course, configure the handlers manually in the standard fashion
 supported by Python. But a convenience function :func:`caproto.set_handler`,
 makes it easy to address to common cases.
 
-To direct the messages to a file instead of the standard out:
-
-.. code-block:: python
-
-    import caproto
-
-    caproto.set_handler(file='caproto.log')
-
-A file object (anything that implements a ``write`` method) is also accepted,
-as in ``caproto.set_handler(file=open('caproto.log'))``.
-
-
-The default handler uses ANSI color codes to color-code the log messages by log
-level. To disable the color codes:
+See the Examples section below.
 
 .. code-block:: python
 
