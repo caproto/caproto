@@ -4,8 +4,7 @@ import trio
 from caproto.trio.client import (SharedBroadcaster, Context)
 
 
-async def main(pv1="XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL",
-               pv2="XF:31IDA-OP{Tbl-Ax:X2}Mtr.VAL"):
+async def main(pv1="simple:A", pv2="simple:B"):
     '''Simple example which connects to two motorsim PVs (by default).
 
     It tests reading, writing, and subscriptions.
