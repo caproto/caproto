@@ -1646,7 +1646,7 @@ class PV:
         # Stash the ioid to match the response to the request.
 
         event = threading.Event()
-        ioid_info = dict(event=event, pv=self)
+        ioid_info = dict(event=event, pv=self, request=command)
         if callback is not None:
             ioid_info['callback'] = callback
 
@@ -1722,7 +1722,7 @@ class PV:
                              data_type=data_type, data_count=data_count)
         if notify:
             event = threading.Event()
-            ioid_info = dict(event=event, pv=self)
+            ioid_info = dict(event=event, pv=self, request=command)
             if callback is not None:
                 ioid_info['callback'] = callback
 
