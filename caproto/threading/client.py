@@ -1312,13 +1312,16 @@ class VirtualCircuitManager:
                                   ca.WriteNotifyResponse)):
             ioid_info = self.ioids.pop(command.ioid)
             deadline = ioid_info['deadline']
+            pv = ioid_info['pv']
             if deadline is not None and time.monotonic() > deadline:
-                self.log.warn("Ignoring late response with ioid=%d because "
+                self.log.warn("Ignoring late response with ioid=%d regarding "
+                              "PV named %s because "
                               "it arrived %.3f seconds after the deadline "
                               "specified by the timeout.", command.ioid,
-                              time.monotonic() - deadline)
+                              pv.name, time.monotonic() - deadline)
                 return
 
+            pv.log.debug("%r: %r", pv.name, command)
             event = ioid_info.get('event')
             if event is not None:
                 # If PV.read() or PV.write() are waiting on this response,
@@ -1643,7 +1646,7 @@ class PV:
         # Stash the ioid to match the response to the request.
 
         event = threading.Event()
-        ioid_info = dict(event=event)
+        ioid_info = dict(event=event, pv=self)
         if callback is not None:
             ioid_info['callback'] = callback
 
@@ -1674,7 +1677,6 @@ class PV:
                 f"The ioid of the expected response is {ioid}."
             )
 
-        self.log.debug("%r: %r", self.name, ioid_info['response'])
         return ioid_info['response']
 
     @ensure_connected
@@ -1720,7 +1722,7 @@ class PV:
                              data_type=data_type, data_count=data_count)
         if notify:
             event = threading.Event()
-            ioid_info = dict(event=event)
+            ioid_info = dict(event=event, pv=self)
             if callback is not None:
                 ioid_info['callback'] = callback
 
@@ -1761,7 +1763,6 @@ class PV:
                 f"{self.name!r} within {float(timeout):.3}-second timeout. "
                 f"The ioid of the expected response is {ioid}."
             )
-        self.log.debug("%r: %r", self.name, ioid_info['response'])
         return ioid_info['response']
 
     def subscribe(self, data_type=None, data_count=None,
@@ -2107,7 +2108,9 @@ class Batch:
                                   notify=True)
         self._commands[pv.circuit_manager].append(command)
         # Stash the ioid to match the response to the request.
-        ioid_info = dict(callback=callback)
+        # The request is used in the logging in __exit__. It is not needed
+        # by the circuit.
+        ioid_info = dict(callback=callback, pv=pv, request=command)
         pv.circuit_manager.ioids[ioid] = ioid_info
         self._ioid_infos.append(ioid_info)
 
@@ -2137,7 +2140,9 @@ class Batch:
         self._commands[pv.circuit_manager].append(command)
         if callback:
             # Stash the ioid to match the response to the request.
-            ioid_info = dict(callback=callback)
+            # The request is used in the logging in __exit__. It is not needed
+            # by the circuit.
+            ioid_info = dict(callback=callback, pv=pv, request=command)
             pv.circuit_manager.ioids[ioid] = ioid_info
             self._ioid_infos.append(ioid_info)
 
@@ -2146,6 +2151,8 @@ class Batch:
         deadline = time.monotonic() + timeout if timeout is not None else None
         for ioid_info in self._ioid_infos:
             ioid_info['deadline'] = deadline
+            pv = ioid_info['pv']
+            pv.log.debug("%r: %r", pv.name, ioid_info['request'])
         for circuit_manager, commands in self._commands.items():
             circuit_manager.send(*commands)
 
