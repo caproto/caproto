@@ -1,5 +1,4 @@
 import functools
-import collections
 
 import caproto as ca
 import trio
@@ -107,8 +106,6 @@ class VirtualCircuit(_VirtualCircuit):
                     ...
                 except LoopExit:
                     ...
-                except Exception:
-                    print('exiting')
 
     async def subscription_queue_loop(self, task_status):
         task_status.started()
