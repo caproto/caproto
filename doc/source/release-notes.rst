@@ -32,6 +32,56 @@ greater feature parity with epics-base.
   client logs a warning and disconnects all circuits from that server so that
   their PVs can begin attempting to reconnect to a responsive server.
 
+v0.2.3 (2018-01-02)
+===================
+
+Usability Improvements
+-----------------------
+
+* A new function :func:`~caproto.set_handler` provides a convenient way to make
+  common customizations to caproto's default logging handler, such as writing
+  to a file instead of the stdout.
+* In the threading client, store the current access rights level on the PV
+  object as ``pv.access_rights``. It was previously only accessible when it
+  *changed*, via a callback, and had to be stashed/tracked by user code.
+* Display the version of caproto in the output of ``--help``/``-h`` in the
+  commandline utilities. Add a new commandline argument ``--version``/``-V``
+  that outputs the version and exits.
+* In the threading client, DEBUG-log *all* read/write requests and
+  read/write/event responses. (When these log messages were first introduced in
+  v0.2.1, batched requests and their responses were not logged, and write
+  responses were not logged when ``notify=True`` but ``wait=False``.)
+
+Bug Fixes
+---------
+
+* Fix critical bug in synchronous client that broke monitoring of multiple PVs.
+* Fix default ("AUTO") broadcast address list (should always be
+  ``255.255.255.255``). Removed internal utility function
+  :func:`broadcast_address_list_from_interfaces`.
+* In pyepics-compatible client, set default mask to
+  ``SubscriptionType.DBE_VALUE | SubscriptionType.DBE_ALARM``, consistent with
+  pyepics.
+* Prevent subscriptions for being processed for all channels that share an
+  alarm if the alarm state has not actually changed.
+
+Updated Pyepics Compatibility
+-----------------------------
+
+* Added new method ``PV.get_with_metadata``, which was added in pyepics 3.3.1.
+
+Deprecations
+------------
+
+* The :func:`~caproto.color_logs` convenience function has been deprecated in
+  favor of :func:`~caproto.set_handler`.
+
+Internal Changes
+----------------
+
+* Enable ``-vvv`` ("very verbose") option when running example IOCs in test
+  suite.
+
 v0.2.2 (2018-11-15)
 ===================
 
@@ -45,7 +95,6 @@ Improved Alarm Support
 * LOLO, LO, HI, and HIHI alarm status fields of mocked records are respected.
 * Channel limit metadata (upper_alarm_limit, upper_warning_limit, etc.) is now
   integrated with alarms.
-
 
 Bug Fixes and Performance Improvements
 --------------------------------------
@@ -113,8 +162,9 @@ Server Performance Tuning
 
 The release also includes one small new feature: in the threading client,
 DEBUG-level logging of channels/PVs ``caproto.ch`` now logs (non-batch)
-read/write requests and read/write/event responses. Related --- there is
-expanded documentation on :doc:`loggers`.
+read/write requests and read/write/event responses. [Update: In v0.2.3,
+this feature was extended to include batched requests and their responses.]
+Related --- there is expanded documentation on :doc:`loggers`.
 
 v0.2.0 (2018-10-17)
 ===================

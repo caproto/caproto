@@ -69,8 +69,4 @@ makes it easy to address to common cases.
 
 See the Examples section below.
 
-.. code-block:: python
-
-    caproto.set_handler(color=False)
-
 .. autofunction:: caproto.set_handler
