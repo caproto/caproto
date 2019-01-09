@@ -229,14 +229,14 @@ class Channel:
         "Start a new subscription and spawn an async task to receive readings."
         command = self.channel.subscribe(*args, **kwargs)
         # Stash the subscriptionid to match the response to the request.
-        queue = trio.Queue(capacity=100)
-        self.circuit.subscriptionids[command.subscriptionid] = queue
+        channel = open_memory_channel(100)
+        self.circuit.subscriptionids[command.subscriptionid] = channel.send
         await self.circuit.send(command)
 
         async def _queue_loop(task_status):
             task_status.started()
             while True:
-                command = await queue.get()
+                command = await channel.receive.receive()
                 if command is ca.DISCONNECTED:
                     break
                 self.process_subscription(command)
@@ -246,7 +246,6 @@ class Channel:
 
     async def unsubscribe(self, subscriptionid, *args, **kwargs):
         "Cancel a subscription and await confirmation from the server."
-        # queue = self.circuit.subscriptionids[subscriptionid]
         await self.circuit.send(self.channel.unsubscribe(subscriptionid))
         while subscriptionid in self.circuit.subscriptionids:
             await self.wait_on_new_command()
@@ -262,7 +261,7 @@ class SharedBroadcaster:
         self.nursery = nursery
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
         self.log = self.broadcaster.log
-        self.command_bundle_queue = trio.Queue(capacity=1000)
+        self.command_chan = open_memory_channel(1000)
         self.broadcaster_command_condition = trio.Condition()
         self._cleanup_condition = trio.Condition()
         self._cleanup_event = trio.Event()
@@ -305,7 +304,7 @@ class SharedBroadcaster:
         async with self._cleanup_condition:
             self._cleanup_event.set()
             self.log.debug('Broadcaster: Disconnecting the command queue loop')
-            await self.command_bundle_queue.put(ca.DISCONNECTED)
+            await self.command_chan.send.send(ca.DISCONNECTED)
             self.log.debug('Broadcaster: Closing the UDP socket')
             self._cleanup_condition.notify_all()
         self.log.debug('Broadcaster disconnect complete')
@@ -338,12 +337,12 @@ class SharedBroadcaster:
                 if bytes_received is ca.DISCONNECTED:
                     break
                 commands = self.broadcaster.recv(bytes_received, address)
-                await self.command_bundle_queue.put(commands)
+                await self.command_chan.send.send(commands)
 
     async def _broadcaster_queue_loop(self):
         while True:
             try:
-                commands = await self.command_bundle_queue.get()
+                commands = await self.command_chan.receive.receive()
                 if commands is ca.DISCONNECTED:
                     break
                 self.broadcaster.process_commands(commands)
