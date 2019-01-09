@@ -43,6 +43,12 @@ print = partial(print, flush=True)
 
 CIRCUIT_DEATH_ATTEMPTS = 3
 
+# sentinels used as default values for arguments
+CONTEXT_DEFAULT_TIMEOUT = object()
+CONTEXT_DEFAULT_ATTEMPTS = object()
+PV_DEFAULT_TIMEOUT = object()
+PV_DEFAULT_ATTEMPTS = object()
+
 
 class DeadCircuitError(CaprotoError):
     ...
@@ -58,8 +64,12 @@ def ensure_connected(func):
         else:
             raise CaprotoTypeError("ensure_connected is intended to decorate "
                                    "methods of PV and Subscription.")
-        # This `2` matches the default in read, write, wait_for_connection.
-        raw_timeout = timeout = kwargs.get('timeout', 2)
+        timeout = kwargs['timeout']
+        if timeout is PV_DEFAULT_TIMEOUT:
+            timeout = pv.timeout
+        # timeout may be decremeneted during disconnection-retry loops below.
+        # Keep a copy of the original 'raw_timeout' for use in error messages.
+        raw_timeout = timeout
         if timeout is not None:
             deadline = time.monotonic() + timeout
         with pv._in_use:
@@ -842,6 +852,13 @@ class Context:
     ----------
     broadcaster : SharedBroadcaster, optional
         If None is specified, a fresh one is instantiated.
+    timeout : float
+        Number of seconds before a CaprotoTimeoutError is raised. This default
+        can be overriden at the PV level or for any specific operation.  If
+        unset, the default is 2 seconds.
+    attempts : integer
+        Number of times to attempt a ``read`` operation if a
+        CaprotoTimeoutError is raised. Default is 1 (i.e. no retries).
     host_name : string, optional
         uses value of ``socket.gethostname()`` by default
     client_name : string, optional
@@ -860,10 +877,13 @@ class Context:
         value from 1.
     """
     def __init__(self, broadcaster=None, *,
+                 timeout=2, attempts=1,
                  host_name=None, client_name=None, max_workers=1):
         if broadcaster is None:
             broadcaster = SharedBroadcaster()
         self.broadcaster = broadcaster
+        self.timeout = timeout
+        self.attempts = attempts
         if host_name is None:
             host_name = socket.gethostname()
         self.host_name = host_name
@@ -914,7 +934,9 @@ class Context:
         self.disconnect(wait=True)
 
     def get_pvs(self, *names, priority=0, connection_state_callback=None,
-                access_rights_callback=None):
+                access_rights_callback=None,
+                timeout=CONTEXT_DEFAULT_TIMEOUT,
+                attempts=CONTEXT_DEFAULT_ATTEMPTS):
         """
         Return a list of PV objects.
 
@@ -940,7 +962,14 @@ class Context:
             Expected signature: ``f(pv, access_rights)`` where ``pv`` is the
             instance of ``PV`` whose state has changed and ``access_rights`` is
             a member of the caproto ``AccessRights`` enum
-
+        timeout : float, optional
+            Number of seconds before a CaprotoTimeoutError is raised. This default
+            can be overriden for any specific operation.  If None, fall back
+            to the default timeout set by the Context.
+        attempts : integer, optional
+            Number of times to attempt a ``read`` operation if a
+            CaprotoTimeoutError is raised. If None, fall back to the default
+            attempts set by the Context.
         """
         if self._user_disconnected:
             raise ContextDisconnectedError("This Context is no longer usable.")
@@ -953,7 +982,7 @@ class Context:
                     new_instance = False
                 except KeyError:
                     pv = PV(name, priority, self, connection_state_callback,
-                            access_rights_callback)
+                            access_rights_callback, timeout, attempts)
                     names_to_search.append(name)
                     self.pvs[(name, priority)] = pv
                     self.pvs_needing_circuits[name].add(pv)
@@ -1457,10 +1486,11 @@ class PV:
                  'access_rights_callback', 'subscriptions',
                  'command_bundle_queue', 'component_lock', '_idle', '_in_use',
                  '_usages', 'connection_state_callback', 'log',
+                 '_timeout', '_attempts',
                  '__weakref__')
 
     def __init__(self, name, priority, context, connection_state_callback,
-                 access_rights_callback):
+                 access_rights_callback, timeout, attempts):
         """
         These must be instantiated by a Context, never directly.
         """
@@ -1475,6 +1505,8 @@ class PV:
         self.channel_ready = threading.Event()
         self.connection_state_callback = CallbackHandler(self)
         self.access_rights_callback = CallbackHandler(self)
+        self._timeout = timeout
+        self._attempts = attempts
 
         if connection_state_callback is not None:
             self.connection_state_callback.add_callback(
@@ -1490,6 +1522,28 @@ class PV:
         self._idle = False
         self._in_use = threading.Condition()
         self._usages = 0
+
+    @property
+    def timeout(self):
+        if self._timeout is CONTEXT_DEFAULT_TIMEOUT:
+            return self.context.timeout
+        else:
+            return self._timeout
+
+    @timeout.setter
+    def timeout(self, val):
+        self._timeout = val
+
+    @property
+    def attempts(self):
+        if self._attempts is CONTEXT_DEFAULT_ATTEMPTS:
+            return self.context.attempts
+        else:
+            return self._attempts
+
+    @attempts.setter
+    def attempts(self, val):
+        self._attempts = val
 
     @property
     def circuit_manager(self):
@@ -1553,7 +1607,7 @@ class PV:
             return False
         return channel.states[ca.CLIENT] is ca.CONNECTED
 
-    def wait_for_search(self, *, timeout=2):
+    def wait_for_search(self, *, timeout=PV_DEFAULT_TIMEOUT):
         """
         Wait for this PV to be found.
 
@@ -1565,6 +1619,8 @@ class PV:
         timeout : float
             Seconds before a CaprotoTimeoutError is raised. Default is 2.
         """
+        if timeout is PV_DEFAULT_TIMEOUT:
+            timeout = self.timeout
         if not self.circuit_ready.wait(timeout=timeout):
             raise CaprotoTimeoutError("No servers responded to a search for a "
                                       "channel named {!r} within {:.3}-second "
@@ -1572,7 +1628,7 @@ class PV:
                                       "".format(self.name, float(timeout)))
 
     @ensure_connected
-    def wait_for_connection(self, *, timeout=2):
+    def wait_for_connection(self, *, timeout=PV_DEFAULT_TIMEOUT):
         pass
 
     def go_idle(self):
@@ -1609,9 +1665,10 @@ class PV:
                 ...
             self._idle = True
 
-    @ensure_connected
-    def read(self, *, wait=True, callback=None, timeout=2, data_type=None,
-             data_count=None, notify=True):
+    def read(self, *, wait=True, callback=None,
+             timeout=PV_DEFAULT_TIMEOUT,
+             attempts=PV_DEFAULT_ATTEMPTS,
+             data_type=None, data_count=None, notify=True):
         """Request a fresh reading.
 
         Can do one or both of:
@@ -1629,7 +1686,12 @@ class PV:
             Called with the response as its argument when received.
         timeout : number or None
             Number of seconds to wait before raising CaprotoTimeoutError.
-            Default is 2.
+            Default is PV.timeout, which falls back to Context.timeout if not
+            set.
+        attempts : integer or None
+            Number of times to attempt this operation if a
+            CaprotoTimeoutError is raised. Default is PV.attempts, which falls
+            back to Context.attempts if not set.
         data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
             Request specific data type or a class of data types, matched to the
             channel's native data type. Default is Channel's native data type.
@@ -1640,6 +1702,30 @@ class PV:
             Send a ``ReadNotifyRequest`` instead of a ``ReadRequest``. True by
             default.
         """
+        if attempts is PV_DEFAULT_ATTEMPTS:
+            attempts = self.attempts
+            if attempts < 1:
+                raise ValueError("attempts must be at least 1.")
+        err = None
+        for attempt in range(attempts):
+            try:
+                return self._read(wait=wait, callback=callback,
+                                  timeout=timeout,
+                                  data_type=data_type, data_count=data_count,
+                                  notify=notify)
+            except CaprotoTimeoutError as err_:
+                self.log.warning(f"Attempt {1 + attempt} of {attempts} to "
+                                 f"read {self.name!r} failed. Retrying....")
+                err = err_
+        else:
+            # We have exhaused all attempts.
+            raise err
+
+    @ensure_connected
+    def _read(self, *, wait, callback, timeout, data_type, data_count, notify):
+        "See read, above."
+        if timeout is PV_DEFAULT_TIMEOUT:
+            timeout = self.timeout
         cm, chan = self._circuit_manager, self._channel
         ioid = cm._ioid_counter()
         command = chan.read(ioid=ioid, data_type=data_type,
@@ -1681,7 +1767,7 @@ class PV:
         return ioid_info['response']
 
     @ensure_connected
-    def write(self, data, *, wait=True, callback=None, timeout=2,
+    def write(self, data, *, wait=True, callback=None, timeout=None,
               notify=None, data_type=None, data_count=None):
         """
         Write a new value. Optionally, request confirmation from the server.
@@ -1715,6 +1801,8 @@ class PV:
             Requested number of values. Default is the channel's native data
             count.
         """
+        if timeout is PV_DEFAULT_TIMEOUT:
+            timeout = self.timeout
         cm, chan = self._circuit_manager, self._channel
         if notify is None:
             notify = (wait or callback is not None)
@@ -1915,7 +2003,7 @@ class Subscription(CallbackHandler):
         return f"<Subscription to {self.pv.name!r}, id={self.subscriptionid}>"
 
     @ensure_connected
-    def _subscribe(self, timeout=2):
+    def _subscribe(self, timeout=PV_DEFAULT_TIMEOUT):
         """This is called automatically after the first callback is added.
         """
         cm = self.pv.circuit_manager
@@ -1925,7 +2013,7 @@ class Subscription(CallbackHandler):
         ctx.activate_subscriptions_now.set()
 
     @ensure_connected
-    def compose_command(self, timeout=2):
+    def compose_command(self, timeout=PV_DEFAULT_TIMEOUT):
         "This is used by the Context to re-subscribe in bulk after dropping."
         with self.callback_lock:
             if not self.callbacks:
@@ -1954,7 +2042,7 @@ class Subscription(CallbackHandler):
         # Once self.callbacks is empty, self.remove_callback calls
         # self._unsubscribe for us.
 
-    def _unsubscribe(self, timeout=2):
+    def _unsubscribe(self, timeout=PV_DEFAULT_TIMEOUT):
         """
         This is automatically called if the number of callbacks goes to 0.
         """
