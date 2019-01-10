@@ -5,7 +5,13 @@ from caproto.trio.client import (SharedBroadcaster, Context)
 
 
 async def main(pv1="simple:A", pv2="simple:B"):
-    '''Simple example which connects to two motorsim PVs (by default).
+    '''Simple example which connects to two PVs on the simple IOC (by default).
+
+    Start the simple IOC like so:
+
+    python -m caproto.ioc_examples.simple
+
+    and then run this example.
 
     It tests reading, writing, and subscriptions.
     '''
