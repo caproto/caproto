@@ -631,11 +631,12 @@ class SharedBroadcaster:
                             if name in self.search_results:
                                 accepted_address, _ = self.search_results[name]
                                 new_address = ca.extract_address(command)
-                                self.log.warning(
-                                    "PV %s with cid %d found on multiple servers. "
-                                    "Accepted address is %s:%d. "
-                                    "Also found on %s:%d",
-                                    name, cid, *accepted_address, *new_address)
+                                if new_address != accepted_address:
+                                    self.log.warning(
+                                        "PV %s with cid %d found on multiple "
+                                        "servers. Accepted address is %s:%d. "
+                                        "Also found on %s:%d",
+                                        name, cid, *accepted_address, *new_address)
                     else:
                         results_by_cid.append((cid, name))
                         address = ca.extract_address(command)
