@@ -21,6 +21,8 @@ from .._utils import (batch_requests, CaprotoError, ThreadsafeCounter,
                       get_environment_variables)
 from .._constants import (STALE_SEARCH_EXPIRATION, SEARCH_MAX_DATAGRAM_BYTES)
 
+from .util import open_memory_channel
+
 
 class TrioClientError(CaprotoError):
     ...
@@ -57,7 +59,7 @@ class VirtualCircuit:
         self.subscriptionids = {}  # map subscriptionid to Channel
         self.connected = True
         self.socket = None
-        self.command_queue = trio.Queue(capacity=1000)
+        self.command_chan = open_memory_channel(1000)
         self.new_command_condition = trio.Condition()
         self._socket_lock = trio.Lock()
 
@@ -78,6 +80,7 @@ class VirtualCircuit:
 
     async def _receive_loop(self):
         num_bytes_needed = 0
+        sender = self.command_chan.send
         while True:
             bytes_to_recv = max(32768, num_bytes_needed)
             bytes_received = await self.socket.receive_some(bytes_to_recv)
@@ -86,12 +89,13 @@ class VirtualCircuit:
                 break
             commands, num_bytes_needed = self.circuit.recv(bytes_received)
             for c in commands:
-                await self.command_queue.put(c)
+                await sender.send(c)
 
     async def _command_queue_loop(self):
+        receiver = self.command_chan.receive
         while True:
             try:
-                command = await self.command_queue.get()
+                command = await receiver.receive()
                 self.circuit.process_command(command)
             except Exception as ex:
                 self.log.error('Command queue evaluation failed: {!r}'
@@ -225,14 +229,14 @@ class Channel:
         "Start a new subscription and spawn an async task to receive readings."
         command = self.channel.subscribe(*args, **kwargs)
         # Stash the subscriptionid to match the response to the request.
-        queue = trio.Queue(capacity=100)
-        self.circuit.subscriptionids[command.subscriptionid] = queue
+        channel = open_memory_channel(100)
+        self.circuit.subscriptionids[command.subscriptionid] = channel.send
         await self.circuit.send(command)
 
         async def _queue_loop(task_status):
             task_status.started()
             while True:
-                command = await queue.get()
+                command = await channel.receive.receive()
                 if command is ca.DISCONNECTED:
                     break
                 self.process_subscription(command)
@@ -242,7 +246,6 @@ class Channel:
 
     async def unsubscribe(self, subscriptionid, *args, **kwargs):
         "Cancel a subscription and await confirmation from the server."
-        # queue = self.circuit.subscriptionids[subscriptionid]
         await self.circuit.send(self.channel.unsubscribe(subscriptionid))
         while subscriptionid in self.circuit.subscriptionids:
             await self.wait_on_new_command()
@@ -258,7 +261,7 @@ class SharedBroadcaster:
         self.nursery = nursery
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
         self.log = self.broadcaster.log
-        self.command_bundle_queue = trio.Queue(capacity=1000)
+        self.command_chan = open_memory_channel(1000)
         self.broadcaster_command_condition = trio.Condition()
         self._cleanup_condition = trio.Condition()
         self._cleanup_event = trio.Event()
@@ -301,7 +304,7 @@ class SharedBroadcaster:
         async with self._cleanup_condition:
             self._cleanup_event.set()
             self.log.debug('Broadcaster: Disconnecting the command queue loop')
-            await self.command_bundle_queue.put(ca.DISCONNECTED)
+            await self.command_chan.send.send(ca.DISCONNECTED)
             self.log.debug('Broadcaster: Closing the UDP socket')
             self._cleanup_condition.notify_all()
         self.log.debug('Broadcaster disconnect complete')
@@ -334,12 +337,12 @@ class SharedBroadcaster:
                 if bytes_received is ca.DISCONNECTED:
                     break
                 commands = self.broadcaster.recv(bytes_received, address)
-                await self.command_bundle_queue.put(commands)
+                await self.command_chan.send.send(commands)
 
     async def _broadcaster_queue_loop(self):
         while True:
             try:
-                commands = await self.command_bundle_queue.get()
+                commands = await self.command_chan.receive.receive()
                 if commands is ca.DISCONNECTED:
                     break
                 self.broadcaster.process_commands(commands)

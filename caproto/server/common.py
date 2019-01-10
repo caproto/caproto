@@ -33,6 +33,10 @@ class DisconnectedCircuit(Exception):
     ...
 
 
+class LoopExit(Exception):
+    ...
+
+
 Subscription = namedtuple('Subscription', ('mask', 'channel_filter',
                                            'circuit', 'channel',
                                            'data_type',
@@ -64,7 +68,7 @@ class VirtualCircuit:
         # self.command_queue = ...
         # self.new_command_condition = ...
         # self.subscription_queue = ...
-        # self.get_from_sub_queue_with_timeout = ...
+        # self.get_from_sub_queue = ...
         # self.events_on = ...
         # self.write_event = ...
 
@@ -121,99 +125,113 @@ class VirtualCircuit:
             await self._on_disconnect()
             raise DisconnectedCircuit()
 
-    async def command_queue_loop(self):
+    async def _command_queue_iteration(self, command):
         """
-        Coroutine which feeds from the circuit command queue.
+        Coroutine which evaluates one item from the circuit command queue.
 
         1. Dispatch and validate through caproto.VirtualCircuit.process_command
             - Upon server failure, respond to the client with
               caproto.ErrorResponse
         2. Update Channel state if applicable.
         """
+        try:
+            self.circuit.process_command(command)
+        except ca.RemoteProtocolError:
+            if hasattr(command, 'sid'):
+                sid = command.sid
+                cid = self.circuit.channels_sid[sid].cid
+            elif hasattr(command, 'cid'):
+                cid = command.cid
+                sid = self.circuit.channels[cid].sid
+
+            else:
+                cid, sid = None, None
+
+            if cid is not None:
+                try:
+                    await self.send(ca.ServerDisconnResponse(cid=cid))
+                except Exception:
+                    self.log.exception(
+                        "Client broke the protocol in a recoverable way, but "
+                        "channel disconnection of cid=%d sid=%d failed.", cid,
+                        sid)
+                    raise LoopExit('Recoverable protocol error failure')
+                else:
+                    self.log.exception(
+                        "Client broke the protocol in a recoverable way. "
+                        "Disconnected channel cid=%d sid=%d but keeping the "
+                        "circuit alive.", cid, sid)
+
+                await self._wake_new_command()
+                return
+            else:
+                self.log.exception(
+                    "Client broke the protocol in an unrecoverable way.")
+                # TODO: Kill the circuit.
+                raise LoopExit('Unrecoverable protocol error')
+        except Exception:
+            self.log.exception('Circuit command queue evaluation failed')
+            # Internal error - ignore for now
+            return
+
+        if command is ca.DISCONNECTED:
+            raise DisconnectedCircuit
+
+        try:
+            response = await self._process_command(command)
+            return response
+        except Exception as ex:
+            if not self.connected:
+                if not isinstance(command, ca.ClearChannelRequest):
+                    self.log.error('Server error after client '
+                                   'disconnection: %s', command)
+                raise LoopExit('Server error after client disconnection')
+
+            self.log.exception('Server failed to process command: %s',
+                               command)
+
+            if hasattr(command, 'sid'):
+                cid = self.circuit.channels_sid[command.sid].cid
+                error_message = f'Python exception: {type(ex).__name__} {ex}'
+                return [ca.ErrorResponse(command, cid,
+                                         status=ca.CAStatus.ECA_INTERNAL,
+                                         error_message=error_message)
+                        ]
+
+    async def command_queue_loop(self):
+        """Reference implementation of the command queue loop
+
+        Note
+        ----
+        Assumes self.command_bundle_queue functions as an async queue with
+        awaitable .get()
+
+        Async library implementations can (and should) reimplement this.
+        Coroutine which evaluates one item from the circuit command queue.
+        """
+
         # The write_event will be cleared when a write is scheduled and set
         # when one completes.
         maybe_awaitable = self.write_event.set()
         # The curio backend makes this an awaitable thing.
         if maybe_awaitable is not None:
             await maybe_awaitable
-        while True:
-            try:
+
+        try:
+            while True:
                 command = await self.command_queue.get()
-                self.circuit.process_command(command)
-                if command is ca.DISCONNECTED:
-                    break
-            except self.TaskCancelled:
-                break
-            except ca.RemoteProtocolError as ex:
-                if hasattr(command, 'sid'):
-                    sid = command.sid
-                    cid = self.circuit.channels_sid[sid].cid
-                elif hasattr(command, 'cid'):
-                    cid = command.cid
-                    sid = self.circuit.channels[cid].sid
-
-                else:
-                    cid, sid = None, None
-
-                if cid is not None:
-                    try:
-                        await self.send(ca.ServerDisconnResponse(cid=cid))
-                    except Exception:
-                        self.log.error(
-                            "Client broke the protocol in a recoverable "
-                            "way, but channel disconnection of cid=%d sid=%d "
-                            "failed.", cid, sid,
-                            exc_info=ex)
-                        break
-                    else:
-                        self.log.error(
-                            "Client broke the protocol in a recoverable "
-                            "way. Disconnected channel cid=%d sid=%d "
-                            "but keeping the circuit alive.", cid, sid,
-                            exc_info=ex)
-
-                    await self._wake_new_command()
-                    continue
-                else:
-                    self.log.error("Client broke the protocol in an "
-                                   "unrecoverable way.", exc_info=ex)
-                    # TODO: Kill the circuit.
-                    break
-            except Exception:
-                self.log.exception('Circuit command queue evaluation failed')
-                continue
-
-            try:
-                response_command = await self._process_command(command)
-                if response_command is not None:
-                    await self.send(*response_command)
-            except DisconnectedCircuit:
-                await self._on_disconnect()
-                self.circuit.disconnect()
-                await self.context.circuit_disconnected(self)
-                break
-            except Exception as ex:
-                if not self.connected:
-                    if not isinstance(command, ca.ClearChannelRequest):
-                        self.log.error('Server error after client '
-                                       'disconnection: %s', command)
-                    break
-
-                self.log.exception('Server failed to process command: %s',
-                                   command)
-
-                if hasattr(command, 'sid'):
-                    cid = self.circuit.channels_sid[command.sid].cid
-
-                    response_command = ca.ErrorResponse(
-                        command, cid,
-                        status=ca.CAStatus.ECA_INTERNAL,
-                        error_message=('Python exception: {} {}'
-                                       ''.format(type(ex).__name__, ex))
-                    )
-                    await self.send(response_command)
-
-            await self._wake_new_command()
+                response = await self._command_queue_iteration(command)
+                if response is not None:
+                    await self.send(*response)
+                await self._wake_new_command()
+        except DisconnectedCircuit:
+            await self._on_disconnect()
+            self.circuit.disconnect()
+            await self.context.circuit_disconnected(self)
+        except self.TaskCancelled:
+            ...
+        except LoopExit:
+            ...
 
     async def subscription_queue_loop(self):
         maybe_awaitable = self.events_on.set()
@@ -236,7 +254,7 @@ class VirtualCircuit:
                 # and it should sacrifice some latency in order to batch
                 # requests efficiently.
                 while True:
-                    ref = await self.get_from_sub_queue_with_timeout(HIGH_LOAD_TIMEOUT)
+                    ref = await self.get_from_sub_queue(timeout=HIGH_LOAD_TIMEOUT)
                     if ref is None:
                         # We have caught up with the producer. Stop batching,
                         # and optimize for low latency.
@@ -248,7 +266,7 @@ class VirtualCircuit:
                             break
 
                         # Block here until we have something to send...
-                        ref = await self.subscription_queue.get()
+                        ref = await self.get_from_sub_queue(timeout=None)
 
                         # And, since we are in "slow producer" mode, reset the
                         # limit in preparation for the next time we enter "fast
@@ -626,12 +644,19 @@ class Context:
             await self.command_bundle_queue.put((address, commands))
 
     async def broadcaster_queue_loop(self):
+        '''Reference broadcaster queue loop implementation
+
+        Note
+        ----
+        Assumes self.command_bundle_queue functions as an async queue with
+        awaitable .get()
+
+        Async library implementations can (and should) reimplement this.
+        '''
         while True:
             try:
                 addr, commands = await self.command_bundle_queue.get()
-                self.broadcaster.process_commands(commands)
-                if addr not in self.ignore_addresses:
-                    await self._broadcaster_evaluate(addr, commands)
+                await self._broadcaster_queue_iteration(addr, commands)
             except self.TaskCancelled:
                 break
             except Exception as ex:
@@ -677,7 +702,11 @@ class Context:
             self.pvdb[rec_field] = inst
         return inst
 
-    async def _broadcaster_evaluate(self, addr, commands):
+    async def _broadcaster_queue_iteration(self, addr, commands):
+        self.broadcaster.process_commands(commands)
+        if addr in self.ignore_addresses:
+            return
+
         search_replies = []
         version_requested = False
         for command in commands:
@@ -713,132 +742,149 @@ class Context:
                     raise CaprotoNetworkError(f"Failed to send to {host}:{port}") from exc
 
     async def subscription_queue_loop(self):
+        """Reference implementation of the subscription queue loop
+
+        Note
+        ----
+        Assumes self.subscription-queue functions as an async queue with
+        awaitable .get()
+
+        Async library implementations can (and should) reimplement this.
+        Coroutine which evaluates one item from the circuit command queue.
+        """
         while True:
             # This queue receives updates that match the db_entry, data_type
             # and mask ("subscription spec") of one or more subscriptions.
             sub_specs, metadata, values, flags, sub = await self.subscription_queue.get()
+            await self._subscription_queue_iteration(sub_specs, metadata,
+                                                     values, flags, sub)
 
-            subs = []
-            if sub is None:
-                # Broadcast to all Subscriptions for the relevant
-                # SubscriptionSpec(s).
-                for sub_spec in sub_specs:
-                    subs.extend(self.subscriptions[sub_spec])
-            else:
-                # A specific Subscription has been specified, which means this
-                # specific update was prompted by Subscription being new, not
-                # prompted by a new value. The update should only be sent to
-                # that specific Subscription.
-                subs = [sub]
-                sub_spec, = sub_specs
-            # Pack the data and metadata into an EventAddResponse and send it.
-            # We have to make a new response for each channel because each may
-            # have a different requested data_count.
-            for sub in subs:
-                circuit = sub.circuit
-                s_flags = flags
-                chan = sub.channel
+    async def _subscription_queue_iteration(self, sub_specs, metadata, values,
+                                            flags, sub):
+        '''Called on every item from the Context subscription queue
 
-                # This is a pass-through if arr is None.
-                values = apply_arr_filter(sub_spec.channel_filter.arr, values)
+        This queue receives updates that match the db_entry, data_type and mask
+        ("subscription spec") of one or more subscriptions.
+        '''
+        subs = []
+        if sub is None:
+            # Broadcast to all Subscriptions for the relevant
+            # SubscriptionSpec(s).
+            for sub_spec in sub_specs:
+                subs.extend(self.subscriptions[sub_spec])
+        else:
+            # A specific Subscription has been specified, which means this
+            # specific update was prompted by Subscription being new, not
+            # prompted by a new value. The update should only be sent to that
+            # specific Subscription.
+            subs = [sub]
+            sub_spec, = sub_specs
+        # Pack the data and metadata into an EventAddResponse and send it.  We
+        # have to make a new response for each channel because each may have a
+        # different requested data_count.
+        for sub in subs:
+            circuit = sub.circuit
+            s_flags = flags
+            chan = sub.channel
 
-                # If the subscription has a non-zero value respect it,
-                # else default to the full length of the data.
-                data_count = sub.data_count or len(values)
-                if data_count != len(values):
-                    values = values[:data_count]
+            # This is a pass-through if arr is None.
+            values = apply_arr_filter(sub_spec.channel_filter.arr, values)
 
-                command = chan.subscribe(data=values,
-                                         metadata=metadata,
-                                         data_type=sub.data_type,
-                                         data_count=data_count,
-                                         subscriptionid=sub.subscriptionid,
-                                         status=1)
+            # If the subscription has a non-zero value respect it, else default
+            # to the full length of the data.
+            data_count = sub.data_count or len(values)
+            if data_count != len(values):
+                values = values[:data_count]
 
-                dbnd = sub.channel_filter.dbnd
-                if dbnd is not None:
-                    new = values
-                    if hasattr(new, 'endian'):
-                        if new.endian != host_endian:
-                            new = copy.copy(new)
-                            new.byteswap()
-                    old = self.last_dead_band.get(sub)
-                    if old is not None:
-                        if ((not isinstance(old, Iterable) or
-                             (isinstance(old, Iterable) and len(old) == 1)) and
-                            (not isinstance(new, Iterable) or
-                             (isinstance(new, Iterable) and len(new) == 1))):
-                            if isinstance(old, Iterable):
-                                old, = old
-                            if isinstance(new, Iterable):
-                                new, = new
-                            # Cool that was fun.
-                            if dbnd.m == 'rel':
-                                out_of_band = dbnd.d < abs((old - new) / old)
-                            else:  # must be 'abs' -- was already validated
-                                out_of_band = dbnd.d < abs(old - new)
-                            # We have verified that that EPICS considers DBE_LOG etc. to be
-                            # an absolute (not relative) threshold.
-                            abs_diff = abs(old - new)
-                            if abs_diff > sub.db_entry.log_atol:
-                                s_flags |= SubscriptionType.DBE_LOG
-                                if abs_diff > sub.db_entry.value_atol:
-                                    s_flags |= SubscriptionType.DBE_VALUE
+            command = chan.subscribe(
+                data=values, metadata=metadata, data_type=sub.data_type,
+                data_count=data_count, subscriptionid=sub.subscriptionid,
+                status=1)
 
-                            if not (out_of_band and (sub.mask & s_flags)):
-                                continue
-                            else:
-                                self.last_dead_band[sub] = new
-                    else:
-                        self.last_dead_band[sub] = new
+            dbnd = sub.channel_filter.dbnd
+            if dbnd is not None:
+                new = values
+                if hasattr(new, 'endian'):
+                    if new.endian != host_endian:
+                        new = copy.copy(new)
+                        new.byteswap()
+                old = self.last_dead_band.get(sub)
+                if old is not None:
+                    old_iterable = isinstance(old, Iterable)
+                    new_iterable = isinstance(new, Iterable)
+                    if ((not old_iterable or (old_iterable and len(old) == 1)) and
+                            (not new_iterable or (new_iterable and len(new) == 1))):
+                        if old_iterable:
+                            old, = old
+                        if new_iterable:
+                            new, = new
+                        # Cool that was fun.
+                        if dbnd.m == 'rel':
+                            out_of_band = dbnd.d < abs((old - new) / old)
+                        else:  # must be 'abs' -- was already validated
+                            out_of_band = dbnd.d < abs(old - new)
+                        # We have verified that that EPICS considers DBE_LOG
+                        # etc. to be an absolute (not relative) threshold.
+                        abs_diff = abs(old - new)
+                        if abs_diff > sub.db_entry.log_atol:
+                            s_flags |= SubscriptionType.DBE_LOG
+                            if abs_diff > sub.db_entry.value_atol:
+                                s_flags |= SubscriptionType.DBE_VALUE
 
-                # Special-case for edge-triggered modes of the sync Channel
-                # Filter (before, after, first, last). Only send the first
-                # update to each channel.
-                sync = sub.channel_filter.sync
-                if sync is not None:
-                    last_update = self.last_sync_edge_update[sub][sync.s].get(sync.m)
-                    if last_update and last_update == command:
-                        # This is a redundant update. Do not send.
-                        continue
-                    else:
-                        # Stash this and then send it.
-                        self.last_sync_edge_update[sub][sync.s][sync.m] = command
+                        if not (out_of_band and (sub.mask & s_flags)):
+                            continue
+                        else:
+                            self.last_dead_band[sub] = new
+                else:
+                    self.last_dead_band[sub] = new
 
-                # This update will be put at the back of the line of updates to
-                # be sent.
-                #
-                # If len(unexpired_updates[id]) == SUBSCRIPTION_BACKLOG_QUOTA,
-                # then the command at the front of the line will be kicked out.
-                # It is not literally removed from the queue but whenever it
-                # reaches the front of the line it will dropped on the floor
-                # instead of sent. This effectively prioritizes sending the
-                # client "new news" instead of "old news".
-
-                # If this circuit has been sent EventsOff by the client, do not
-                # queue any updates until the client sends EventsOn to signal
-                # that it has caught up. But stash the most recent update for
-                # each subscription, which will immediately send when we turn
-                # events back on.
-                if not circuit.events_on.is_set():
-                    circuit.most_recent_updates[sub.subscriptionid] = command
+            # Special-case for edge-triggered modes of the sync Channel
+            # Filter (before, after, first, last). Only send the first
+            # update to each channel.
+            sync = sub.channel_filter.sync
+            if sync is not None:
+                last_update = self.last_sync_edge_update[sub][sync.s].get(sync.m)
+                if last_update and last_update == command:
+                    # This is a redundant update. Do not send.
                     continue
+                else:
+                    # Stash this and then send it.
+                    self.last_sync_edge_update[sub][sync.s][sync.m] = command
 
-                # This is an OrderedBoundedSet, a set with a maxlen, containing
-                # only commands for this particular subscription.
-                circuit.unexpired_updates[sub.subscriptionid].append(command)
+            # This update will be put at the back of the line of updates to be
+            # sent.
+            #
+            # If len(unexpired_updates[id]) == SUBSCRIPTION_BACKLOG_QUOTA, then
+            # the command at the front of the line will be kicked out.  It is
+            # not literally removed from the queue but whenever it reaches the
+            # front of the line it will dropped on the floor instead of sent.
+            # This effectively prioritizes sending the client "new news"
+            # instead of "old news".
 
-                # This is a queue with the commands from _all_ subscriptions on
-                # this circuit.
-                try:
-                    await circuit.subscription_queue.put(weakref.ref(command))
-                except circuit.QueueFull:
-                    # We have hit the overall max for subscription backlog.
-                    circuit.log.warning(
-                        "Critically high EventAddResponse load. Dropping all "
-                        "queued responses on this circuit.")
-                    circuit.subscription_queue.clear()
-                    circuit.unexpired_updates.clear()
+            # If this circuit has been sent EventsOff by the client, do not
+            # queue any updates until the client sends EventsOn to signal that
+            # it has caught up. But stash the most recent update for each
+            # subscription, which will immediately send when we turn events
+            # back on.
+            if not circuit.events_on.is_set():
+                circuit.most_recent_updates[sub.subscriptionid] = command
+                continue
+
+            # This is an OrderedBoundedSet, a set with a maxlen, containing
+            # only commands for this particular subscription.
+            circuit.unexpired_updates[sub.subscriptionid].append(command)
+
+            # This is a queue with the commands from _all_ subscriptions on
+            # this circuit.
+            try:
+                await circuit.subscription_queue.put(weakref.ref(command))
+            except circuit.QueueFull:
+                # We have hit the overall max for subscription backlog.
+                circuit.log.warning(
+                    "Critically high EventAddResponse load. Dropping all "
+                    "queued responses on this circuit.")
+                circuit.subscription_queue.clear()
+                circuit.unexpired_updates.clear()
 
     async def broadcast_beacon_loop(self):
         self.log.debug('Will send beacons to %r',
