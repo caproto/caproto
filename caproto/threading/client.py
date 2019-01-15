@@ -67,7 +67,7 @@ def ensure_connected(func):
         timeout = kwargs.get('timeout', pv.timeout)
         if timeout is PV_DEFAULT_TIMEOUT:
             timeout = pv.timeout
-        # timeout may be decremeneted during disconnection-retry loops below.
+        # timeout may be decremented during disconnection-retry loops below.
         # Keep a copy of the original 'raw_timeout' for use in error messages.
         raw_timeout = timeout
         if timeout is not None:
