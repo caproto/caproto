@@ -883,6 +883,9 @@ class Context:
             broadcaster = SharedBroadcaster()
         self.broadcaster = broadcaster
         self.timeout = timeout
+        attempts = int(attempts)
+        if attempts < 1:
+            raise CaprotoValueError("attempts must be >= 1")
         self.attempts = attempts
         if host_name is None:
             host_name = socket.gethostname()
@@ -1525,6 +1528,14 @@ class PV:
 
     @property
     def timeout(self):
+        """
+        Effective default timeout.
+
+        Valid values are:
+        * CONTEXT_DEFAULT_TIMEOUT (fall back to Context.timeout)
+        * a floating-point number
+        * None (never timeout)
+        """
         if self._timeout is CONTEXT_DEFAULT_TIMEOUT:
             return self.context.timeout
         else:
@@ -1536,6 +1547,13 @@ class PV:
 
     @property
     def attempts(self):
+        """
+        Effective default attempts.
+
+        Valid values are:
+        * CONTEXT_DEFAULT_ATTEMPTS(fall back to Context.attempts)
+        * a positive integer
+        """
         if self._attempts is CONTEXT_DEFAULT_ATTEMPTS:
             return self.context.attempts
         else:
@@ -1543,6 +1561,10 @@ class PV:
 
     @attempts.setter
     def attempts(self, val):
+        if val is not CONTEXT_DEFAULT_ATTEMPTS:
+            val = int(val)
+        if val < 1:
+            raise CaprotoValueError("attempts must be >= 1")
         self._attempts = val
 
     @property
