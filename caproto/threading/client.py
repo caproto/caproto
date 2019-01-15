@@ -964,7 +964,7 @@ class Context:
             a member of the caproto ``AccessRights`` enum
         timeout : float, optional
             Number of seconds before a CaprotoTimeoutError is raised. This default
-            can be overriden for any specific operation.  If None, fall back
+            can be overridden for any specific operation.  If None, fall back
             to the default timeout set by the Context.
         attempts : integer, optional
             Number of times to attempt a ``read`` operation if a
