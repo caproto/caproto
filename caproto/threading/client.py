@@ -854,7 +854,7 @@ class Context:
         If None is specified, a fresh one is instantiated.
     timeout : float
         Number of seconds before a CaprotoTimeoutError is raised. This default
-        can be overriden at the PV level or for any specific operation.  If
+        can be overridden at the PV level or for any specific operation.  If
         unset, the default is 2 seconds.
     attempts : integer
         Number of times to attempt a ``read`` operation if a
