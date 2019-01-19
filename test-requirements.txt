@@ -4,11 +4,11 @@ curio
 flake8
 netifaces
 pyepics
-pytest==3.3.0
+pytest
 numpy
-pytest_benchmark==3.1.1
-pytest-timeout==1.2.1
-pytest-rerunfailures==4.1
+pytest_benchmark
+pytest-timeout
+pytest-rerunfailures
 pytest-xdist
 asv
 asks
