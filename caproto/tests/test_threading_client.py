@@ -127,7 +127,10 @@ def shared_broadcaster(request):
 
 @pytest.fixture(scope='function')
 def context(request, shared_broadcaster):
-    context = Context(broadcaster=shared_broadcaster)
+    # This very large timeout is not necessary to run the tests on a local
+    # dedicated machine, but Continuous Integration service VMs can be
+    # erratically slow, so an overlarge timeout helps with reliability.
+    context = Context(broadcaster=shared_broadcaster, timeout=10)
     sb = shared_broadcaster
 
     def cleanup():
