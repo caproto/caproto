@@ -225,7 +225,7 @@ class Context(_Context):
             def close(self):
                 return self.transport.close()
 
-        reuse_port = sys.platform not in ('win32', )
+        reuse_port = sys.platform not in ('win32', ) and hasattr(socket, 'SO_REUSEPORT')
         for address in ca.get_beacon_address_list():
             transport, _ = await self.loop.create_datagram_endpoint(
                 BcastLoop, remote_addr=address, allow_broadcast=True,
