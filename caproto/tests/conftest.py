@@ -134,7 +134,7 @@ def poll_readiness(pv_to_check, attempts=5, timeout=1):
             break
     else:
         raise TimeoutError(f"ioc fixture failed to start in "
-                           f"{attempts} seconds (pv: {pv_to_check})")
+                           f"{attempts * timeout} seconds (pv: {pv_to_check})")
 
 
 def run_softioc(request, db, additional_db=None, **kwargs):
