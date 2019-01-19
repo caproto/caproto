@@ -62,12 +62,9 @@ def ensure_connected(func):
         else:
             raise CaprotoTypeError("ensure_connected is intended to decorate "
                                    "methods of PV and Subscription.")
-        timeout = kwargs.get('timeout', pv.timeout)
-        if timeout is PV_DEFAULT_TIMEOUT:
-            timeout = pv.timeout
         # timeout may be decremented during disconnection-retry loops below.
         # Keep a copy of the original 'raw_timeout' for use in error messages.
-        raw_timeout = timeout
+        raw_timeout = timeout = kwargs.get('timeout', pv.timeout)
         if timeout is not None:
             deadline = time.monotonic() + timeout
         with pv._in_use:
