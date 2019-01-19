@@ -45,9 +45,7 @@ CIRCUIT_DEATH_ATTEMPTS = 3
 
 # sentinels used as default values for arguments
 CONTEXT_DEFAULT_TIMEOUT = object()
-CONTEXT_DEFAULT_ATTEMPTS = object()
 PV_DEFAULT_TIMEOUT = object()
-PV_DEFAULT_ATTEMPTS = object()
 
 
 class DeadCircuitError(CaprotoError):
@@ -856,9 +854,6 @@ class Context:
         Number of seconds before a CaprotoTimeoutError is raised. This default
         can be overridden at the PV level or for any specific operation.  If
         unset, the default is 2 seconds.
-    attempts : integer
-        Number of times to attempt a ``read`` operation if a
-        CaprotoTimeoutError is raised. Default is 1 (i.e. no retries).
     host_name : string, optional
         uses value of ``socket.gethostname()`` by default
     client_name : string, optional
@@ -877,16 +872,12 @@ class Context:
         value from 1.
     """
     def __init__(self, broadcaster=None, *,
-                 timeout=2, attempts=1,
+                 timeout=2,
                  host_name=None, client_name=None, max_workers=1):
         if broadcaster is None:
             broadcaster = SharedBroadcaster()
         self.broadcaster = broadcaster
         self.timeout = timeout
-        attempts = int(attempts)
-        if attempts < 1:
-            raise CaprotoValueError("attempts must be >= 1")
-        self.attempts = attempts
         if host_name is None:
             host_name = socket.gethostname()
         self.host_name = host_name
@@ -938,8 +929,7 @@ class Context:
 
     def get_pvs(self, *names, priority=0, connection_state_callback=None,
                 access_rights_callback=None,
-                timeout=CONTEXT_DEFAULT_TIMEOUT,
-                attempts=CONTEXT_DEFAULT_ATTEMPTS):
+                timeout=CONTEXT_DEFAULT_TIMEOUT):
         """
         Return a list of PV objects.
 
@@ -969,10 +959,6 @@ class Context:
             Number of seconds before a CaprotoTimeoutError is raised. This default
             can be overridden for any specific operation.  If None, fall back
             to the default timeout set by the Context.
-        attempts : integer, optional
-            Number of times to attempt a ``read`` operation if a
-            CaprotoTimeoutError is raised. If None, fall back to the default
-            attempts set by the Context.
         """
         if self._user_disconnected:
             raise ContextDisconnectedError("This Context is no longer usable.")
@@ -985,7 +971,7 @@ class Context:
                     new_instance = False
                 except KeyError:
                     pv = PV(name, priority, self, connection_state_callback,
-                            access_rights_callback, timeout, attempts)
+                            access_rights_callback, timeout)
                     names_to_search.append(name)
                     self.pvs[(name, priority)] = pv
                     self.pvs_needing_circuits[name].add(pv)
@@ -1489,11 +1475,11 @@ class PV:
                  'access_rights_callback', 'subscriptions',
                  'command_bundle_queue', 'component_lock', '_idle', '_in_use',
                  '_usages', 'connection_state_callback', 'log',
-                 '_timeout', '_attempts',
+                 '_timeout',
                  '__weakref__')
 
     def __init__(self, name, priority, context, connection_state_callback,
-                 access_rights_callback, timeout, attempts):
+                 access_rights_callback, timeout):
         """
         These must be instantiated by a Context, never directly.
         """
@@ -1509,7 +1495,6 @@ class PV:
         self.connection_state_callback = CallbackHandler(self)
         self.access_rights_callback = CallbackHandler(self)
         self._timeout = timeout
-        self._attempts = attempts
 
         if connection_state_callback is not None:
             self.connection_state_callback.add_callback(
@@ -1544,28 +1529,6 @@ class PV:
     @timeout.setter
     def timeout(self, val):
         self._timeout = val
-
-    @property
-    def attempts(self):
-        """
-        Effective default attempts.
-
-        Valid values are:
-        * CONTEXT_DEFAULT_ATTEMPTS(fall back to Context.attempts)
-        * a positive integer
-        """
-        if self._attempts is CONTEXT_DEFAULT_ATTEMPTS:
-            return self.context.attempts
-        else:
-            return self._attempts
-
-    @attempts.setter
-    def attempts(self, val):
-        if val is not CONTEXT_DEFAULT_ATTEMPTS:
-            val = int(val)
-        if val < 1:
-            raise CaprotoValueError("attempts must be >= 1")
-        self._attempts = val
 
     @property
     def circuit_manager(self):
@@ -1687,9 +1650,9 @@ class PV:
                 ...
             self._idle = True
 
+    @ensure_connected
     def read(self, *, wait=True, callback=None,
              timeout=PV_DEFAULT_TIMEOUT,
-             attempts=PV_DEFAULT_ATTEMPTS,
              data_type=None, data_count=None, notify=True):
         """Request a fresh reading.
 
@@ -1710,10 +1673,6 @@ class PV:
             Number of seconds to wait before raising CaprotoTimeoutError.
             Default is PV.timeout, which falls back to Context.timeout if not
             set.
-        attempts : integer or None
-            Number of times to attempt this operation if a
-            CaprotoTimeoutError is raised. Default is PV.attempts, which falls
-            back to Context.attempts if not set.
         data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
             Request specific data type or a class of data types, matched to the
             channel's native data type. Default is Channel's native data type.
@@ -1724,28 +1683,6 @@ class PV:
             Send a ``ReadNotifyRequest`` instead of a ``ReadRequest``. True by
             default.
         """
-        if attempts is PV_DEFAULT_ATTEMPTS:
-            attempts = self.attempts
-            if attempts < 1:
-                raise ValueError("attempts must be at least 1.")
-        err = None
-        for attempt in range(attempts):
-            try:
-                return self._read(wait=wait, callback=callback,
-                                  timeout=timeout,
-                                  data_type=data_type, data_count=data_count,
-                                  notify=notify)
-            except CaprotoTimeoutError as err_:
-                self.log.warning(f"Attempt {1 + attempt} of {attempts} to "
-                                 f"read {self.name!r} failed. Retrying....")
-                err = err_
-        else:
-            # We have exhaused all attempts.
-            raise err
-
-    @ensure_connected
-    def _read(self, *, wait, callback, timeout, data_type, data_count, notify):
-        "See read, above."
         if timeout is PV_DEFAULT_TIMEOUT:
             timeout = self.timeout
         cm, chan = self._circuit_manager, self._channel
