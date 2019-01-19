@@ -1,6 +1,7 @@
 language: python
 python:
   - 3.6
+  - 3.7
 
 env:
   matrix:
@@ -24,7 +25,7 @@ env:
 #   allow_failures:
 #     - env: BASE=3.16
 
-dist: trusty
+dist: xenial
 addons:
   apt:
     packages:
