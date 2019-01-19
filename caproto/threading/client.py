@@ -1726,7 +1726,8 @@ class PV:
         return ioid_info['response']
 
     @ensure_connected
-    def write(self, data, *, wait=True, callback=None, timeout=None,
+    def write(self, data, *, wait=True, callback=None,
+              timeout=PV_DEFAULT_TIMEOUT,
               notify=None, data_type=None, data_count=None):
         """
         Write a new value. Optionally, request confirmation from the server.
