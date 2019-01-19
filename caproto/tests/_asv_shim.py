@@ -324,7 +324,7 @@ def asv_bench(request):
                     "used).")
     else:
         node = request.node
-        marker = node.get_marker("benchmark")
+        marker = node.get_closest_marker("benchmark")
         options = marker.kwargs if marker else {}
         if "timer" in options:
             options["timer"] = NameWrapper(options["timer"])
