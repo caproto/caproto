@@ -280,15 +280,15 @@ class SelectorThread:
                 except OSError as ex:
                     if ex.errno != errno.EAGAIN:
                         # register as a disconnection
-                        # logger.error('Removing %s due to %s (%s)', obj, ex,
-                        #              ex.errno)
+                        obj.log.error('Removing %s due to %s (%s)', obj, ex,
+                                      ex.errno)
                         self.remove_socket(sock)
                     continue
 
                 # Let objects handle disconnection by returning a failure here
                 if obj.received(bytes_recv, address) is ca.DISCONNECTED:
-                    # self.log.debug('Removing %s = %s due to receive failure',
-                    #              sock, obj)
+                    obj.log.debug('Removing %s = %s due to receive failure',
+                                  sock, obj)
                     self.remove_socket(sock)
 
                     # TODO: consider adding specific DISCONNECTED instead of b''
