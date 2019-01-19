@@ -20,7 +20,7 @@ import pytest
 from .conftest import default_setup_module as setup_module  # noqa
 from .conftest import default_teardown_module as teardown_module  # noqa
 
-THREAD_TIMEOUT_SCALE = .5
+THREAD_TIMEOUT_SCALE = 2
 
 
 def test_go_idle(context, ioc):
