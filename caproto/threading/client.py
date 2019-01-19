@@ -88,6 +88,7 @@ def ensure_connected(func):
                     cm.channels[cid] = chan
                     cm.pvs[cid] = pv
                     pv.circuit_manager.send(chan.create())
+                    self._idle = False
         try:
             for i in range(CIRCUIT_DEATH_ATTEMPTS):
                 # On each iteration, subtract the time we already spent on any
@@ -102,7 +103,7 @@ def ensure_connected(func):
                 if timeout is not None:
                     timeout = deadline - time.monotonic()
                     kwargs['timeout'] = timeout
-                self._idle = False
+
                 cm = pv.circuit_manager
                 try:
                     return func(self, *args, **kwargs)
