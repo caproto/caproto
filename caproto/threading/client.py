@@ -1330,11 +1330,11 @@ class VirtualCircuitManager:
             deadline = ioid_info['deadline']
             pv = ioid_info['pv']
             if deadline is not None and time.monotonic() > deadline:
-                self.log.warn("Ignoring late response with ioid=%d regarding "
-                              "PV named %s because "
-                              "it arrived %.3f seconds after the deadline "
-                              "specified by the timeout.", command.ioid,
-                              pv.name, time.monotonic() - deadline)
+                self.log.warning("Ignoring late response with ioid=%d regarding "
+                                 "PV named %s because "
+                                 "it arrived %.3f seconds after the deadline "
+                                 "specified by the timeout.", command.ioid,
+                                 pv.name, time.monotonic() - deadline)
                 return
 
             pv.log.debug("%r: %r", pv.name, command)

@@ -8,7 +8,8 @@
 # Responses.
 import itertools
 import logging
-from collections import deque, Iterable
+from collections import deque
+from collections.abc import Iterable
 import os
 
 from ._commands import (AccessRightsResponse, CreateChFailResponse,
