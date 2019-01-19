@@ -379,12 +379,15 @@ def multi_iterations(request):
     return request.param
 
 
-def _multithreaded_exec(test_func, thread_count, *, start_timeout=10,
-                        end_timeout=20):
+def _multithreaded_exec(test_func, thread_count, *, start_timeout=1,
+                        end_timeout=2):
     threads = {}
     return_values = {i: None for i in range(thread_count)}
     start_barrier = threading.Barrier(parties=thread_count + 1)
     end_barrier = threading.Barrier(parties=thread_count + 1)
+
+    start_timeout *= thread_count
+    end_timeout *= thread_count
 
     def thread_wrapper(thread_id):
         try:
