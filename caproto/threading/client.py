@@ -63,7 +63,6 @@ def ensure_connected(func):
         if timeout is not None:
             deadline = time.monotonic() + timeout
         with pv._in_use:
-            pv._usages += 1
             # If needed, reconnect. Do this inside the lock so that we don't
             # try to do this twice. (No other threads that need this lock
             # can proceed until the connection is ready anyway!)
@@ -84,6 +83,10 @@ def ensure_connected(func):
                     cm.pvs[cid] = pv
                     pv.circuit_manager.send(chan.create())
                     self._idle = False
+            # increment the usage at the very end in case anything
+            # goes wrong in the block of code above this.
+            pv._usages += 1
+
         try:
             for i in range(CIRCUIT_DEATH_ATTEMPTS):
                 # On each iteration, subtract the time we already spent on any
