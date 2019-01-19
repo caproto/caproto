@@ -969,14 +969,12 @@ class Context:
             with self.pv_cache_lock:
                 try:
                     pv = self.pvs[(name, priority)]
-                    new_instance = False
                 except KeyError:
                     pv = PV(name, priority, self, connection_state_callback,
                             access_rights_callback, timeout)
                     names_to_search.append(name)
                     self.pvs[(name, priority)] = pv
                     self.pvs_needing_circuits[name].add(pv)
-                    new_instance = True
 
             if connection_state_callback is not None:
                 pv.connection_state_callback.add_callback(
