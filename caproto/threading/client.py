@@ -959,13 +959,12 @@ class Context:
                     self.pvs_needing_circuits[name].add(pv)
                     new_instance = True
 
-            if not new_instance:
-                if connection_state_callback is not None:
-                    pv.connection_state_callback.add_callback(
-                        connection_state_callback)
-                if access_rights_callback is not None:
-                    pv.access_rights_callback.add_callback(
-                        access_rights_callback)
+            if connection_state_callback is not None:
+                pv.connection_state_callback.add_callback(
+                    connection_state_callback)
+            if access_rights_callback is not None:
+                pv.access_rights_callback.add_callback(
+                    access_rights_callback)
 
             pvs.append(pv)
 
