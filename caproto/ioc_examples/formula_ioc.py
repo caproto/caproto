@@ -98,7 +98,7 @@ if __name__ == '__main__':
         get=FormulaIOC.compute, mock_record='ai',
         alarm_group='formula')
 
-    @out_pv.scan(period=1, use_scan_field=True)
+    @out_pv.scan(period=.1, use_scan_field=True)
     async def out_pv(self, instance, async_lib):
         ret = await self.compute(instance)
         await instance.write(ret)
