@@ -85,7 +85,8 @@ script:
   - pip install git+https://github.com/klauer/catvs.git@py3k
 
   # give us an early warning of flake8 failure
-  - flake8 . || echo "flake8 FAILED!"
+  # the weird quating in to make searching in the results webpage easier
+  - flake8 . || echo "flake8 FAI""LED!"
   - caproto-repeater &
   - coverage run --parallel-mode run_tests.py -k 'not bench' -n $(nproc) --benchmark-disable --dist=loadfile -v
   - coverage combine --append
