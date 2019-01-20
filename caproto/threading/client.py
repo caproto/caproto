@@ -979,10 +979,10 @@ class Context:
 
             if connection_state_callback is not None:
                 pv.connection_state_callback.add_callback(
-                    connection_state_callback)
+                    connection_state_callback, run=True)
             if access_rights_callback is not None:
                 pv.access_rights_callback.add_callback(
-                    access_rights_callback)
+                    access_rights_callback, run=True)
 
             pvs.append(pv)
 
@@ -1497,11 +1497,11 @@ class PV:
 
         if connection_state_callback is not None:
             self.connection_state_callback.add_callback(
-                connection_state_callback)
+                connection_state_callback, run=True)
 
         if access_rights_callback is not None:
             self.access_rights_callback.add_callback(
-                access_rights_callback)
+                access_rights_callback, run=True)
 
         self._circuit_manager = None
         self._channel = None
@@ -1885,8 +1885,9 @@ class CallbackHandler:
         self.pv = pv
         self._callback_id = 0
         self.callback_lock = threading.RLock()
+        self._last_call_values = None
 
-    def add_callback(self, func):
+    def add_callback(self, func, run=False):
 
         def removed(_):
             self.remove_callback(cb_id)  # defined below inside the lock
@@ -1901,6 +1902,11 @@ class CallbackHandler:
             cb_id = self._callback_id
             self._callback_id += 1
             self.callbacks[cb_id] = ref
+
+        if run and self._last_call_values is not None:
+            with self.callback_lock:
+                args, kwargs = self._last_call_values
+            self.process(*args, **kwargs)
         return cb_id
 
     def remove_callback(self, token):
@@ -1915,6 +1921,7 @@ class CallbackHandler:
         to_remove = []
         with self.callback_lock:
             callbacks = list(self.callbacks.items())
+            self._last_call_values = (args, kwargs)
 
         for cb_id, ref in callbacks:
             callback = ref()
