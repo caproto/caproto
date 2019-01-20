@@ -79,7 +79,7 @@ if __name__ == '__main__':
         default_prefix='SmartCalc:',
         desc=dedent(FormulaIOC.__doc__)
     )
-
+    # add our own CLI arguments
     parser.add_argument('--formula',
                         help=('The formula to evaluate.  ' +
                               'Must be a python expression.'),
@@ -88,10 +88,14 @@ if __name__ == '__main__':
     args = parser.parse_args()
     ioc_options, run_options = split_args(args)
 
+    # parse the input formula
     out_name, expr, code_object, names = extract_names(args.formula)
+
+    # build the pvpropriety objects for then inputs to the formula
     dyn_pvs = {n: pvproperty(value=0.0, alarm_group='formula')
                for n in names}
 
+    # build the pvproperty for the output.
     out_pv = pvproperty(
         value=0.0,
         name=out_name, read_only=True,
@@ -104,20 +108,24 @@ if __name__ == '__main__':
         await instance.write(ret)
 
     dyn_pvs['output'] = out_pv
+
+    # add read-only informational PVs
     dyn_pvs['formula'] = pvproperty(
         value=f'{out_name} = {expr}',
         read_only=True)
-
     dyn_pvs['out_postfix'] = pvproperty(
         value=[out_name], read_only=True, dtype=ChannelType.STRING)
     dyn_pvs['vars'] = pvproperty(
         value=sorted(names), read_only=True, dtype=ChannelType.STRING)
 
-    MyIOC = type('MyIOC', (FormulaIOC,),
-                 dyn_pvs)
+    # dynamically sub-class the FormulaIOC to add the pvproperty
+    # objects we built up above.
+    MyIOC = type('MyIOC', (FormulaIOC,), dyn_pvs)
 
+    # instantiate the IOC
     ioc = MyIOC(code_object=code_object,
                 var_names=names,
                 **ioc_options)
 
+    # and run it!
     run(ioc.pvdb, **run_options)
