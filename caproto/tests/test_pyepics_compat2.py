@@ -1,3 +1,8 @@
+"""
+This is separate from the test_pyepics_compat file because it does
+not use the pyepics test IOCs and can safely be run in parallel.
+"""
+
 import pytest
 from .conftest import default_setup_module as setup_module  # noqa
 from .conftest import default_teardown_module as teardown_module  # noqa
