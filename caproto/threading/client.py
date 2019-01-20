@@ -282,6 +282,7 @@ class SelectorThread:
                     bytes_available = socket_bytes_available(
                         sock, available_buffer=avail_buf)
                     bytes_recv, address = sock.recvfrom(bytes_available)
+                    obj.log.debug("got bytes for me")
                 except OSError as ex:
                     if ex.errno != errno.EAGAIN:
                         # register as a disconnection
