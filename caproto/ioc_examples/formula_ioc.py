@@ -76,7 +76,7 @@ class FormulaIOC(PVGroup):
 
 if __name__ == '__main__':
     parser, split_args = template_arg_parser(
-        default_prefix='SmartCalc:',
+        default_prefix='Formula:',
         desc=dedent(FormulaIOC.__doc__)
     )
     # add our own CLI arguments
