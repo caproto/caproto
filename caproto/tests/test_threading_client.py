@@ -374,7 +374,7 @@ def thread_count(request):
     return request.param
 
 
-@pytest.fixture(params=[f'iter{i}' for i in range(1, 3)])
+@pytest.fixture(params=[f'iter{i}' for i in range(1, 26)])
 def multi_iterations(request):
     return request.param
 
