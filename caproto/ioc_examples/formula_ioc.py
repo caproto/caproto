@@ -53,7 +53,7 @@ class FormulaIOC(PVGroup):
     ---------
     {prefix}{var} -> the value for {var} in the inputs
     """
-    proc = pvproperty(value=0)
+    proc = pvproperty(value=0, alarm_group='formula')
 
     def __init__(self, *args, code_object, var_names, **kwargs):
         super().__init__(*args, **kwargs)
@@ -89,13 +89,14 @@ if __name__ == '__main__':
     ioc_options, run_options = split_args(args)
 
     out_name, expr, code_object, names = extract_names(args.formula)
-    dyn_pvs = {n: pvproperty(value=0.0)
+    dyn_pvs = {n: pvproperty(value=0.0, alarm_group='formula')
                for n in names}
 
     out_pv = pvproperty(
         value=0.0,
         name=out_name, read_only=True,
-        get=FormulaIOC.compute, mock_record='ai')
+        get=FormulaIOC.compute, mock_record='ai',
+        alarm_group='formula')
 
     @out_pv.scan(period=1, use_scan_field=True)
     async def out_pv(self, instance, async_lib):
