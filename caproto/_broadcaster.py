@@ -49,6 +49,7 @@ class Broadcaster:
         self._registered = False
         self._search_id_counter = itertools.count(0)
         self.log = logging.getLogger(f"caproto.bcast")
+        self.search_logger = logging.getLogger(f"caproto.search")
 
     def send(self, *commands):
         """
@@ -182,6 +183,9 @@ class Broadcaster:
             cid = self.new_search_id()
         commands = (VersionRequest(0, self.protocol_version),
                     SearchRequest(name, cid, self.protocol_version))
+        self.search_logger.debug("Search {name} and return {commands}")
+        pv_name_logger = logging.getLogger(f'caproto.search.{name}')
+        pv_name_logger.debug("Search {name} and return {commands}")
         return commands
 
     def register(self, ip='0.0.0.0'):
