@@ -277,11 +277,9 @@ class PV:
         'Callback when connection is closed'
         self._connected = False
 
-    def _connection_established(self, caproto_pv):
+    def _connection_established(self):
         'Callback when connection is initially established'
-        # Take in caproto_pv as an argument because this might be called
-        # before self._caproto_pv is set.
-        ch = caproto_pv.channel
+        ch = self._caproto_pv.channel
         form = self.form
         count = self.default_count
 
@@ -295,7 +293,7 @@ class PV:
             nelm=ch.native_data_count,
             count=ch.native_data_count,
         )
-        self._access_rights_changed(caproto_pv, ch.access_rights)
+        self._access_rights_changed(self._caproto_pv, ch.access_rights)
 
         if self.auto_monitor is None:
             mcount = count if count is not None else ch.native_data_count
@@ -320,11 +318,18 @@ class PV:
 
     def _connection_state_changed(self, caproto_pv, state):
         'Connection callback hook from threading.PV.connection_state_changed'
+        # Ensure _caproto_pv is set, as this callback may happen prior to that in
+        # the initializer.  While not necessary in this function, callbacks
+        # chained from here may interact with this instance in ways that
+        # require it to be set.  For example:
+        #   PV created -> connection_state_changed -> run connection_callbacks
+        #   -> pv.get_ctrlvars()
+        self._caproto_pv = caproto_pv
         connected = (state == 'connected')
         with self._state_lock:
             try:
                 if connected:
-                    self._connection_established(caproto_pv)
+                    self._connection_established()
             except Exception:
                 raise
             finally:
@@ -576,6 +581,7 @@ class PV:
 
     def _access_rights_changed(self, caproto_pv, access_rights, *,
                                forced=False):
+        self._caproto_pv = caproto_pv
         read_access = AccessRights.READ in access_rights
         write_access = AccessRights.WRITE in access_rights
         access_strs = ('no access', 'read-only', 'write-only', 'read/write')
