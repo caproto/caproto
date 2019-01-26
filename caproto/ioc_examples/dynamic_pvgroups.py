@@ -35,11 +35,11 @@ class GroupB(PVGroup):
         self.ioc = ioc
 
 
-def create_ioc(prefix, groups_a, groups_b):
+def create_ioc(prefix, groups_a, groups_b, **ioc_options):
     'Create groups based on prefixes passed in from groups_a, groups_b'
     groups = {}
 
-    ioc = IOCMain(prefix, groups=groups)
+    ioc = IOCMain(prefix=prefix, groups=groups, **ioc_options)
 
     for group_prefix in groups_a:
         groups[group_prefix] = GroupA(f'{prefix}{group_prefix}', ioc=ioc)
@@ -59,10 +59,9 @@ if __name__ == '__main__':
         desc=IOCMain.__doc__,
     )
 
-    prefix = ioc_options['prefix']
-    ioc = create_ioc(prefix=prefix,
-                     groups_a=['A1', 'A2', 'A3'],
-                     groups_b=['B1', 'B2', 'B3']
+    ioc = create_ioc(groups_a=['A1', 'A2', 'A3'],
+                     groups_b=['B1', 'B2', 'B3'],
+                     **ioc_options,
                      )
 
     run(ioc.pvdb, **run_options)
