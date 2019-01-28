@@ -393,7 +393,7 @@ def simulator(request, pvnames):
 
     print()
     print(f'* Simulator thread started up! (prefix={prefix})')
-    return thread
+    return thread, pvnames
 
 
 @contextmanager
@@ -516,7 +516,8 @@ def test_get1(pvnames):
 
 @pytest.mark.xfail(os.environ.get('BASE') in ('R3.16.1', 'R7.0.1.1'),
                    reason='known issues with simulator on some BASE versions')
-def test_get_string_waveform(pvnames, simulator):
+def test_get_string_waveform(simulator):
+    thread, pvnames = simulator
     print('String Array: \n')
     with no_simulator_updates(pvnames):
         pv = PV(pvnames.string_arr_pv)
@@ -628,7 +629,8 @@ def test_putwait(pvnames):
 
 @pytest.mark.xfail(os.environ.get('BASE') in ('R3.16.1', 'R7.0.1.1'),
                    reason='known issues with simulator on some BASE versions')
-def test_get_callback(pvnames, simulator):
+def test_get_callback(simulator):
+    thread, pvnames = simulator
     print("Callback test:  changing PV must be updated\n")
     mypv = PV(pvnames.updating_pv1)
     NEWVALS = []
@@ -721,7 +723,8 @@ def test_waveform_get_with_count_arg(pvnames):
 
 @pytest.mark.xfail(os.environ.get('BASE') in ('R3.16.1', 'R7.0.1.1'),
                    reason='known issues with simulator on some BASE versions')
-def test_waveform_callback_with_count_arg(pvnames, simulator):
+def test_waveform_callback_with_count_arg(simulator):
+    thread, pvnames = simulator
     values = []
 
     wf = PV(pvnames.char_arr_pv, count=32)
@@ -805,7 +808,8 @@ def testEnumPut(pvnames):
 
 @pytest.mark.xfail(os.environ.get('BASE') in ('R3.16.1', 'R7.0.1.1'),
                    reason='known issues with simulator on some BASE versions')
-def test_DoubleVal(pvnames, simulator):
+def test_DoubleVal(simulator):
+    thread, pvnames = simulator
     pvn = pvnames.double_pv
     pv = PV(pvn)
     print('pv', pv)
