@@ -88,7 +88,7 @@ script:
   # the weird quating in to make searching in the results webpage easier
   - flake8 . || echo "flake8 FAI""LED!"
   - caproto-repeater &
-  - coverage run --parallel-mode run_tests.py -k 'not bench' -n $(nproc) --benchmark-disable --dist=loadfile -v
+  - coverage run --parallel-mode run_tests.py -k 'not bench'  --benchmark-disable --dist=loadfile -v
   - coverage combine --append
 
   - export ASV_ENV_NAME=${TRAVIS_PYTHON_VERSION}_${BASE}
