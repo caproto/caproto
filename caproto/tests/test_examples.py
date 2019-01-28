@@ -337,12 +337,14 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
             continue
 
         print(f'Writing {value} to {pv}')
-        write(pv, value)
+        write(pv, value, timeout=15)
 
-        value = read(pv)
+        value = read(pv, timeout=15)
         print(f'Read {pv} = {value}')
 
 
+# TODO sort out why these are flaky on travis
+@pytest.mark.flaky(reruns=2, reruns_delay=2)
 @pytest.mark.parametrize(
     'module_name, pvdb_class_name, class_kwargs',
     [('caproto.ioc_examples.all_in_one', 'MyPVGroup',

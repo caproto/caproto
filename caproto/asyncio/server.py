@@ -182,10 +182,13 @@ class Context(_Context):
                 self.transport = transport
 
             def datagram_received(self, data, addr):
-                tsk = self.loop.create_task(self.parent._broadcaster_recv_datagram(
-                    data, addr))
-                self._tasks = tuple(t for t in self._tasks + (tsk,)
-                                    if not t.done())
+                if data:
+                    tsk = self.loop.create_task(
+                        self.parent._broadcaster_recv_datagram(
+                            data, addr))
+
+                    self._tasks = tuple(t for t in self._tasks + (tsk,)
+                                        if not t.done())
 
             def error_received(self, exc):
                 self.parent.log.error('BcastLoop received error', exc_info=exc)
@@ -222,7 +225,7 @@ class Context(_Context):
             def close(self):
                 return self.transport.close()
 
-        reuse_port = sys.platform not in ('win32', )
+        reuse_port = sys.platform not in ('win32', ) and hasattr(socket, 'SO_REUSEPORT')
         for address in ca.get_beacon_address_list():
             transport, _ = await self.loop.create_datagram_endpoint(
                 BcastLoop, remote_addr=address, allow_broadcast=True,

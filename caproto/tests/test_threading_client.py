@@ -20,6 +20,8 @@ import pytest
 from .conftest import default_setup_module as setup_module  # noqa
 from .conftest import default_teardown_module as teardown_module  # noqa
 
+THREAD_TIMEOUT_SCALE = 2
+
 
 def test_go_idle(context, ioc):
     pv, = context.get_pvs(ioc.pvs['str'])
@@ -377,12 +379,15 @@ def multi_iterations(request):
     return request.param
 
 
-def _multithreaded_exec(test_func, thread_count, *, start_timeout=10,
-                        end_timeout=20):
+def _multithreaded_exec(test_func, thread_count, *, start_timeout=1,
+                        end_timeout=2):
     threads = {}
     return_values = {i: None for i in range(thread_count)}
     start_barrier = threading.Barrier(parties=thread_count + 1)
     end_barrier = threading.Barrier(parties=thread_count + 1)
+
+    start_timeout *= thread_count
+    end_timeout *= thread_count
 
     def thread_wrapper(thread_id):
         try:
@@ -436,7 +441,7 @@ def test_multithreaded_many_get_pvs(ioc, context, thread_count,
                                     multi_iterations):
     def _test(thread_id):
         pv, = context.get_pvs(ioc.pvs['int'])
-        pv.wait_for_connection(timeout=10)
+        pv.wait_for_connection(timeout=THREAD_TIMEOUT_SCALE * thread_count)
 
         pvs[thread_id] = pv
         return pv.connected
@@ -451,7 +456,7 @@ def test_multithreaded_many_get_pvs(ioc, context, thread_count,
 def test_multithreaded_many_wait_for_connection(ioc, context, thread_count,
                                                 multi_iterations):
     def _test(thread_id):
-        pv.wait_for_connection(timeout=10)
+        pv.wait_for_connection(timeout=THREAD_TIMEOUT_SCALE * thread_count)
         return pv.connected
 
     pv, = context.get_pvs(ioc.pvs['int'])
@@ -464,7 +469,7 @@ def test_multithreaded_many_read(ioc, context, thread_count,
                                  multi_iterations):
     def _test(thread_id):
         data_id = thread_id % max(data_types)
-        pv.wait_for_connection(timeout=10)
+        pv.wait_for_connection(timeout=THREAD_TIMEOUT_SCALE * thread_count)
         value = pv.read(data_type=data_types[data_id])
         values[data_id] = value
         return (data_id, value)
@@ -485,7 +490,7 @@ def test_multithreaded_many_read(ioc, context, thread_count,
 def test_multithreaded_many_write(ioc, context, thread_count,
                                   multi_iterations):
     def _test(thread_id):
-        pv.wait_for_connection(timeout=10)
+        pv.wait_for_connection(timeout=THREAD_TIMEOUT_SCALE * thread_count)
         ret = pv.write(data=[thread_id], wait=True)
         time.sleep(0.2)  # Wait for EventAddResponse to be received, processed.
         return ret
@@ -506,12 +511,11 @@ def test_multithreaded_many_write(ioc, context, thread_count,
     sub.clear()
 
 
-@pytest.mark.xfail
 def test_multithreaded_many_subscribe(ioc, context, thread_count,
                                       multi_iterations):
     def _test(thread_id):
         if thread_id == 0:
-            init_barrier.wait(timeout=10)
+            init_barrier.wait(timeout=THREAD_TIMEOUT_SCALE * thread_count)
             print('-- write thread initialized --')
             pv.write((1, ), wait=True)
             time.sleep(0.01)
@@ -520,7 +524,7 @@ def test_multithreaded_many_subscribe(ioc, context, thread_count,
             pv.write((3, ), wait=True)
             time.sleep(0.2)
             print('-- write thread hit sub barrier --')
-            sub_ended_barrier.wait(timeout=10)
+            sub_ended_barrier.wait(timeout=THREAD_TIMEOUT_SCALE * thread_count)
             print('-- write thread exiting --')
             return [initial_value, 1, 2, 3]
 
@@ -540,7 +544,7 @@ def test_multithreaded_many_subscribe(ioc, context, thread_count,
         else:
             raise Exception(f"{thread_id} never saw initial EventAddResponse")
         # print(thread_id, sub)
-        init_barrier.wait(timeout=20)
+        init_barrier.wait(timeout=THREAD_TIMEOUT_SCALE * thread_count)
         # Everybody here? On my signal... SEND UPDATES!! Ahahahahaha!
         # Destruction!!
         # Wait <= 20 seconds until three more EventAddResponses are received.
@@ -551,7 +555,7 @@ def test_multithreaded_many_subscribe(ioc, context, thread_count,
         else:
             raise Exception(f"{thread_id} only got {len(values[thread_id])}"
                             f"EventAddResponses.")
-        sub_ended_barrier.wait(timeout=20)
+        sub_ended_barrier.wait(timeout=THREAD_TIMEOUT_SCALE * thread_count)
 
         sub.clear()
         return values[thread_id]

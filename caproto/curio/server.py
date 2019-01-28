@@ -120,8 +120,8 @@ class Context(_Context):
             try:
                 udp_sock.bind((interface, self.ca_server_port))
             except Exception:
-                self.log.exception('UDP bind failure on interface %r',
-                                   interface)
+                self.log.exception('UDP bind failure on interface %r:%d',
+                                   interface, self.ca_server_port)
                 raise
             self.log.debug('UDP socket bound on %s:%d', interface,
                            self.ca_server_port)

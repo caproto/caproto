@@ -68,7 +68,6 @@ def ensure_connected(func):
         if timeout is not None:
             deadline = time.monotonic() + timeout
         with pv._in_use:
-            pv._usages += 1
             # If needed, reconnect. Do this inside the lock so that we don't
             # try to do this twice. (No other threads that need this lock
             # can proceed until the connection is ready anyway!)
@@ -88,6 +87,11 @@ def ensure_connected(func):
                     cm.channels[cid] = chan
                     cm.pvs[cid] = pv
                     pv.circuit_manager.send(chan.create())
+                    self._idle = False
+            # increment the usage at the very end in case anything
+            # goes wrong in the block of code above this.
+            pv._usages += 1
+
         try:
             for i in range(CIRCUIT_DEATH_ATTEMPTS):
                 # On each iteration, subtract the time we already spent on any
@@ -102,7 +106,7 @@ def ensure_connected(func):
                 if timeout is not None:
                     timeout = deadline - time.monotonic()
                     kwargs['timeout'] = timeout
-                self._idle = False
+
                 cm = pv.circuit_manager
                 try:
                     return func(self, *args, **kwargs)
@@ -278,18 +282,19 @@ class SelectorThread:
                     bytes_available = socket_bytes_available(
                         sock, available_buffer=avail_buf)
                     bytes_recv, address = sock.recvfrom(bytes_available)
+                    obj.log.debug("got bytes for me")
                 except OSError as ex:
                     if ex.errno != errno.EAGAIN:
                         # register as a disconnection
-                        # logger.error('Removing %s due to %s (%s)', obj, ex,
-                        #              ex.errno)
+                        obj.log.error('Removing %s due to %s (%s)', obj, ex,
+                                      ex.errno)
                         self.remove_socket(sock)
                     continue
 
                 # Let objects handle disconnection by returning a failure here
                 if obj.received(bytes_recv, address) is ca.DISCONNECTED:
-                    # self.log.debug('Removing %s = %s due to receive failure',
-                    #              sock, obj)
+                    obj.log.debug('Removing %s = %s due to receive failure',
+                                  sock, obj)
                     self.remove_socket(sock)
 
                     # TODO: consider adding specific DISCONNECTED instead of b''
@@ -965,22 +970,19 @@ class Context:
             with self.pv_cache_lock:
                 try:
                     pv = self.pvs[(name, priority)]
-                    new_instance = False
                 except KeyError:
                     pv = PV(name, priority, self, connection_state_callback,
                             access_rights_callback, timeout)
                     names_to_search.append(name)
                     self.pvs[(name, priority)] = pv
                     self.pvs_needing_circuits[name].add(pv)
-                    new_instance = True
 
-            if not new_instance:
-                if connection_state_callback is not None:
-                    pv.connection_state_callback.add_callback(
-                        connection_state_callback)
-                if access_rights_callback is not None:
-                    pv.access_rights_callback.add_callback(
-                        access_rights_callback)
+            if connection_state_callback is not None:
+                pv.connection_state_callback.add_callback(
+                    connection_state_callback, run=True)
+            if access_rights_callback is not None:
+                pv.access_rights_callback.add_callback(
+                    access_rights_callback, run=True)
 
             pvs.append(pv)
 
@@ -1330,11 +1332,11 @@ class VirtualCircuitManager:
             deadline = ioid_info['deadline']
             pv = ioid_info['pv']
             if deadline is not None and time.monotonic() > deadline:
-                self.log.warn("Ignoring late response with ioid=%d regarding "
-                              "PV named %s because "
-                              "it arrived %.3f seconds after the deadline "
-                              "specified by the timeout.", command.ioid,
-                              pv.name, time.monotonic() - deadline)
+                self.log.warning("Ignoring late response with ioid=%d regarding "
+                                 "PV named %s because "
+                                 "it arrived %.3f seconds after the deadline "
+                                 "specified by the timeout.", command.ioid,
+                                 pv.name, time.monotonic() - deadline)
                 return
 
             pv.log.debug("%r: %r", pv.name, command)
@@ -1495,11 +1497,11 @@ class PV:
 
         if connection_state_callback is not None:
             self.connection_state_callback.add_callback(
-                connection_state_callback)
+                connection_state_callback, run=True)
 
         if access_rights_callback is not None:
             self.access_rights_callback.add_callback(
-                access_rights_callback)
+                access_rights_callback, run=True)
 
         self._circuit_manager = None
         self._channel = None
@@ -1883,8 +1885,9 @@ class CallbackHandler:
         self.pv = pv
         self._callback_id = 0
         self.callback_lock = threading.RLock()
+        self._last_call_values = None
 
-    def add_callback(self, func):
+    def add_callback(self, func, run=False):
 
         def removed(_):
             self.remove_callback(cb_id)  # defined below inside the lock
@@ -1899,6 +1902,11 @@ class CallbackHandler:
             cb_id = self._callback_id
             self._callback_id += 1
             self.callbacks[cb_id] = ref
+
+        if run and self._last_call_values is not None:
+            with self.callback_lock:
+                args, kwargs = self._last_call_values
+            self.process(*args, **kwargs)
         return cb_id
 
     def remove_callback(self, token):
@@ -1913,6 +1921,7 @@ class CallbackHandler:
         to_remove = []
         with self.callback_lock:
             callbacks = list(self.callbacks.items())
+            self._last_call_values = (args, kwargs)
 
         for cb_id, ref in callbacks:
             callback = ref()

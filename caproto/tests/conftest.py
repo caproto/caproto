@@ -27,9 +27,12 @@ _repeater_process = None
 
 REPEATER_PORT = 5065
 SERVER_HOST = '0.0.0.0'
+# make the logs noisy
 logger = logging.getLogger('caproto')
 logger.setLevel('DEBUG')
-
+# except for the broadcaster
+bcast_logger = logging.getLogger('caproto.bcast')
+bcast_logger.setLevel('INFO')
 
 array_types = (array.array,)
 try:
@@ -131,7 +134,7 @@ def poll_readiness(pv_to_check, attempts=5, timeout=1):
             break
     else:
         raise TimeoutError(f"ioc fixture failed to start in "
-                           f"{attempts} seconds (pv: {pv_to_check})")
+                           f"{attempts * timeout} seconds (pv: {pv_to_check})")
 
 
 def run_softioc(request, db, additional_db=None, **kwargs):
