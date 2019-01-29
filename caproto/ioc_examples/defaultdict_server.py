@@ -3,12 +3,20 @@
 from caproto.server import ioc_arg_parser, run
 from collections import defaultdict
 from caproto import ChannelData
+import logging
+logger = logging.getLogger('caproto')
 
-
-class ReallyDefaultDict(defaultdict):
+class ReallyDefaultDict(dict):
     def __contains__(self, key):
-        return True
+        if 'ALS:701' in key:
+            logger.critical(f'Captured {key}')
+            return True
 
+    def __missing__(self, key):
+        logger.info(f'Checking key {key}')
+        if 'ALS:701' in key:
+            logger.critical(f'Captured {key}')
+            return ChannelData(value=0)
 
 def main():
     print('''
@@ -33,8 +41,8 @@ Press return if you have acknowledged the above, or Ctrl-C to quit.''')
     _, run_options = ioc_arg_parser(
         default_prefix='',
         desc="PV black hole")
-    run_options['interfaces'] = ['127.0.0.1']
-    run(ReallyDefaultDict(lambda: ChannelData(value=0)),
+    #run_options['interfaces'] = ['127.0.0.1']
+    run(ReallyDefaultDict(),
         **run_options)
 
 
