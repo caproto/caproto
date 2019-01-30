@@ -1,21 +1,32 @@
 language: python
+
+dist: xenial
+
+sudo:
+  - false
+  - true
+
+
 python:
+  - 3.7
   - 3.6
 
 env:
   matrix:
-    - BASE=R3.14.12.6 PVA= BUSY=1-6-1 SEQ=2.2.5 ASYN=4-32 CALC=3-7 AUTOSAVE=5-9 SSCAN=2-11-1 MOTOR=6-9 AREADETECTOR=3-2 \
+    - BASE=R3.14.12.6 INSTALL_NUMPY=0 \
+      PVA= BUSY=1-6-1 SEQ=2.2.5 ASYN=4-32 CALC=3-7 AUTOSAVE=5-9 SSCAN=2-11-1 MOTOR=6-9 AREADETECTOR=3-2 \
       PACKAGED_DEPS=0.7/epics-ci-0.7_R3.14.12.6_pva_areadetector3-2_motor6-9.tar.bz2 \
-      INSTALL_NUMPY=0
-    - BASE=R3.14.12.6 PVA= BUSY=1-6-1 SEQ=2.2.5 ASYN=4-32 CALC=3-7 AUTOSAVE=5-9 SSCAN=2-11-1 MOTOR=6-9 AREADETECTOR=3-2 \
+    - BASE=R3.14.12.6 INSTALL_NUMPY=1 \
+      PVA= BUSY=1-6-1 SEQ=2.2.5 ASYN=4-32 CALC=3-7 AUTOSAVE=5-9 SSCAN=2-11-1 MOTOR=6-9 AREADETECTOR=3-2 \
       PACKAGED_DEPS=0.7/epics-ci-0.7_R3.14.12.6_pva_areadetector3-2_motor6-9.tar.bz2 \
-      INSTALL_NUMPY=1
-    - BASE=R7.0.1.1 PVA= BUSY=1-7 SEQ=2.2.5 ASYN=4-33 CALC=3-7 AUTOSAVE=5-9 SSCAN=2-11-1 MOTOR=6-10 AREADETECTOR=3-2 \
+    - BASE=R7.0.1.1 INSTALL_NUMPY=1 \
+      PVA= BUSY=1-7 SEQ=2.2.5 ASYN=4-33 CALC=3-7 AUTOSAVE=5-9 SSCAN=2-11-1 MOTOR=6-10 AREADETECTOR=3-2 \
       PACKAGED_DEPS=0.7/epics-ci-0.7_R7.0.1.1_pva_areadetector3-2_motor6-10.tar.bz2 \
-      INSTALL_NUMPY=1 PUBLISH_DOCS=1
-    - BASE=R7.0.1.1 PVA= BUSY=1-7 SEQ=2.2.5 ASYN=4-33 CALC=3-7 AUTOSAVE=5-9 SSCAN=2-11-1 MOTOR=6-10 AREADETECTOR=3-2 \
+      PUBLISH_DOCS=1
+    - BASE=R7.0.1.1 INSTALL_NUMPY=0 \
+      PVA= BUSY=1-7 SEQ=2.2.5 ASYN=4-33 CALC=3-7 AUTOSAVE=5-9 SSCAN=2-11-1 MOTOR=6-10 AREADETECTOR=3-2 \
       PACKAGED_DEPS=0.7/epics-ci-0.7_R7.0.1.1_pva_areadetector3-2_motor6-10.tar.bz2 \
-      INSTALL_NUMPY=0
+
   global:
     - secure: "Hnz9c6x13kaAc7IqH4/wJWNel2rzEC8/x0KhFoGLVLHjmiH1LMmpGh/P5CPADlmKS80WFz4vhJ0YtSjtHCPI+9Y2aBGn8z732WM86OyGHITviCMTxtyVZfRFCkOAVlU0qpIyWu4p0rEfxrXCztSKE4bBO/wWnFhGGw9CJROnFhJwoJlbI9i28zscyeGsdqHNUfXHkyUAN3c3LKoYZgnJco5HiHLwXVvsy3DMkvOizLgslf6lrHwnQOT1F49ShgPcGGWpkuRARXkGII7lB0LOn2TBoTzmhgjoC3OmC4nZGJfzitwH9+nHc+iJ3mTlshsXb366B/D5TNVIL/4rzYV8zw49DogQIWYtECK4/z7fOzG61yCU33b3aeXU2OI4k5eZ2qN3gp3KQ4+PWyCMTHsBVgs6o49K1HWtFuuFLuhUPT4FVs2Pzz6yTka9NUukPO1LoTeQAUvGxRbc/15CjIWXtqqzEGmlPi8AFEo2kw33EtTawMU9w8nzAfdk5DX28Qcuzh9XA9nVUD0j7Rum7nGY1f5+icXh0FsOuP1uHt82bXIYvw3rey3RkWcqVcniJXlkq0bAZM/ZSXWX5VHyQ2e7C4kxCdnzVqjgtlGT2ARSlD6o8FKKRKTAKD7kQ9ajTjZHRhO+xbvP+X4K9GlbGvPyU9bnDFa14fXBJS4dTMd8GgQ="
 
@@ -24,7 +35,14 @@ env:
 #   allow_failures:
 #     - env: BASE=3.16
 
-dist: trusty
+matrix:
+  exclude:
+    - python: 3.6
+      sudo: true
+
+    - python: 3.7
+      sudo: false
+
 addons:
   apt:
     packages:
@@ -63,11 +81,14 @@ script:
     then
       pip uninstall --yes numpy
     fi
+
   - pip install git+https://github.com/klauer/catvs.git@py3k
 
   # give us an early warning of flake8 failure
+  # the weird quating in to make searching in the results webpage easier
   - flake8 . || echo "flake8 FAI""LED!"
-  - coverage run --parallel-mode run_tests.py  -k 'not bench' --benchmark-disable --timeout=100 -v
+  - caproto-repeater &
+  - coverage run --parallel-mode run_tests.py -k 'not bench'  --benchmark-disable -v
   - coverage combine --append
 
   - export ASV_ENV_NAME=${TRAVIS_PYTHON_VERSION}_${BASE}

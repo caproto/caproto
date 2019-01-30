@@ -1,6 +1,7 @@
 # This module includes all exceptions raised by caproto, sentinel objects used
 # throughout the package (see detailed comment below), various network-related
 # helper functions, and other miscellaneous utilities.
+import argparse
 import array
 import collections
 import os
@@ -13,6 +14,9 @@ import threading
 from collections import namedtuple
 from contextlib import contextmanager
 from warnings import warn
+
+from ._version import get_versions
+__version__ = get_versions()['version']
 
 try:
     import fcntl
@@ -37,7 +41,6 @@ __all__ = (  # noqa F822
     'get_server_address_list',
     'get_beacon_address_list',
     'get_netifaces_addresses',
-    'broadcast_address_list_from_interfaces',
     'ensure_bytes',
     'random_ports',
     'bcast_socket',
@@ -60,12 +63,14 @@ __all__ = (  # noqa F822
     'CaprotoTypeError',
     'CaprotoConversionError',
     'CaprotoRuntimeError',
+    'CaprotoNetworkError',
     'ErrorResponseReceived',
     'SendAllRetry',
     'RecordModifiers',
     'RecordModifier',
     'RecordAndField',
     'ThreadsafeCounter',
+    '__version__',
      # sentinels dynamically defined and added to globals() below
     'CLIENT', 'SERVER', 'RESPONSE', 'REQUEST', 'NEED_DATA',
     'SEND_SEARCH_REQUEST', 'AWAIT_SEARCH_RESPONSE',
@@ -194,6 +199,10 @@ class CaprotoRuntimeError(RuntimeError, CaprotoError):
     ...
 
 
+class CaprotoNetworkError(OSError, CaprotoError):
+    ...
+
+
 class ErrorResponseReceived(CaprotoError):
     ...
 
@@ -257,7 +266,7 @@ def get_address_list():
     addr_list = env['EPICS_CA_ADDR_LIST']
 
     if not addr_list or auto_addr_list.lower() == 'yes':
-        return broadcast_address_list_from_interfaces()
+        return ['255.255.255.255']
 
     return addr_list.split(' ')
 
@@ -305,8 +314,7 @@ def get_beacon_address_list():
         return (addr, beacon_port)
 
     if not addr_list or auto_addr_list.lower() == 'yes':
-        return [get_addr_port(addr) for addr in
-                broadcast_address_list_from_interfaces()]
+        return [('255.255.255.255', beacon_port)]
 
     return [get_addr_port(addr) for addr in addr_list.split(' ')]
 
@@ -335,18 +343,6 @@ def get_netifaces_addresses():
                     yield (addr, addr)
                 elif peer is not None:
                     yield (peer, peer)
-
-
-def broadcast_address_list_from_interfaces():
-    '''Get a list of broadcast addresses using netifaces
-
-    If netifaces is unavailable, the standard IPv4 255.255.255.255 broadcast
-    address is returned.
-    '''
-    if netifaces is None:
-        return ['255.255.255.255']
-
-    return [bcast for addr, bcast in get_netifaces_addresses()]
 
 
 def ensure_bytes(s):
@@ -837,3 +833,24 @@ def named_temporary_file(*args, delete=True, **kwargs):
         finally:
             if delete:
                 os.unlink(f.name)
+
+
+class ShowVersionAction(argparse.Action):
+    # a special action that allows the usage --version to override
+    # any 'required args' requirements, the same way that --help does
+
+    def __init__(self,
+                 option_strings,
+                 dest=argparse.SUPPRESS,
+                 default=argparse.SUPPRESS,
+                 help=None):
+        super().__init__(
+            option_strings=option_strings,
+            dest=dest,
+            default=default,
+            nargs=0,
+            help=help)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        print(__version__)
+        parser.exit()

@@ -6,7 +6,6 @@ import sys
 
 from ..server.common import (VirtualCircuit as _VirtualCircuit,
                              Context as _Context)
-from .._utils import bcast_socket
 
 
 class ServerExit(Exception):
@@ -94,7 +93,7 @@ class VirtualCircuit(_VirtualCircuit):
         self._sq_task = None
         self._write_tasks = ()
 
-    async def get_from_sub_queue_with_timeout(self, timeout):
+    async def get_from_sub_queue(self, timeout=None):
         # Timeouts work very differently between our server implementations,
         # so we do this little stub in its own method.
         fut = asyncio.ensure_future(self.subscription_queue.get())
@@ -183,10 +182,13 @@ class Context(_Context):
                 self.transport = transport
 
             def datagram_received(self, data, addr):
-                tsk = self.loop.create_task(self.parent._broadcaster_recv_datagram(
-                    data, addr))
-                self._tasks = tuple(t for t in self._tasks + (tsk,)
-                                    if not t.done())
+                if data:
+                    tsk = self.loop.create_task(
+                        self.parent._broadcaster_recv_datagram(
+                            data, addr))
+
+                    self._tasks = tuple(t for t in self._tasks + (tsk,)
+                                        if not t.done())
 
             def error_received(self, exc):
                 self.parent.log.error('BcastLoop received error', exc_info=exc)
@@ -197,7 +199,11 @@ class Context(_Context):
                 self.transport = transport
 
             async def sendto(self, bytes_to_send, addr_port):
-                self.transport.sendto(bytes_to_send, addr_port)
+                try:
+                    self.transport.sendto(bytes_to_send, addr_port)
+                except OSError as exc:
+                    host, port = addr_port
+                    raise ca.CaprotoNetworkError(f"Failed to send to {host}:{port}") from exc
 
             def close(self):
                 return self.transport.close()
@@ -209,37 +215,29 @@ class Context(_Context):
                 self.address = address
 
             async def send(self, bytes_to_send):
-                self.transport.sendto(bytes_to_send, self.address)
+                try:
+                    self.transport.sendto(bytes_to_send, self.address)
+                except OSError as exc:
+                    host, port = self.address
+                    raise ca.CaprotoNetworkError(
+                        f"Failed to send to {host}:{port}") from exc
 
             def close(self):
                 return self.transport.close()
 
+        reuse_port = sys.platform not in ('win32', ) and hasattr(socket, 'SO_REUSEPORT')
         for address in ca.get_beacon_address_list():
-            # Win wants a connected socket; UNIX wants an un-connected one.
-            temp_sock = ca.bcast_socket(socket)
-            temp_sock.connect(address)
-            interface, _ = temp_sock.getsockname()
-            if sys.platform == 'win32':
-                sock = temp_sock
-            else:
-                temp_sock.close()
-                sock = ca.bcast_socket(socket)
             transport, _ = await self.loop.create_datagram_endpoint(
-                BcastLoop, sock=sock)
+                BcastLoop, remote_addr=address, allow_broadcast=True,
+                reuse_address=True, reuse_port=reuse_port)
             wrapped_transport = ConnectedTransportWrapper(transport, address)
             self.beacon_socks[address] = (interface, wrapped_transport)
 
         for interface in self.interfaces:
-            udp_sock = bcast_socket()
-            try:
-                udp_sock.bind((interface, self.ca_server_port))
-            except Exception:
-                self.log.exception('UDP bind failure on interface %r',
-                                   interface)
-                raise
-
             transport, self.p = await self.loop.create_datagram_endpoint(
-                BcastLoop, sock=udp_sock)
+                BcastLoop, local_addr=(interface, self.ca_server_port),
+                allow_broadcast=True, reuse_address=True,
+                reuse_port=reuse_port)
             self.udp_socks[interface] = TransportWrapper(transport)
             self.log.debug('UDP socket bound on %s:%d', interface,
                            self.ca_server_port)
@@ -260,7 +258,6 @@ class Context(_Context):
             await asyncio.gather(*tasks)
         except asyncio.CancelledError:
             self.log.info('Server task cancelled. Will shut down.')
-            udp_sock.close()
             all_tasks = (tasks + self._server_tasks +
                          [c._cq_task for c in self.circuits if c._cq_task is not None] +
                          [c._sq_task for c in self.circuits if c._sq_task is not None] +

@@ -2,6 +2,118 @@
 Release History
 ***************
 
+Unreleased
+==========
+
+Features
+--------
+
+The threading client---and, thereby, the pyepics-compatible shim---have
+greater feature parity with epics-base.
+
+* In previous releases, the client resent any unanswered ``SearchRequests`` at
+  a fast regular rate forever. Now, it backs off from that initial rate and
+  rests at a slow interval to avoid creating too much wasteful network traffic.
+  There is a new method,
+  :meth:`~caproto.threading.client.SharedBroadcaster.cancel`, for manually
+  canceling some requests altogether if a response is never excepected (e.g. a
+  typo). There is also a new method for manually resending all unanswered
+  search requests,
+  :meth:`~caproto.threading.client.SharedBroadcaster.search_now`,
+  primarily for debugging. All unanswered search requests are automatically
+  resent when the user searches for a new PV or when a new server appears on
+  the network (see next point).
+* The client monitors server beacons to notice changes in the CA servers on the
+  network. When a new server appears, all standing unanswered search requests
+  are given a fresh start and immediately resent. If a server does not send a
+  beacon within the expected interval and has also not sent any TCP packets
+  related to user activity during that interval, the client silently initiates
+  an Echo. If the server still does not respond, it is deemed unresponsive. The
+  client logs a warning and disconnects all circuits from that server so that
+  their PVs can begin attempting to reconnect to a responsive server.
+
+v0.2.3 (2018-01-02)
+===================
+
+Usability Improvements
+-----------------------
+
+* A new function :func:`~caproto.set_handler` provides a convenient way to make
+  common customizations to caproto's default logging handler, such as writing
+  to a file instead of the stdout.
+* In the threading client, store the current access rights level on the PV
+  object as ``pv.access_rights``. It was previously only accessible when it
+  *changed*, via a callback, and had to be stashed/tracked by user code.
+* Display the version of caproto in the output of ``--help``/``-h`` in the
+  commandline utilities. Add a new commandline argument ``--version``/``-V``
+  that outputs the version and exits.
+* In the threading client, DEBUG-log *all* read/write requests and
+  read/write/event responses. (When these log messages were first introduced in
+  v0.2.1, batched requests and their responses were not logged, and write
+  responses were not logged when ``notify=True`` but ``wait=False``.)
+
+Bug Fixes
+---------
+
+* Fix critical bug in synchronous client that broke monitoring of multiple PVs.
+* Fix default ("AUTO") broadcast address list (should always be
+  ``255.255.255.255``). Removed internal utility function
+  :func:`broadcast_address_list_from_interfaces`.
+* In pyepics-compatible client, set default mask to
+  ``SubscriptionType.DBE_VALUE | SubscriptionType.DBE_ALARM``, consistent with
+  pyepics.
+* Prevent subscriptions for being processed for all channels that share an
+  alarm if the alarm state has not actually changed.
+
+Updated Pyepics Compatibility
+-----------------------------
+
+* Added new method ``PV.get_with_metadata``, which was added in pyepics 3.3.1.
+
+Deprecations
+------------
+
+* The :func:`~caproto.color_logs` convenience function has been deprecated in
+  favor of :func:`~caproto.set_handler`.
+
+Internal Changes
+----------------
+
+* Enable ``-vvv`` ("very verbose") option when running example IOCs in test
+  suite.
+
+v0.2.2 (2018-11-15)
+===================
+
+The release improves the performance of the threading client and adds support
+for value-based alarms.
+
+Improved Alarm Support
+----------------------
+
+* Value-based alarms are supported by all servers.
+* LOLO, LO, HI, and HIHI alarm status fields of mocked records are respected.
+* Channel limit metadata (upper_alarm_limit, upper_warning_limit, etc.) is now
+  integrated with alarms.
+
+Bug Fixes and Performance Improvements
+--------------------------------------
+
+* The socket settings ``SO_KEEPALIVE`` and ``TCP_NODELAY`` are used in the
+  threading client TCP sockets, making it consistent with epics-base and removing a 40ms
+  overhead that can occur when sending small packets.
+* Some unnecessary locking was removed from the threading client, resolving
+  a deadlock observed in ophyd and improving performance.
+* The ``spoof_beamline`` IOC is aware of more components of Area Detector and
+  defaults to float-type channels instead of integer-type.
+* A rare but possible race condition that caused a subscription to be activated
+  twice (thus getting two responses for each update) has been resolved.
+* The ``ChannelData`` objects are serializable with pickle.
+* A bug in length-checking that affected zero-length data has been fixed.
+
+The detail and consistency of the exceptions raised by the clients has also
+been improved.
+
 v0.2.1 (2018-10-29)
 ===================
 
@@ -50,8 +162,9 @@ Server Performance Tuning
 
 The release also includes one small new feature: in the threading client,
 DEBUG-level logging of channels/PVs ``caproto.ch`` now logs (non-batch)
-read/write requests and read/write/event responses. Related --- there is
-expanded documentation on :doc:`loggers`.
+read/write requests and read/write/event responses. [Update: In v0.2.3,
+this feature was extended to include batched requests and their responses.]
+Related --- there is expanded documentation on :doc:`loggers`.
 
 v0.2.0 (2018-10-17)
 ===================

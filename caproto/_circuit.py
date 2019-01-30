@@ -8,7 +8,8 @@
 # Responses.
 import itertools
 import logging
-from collections import deque, Iterable
+from collections import deque
+from collections.abc import Iterable
 import os
 
 from ._commands import (AccessRightsResponse, CreateChFailResponse,
@@ -107,8 +108,8 @@ class VirtualCircuit:
         return self.address[1]
 
     def __repr__(self):
-        return (f"<VirtualCircuit host={self.host} port={self.port} "
-                f"our_role={self.our_role}> logger_name={self.log.name}>")
+        return (f"<VirtualCircuit host={self.host!r} port={self.port} "
+                f"our_role={self.our_role}> logger_name={self.log.name!r}>")
 
     @property
     def key(self):
@@ -181,13 +182,12 @@ class VirtualCircuit:
              command,
              num_bytes_needed) = read_from_bytestream(self._data,
                                                       self.their_role)
-            len_data = len(self._data)  # just for logging
             if command is not NEED_DATA:
                 self.log.debug("%d bytes -> %r", len(command), command)
                 commands.append(command)
             else:
-                self.log.debug("%d bytes are cached. Need more bytes to parse "
-                               "next command.", len_data)
+                # Less than a full command's worth of bytes are cached. Wait
+                # for more bytes to come in before continuing parsing.
                 break
         return commands, num_bytes_needed
 
@@ -357,6 +357,13 @@ class VirtualCircuit:
                 chan.protocol_version = protocol_version
 
         if isinstance(command, VersionResponse):
+            if command.version == 0:
+                # Per the specification:
+                # "In CA < 4.11, Message does not include minor version number
+                # (it is always 0) and is interpreted as an echo command that
+                # carries no data. Version exchange is performed immediately
+                # after [channel creation]."
+                return
             protocol_version = min(self.protocol_version, command.version)
             self.protocol_version = protocol_version
             for cid, chan in self.channels.items():

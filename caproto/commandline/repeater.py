@@ -15,7 +15,8 @@ import argparse
 import logging
 import os
 from ..sync.repeater import run
-from .. import color_logs
+from .. import set_handler, __version__
+from .._utils import ShowVersionAction
 
 
 def main():
@@ -26,8 +27,9 @@ Run a Channel Access Repeater.
 If the Repeater port is already in use, assume a Repeater is already running
 and exit. That port number is set by the environment variable
 EPICS_CA_REPEATER_PORT. It defaults to the standard 5065. The current value is
-{}.""".format(os.environ.get('EPICS_CA_REPEATER_PORT', 5065)))
-
+{}.""".format(os.environ.get('EPICS_CA_REPEATER_PORT', 5065)),
+        epilog=f'caproto version {__version__}')
+    parser.register('action', 'show_version', ShowVersionAction)
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-q', '--quiet', action='store_true',
                        help=("Suppress INFO log messages. "
@@ -36,9 +38,12 @@ EPICS_CA_REPEATER_PORT. It defaults to the standard 5065. The current value is
                        help="Verbose mode. (Use -vvv for more.)")
     parser.add_argument('--no-color', action='store_true',
                         help="Suppress ANSI color codes in log messages.")
+    parser.add_argument('--version', '-V', action='show_version',
+                        default=argparse.SUPPRESS,
+                        help="Show caproto version and exit.")
     args = parser.parse_args()
     if args.no_color:
-        color_logs(False)
+        set_handler(color=False)
     if args.verbose and args.verbose > 2:
         logging.getLogger('caproto').setLevel('DEBUG')
     else:

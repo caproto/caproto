@@ -27,9 +27,12 @@ _repeater_process = None
 
 REPEATER_PORT = 5065
 SERVER_HOST = '0.0.0.0'
+# make the logs noisy
 logger = logging.getLogger('caproto')
 logger.setLevel('DEBUG')
-
+# except for the broadcaster
+bcast_logger = logging.getLogger('caproto.bcast')
+bcast_logger.setLevel('INFO')
 
 array_types = (array.array,)
 try:
@@ -57,7 +60,7 @@ def assert_array_almost_equal(arr1, arr2):
 
 
 def run_example_ioc(module_name, *, request, pv_to_check, args=None,
-                    stdin=None, stdout=None, stderr=None):
+                    stdin=None, stdout=None, stderr=None, very_verbose=True):
     '''Run an example IOC by module name as a subprocess
 
     Parameters
@@ -75,7 +78,7 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
     else:
         logger.debug(f'Running {module_name}')
 
-    if '-vvv' not in args:
+    if '-vvv' not in args and very_verbose:
         args = list(args) + ['-vvv']
 
     os.environ['COVERAGE_PROCESS_START'] = '.coveragerc'
@@ -131,7 +134,7 @@ def poll_readiness(pv_to_check, attempts=5, timeout=1):
             break
     else:
         raise TimeoutError(f"ioc fixture failed to start in "
-                           f"{attempts} seconds (pv: {pv_to_check})")
+                           f"{attempts * timeout} seconds (pv: {pv_to_check})")
 
 
 def run_softioc(request, db, additional_db=None, **kwargs):
@@ -166,8 +169,7 @@ def prefix():
     return str(uuid.uuid4())[:8] + ':'
 
 
-@pytest.fixture(scope='function')
-def epics_base_ioc(prefix, request):
+def _epics_base_ioc(prefix, request):
     name = 'Waveform and standard record IOC'
     db = {
         ('{}waveform'.format(prefix), 'waveform'):
@@ -231,8 +233,7 @@ def epics_base_ioc(prefix, request):
                            type='epics-base')
 
 
-@pytest.fixture(scope='function')
-def caproto_ioc(prefix, request):
+def _caproto_ioc(prefix, request):
     name = 'Caproto type varieties example'
     pvs = dict(int=prefix + 'int',
                int2=prefix + 'int2',
@@ -249,14 +250,18 @@ def caproto_ioc(prefix, request):
                            type='caproto')
 
 
+caproto_ioc = pytest.fixture(scope='function')(_caproto_ioc)
+epics_base_ioc = pytest.fixture(scope='function')(_epics_base_ioc)
+
+
 @pytest.fixture(params=['caproto', 'epics-base'], scope='function')
 def ioc_factory(prefix, request):
     'A fixture that runs more than one IOC: caproto, epics'
     # Get a new prefix for each IOC type:
     if request.param == 'caproto':
-        return functools.partial(caproto_ioc, prefix, request)
+        return functools.partial(_caproto_ioc, prefix, request)
     elif request.param == 'epics-base':
-        return functools.partial(epics_base_ioc, prefix, request)
+        return functools.partial(_epics_base_ioc, prefix, request)
 
 
 @pytest.fixture(params=['caproto', 'epics-base'], scope='function')
@@ -264,9 +269,10 @@ def ioc(prefix, request):
     'A fixture that runs more than one IOC: caproto, epics'
     # Get a new prefix for each IOC type:
     if request.param == 'caproto':
-        ioc_ = caproto_ioc(prefix, request)
+        ioc_ = _caproto_ioc(prefix, request)
     elif request.param == 'epics-base':
-        ioc_ = epics_base_ioc(prefix, request)
+        ioc_ = _epics_base_ioc(prefix, request)
+
     return ioc_
 
 

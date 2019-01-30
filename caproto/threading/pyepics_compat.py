@@ -3,6 +3,7 @@ import itertools
 import time
 import copy
 import threading
+import types
 
 from math import log10
 from collections import Iterable
@@ -10,7 +11,7 @@ from collections import Iterable
 import caproto as ca
 from .client import (Context, SharedBroadcaster, AUTOMONITOR_MAXLENGTH,
                      STR_ENC)
-from caproto import (AccessRights, field_types, ChannelType,
+from caproto import (AccessRights, field_types, ChannelType, SubscriptionType,
                      CaprotoTimeoutError, CaprotoValueError,
                      CaprotoRuntimeError, CaprotoNotImplementedError)
 
@@ -132,6 +133,10 @@ def _pyepics_get_value(value, string_value, full_type, native_count, *,
     return value
 
 
+DEFAULT_SUBSCRIPTION_MASK = (SubscriptionType.DBE_VALUE |
+                             SubscriptionType.DBE_ALARM)
+
+
 class PV:
     """Epics Process Variable
 
@@ -182,6 +187,7 @@ class PV:
         self.verbose = verbose
         self.auto_monitor = auto_monitor
         self.ftype = None
+        self._connected = False
         self._connect_event = threading.Event()
         self._state_lock = threading.RLock()
         self.connection_timeout = connection_timeout
@@ -232,7 +238,7 @@ class PV:
     @property
     def connected(self):
         'Connection state'
-        return self._caproto_pv.connected
+        return self._caproto_pv.connected and self._connect_event.is_set()
 
     def force_connect(self, pvname=None, chid=None, conn=True, **kws):
         # not quite sure what this is for in pyepics
@@ -271,11 +277,9 @@ class PV:
         'Callback when connection is closed'
         self._connected = False
 
-    def _connection_established(self, caproto_pv):
+    def _connection_established(self):
         'Callback when connection is initially established'
-        # Take in caproto_pv as an argument because this might be called
-        # before self._caproto_pv is set.
-        ch = caproto_pv.channel
+        ch = self._caproto_pv.channel
         form = self.form
         count = self.default_count
 
@@ -289,7 +293,7 @@ class PV:
             nelm=ch.native_data_count,
             count=ch.native_data_count,
         )
-        self._access_rights_changed(caproto_pv, ch.access_rights)
+        self._access_rights_changed(self._caproto_pv, ch.access_rights)
 
         if self.auto_monitor is None:
             mcount = count if count is not None else ch.native_data_count
@@ -305,21 +309,32 @@ class PV:
             if count is None:
                 count = self.default_count
 
+            mask = (DEFAULT_SUBSCRIPTION_MASK if self.auto_monitor is True
+                    else self.auto_monitor)
             self._auto_monitor_sub = self._caproto_pv.subscribe(
-                data_type=self.typefull, data_count=count)
+                data_type=self.typefull, data_count=count,
+                mask=mask)
             self._auto_monitor_sub.add_callback(self.__on_changes)
 
     def _connection_state_changed(self, caproto_pv, state):
         'Connection callback hook from threading.PV.connection_state_changed'
+        # Ensure _caproto_pv is set, as this callback may happen prior to that in
+        # the initializer.  While not necessary in this function, callbacks
+        # chained from here may interact with this instance in ways that
+        # require it to be set.  For example:
+        #   PV created -> connection_state_changed -> run connection_callbacks
+        #   -> pv.get_ctrlvars()
+        self._caproto_pv = caproto_pv
         connected = (state == 'connected')
         with self._state_lock:
             try:
                 if connected:
-                    self._connection_established(caproto_pv)
+                    self._connection_established()
             except Exception:
                 raise
             finally:
-                self._connect_event.set()
+                if connected:
+                    self._connect_event.set()
 
         # todo move to async connect logic
         for cb in self.connection_callbacks:
@@ -341,9 +356,111 @@ class PV:
         return True
 
     @ensure_connection
+    def get_with_metadata(self, *, count=None, as_string=False, as_numpy=True,
+                          timeout=None, with_ctrlvars=False, use_monitor=True,
+                          form=None, as_namespace=False):
+        """Returns a dictionary of the current value and associated metadata
+
+        Parameters
+        ----------
+        count : int, optional
+             explicitly limit count for array data
+        as_string : bool, optional
+            flag(True/False) to get a string representation
+            of the value.
+        as_numpy : bool, optional
+            use numpy array as the return type for array data.
+        timeout : float, optional
+            maximum time to wait for value to be received.
+            (default = 0.5 + log10(count) seconds)
+        use_monitor : bool, optional
+            use value from latest monitor callback (True, default)
+            or to make an explicit CA call for the value.
+        form : {'time', 'ctrl', None}
+            Optionally change the type of the get request
+        as_namespace : bool, optional
+            Change the return type to that of a namespace with support for
+            tab-completion
+
+        Returns
+        -------
+        val : dict or namespace
+           The dictionary of data, guaranteed to at least have the 'value' key.
+           Depending on the request form, other keys may also be present::
+               {'precision', 'units', 'status', 'severity', 'enum_strs',
+               'status', 'severity', 'timestamp', 'posixseconds',
+               'nanoseconds', 'upper_disp_limit', 'lower_disp_limit',
+               'upper_alarm_limit', 'upper_warning_limit',
+               'lower_warning_limit','lower_alarm_limit', 'upper_ctrl_limit',
+               'lower_ctrl_limit'}
+           Returns ``None`` if the channel is not connected, `wait=False` was used,
+           or the data transfer timed out.
+        """
+        if form is None:
+            form = self.form
+
+        if count is None:
+            count = self.default_count
+
+        if timeout is None:
+            if count is None:
+                timeout = 1.0
+            else:
+                timeout = 1.0 + log10(max(1, count))
+
+        type_key = 'control' if form == 'ctrl' else form
+
+        if (with_ctrlvars and type_key not in ('control', 'native')):
+            md = self.get_with_metadata(
+                count=count, as_string=as_string, as_numpy=as_numpy,
+                timeout=timeout, with_ctrlvars=False,
+                use_monitor=use_monitor, form='control', as_namespace=False)
+        elif use_monitor:
+            md = self._args.copy()
+        else:
+            md = {}
+
+        dt = field_types[type_key][self.type]
+        if not as_string and dt in ca.char_types:
+            re_map = {ChannelType.CHAR: ChannelType.INT,
+                      ChannelType.CTRL_CHAR: ChannelType.CTRL_INT,
+                      ChannelType.TIME_CHAR: ChannelType.TIME_INT,
+                      ChannelType.STS_CHAR: ChannelType.STS_INT}
+            dt = re_map[dt]
+            # TODO if you want char arrays not as_string
+            # force no-monitor rather than
+            use_monitor = False
+
+        cached_value = self._args['value']
+
+        # trigger going out to got data from network
+        if ((not use_monitor) or
+                (self._auto_monitor_sub is None) or
+                (cached_value is None) or
+                (count is not None and count > len(cached_value))):
+            command = self._caproto_pv.read(data_type=dt, data_count=count)
+            response = _read_response_to_pyepics(self.typefull, command)
+            self._args.update(**response)
+            md.update(**response)
+
+        if as_string and self.typefull in ca.enum_types:
+            enum_strs = self.enum_strs
+        else:
+            enum_strs = None
+
+        md['value'] = _pyepics_get_value(
+            value=md['raw_value'], string_value=md['char_value'],
+            full_type=self.typefull, native_count=self._args['count'],
+            requested_count=count, enum_strings=enum_strs, as_string=as_string,
+            as_numpy=as_numpy)
+
+        if as_namespace:
+            return types.SimpleNamespace(**md)
+        return md
+
     def get(self, *, count=None, as_string=False, as_numpy=True,
             timeout=None, with_ctrlvars=False, use_monitor=True):
-        """returns current value of PV.
+        """Returns current value of PV.
 
         Parameters
         ----------
@@ -363,60 +480,18 @@ class PV:
 
         Returns
         -------
-        val : Object
-            The value, the type is dependent on the underlying PV
+        val : object
+            The value from the PV.
+            Returns None in the case of a timeout.
         """
-        if count is None:
-            count = self.default_count
+        data = self.get_with_metadata(
+            count=count, as_string=as_string, as_numpy=as_numpy,
+            timeout=timeout, with_ctrlvars=with_ctrlvars,
+            use_monitor=use_monitor, form=self.form, as_namespace=False)
 
-        if timeout is None:
-            if count is None:
-                timeout = 1.0
-            else:
-                timeout = 1.0 + log10(max(1, count))
-
-        if with_ctrlvars:
-            dt = field_types['control'][self.type]
-
-        dt = self.typefull
-        if not as_string and self.typefull in ca.char_types:
-            re_map = {ChannelType.CHAR: ChannelType.INT,
-                      ChannelType.CTRL_CHAR: ChannelType.CTRL_INT,
-                      ChannelType.TIME_CHAR: ChannelType.TIME_INT,
-                      ChannelType.STS_CHAR: ChannelType.STS_INT}
-            dt = re_map[self.typefull]
-            # TODO if you want char arrays not as_string
-            # force no-monitor rather than
-            use_monitor = False
-
-        cached_info = self._args
-        cached_value = cached_info['value']
-
-        # trigger going out to got data from network
-        if ((not use_monitor) or
-            (self._auto_monitor_sub is None) or
-            (cached_value is None) or
-            (count is not None and
-             count > len(cached_value))):
-
-            command = self._caproto_pv.read(data_type=dt, data_count=count)
-            read_info = _read_response_to_pyepics(self.typefull, command)
-            self._args.update(**read_info)
-
-        if as_string and self.typefull in ca.enum_types:
-            enum_strs = self.enum_strs
-        else:
-            enum_strs = None
-
-        raw_value = cached_info['raw_value']
-        string_value = cached_info['char_value']
-        native_count = cached_info['count']
-
-        return _pyepics_get_value(
-            value=raw_value, string_value=string_value,
-            full_type=self.typefull, native_count=native_count,
-            requested_count=count, enum_strings=enum_strs, as_string=as_string,
-            as_numpy=as_numpy)
+        return (data['value']
+                if data is not None
+                else None)
 
     @ensure_connection
     def put(self, value, *, wait=False, timeout=30.0,
@@ -506,6 +581,7 @@ class PV:
 
     def _access_rights_changed(self, caproto_pv, access_rights, *,
                                forced=False):
+        self._caproto_pv = caproto_pv
         read_access = AccessRights.READ in access_rights
         write_access = AccessRights.WRITE in access_rights
         access_strs = ('no access', 'read-only', 'write-only', 'read/write')

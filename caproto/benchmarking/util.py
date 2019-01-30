@@ -111,9 +111,11 @@ def softioc(*, db_text='', access_rules_text='', additional_args=None,
                                     stdout=subprocess.PIPE,
                                     stderr=subprocess.PIPE,
                                     **os_kwargs)
-            yield proc
-            proc.kill()
-            proc.wait()
+            try:
+                yield proc
+            finally:
+                proc.kill()
+                proc.wait()
 
 
 def make_database(records):

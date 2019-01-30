@@ -13,13 +13,16 @@ Python session, do not import this module; instead import caproto.sync.client.
 import argparse
 from datetime import datetime
 import logging
-from .. import ChannelType, color_logs, field_types
+from .. import ChannelType, set_handler, field_types, __version__
 from ..sync.client import read
+from .._utils import ShowVersionAction
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Read the value of a PV.')
+    parser = argparse.ArgumentParser(description='Read the value of a PV.',
+                                     epilog=f'caproto version {__version__}')
     parser.register('action', 'list_types', _ListTypesAction)
+    parser.register('action', 'show_version', ShowVersionAction)
     fmt_group = parser.add_mutually_exclusive_group()
     parser.add_argument('pv_names', type=str, nargs='+',
                         help="PV (channel) name(s) separated by spaces")
@@ -71,9 +74,12 @@ def main():
     parser.add_argument('--no-repeater', action='store_true',
                         help=("Do not spawn a Channel Access repeater daemon "
                               "process."))
+    parser.add_argument('--version', '-V', action='show_version',
+                        default=argparse.SUPPRESS,
+                        help="Show caproto version and exit.")
     args = parser.parse_args()
     if args.no_color:
-        color_logs(False)
+        set_handler(color=False)
     if args.verbose:
         logging.getLogger(f'caproto.ch').setLevel('DEBUG')
         logging.getLogger(f'caproto.ctx').setLevel('DEBUG')

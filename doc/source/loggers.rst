@@ -61,30 +61,12 @@ Here is the complete list of loggers used by caproto.
 Logging Handlers
 ================
 
-At import time, caproto adds a logging stream handler
-``caproto.color_log_handler`` to the ``'caproto'`` logger, which uses ANSI
-color codes to color-code the log messages by log level.
+By default, caproto prints log messages to the standard out by adding a
+:class:`logging.StreamHandler` to the ``'caproto'`` logger at import time. You
+can, of course, configure the handlers manually in the standard fashion
+supported by Python. But a convenience function :func:`caproto.set_handler`,
+makes it easy to address to common cases.
 
-To conveniently switch to a version without the colors:
+See the Examples section below.
 
-.. code-block:: python
-
-    caproto.color_logs(False)  # color_log_handler -> plain_log_handler
-
-You can, of course, configure the handlers manually in the standard fashion
-supported by Python, using ``logging.getLogger('caproto').handlers``. For
-example, to remove caproto's default handler and write to a file instead of the
-standard out:
-
-.. code-block:: python
-
-   import logging
-   import caproto
-   from caproto._log import LogFormatter, color_log_format, log_date_format
-
-   handler = logging.FileHandler(YOUR_FILEPATH)
-   handler.setFormatter(
-       LogFormatter(color_log_format, datefmt=log_date_format))
-   log = logging.getLogger('caproto')
-   log.handlers.clear()
-   log.addHandler(handler)
+.. autofunction:: caproto.set_handler

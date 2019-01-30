@@ -321,6 +321,23 @@ call ``go_idle()`` on any PV at any time, knowing that the PV will decline to
 disconnect if it is being actively used and that, if it is currently unused, it
 will transparently reconnect the next time it is used.
 
+Canceling Searches
+------------------
+
+All unanswered searches are retried repeatedly, with decreasing frequency,
+forever. Each new call to :meth:`~Context.get_pvs` causes all unanswered
+searches to be retried at least once immediately. This can generate unwanted
+network traffic. To fully cancel a search that is never expected to complete,
+access the method :class:`SharedBroadcaster.cancel`.
+
+.. code-block:: python
+
+   ctx.broadcaster.cancel('some typo-ed PV name, for example')
+
+As the name suggestions, it is possible to construct multiple Contexts that
+share one SharedBroadcaster. In that scenario, notice that canceling the
+search will affect all contexts using the SharedBroadcaster.
+
 Events Off and On
 -----------------
 

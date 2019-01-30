@@ -1,4 +1,5 @@
 import curio
+import functools
 import os
 import pytest
 import trio
@@ -30,7 +31,11 @@ def test_curio_client_example():
                     reason='win32 motorsim IOC')
 def test_trio_client_example():
     from caproto.examples.trio_client_simple import main
-    trio.run(main)
+    main_with_motorsim = functools.partial(
+        main,
+        pv1="XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL",
+        pv2="XF:31IDA-OP{Tbl-Ax:X2}Mtr.VAL")
+    trio.run(main_with_motorsim)
 
 
 def test_thread_client_example(curio_server):
@@ -332,12 +337,14 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
             continue
 
         print(f'Writing {value} to {pv}')
-        write(pv, value)
+        write(pv, value, timeout=15)
 
-        value = read(pv)
+        value = read(pv, timeout=15)
         print(f'Read {pv} = {value}')
 
 
+# TODO sort out why these are flaky on travis
+@pytest.mark.flaky(reruns=2, reruns_delay=2)
 @pytest.mark.parametrize(
     'module_name, pvdb_class_name, class_kwargs',
     [('caproto.ioc_examples.all_in_one', 'MyPVGroup',

@@ -91,10 +91,13 @@ class VirtualCircuit(_VirtualCircuit):
         async with self.new_command_condition:
             await self.new_command_condition.notify_all()
 
-    async def get_from_sub_queue_with_timeout(self, timeout):
+    async def get_from_sub_queue(self, timeout=None):
         # Timeouts work very differently between our server implementations,
         # so we do this little stub in its own method.
         # Returns weakref(EventAddResponse) or None
+        if timeout is None:
+            return await self.subscription_queue.get()
+
         return await curio.ignore_after(timeout, self.subscription_queue.get)
 
 
@@ -117,8 +120,8 @@ class Context(_Context):
             try:
                 udp_sock.bind((interface, self.ca_server_port))
             except Exception:
-                self.log.exception('UDP bind failure on interface %r',
-                                   interface)
+                self.log.exception('UDP bind failure on interface %r:%d',
+                                   interface, self.ca_server_port)
                 raise
             self.log.debug('UDP socket bound on %s:%d', interface,
                            self.ca_server_port)
