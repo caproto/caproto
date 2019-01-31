@@ -4185,6 +4185,10 @@ class MotorFields(RecordFieldGroup):
         dtype=ChannelType.LONG,
         doc='User Low Limit Switch',
         read_only=True)
+    user_offset = pvproperty(
+        name='OFF',
+        dtype=ChannelType.DOUBLE,
+        doc='User Offset (EGU)')
     user_readback_value = pvproperty(
         name='RBV',
         dtype=ChannelType.DOUBLE,
