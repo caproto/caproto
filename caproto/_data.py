@@ -667,7 +667,7 @@ class ChannelData:
         return out
 
     def _clear_cached_alarms(self):
-            self._status = self._severity = None
+        self._status = self._severity = None
 
     def __len__(self):
         try:
