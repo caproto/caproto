@@ -40,7 +40,6 @@ class Array(array.ArrayType):
             return Array(self.typecode, ret, endian=self.endian)
 
 
-
 type_map = {
     ChannelType.STRING: 'B',  # TO DO
     ChannelType.INT: 'h',
