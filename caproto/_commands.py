@@ -425,7 +425,7 @@ class Message(metaclass=_MetaDirectionalMessage):
 
     def validate(self):
         size = sum(bytelen(buf) for buf in self.buffers)
-        if self.buffers is () and self.header.payload_size != 0:
+        if self.buffers == () and self.header.payload_size != 0:
             raise CaprotoValueError(
                 "{}.header.payload_size {} > 0 but payload is None."
                 "".format(type(self).__name__, self.header.payload_size))
