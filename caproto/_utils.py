@@ -400,12 +400,20 @@ def bcast_socket(socket_module=socket):
     return sock
 
 
+def _cast_buffer_to_b(b):
+    try:
+        return memoryview(b).cast('b')
+    except TypeError:
+        target_type = b.dtype.str.replace('>', '<')
+        return memoryview(b.astype(target_type)).cast('b')
+
+
 def buffer_list_slice(*buffers, offset):
     'Helper function for slicing a list of buffers'
     if offset < 0:
         raise CaprotoValueError('Negative offset')
 
-    buffers = tuple(memoryview(b).cast('b') for b in buffers)
+    buffers = tuple(_cast_buffer_to_b(b) for b in buffers)
 
     start = 0
     for bufidx, buf in enumerate(buffers):
@@ -422,7 +430,7 @@ def buffer_list_slice(*buffers, offset):
 
 def incremental_buffer_list_slice(*buffers):
     'Incrementally slice a list of buffers'
-    buffers = tuple(memoryview(b).cast('b') for b in buffers)
+    buffers = tuple(_cast_buffer_to_b(b) for b in buffers)
     total_size = sum(len(b) for b in buffers)
     total_sent = 0
 
