@@ -400,12 +400,19 @@ def bcast_socket(socket_module=socket):
     return sock
 
 
-def _cast_buffer_to_b(b):
-    try:
-        return memoryview(b).cast('b')
-    except TypeError:
-        target_type = b.dtype.str.replace('>', '<')
-        return memoryview(b.astype(target_type)).cast('b')
+if 'pypy' in sys.implementation.name:
+    def _cast_buffers_to_byte(buffers):
+        def inner(b):
+            try:
+                return memoryview(b).cast('b')
+            except TypeError:
+                target_type = b.dtype.str.replace('>', '<')
+                return memoryview(b.astype(target_type)).cast('b')
+        return tuple(inner(b) for b in buffers)
+
+else:
+    def _cast_buffers_to_byte(buffers):
+        return tuple(memoryview(b).cast('b') for b in buffers)
 
 
 def buffer_list_slice(*buffers, offset):
@@ -413,7 +420,7 @@ def buffer_list_slice(*buffers, offset):
     if offset < 0:
         raise CaprotoValueError('Negative offset')
 
-    buffers = tuple(_cast_buffer_to_b(b) for b in buffers)
+    buffers = _cast_buffers_to_byte(buffers)
 
     start = 0
     for bufidx, buf in enumerate(buffers):
@@ -430,7 +437,7 @@ def buffer_list_slice(*buffers, offset):
 
 def incremental_buffer_list_slice(*buffers):
     'Incrementally slice a list of buffers'
-    buffers = tuple(_cast_buffer_to_b(b) for b in buffers)
+    buffers = _cast_buffers_to_byte(buffers)
     total_size = sum(len(b) for b in buffers)
     total_sent = 0
 
