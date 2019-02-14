@@ -310,8 +310,8 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
         (PvpropertyReadOnlyData, None),
         (ca.ChannelNumeric, [1]),
         (ca.ChannelString, ['USD']),
-        (ca.ChannelChar, ['USD']),
-        (ca.ChannelByte, [b'USD']),
+        (ca.ChannelChar, 'USD'),
+        (ca.ChannelByte, b'USD'),
         (ca.ChannelEnum, [b'no']),
     ]
 
