@@ -13,7 +13,7 @@ default_endian = ('>' if sys.byteorder == 'big'
 
 class Array(array.ArrayType):
     'Simple array.array subclass which tracks endianness'
-    __dict__ = {}
+    __slots__ = ('endian',)
 
     def __init__(self, type_code, values, *, endian=default_endian):
         self.endian = endian
