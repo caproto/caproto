@@ -109,7 +109,8 @@ async def update_metadata(chan1, pvdb, ctx):
     assert actual == expected
     # check timestamp
     expected = 4
-    actual = reading.metadata.secondsSinceEpoch
+    # work around pypy bug in _anonymous_
+    actual = reading.metadata.stamp.secondsSinceEpoch
     assert actual == expected
     print('reading:', reading)
 
