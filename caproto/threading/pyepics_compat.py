@@ -522,7 +522,7 @@ class PV:
         elif not isinstance(value, Iterable):
             value = (value, )
 
-        if isinstance(value[0], str):
+        if len(value) and isinstance(value[0], str):
             value = tuple(v.encode(STR_ENC) for v in value)
 
         notify = any((use_complete, callback is not None, wait))

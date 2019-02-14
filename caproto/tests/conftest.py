@@ -241,6 +241,7 @@ def _caproto_ioc(prefix, request):
                float=prefix + 'pi',
                str=prefix + 'str',
                enum=prefix + 'enum',
+               waveform=prefix + 'waveform'
                )
     process = run_example_ioc('caproto.ioc_examples.type_varieties',
                               request=request,
