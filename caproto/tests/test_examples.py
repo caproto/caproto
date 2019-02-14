@@ -379,7 +379,8 @@ def test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
         'caproto.ioc_examples.io_interrupt',
     )
 
-    skip_if_no_numpy = ('caproto.ioc_examples.mini_beamline',)
+    skip_if_no_numpy = ('caproto.ioc_examples.mini_beamline',
+                        'caproto.ioc_examples.thermo_sim')
 
     if sys.platform == 'win32' and module_name in skip_on_windows:
         raise pytest.skip('win32 TODO')
