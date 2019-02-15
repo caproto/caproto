@@ -1,13 +1,5 @@
-# Python package
-# Create and test a Python package on multiple Python versions.
-# Add steps that analyze code, save the dist with the build record, publish to a PyPI-compatible index, and more:
-# https://docs.microsoft.com/azure/devops/pipelines/languages/python
 # vi: sw=2 ts=2 sts=2 expandtab
 
-variables:
-    EPICS_ON_TRAVIS_TAG: '0.8.1'
-    EPICS_ON_TRAVIS_PKG: '0.8.1/epics-ci-0.8.1_R7.0.1.1_pva_areadetector3-2_motor6-10.tar.bz2'
-  
 jobs:
 
 - job: 'Test'
@@ -15,17 +7,28 @@ jobs:
     vmImage: 'Ubuntu 16.04'
   strategy:
     matrix:
-      Python36:
+      Python36_R314:
         python.version: '3.6'
-      Python37:
+        epics.on.travis.pkg: '0.8.2/epics-ci-0.8.2_R3.14.12.6_pva_areadetector3-2_motor6-9.tar.bz2'
+      Python37_R314:
         python.version: '3.7'
-    maxParallel: 4
+        epics.on.travis.pkg: '0.8.2/epics-ci-0.8.2_R3.14.12.6_pva_areadetector3-2_motor6-9.tar.bz2'
+      Python36_R7:
+        python.version: '3.6'
+        epics.on.travis.pkg: '0.8.2/epics-ci-0.8.2_R7.0.1.1_pva_areadetector3-2_motor6-10.tar.bz2'
+      Python37_R7:
+        python.version: '3.7'
+        epics.on.travis.pkg: '0.8.2/epics-ci-0.8.2_R7.0.1.1_pva_areadetector3-2_motor6-10.tar.bz2'
 
   steps:
   - task: UsePythonVersion@0
     inputs:
       versionSpec: '$(python.version)'
       architecture: 'x64'
+
+  - bash: |
+      git submodule update --init --recursive
+    displayName: 'Checkout submodules'
 
   - bash: |
       pushd /home
@@ -40,10 +43,21 @@ jobs:
       env
       pwd
       cp azure_env.sh $HOME
-      # this does not yet work:
-      echo 'source $HOME/azure_env.sh' >> "$HOME/.bashrc"
-      echo 'source $HOME/.bashrc' >> "$HOME/.bash_profile"
-    displayName: 'Show the environment'
+    displayName: 'Configure the environment'
+
+  - bash: |
+      export CI_TOP="${BUILD_REPOSITORY_LOCALPATH}/.ci"
+      export EPICS_ON_TRAVIS_PKG="$(epics.on.travis.pkg)"
+      source $HOME/azure_env.sh
+      bash ${CI_TOP}/install-from-release.sh "${EPICS_ON_TRAVIS_URL}"
+    displayName: 'Install EPICS dependencies'
+
+  - bash: |
+      echo "EPICS versions are as follows:"
+      source $HOME/azure_env.sh
+      echo "Base version: ${BASE_VER}"
+      cat $HOME/epics/versions.sh
+    displayName: 'Show EPICS versions'
 
   - bash: |
       python -m pip install --upgrade pip
@@ -56,14 +70,6 @@ jobs:
   - bash: |
       pip install .
     displayName: 'Install caproto'
-
-  - bash: |
-      export CI_TOP="$HOME/ci"
-      # git clone --single-branch --branch ${EPICS_ON_TRAVIS_TAG} --depth 1 https://github.com/klauer/epics-on-travis ${CI_TOP}
-      git clone --single-branch --branch master --depth 1 https://github.com/klauer/epics-on-travis ${CI_TOP}
-      source $HOME/azure_env.sh
-      bash ${CI_TOP}/install-from-release.sh "${EPICS_ON_TRAVIS_URL}"
-    displayName: 'Install EPICS dependencies'
 
   - bash: |
       source $HOME/azure_env.sh
