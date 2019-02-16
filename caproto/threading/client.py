@@ -416,6 +416,8 @@ class SharedBroadcaster:
     def disconnect(self, *, wait=True):
         if self.udp_sock is not None:
             self.selector.remove_socket(self.udp_sock)
+            self.udp_sock.close()
+            self.udp_sock = None
 
         self._close_event.set()
         self.search_results.clear()
@@ -1425,9 +1427,10 @@ class VirtualCircuitManager:
             self.selector.remove_socket(sock)
             try:
                 sock.shutdown(socket.SHUT_WR)
-                sock.close()
             except OSError:
                 pass
+
+            sock.close()
 
         # Kick off attempt to reconnect all PVs via fresh circuit(s).
         self.log.debug('Kicking off reconnection attempts for %d PVs '
@@ -1449,6 +1452,9 @@ class VirtualCircuitManager:
             sock.shutdown(socket.SHUT_WR)
         except OSError:
             pass
+
+        sock.close()
+
         self.log.debug('Circuit manager disconnected by user')
 
     def __del__(self):
