@@ -691,3 +691,34 @@ def dump_process_output(prefix, stdout, stderr):
         for line in stderr.decode('latin-1').split('\n'):
             print(f'[{prefix}-stderr]', line)
     print('--')
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_call(item):
+    'Socket and thread debugging hook'
+    from .debug import use_debug_socket, use_thread_counter
+
+    with use_thread_counter() as (dangling_threads, thread_counter):
+        with use_debug_socket() as (sockets, socket_counter):
+            yield
+
+    if len(dangling_threads):
+        logger.warning(f'%d threads were left dangling of %d! Threads: %s',
+                       len(dangling_threads),
+                       thread_counter.value,
+                       ', '.join(str(thread) for thread in dangling_threads)
+                       )
+        # pytest.fail() ?
+    else:
+        logger.debug('All %d threads were disposed of properly.',
+                     thread_counter.value)
+
+    if not socket_counter.value:
+        return
+
+    if len(sockets):
+        logger.warning(f'Saw %d sockets: %d were not closed.',
+                       socket_counter.value, len(sockets))
+        # pytest.fail() ?
+    else:
+        logger.debug(f'All %d sockets were closed.', socket_counter.value)
