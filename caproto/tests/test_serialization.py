@@ -191,7 +191,7 @@ def test_reads(backends, circuit_pair, data_type, data_count, data, metadata):
                                              data_count)
 
     req = ca.ReadNotifyRequest(data_count=data_count, data_type=data_type,
-                               ioid=0, sid=0)
+                               ioid=0, sid=srv_channel.sid)
     buffers_to_send = cli_circuit.send(req)
     # Socket transport would happen here. Calling bytes() simulates
     # serialization over the socket.
@@ -243,7 +243,8 @@ def test_writes(backends, circuit_pair, data_type, data_count, data, metadata):
 
     req = ca.WriteNotifyRequest(data=data, metadata=metadata,
                                 data_count=data_count,
-                                data_type=data_type, ioid=0, sid=0)
+                                data_type=data_type, ioid=0,
+                                sid=srv_channel.sid)
     buffers_to_send = cli_circuit.send(req)
     # Socket transport would happen here. Calling bytes() simulates
     # serialization over the socket.
