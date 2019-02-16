@@ -3,10 +3,11 @@
 # UDP socket provided by a client or server implementation.
 import itertools
 import logging
+import random
 
 from ._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
 from ._utils import (CLIENT, SERVER, CaprotoValueError,
-                     RemoteProtocolError)
+                     RemoteProtocolError, ThreadsafeCounter)
 from ._state import get_exception
 from ._commands import (RepeaterConfirmResponse, RepeaterRegisterRequest,
                         SearchRequest, SearchResponse, VersionRequest,
@@ -47,7 +48,10 @@ class Broadcaster:
         # track for the Broadcaster. We don't need a full state machine, just
         # one flag to check whether we have yet registered with a repeater.
         self._registered = False
-        self._search_id_counter = itertools.count(0)
+        self._search_id_counter = ThreadsafeCounter(
+            initial_value=random.randint(0, MAX_ID),
+            dont_clash_with=self.unanswered_searches,
+        )
         self.log = logging.getLogger(f"caproto.bcast")
 
     def send(self, *commands):
@@ -152,14 +156,7 @@ class Broadcaster:
 
     def new_search_id(self):
         # Return the next sequential unused id. Wrap back to 0 on overflow.
-        while True:
-            i = next(self._search_id_counter)
-            if i in self.unanswered_searches:
-                continue
-            if i == MAX_ID:
-                self._search_id_counter = itertools.count(0)
-                continue
-            return i
+        return self._search_id_counter()
 
     def search(self, name, *, cid=None):
         """

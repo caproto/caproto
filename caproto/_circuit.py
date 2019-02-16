@@ -6,7 +6,6 @@
 # to that Channel. A ClientChannel provides convenience methods for composing
 # Requests; a ServerChannel provides convenience methods for composing
 # Responses.
-import itertools
 import logging
 from collections import deque
 from collections.abc import Iterable
@@ -28,7 +27,7 @@ from ._utils import (CLIENT, SERVER, NEED_DATA, DISCONNECTED, CaprotoKeyError,
                      CaprotoValueError, CaprotoRuntimeError, CaprotoError,
                      CaprotoTypeError,
                      parse_channel_filter, parse_record_field,
-                     ChannelFilter)
+                     ChannelFilter, ThreadsafeCounter)
 from ._dbr import (ChannelType, SubscriptionType, field_types, native_type)
 from ._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
 from ._status import CAStatus
@@ -73,9 +72,12 @@ class VirtualCircuit:
         self._ioids = {}  # map ioid to Channel
         self.event_add_commands = {}  # map subscriptionid to EventAdd command
         # There are only used by the convenience methods, to auto-generate ids.
-        self._channel_id_counter = itertools.count(0)
-        self._ioid_counter = itertools.count(0)
-        self._sub_counter = itertools.count(0)
+        self._channel_id_counter = ThreadsafeCounter(
+            dont_clash_with=self.channels
+        )
+        self._ioid_counter = ThreadsafeCounter(dont_clash_with=self._ioids)
+        self._sub_counter = ThreadsafeCounter(
+            dont_clash_with=self.event_add_commands)
         if priority is None and self.our_role is CLIENT:
             raise CaprotoRuntimeError("Client-side VirtualCircuit requires a "
                                       "non-None priority at initialization "
@@ -380,44 +382,21 @@ class VirtualCircuit:
     def new_channel_id(self):
         "Return a valid value for a cid or sid."
         # Return the next sequential unused id. Wrap back to 0 on overflow.
-        while True:
-            i = next(self._channel_id_counter)
-            if i in self.channels:
-                continue
-            if i == MAX_ID:
-                self._channel_id_counter = itertools.count(0)
-                continue
-            return i
+        return self._channel_id_counter()
 
     def new_subscriptionid(self):
         """
         This is used by the convenience methods to obtain an unused integer ID.
         It does not update any important state.
         """
-        # Return the next sequential unused id. Wrap back to 0 on overflow.
-        while True:
-            i = next(self._sub_counter)
-            if i in self.event_add_commands:
-                continue
-            if i == MAX_ID:
-                self._sub_counter = itertools.count(0)
-                continue
-            return i
+        return self._sub_counter()
 
     def new_ioid(self):
         """
         This is used by the convenience methods to obtain an unused integer ID.
         It does not update any important state.
         """
-        # Return the next sequential unused id. Wrap back to 0 on overflow.
-        while True:
-            i = next(self._ioid_counter)
-            if i in self._ioids:
-                continue
-            if i == MAX_ID:
-                self._ioid_counter = itertools.count(0)
-                continue
-            return i
+        return self._ioid_counter()
 
 
 class _BaseChannel:

@@ -15,9 +15,9 @@ import errno
 import functools
 import getpass
 import inspect
-import itertools
 import logging
 import os
+import random
 import selectors
 import socket
 import sys
@@ -326,10 +326,14 @@ class SharedBroadcaster:
         # PVs (via Context.get_pvs).
         self._search_now = threading.Event()
 
-        self._id_counter = itertools.count(0)
         self.search_results = {}  # map name to (time, address)
         self.unanswered_searches = {}  # map search id (cid) to [name, queue, retirement_deadline]
         self.server_protocol_versions = {}  # map address to protocol version
+
+        self._id_counter = ThreadsafeCounter(
+            initial_value=random.randint(0, MAX_ID),
+            dont_clash_with=self.unanswered_searches,
+        )
 
         self.listeners = weakref.WeakSet()
 
@@ -388,12 +392,7 @@ class SharedBroadcaster:
         self._searching_enabled.set()
 
     def new_id(self):
-        while True:
-            i = next(self._id_counter)
-            if i == MAX_ID:
-                self._id_counter = itertools.count(0)
-                continue
-            return i
+        return self._id_counter()
 
     def add_listener(self, listener):
         with self._search_lock:
