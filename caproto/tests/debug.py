@@ -57,5 +57,6 @@ def use_thread_counter():
         yield dangling_threads, counter
     finally:
         final_threads = set(threading.enumerate())
-        dangling_threads[:] = list(sorted(final_threads - threads_at_start))
+        dangling_threads[:] = list(sorted(final_threads - threads_at_start,
+                                          key=lambda th: th.name))
         threading.Thread = _orig_thread
