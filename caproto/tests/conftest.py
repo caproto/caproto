@@ -702,23 +702,31 @@ def pytest_runtest_call(item):
         with use_debug_socket() as (sockets, socket_counter):
             yield
 
-    if len(dangling_threads):
-        logger.warning(f'%d threads were left dangling of %d! Threads: %s',
-                       len(dangling_threads),
-                       thread_counter.value,
-                       ', '.join(str(thread) for thread in dangling_threads)
-                       )
-        # pytest.fail() ?
-    else:
-        logger.debug('All %d threads were disposed of properly.',
-                     thread_counter.value)
+    num_dangling = len(dangling_threads)
+    num_threads = thread_counter.value
 
-    if not socket_counter.value:
-        return
+    if num_threads:
+        if num_dangling:
+            thread_info = ', '.join(str(thread) for thread in dangling_threads)
+            logger.warning('%d thread(s) left dangling out of %d! %s',
+                           num_dangling, num_threads, thread_info)
+            # pytest.fail() ?
+        else:
+            logger.debug('%d thread(s) OK', num_threads)
 
-    if len(sockets):
-        logger.warning(f'Saw %d sockets: %d were not closed.',
-                       socket_counter.value, len(sockets))
-        # pytest.fail() ?
-    else:
-        logger.debug(f'All %d sockets were closed.', socket_counter.value)
+    item.user_properties.append(('total_threads', num_threads))
+    item.user_properties.append(('dangling_threads', num_dangling))
+
+    num_sockets = socket_counter.value
+    num_open = len(sockets)
+
+    if num_sockets:
+        if num_open:
+            logger.warning('%d sockets still open of %d', num_open,
+                           num_sockets)
+            # pytest.fail() ?
+        else:
+            logger.debug('%d sockets OK', socket_counter.value)
+
+    item.user_properties.append(('total_sockets', num_sockets))
+    item.user_properties.append(('open_sockets', num_open))
