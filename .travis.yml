@@ -45,6 +45,7 @@ before_install:
 
   - git fetch --unshallow
   - export CI_SCRIPTS=${TRAVIS_BUILD_DIR}/.ci/ci-scripts
+  - install -d $HOME/epics $HOME/epics/iocs $HOME/epics/support $HOME/epics/base
   - bash .ci/install-from-release.sh "https://github.com/klauer/epics-on-travis/releases/download/${PACKAGED_DEPS}"
   - source $HOME/epics/versions.sh
   - source ${CI_SCRIPTS}/epics-config.sh
