@@ -241,6 +241,12 @@ class SharedBroadcaster:
         self.environ = ca.get_environment_variables()
         self.ca_server_port = self.environ['EPICS_CA_SERVER_PORT']
 
+    async def disconnect(self):
+        'Disconnect the broadcaster and stop listening'
+        await self.udp_sock.close()
+        self.udp_sock = None
+        self.log.debug('Broadcaster disconnect complete')
+
     async def send(self, port, *commands):
         """
         Process a command and tranport it over the UDP socket.

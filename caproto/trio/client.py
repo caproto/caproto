@@ -306,6 +306,7 @@ class SharedBroadcaster:
             self.log.debug('Broadcaster: Disconnecting the command queue loop')
             await self.command_chan.send.send(ca.DISCONNECTED)
             self.log.debug('Broadcaster: Closing the UDP socket')
+            self.udp_sock = None
             self._cleanup_condition.notify_all()
         self.log.debug('Broadcaster disconnect complete')
 
@@ -324,6 +325,7 @@ class SharedBroadcaster:
         while True:
             async with self._cleanup_condition:
                 if self._cleanup_event.is_set():
+                    self.udp_sock.close()
                     self.log.debug('Exiting broadcaster recv loop')
                     break
 
