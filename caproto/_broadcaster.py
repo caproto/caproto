@@ -1,7 +1,6 @@
 # This module contains only the Broadcaster object, encapsulating the state of
 # one Channel Access UDP connection, intended to be used as a companion to a
 # UDP socket provided by a client or server implementation.
-import itertools
 import logging
 import random
 

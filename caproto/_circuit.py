@@ -29,7 +29,7 @@ from ._utils import (CLIENT, SERVER, NEED_DATA, DISCONNECTED, CaprotoKeyError,
                      parse_channel_filter, parse_record_field,
                      ChannelFilter, ThreadsafeCounter)
 from ._dbr import (ChannelType, SubscriptionType, field_types, native_type)
-from ._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
+from ._constants import DEFAULT_PROTOCOL_VERSION
 from ._status import CAStatus
 
 
