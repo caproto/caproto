@@ -767,30 +767,24 @@ class ThreadsafeCounter:
     '''
     MAX_ID = 2 ** 16
 
-    def __init__(self, *, initial_value=0, dont_clash_with=None):
+    def __init__(self, *, initial_value=-1, dont_clash_with=None):
+        if dont_clash_with is None:
+            dont_clash_with = set()
+
         self.value = initial_value
         self.lock = threading.RLock()
         self.dont_clash_with = dont_clash_with
 
     def __call__(self):
         'Get next ID, wrapping around at 2**16, ensuring no clashes'
-        if not self.dont_clash_with:
-            with self.lock:
-                self.value += 1
-                if self.value >= self.MAX_ID:
-                    self.value = 0
-                return self.value
-        else:
-            with self.lock:
-                value = self.value
+        with self.lock:
+            value = self.value + 1
 
-                while value in self.dont_clash_with or value >= self.MAX_ID:
-                    value += 1
-                    if value >= self.MAX_ID:
-                        value = 0
+            while value in self.dont_clash_with or value >= self.MAX_ID:
+                value = 0 if value >= self.MAX_ID else value + 1
 
-                self.value = value
-                return value
+            self.value = value
+            return self.value
 
 
 if sys.platform == 'win32' or fcntl is None:
