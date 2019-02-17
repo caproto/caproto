@@ -25,6 +25,7 @@ def test_sync_repeater(ioc):
                             ('127.0.0.1', REPEATER_PORT))
 
         await curio.sleep(1)
+        udp_sock.close()
 
     with curio.Kernel() as kernel:
         kernel.run(check_repeater)

@@ -416,6 +416,8 @@ class SharedBroadcaster:
     def disconnect(self, *, wait=True):
         if self.udp_sock is not None:
             self.selector.remove_socket(self.udp_sock)
+            self.udp_sock.close()
+            self.udp_sock = None
 
         self._close_event.set()
         self.search_results.clear()
@@ -1150,7 +1152,7 @@ class Context:
                 if circuit.connected:
                     self.log.debug('Disconnecting circuit %d/%d: %s',
                                    idx, total_circuits, circuit)
-                    circuit.disconnect()
+                    circuit._disconnected(reconnect=False)
                     disconnected = True
             if disconnected:
                 self.log.debug('All circuits disconnected')
@@ -1390,7 +1392,7 @@ class VirtualCircuitManager:
         else:
             self.log.debug('other command %s', command)
 
-    def _disconnected(self):
+    def _disconnected(self, *, reconnect=True):
         # Ensure that this method is idempotent.
         if self.dead.is_set():
             return
@@ -1425,16 +1427,20 @@ class VirtualCircuitManager:
             self.selector.remove_socket(sock)
             try:
                 sock.shutdown(socket.SHUT_WR)
-                sock.close()
             except OSError:
                 pass
 
-        # Kick off attempt to reconnect all PVs via fresh circuit(s).
-        self.log.debug('Kicking off reconnection attempts for %d PVs '
-                       'disconnected from %s:%d....',
-                       len(self.channels), *self.circuit.address)
-        self.context.reconnect(((chan.name, chan.circuit.priority)
-                                for chan in self.channels.values()))
+            sock.close()
+
+        if reconnect:
+            # Kick off attempt to reconnect all PVs via fresh circuit(s).
+            self.log.debug('Kicking off reconnection attempts for %d PVs '
+                           'disconnected from %s:%d....',
+                           len(self.channels), *self.circuit.address)
+            self.context.reconnect(((chan.name, chan.circuit.priority)
+                                    for chan in self.channels.values()))
+        else:
+            self.log.debug('Not attempting reconnection')
 
         self.log.debug("Shutting down ThreadPoolExecutor for user callbacks")
         self.user_callback_executor.shutdown()
@@ -1444,16 +1450,11 @@ class VirtualCircuitManager:
         if self.socket is None:
             return
 
-        sock, self.socket = self.socket, None
-        try:
-            sock.shutdown(socket.SHUT_WR)
-        except OSError:
-            pass
         self.log.debug('Circuit manager disconnected by user')
 
     def __del__(self):
         try:
-            self.disconnect()
+            self._disconnected(reconnect=False)
         except AttributeError:
             pass
 
