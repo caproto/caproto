@@ -328,6 +328,13 @@ class VirtualCircuit:
                                       ClearChannelResponse)):
                 self.channels_sid.pop(chan.sid)
                 self.channels.pop(chan.cid)
+                to_remove = []
+                for k, v in self._ioids.items():
+                    if v is chan:
+                        to_remove.apend(k)
+                for k in to_remove:
+                    self._ioids.pop(k)
+
             elif isinstance(command, (ReadNotifyRequest, ReadRequest,
                                       WriteNotifyRequest)):
                 # Stash the ioid for later reference.
