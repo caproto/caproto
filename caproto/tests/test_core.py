@@ -377,19 +377,28 @@ def test_circuit_equality():
 
 
 def test_ioid_exhaustion(circuit_pair):
+    max_id = 15
     cli_circuit, srv_circuit = circuit_pair
+    # make the test run faster by not doing it 2**16 times
+    cli_circuit._ioid_counter.MAX_ID = max_id
+    srv_circuit._ioid_counter.MAX_ID = max_id
+
     cli_channel, srv_channel = make_channels(*circuit_pair, 5, 1, name='a')
+
     data = [1]
     data_count = 1
+
     # if this is broken it will hang
-    for N in range(ca._constants.MAX_ID + 10):
+    for N in range(max_id + 10):
         # create a read request and serialize
         req = cli_channel.read()
+        assert req.ioid < max_id
         buffers_to_send = cli_circuit.send(req)
 
         # set the bits to the server and create a response
         (command,), _ = srv_circuit.recv(*buffers_to_send)
         srv_circuit.process_command(command)
+        assert command.ioid < max_id
         resp = srv_channel.read(data=data, data_type=command.data_type,
                                 data_count=data_count, status=0,
                                 ioid=command.ioid, metadata=None,
