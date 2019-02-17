@@ -376,7 +376,7 @@ def test_circuit_equality():
     assert a == b != c
 
 
-def test_ioid_exhastion(circuit_pair):
+def test_ioid_exhaustion(circuit_pair):
     cli_circuit, srv_circuit = circuit_pair
     cli_channel, srv_channel = make_channels(*circuit_pair, 5, 1, name='a')
     data = [1]
