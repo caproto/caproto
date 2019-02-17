@@ -66,15 +66,20 @@ class VirtualCircuit:
         self.address = address
         self.priority = priority
         self.channels = {}  # map cid to Channel
+        self.channels_sid = {}  # map sid to Channel
         self.states = CircuitState(self.channels)
         self._data = bytearray()
-        self.channels_sid = {}  # map sid to Channel
         self._ioids = {}  # map ioid to Channel
         self.event_add_commands = {}  # map subscriptionid to EventAdd command
         # There are only used by the convenience methods, to auto-generate ids.
-        self._channel_id_counter = ThreadsafeCounter(
-            dont_clash_with=self.channels
-        )
+        if our_role is CLIENT:
+            self._channel_id_counter = ThreadsafeCounter(
+                dont_clash_with=self.channels
+            )
+        else:
+            self._channel_id_counter = ThreadsafeCounter(
+                dont_clash_with=self.channels_sid
+            )
         self._ioid_counter = ThreadsafeCounter(dont_clash_with=self._ioids)
         self._sub_counter = ThreadsafeCounter(
             dont_clash_with=self.event_add_commands)
