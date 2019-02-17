@@ -25,6 +25,9 @@ def test_counter_wraparound(circuit_pair):
     circuit, _ = circuit_pair
     broadcaster = ca.Broadcaster(ca.CLIENT)
 
+    # Force the initial value of search IDs to make this test work
+    broadcaster._search_id_counter.value = -1
+
     MAX = 2**16
     for i in range(MAX + 2):
         assert i % MAX == circuit.new_channel_id()
@@ -36,6 +39,10 @@ def test_counter_wraparound(circuit_pair):
 def test_counter_skipping(circuit_pair):
     circuit, _ = circuit_pair
     broadcaster = ca.Broadcaster(ca.CLIENT)
+
+    # Force the initial value of search IDs to make this test work
+    broadcaster._search_id_counter.value = -1
+    circuit._channel_id_counter.value = -1
 
     broadcaster.unanswered_searches[0] = 'placeholder'
     broadcaster.unanswered_searches[2] = 'placeholder'
