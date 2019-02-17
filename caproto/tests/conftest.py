@@ -691,3 +691,42 @@ def dump_process_output(prefix, stdout, stderr):
         for line in stderr.decode('latin-1').split('\n'):
             print(f'[{prefix}-stderr]', line)
     print('--')
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_call(item):
+    'Socket and thread debugging hook'
+    from .debug import use_debug_socket, use_thread_counter
+
+    with use_thread_counter() as (dangling_threads, thread_counter):
+        with use_debug_socket() as (sockets, socket_counter):
+            yield
+
+    num_dangling = len(dangling_threads)
+    num_threads = thread_counter.value
+
+    if num_threads:
+        if num_dangling:
+            thread_info = ', '.join(str(thread) for thread in dangling_threads)
+            logger.warning('%d thread(s) left dangling out of %d! %s',
+                           num_dangling, num_threads, thread_info)
+            # pytest.fail() ?
+        else:
+            logger.debug('%d thread(s) OK', num_threads)
+
+    item.user_properties.append(('total_threads', num_threads))
+    item.user_properties.append(('dangling_threads', num_dangling))
+
+    num_sockets = socket_counter.value
+    num_open = len(sockets)
+
+    if num_sockets:
+        if num_open:
+            logger.warning('%d sockets still open of %d', num_open,
+                           num_sockets)
+            # pytest.fail() ?
+        else:
+            logger.debug('%d sockets OK', socket_counter.value)
+
+    item.user_properties.append(('total_sockets', num_sockets))
+    item.user_properties.append(('open_sockets', num_open))
