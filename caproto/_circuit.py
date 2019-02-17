@@ -249,7 +249,7 @@ class VirtualCircuit:
                                       WriteNotifyResponse)):
                 # Identify the Channel based on its ioid.
                 try:
-                    chan = self._ioids[command.ioid]
+                    chan = self._ioids.pop(command.ioid)
                 except KeyError:
                     err = get_exception(self.our_role, command)
                     raise err("Unknown Channel ioid {!r}".format(command.ioid))
