@@ -27,8 +27,8 @@ def main():
     parser.add_argument('--format', type=str,
                         help=("Python format string. Available tokens are "
                               "{timestamp}, {ethernet}, {ip}, {transport}, "
-                              "{role}, {command} and {src} and {dst}, which "
-                              "are {ip.src} and {ip.dst} decoded into "
+                              "{command} and {src} and {dst}, which are "
+                              "{ip.src} and {ip.dst} decoded into "
                               "numbers-and-dots form."),
                         default=('{timestamp} '
                                  '{src}:{transport.sport}->{dst}:{transport.dport} '
@@ -37,12 +37,11 @@ def main():
     try:
         for namespace in shark(sys.stdin.buffer):
             print(args.format.format(timestamp=namespace.timestamp,
-                                     ethernet=repr(namespace.ethernet),
-                                     ip=repr(namespace.ip),
-                                     transport=repr(namespace.transport),
+                                     ethernet=namespace.ethernet,
+                                     ip=namespace.ip,
+                                     transport=namespace.transport,
                                      src=namespace.src,
                                      dst=namespace.dst,
-                                     role=namespace.role,
                                      command=namespace.command))
     except BaseException as exc:
         raise
