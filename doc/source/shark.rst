@@ -31,7 +31,9 @@ Extract the information in Python using caproto:
 
 .. code-block:: python
 
-   file = open(data_dir / 'some_network_traffic.pcap', 'rb')
+   from caproto.sync.shark import shark
+
+   file = open('some_network_traffic.pcap', 'rb')
    parsed = shark(file)
 
 The result, ``parsed``, is a generator. Each item is a ``SimpleNamespace`` that
