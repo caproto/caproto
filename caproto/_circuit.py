@@ -249,7 +249,7 @@ class VirtualCircuit:
                                       WriteNotifyResponse)):
                 # Identify the Channel based on its ioid.
                 try:
-                    chan = self._ioids[command.ioid]
+                    chan = self._ioids.pop(command.ioid)
                 except KeyError:
                     err = get_exception(self.our_role, command)
                     raise err("Unknown Channel ioid {!r}".format(command.ioid))
@@ -328,6 +328,11 @@ class VirtualCircuit:
                                       ClearChannelResponse)):
                 self.channels_sid.pop(chan.sid)
                 self.channels.pop(chan.cid)
+                # put in list comprehension (not generator) to not change
+                # the size while iterating
+                for k in [k for k, v in self._ioids.items() if v is chan]:
+                    self._ioids.pop(k)
+
             elif isinstance(command, (ReadNotifyRequest, ReadRequest,
                                       WriteNotifyRequest)):
                 # Stash the ioid for later reference.
