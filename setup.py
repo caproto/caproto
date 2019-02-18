@@ -34,7 +34,7 @@ classifiers = [
 
 
 extras_require = {
-    'standard': ['netifaces', 'numpy'],
+    'standard': ['netifaces', 'numpy', 'dpkt'],
     'async': ['asks', 'curio', 'trio>=0.9.0'],
 }
 extras_require['complete'] = sorted(set(sum(extras_require.values(), [])))
@@ -65,6 +65,7 @@ setup(name='caproto',
               'caproto-put = caproto.commandline.put:main',
               'caproto-monitor = caproto.commandline.monitor:main',
               'caproto-repeater = caproto.commandline.repeater:main',
+              'caproto-shark= caproto.commandline.shark:main',
               'caproto-defaultdict-server = caproto.ioc_examples.defaultdict_server:main',
               'caproto-spoof-beamline = caproto.ioc_examples.spoof_beamline:main',
           ],
