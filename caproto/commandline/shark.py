@@ -18,12 +18,10 @@ from .._utils import ShowVersionAction
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Parse CA network traffic.',
-                                     epilog=f'caproto version {__version__}')
+    parser = argparse.ArgumentParser(
+        description='Parse pcap (tcpdump) output and pretty-print CA commands.',
+        epilog=f'caproto version {__version__}')
     parser.register('action', 'show_version', ShowVersionAction)
-    parser.add_argument('--version', '-V', action='show_version',
-                        default=argparse.SUPPRESS,
-                        help="Show caproto version and exit.")
     parser.add_argument('--format', type=str,
                         help=("Python format string. Available tokens are "
                               "{timestamp}, {ethernet}, {ip}, {transport}, "
@@ -33,18 +31,18 @@ def main():
                         default=('{timestamp} '
                                  '{src}:{transport.sport}->{dst}:{transport.dport} '
                                  '{command}'))
+    parser.add_argument('--version', '-V', action='show_version',
+                        default=argparse.SUPPRESS,
+                        help="Show caproto version and exit.")
     args = parser.parse_args()
-    try:
-        for namespace in shark(sys.stdin.buffer):
-            print(args.format.format(timestamp=namespace.timestamp,
-                                     ethernet=namespace.ethernet,
-                                     ip=namespace.ip,
-                                     transport=namespace.transport,
-                                     src=namespace.src,
-                                     dst=namespace.dst,
-                                     command=namespace.command))
-    except BaseException as exc:
-        raise
+    for namespace in shark(sys.stdin.buffer):
+        print(args.format.format(timestamp=namespace.timestamp,
+                                    ethernet=namespace.ethernet,
+                                    ip=namespace.ip,
+                                    transport=namespace.transport,
+                                    src=namespace.src,
+                                    dst=namespace.dst,
+                                    command=namespace.command))
 
 
 if __name__ == '__main__':

@@ -23,7 +23,7 @@ from .._commands import (AccessRightsResponse, CreateChFailResponse,
                          ReadNotifyResponse, ReadResponse,
                          SearchResponse, ServerDisconnResponse,
                          VersionRequest, VersionResponse, WriteNotifyRequest,
-                         WriteNotifyResponse, WriteRequest, Commands)
+                         WriteNotifyResponse, WriteRequest)
 
 
 # These are similar to read_datagram and read_from_bytestream in _commands.py
