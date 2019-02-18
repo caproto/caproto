@@ -109,7 +109,8 @@ async def update_metadata(chan1, pvdb, ctx):
     assert actual == expected
     # check timestamp
     expected = 4
-    actual = reading.metadata.secondsSinceEpoch
+    # work around pypy bug in _anonymous_
+    actual = reading.metadata.stamp.secondsSinceEpoch
     assert actual == expected
     print('reading:', reading)
 
@@ -309,8 +310,8 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
         (PvpropertyReadOnlyData, None),
         (ca.ChannelNumeric, [1]),
         (ca.ChannelString, ['USD']),
-        (ca.ChannelChar, ['USD']),
-        (ca.ChannelByte, [b'USD']),
+        (ca.ChannelChar, 'USD'),
+        (ca.ChannelByte, b'USD'),
         (ca.ChannelEnum, [b'no']),
     ]
 
@@ -378,7 +379,8 @@ def test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
         'caproto.ioc_examples.io_interrupt',
     )
 
-    skip_if_no_numpy = ('caproto.ioc_examples.mini_beamline',)
+    skip_if_no_numpy = ('caproto.ioc_examples.mini_beamline',
+                        'caproto.ioc_examples.thermo_sim')
 
     if sys.platform == 'win32' and module_name in skip_on_windows:
         raise pytest.skip('win32 TODO')

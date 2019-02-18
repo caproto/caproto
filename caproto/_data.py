@@ -573,7 +573,8 @@ class ChannelData:
 
         if to_type in time_types:
             epics_ts = timestamp_to_epics(data['timestamp'])
-            dbr_metadata.secondsSinceEpoch, dbr_metadata.nanoSeconds = epics_ts
+            stamp = dbr_metadata.stamp
+            stamp.secondsSinceEpoch, stamp.nanoSeconds = epics_ts
 
         convert_attrs = (GraphicControlBase.control_fields +
                          GraphicControlBase.graphic_fields)
