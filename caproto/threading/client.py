@@ -689,7 +689,7 @@ class SharedBroadcaster:
 
         If the server fails to send a Beacon on schedule *and* fails to reply to
         an Echo, the server is assumed dead. A warning is issued, and all PVs
-        are disconnected to initiate reconnection.
+        are disconnected to initiate a reconnection attempt.
         """
         return {address: time.monotonic() - t for address, t in self._last_heard.items()}
 
