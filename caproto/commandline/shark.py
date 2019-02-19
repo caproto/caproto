@@ -13,7 +13,7 @@ Python session, do not import this module; instead import caproto.sync.shark.
 import argparse
 import sys
 from ..sync.shark import shark
-from .. import __version__, CLIENT, SERVER
+from .. import __version__
 from .._utils import ShowVersionAction
 
 
@@ -37,12 +37,12 @@ def main():
     args = parser.parse_args()
     for namespace in shark(sys.stdin.buffer):
         print(args.format.format(timestamp=namespace.timestamp,
-                                    ethernet=namespace.ethernet,
-                                    ip=namespace.ip,
-                                    transport=namespace.transport,
-                                    src=namespace.src,
-                                    dst=namespace.dst,
-                                    command=namespace.command))
+                                 ethernet=namespace.ethernet,
+                                 ip=namespace.ip,
+                                 transport=namespace.transport,
+                                 src=namespace.src,
+                                 dst=namespace.dst,
+                                 command=namespace.command))
 
 
 if __name__ == '__main__':

@@ -4,14 +4,13 @@ from dpkt.ethernet import Ethernet
 from dpkt.tcp import TCP
 from dpkt.udp import UDP
 from socket import inet_ntoa
-import sys
 from types import SimpleNamespace
 
 
-from .. import NEED_DATA, CLIENT, SERVER
-from .._headers import MessageHeader, ExtendedMessageHeader, EchoResponseHeader
+from .. import NEED_DATA
+from .._headers import MessageHeader, ExtendedMessageHeader
 from .._commands import (AccessRightsResponse, CreateChFailResponse,
-                         ClearChannelRequest, ClearChannelResponse,
+                         ClearChannelRequest,
                          ClientNameRequest, CreateChanRequest,
                          CreateChanResponse, EventAddRequest, EventAddResponse,
                          EchoRequest, ErrorResponse, SearchRequest,
@@ -260,21 +259,19 @@ def shark(file):
                 if command is NEED_DATA:
                     break
                 yield SimpleNamespace(timestamp=timestamp,
-                                        ethernet=ethernet,
-                                        src=inet_ntoa(ip.src),
-                                        dst=inet_ntoa(ip.dst),
-                                        ip=ip,
-                                        transport=transport,
-                                        command=command)
+                                      ethernet=ethernet,
+                                      src=inet_ntoa(ip.src),
+                                      dst=inet_ntoa(ip.dst),
+                                      ip=ip,
+                                      transport=transport,
+                                      command=command)
         elif isinstance(transport, UDP):
             address = inet_ntoa(ip.src)
             for command in read_datagram(transport.data, address):
                 yield SimpleNamespace(timestamp=timestamp,
-                                        ethernet=ethernet,
-                                        src=inet_ntoa(ip.src),
-                                        dst=inet_ntoa(ip.dst),
-                                        ip=ip,
-                                        transport=transport,
-                                        command=command)
-        else:
-            pass
+                                      ethernet=ethernet,
+                                      src=inet_ntoa(ip.src),
+                                      dst=inet_ntoa(ip.dst),
+                                      ip=ip,
+                                      transport=transport,
+                                      command=command)
