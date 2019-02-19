@@ -691,3 +691,12 @@ def test_events_off_and_on(ioc, context):
             time.sleep(0.2)
 
     assert monitor_values[1:] == [1, 2, 3, 6, 7, 8, 9]
+
+
+def test_time_since_last_heard(context, ioc):
+    pv, = context.get_pvs(ioc.pvs['str'])
+    pv.wait_for_connection(timeout=10)
+    time.sleep(1)
+    address, t = context.broadcaster.time_since_last_heard().items()
+    assert address  == pv.circuit_manager.address
+    assert 0 < t < 10

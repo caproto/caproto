@@ -673,6 +673,26 @@ class SharedBroadcaster:
             for item in self.unanswered_searches.values():
                 item[-1] = retirement_deadline
 
+    def time_since_last_heard(self):
+        """
+        Map each known server address to seconds since its last message.
+
+        The time is reset to 0 whenever we receive a TCP message related to
+        user activity *or* a Beacon. Servers are expected to send Beacons at
+        regular intervals. If we do not receive either a Beacon or TCP message,
+        we initiate an Echo over TCP, to which the server is expected to
+        promptly respond.
+
+        Therefore, the time reported here should not much exceed
+        ``EPICS_CA_CONN_TMO`` (default 30 seconds unless overriden by that
+        environment variable) if the server is healthy.
+
+        If the server fails to send a Beaon on schedule *and* fails to reply to
+        an Echo, the server is assumed dead. A warning is issued, and all PVs
+        are disconnected to initiate reconnection.
+        """
+        return {address: time.monotonic() - t for address, t in self._last_heard.items()}
+
     def _check_for_unresponsive_servers(self):
         self.log.debug('Broadcaster check for unresponsive servers loop is running.')
 
@@ -680,6 +700,7 @@ class SharedBroadcaster:
         checking = dict()  # map address to deadline for check to resolve
         servers = defaultdict(weakref.WeakSet)  # map address to VirtualCircuitManagers
         last_heard = dict()  # map address to time of last response
+        self._last_heard = last_heard
 
         # Make locals to save getattr lookups in the loop.
         last_beacon = self.last_beacon
