@@ -687,7 +687,7 @@ class SharedBroadcaster:
         ``EPICS_CA_CONN_TMO`` (default 30 seconds unless overriden by that
         environment variable) if the server is healthy.
 
-        If the server fails to send a Beaon on schedule *and* fails to reply to
+        If the server fails to send a Beacon on schedule *and* fails to reply to
         an Echo, the server is assumed dead. A warning is issued, and all PVs
         are disconnected to initiate reconnection.
         """
