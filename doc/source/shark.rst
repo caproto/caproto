@@ -6,7 +6,7 @@ Caproto includes a Python function for parsing and analyzing Channel Access
 network traffic in Python. It consumes pcap format, as produced by ``tcpdump``.
 This functionality is also accessible though a CLI, ``caproto-shark``.
 
-.. info::
+.. important::
 
    This feature of caproto uses an external Python library
    `dpkt <https://dpkt.readthedocs.io/en/latest/>`_ to parse the pcap format
