@@ -698,5 +698,5 @@ def test_time_since_last_heard(context, ioc):
     pv.wait_for_connection(timeout=10)
     time.sleep(1)
     address, t = context.broadcaster.time_since_last_heard().items()
-    assert address  == pv.circuit_manager.address
+    assert address == pv.circuit_manager.address
     assert 0 < t < 10
