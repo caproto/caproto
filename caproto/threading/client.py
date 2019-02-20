@@ -873,10 +873,10 @@ class Context:
     ----------
     broadcaster : SharedBroadcaster, optional
         If None is specified, a fresh one is instantiated.
-    timeout : float
+    timeout : number or None, optional
         Number of seconds before a CaprotoTimeoutError is raised. This default
-        can be overridden at the PV level or for any specific operation.  If
-        unset, the default is 2 seconds.
+        can be overridden at the PV level or for any given operation. If
+        unset, the default is 2 seconds. If None, never timeout.
     host_name : string, optional
         uses value of ``socket.gethostname()`` by default
     client_name : string, optional
@@ -978,10 +978,11 @@ class Context:
             Expected signature: ``f(pv, access_rights)`` where ``pv`` is the
             instance of ``PV`` whose state has changed and ``access_rights`` is
             a member of the caproto ``AccessRights`` enum
-        timeout : float, optional
-            Number of seconds before a CaprotoTimeoutError is raised. This default
-            can be overridden for any specific operation.  If None, fall back
-            to the default timeout set by the Context.
+        timeout : number or None, optional
+            Number of seconds before a CaprotoTimeoutError is raised. This
+            default can be overridden for any specific operation. By default,
+            fall back to the default timeout set by the Context. If None, never
+            timeout.
         """
         if self._user_disconnected:
             raise ContextDisconnectedError("This Context is no longer usable.")
@@ -1620,8 +1621,10 @@ class PV:
 
         Parameters
         ----------
-        timeout : float
-            Seconds before a CaprotoTimeoutError is raised. Default is 2.
+        timeout : number or None, optional
+            Seconds to wait before a CaprotoTimeoutError is raised. Default is
+            ``PV.timeout``, which falls back to Context.timeout if not set. If
+            None, never timeout.
         """
         if timeout is PV_DEFAULT_TIMEOUT:
             timeout = self.timeout
@@ -1633,6 +1636,16 @@ class PV:
 
     @ensure_connected
     def wait_for_connection(self, *, timeout=PV_DEFAULT_TIMEOUT):
+        """
+        Wait for this PV to be connected.
+
+        Parameters
+        ----------
+        timeout : number or None, optional
+            Seconds to wait before a CaprotoTimeoutError is raised. Default is
+            ``PV.timeout``, which falls back to ``PV.context.timeout`` if not
+            set. If None, never timeout.
+        """
         pass
 
     def go_idle(self):
@@ -1688,10 +1701,10 @@ class PV:
             parameter.
         callback : callable or None
             Called with the response as its argument when received.
-        timeout : number or None
-            Number of seconds to wait before raising CaprotoTimeoutError.
-            Default is PV.timeout, which falls back to Context.timeout if not
-            set.
+        timeout : number or None, optional
+            Seconds to wait before a CaprotoTimeoutError is raised. Default is
+            ``PV.timeout``, which falls back to ``PV.context.timeout`` if not
+            set. If None, never timeout.
         data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
             Request specific data type or a class of data types, matched to the
             channel's native data type. Default is Channel's native data type.
@@ -1766,9 +1779,10 @@ class PV:
             parameter.
         callback : callable or None
             Called with the WriteNotifyResponse as its argument when received.
-        timeout : number or None
-            Number of seconds to wait before raising CaprotoTimeoutError.
-            Default is 2.
+        timeout : number or None, optional
+            Seconds to wait before a CaprotoTimeoutError is raised. Default is
+            ``PV.timeout``, which falls back to ``PV.context.timeout`` if not
+            set. If None, never timeout.
         notify : boolean or None
             If None (default), set to True if wait=True or callback is set.
             Can be manually set to True or False. Will raise ValueError if set
@@ -1896,6 +1910,30 @@ class PV:
 
     @ensure_connected
     def time_since_last_heard(self, timeout=PV_DEFAULT_TIMEOUT):
+        """
+        Seconds since last message from the server that provides this channel.
+
+        The time is reset to 0 whenever we receive a TCP message related to
+        user activity *or* a Beacon. Servers are expected to send Beacons at
+        regular intervals. If we do not receive either a Beacon or TCP message,
+        we initiate an Echo over TCP, to which the server is expected to
+        promptly respond.
+
+        Therefore, the time reported here should not much exceed
+        ``EPICS_CA_CONN_TMO`` (default 30 seconds unless overriden by that
+        environment variable) if the server is healthy.
+
+        If the server fails to send a Beacon on schedule *and* fails to reply to
+        an Echo, the server is assumed dead. A warning is issued, and all PVs
+        are disconnected to initiate a reconnection attempt.
+
+        Parameters
+        ----------
+        timeout : number or None, optional
+            Seconds to wait before a CaprotoTimeoutError is raised. Default is
+            ``PV.timeout``, which falls back to ``PV.context.timeout`` if not
+            set. If None, never timeout.
+        """
         address = self.circuit_manager.circuit.address
         return self.context.broadcaster.time_since_last_heard()[address]
 
