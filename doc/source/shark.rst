@@ -25,7 +25,7 @@ Capture network traffic to a using ``tcpdump`` like so:
 
 .. code-block:: bash
 
-   sudo tcpdump -w some_network_traffic.pcap port 5064
+   sudo tcpdump -w some_network_traffic.pcap
 
 Extract the information in Python using caproto:
 
@@ -78,52 +78,34 @@ This feature is also accessible through a CLI:
                       numbers-and-dots form.
      --version, -V    Show caproto version and exit.
 
-Use this, for example, to stream ``tcpdump`` unbuffered to the standard out,
-and pipe it to ``caproto-shark``.
+Use this, for example, to stream ``tcpdump`` to the standard out, and pipe it
+to ``caproto-shark``.
 
 .. code-block:: bash
 
-   sudo tcpdump -U -w - port 5064 | caproto-shark
+   sudo tcpdump -w - | caproto-shark
 
 Example output:
 
 .. code-block:: bash
 
-   $ sudo tcpdump -U -w - port 5064 | caproto-shark
+   $ sudo tcpdump -w - | caproto-shark
    tcpdump: listening on wlp59s0, link-type EN10MB (Ethernet), capture size 262144 bytes
-   1550523983.54872 192.168.86.21:54763->255.255.255.255:5064 VersionRequest(priority=0, version=13)
-   1550523983.54872 192.168.86.21:54763->255.255.255.255:5064 SearchRequest(name='rpi:color', cid=50928, version=13, reply=5)
-   1550523983.57894 192.168.86.21:54763->255.255.255.255:5064 VersionRequest(priority=0, version=13)
-   1550523983.57894 192.168.86.21:54763->255.255.255.255:5064 SearchRequest(name='rpi:color', cid=50928, version=13, reply=5)
-   1550523983.639661 192.168.86.21:54763->255.255.255.255:5064 VersionRequest(priority=0, version=13)
-   1550523983.639661 192.168.86.21:54763->255.255.255.255:5064 SearchRequest(name='rpi:color', cid=50928, version=13, reply=5)
-   1550523983.653664 192.168.86.245:5064->192.168.86.21:54763 VersionResponse(version=13)
-   1550523983.653664 192.168.86.245:5064->192.168.86.21:54763 SearchResponse(port=50421, ip='255.255.255.255', cid=50928, version=13)
-   1550523983.695755 192.168.86.245:5064->192.168.86.21:54763 VersionResponse(version=13)
-   1550523983.695755 192.168.86.245:5064->192.168.86.21:54763 SearchResponse(port=50421, ip='255.255.255.255', cid=50928, version=13)
-
-And an example from a capture of TCP traffic:
-
-.. code-block:: bash
-
-   $ sudo tcpdump -U -w - port 50421 | caproto-shark
-   tcpdump: listening on wlp59s0, link-type EN10MB (Ethernet), capture size 262144 bytes
-   1550523362.981695 192.168.86.21:46212->192.168.86.245:50421 VersionRequest(priority=0, version=13)
-   1550523362.981695 192.168.86.21:46212->192.168.86.245:50421 HostNameRequest(name='pop-os')
-   1550523362.981695 192.168.86.21:46212->192.168.86.245:50421 ClientNameRequest(name='dallan')
-   1550523363.120444 192.168.86.245:50421->192.168.86.21:46212 VersionResponse(version=13)
-   1550523363.121993 192.168.86.21:46212->192.168.86.245:50421 CreateChanRequest(name='rpi:color', cid=0, version=13)
-   1550523363.170899 192.168.86.245:50421->192.168.86.21:46212 AccessRightsResponse(cid=0, access_rights=<AccessRights.WRITE|READ: 3>)
-   1550523363.170899 192.168.86.245:50421->192.168.86.21:46212 CreateChanResponse(data_type=<ChannelType.STRING: 0>, data_count=1, cid=0, sid=1)
-   1550523369.251882 192.168.86.21:46212->192.168.86.245:50421 ReadNotifyRequest(data_type=<ChannelType.STRING: 0>, data_count=0, sid=1, ioid=0)
-   1550523369.298866 192.168.86.245:50421->192.168.86.21:46212 ReadNotifyResponse(data=[b'000000'], data_type=<ChannelType.STRING: 0>, data_count=1, status=CAStatusCode(name='ECA_NORMAL', code=0, code_with_severity=1, severity=<CASeverity.SUCCESS: 1>, success=1, defunct=False, description='Normal successful completion'), ioid=0, metadata=None)
-   1550523374.317729 192.168.86.21:46212->192.168.86.245:50421 WriteNotifyRequest(data=[b'ff0000'], data_type=<ChannelType.STRING: 0>, data_count=1, sid=1, ioid=1, metadata=None)
-   1550523374.366062 192.168.86.245:50421->192.168.86.21:46212 WriteNotifyResponse(data_type=<ChannelType.STRING: 0>, data_count=0, status=CAStatusCode(name='ECA_NORMAL', code=0, code_with_severity=1, severity=<CASeverity.SUCCESS: 1>, success=1, defunct=False, description='Normal successful completion'), ioid=1)
-   1550523386.739346 192.168.86.21:46212->192.168.86.245:50421 ReadNotifyRequest(data_type=<ChannelType.TIME_STRING: 14>, data_count=0, sid=1, ioid=2)
-   1550523386.811133 192.168.86.245:50421->192.168.86.21:46212 ReadNotifyResponse(data=[b'000000'], data_type=<ChannelType.TIME_STRING: 14>, data_count=1, status=CAStatusCode(name='ECA_NORMAL', code=0, code_with_severity=1, severity=<CASeverity.SUCCESS: 1>, success=1, defunct=False, description='Normal successful completion'), ioid=2, metadata=DBR_TIME_STRING(status=<AlarmStatus.NO_ALARM: 0>, severity=<AlarmSeverity.NO_ALARM: 0>, timestamp=1550523385.868129))
-   1550523418.232482 192.168.86.21:46212->192.168.86.245:50421 EchoRequestOrResponse()
-   1550523418.336746 192.168.86.245:50421->192.168.86.21:46212 EchoRequestOrResponse()
-   1550523429.690765 192.168.86.21:46212->192.168.86.245:50421 EventAddRequestOrResponse(data_type=<ChannelType.STRING: 0>, data_count=0, sid=1, subscriptionid=0, low=0.0, high=0.0, to=0.0, mask=13)
-   1550523429.743627 192.168.86.245:50421->192.168.86.21:46212 EventAddResponse(data=[b'000000'], data_type=<ChannelType.STRING: 0>, data_count=1, status=CAStatusCode(name='ECA_NORMAL', code=0, code_with_severity=1, severity=<CASeverity.SUCCESS: 1>, success=1, defunct=False, description='Normal successful completion'), subscriptionid=0, metadata=None)
-   1550523449.254619 192.168.86.21:46212->192.168.86.245:50421 EventCancelRequest(data_type=<ChannelType.STRING: 0>, sid=1, subscriptionid=0)
-   1550523449.320692 192.168.86.245:50421->192.168.86.21:46212 EventCancelResponse(data_type=<ChannelType.STRING: 0>, sid=1, subscriptionid=0, data_count=0)
+   1550679067.619182 192.168.86.21:55928->255.255.255.255:5065 RepeaterRegisterRequest(client_address='0.0.0.0')
+   1550679069.309346 192.168.86.21:55928->255.255.255.255:5064 VersionRequest(priority=0, version=13)
+   1550679069.309346 192.168.86.21:55928->255.255.255.255:5064 SearchRequest(name='rpi:color', cid=24593, version=13, reply=5)
+   1550679069.339563 192.168.86.21:55928->255.255.255.255:5064 VersionRequest(priority=0, version=13)
+   1550679069.339563 192.168.86.21:55928->255.255.255.255:5064 SearchRequest(name='rpi:color', cid=24593, version=13, reply=5)
+   1550679069.381939 192.168.86.245:5064->192.168.86.21:55928 VersionResponse(version=13)
+   1550679069.381939 192.168.86.245:5064->192.168.86.21:55928 SearchResponse(port=50421, ip='255.255.255.255', cid=24593, version=13)
+   1550679069.398823 192.168.86.21:57522->192.168.86.245:50421 VersionRequest(priority=0, version=13)
+   1550679069.398823 192.168.86.21:57522->192.168.86.245:50421 HostNameRequest(name='pop-os')
+   1550679069.398823 192.168.86.21:57522->192.168.86.245:50421 ClientNameRequest(name='dallan')
+   1550679069.423308 192.168.86.245:5064->192.168.86.21:55928 VersionResponse(version=13)
+   1550679069.423308 192.168.86.245:5064->192.168.86.21:55928 SearchResponse(port=50421, ip='255.255.255.255', cid=24593, version=13)
+   1550679069.481746 192.168.86.245:50421->192.168.86.21:57522 VersionResponse(version=13)
+   1550679069.482269 192.168.86.21:57522->192.168.86.245:50421 CreateChanRequest(name='rpi:color', cid=0, version=13)
+   1550679069.541407 192.168.86.245:50421->192.168.86.21:57522 AccessRightsResponse(cid=0, access_rights=<AccessRights.WRITE|READ: 3>)
+   1550679069.541407 192.168.86.245:50421->192.168.86.21:57522 CreateChanResponse(data_type=<ChannelType.STRING: 0>, data_count=1, cid=0, sid=1)
+   1550679076.427868 192.168.86.21:57522->192.168.86.245:50421 ReadNotifyRequest(data_type=<ChannelType.STRING: 0>, data_count=0, sid=1, ioid=0)
+   1550679076.488508 192.168.86.245:50421->192.168.86.21:57522 ReadNotifyResponse(data=[b'000000'], data_type=<ChannelType.STRING: 0>, data_count=1, status=CAStatusCode(name='ECA_NORMAL', code=0, code_with_severity=1, severity=<CASeverity.SUCCESS: 1>, success=1, defunct=False, description='Normal successful completion'), ioid=0, metadata=None)

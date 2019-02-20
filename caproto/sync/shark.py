@@ -23,6 +23,7 @@ from .._commands import (AccessRightsResponse, CreateChFailResponse,
                          SearchResponse, ServerDisconnResponse,
                          VersionRequest, VersionResponse, WriteNotifyRequest,
                          WriteNotifyResponse, WriteRequest)
+from .._utils import ValidationError
 
 
 # These are similar to read_datagram and read_from_bytestream in _commands.py
@@ -44,7 +45,8 @@ def read_datagram(data, address):
         else:
             payload_bytes = None
         command = _class.from_wire(header, payload_bytes,
-                                   sender_address=address)
+                                   sender_address=address,
+                                   validate=True)
         commands.append(command)
     return commands
 
@@ -112,7 +114,7 @@ def read_from_bytestream(data):
 
     # Receive the buffer (zero-copy).
     payload_bytes = memoryview(data)[header_size:total_size]
-    command = class_.from_wire(header, payload_bytes)
+    command = class_.from_wire(header, payload_bytes, validate=True)
     # Advance the buffer.
     return data[total_size:], command, 0
 
@@ -228,7 +230,10 @@ def infer_command_class(header):
     try:
         return one_way_commands[id_]
     except KeyError:
-        return sniffers[id_](header)
+        try:
+            return sniffers[id_](header)
+        except KeyError:
+            raise ValidationError("Unknown command ID")
 
 
 def shark(file):
@@ -237,7 +242,7 @@ def shark(file):
 
     This function is also accessible via a CLI installed with caproto. Example::
 
-        sudo tcpdump -U -w - port <PORT> | caproto-shark
+        sudo tcpdump -w - | caproto-shark
 
     Parameters
     ----------
@@ -248,30 +253,38 @@ def shark(file):
     command_context : SimpleNamespace
         Contains timestamp, ethernet, src, dst, ip, transport, and command.
     """
+    banned = set()
     for timestamp, buffer in Reader(file):
         ethernet = Ethernet(buffer)
         ip = ethernet.data
         transport = ip.data
-        if isinstance(transport, TCP):
-            data = bytearray(transport.data)
-            while True:
-                data, command, _ = read_from_bytestream(data)
-                if command is NEED_DATA:
-                    break
-                yield SimpleNamespace(timestamp=timestamp,
-                                      ethernet=ethernet,
-                                      src=inet_ntoa(ip.src),
-                                      dst=inet_ntoa(ip.dst),
-                                      ip=ip,
-                                      transport=transport,
-                                      command=command)
-        elif isinstance(transport, UDP):
-            address = inet_ntoa(ip.src)
-            for command in read_datagram(transport.data, address):
-                yield SimpleNamespace(timestamp=timestamp,
-                                      ethernet=ethernet,
-                                      src=inet_ntoa(ip.src),
-                                      dst=inet_ntoa(ip.dst),
-                                      ip=ip,
-                                      transport=transport,
-                                      command=command)
+        try:
+            if isinstance(transport, TCP):
+                if (ip.src, transport.sport) in banned:
+                    continue
+                data = bytearray(transport.data)
+                while True:
+                    data, command, _ = read_from_bytestream(data)
+                    if command is NEED_DATA:
+                        break
+                    yield SimpleNamespace(timestamp=timestamp,
+                                          ethernet=ethernet,
+                                          src=inet_ntoa(ip.src),
+                                          dst=inet_ntoa(ip.dst),
+                                          ip=ip,
+                                          transport=transport,
+                                          command=command)
+            elif isinstance(transport, UDP):
+                if (ip.src, transport.sport) in banned:
+                    continue
+                address = inet_ntoa(ip.src)
+                for command in read_datagram(transport.data, address):
+                    yield SimpleNamespace(timestamp=timestamp,
+                                          ethernet=ethernet,
+                                          src=inet_ntoa(ip.src),
+                                          dst=inet_ntoa(ip.dst),
+                                          ip=ip,
+                                          transport=transport,
+                                          command=command)
+        except ValidationError:
+            banned.add((ip.src, transport.sport))
