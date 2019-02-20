@@ -117,17 +117,17 @@ def read_from_bytestream(data):
     return data[total_size:], command, 0
 
 
-class EventAddRequestOrResponse(EventAddRequest):
+class EventAddRequestOrResponse(EventAddRequest, register=False):
     "We cannot tell if it is a request or a response."
     pass
 
 
-class EchoRequestOrResponse(EchoRequest):
+class EchoRequestOrResponse(EchoRequest, register=False):
     "We cannot tell if it is a request or a response."
     pass
 
 
-class ClearChannelRequestOrResponse(ClearChannelRequest):
+class ClearChannelRequestOrResponse(ClearChannelRequest, register=False):
     "We cannot tell if it is a request or a response."
     pass
 
