@@ -159,6 +159,13 @@ class RemoteProtocolError(ProtocolError):
     ...
 
 
+class ValidationError(CaprotoError):
+    """
+    Could not parse into valid command.
+    """
+    ...
+
+
 class CaprotoTimeoutError(TimeoutError, CaprotoError):
     ...
 
