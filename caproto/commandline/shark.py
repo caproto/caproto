@@ -35,14 +35,18 @@ def main():
                         default=argparse.SUPPRESS,
                         help="Show caproto version and exit.")
     args = parser.parse_args()
-    for namespace in shark(sys.stdin.buffer):
-        print(args.format.format(timestamp=namespace.timestamp,
-                                 ethernet=namespace.ethernet,
-                                 ip=namespace.ip,
-                                 transport=namespace.transport,
-                                 src=namespace.src,
-                                 dst=namespace.dst,
-                                 command=namespace.command))
+    try:
+        for namespace in shark(sys.stdin.buffer):
+            print(args.format.format(timestamp=namespace.timestamp,
+                                     ethernet=namespace.ethernet,
+                                     ip=namespace.ip,
+                                     transport=namespace.transport,
+                                     src=namespace.src,
+                                     dst=namespace.dst,
+                                     command=namespace.command))
+
+    except KeyboardInterrupt:
+        return
 
 
 if __name__ == '__main__':

@@ -33,6 +33,8 @@ from .._utils import ValidationError
 
 def read_datagram(data, address):
     "Parse bytes from one datagram into one or more commands."
+    if len(data) < 16:
+        raise ValidationError("Not enough bytes to be a CA header")
     barray = bytearray(data)
     commands = []
     while barray:
