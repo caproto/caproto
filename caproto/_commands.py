@@ -387,33 +387,31 @@ Commands[SERVER] = {}
 _commands = set()
 
 
-class _MetaDirectionalMessage(type):
-    # see what you've done, @tacaswell and @danielballan?
-    def __new__(metacls, name, bases, dct):
-        if name.endswith('Request'):
-            direction = REQUEST
-            command_dict = Commands[CLIENT]
-        else:
-            direction = RESPONSE
-            command_dict = Commands[SERVER]
-
-        dct['DIRECTION'] = direction
-        new_class = super().__new__(metacls, name, bases, dct)
-
-        if new_class.ID is not None:
-            command_dict[new_class.ID] = new_class
-
-        if name in ('Beacon, '):
-            Commands[CLIENT][new_class.ID] = new_class
-            Commands[SERVER][new_class.ID] = new_class
-
-        _commands.add(new_class)
-        return new_class
-
-
-class Message(metaclass=_MetaDirectionalMessage):
+class Message:
     __slots__ = ('header', 'buffers', 'sender_address')
     ID = None  # integer, to be overriden by subclass
+
+    def __init_subclass__(cls, register=True):
+        if register:
+            # Add this class to the global registries of commands.
+            name = cls.__name__
+            if name.endswith('Request'):
+                direction = REQUEST
+                command_dict = Commands[CLIENT]
+            else:
+                direction = RESPONSE
+                command_dict = Commands[SERVER]
+
+            cls.DIRECTION = direction
+
+            if cls.ID is not None:
+                command_dict[cls.ID] = cls
+
+            if name in ('Beacon, '):
+                Commands[CLIENT][cls.ID] = cls
+                Commands[SERVER][cls.ID] = cls
+
+            _commands.add(cls)
 
     def __init__(self, header, *buffers, validate=True, sender_address=None):
         self.header = header
