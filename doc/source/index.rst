@@ -153,6 +153,8 @@ learning exercises.
    iocs
    mock-records
    servers
+   shark
+   loggers
 
 .. toctree::
    :maxdepth: 2
@@ -160,7 +162,6 @@ learning exercises.
 
    basics
    api
-   loggers
 
 .. toctree::
    :maxdepth: 2

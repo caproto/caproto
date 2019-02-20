@@ -1,6 +1,7 @@
 codecov
 coverage
 curio
+dpkt
 flake8
 netifaces
 pyepics
