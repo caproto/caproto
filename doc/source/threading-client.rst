@@ -353,6 +353,18 @@ the most recent update and then any future updates.
    ...
    x.circuit_manager.events_on()
 
+Server Health Check
+-------------------
+
+To check how long it has been since each known server was last heard from, use:
+
+.. code-block:: python
+
+   ctx.broadcaster.time_since_last_heard()
+
+See the :meth:`SharedBroadcaster.time_since_last_heard` API documentation below
+for details.
+
 .. _threading_loggers:
 
 Loggers for Debugging
