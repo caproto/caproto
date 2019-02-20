@@ -1894,6 +1894,11 @@ class PV:
         for sub in self.subscriptions.values():
             sub.clear()
 
+    @ensure_connected
+    def time_since_last_heard(self, timeout=PV_DEFAULT_TIMEOUT):
+        address = self.circuit_manager.circuit.address
+        return self.context.broadcaster.time_since_last_heard()[address]
+
     # def __hash__(self):
     #     return id((self.context, self.circuit_manager, self.name))
 

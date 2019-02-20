@@ -700,3 +700,4 @@ def test_time_since_last_heard(context, ioc):
     (address, t), = context.broadcaster.time_since_last_heard().items()
     assert address == pv.circuit_manager.circuit.address
     assert 0 < t < 10
+    pv.time_since_last_heard() - t < 10  # wide tolerance here for slow CI

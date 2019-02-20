@@ -356,11 +356,18 @@ the most recent update and then any future updates.
 Server Health Check
 -------------------
 
-To check how long it has been since each known server was last heard from, use:
+To check how much time has passed (in seconds) since each known server was last
+heard from, use:
 
 .. code-block:: python
 
    ctx.broadcaster.time_since_last_heard()
+
+As a convenience, check on the server connected to a specific PV using:
+
+.. code-block:: python
+
+   x.time_since_last_heard()
 
 See the :meth:`SharedBroadcaster.time_since_last_heard` API documentation below
 for details.
