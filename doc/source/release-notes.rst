@@ -2,37 +2,47 @@
 Release History
 ***************
 
-Unreleased
-==========
+v0.3.0 (2019-02-20)
+===================
+
+This release introduces :doc:`caproto-shark <shark>` and other convenient
+improvements. It also contains many bug-fixes, some critical.
 
 Features
 --------
 
-The threading client---and, thereby, the pyepics-compatible shim---have
-greater feature parity with epics-base.
+* Add :doc:`shark`.
+* Add server "healthcheck" methods to the threading client, which expose
+  information collected about how recently each server has communicated with
+  the client. See :ref:`server_health_check`.
+* Add a new example IOC who PVs are dynamic (change during runtime). Include a
+  "waveform" (array) PV in the simple example.
+* Make the default timeout configurable per Context and per PV, in addition to
+  per a given operation. This makes it possible to adjust all the timeouts in
+  one place during debugging.
+* Use a random starting ID for message identifiers as an extra layer of
+  protections against collisions, especially in the context of CI testing where
+  many clients and servers are started up in rapid succession.
 
-* In previous releases, the client resent any unanswered ``SearchRequests`` at
-  a fast regular rate forever. Now, it backs off from that initial rate and
-  rests at a slow interval to avoid creating too much wasteful network traffic.
-  There is a new method,
-  :meth:`~caproto.threading.client.SharedBroadcaster.cancel`, for manually
-  canceling some requests altogether if a response is never excepected (e.g. a
-  typo). There is also a new method for manually resending all unanswered
-  search requests,
-  :meth:`~caproto.threading.client.SharedBroadcaster.search_now`,
-  primarily for debugging. All unanswered search requests are automatically
-  resent when the user searches for a new PV or when a new server appears on
-  the network (see next point).
-* The client monitors server beacons to notice changes in the CA servers on the
-  network. When a new server appears, all standing unanswered search requests
-  are given a fresh start and immediately resent. If a server does not send a
-  beacon within the expected interval and has also not sent any TCP packets
-  related to user activity during that interval, the client silently initiates
-  an Echo. If the server still does not respond, it is deemed unresponsive. The
-  client logs a warning and disconnects all circuits from that server so that
-  their PVs can begin attempting to reconnect to a responsive server.
+Bug Fixes
+---------
 
-v0.2.3 (2018-01-02)
+* Only attempt to use ``SO_REUSEPORT`` socket option if support for it has been
+  compiled into Python.
+* A critical bug only affecting Windows had broken asyncio servers on Windows
+  in a previous release.
+* The threading client was wrongly issuing warnings if it received multiple
+  responses to a search for a PV from *the same server*.
+* Add missing user_offset pvproperty to MotorFields.
+* Fix several race conditions in the threading client.
+* Improve cleanup of resources: ensure sockets are explicitly closed and
+  threads explicitly joined. (More work is needed, but progress was made.)
+* Fix "leak" of ioids (IO message identifiers).
+* Handle setting empty lists as values through the pyepics-compat client.
+* In the trio-backed server, remove usage of deprecated ``trio.Queue``.
+* Many other small fixes and safeguards.
+
+v0.2.3 (2019-01-02)
 ===================
 
 Usability Improvements

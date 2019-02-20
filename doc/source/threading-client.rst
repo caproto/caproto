@@ -353,6 +353,8 @@ the most recent update and then any future updates.
    ...
    x.circuit_manager.events_on()
 
+.. _server_health_check:
+
 Server Health Check
 -------------------
 
