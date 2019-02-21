@@ -222,6 +222,35 @@ class VirtualCircuit:
             self.states.disconnect()
             return
 
+        if isinstance(command, EventAddResponse):
+            # well, this is dirty...
+            if (command.subscriptionid in self.event_cancel_commands and
+                    command.payload_size == 0):
+                try:
+                    ev_add = self.event_cancel_commands[command.subscriptionid]
+                except KeyError:
+                    # EventCancelResponse messages never get sent,
+                    # instead we get sent EventAddResponse with 0
+                    # payload.  This means we can have the following
+                    # race condition:
+
+                    #  -> cancel request
+                    #  <- an update that really is an 0 length array
+                    #  <- the cancel response
+
+                    # where the real update is treated as the
+                    # EventCancelResponse.  Thus, if get
+                    # EventCancelResponse or EventAddResponse which is
+                    # not associated with an active subscription but
+                    # has 0 payload, just drop it on the floor and
+                    # move on.
+                    return
+                # Otherwise, transmute the Command to a EventCancelRequest
+                command = EventCancelResponse(command.data_type,
+                                              ev_add.sid,
+                                              command.subscriptionid,
+                                              command.data_count)
+
         # Filter for Commands that are pertinent to a specific Channel, as
         # opposed to the Circuit as a whole:
         if isinstance(command, (ClearChannelRequest, ClearChannelResponse,
@@ -270,21 +299,7 @@ class VirtualCircuit:
                     event_add = self.event_add_commands[command.subscriptionid]
                 except KeyError:
                     if command.payload_size == 0:
-                        # EventCancelResponse messages never get sent,
-                        # instead we get sent EventAddResponse with 0
-                        # payload.  This means we can have the following
-                        # race condition:
-                        #
-                        #  -> cancel request
-                        #  <- an update that really is an 0 length array
-                        #  <- the cancel response
-                        #
-                        # where the real update is treated as the
-                        # EventCancelResponse.  Thus, if get
-                        # EventCancelResponse or EventAddResponse
-                        # which is not associated with an active subscription
-                        # but has 0 payload, just drop it on the floor and move
-                        # on.
+
                         return
 
                     err = get_exception(self.our_role, command)
@@ -375,16 +390,6 @@ class VirtualCircuit:
                 self.event_cancel_commands[command.subscriptionid] = \
                     self.event_add_commands[command.subscriptionid]
             elif isinstance(command, EventCancelResponse):
-                self.event_add_commands.pop(command.subscriptionid)
-                self.event_cancel_commands.pop(command.subscriptionid)
-            elif (isinstance(command, EventAddResponse) and
-                  command.payload_size == 0):
-                # we have:
-                #  A) seen a EventCancelRequest so the add event is moved to the
-                #     cancel dict
-                #  B) have received a EventAddResponse with a size 0 payload
-                #  C) in the actual implementation, we never see
-                #     EventCancelResponse but rather get a 0 payload
                 self.event_add_commands.pop(command.subscriptionid)
                 self.event_cancel_commands.pop(command.subscriptionid)
             # We are done. Run the Channel state change callbacks.
