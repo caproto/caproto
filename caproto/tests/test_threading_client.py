@@ -450,6 +450,10 @@ def test_multithreaded_many_get_pvs(ioc, context, thread_count,
     for connected in _multithreaded_exec(_test, thread_count):
         assert connected
 
+    pv, = context.get_pvs(ioc.pvs['int'])
+    for thread_pv in pvs.values():
+        assert pv is thread_pv
+
     assert len(set(pvs.values())) == 1
 
 
