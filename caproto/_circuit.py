@@ -71,6 +71,8 @@ class VirtualCircuit:
         self._data = bytearray()
         self._ioids = {}  # map ioid to Channel
         self.event_add_commands = {}  # map subscriptionid to EventAdd command
+        # map subscriptionid to EventAdd command as we wait for them to die
+        self.event_cancel_commands = {}
         # There are only used by the convenience methods, to auto-generate ids.
         if our_role is CLIENT:
             self._channel_id_counter = ThreadsafeCounter(
@@ -253,12 +255,38 @@ class VirtualCircuit:
                 except KeyError:
                     err = get_exception(self.our_role, command)
                     raise err("Unknown Channel ioid {!r}".format(command.ioid))
-            elif isinstance(command, (EventAddResponse, EventCancelRequest,
-                                      EventCancelResponse)):
+            elif isinstance(command, (EventCancelRequest,)):
                 # Identify the Channel based on its subscriptionid
                 try:
                     event_add = self.event_add_commands[command.subscriptionid]
                 except KeyError:
+                    err = get_exception(self.our_role, command)
+                    raise err("Unrecognized subscriptionid {!r}"
+                              "".format(command.subscriptionid))
+                chan = self.channels_sid[event_add.sid]
+            elif isinstance(command, (EventAddResponse, EventCancelResponse)):
+                # Identify the Channel based on its subscriptionid
+                try:
+                    event_add = self.event_add_commands[command.subscriptionid]
+                except KeyError:
+                    if command.payload_size == 0:
+                        # EventCancelResponse messages never get sent,
+                        # instead we get sent EventAddResponse with 0
+                        # payload.  This means we can have the following
+                        # race condition:
+                        #
+                        #  -> cancel request
+                        #  <- an update that really is an 0 length array
+                        #  <- the cancel response
+                        #
+                        # where the real update is treated as the
+                        # EventCancelResponse.  Thus, if get
+                        # EventCancelResponse or EventAddResponse
+                        # which is not associated with an active subscription
+                        # but has 0 payload, just drop it on the floor and move
+                        # on.
+                        return
+
                     err = get_exception(self.our_role, command)
                     raise err("Unrecognized subscriptionid {!r}"
                               "".format(command.subscriptionid))
@@ -342,9 +370,23 @@ class VirtualCircuit:
                 # {EventAddResponse, EventCancelRequest, EventCancelResponse}
                 # send or received in the future are valid.
                 self.event_add_commands[command.subscriptionid] = command
+            elif isinstance(command, EventCancelRequest):
+                # if we see a cancel request, note that so we know
+                self.event_cancel_commands[command.subscriptionid] = \
+                    self.event_add_commands[command.subscriptionid]
             elif isinstance(command, EventCancelResponse):
                 self.event_add_commands.pop(command.subscriptionid)
-
+                self.event_cancel_commands.pop(command.subscriptionid)
+            elif (isinstance(command, EventAddResponse) and
+                  command.payload_size == 0):
+                # we have:
+                #  A) seen a EventCancelRequest so the add event is moved to the
+                #     cancel dict
+                #  B) have received a EventAddResponse with a size 0 payload
+                #  C) in the actual implementation, we never see
+                #     EventCancelResponse but rather get a 0 payload
+                self.event_add_commands.pop(command.subscriptionid)
+                self.event_cancel_commands.pop(command.subscriptionid)
             # We are done. Run the Channel state change callbacks.
             for transition in transitions:
                 chan.state_changed(*transition)
