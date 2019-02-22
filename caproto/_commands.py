@@ -298,7 +298,7 @@ def read_datagram(data, address, role):
     while barray:
         header = MessageHeader.from_buffer(barray)
         barray = barray[_MessageHeaderSize:]
-        _class = get_command_class(role, header)
+        _class = Commands[role][header.command]
         payload_size = header.payload_size
         if _class.HAS_PAYLOAD:
             payload_bytes = barray[:header.payload_size]
@@ -365,7 +365,7 @@ def read_from_bytestream(data, role):
     if num_bytes_needed > 0:
         return data, NEED_DATA, num_bytes_needed
 
-    _class = get_command_class(role, header)
+    _class = Commands[role][header.command]
 
     header_size = ctypes.sizeof(header)
     total_size = header_size + header.payload_size
