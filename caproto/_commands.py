@@ -288,11 +288,7 @@ def extract_metadata(payload, data_type):
 
 
 def get_command_class(role, header):
-    _class = Commands[role][header.command]
-    # Special case for EventCancelResponse which is coded inconsistently.
-    if role is SERVER and header.command == 1 and header.payload_size == 0:
-        _class = Commands[role][2]
-    return _class
+    return Commands[role][header.command]
 
 
 def read_datagram(data, address, role):
@@ -302,7 +298,7 @@ def read_datagram(data, address, role):
     while barray:
         header = MessageHeader.from_buffer(barray)
         barray = barray[_MessageHeaderSize:]
-        _class = get_command_class(role, header)
+        _class = Commands[role][header.command]
         payload_size = header.payload_size
         if _class.HAS_PAYLOAD:
             payload_bytes = barray[:header.payload_size]
@@ -369,7 +365,7 @@ def read_from_bytestream(data, role):
     if num_bytes_needed > 0:
         return data, NEED_DATA, num_bytes_needed
 
-    _class = get_command_class(role, header)
+    _class = Commands[role][header.command]
 
     header_size = ctypes.sizeof(header)
     total_size = header_size + header.payload_size
@@ -1071,8 +1067,6 @@ class EventCancelResponse(Message):
         Integer ID for this subscription.
     """
     # Actually this is coded with the ID = 1 like EventAdd*.
-    # This is the only weird exception so we special-case it in the function
-    # get_command_class.
     __slots__ = ()
     ID = 2
     HAS_PAYLOAD = False
