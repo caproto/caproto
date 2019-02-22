@@ -1,1 +1,1 @@
-from . import server  # noqa
+from . import server, client  # noqa
