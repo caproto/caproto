@@ -55,7 +55,7 @@ def teardown_module(module):
 
 @contextlib.contextmanager
 def temporary_pyepics_access(pvname, **kwargs):
-    import epics
+    epics = pytest.importorskip('epics')
     pv = epics.PV(pvname, **kwargs)
     assert pv.wait_for_connection(), 'unable to connect to {}'.format(pv)
     yield pv
@@ -254,7 +254,7 @@ def test_waveform_put(benchmark, waveform_size, backend, log_level):
 @contextlib.contextmanager
 def bench_pyepics_many_connections(pv_names, *, initial_value=None,
                                    log_level='DEBUG'):
-    import epics
+    epics = pytest.importorskip('epics')
 
     pvs = []
 
