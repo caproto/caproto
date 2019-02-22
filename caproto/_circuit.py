@@ -245,7 +245,7 @@ class VirtualCircuit:
                     # has 0 payload, just drop it on the floor and
                     # move on.
                     return
-                # Otherwise, transmute the Command to a EventCancelRequest
+                # Otherwise, transmute the Command to a EventCancelResponse.
                 command = EventCancelResponse(command.data_type,
                                               ev_add.sid,
                                               command.subscriptionid,
@@ -386,7 +386,9 @@ class VirtualCircuit:
                 # send or received in the future are valid.
                 self.event_add_commands[command.subscriptionid] = command
             elif isinstance(command, EventCancelRequest):
-                # if we see a cancel request, note that so we know
+                # If we see a cancel request, note that so we know to interpret
+                # the next EventAddResponse with an empty payload as an
+                # EventCancelResponse.
                 self.event_cancel_commands[command.subscriptionid] = \
                     self.event_add_commands[command.subscriptionid]
             elif isinstance(command, EventCancelResponse):
