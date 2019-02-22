@@ -84,8 +84,11 @@ class VirtualCircuit:
                 self.ioid_data[command.ioid] = command
                 await user_event.set()
             elif isinstance(command, ca.EventAddResponse):
-                user_queue = self.subscriptionids[command.subscriptionid]
-                await user_queue.put(command)
+                if command.subscriptionid in self.circuit.event_add_commands:
+                    user_queue = self.subscriptionids[command.subscriptionid]
+                    await user_queue.put(command)
+                else:
+                    self.subscriptionids.pop(command.subscriptionid)
             elif isinstance(command, ca.EventCancelResponse):
                 self.subscriptionids.pop(command.subscriptionid)
             elif isinstance(command, ca.ErrorResponse):
