@@ -163,7 +163,7 @@ def sniff_version_header(header):
     if header.parameter1 == 1:
         return VersionResponse
     else:
-        raise ValueError("Unidentifiable command.")
+        raise ValidationError("Unidentifiable command.")
 
 
 def sniff_search_header(header):
