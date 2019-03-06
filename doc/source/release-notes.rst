@@ -14,7 +14,7 @@ Fixes
 * Fix servers' support for empty (zero-length) data.
 * Assume the *maximum* length of a channel initialized with empty data is one
   (i.e. assume it is scalar).
-* Address an ambiguity in the protocol: a subscription update
+* Address an ambiguity in the Channel Access protocol: a subscription update
   (``EventAddResponse``) indicating empty data and a confirmation of a request
   to cancel the subscription (``EventCancelResponse``) serialize identically,
   and so the client must make a best effort to interpret based on context which
