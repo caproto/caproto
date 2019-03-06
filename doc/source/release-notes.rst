@@ -2,6 +2,13 @@
 Release History
 ***************
 
+v0.3.2 (2019-03-06)
+===================
+
+This release inclues just one minor fix to :doc:`caproto-shark <shark>`,
+enabling it to more reliably skip over irrelevant network traffic (i.e. traffic
+that is not Channel Access messages).
+
 v0.3.1 (2019-03-05)
 ===================
 
