@@ -2,6 +2,24 @@
 Release History
 ***************
 
+v0.3.1 (2019-03-05)
+===================
+
+This is a bug-fix release addressing issues related to empty (zero-length)
+channel data.
+
+Fixes
+-----
+
+* Fix servers' support for empty (zero-length) data.
+* Assume the *maximum* length of a channel initialized with empty data is one
+  (i.e. assume it is scalar).
+* Address an ambiguity in the Channel Access protocol: a subscription update
+  (``EventAddResponse``) indicating empty data and a confirmation of a request
+  to cancel the subscription (``EventCancelResponse``) serialize identically,
+  and so the client must make a best effort to interpret based on context which
+  of the two is intended.
+
 v0.3.0 (2019-02-20)
 ===================
 
@@ -96,7 +114,7 @@ v0.2.2 (2018-11-15)
 ===================
 
 The release improves the performance of the threading client and adds support
-for value-based alarms. Additionally, it provides more control over serach and
+for value-based alarms. Additionally, it provides more control over search and
 implements back-off in a way more consistent with (but not yet fully consistent
 with) EPICS' reference implementation.
 
@@ -111,7 +129,7 @@ greater feature parity with epics-base.
   rests at a slow interval to avoid creating too much wasteful network traffic.
   There is a new method,
   :meth:`~caproto.threading.client.SharedBroadcaster.cancel`, for manually
-  canceling some requests altogether if a response is never excepected (e.g. a
+  canceling some requests altogether if a response is never expected (e.g. a
   typo). There is also a new method for manually resending all unanswered
   search requests,
   :meth:`~caproto.threading.client.SharedBroadcaster.search_now`,
@@ -195,9 +213,9 @@ Server Performance Tuning
   in less than 0.001 seconds, the read will reflect the new value. This
   behavior is in the spirit of, but distinct from, EPICS' "synchronous writes."
   EPICS allows a device to block while writing if it promises to finish quickly
-  (< 0.1 miliseconds). We take a different approach, making all writes
+  (< 0.1 milliseconds). We take a different approach, making all writes
   asynchronous. This ensures that an accidentally-slow write cannot lock up the
-  server. It adds latency to some reads, up to a hard maximum of 1 milisecond,
+  server. It adds latency to some reads, up to a hard maximum of 1 millisecond,
   giving the effect of synchronous write whenever the write finishes fast.
 
 The release also includes one small new feature: in the threading client,
@@ -291,7 +309,7 @@ v0.1.2 (2018-08-31)
 ===================
 
 This is a bug-fix release fixing some critical bugs. We recommend that all
-users ugprade.
+users upgrade.
 
 * Fix critical typo in threading client's search functionality that could cause
   it to conflate addresses from different search responses and then attempt to
