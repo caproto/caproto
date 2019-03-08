@@ -44,7 +44,7 @@ def _clean_format_args(args = None):
         and integer data values, improving compatibility with EPICS caget.
 
     EPICS caget allows multiple contradicting format specifications and discards
-        all except the last one according to command line order.
+        all except the last one according to the order in which they are specified.
         For example, for a floating point pv with the value 56.3452093 the
         following format will be displayed depending on argument sequence:
 
@@ -97,7 +97,7 @@ def _clean_format_args(args = None):
 
 def _gen_data_format(args = None, data = None):
     '''
-    Generates format specification for printing 'response.data' elements
+    Generates format specification for printing 'response.data' field
 
       args - class that contains data on cmd line arguments (returned by parser.parseargs())
       data - iterable object (typically numpy.narray), which contains data entries returned
@@ -181,9 +181,10 @@ def _print_response_data(data=None, data_fmt=None):
 
     s = ""
 
-    # There must be at least some data
+    # There must be at least some elements in 'data' array
     if data is None or len(data)==0:
-        return s
+        # Used to display empty array sent by the server
+        return "[]"
 
     # Format does NOT NEED to be set for the function to print properly.
     #    The default python printing format for the type is used then.
@@ -272,13 +273,14 @@ def main():
                         help="Show caproto version and exit.")
     
     fmt_group_float = parser.add_argument_group(title="Floating point type format",
-        description=("Default: Use %g format. Ignored if --format or --terse is used"))
+        description=("If --format is set, the following arguments change formatting of the "
+            "{response.data} field if floating point value is displayed. The default format is %g."))
     fmt_group_float.add_argument('-e', dest="float_e", type=int, metavar="<nr>", action="store", 
-        help=("Use %%e format with precision of <nr> digits"))
+        help=("Use %%e format with precision of <nr> digits (e.g. -e5 or -e 5)"))
     fmt_group_float.add_argument('-f', dest="float_f", type=int, metavar="<nr>", action="store", 
-        help=("Use %%f format with precision of <nr> digits"))
+        help=("Use %%f format with precision of <nr> digits (e.g. -f5 or -f 5)"))
     fmt_group_float.add_argument('-g', dest="float_g", type=int, metavar="<nr>", action="store", 
-        help=("Use %%g format with precision of <nr> digits"))
+        help=("Use %%g format with precision of <nr> digits (e.g. -g5 or -g 5)"))
     fmt_group_float.add_argument('-s', dest="float_s", action="store_true", 
         help=("Get value as string (honors server-side precision"))
     fmt_group_float.add_argument('-lx', dest="float_lx", action="store_true", 
@@ -289,18 +291,18 @@ def main():
         help=("Round to long integer and print as binary number"))
 
     fmt_group_int = parser.add_argument_group(title="Integer number format",
-        description="Default: Print as decimal number. Ignored if --format or --terse is used")
+        description="If --format is set, the following arguments change formatting of the "
+            "{response.data} field if integer value is displayed. Decimal number is displayed by default.")
     fmt_group_int.add_argument('-0x', dest="int_0x", action="store_true", 
         help=("Print as hex number"))
     fmt_group_int.add_argument('-0o', dest="int_0o", action="store_true", 
         help=("Print as octal number"))
     fmt_group_int.add_argument('-0b', dest="int_0b", action="store_true", 
-        help=("Print as octal number"))
+        help=("Print as binary number"))
 
-    fmt_group_sep = parser.add_argument_group(title="Alternate output field separator",
-        description="Ignored if --format or --terse is used")
+    fmt_group_sep = parser.add_argument_group(title="Custom output field separator")
     fmt_group_sep.add_argument('-F', type=str, metavar="<ofs>", action="store", 
-        help=("Use <ofs> as an alternate output field separator"))
+        help=("Use <ofs> as an alternate output field separator (e.g. -F*, -F'*', -F '*', -F ' ** ')"))
                             
     args = parser.parse_args()
     if args.no_color:
@@ -362,7 +364,7 @@ def main():
             # In 'format_str': replace all instances of '{response.data}' with '{response_data}'
             p = re.compile("{response.data}")
             format_str = p.sub("{response_data}", format_str)
-            # If separator is specified, then put the separators between each field
+            # If a separator is specified (argument -F), then put the separators between each field
             if data_fmt.separator is not None:
                 p = re.compile("} *{")
                 format_str = p.sub("}"+"{}".format(data_fmt.separator)+"{", format_str)

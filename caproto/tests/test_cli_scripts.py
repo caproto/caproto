@@ -1,6 +1,7 @@
 import sys
 import pytest
 import subprocess
+
 from caproto.sync.client import read, write, subscribe, block
 
 from .conftest import dump_process_output
@@ -70,6 +71,7 @@ def test_subscribe_options(more_kwargs, ioc):
 
 fmt1 = '{response.data[0]}'
 fmt2 = '{timestamp:%%H:%%M}'
+fmt3 = '{response.data}'
 
 
 # Skip the long-running ones.
@@ -84,10 +86,15 @@ fmt2 = '{timestamp:%%H:%%M}'
                           ('caproto-get', ('float', '-d', '0')),
                           ('caproto-get', ('float', '-d', 'STRING')),
                           ('caproto-get', ('float', '-d', 'string')),
+                          ('caproto-get', ('float', '-d', 'DBR_STRING')),
+                          ('caproto-get', ('float', '-d', 'dbr_string')),
                           ('caproto-get', ('float', '-d', 'CONTROL')),
                           ('caproto-get', ('float', '-d', 'control')),
+                          ('caproto-get', ('float', '-d', 'DBR_CONTROL')),
+                          ('caproto-get', ('float', '-d', 'dbr_control')),
                           ('caproto-get', ('float', '--format', fmt1)),
                           ('caproto-get', ('float', '--format', fmt2)),
+                          ('caproto-get', ('float', '--format', fmt3)),
                           ('caproto-get', ('enum',)),
                           ('caproto-get', ('enum', '-n')),
                           ('caproto-get', ('float', '-n')),  # no effect
@@ -108,14 +115,41 @@ fmt2 = '{timestamp:%%H:%%M}'
                           ('caproto-put', ('float', '3.16', '-l')),
                           ('caproto-put', ('float', '3.16', '-v')),
                           ('caproto-put', ('float', '3.16', '-vvv')),
+                          # Tests for output formatting arguments: 
+                          #    floating point -e -f -g -s -lx -lo -lb
+                          ('caproto-get', ('float', '-e5')),
+                          ('caproto-get', ('float', '-e', '5')),
+                          ('caproto-get', ('float', '-f5')),
+                          ('caproto-get', ('float', '-f', '5')),
+                          ('caproto-get', ('float', '-g5')),
+                          ('caproto-get', ('float', '-g', '5')),
+                          ('caproto-get', ('float', '-s')),
+                          ('caproto-get', ('float', '-lx')),
+                          ('caproto-get', ('float', '-lo')),
+                          ('caproto-get', ('float', '-lb')),
+                          # All at once (the last one is used)
+                          ('caproto-get', ('float', '-e5', '-f5', '-g5', '-s', '-lx', '-lo', '-lb')),
+                          #    integer -0x -0o -0b
+                          ('caproto-get', ('int', '-0x')),
+                          ('caproto-get', ('int', '-0o')),
+                          ('caproto-get', ('int', '-0b')),
+                          # All at once (the last one is used)
+                          ('caproto-get', ('int', '-0x', '-0o', '-0b')),
+                          # Test separator (single character)
+                          ('caproto-get', ('float', '-F-')),
+                          ('caproto-get', ('float', "-F'-'")),
+                          ('caproto-get', ('float', '-F', '-')),
+                          ('caproto-get', ('float', '-F', "'='")),
+                          ('caproto-get', ('waveform', '-F', "'-'")),
+                          # Test separator (multiple characters, not supported by EPICS caget)
+                          ('caproto-get', ('float', '--wide', '-F', "' = '")),
                           ])
-def test_cli(command, args, ioc):
+def test_cli(command, args, ioc, ):
     args = fix_arg_prefixes(ioc, args)
     p = subprocess.Popen([sys.executable, '-um', 'caproto.tests.example_runner',
                           '--script', command] + list(args),
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE
                          )
-
     _subprocess_communicate(p, command, timeout=10.0)
 
 
