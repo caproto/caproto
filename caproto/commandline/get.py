@@ -46,7 +46,7 @@ def _clean_format_args(args = None):
     EPICS caget allows multiple contradicting format specifications and discards
         all except the last one according to the order in which they are specified.
         For example, for a floating point pv with the value 56.3452093 the
-        following format will be displayed depending on argument sequence:
+        following format will be applied depending on the sequence of arguments:
 
         ARGUMENTS                DISPLAYED VALUE
 
@@ -55,11 +55,15 @@ def _clean_format_args(args = None):
         -f5 -e5 -lx              0x38
 
     This function clears data in 'args' for all arguments from the same format group except 
-    the last. Since format arguments for floating point and integer data belong to 
-    separate group of parameters, processing is performed separately for floats and ints.
+    the last in sequence as the arguments appear in command line. Since format arguments 
+    for floating point and integer data belong to separate group of parameters, processing 
+    is performed separately for floats and ints.
 
     args - class that contains data extracted from command line arguments (returned by parser.parseargs())
     Function changes fields of 'args' and returns no value.
+
+    Note: this function is a patch, which necessary because equivalent functionality is not available
+    from 'argparse' module.
     '''
 
     double_fmt = ["e", "f", "g", "s", "lx", "lo", "lb"]
@@ -135,7 +139,8 @@ def _gen_data_format(args = None, data = None):
             df.format = ".{}g".format(args.float_g)
         elif args.float_s:
             # This feature is not implemented yet. Instead use floating point
-            #    value supplied by the server and print it in %f format
+            #    value supplied by the server and print it in %f format.
+            #    This is still gives some elementary support for the argument -s.
             df.format = "f"   
             df.float_server_precision = True
         elif args.float_lx:  # Rounded hexadecimal
@@ -154,18 +159,19 @@ def _gen_data_format(args = None, data = None):
     # 'data' contains an array of integers
     if(isinstance(data[0], numbers.Integral)):
         if args.int_0x:
-            df.format = "X"
+            df.format = "X"   # Hexadecimal
             df.prefix = "0x"
         elif args.int_0o:
-            df.format = "o"
+            df.format = "o"   # Octal
             df.prefix = "0o"
         elif args.int_0b:
-            df.format = "b"
+            df.format = "b"   # Binary
             df.prefix = "0b"
 
     # Separator: may be a single character (quoted or not quoted) or quoted multiple characters
     #          including spaces. EPICS caget allows only single character separators.
-    #          Quoted separator also may be an empty string (no separator)
+    #          Quoted separator also may be an empty string (no separator), but this is
+    #          a meaningless feature.
     if args.F is not None:
         df.separator = args.F
 
@@ -173,7 +179,7 @@ def _gen_data_format(args = None, data = None):
 
 def _print_response_data(data=None, data_fmt=None):
     '''
-    Prints data contained in iterable 'data' according to format specifications 'data_fmt'
+    Prints data contained in iterable 'data' to a string according to format specifications 'data_fmt'
     Returns a string containing printed data.
     '''
 
@@ -183,23 +189,26 @@ def _print_response_data(data=None, data_fmt=None):
 
     # There must be at least some elements in 'data' array
     if data is None or len(data)==0:
-        # Used to display empty array sent by the server
+        # Used to display empty array received from the server
         return "[]"
 
     # Format does NOT NEED to be set for the function to print properly.
     #    The default python printing format for the type is used then.
 
-    sep = " "
+    sep = " " # Default
+    # Note, that the separator may be an empty string and it still overrides the default " "
     if data_fmt.separator is not None: sep = data_fmt.separator
 
     if not data_fmt.no_brackets:
         s += "["
     add_sep = False
     for v in data:
-        if(isinstance(v, bytes)): v = v.decode()  # Convert class 'bytes' to regular string for printing
+        # Strings (or arrays of strings) are returned by the server in the form of lists
+        #    of type 'bytes'. They need to be converted to regular strings for printing.
+        if(isinstance(v, bytes)): v = v.decode()  
         if add_sep: s += sep
         add_sep = True
-        # Round the value if needed
+        # Round the value if needed (if floating point number needs to be converted to closest int)
         if data_fmt.float_round and isinstance(v, float):
             v = int(round(v)) 
         s += ("{0:}{1:"+data_fmt.format+"}").format(data_fmt.prefix, v)
