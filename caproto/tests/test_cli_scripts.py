@@ -127,13 +127,13 @@ fmt3 = '{response.data}'
                           ('caproto-get', ('float', '-lx')),
                           ('caproto-get', ('float', '-lo')),
                           ('caproto-get', ('float', '-lb')),
-                          # All at once (the last one is used)
+                          # All at once (the last one is used for output formatting)
                           ('caproto-get', ('float', '-e5', '-f5', '-g5', '-s', '-lx', '-lo', '-lb')),
                           #    integer -0x -0o -0b
                           ('caproto-get', ('int', '-0x')),
                           ('caproto-get', ('int', '-0o')),
                           ('caproto-get', ('int', '-0b')),
-                          # All at once (the last one is used)
+                          # All at once (the last one is used for output formatting)
                           ('caproto-get', ('int', '-0x', '-0o', '-0b')),
                           # Test separator (single character)
                           ('caproto-get', ('float', '-F-')),
