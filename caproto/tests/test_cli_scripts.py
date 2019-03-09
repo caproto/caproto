@@ -115,7 +115,7 @@ fmt3 = '{response.data}'
                           ('caproto-put', ('float', '3.16', '-l')),
                           ('caproto-put', ('float', '3.16', '-v')),
                           ('caproto-put', ('float', '3.16', '-vvv')),
-                          # Tests for output formatting arguments: 
+                          # Tests for output formatting arguments:
                           #    floating point -e -f -g -s -lx -lo -lb
                           ('caproto-get', ('float', '-e5')),
                           ('caproto-get', ('float', '-e', '5')),
