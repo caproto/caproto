@@ -167,6 +167,34 @@ def test_cli(command, args, ioc, ):
                           ('float', '-p', '0'),
                           ('float', '-p', '99'),
                           ('float', '-w', '2'),
+                          # Tests for output formatting arguments:
+                          #    floating point -e -f -g -s -lx -lo -lb
+                          ('float', '-e5'),
+                          ('float', '-e', '5'),
+                          ('float', '-f5'),
+                          ('float', '-f', '5'),
+                          ('float', '-g5'),
+                          ('float', '-g', '5'),
+                          ('float', '-s'),
+                          ('float', '-lx'),
+                          ('float', '-lo'),
+                          ('float', '-lb'),
+                          # All at once (the last one is used for output formatting)
+                          ('float', '-e5', '-f5', '-g5', '-s', '-lx', '-lo', '-lb'),
+                          #    integer -0x -0o -0b
+                          ('int', '-0x'),
+                          ('int', '-0o'),
+                          ('int', '-0b'),
+                          # All at once (the last one is used for output formatting)
+                          ('int', '-0x', '-0o', '-0b'),
+                          # Test separator (single character)
+                          ('float', '-F-'),
+                          ('float', "-F'-'"),
+                          ('float', '-F', '-'),
+                          ('float', '-F', "'='"),
+                          ('waveform', '-F', "'-'"),
+                          # Test separator (multiple characters, not supported by EPICS monitor)
+                          ('float', '-F', "' = '"),
                           ])
 def test_monitor(args, ioc):
     args = fix_arg_prefixes(ioc, args)
