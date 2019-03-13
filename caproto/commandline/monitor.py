@@ -18,6 +18,8 @@ import time
 from ..sync.client import subscribe, block
 from .. import SubscriptionType, set_handler, __version__
 from .._utils import ShowVersionAction
+from .cli_print_formats import (print_response_data, gen_data_format,
+                                clean_format_args, format_str_adjust)
 
 
 def main():
@@ -65,7 +67,56 @@ def main():
     parser.add_argument('--version', '-V', action='show_version',
                         default=argparse.SUPPRESS,
                         help="Show caproto version and exit.")
+
+    fmt_group_float = parser.add_argument_group(
+        title="Floating point type format",
+        description=("If --format is set, the following arguments change formatting of the "
+                     "{response.data} field if floating point value is displayed. "
+                     "The default format is %g."))
+    fmt_group_float.add_argument(
+        '-e', dest="float_e", type=int, metavar="<nr>", action="store",
+        help=("Use %%e format with precision of <nr> digits (e.g. -e5 or -e 5)"))
+    fmt_group_float.add_argument(
+        '-f', dest="float_f", type=int, metavar="<nr>", action="store",
+        help=("Use %%f format with precision of <nr> digits (e.g. -f5 or -f 5)"))
+    fmt_group_float.add_argument(
+        '-g', dest="float_g", type=int, metavar="<nr>", action="store",
+        help=("Use %%g format with precision of <nr> digits (e.g. -g5 or -g 5)"))
+    fmt_group_float.add_argument(
+        '-s', dest="float_s", action="store_true",
+        help=("Get value as string (honors server-side precision"))
+    fmt_group_float.add_argument(
+        '-lx', dest="float_lx", action="store_true",
+        help=("Round to long integer and print as hex number"))
+    fmt_group_float.add_argument(
+        '-lo', dest="float_lo", action="store_true",
+        help=("Round to long integer and print as octal number"))
+    fmt_group_float.add_argument(
+        '-lb', dest="float_lb", action="store_true",
+        help=("Round to long integer and print as binary number"))
+
+    fmt_group_int = parser.add_argument_group(
+        title="Integer number format",
+        description="If --format is set, the following arguments change formatting of the "
+                    "{response.data} field if integer value is displayed. "
+                    "Decimal number is displayed by default.")
+    fmt_group_int.add_argument('-0x', dest="int_0x", action="store_true",
+                               help=("Print as hex number"))
+    fmt_group_int.add_argument('-0o', dest="int_0o", action="store_true",
+                               help=("Print as octal number"))
+    fmt_group_int.add_argument('-0b', dest="int_0b", action="store_true",
+                               help=("Print as binary number"))
+
+    fmt_group_sep = parser.add_argument_group(title="Custom output field separator")
+    fmt_group_sep.add_argument(
+        '-F', type=str, metavar="<ofs>", action="store",
+        help=("Use <ofs> as an alternate output field separator (e.g. -F*, -F'*', -F '*', -F ' ** ')"))
+
     args = parser.parse_args()
+    # Remove contradicting format arguments. This function may be simply removed from code
+    #        if the functionality is not desired.
+    clean_format_args(args=args)
+
     if args.no_color:
         set_handler(color=False)
     if args.verbose:
@@ -89,15 +140,30 @@ def main():
 
     def callback(pv_name, response):
         tokens['callback_count'] += 1
+
+        data_fmt = gen_data_format(args=args, data=response.data)
+
         if args.format is None:
-            format_str = ("{pv_name: <40}  {timestamp:%Y-%m-%d %H:%M:%S.%f} "
-                          "{response.data}")
+            if args.F is None:
+                format_str = ("{pv_name: <40}  {timestamp:%Y-%m-%d %H:%M:%S.%f} "
+                              "{response.data}")
+            else:
+                format_str = ("{pv_name}  {timestamp:%Y-%m-%d %H:%M:%S.%f} "
+                              "{response.data}")
         else:
             format_str = args.format
+
+        format_str = format_str_adjust(format_str=format_str, data_fmt=data_fmt)
+
+        response_data_str = print_response_data(data=response.data,
+                                                data_fmt=data_fmt)
+
         tokens['pv_name'] = pv_name
         tokens['response'] = response
         dt = datetime.fromtimestamp(response.metadata.timestamp)
         tokens['timestamp'] = dt
+        tokens['response_data'] = response_data_str
+
         if history:
             # Add a {timedelta} token using the previous timestamp.
             td = dt - history.pop()
