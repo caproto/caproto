@@ -13,224 +13,11 @@ Python session, do not import this module; instead import caproto.sync.client.
 import argparse
 from datetime import datetime
 import logging
-import numbers
-import re
-import sys
 from .. import ChannelType, set_handler, field_types, __version__
 from ..sync.client import read
 from .._utils import ShowVersionAction
-
-
-class _DataFormat:
-
-    def __init__(self):
-        self.format = ""
-        self.prefix = ""
-        self.separator = None
-        self.float_round = False    # floating point data value
-        #                             must be rounded to the nearest integer (long)
-        self.float_server_precision = False  # The floating point data value must be requested
-        #                                      from the server as string
-        self.no_brackets = False             # Print data as scalar (no brackets)
-
-    def is_set(self):
-        ''' Returns True if format string is not empty '''
-        return len(self.format) > 0
-
-
-def _clean_format_args(args=None):
-    '''
-    The function removes contradicting arguments, which define output format for floating point
-        and integer data values, improving compatibility with EPICS caget.
-
-    EPICS caget allows multiple contradicting format specifications and discards
-        all except the last one according to the order in which they are specified.
-        For example, for a floating point pv with the value 56.3452093 the
-        following format will be applied depending on the sequence of arguments:
-
-        ARGUMENTS                DISPLAYED VALUE
-
-        -e5 -lx -f5              56.34521
-        -f5 -lx -e5              5.63452e+01
-        -f5 -e5 -lx              0x38
-
-    This function clears data in 'args' for all arguments from the same format group except
-    the last in sequence as the arguments appear in command line. Since format arguments
-    for floating point and integer data belong to separate group of parameters, processing
-    is performed separately for floats and ints.
-
-    args - class that contains data extracted from command line arguments (returned by parser.parseargs())
-    Function changes fields of 'args' and returns no value.
-
-    Note: this function is a patch, which necessary because equivalent functionality is not available
-    from 'argparse' module.
-    '''
-
-    double_fmt = ["e", "f", "g", "s", "lx", "lo", "lb"]
-    int_fmt = ["0x", "0o", "0b"]
-
-    def _find_last_arg(list_args=[]):
-        sa = sys.argv
-        fm_selected = None
-        for ag in reversed(sa):
-            for fm in list_args:
-                p = re.compile("^-{}.*".format(fm))
-                if p.match(ag) is not None:
-                    fm_selected = fm
-                    break
-            if fm_selected is not None:
-                break
-        return fm_selected
-
-    arg_float = _find_last_arg(list_args=double_fmt)
-    if arg_float is not None:
-        if arg_float != "e":
-            args.float_e = None
-        if arg_float != "f":
-            args.float_f = None
-        if arg_float != "g":
-            args.float_g = None
-        if arg_float != "s":
-            args.float_s = False
-        if arg_float != "lx":
-            args.float_lx = False
-        if arg_float != "lo":
-            args.float_lo = False
-        if arg_float != "lb":
-            args.float_lb = False
-
-    arg_int = _find_last_arg(list_args=int_fmt)
-    if arg_int is not None:
-        if arg_int != "0x":
-            args.int_0x = False
-        if arg_int != "0o":
-            args.int_0o = False
-        if arg_int != "0b":
-            args.int_Ob = False
-
-
-def _gen_data_format(args=None, data=None):
-    '''
-    Generates format specification for printing 'response.data' field
-
-      args - class that contains data on cmd line arguments (returned by parser.parseargs())
-      data - iterable object (typically numpy.narray), which contains data entries returned
-                by the server
-
-      Returns the instance of DataFormat class. Format is set to empty string if the function
-          is unable to select correct format.
-    '''
-
-    # Remove contradicting format arguments. This function may be simply removed from code
-    #        if the functionality is not desired.
-    _clean_format_args(args=args)
-
-    df = _DataFormat()
-
-    # Both arguments 'arg' and 'data' are needed to produce meaningful result
-    if args is None or data is None or len(data) == 0:
-        return df
-
-    # If no format was specified, the default is "g" (as in EPICS caget)
-    df.format = "g"
-
-    # 'data' contains a list (or array) of strings
-    if(isinstance(data[0], str) or isinstance(data[0], bytes)):
-        df.format = "s"
-
-    # 'data' contains an array of floats
-    if(isinstance(data[0], float)):
-        # Check if any of the format specification arguments were passed
-        if args.float_e is not None:
-            df.format = ".{}e".format(args.float_e)
-        elif args.float_f is not None:
-            df.format = ".{}f".format(args.float_f)
-        elif args.float_g is not None:
-            df.format = ".{}g".format(args.float_g)
-        elif args.float_s:
-            # This feature is not implemented yet. Instead use floating point
-            #    value supplied by the server and print it in %f format.
-            #    This is still gives some elementary support for the argument -s.
-            df.format = "f"
-            df.float_server_precision = True
-        elif args.float_lx:  # Rounded hexadecimal
-            df.format = "X"
-            df.prefix = "0x"
-            df.float_round = True
-        elif args.float_lo:  # Rounded octal
-            df.format = "o"
-            df.prefix = "0o"
-            df.float_round = True
-        elif args.float_lb:  # Rounded binary
-            df.format = "b"
-            df.prefix = "0b"
-            df.float_round = True
-
-    # 'data' contains an array of integers
-    if(isinstance(data[0], numbers.Integral)):
-        if args.int_0x:
-            df.format = "X"   # Hexadecimal
-            df.prefix = "0x"
-        elif args.int_0o:
-            df.format = "o"   # Octal
-            df.prefix = "0o"
-        elif args.int_0b:
-            df.format = "b"   # Binary
-            df.prefix = "0b"
-
-    # Separator: may be a single character (quoted or not quoted) or quoted multiple characters
-    #          including spaces. EPICS caget allows only single character separators.
-    #          Quoted separator also may be an empty string (no separator), but this is
-    #          a meaningless feature.
-    if args.F is not None:
-        df.separator = args.F
-
-    return df
-
-
-def _print_response_data(data=None, data_fmt=None):
-    '''
-    Prints data contained in iterable 'data' to a string according to format specifications 'data_fmt'
-    Returns a string containing printed data.
-    '''
-
-    if data_fmt is None:
-        data_fmt = _DataFormat()
-
-    s = ""
-
-    # There must be at least some elements in 'data' array
-    if data is None or len(data) == 0:
-        # Used to display empty array received from the server
-        return "[]"
-
-    # Format does NOT NEED to be set for the function to print properly.
-    #    The default python printing format for the type is used then.
-
-    sep = " "  # Default
-    # Note, that the separator may be an empty string and it still overrides the default " "
-    if data_fmt.separator is not None:
-        sep = data_fmt.separator
-
-    if not data_fmt.no_brackets:
-        s += "["
-    add_sep = False
-    for v in data:
-        # Strings (or arrays of strings) are returned by the server in the form of lists
-        #    of type 'bytes'. They need to be converted to regular strings for printing.
-        if(isinstance(v, bytes)):
-            v = v.decode()
-        if add_sep:
-            s += sep
-        add_sep = True
-        # Round the value if needed (if floating point number needs to be converted to closest int)
-        if data_fmt.float_round and isinstance(v, float):
-            v = int(round(v))
-        s += ("{0:}{1:" + data_fmt.format + "}").format(data_fmt.prefix, v)
-    if not data_fmt.no_brackets:
-        s += "]"
-
-    return s
+from .cli_print_formats import (print_response_data, gen_data_format,
+                                clean_format_args, format_str_adjust)
 
 
 def main():
@@ -341,6 +128,10 @@ def main():
         help=("Use <ofs> as an alternate output field separator (e.g. -F*, -F'*', -F '*', -F ' ** ')"))
 
     args = parser.parse_args()
+    # Remove contradicting format arguments. This function may be simply removed from code
+    #        if the functionality is not desired.
+    clean_format_args(args=args)
+
     if args.no_color:
         set_handler(color=False)
     if args.verbose:
@@ -374,7 +165,7 @@ def main():
                             force_int_enums=args.n,
                             repeater=not args.no_repeater)
 
-            data_fmt = _gen_data_format(args=args, data=response.data)
+            data_fmt = gen_data_format(args=args, data=response.data)
 
             if args.format is None:
                 if args.F is None:
@@ -394,15 +185,10 @@ def main():
                 # TODO Make this look more like caget -a
                 format_str = '{pv_name} {timestamp} {response.data} {response.status.name}'
 
-            # In 'format_str': replace all instances of '{response.data}' with '{response_data}'
-            p = re.compile("{response.data}")
-            format_str = p.sub("{response_data}", format_str)
-            # If a separator is specified (argument -F), then put the separators between each field
-            if data_fmt.separator is not None:
-                p = re.compile("} *{")
-                format_str = p.sub("}" + "{}".format(data_fmt.separator) + "{", format_str)
+            format_str = format_str_adjust(format_str=format_str, data_fmt=data_fmt)
 
-            response_data_str = _print_response_data(data=response.data, data_fmt=data_fmt)
+            response_data_str = print_response_data(data=response.data,
+                                                    data_fmt=data_fmt)
 
             tokens = dict(pv_name=pv_name, response=response, response_data=response_data_str)
             if hasattr(response.metadata, 'timestamp'):
