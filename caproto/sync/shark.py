@@ -4,7 +4,6 @@ from dpkt.ethernet import Ethernet
 from dpkt.tcp import TCP
 from dpkt.udp import UDP
 from dpkt.ip import IP
-from dpkt.ip6 import IP6
 from socket import inet_ntoa
 from types import SimpleNamespace
 
