@@ -140,7 +140,7 @@ we used it to help write caproto itself, and we have had a link to it in our
 are situations where using wireshark is a better choice. However:
 
 * Caproto's implementation enables in-depth analysis of traffic in Python
-  (making timing plots in matplotlib, etc.)
+  (making timing plots in Matplotlib, etc.)
 * The output from ``caproto-shark`` is more descriptive in some areas as a
   natural consequence of reusing the same command objects that back caproto's
   clients and servers.
