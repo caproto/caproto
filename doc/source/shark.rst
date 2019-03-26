@@ -21,6 +21,9 @@ This functionality is also accessible though a CLI, ``caproto-shark``.
       pip install caproto[standard]  # all of caproto's network-related extras
       pip install caproto[complete]  # all of caproto's extras
 
+Caproto and tcpdump
+===================
+
 Capture network traffic to a using ``tcpdump`` like so:
 
 .. code-block:: bash
@@ -83,13 +86,13 @@ to ``caproto-shark``.
 
 .. code-block:: bash
 
-   sudo tcpdump -w - | caproto-shark
+   sudo tcpdump -U -w - | caproto-shark
 
 Example output:
 
 .. code-block:: bash
 
-   $ sudo tcpdump -w - | caproto-shark
+   $ sudo tcpdump -U -w - | caproto-shark
    tcpdump: listening on wlp59s0, link-type EN10MB (Ethernet), capture size 262144 bytes
    1550679067.619182 192.168.86.21:55928->255.255.255.255:5065 RepeaterRegisterRequest(client_address='0.0.0.0')
    1550679069.309346 192.168.86.21:55928->255.255.255.255:5064 VersionRequest(priority=0, version=13)
@@ -109,3 +112,39 @@ Example output:
    1550679069.541407 192.168.86.245:50421->192.168.86.21:57522 CreateChanResponse(data_type=<ChannelType.STRING: 0>, data_count=1, cid=0, sid=1)
    1550679076.427868 192.168.86.21:57522->192.168.86.245:50421 ReadNotifyRequest(data_type=<ChannelType.STRING: 0>, data_count=0, sid=1, ioid=0)
    1550679076.488508 192.168.86.245:50421->192.168.86.21:57522 ReadNotifyResponse(data=[b'000000'], data_type=<ChannelType.STRING: 0>, data_count=1, status=CAStatusCode(name='ECA_NORMAL', code=0, code_with_severity=1, severity=<CASeverity.SUCCESS: 1>, success=1, defunct=False, description='Normal successful completion'), ioid=0, metadata=None)
+
+Windows
+=======
+
+The Windows program `WinDump <https://www.winpcap.org/windump/>`_ provides
+similar functionality to ``tcpdump``. List the available network interfaces
+like so:
+
+.. code-block:: bash
+
+   WinDump.exe -D
+
+And then use it similarly to ``tcpdump``:
+
+.. code-block:: bash
+
+   WinDump.exe -i <INTERFACE> -U -w - | caproto-shark
+
+Why not just use wireshark?
+===========================
+
+There is already a
+`wireshark plugin for CA <https://github.com/mdavidsaver/cashark>`_. In fact,
+we used it to help write caproto itself, and we have had a link to it in our
+:doc:`references` section from the start. Who needs ``caproto-shark``? There
+are situations where using wireshark is a better choice. However:
+
+* Caproto's implementation enables in-depth analysis of traffic in Python
+  (making timing plots in Matplotlib, etc.)
+* The output from ``caproto-shark`` is more descriptive in some areas as a
+  natural consequence of reusing the same command objects that back caproto's
+  clients and servers.
+* It's handy to bundle pcap analysis with caproto---batteries included, nothing
+  else to install.
+* Since caproto already has all of the byte-parsing logic anyway, integrating
+  with pcap streams only took a day or two of effort and ~300 lines of code.
