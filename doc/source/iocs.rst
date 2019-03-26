@@ -126,7 +126,7 @@ and write to them.
 
 .. ipython:: python
 
-    a, b = ctx.get_pvs('simple:A', 'simple:B', 'simple:C')
+    a, b, c = ctx.get_pvs('simple:A', 'simple:B', 'simple:C')
     a.read()
     b.read()
     c.read()
