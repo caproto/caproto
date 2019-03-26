@@ -129,3 +129,22 @@ And then use it similarly to ``tcpdump``:
 .. code-block:: bash
 
    WinDump.exe -i <INTERFACE> -U -w - | caproto-shark
+
+Why not just use wireshark?
+===========================
+
+There is already a
+`wireshark plugin for CA <https://github.com/mdavidsaver/cashark>`_. In fact,
+we used it to help write caproto itself, and we have had a link to it in our
+:doc:`references` section from the start. Who needs ``caproto-shark``? There
+are situations where using wireshark is a better choice. However:
+
+* Caproto's implementation enables in-depth analysis of traffic in Python
+  (making timing plots in matplotlib, etc.)
+* The output from ``caproto-shark`` is more descriptive in some areas as a
+  natural consequence of reusing the same command objects that back caproto's
+  clients and servers.
+* It's handy to bundle pcap analysis with caproto---batteries included, nothing
+  else to install.
+* Since caproto already has all of the byte-parsing logic anyway, integrating
+  with pcap streams only took a day or two of effort and ~300 lines of code.
