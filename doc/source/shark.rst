@@ -83,13 +83,13 @@ to ``caproto-shark``.
 
 .. code-block:: bash
 
-   sudo tcpdump -w - | caproto-shark
+   sudo tcpdump -U -w - | caproto-shark
 
 Example output:
 
 .. code-block:: bash
 
-   $ sudo tcpdump -w - | caproto-shark
+   $ sudo tcpdump -U -w - | caproto-shark
    tcpdump: listening on wlp59s0, link-type EN10MB (Ethernet), capture size 262144 bytes
    1550679067.619182 192.168.86.21:55928->255.255.255.255:5065 RepeaterRegisterRequest(client_address='0.0.0.0')
    1550679069.309346 192.168.86.21:55928->255.255.255.255:5064 VersionRequest(priority=0, version=13)
