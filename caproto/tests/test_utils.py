@@ -5,7 +5,7 @@ from caproto._headers import MessageHeader
 
 
 def test_broadcast_auto_address_list():
-    netifaces = pytest.importorskip('netifaces')
+    pytest.importorskip('netifaces')
     env = os.environ.copy()
     try:
         os.environ['EPICS_CA_ADDR_LIST'] = ''
