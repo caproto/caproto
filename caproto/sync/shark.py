@@ -3,7 +3,7 @@ from dpkt.pcap import Reader
 from dpkt.ethernet import Ethernet
 from dpkt.tcp import TCP
 from dpkt.udp import UDP
-from dpkt.ip6 import IP6
+from dpkt.ip import IP
 from socket import inet_ntoa
 from types import SimpleNamespace
 
@@ -260,17 +260,14 @@ def shark(file):
     for timestamp, buffer in Reader(file):
         ethernet = Ethernet(buffer)
         ip = ethernet.data
+        if not isinstance(ip, IP):
+            continue
         transport = ip.data
         if not isinstance(transport, (TCP, UDP)):
             continue
         try:
-            try:
-                src = inet_ntoa(ip.src)
-                dst = inet_ntoa(ip.dst)
-            except OSError:
-                if isinstance(ip, IP6):
-                    raise ValidationError("CA does not support IP6")
-                raise  # some other reason for the OSError....
+            src = inet_ntoa(ip.src)
+            dst = inet_ntoa(ip.dst)
             if isinstance(transport, TCP):
                 if (ip.src, transport.sport) in banned:
                     continue
