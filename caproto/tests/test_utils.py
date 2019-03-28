@@ -5,11 +5,13 @@ from caproto._headers import MessageHeader
 
 
 def test_broadcast_auto_address_list():
+    pytest.importorskip('netifaces')
     env = os.environ.copy()
     try:
         os.environ['EPICS_CA_ADDR_LIST'] = ''
         os.environ['EPICS_CA_AUTO_ADDR_LIST'] = 'YES'
-        assert ca.get_address_list() == ['255.255.255.255']
+        expected = [bcast for addr, bcast in ca.get_netifaces_addresses()]
+        assert ca.get_address_list() == expected
     finally:
         os.environ = env
 

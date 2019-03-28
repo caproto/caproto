@@ -273,7 +273,10 @@ def get_address_list():
     addr_list = env['EPICS_CA_ADDR_LIST']
 
     if not addr_list or auto_addr_list.lower() == 'yes':
-        return ['255.255.255.255']
+        if netifaces is not None:
+            return [bcast for addr, bcast in get_netifaces_addresses()]
+        else:
+            return ['255.255.255.255']
 
     return addr_list.split(' ')
 
