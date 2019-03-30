@@ -188,7 +188,7 @@ def main():
             format_str = format_str_adjust(format_str=format_str, data_fmt=data_fmt)
 
             response_data_str = format_response_data(data=response.data,
-                                                    data_fmt=data_fmt)
+                                                     data_fmt=data_fmt)
 
             tokens = dict(pv_name=pv_name, response=response, response_data=response_data_str)
             if hasattr(response.metadata, 'timestamp'):
