@@ -16,7 +16,7 @@ import logging
 from .. import ChannelType, set_handler, field_types, __version__
 from ..sync.client import read
 from .._utils import ShowVersionAction
-from .cli_print_formats import (print_response_data, gen_data_format,
+from .cli_print_formats import (format_response_data, gen_data_format,
                                 clean_format_args, format_str_adjust)
 
 
@@ -187,7 +187,7 @@ def main():
 
             format_str = format_str_adjust(format_str=format_str, data_fmt=data_fmt)
 
-            response_data_str = print_response_data(data=response.data,
+            response_data_str = format_response_data(data=response.data,
                                                     data_fmt=data_fmt)
 
             tokens = dict(pv_name=pv_name, response=response, response_data=response_data_str)
