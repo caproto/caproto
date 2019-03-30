@@ -21,10 +21,6 @@ class _DataPrintFormat:
         #                                      from the server as string
         self.no_brackets = False             # Print data as scalar (no brackets)
 
-    def is_set(self):
-        ''' Returns True if format string is not empty '''
-        return len(self.format) > 0
-
 
 def _clean_args_for_group(args_parsed=None, group_args=None, group_attrs=None):
     '''
@@ -211,7 +207,7 @@ def format_str_adjust(format_str=None, data_fmt=None):
     return format_str
 
 
-def print_response_data(data=None, data_fmt=None):
+def format_response_data(data=None, data_fmt=None):
     '''
     Prints data contained in iterable object 'data' to a string according to format specifications 'data_fmt'
     Returns a string containing printed data.
