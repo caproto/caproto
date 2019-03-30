@@ -156,7 +156,7 @@ def main():
         format_str = format_str_adjust(format_str=format_str, data_fmt=data_fmt)
 
         response_data_str = format_response_data(data=response.data,
-                                                data_fmt=data_fmt)
+                                                 data_fmt=data_fmt)
 
         tokens['pv_name'] = pv_name
         tokens['response'] = response
