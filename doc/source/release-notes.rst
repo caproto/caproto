@@ -2,6 +2,22 @@
 Release History
 ***************
 
+v0.3.3 (2019-04-01)
+===================
+
+This release improves the commandline utilities' parity to their counterparts
+in the reference implementation by supporting formatting parameters for
+integers and floats. It also includes some important fixes.
+
+Fixes
+-----
+
+* When optional dependency ``netifaces`` is installed, clients search on all
+  broadcast interfaces, not just ``255.255.255.255``. This reverts an erroneous
+  change made in v0.2.3.
+* ``caproto-shark`` does a better job ignoring non-CA packets (instead of
+  erroring out).
+
 v0.3.2 (2019-03-06)
 ===================
 
