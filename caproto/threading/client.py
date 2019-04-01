@@ -469,8 +469,8 @@ class SharedBroadcaster:
                         # A valid connection exists in one of our clients, so
                         # ignore the stale result status
                         with self._search_lock:
+                            address = cm.circuit.address
                             self.search_results[name] = (address, time.monotonic())
-                        # TODO verify that addr matches address
                         return address
 
             with self._search_lock:
