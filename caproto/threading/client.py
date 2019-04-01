@@ -406,22 +406,26 @@ class SharedBroadcaster:
             self.listeners.remove(listener)
         except KeyError:
             pass
-        if not self.listeners:
-            self.disconnect()
+
+        with self._search_lock:
+            if not self.listeners:
+                self.disconnect()
 
     def disconnect(self, *, wait=True):
-        if self.udp_sock is not None:
-            self.selector.remove_socket(self.udp_sock)
-            self.udp_sock.close()
-            self.udp_sock = None
-
-        self._close_event.set()
         with self._search_lock:
+            if self.udp_sock is not None:
+                self.selector.remove_socket(self.udp_sock)
+                self.udp_sock.close()
+                self.udp_sock = None
+
+            self._close_event.set()
             self.search_results.clear()
-        self._registration_last_sent = 0
-        self._searching_enabled.clear()
-        self.broadcaster.disconnect()
-        self.selector.stop()
+            self._registration_last_sent = 0
+            self._searching_enabled.clear()
+            self.broadcaster.disconnect()
+            self.selector.stop()
+
+        # TODO join could deadlock (locks held in command_thread)
         if wait:
             self._command_thread.join()
             self.selector.thread.join()
