@@ -38,9 +38,6 @@ from .._utils import (batch_requests, CaprotoError, ThreadsafeCounter,
                       CaprotoKeyError, CaprotoNetworkError)
 
 
-print = partial(print, flush=True)
-
-
 CIRCUIT_DEATH_ATTEMPTS = 3
 
 # sentinels used as default values for arguments
