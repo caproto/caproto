@@ -464,7 +464,7 @@ class SharedBroadcaster:
             # TODO this is very inefficient
             for context in self.listeners:
                 for addr, cm in context.circuit_managers.items():
-                    if cm.connected and name in cm.all_created_pvnames:
+                    if cm.connected and cm.pvname_to_channels[name]:
                         # A valid connection exists in one of our clients, so
                         # ignore the stale result status
                         with self._search_lock:
@@ -1234,7 +1234,7 @@ class VirtualCircuitManager:
     """
     __slots__ = ('context', 'circuit', 'channels', 'ioids', '_ioid_counter',
                  'subscriptions', '_ready', 'log',
-                 'socket', 'selector', 'pvs', 'all_created_pvnames',
+                 'socket', 'selector', 'pvs', 'pvname_to_channels',
                  'dead', 'process_queue', 'processing',
                  '_subscriptionid_counter', 'user_callback_executor',
                  'last_tcp_receipt', '__weakref__')
@@ -1247,15 +1247,13 @@ class VirtualCircuitManager:
         self.pvs = {}  # map cid to PV
         self.ioids = {}  # map ioid to Channel and info dict
         self.subscriptions = {}  # map subscriptionid to Subscription
+        self.pvname_to_channels = defaultdict(set)
         self.socket = None
         self.selector = selector
         self.user_callback_executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=self.context.max_workers,
             thread_name_prefix='user-callback-executor')
         self.last_tcp_receipt = None
-        # keep track of all PV names that are successfully connected to within
-        # this circuit. This is to be cleared upon disconnection:
-        self.all_created_pvnames = []
         self.dead = threading.Event()
         self._ioid_counter = ThreadsafeCounter()
         self._subscriptionid_counter = ThreadsafeCounter()
@@ -1410,13 +1408,15 @@ class VirtualCircuitManager:
         elif isinstance(command, ca.CreateChanResponse):
             pv = self.pvs[command.cid]
             chan = self.channels[command.cid]
-            self.all_created_pvnames.append(pv.name)
+            self.pvname_to_channels[pv.pvname].add(chan)
             with pv.component_lock:
                 pv.channel = chan
                 pv.channel_ready.set()
             pv.connection_state_changed('connected', chan)
         elif isinstance(command, (ca.ServerDisconnResponse,
                                   ca.ClearChannelResponse)):
+            chan = self.channels[command.cid]
+            self.pvname_to_channels[pv.pvname].remove(chan)
             pv = self.pvs[command.cid]
             pv.connection_state_changed('disconnected', None)
             # NOTE: pv remains valid until server goes down
@@ -1453,7 +1453,8 @@ class VirtualCircuitManager:
             for n in self.all_created_pvnames:
                 self.context.broadcaster.search_results.pop(n, None)
 
-        self.all_created_pvnames.clear()
+        self.pvname_to_channels.clear()
+
         for pv in self.pvs.values():
             pv.connection_state_changed('disconnected', None)
         # Remove VirtualCircuitManager from Context.
