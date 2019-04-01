@@ -792,12 +792,15 @@ class ThreadsafeCounter:
     '''
     MAX_ID = 2 ** 16
 
-    def __init__(self, *, initial_value=-1, dont_clash_with=None):
+    def __init__(self, *, initial_value=-1, dont_clash_with=None, lock=None):
         if dont_clash_with is None:
             dont_clash_with = set()
 
+        if lock is None:
+            lock = threading.RLock()
+
         self.value = initial_value
-        self.lock = threading.RLock()
+        self.lock = lock
         self.dont_clash_with = dont_clash_with
 
     def __call__(self):

@@ -42,6 +42,7 @@ CIRCUIT_DEATH_ATTEMPTS = 3
 # sentinels used as default values for arguments
 CONTEXT_DEFAULT_TIMEOUT = object()
 PV_DEFAULT_TIMEOUT = object()
+VALID_CHANNEL_MARKER = object()
 
 
 class DeadCircuitError(CaprotoError):
@@ -296,6 +297,187 @@ class SelectorThread:
                     # sent to disconnected sockets
 
 
+class SearchResults:
+    '''
+    Thread-safe handling of all past and in-process search results
+
+    Acts partially as a container type which is keyed on PV name, such that the
+    following are possible::
+
+        1. `SearchResults()[name] -> [time, address]`
+        2. `name in SearchResults()`
+    '''
+
+    def __init__(self):
+        self._lock = threading.RLock()
+        # map name to (time, address)
+        self.name_to_addr = {}
+        self.addr_to_names = defaultdict(set)
+        self._unanswered_searches = {}
+        self._search_id_counter = ThreadsafeCounter(
+            initial_value=random.randint(0, MAX_ID),
+            dont_clash_with=self._unanswered_searches,
+            lock=self._lock,
+        )
+
+    def new_server_found(self):
+        '''
+        Call when a new server beacon is found:
+        Bring all the unanswered searches out of retirement to see if we have a
+        new match.
+        '''
+        retirement_deadline = time.monotonic() + SEARCH_RETIREMENT_AGE
+        with self._lock:
+            for item in self._unanswered_searches.values():
+                item[-1] = retirement_deadline
+
+    @property
+    def unanswered_searches(self):
+        'All unanswered searches'
+        with self._lock:
+            return dict(self._unanswered_searches)
+
+    def cancel(self, *names):
+        """
+        Cancel searches for these names.
+
+        Parameters
+        ----------
+        *names : strings
+            any number of PV names
+
+        Any PV instances that were awaiting these results will be stuck until
+        :meth:`get_pvs` is called again.
+        """
+        with self._lock:
+            for search_id, item in self._unanswered_searches.items():
+                if item[0] in names:
+                    del self._unanswered_searches[search_id]
+
+    def __contains__(self, name):
+        return name in self.name_to_addr
+
+    def __getitem__(self, name):
+        return self.name_to_addr[name]
+
+    def clear(self):
+        'Clear all status'
+        with self._lock:
+            self.name_to_addr.clear()
+            self.addr_to_names.clear()
+            self.unanswered_searches.clear()
+
+    def mark_server_alive(self, addr):
+        'Beacon from a server received'
+        # self.addr_to_names[addr].clear()
+        ...
+        # TODO
+
+    def mark_server_disconnected(self, addr):
+        'Server disconnected; update all status'
+        with self._lock:
+            self.addr_to_names[addr].clear()
+            # for ... in self.name_to_addr:
+
+    def mark_name_found(self, name, addr):
+        '{name} was found at {addr}; update state'
+        old_addr, old_marker = self.name_to_addr.get(name, [None, None])
+        if old_marker is VALID_CHANNEL_MARKER:
+            return
+
+        with self._lock:
+            self.name_to_addr[name] = (addr, time.monotonic())
+            self.addr_to_names[addr].add(name)
+
+    def mark_channel_created(self, name, addr):
+        'Channel was created with {name} at {addr}'
+        with self._lock:
+            self.name_to_addr[name] = (addr, VALID_CHANNEL_MARKER)
+            self.addr_to_names[addr].add(name)
+
+    def mark_channel_disconnected(self, name, addr):
+        'Channel by name {name} was disconnected from {addr}'
+        with self._lock:
+            self.name_to_addr.pop(name)
+            self.addr_to_names[addr].remove(name)
+            # TODO: redundant servers can serve the same PV...
+
+    def get_cached_search_result(self, name, *,
+                                 threshold=STALE_SEARCH_EXPIRATION):
+        'Returns address if found, raises KeyError if missing or stale.'
+        address, timestamp = self.name_to_addr[name]
+        # this block of code is only to refresh the time found on
+        # any PVs.  If we can find any context which has any circuit which
+        # has any channel talking to this PV name then it is not stale so
+        # re-up the timestamp to now.
+        if ((timestamp is VALID_CHANNEL_MARKER) or
+                (time.monotonic() - timestamp) < threshold):
+            return address
+
+        with self._lock:
+            # Clean up expired result.
+            self.name_to_addr.pop(name, None)
+
+        raise CaprotoKeyError(f'{name!r}: stale search result')
+
+    def remove_unanswered_by_cid(self, cid):
+        'Get an unanswered search by cid -> name, queue, deadline'
+        with self._lock:
+            return self._unanswered_searches.pop(cid)
+
+    def items_to_retry(self, threshold, resend_deadline):
+        'All search results in need of retrying (if beyond threshold)'
+        with self._lock:
+            items = self._unanswered_searches.items()
+
+        if not threshold:
+            return items
+
+        # Skip over searches that haven't gotten any results in
+        # SEARCH_RETIREMENT_AGE.
+        return list((search_id, it)
+                    for search_id, it in items
+                    if (it[-1] > threshold and it[-2] < resend_deadline))
+
+    def search(self, *names, results_queue, retirement_deadline):
+        'Search for names, adding items to results_queue'
+        with self._lock:
+            # Search requests that are past their retirement deadline with no
+            # results will be searched for less frequently.
+            new_searches = dict(
+                (self._search_id_counter(),
+                 [name, results_queue, retirement_deadline]
+                 )
+                for name in names)
+
+            self._unanswered_searches.update(new_searches)
+
+    def check_cache(self, names):
+        """
+        Tell which PVs have valid cached addresses, and which do not.
+
+        Returns
+        -------
+        use_cached_search : dict
+            Address to list of names
+        needs_search : list
+            Remaining PVs that need a search attempt
+        """
+        needs_search = []
+        use_cached_search = defaultdict(list)
+
+        with self._lock:
+            for name in names:
+                try:
+                    address = self.get_cached_search_result(name)
+                except KeyError:
+                    needs_search.append(name)
+                else:
+                    use_cached_search[address].append(name)
+
+        return use_cached_search, needs_search
+
+
 class SharedBroadcaster:
     def __init__(self, *, registration_retry_time=10.0):
         '''
@@ -321,17 +503,13 @@ class SharedBroadcaster:
         # PVs (via Context.get_pvs).
         self._search_now = threading.Event()
 
-        self.search_results = {}  # map name to (time, address)
-        # map search id (cid) to [name, queue, last_search_time, retirement_deadline]
-        self.unanswered_searches = {}
+        self.results = SearchResults()
         self.server_protocol_versions = {}  # map address to protocol version
 
-        self._id_counter = ThreadsafeCounter(
-            initial_value=random.randint(0, MAX_ID),
-            dont_clash_with=self.unanswered_searches,
-        )
-
         self.listeners = weakref.WeakSet()
+
+        # map search id (cid) to [name, queue, retirement_deadline]
+        self.search_results = SearchResults()
 
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
         self.log = self.broadcaster.log
@@ -386,9 +564,6 @@ class SharedBroadcaster:
 
         self.send(ca.EPICS_CA2_PORT, command)
         self._searching_enabled.set()
-
-    def new_id(self):
-        return self._id_counter()
 
     def add_listener(self, listener):
         with self._search_lock:
@@ -451,34 +626,6 @@ class SharedBroadcaster:
                     f'{ex} while sending {len(bytes_to_send)} bytes to '
                     f'{host}:{specified_port}') from ex
 
-    def get_cached_search_result(self, name, *,
-                                 threshold=STALE_SEARCH_EXPIRATION):
-        'Returns address if found, raises KeyError if missing or stale.'
-        with self._search_lock:
-            address, timestamp = self.search_results[name]
-        # this block of code is only to re-fresh the time found on
-        # any PVs.  If we can find any context which has any circuit which
-        # has any channel talking to this PV name then it is not stale so
-        # re-up the timestamp to now.
-        if time.monotonic() - timestamp > threshold:
-            # TODO this is very inefficient
-            for context in self.listeners:
-                for addr, cm in context.circuit_managers.items():
-                    if cm.connected and cm.pvname_to_channels[name]:
-                        # A valid connection exists in one of our clients, so
-                        # ignore the stale result status
-                        with self._search_lock:
-                            address = cm.circuit.address
-                            self.search_results[name] = (address, time.monotonic())
-                        return address
-
-            with self._search_lock:
-                # Clean up expired result.
-                self.search_results.pop(name, None)
-            raise CaprotoKeyError(f'{name!r}: stale search result')
-
-        return address
-
     def search(self, results_queue, names, *, timeout=2):
         """
         Search for PV names.
@@ -497,38 +644,17 @@ class SharedBroadcaster:
         if self._should_attempt_registration():
             self._register()
 
-        new_id = self.new_id
-        unanswered_searches = self.unanswered_searches
+        # We have have already searched for these names recently.
+        # Filter `pv_names` down to a subset, `needs_search`.
+        use_cached_search, needs_search = self.search_results.check_cache(names)
 
-        with self._search_lock:
-            # We have have already searched for these names recently.
-            # Filter `pv_names` down to a subset, `needs_search`.
-            needs_search = []
-            use_cached_search = defaultdict(list)
-            for name in names:
-                try:
-                    address = self.get_cached_search_result(name)
-                except KeyError:
-                    needs_search.append(name)
-                else:
-                    use_cached_search[address].append(name)
+        for address, names in use_cached_search.items():
+            results_queue.put((address, names))
 
-            for address, names in use_cached_search.items():
-                results_queue.put((address, names))
-
-            # Generate search_ids and stash them on Context state so they can
-            # be used to match SearchResponses with SearchRequests.
-            search_ids = []
-            # Search requests that are past their retirement deadline with no
-            # results will be searched for less frequently.
-            retirement_deadline = time.monotonic() + SEARCH_RETIREMENT_AGE
-            for name in needs_search:
-                search_id = new_id()
-                search_ids.append(search_id)
-                # The value is a list because we mutate it to update the
-                # retirement deadline sometimes.
-                unanswered_searches[search_id] = [name, results_queue,
-                                                  0, retirement_deadline]
+        self.search_results.search(
+            *needs_search, results_queue=results_queue,
+            last_search_time=0,
+            retirement_deadline=time.monotonic() + SEARCH_RETIREMENT_AGE)
         self._search_now.set()
 
     def cancel(self, *names):
@@ -543,10 +669,7 @@ class SharedBroadcaster:
         Any PV instances that were awaiting these results will be stuck until
         :meth:`get_pvs` is called again.
         """
-        with self._search_lock:
-            for search_id, item in list(self.unanswered_searches.items()):
-                if item[0] in names:
-                    del self.unanswered_searches[search_id]
+        self.search_results.cancel(*names)
 
     def search_now(self):
         """
@@ -575,9 +698,10 @@ class SharedBroadcaster:
         # Save doing a 'self' lookup in the inner loop.
         search_results = self.search_results
         server_protocol_versions = self.server_protocol_versions
-        unanswered_searches = self.unanswered_searches
         queues = defaultdict(list)
-        results_by_cid = deque(maxlen=1000)
+
+        # TODO remove max length
+        results_by_cid = deque()
         self.log.debug('Broadcaster command loop is running.')
 
         while not self._close_event.is_set():
@@ -605,7 +729,7 @@ class SharedBroadcaster:
                         # We made a new friend!
                         self.log.info("Watching Beacons from %s:%d",
                                       *address)
-                        self._new_server_found()
+                        search_results.new_server_found()
                     else:
                         interval = now - self.last_beacon[address]
                         if interval < self.last_beacon_interval.get(address, 0) / 4:
@@ -614,7 +738,7 @@ class SharedBroadcaster:
                             self.log.info(
                                 "Beacon anomaly: %s:%d may have restarted.",
                                 *address)
-                            self._new_server_found()
+                            search_results.new_server_found()
                         self.last_beacon_interval[address] = interval
                     self.last_beacon[address] = now
                 elif isinstance(command, ca.VersionResponse):
@@ -633,8 +757,7 @@ class SharedBroadcaster:
                 elif isinstance(command, ca.SearchResponse):
                     cid = command.cid
                     try:
-                        with self._search_lock:
-                            name, queue, *_ = unanswered_searches.pop(cid)
+                        name, queue, _ = search_results.remove_unanswered_by_cid(cid)
                     except KeyError:
                         # This is a redundant response, which the EPICS
                         # spec tells us to ignore. (The first responder
@@ -644,16 +767,15 @@ class SharedBroadcaster:
                         except StopIteration:
                             continue
                         else:
-                            with self._search_lock:
-                                if name in search_results:
-                                    accepted_address, _ = search_results[name]
-                                    new_address = ca.extract_address(command)
-                                    if new_address != accepted_address:
-                                        self.log.warning(
-                                            "PV %s with cid %d found on multiple "
-                                            "servers. Accepted address is %s:%d. "
-                                            "Also found on %s:%d",
-                                            name, cid, *accepted_address, *new_address)
+                            if name in search_results:
+                                accepted_address = search_results.get_cached_search_result(name)
+                                new_address = ca.extract_address(command)
+                                if new_address != accepted_address:
+                                    self.log.warning(
+                                        "PV %s with cid %d found on multiple "
+                                        "servers. Accepted address is %s:%d. "
+                                        "Also found on %s:%d",
+                                        name, cid, *accepted_address, *new_address)
                     else:
                         results_by_cid.append((cid, name))
                         address = ca.extract_address(command)
@@ -661,8 +783,7 @@ class SharedBroadcaster:
                         # Cache this to save time on future searches.
                         # (Entries expire after STALE_SEARCH_EXPIRATION.)
                         self.log.debug('Found %s at %s:%d', name, *address)
-                        with self._search_lock:
-                            search_results[name] = (address, now)
+                        search_results.mark_name_found(name, address)
                         server_protocol_versions[address] = command.version
             # Send the search results to the Contexts that asked for
             # them. This is probably more general than is has to be but
@@ -672,15 +793,6 @@ class SharedBroadcaster:
                     queue.put((address, names))
 
         self.log.debug('Broadcaster command loop has exited.')
-
-    def _new_server_found(self):
-        # Bring all the unanswered seraches out of retirement
-        # to see if we have a new match.
-        retirement_deadline = time.monotonic() + SEARCH_RETIREMENT_AGE
-        with self._search_lock:
-            for item in self.unanswered_searches.values():
-                # give new age-out deadline
-                item[-1] = retirement_deadline
 
     def time_since_last_heard(self):
         """
@@ -831,20 +943,14 @@ class SharedBroadcaster:
                     # reset the last time this was sent
                     it[-2] = t
 
-            with self._search_lock:
-                if t >= time_to_check_on_retirees:
-                    items = list(self.unanswered_searches.items())
-                    time_to_check_on_retirees += RETRY_RETIRED_SEARCHES_INTERVAL
-                else:
-                    # Skip over searches that haven't gotten any results in
-                    # SEARCH_RETIREMENT_AGE.
-                    items = list((search_id, it)
-                                 for search_id, it in self.unanswered_searches.items()
-                                 if (it[-1] > t))
+            threshold = t
+            if threshold >= time_to_check_on_retirees:
+                time_to_check_on_retirees += RETRY_RETIRED_SEARCHES_INTERVAL
+                threshold = None
 
             # only send requests who we last sent at least interval in the past
-            resend_deadline = t - interval
-            items = [(sid, it) for sid, it in items if it[-2] < resend_deadline]
+            items = self.search_results.items_to_retry(threshold, resend_deadline=t - interval)
+
             requests = _construct_search_requests(items)
 
             if not self._searching_enabled.is_set():
@@ -954,7 +1060,7 @@ class Context:
 
     def __repr__(self):
         return (f"<Context "
-                f"searches_pending={len(self.broadcaster.unanswered_searches)} "
+                f"searches_pending={len(self.broadcaster.search_results.unanswered_searches)} "
                 f"circuits={len(self.circuit_managers)} "
                 f"pvs={len(self.pvs)} "
                 f"idle={len([1 for pv in self.pvs.values() if pv._idle])}>")
@@ -1047,8 +1153,11 @@ class Context:
             name, _ = key
             names.append(name)
             # If there is a cached search result for this name, expire it.
-            with self.broadcaster._search_lock:
-                self.broadcaster.search_results.pop(name, None)
+
+            # TODO: search lock
+            # self.broadcaster.search_results.mark_channel_disconnected(
+            #     name, pv.address)
+
             with self.pv_cache_lock:
                 self.pvs_needing_circuits[name].add(pv)
 
@@ -1408,7 +1517,7 @@ class VirtualCircuitManager:
         elif isinstance(command, ca.CreateChanResponse):
             pv = self.pvs[command.cid]
             chan = self.channels[command.cid]
-            self.pvname_to_channels[pv.pvname].add(chan)
+            self.pvname_to_channels[pv.name].add(chan)
             with pv.component_lock:
                 pv.channel = chan
                 pv.channel_ready.set()
@@ -1416,8 +1525,8 @@ class VirtualCircuitManager:
         elif isinstance(command, (ca.ServerDisconnResponse,
                                   ca.ClearChannelResponse)):
             chan = self.channels[command.cid]
-            self.pvname_to_channels[pv.pvname].remove(chan)
             pv = self.pvs[command.cid]
+            self.pvname_to_channels[pv.name].remove(chan)
             pv.connection_state_changed('disconnected', None)
             # NOTE: pv remains valid until server goes down
         elif isinstance(command, ca.EchoResponse):
@@ -1478,6 +1587,7 @@ class VirtualCircuitManager:
             self.log.debug('Kicking off reconnection attempts for %d PVs '
                            'disconnected from %s:%d....',
                            len(self.channels), *self.circuit.address)
+
             self.context.reconnect(((chan.name, chan.circuit.priority)
                                     for chan in self.channels.values()))
         else:
