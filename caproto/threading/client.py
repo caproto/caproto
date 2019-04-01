@@ -27,7 +27,6 @@ import weakref
 
 from queue import Queue, Empty
 from inspect import Parameter, Signature
-from functools import partial
 from collections import defaultdict, deque
 import caproto as ca
 from .._constants import (MAX_ID, STALE_SEARCH_EXPIRATION,
@@ -90,7 +89,7 @@ def ensure_connected(func):
             pv._usages += 1
 
         try:
-            for i in range(CIRCUIT_DEATH_ATTEMPTS):
+            for _ in range(CIRCUIT_DEATH_ATTEMPTS):
                 # On each iteration, subtract the time we already spent on any
                 # previous attempts.
                 if timeout is not None:
