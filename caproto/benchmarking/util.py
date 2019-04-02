@@ -182,7 +182,7 @@ class IocHandler:
     def teardown(self):
         for i, cm in enumerate(self._cms[:]):
             self.logger.debug('Tearing down soft IOC context manager #%d', i)
-            cm.__exit__(StopIteration, None, None)
+            cm.__exit__(None, None, None)
             self._cms.remove(cm)
 
         for i, proc in enumerate(self._softioc_processes[:]):
