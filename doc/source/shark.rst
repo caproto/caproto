@@ -146,5 +146,3 @@ are situations where using wireshark is a better choice. However:
   clients and servers.
 * It's handy to bundle pcap analysis with caproto---batteries included, nothing
   else to install.
-* Since caproto already has all of the byte-parsing logic anyway, integrating
-  with pcap streams only took a day or two of effort and ~300 lines of code.
