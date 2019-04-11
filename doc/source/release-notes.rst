@@ -2,7 +2,7 @@
 Release History
 ***************
 
-v0.3.3 (2019-04-01)
+v0.3.3 (2019-04-11)
 ===================
 
 This release improves the commandline utilities' parity to their counterparts
