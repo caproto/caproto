@@ -462,7 +462,7 @@ class ChannelData:
             direction=ConversionDirection.FROM_WIRE)
 
         if metadata is None:
-            metadata_dict = {'timestamp': timestamp}
+            metadata_dict = {}
         else:
             # Convert `metadata` to bytes-like (or pass it through).
             md_payload = parse_metadata(metadata, data_type)
