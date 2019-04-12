@@ -58,8 +58,7 @@ class TriggeredIOC(PVGroup):
     async def acquire(self, instance, value):
         if not instance.ev.is_set():
             await instance.ev.wait()
-            return instance.value
-
+            return 'idle'
 
         if value == 'acquiring':
             instance.ev.clear()
