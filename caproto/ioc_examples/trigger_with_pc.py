@@ -60,9 +60,6 @@ class TriggeredIOC(PVGroup):
             await instance.ev.wait()
             return instance.value
 
-        if value == instance.value:
-            await instance.event.wait()
-            return instance.value
 
         if value == 'acquiring':
             instance.ev.clear()
