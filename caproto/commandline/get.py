@@ -30,13 +30,17 @@ def main():
                         help="PV (channel) name(s) separated by spaces")
     parser.add_argument('--verbose', '-v', action='count',
                         help="Show more log messages. (Use -vvv for even more.)")
-    fmt_group.add_argument('--format', type=str,
-                           help=("Python format string. Available tokens are "
-                                 "{pv_name} and {response}. Additionally, if "
-                                 "this data type includes time, {timestamp} "
-                                 "and usages like "
-                                 "{timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are "
-                                 "supported."))
+    # --format may be specified even if -t (--terse) or -a (--wide) options are
+    #    selected. In this case --format specified in command line will be ignored
+    #    (overwritten by default format for -t or -a)
+    parser.add_argument('--format', type=str,
+                        help=("Python format string. Available tokens are "
+                              "{pv_name} and {response}. Additionally, if "
+                              "this data type includes time, {timestamp} "
+                              "and usages like "
+                              "{timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are "
+                              "supported. Format string is ignored if --terse "
+                              "or --wide options are selected."))
     parser.add_argument('--timeout', '-w', type=float, default=1,
                         help=("Timeout ('wait') in seconds for server "
                               "responses."))
@@ -99,7 +103,7 @@ def main():
         help=("Use %%g format with precision of <nr> digits (e.g. -g5 or -g 5)"))
     fmt_group_float.add_argument(
         '-s', dest="float_s", action="store_true",
-        help=("Get value as string (honors server-side precision"))
+        help=("Get value as string (honors server-side precision)"))
     fmt_group_float.add_argument(
         '-lx', dest="float_lx", action="store_true",
         help=("Round to long integer and print as hex number"))
