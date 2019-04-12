@@ -196,7 +196,6 @@ def main():
             else:
                 format_str = args.format
 
-
             format_str = format_str_adjust(format_str=format_str, data_fmt=data_fmt)
 
             response_data_str = format_response_data(data=response.data,
