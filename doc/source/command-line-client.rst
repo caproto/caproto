@@ -246,31 +246,33 @@ For additional options, type ``caproto-monitor -h`` or see below.
 Output Formatting Options
 -------------------------
 
-Output formatting options are changing the default format used by 
-``caproto-get`` and ``caproto-monitor`` for printing of PV values 
-in console output. The default formatting is used if the format string 
-(``--format`` argument) is not specified. If the arguments contain 
-format string, then the default formatting is applied to the field 
-``{response.data}``.
+Output formatting options are changing the default format used in 
+``caproto-get`` and ``caproto-monitor`` for printing PV values. 
+The default formatting is used in the following cases: 
+
+* The format string (``--format`` argument) is not specified. 
+
+* The format string contains the field ``{response.data}``. In this case 
+  formatting is applied only to the field ``{response.data}``.
 
 Formatting options applied to **floating point PV values**:
 
-* **-e <nr>** - use %e format with precision of <nr> digits (e.g. ``-e5`` or ``-e 5``);
-* **-f <nr>** - use %f format with precision of <nr> digits (e.g. ``-f5`` or ``-f 5``);
-* **-g <nr>** - use %g format with precision of <nr> digits (e.g. ``-g5`` or ``-g 5``);
-* **-s** - get value as string (honors server-side precision);
-* **-lx** - round to long integer and print as hex number;
-* **-lo** - round to long integer and print as octal number;
-* **-lb** - round to long integer and print as binary number.
+* ``-e <nr>`` - use %e format with precision of ``<nr>`` digits (e.g. ``-e5`` or ``-e 5``);
+* ``-f <nr>`` - use %f format with precision of ``<nr>`` digits (e.g. ``-f5`` or ``-f 5``);
+* ``-g <nr>`` - use %g format with precision of ``<nr>`` digits (e.g. ``-g5`` or ``-g 5``);
+* ``-s`` - get value as string (honors server-side precision);
+* ``-lx`` - round to long integer and print as hex number;
+* ``-lo`` - round to long integer and print as octal number;
+* ``-lb`` - round to long integer and print as binary number.
 
 Formatting options applied to **integer PV values**:
 
-* **-0x** - print as hex number;
-* **-0o** - print as octal number;
-* **-0b** - print as binary number.
+* ``-0x`` - print as hex number;
+* ``-0o`` - print as octal number;
+* ``-0b`` - print as binary number.
 
-The argument **-F <ofs>** replaces the default field separator (spaces) with alternate 
-separator <ofs> (e.g. ``-F*``, ``-F'*'``, ``-F '*'``, ``-F ' ** '``).
+The argument ``-F <ofs>`` replaces the default field separator (spaces) with alternate 
+separator ``<ofs>`` (e.g. ``-F*``, ``-F'*'``, ``-F '*'``, ``-F ' ** '``).
 
 Some examples of output formatting:
 
