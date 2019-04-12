@@ -235,6 +235,9 @@ def format_response_data(data=None, data_fmt=None):
     #    of type 'bytes'. They need to be converted to regular strings for printing.
     if(isinstance(data[0], bytes)):
         data = [v.decode() for v in data]
+    # Round floating point numbers and convert to nearest integers (if required)
+    if(isinstance(data[0], float) and data_fmt.float_round):
+        data = [int(round(v)) for v in data]
     # Convert to strings by printing values using selected format and prefix (0x, 0o or 0b)
     data_str = [("{}{:" + data_fmt.format + "}").format(data_fmt.prefix, v) for v in data]
     s = sep.join(data_str)
