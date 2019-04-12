@@ -39,8 +39,9 @@ def main():
                               "this data type includes time, {timestamp} "
                               "and usages like "
                               "{timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are "
-                              "supported. Format string is ignored if --terse "
-                              "or --wide options are selected."))
+                              "supported. If the format string is specified, "
+                              "--terse and --wide options have no effect "
+                              "on the output formatting."))
     parser.add_argument('--timeout', '-w', type=float, default=1,
                         help=("Timeout ('wait') in seconds for server "
                               "responses."))
@@ -172,22 +173,29 @@ def main():
             data_fmt = gen_data_format(args=args, data=response.data)
 
             if args.format is None:
-                if args.F is None:
+                # The following are default output formats.
+                # The --format argument ALWAYS overwrites the default format.
+                # (i.e. --wide and --terse have not effect if --format is specified)
+
+                if args.terse:
+                    format_str = '{response.data}'
+                    if len(response.data) == 1:
+                        # Only single entries are printed as scalars (without brackets)
+                        data_fmt.no_brackets = True
+
+                elif args.wide:
+                    # TODO Make this look more like caget -a
+                    format_str = '{pv_name} {timestamp} {response.data} {response.status.name}'
+
+                elif args.F is None:
                     format_str = '{pv_name: <40}  {response.data}'
+
                 else:
                     format_str = '{pv_name}  {response.data}'
+
             else:
                 format_str = args.format
 
-            if args.terse:
-                format_str = '{response.data}'
-                if len(response.data) == 1:
-                    # Only single entries are printed as scalars (without brackets)
-                    data_fmt.no_brackets = True
-
-            elif args.wide:
-                # TODO Make this look more like caget -a
-                format_str = '{pv_name} {timestamp} {response.data} {response.status.name}'
 
             format_str = format_str_adjust(format_str=format_str, data_fmt=data_fmt)
 
