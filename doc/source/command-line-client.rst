@@ -366,9 +366,9 @@ caproto-get
     --format FORMAT       Python format string. Available tokens are {pv_name}
                             and {response}. Additionally, if this data type
                             includes time, {timestamp} and usages like
-                            {timestamp:%Y-%m-%d %H:%M:%S} are supported. Format
-                            string is ignored if --terse or --wide options are
-                            selected.
+                            {timestamp:%Y-%m-%d %H:%M:%S} are supported. If the
+                            format string is specified, --terse and --wide options
+                            have no effect on the output formatting.
     --timeout TIMEOUT, -w TIMEOUT
                             Timeout ('wait') in seconds for server responses.
     --notify, -c          This is a vestigial argument that now has no effect in
@@ -418,8 +418,6 @@ caproto-get
     Custom output field separator:
     -F <ofs>              Use <ofs> as an alternate output field separator (e.g.
                             -F*, -F'*', -F '*', -F ' ** ')
-
-
 
 caproto-put
 -----------
