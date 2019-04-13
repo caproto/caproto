@@ -326,7 +326,8 @@ class SharedBroadcaster:
         self._search_now = threading.Event()
 
         self.search_results = {}  # map name to (time, address)
-        self.unanswered_searches = {}  # map search id (cid) to [name, queue, retirement_deadline]
+        # map search id (cid) to [name, queue, last_search_time, retirement_deadline]
+        self.unanswered_searches = {}
         self.server_protocol_versions = {}  # map address to protocol version
 
         self._id_counter = ThreadsafeCounter(
@@ -522,7 +523,8 @@ class SharedBroadcaster:
                 search_ids.append(search_id)
                 # The value is a list because we mutate it to update the
                 # retirement deadline sometimes.
-                unanswered_searches[search_id] = [name, results_queue, retirement_deadline]
+                unanswered_searches[search_id] = [name, results_queue,
+                                                  0, retirement_deadline]
         self._search_now.set()
 
     def cancel(self, *names):
@@ -628,7 +630,7 @@ class SharedBroadcaster:
                     cid = command.cid
                     try:
                         with self._search_lock:
-                            name, queue, _ = unanswered_searches.pop(cid)
+                            name, queue, *_ = unanswered_searches.pop(cid)
                     except KeyError:
                         # This is a redundant response, which the EPICS
                         # spec tells us to ignore. (The first responder
@@ -671,6 +673,7 @@ class SharedBroadcaster:
         retirement_deadline = time.monotonic() + SEARCH_RETIREMENT_AGE
         with self._search_lock:
             for item in self.unanswered_searches.values():
+                # give new age-out deadline
                 item[-1] = retirement_deadline
 
     def time_since_last_heard(self):
@@ -819,6 +822,8 @@ class SharedBroadcaster:
                 for search_id, it in items:
                     yield ca.SearchRequest(it[0], search_id,
                                            ca.DEFAULT_PROTOCOL_VERSION)
+                    # reset the last time this was sent
+                    it[-2] = t
 
             with self._search_lock:
                 if t >= time_to_check_on_retirees:
@@ -830,6 +835,10 @@ class SharedBroadcaster:
                     items = list((search_id, it)
                                  for search_id, it in self.unanswered_searches.items()
                                  if (it[-1] > t))
+
+            # only send requests who we last sent at least interval in the past
+            resend_deadline = t - interval
+            items = [(sid, it) for sid, it in items if it[-2] < resend_deadline]
             requests = _construct_search_requests(items)
 
             if not self._searching_enabled.is_set():
