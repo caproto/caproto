@@ -85,7 +85,7 @@ class TriggeredIOC(PVGroup):
 
 if __name__ == '__main__':
     ioc_options, run_options = ioc_arg_parser(
-        default_prefix='simple:',
+        default_prefix='triggered_with_pc:',
         desc=dedent(TriggeredIOC.__doc__))
     ioc = TriggeredIOC(**ioc_options)
     run(ioc.pvdb, **run_options)
