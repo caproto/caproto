@@ -30,7 +30,7 @@ class TriggeredIOC(PVGroup):
     A triggered IOC with put-completion support
 
 
-    Scalar P Vs
+    Scalar PVs
     ----------
     exposure_time : float
         The simulated exposure time
