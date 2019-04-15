@@ -155,7 +155,7 @@ Write to a File When a PV is Written To
 
     run_example('caproto.ioc_examples.custom_write')
 
-On the machine where the server redies, we will see files update whenever any
+On the machine where the server resides, we will see files update whenever any
 client writes.
 
 .. ipython:: python
