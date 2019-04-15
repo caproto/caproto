@@ -43,19 +43,29 @@ class TriggeredIOC(PVGroup):
 
     gain : float
         Sets the range of the random number for the reading.
+
+    enabled : {'off', 'on'}
     """
 
     gain = pvproperty(value=2.0)
     exposure_time = pvproperty(value=2.0)
-    reading = pvproperty(value=0.1)
+    reading = pvproperty(value=0.1, alarm_group='acq')
 
     acquire = pvproperty(value='idle',
                          enum_strings=['idle', 'acquiring'],
-                         dtype=ChannelType.ENUM)
+                         dtype=ChannelType.ENUM,
+                         alarm_group='acq')
+
+    enabled = pvproperty(value='on',
+                         enum_strings=['off', 'on'],
+                         dtype=ChannelType.ENUM,
+                         alarm_group='acq')
 
     @acquire.putter
     @no_reentry
     async def acquire(self, instance, value):
+        if self.enabled.value == 'off':
+            raise RuntimeError("Device must be enabled")
         if not instance.ev.is_set():
             await instance.ev.wait()
             return 'idle'
