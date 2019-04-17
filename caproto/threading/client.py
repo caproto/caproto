@@ -419,7 +419,8 @@ class SharedBroadcaster:
             self.udp_sock = None
 
         self._close_event.set()
-        self.search_results.clear()
+        with self._search_lock:
+            self.search_results.clear()
         self._registration_last_sent = 0
         self._searching_enabled.clear()
         self.broadcaster.disconnect()
@@ -453,7 +454,8 @@ class SharedBroadcaster:
     def get_cached_search_result(self, name, *,
                                  threshold=STALE_SEARCH_EXPIRATION):
         'Returns address if found, raises KeyError if missing or stale.'
-        address, timestamp = self.search_results[name]
+        with self._search_lock:
+            address, timestamp = self.search_results[name]
         # this block of code is only to re-fresh the time found on
         # any PVs.  If we can find any context which has any circuit which
         # has any channel talking to this PV name then it is not stale so
@@ -465,12 +467,14 @@ class SharedBroadcaster:
                     if cm.connected and name in cm.all_created_pvnames:
                         # A valid connection exists in one of our clients, so
                         # ignore the stale result status
-                        self.search_results[name] = (address, time.monotonic())
+                        with self._search_lock:
+                            self.search_results[name] = (address, time.monotonic())
                         # TODO verify that addr matches address
                         return address
 
-            # Clean up expired result.
-            self.search_results.pop(name, None)
+            with self._search_lock:
+                # Clean up expired result.
+                self.search_results.pop(name, None)
             raise CaprotoKeyError(f'{name!r}: stale search result')
 
         return address
@@ -640,15 +644,16 @@ class SharedBroadcaster:
                         except StopIteration:
                             continue
                         else:
-                            if name in self.search_results:
-                                accepted_address, _ = self.search_results[name]
-                                new_address = ca.extract_address(command)
-                                if new_address != accepted_address:
-                                    self.log.warning(
-                                        "PV %s with cid %d found on multiple "
-                                        "servers. Accepted address is %s:%d. "
-                                        "Also found on %s:%d",
-                                        name, cid, *accepted_address, *new_address)
+                            with self._search_lock:
+                                if name in search_results:
+                                    accepted_address, _ = search_results[name]
+                                    new_address = ca.extract_address(command)
+                                    if new_address != accepted_address:
+                                        self.log.warning(
+                                            "PV %s with cid %d found on multiple "
+                                            "servers. Accepted address is %s:%d. "
+                                            "Also found on %s:%d",
+                                            name, cid, *accepted_address, *new_address)
                     else:
                         results_by_cid.append((cid, name))
                         address = ca.extract_address(command)
@@ -656,7 +661,8 @@ class SharedBroadcaster:
                         # Cache this to save time on future searches.
                         # (Entries expire after STALE_SEARCH_EXPIRATION.)
                         self.log.debug('Found %s at %s:%d', name, *address)
-                        search_results[name] = (address, now)
+                        with self._search_lock:
+                            search_results[name] = (address, now)
                         server_protocol_versions[address] = command.version
             # Send the search results to the Contexts that asked for
             # them. This is probably more general than is has to be but
@@ -1041,7 +1047,8 @@ class Context:
             name, _ = key
             names.append(name)
             # If there is a cached search result for this name, expire it.
-            self.broadcaster.search_results.pop(name, None)
+            with self.broadcaster._search_lock:
+                self.broadcaster.search_results.pop(name, None)
             with self.pv_cache_lock:
                 self.pvs_needing_circuits[name].add(pv)
 
@@ -1441,6 +1448,10 @@ class VirtualCircuitManager:
             event = ioid_info.get('event')
             if event is not None:
                 event.set()
+
+        with self.context.broadcaster._search_lock:
+            for n in self.all_created_pvnames:
+                self.context.broadcaster.search_results.pop(n, None)
 
         self.all_created_pvnames.clear()
         for pv in self.pvs.values():
