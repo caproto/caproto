@@ -1790,13 +1790,6 @@ class PV:
         # The circuit_manager will put a reference to the response into
         # ioid_info and then set event.
         if not event.wait(timeout=timeout):
-            if cm.dead.is_set():
-                # This circuit has died sometime during this function call.
-                # The exception raised here will be caught by
-                # @ensure_connected, which will retry the function call a
-                # in hopes of getting a working circuit until our `timeout` has
-                # been used up.
-                raise DeadCircuitError()
             host, port = cm.circuit.address
             raise CaprotoTimeoutError(
                 f"Server at {host}:{port} did "
@@ -1804,7 +1797,13 @@ class PV:
                 f"{self.name!r} within {float(timeout):.3}-second timeout. "
                 f"The ioid of the expected response is {ioid}."
             )
-
+        if cm.dead.is_set():
+            # This circuit has died sometime during this function call.
+            # The exception raised here will be caught by
+            # @ensure_connected, which will retry the function call a
+            # in hopes of getting a working circuit until our `timeout` has
+            # been used up.
+            raise DeadCircuitError()
         return ioid_info['response']
 
     @ensure_connected
