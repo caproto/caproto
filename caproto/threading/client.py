@@ -1176,11 +1176,10 @@ class Context:
             pvs.append(pv)
             name, _ = key
             names.append(name)
-            # If there is a cached search result for this name, expire it.
 
-            # TODO: search lock
-            # self.broadcaster.search_results.mark_channel_disconnected(
-            #     name, pv.address)
+            # If there is a cached search result for this name, expire it.
+            self.broadcaster.search_results.mark_channel_disconnected(
+                name, pv.channel.circuit.address)
 
             with self.pv_cache_lock:
                 self.pvs_needing_circuits[name].add(pv)
