@@ -309,9 +309,9 @@ class SearchResults:
 
     Attributes
     ----------
-    name_to_addr : dict
+    name_to_addrs : dict
         Holds search results.
-        Maps name -> (time, address)
+        Maps name -> [(address, name, time), ...]
     addr_to_name : dict
         Holds search results.
         Maps address -> {name1, name2, ...}
@@ -328,7 +328,7 @@ class SearchResults:
     def __init__(self):
         self._lock = threading.RLock()
         # map name to (time, address)
-        self.name_to_addr = {}
+        self.name_to_addrs = defaultdict(dict)
         self.addr_to_names = defaultdict(set)
         self._unanswered_searches = {}
         self._search_id_counter = ThreadsafeCounter(
@@ -372,68 +372,69 @@ class SearchResults:
                     del self._unanswered_searches[search_id]
 
     def __contains__(self, name):
-        return name in self.name_to_addr
+        return bool(self.name_to_addrs.get(name, {}))
 
     def __getitem__(self, name):
-        return self.name_to_addr[name]
+        return self.name_to_addrs[name]
 
     def clear(self):
         'Clear all status'
         with self._lock:
-            self.name_to_addr.clear()
+            self.name_to_addrs.clear()
             self.addr_to_names.clear()
             self.unanswered_searches.clear()
 
     def mark_server_alive(self, addr):
         'Beacon from a server received'
-        # self.addr_to_names[addr].clear()
-        ...
-        # TODO
+        with self._lock:
+            for addr, info_list in self.addr_to_names[addr].items():
+                info_list[-1] = time.monotonic()
 
     def mark_server_disconnected(self, addr):
         'Server disconnected; update all status'
         with self._lock:
-            self.addr_to_names[addr].clear()
-            # for ... in self.name_to_addr:
+            to_remove = self.addr_to_names.pop(addr)
+            names_to_remove = set(to_remove.keys())
+            for name in names_to_remove:
+                self.name_to_addrs[name].pop(addr, None)
 
     def mark_name_found(self, name, addr):
         '{name} was found at {addr}; update state'
-        old_addr, old_marker = self.name_to_addr.get(name, [None, None])
-        if old_marker is VALID_CHANNEL_MARKER:
-            return
-
         with self._lock:
-            self.name_to_addr[name] = (addr, time.monotonic())
+            self.name_to_addrs[name][addr] = time.monotonic()
             self.addr_to_names[addr].add(name)
 
     def mark_channel_created(self, name, addr):
         'Channel was created with {name} at {addr}'
         with self._lock:
-            self.name_to_addr[name] = (addr, VALID_CHANNEL_MARKER)
+            self.name_to_addrs[name][addr] = VALID_CHANNEL_MARKER
             self.addr_to_names[addr].add(name)
 
     def mark_channel_disconnected(self, name, addr):
         'Channel by name {name} was disconnected from {addr}'
         with self._lock:
-            self.name_to_addr.pop(name)
+            self.name_to_addrs[name].pop(addr)
             self.addr_to_names[addr].remove(name)
-            # TODO: redundant servers can serve the same PV...
 
     def get_cached_search_result(self, name, *,
                                  threshold=STALE_SEARCH_EXPIRATION):
         'Returns address if found, raises KeyError if missing or stale.'
-        address, timestamp = self.name_to_addr[name]
-        # this block of code is only to refresh the time found on
-        # any PVs.  If we can find any context which has any circuit which
-        # has any channel talking to this PV name then it is not stale so
-        # re-up the timestamp to now.
-        if ((timestamp is VALID_CHANNEL_MARKER) or
-                (time.monotonic() - timestamp) < threshold):
-            return address
-
         with self._lock:
-            # Clean up expired result.
-            self.name_to_addr.pop(name, None)
+            entry = self.name_to_addrs[name]
+            result_addr = None
+            result_timestamp = None
+            for addr, timestamp in list(entry.items()):
+                if ((timestamp is VALID_CHANNEL_MARKER) or
+                        (time.monotonic() - timestamp) < threshold):
+                    if result_timestamp is not VALID_CHANNEL_MARKER:
+                        result_addr = addr
+                        result_timestamp = timestamp
+                else:
+                    # Clean up expired result.
+                    entry.pop(addr)
+
+            if result_addr is not None:
+                return result_addr
 
         raise CaprotoKeyError(f'{name!r}: stale search result')
 
@@ -445,7 +446,7 @@ class SearchResults:
     def items_to_retry(self, threshold, resend_deadline):
         'All search results in need of retrying (if beyond threshold)'
         with self._lock:
-            items = self._unanswered_searches.items()
+            items = list(self._unanswered_searches.items())
 
         if not threshold:
             return items
