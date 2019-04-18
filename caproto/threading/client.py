@@ -464,7 +464,7 @@ class SearchResults:
             # results will be searched for less frequently.
             new_searches = dict(
                 (self._search_id_counter(),
-                 [name, results_queue, retirement_deadline]
+                 [name, results_queue, 0, retirement_deadline]
                  )
                 for name in names)
 
@@ -671,7 +671,6 @@ class SharedBroadcaster:
 
         self.search_results.search(
             *needs_search, results_queue=results_queue,
-            last_search_time=0,
             retirement_deadline=time.monotonic() + SEARCH_RETIREMENT_AGE)
         self._search_now.set()
 
@@ -718,8 +717,7 @@ class SharedBroadcaster:
         server_protocol_versions = self.server_protocol_versions
         queues = defaultdict(list)
 
-        # TODO remove max length
-        results_by_cid = deque()
+        results_by_cid = deque(maxlen=1000)
         self.log.debug('Broadcaster command loop is running.')
 
         while not self._close_event.is_set():
@@ -775,7 +773,7 @@ class SharedBroadcaster:
                 elif isinstance(command, ca.SearchResponse):
                     cid = command.cid
                     try:
-                        name, queue, _ = search_results.remove_unanswered_by_cid(cid)
+                        name, queue, *_ = search_results.remove_unanswered_by_cid(cid)
                     except KeyError:
                         # This is a redundant response, which the EPICS
                         # spec tells us to ignore. (The first responder
@@ -1575,10 +1573,6 @@ class VirtualCircuitManager:
             event = ioid_info.get('event')
             if event is not None:
                 event.set()
-
-        with self.context.broadcaster._search_lock:
-            for n in self.all_created_pvnames:
-                self.context.broadcaster.search_results.pop(n, None)
 
         self.pvname_to_channels.clear()
 
