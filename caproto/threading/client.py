@@ -337,6 +337,14 @@ class SearchResults:
             lock=self._lock,
         )
 
+    def _locked(func):
+        @functools.wraps(func)
+        def wrapped(self, *args, **kwargs):
+            with self._lock:
+                return func(self, *args, **kwargs)
+        return wrapped
+
+    @_locked
     def new_server_found(self):
         '''
         Call when a new server beacon is found:
@@ -344,16 +352,16 @@ class SearchResults:
         new match.
         '''
         retirement_deadline = time.monotonic() + SEARCH_RETIREMENT_AGE
-        with self._lock:
-            for item in self._unanswered_searches.values():
-                item[-1] = retirement_deadline
+        for item in self._unanswered_searches.values():
+            item[-1] = retirement_deadline
 
     @property
+    @_locked
     def unanswered_searches(self):
         'All unanswered searches'
-        with self._lock:
-            return dict(self._unanswered_searches)
+        return dict(self._unanswered_searches)
 
+    @_locked
     def cancel(self, *names):
         """
         Cancel searches for these names.
@@ -377,71 +385,71 @@ class SearchResults:
     def __getitem__(self, name):
         return self.name_to_addrs[name]
 
+    @_locked
     def clear(self):
         'Clear all status'
-        with self._lock:
-            self.name_to_addrs.clear()
-            self.addr_to_names.clear()
-            self.unanswered_searches.clear()
+        self.name_to_addrs.clear()
+        self.addr_to_names.clear()
+        self.unanswered_searches.clear()
 
+    @_locked
     def mark_server_alive(self, addr):
         'Beacon from a server received'
-        with self._lock:
-            for addr, info_list in self.addr_to_names[addr].items():
-                info_list[-1] = time.monotonic()
+        for addr, info_list in self.addr_to_names[addr].items():
+            info_list[-1] = time.monotonic()
 
+    @_locked
     def mark_server_disconnected(self, addr):
         'Server disconnected; update all status'
-        with self._lock:
-            to_remove = self.addr_to_names.pop(addr)
-            names_to_remove = set(to_remove.keys())
-            for name in names_to_remove:
-                self.name_to_addrs[name].pop(addr, None)
+        to_remove = self.addr_to_names.pop(addr)
+        names_to_remove = set(to_remove.keys())
+        for name in names_to_remove:
+            self.name_to_addrs[name].pop(addr, None)
 
+    @_locked
     def mark_name_found(self, name, addr):
         '{name} was found at {addr}; update state'
-        with self._lock:
-            self.name_to_addrs[name][addr] = time.monotonic()
-            self.addr_to_names[addr].add(name)
+        self.name_to_addrs[name][addr] = time.monotonic()
+        self.addr_to_names[addr].add(name)
 
+    @_locked
     def mark_channel_created(self, name, addr):
         'Channel was created with {name} at {addr}'
-        with self._lock:
-            self.name_to_addrs[name][addr] = VALID_CHANNEL_MARKER
-            self.addr_to_names[addr].add(name)
+        self.name_to_addrs[name][addr] = VALID_CHANNEL_MARKER
+        self.addr_to_names[addr].add(name)
 
+    @_locked
     def mark_channel_disconnected(self, name, addr):
         'Channel by name {name} was disconnected from {addr}'
-        with self._lock:
-            self.name_to_addrs[name].pop(addr)
-            self.addr_to_names[addr].remove(name)
+        self.name_to_addrs[name].pop(addr)
+        self.addr_to_names[addr].remove(name)
 
+    @_locked
     def get_cached_search_result(self, name, *,
                                  threshold=STALE_SEARCH_EXPIRATION):
         'Returns address if found, raises KeyError if missing or stale.'
-        with self._lock:
-            entry = self.name_to_addrs[name]
-            result_addr = None
-            result_timestamp = None
-            for addr, timestamp in list(entry.items()):
-                if ((timestamp is VALID_CHANNEL_MARKER) or
-                        (time.monotonic() - timestamp) < threshold):
-                    if result_timestamp is not VALID_CHANNEL_MARKER:
-                        result_addr = addr
-                        result_timestamp = timestamp
-                else:
-                    # Clean up expired result.
-                    entry.pop(addr)
+        entry = self.name_to_addrs[name]
+        result_addr = None
+        result_timestamp = None
+        for addr, timestamp in list(entry.items()):
+            if ((timestamp is VALID_CHANNEL_MARKER) or
+                    (time.monotonic() - timestamp) < threshold):
+                if result_timestamp is not VALID_CHANNEL_MARKER:
+                    result_addr = addr
+                    result_timestamp = timestamp
+            else:
+                # Clean up expired result.
+                entry.pop(addr)
 
-            if result_addr is not None:
-                return result_addr
+        if result_addr is not None:
+            return result_addr
 
         raise CaprotoKeyError(f'{name!r}: stale search result')
 
+    @_locked
     def remove_unanswered_by_cid(self, cid):
         'Get an unanswered search by cid -> name, queue, deadline'
-        with self._lock:
-            return self._unanswered_searches.pop(cid)
+        return self._unanswered_searches.pop(cid)
 
     def items_to_retry(self, threshold, resend_deadline):
         'All search results in need of retrying (if beyond threshold)'
@@ -457,19 +465,20 @@ class SearchResults:
                     for search_id, it in items
                     if (it[-1] > threshold and it[-2] < resend_deadline))
 
+    @_locked
     def search(self, *names, results_queue, retirement_deadline):
         'Search for names, adding items to results_queue'
-        with self._lock:
-            # Search requests that are past their retirement deadline with no
-            # results will be searched for less frequently.
-            new_searches = dict(
-                (self._search_id_counter(),
-                 [name, results_queue, 0, retirement_deadline]
-                 )
-                for name in names)
+        # Search requests that are past their retirement deadline with no
+        # results will be searched for less frequently.
+        new_searches = dict(
+            (self._search_id_counter(),
+             [name, results_queue, 0, retirement_deadline]
+             )
+            for name in names)
 
-            self._unanswered_searches.update(new_searches)
+        self._unanswered_searches.update(new_searches)
 
+    @_locked
     def check_cache(self, names):
         """
         Tell which PVs have valid cached addresses, and which do not.
@@ -484,14 +493,13 @@ class SearchResults:
         needs_search = []
         use_cached_search = defaultdict(list)
 
-        with self._lock:
-            for name in names:
-                try:
-                    address = self.get_cached_search_result(name)
-                except KeyError:
-                    needs_search.append(name)
-                else:
-                    use_cached_search[address].append(name)
+        for name in names:
+            try:
+                address = self.get_cached_search_result(name)
+            except KeyError:
+                needs_search.append(name)
+            else:
+                use_cached_search[address].append(name)
 
         return use_cached_search, needs_search
 
