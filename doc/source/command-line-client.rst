@@ -243,6 +243,93 @@ and the time-spacing between readings:
 
 For additional options, type ``caproto-monitor -h`` or see below.
 
+Output Formatting Options
+-------------------------
+
+Output formatting options are changing the default format used in 
+``caproto-get`` and ``caproto-monitor`` for printing PV values. 
+The default formatting is used in the following cases: 
+
+* The format string (``--format`` argument) is not specified. 
+
+* The format string contains the field ``{response.data}``. In this case 
+  formatting is applied only to the field ``{response.data}``.
+
+Formatting options applied to **floating point PV values**:
+
+* ``-e <nr>`` - use %e format with precision of ``<nr>`` digits (e.g. ``-e5`` or ``-e 5``);
+* ``-f <nr>`` - use %f format with precision of ``<nr>`` digits (e.g. ``-f5`` or ``-f 5``);
+* ``-g <nr>`` - use %g format with precision of ``<nr>`` digits (e.g. ``-g5`` or ``-g 5``);
+* ``-s`` - get value as string (honors server-side precision);
+* ``-lx`` - round to long integer and print as hex number;
+* ``-lo`` - round to long integer and print as octal number;
+* ``-lb`` - round to long integer and print as binary number.
+
+Formatting options applied to **integer PV values**:
+
+* ``-0x`` - print as hex number;
+* ``-0o`` - print as octal number;
+* ``-0b`` - print as binary number.
+
+The argument ``-F <ofs>`` replaces the default field separator (spaces) with alternate 
+separator ``<ofs>`` (e.g. ``-F*``, ``-F'*'``, ``-F '*'``, ``-F ' ** '``).
+
+Some examples of output formatting:
+
+.. code-block:: bash
+
+    $ caproto-monitor random_walk:x -g10
+    random_walk:x                             2019-04-11 20:12:45.159667 [-165.3895284]
+    random_walk:x                             2019-04-11 20:12:46.160722 [-164.5046121]
+    random_walk:x                             2019-04-11 20:12:47.162351 [-163.5463466]
+    random_walk:x                             2019-04-11 20:12:48.164604 [-164.0319457]
+    random_walk:x                             2019-04-11 20:12:49.166856 [-163.1483927]
+    random_walk:x                             2019-04-11 20:12:50.169072 [-163.9358578]
+    random_walk:x                             2019-04-11 20:12:51.171294 [-163.4155186]
+    random_walk:x                             2019-04-11 20:12:52.173604 [-162.6590992]
+    ^C
+
+    $ caproto-monitor random_walk:x -g10 -F"  ==  " 
+    random_walk:x  ==  2019-04-11 20:14:41.297880  ==  [-3.811720948]
+    random_walk:x  ==  2019-04-11 20:14:42.298818  ==  [-3.162919537]
+    random_walk:x  ==  2019-04-11 20:14:43.301088  ==  [-3.432931988]
+    random_walk:x  ==  2019-04-11 20:14:44.303375  ==  [-2.787768272]
+    random_walk:x  ==  2019-04-11 20:14:45.305699  ==  [-2.024880621]
+    random_walk:x  ==  2019-04-11 20:14:46.307986  ==  [-1.765013774]
+    random_walk:x  ==  2019-04-11 20:14:47.310276  ==  [-1.45201324]
+    random_walk:x  ==  2019-04-11 20:14:48.312575  ==  [-0.9904703683]
+    ^C
+
+    $ caproto-monitor random_walk:x -e5 --format "{timedelta} {response.data}"
+    0:00:00.561498 [-6.09173e+00]
+    0:00:01.001148 [-5.15495e+00]
+    0:00:01.002169 [-5.64561e+00]
+    0:00:01.002267 [-6.01321e+00]
+    0:00:01.002256 [-5.18551e+00]
+    0:00:01.002254 [-4.88171e+00]
+    0:00:01.000546 [-4.47361e+00]
+    ^C
+
+    $ caproto-monitor random_walk:x -f3 -F ' ** ' --format "{timedelta} {response.data}"
+    0:00:00.115265 ** [53.291]
+    0:00:01.002170 ** [53.597]
+    0:00:01.002251 ** [54.536]
+    0:00:01.002267 ** [54.469]
+    0:00:01.002254 ** [53.827]
+    0:00:01.002264 ** [53.000]
+    0:00:01.001584 ** [52.160]
+    ^C
+
+    $ caproto-monitor random_walk:x -lx -F ' ** ' --format "{timedelta} {response.data}"
+    0:00:00.953373 ** [0x2D]
+    0:00:01.000445 ** [0x2D]
+    0:00:01.001918 ** [0x2E]
+    0:00:01.002289 ** [0x2E]
+    0:00:01.002199 ** [0x2D]
+    0:00:01.002327 ** [0x2D]
+    0:00:01.001610 ** [0x2C]
+    ^C
+
 API Documentation
 =================
 
@@ -261,10 +348,12 @@ caproto-get
 
     $ caproto-get -h
     usage: caproto-get [-h] [--verbose] [--format FORMAT] [--timeout TIMEOUT]
-                   [--notify] [--priority PRIORITY] [--terse] [--wide]
-                   [-d DATA_TYPE] [--list-types] [-n] [--no-color]
-                   [--no-repeater]
-                   pv_names [pv_names ...]
+                    [--notify] [--priority PRIORITY]
+                    [--terse | --wide | -d DATA_TYPE] [--list-types] [-n]
+                    [--no-color] [--no-repeater] [--version] [-e <nr>]
+                    [-f <nr>] [-g <nr>] [-s] [-lx] [-lo] [-lb] [-0x] [-0o]
+                    [-0b] [-F <ofs>]
+                    pv_names [pv_names ...]
 
     Read the value of a PV.
 
@@ -277,7 +366,9 @@ caproto-get
     --format FORMAT       Python format string. Available tokens are {pv_name}
                             and {response}. Additionally, if this data type
                             includes time, {timestamp} and usages like
-                            {timestamp:%Y-%m-%d %H:%M:%S} are supported.
+                            {timestamp:%Y-%m-%d %H:%M:%S} are supported. If the
+                            format string is specified, --terse and --wide options
+                            have no effect on the output formatting.
     --timeout TIMEOUT, -w TIMEOUT
                             Timeout ('wait') in seconds for server responses.
     --notify, -c          This is a vestigial argument that now has no effect in
@@ -297,7 +388,36 @@ caproto-get
     -n                    Retrieve enums as integers (default is strings).
     --no-color            Suppress ANSI color codes in log messages.
     --no-repeater         Do not spawn a Channel Access repeater daemon process.
+    --version, -V         Show caproto version and exit.
 
+    Floating point type format:
+    If --format is set, the following arguments change formatting of the
+    {response.data} field if floating point value is displayed. The default
+    format is %g.
+
+    -e <nr>               Use %e format with precision of <nr> digits (e.g. -e5
+                            or -e 5)
+    -f <nr>               Use %f format with precision of <nr> digits (e.g. -f5
+                            or -f 5)
+    -g <nr>               Use %g format with precision of <nr> digits (e.g. -g5
+                            or -g 5)
+    -s                    Get value as string (honors server-side precision)
+    -lx                   Round to long integer and print as hex number
+    -lo                   Round to long integer and print as octal number
+    -lb                   Round to long integer and print as binary number
+
+    Integer number format:
+    If --format is set, the following arguments change formatting of the
+    {response.data} field if integer value is displayed. Decimal number is
+    displayed by default.
+
+    -0x                   Print as hex number
+    -0o                   Print as octal number
+    -0b                   Print as binary number
+
+    Custom output field separator:
+    -F <ofs>              Use <ofs> as an alternate output field separator (e.g.
+                            -F*, -F'*', -F '*', -F ' ** ')
 
 caproto-put
 -----------
@@ -348,10 +468,12 @@ caproto-monitor
 
     $ caproto-monitor -h
     usage: caproto-monitor [-h] [--format FORMAT] [--verbose]
-                       [--duration DURATION | --maximum MAXIMUM]
-                       [--timeout TIMEOUT] [-m MASK] [--priority PRIORITY]
-                       [-n] [--no-color] [--no-repeater]
-                       pv_names [pv_names ...]
+                        [--duration DURATION | --maximum MAXIMUM]
+                        [--timeout TIMEOUT] [-m MASK] [--priority PRIORITY]
+                        [-n] [--no-color] [--no-repeater] [--version] [-e <nr>]
+                        [-f <nr>] [-g <nr>] [-s] [-lx] [-lo] [-lb] [-0x] [-0o]
+                        [-0b] [-F <ofs>]
+                        pv_names [pv_names ...]
 
     Read the value of a PV.
 
@@ -381,6 +503,39 @@ caproto-monitor
     -n                    Retrieve enums as integers (default is strings).
     --no-color            Suppress ANSI color codes in log messages.
     --no-repeater         Do not spawn a Channel Access repeater daemon process.
+    --version, -V         Show caproto version and exit.
+
+    Floating point type format:
+    If --format is set, the following arguments change formatting of the
+    {response.data} field if floating point value is displayed. The default
+    format is %g.
+
+    -e <nr>               Use %e format with precision of <nr> digits (e.g. -e5
+                            or -e 5)
+    -f <nr>               Use %f format with precision of <nr> digits (e.g. -f5
+                            or -f 5)
+    -g <nr>               Use %g format with precision of <nr> digits (e.g. -g5
+                            or -g 5)
+    -s                    Get value as string (honors server-side precision)
+    -lx                   Round to long integer and print as hex number
+    -lo                   Round to long integer and print as octal number
+    -lb                   Round to long integer and print as binary number
+
+    Integer number format:
+    If --format is set, the following arguments change formatting of the
+    {response.data} field if integer value is displayed. Decimal number is
+    displayed by default.
+
+    -0x                   Print as hex number
+    -0o                   Print as octal number
+    -0b                   Print as binary number
+
+    Custom output field separator:
+    -F <ofs>              Use <ofs> as an alternate output field separator (e.g.
+                            -F*, -F'*', -F '*', -F ' ** ')
+
+
+
 
 
 caproto-repeater

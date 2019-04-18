@@ -84,7 +84,7 @@ def main():
         help=("Use %%g format with precision of <nr> digits (e.g. -g5 or -g 5)"))
     fmt_group_float.add_argument(
         '-s', dest="float_s", action="store_true",
-        help=("Get value as string (honors server-side precision"))
+        help=("Get value as string (honors server-side precision)"))
     fmt_group_float.add_argument(
         '-lx', dest="float_lx", action="store_true",
         help=("Round to long integer and print as hex number"))

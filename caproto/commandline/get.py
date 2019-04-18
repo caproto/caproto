@@ -30,13 +30,18 @@ def main():
                         help="PV (channel) name(s) separated by spaces")
     parser.add_argument('--verbose', '-v', action='count',
                         help="Show more log messages. (Use -vvv for even more.)")
-    fmt_group.add_argument('--format', type=str,
-                           help=("Python format string. Available tokens are "
-                                 "{pv_name} and {response}. Additionally, if "
-                                 "this data type includes time, {timestamp} "
-                                 "and usages like "
-                                 "{timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are "
-                                 "supported."))
+    # --format may be specified even if -t (--terse) or -a (--wide) options are
+    #    selected. In this case --format specified in command line will be ignored
+    #    (overwritten by default format for -t or -a)
+    parser.add_argument('--format', type=str,
+                        help=("Python format string. Available tokens are "
+                              "{pv_name} and {response}. Additionally, if "
+                              "this data type includes time, {timestamp} "
+                              "and usages like "
+                              "{timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are "
+                              "supported. If the format string is specified, "
+                              "--terse and --wide options have no effect "
+                              "on the output formatting."))
     parser.add_argument('--timeout', '-w', type=float, default=1,
                         help=("Timeout ('wait') in seconds for server "
                               "responses."))
@@ -99,7 +104,7 @@ def main():
         help=("Use %%g format with precision of <nr> digits (e.g. -g5 or -g 5)"))
     fmt_group_float.add_argument(
         '-s', dest="float_s", action="store_true",
-        help=("Get value as string (honors server-side precision"))
+        help=("Get value as string (honors server-side precision)"))
     fmt_group_float.add_argument(
         '-lx', dest="float_lx", action="store_true",
         help=("Round to long integer and print as hex number"))
@@ -168,22 +173,28 @@ def main():
             data_fmt = gen_data_format(args=args, data=response.data)
 
             if args.format is None:
-                if args.F is None:
+                # The following are default output formats.
+                # The --format argument ALWAYS overwrites the default format.
+                # (i.e. --wide and --terse have not effect if --format is specified)
+
+                if args.terse:
+                    format_str = '{response.data}'
+                    if len(response.data) == 1:
+                        # Only single entries are printed as scalars (without brackets)
+                        data_fmt.no_brackets = True
+
+                elif args.wide:
+                    # TODO Make this look more like caget -a
+                    format_str = '{pv_name} {timestamp} {response.data} {response.status.name}'
+
+                elif args.F is None:
                     format_str = '{pv_name: <40}  {response.data}'
+
                 else:
                     format_str = '{pv_name}  {response.data}'
+
             else:
                 format_str = args.format
-
-            if args.terse:
-                format_str = '{response.data}'
-                if len(response.data) == 1:
-                    # Only single entries are printed as scalars (without brackets)
-                    data_fmt.no_brackets = True
-
-            elif args.wide:
-                # TODO Make this look more like caget -a
-                format_str = '{pv_name} {timestamp} {response.data} {response.status.name}'
 
             format_str = format_str_adjust(format_str=format_str, data_fmt=data_fmt)
 
