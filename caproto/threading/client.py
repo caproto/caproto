@@ -377,11 +377,8 @@ class SearchResults:
         :meth:`get_pvs` is called again.
         """
         for name in names:
-            try:
-                cid = self._searches_by_name[name]
-            except KeyError:
-                ...
-            else:
+            cid = self._searches_by_name.pop(name, None)
+            if cid is not None:
                 self._unanswered_searches.pop(cid, None)
 
     def __contains__(self, name):
