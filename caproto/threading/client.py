@@ -1222,6 +1222,7 @@ class Context:
     def _process_search_results_loop(self):
         # Receive (address, (name1, name2, ...)). The sending side of this
         # queue is held by SharedBroadcaster.command_loop.
+        broadcaster = self.broadcaster
         self.log.debug('Context search-results processing loop has '
                        'started.')
         while not self._close_event.is_set():
@@ -1237,6 +1238,8 @@ class Context:
             # Assign each PV a VirtualCircuitManager for managing a socket
             # and tracking circuit state, as well as a ClientChannel for
             # tracking channel state.
+
+            connect_failed = False
             for name in names:
                 # There could be multiple PVs with the same name and
                 # different priority. That is what we are looping over
@@ -1248,7 +1251,17 @@ class Context:
                 for pv in pvs:
                     # Get (make if necessary) a VirtualCircuitManager. This
                     # is where TCP socket creation happens.
-                    cm = self.get_circuit_manager(address, pv.priority)
+                    try:
+                        cm = self.get_circuit_manager(address, pv.priority)
+                    except ConnectionRefusedError:
+                        broadcaster.search_results.mark_server_disconnected(
+                            address)
+                        connect_failed = True
+                        self.log.error(
+                            'Connection refused to %s:%d for PVs: %s',
+                            *address, ', '.join(names))
+                        break
+
                     circuit = cm.circuit
 
                     pv.circuit_manager = cm
@@ -1261,6 +1274,9 @@ class Context:
                     cm.pvs[cid] = pv
                     channels_grouped_by_circuit[cm].append(chan)
                     pv.circuit_ready.set()
+
+                if connect_failed:
+                    break
 
             # Initiate channel creation with the server.
             for cm, channels in channels_grouped_by_circuit.items():
