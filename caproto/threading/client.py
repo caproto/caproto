@@ -512,18 +512,13 @@ class SearchResults:
         'Search for names, adding items to results_queue'
         # Search requests that are past their retirement deadline with no
         # results will be searched for less frequently.
-        new_searches = dict(
-            (self._search_id_counter(),
-             [name, results_queue, 0, retirement_deadline]
-             )
-            for name in names)
+        for name in names:
+            id_ = self._search_id_counter()
+            item = [name, results_queue, 0, retirement_deadline]
 
-        self._unanswered_searches.update(new_searches)
-        self._searches.update(new_searches)
-
-        for id, info in new_searches.items():
-            name, *_ = info
-            self._searches_by_name[name] = info
+            self._unanswered_searches[id_] = item
+            self._searches[id_] = item
+            self._searches_by_name[name] = item
 
     @_locked
     def check_cache(self, names):
