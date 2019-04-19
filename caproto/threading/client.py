@@ -49,6 +49,18 @@ class DeadCircuitError(CaprotoError):
     ...
 
 
+class UnknownSearchResponse(CaprotoError):
+    ...
+
+
+class DuplicateSearchResponse(CaprotoError):
+    def __init__(self, name, cid, addresses):
+        super().__init__()
+        self.name = name
+        self.cid = cid
+        self.addresses = addresses
+
+
 def ensure_connected(func):
     @functools.wraps(func)
     def inner(self, *args, **kwargs):
@@ -399,15 +411,13 @@ class SearchResults:
     @_locked
     def mark_server_alive(self, addr):
         'Beacon from a server received'
-        for addr, info_list in self.addr_to_names[addr].items():
-            info_list[-1] = time.monotonic()
+        for name in self.addr_to_names[addr]:
+            self.name_to_addrs[name][addr] = time.monotonic()
 
     @_locked
     def mark_server_disconnected(self, addr):
         'Server disconnected; update all status'
-        to_remove = self.addr_to_names.pop(addr)
-        names_to_remove = set(to_remove.keys())
-        for name in names_to_remove:
+        for name in self.addr_to_names.pop(addr, []):
             self.name_to_addrs[name].pop(addr, None)
 
     @_locked
@@ -427,7 +437,8 @@ class SearchResults:
         'Channel by name {name} was disconnected from {addr}'
         if name in self.addr_to_names[addr]:
             self.addr_to_names[addr].remove(name)
-            self.name_to_addrs[name].pop(addr, None)
+
+        self.name_to_addrs[name].pop(addr, None)
 
     @_locked
     def get_cached_search_result(self, name, *,
@@ -453,29 +464,26 @@ class SearchResults:
 
     @_locked
     def received_search_response(self, cid, addr):
-        'Get an unanswered search by cid -> name, queue, deadline'
+        'Get an unanswered search by (cid, addr) -> name, queue'
+        first_response = True
         try:
             info = self._unanswered_searches.pop(cid)
         except KeyError:
-            ...
-        else:
-            name, queue, *_ = info
+            first_response = False
+            try:
+                info = self._searches[cid]
+            except KeyError:
+                # Completely unknown cid... ignore
+                raise UnknownSearchResponse('No matching cid') from None
+
+        name, queue, *_ = info
+        self.mark_name_found(name, addr)
+
+        if first_response:
             return name, queue
 
-        try:
-            past_search_info = self._searches[cid]
-            name, *_ = past_search_info
-            addresses = self.name_to_addrs[name]
-        except KeyError:
-            # Completely unknown cid... ignore
-            return
-        else:
-            if len(addresses) > 1:
-                self.log.warning(
-                    "PV %s with cid %d found on multiple "
-                    "servers. Accepted address is %s:%d. "
-                    "Also found on %s:%d",
-                    name, cid, ('TODO', 0), ('TODO', 0))
+        raise DuplicateSearchResponse(name=name, cid=cid,
+                                      addresses=list(self.name_to_addrs[name]))
 
     def items_to_retry(self, threshold, resend_deadline):
         'All search results in need of retrying (if beyond threshold)'
@@ -794,6 +802,7 @@ class SharedBroadcaster:
                                 *address)
                             search_results.new_server_found(address)
                         self.last_beacon_interval[address] = interval
+                    search_results.mark_server_alive(address)
                     self.last_beacon[address] = now
                 elif isinstance(command, ca.VersionResponse):
                     # Per the specification, in CA < 4.11, VersionResponse does
@@ -812,11 +821,25 @@ class SharedBroadcaster:
                     address = ca.extract_address(command)
                     server_protocol_versions[address] = command.version
 
-                    res = search_results.received_search_response(
-                        command.cid, address)
-                    if res is not None:
-                        name, queue = res
+                    cid = command.cid
+                    try:
+                        name, queue = search_results.received_search_response(
+                            cid, address)
+                    except UnknownSearchResponse:
+                        self.log.debug('Unknown search response cid=%d', cid)
+                    except DuplicateSearchResponse as ex:
+                        if len(ex.addresses) > 1:
+                            self.log.warning(
+                                "PV %s with cid %d found on multiple servers. "
+                                "Addresses: %s",
+                                name, cid,
+                                ', '.join('{}:{}'.format(*addr)
+                                          for addr in ex.addresses)
+                            )
+
+                    else:
                         queues[queue].append(name)
+
             # Send the search results to the Contexts that asked for
             # them. This is probably more general than is has to be but
             # I'm playing it safe for now.
@@ -1185,7 +1208,6 @@ class Context:
             name, _ = key
             names.append(name)
 
-            # If there is a cached search result for this name, expire it.
             self.broadcaster.search_results.mark_channel_disconnected(
                 name, pv.channel.circuit.address)
 
@@ -1549,6 +1571,8 @@ class VirtualCircuitManager:
             pv = self.pvs[command.cid]
             chan = self.channels[command.cid]
             self.pvname_to_channels[pv.name].add(chan)
+            self.context.broadcaster.search_results.mark_channel_created(
+                name=pv.name, addr=chan.circuit.address)
             with pv.component_lock:
                 pv.channel = chan
                 pv.channel_ready.set()
@@ -1572,6 +1596,8 @@ class VirtualCircuitManager:
         # Ensure that this method is idempotent.
         if self.dead.is_set():
             return
+        self.context.broadcaster.search_results.mark_server_disconnected(
+            self.circuit.address)
         self.log.debug('Virtual circuit with address %s:%d has disconnected.',
                        *self.circuit.address)
         # Update circuit state. This will be reflected on all PVs, which
