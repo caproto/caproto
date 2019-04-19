@@ -40,9 +40,17 @@ from .._utils import (batch_requests, CaprotoError, ThreadsafeCounter,
 CIRCUIT_DEATH_ATTEMPTS = 3
 
 # sentinels used as default values for arguments
-CONTEXT_DEFAULT_TIMEOUT = object()
-PV_DEFAULT_TIMEOUT = object()
-VALID_CHANNEL_MARKER = object()
+
+def _sentinel(name):
+    class Sentinel:
+        def __repr__(self):
+            return name
+    return Sentinel()
+
+
+CONTEXT_DEFAULT_TIMEOUT = _sentinel('CONTEXT_DEFAULT_TIMEOUT')
+PV_DEFAULT_TIMEOUT = _sentinel('PV_DEFAULT_TIMEOUT')
+VALID_CHANNEL_MARKER = _sentinel('VALID_CHANNEL_MARKER')
 
 
 class DeadCircuitError(CaprotoError):
