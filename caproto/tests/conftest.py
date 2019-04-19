@@ -446,12 +446,7 @@ def curio_server(prefix):
         server_task = await curio.spawn(_server, pvdb, daemon=True)
 
         try:
-            if hasattr(client, 'wait'):
-                # NOTE: wrapped by threaded_in_curio_wrapper
-                await curio.run_in_thread(client)
-                await client.wait()
-            else:
-                await client()
+            await client()
         except caproto.curio.server.ServerExit:
             ...
         finally:
@@ -650,7 +645,6 @@ def threaded_in_curio_wrapper(fcn):
     '''
     uqueue = curio.UniversalQueue()
 
-    @functools.wraps(fcn)
     def wrapped_threaded_func():
         try:
             fcn()
@@ -659,15 +653,15 @@ def threaded_in_curio_wrapper(fcn):
         else:
             uqueue.put(None)
 
-    async def wait():
+    @functools.wraps(fcn)
+    async def test_runner():
         'Wait for the test function completion'
         await curio.run_in_thread(wrapped_threaded_func)
         res = await uqueue.get()
         if res is not None:
             raise res
 
-    wrapped_threaded_func.wait = wait
-    return wrapped_threaded_func
+    return test_runner
 
 
 @pytest.fixture(scope='function', params=['array', 'numpy'])
