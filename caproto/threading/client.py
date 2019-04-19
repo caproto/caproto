@@ -330,6 +330,8 @@ class SearchResults:
         # map name to (time, address)
         self.name_to_addrs = defaultdict(dict)
         self.addr_to_names = defaultdict(set)
+        self._searches = {}
+        self._searches_by_name = {}
         self._unanswered_searches = {}
         self._search_id_counter = ThreadsafeCounter(
             initial_value=random.randint(0, MAX_ID),
@@ -345,7 +347,7 @@ class SearchResults:
         return wrapped
 
     @_locked
-    def new_server_found(self):
+    def new_server_found(self, address):
         '''
         Call when a new server beacon is found:
         Bring all the unanswered searches out of retirement to see if we have a
@@ -374,10 +376,13 @@ class SearchResults:
         Any PV instances that were awaiting these results will be stuck until
         :meth:`get_pvs` is called again.
         """
-        with self._lock:
-            for search_id, item in self._unanswered_searches.items():
-                if item[0] in names:
-                    del self._unanswered_searches[search_id]
+        for name in names:
+            try:
+                cid = self._searches_by_name[name]
+            except KeyError:
+                ...
+            else:
+                self._unanswered_searches.pop(cid, None)
 
     def __contains__(self, name):
         return bool(self.name_to_addrs.get(name, {}))
@@ -390,7 +395,9 @@ class SearchResults:
         'Clear all status'
         self.name_to_addrs.clear()
         self.addr_to_names.clear()
-        self.unanswered_searches.clear()
+        self._unanswered_searches.clear()
+        self._searches_by_name.clear()
+        self._searches.clear()
 
     @_locked
     def mark_server_alive(self, addr):
@@ -421,8 +428,9 @@ class SearchResults:
     @_locked
     def mark_channel_disconnected(self, name, addr):
         'Channel by name {name} was disconnected from {addr}'
-        self.name_to_addrs[name].pop(addr)
-        self.addr_to_names[addr].remove(name)
+        if name in self.addr_to_names[addr]:
+            self.addr_to_names[addr].remove(name)
+            self.name_to_addrs[name].pop(addr, None)
 
     @_locked
     def get_cached_search_result(self, name, *,
@@ -447,9 +455,30 @@ class SearchResults:
         raise CaprotoKeyError(f'{name!r}: stale search result')
 
     @_locked
-    def remove_unanswered_by_cid(self, cid):
+    def received_search_response(self, cid, addr):
         'Get an unanswered search by cid -> name, queue, deadline'
-        return self._unanswered_searches.pop(cid)
+        try:
+            info = self._unanswered_searches.pop(cid)
+        except KeyError:
+            ...
+        else:
+            name, queue, *_ = info
+            return name, queue
+
+        try:
+            past_search_info = self._searches[cid]
+            name, *_ = past_search_info
+            addresses = self.name_to_addrs[name]
+        except KeyError:
+            # Completely unknown cid... ignore
+            return
+        else:
+            if len(addresses) > 1:
+                self.log.warning(
+                    "PV %s with cid %d found on multiple "
+                    "servers. Accepted address is %s:%d. "
+                    "Also found on %s:%d",
+                    name, cid, ('TODO', 0), ('TODO', 0))
 
     def items_to_retry(self, threshold, resend_deadline):
         'All search results in need of retrying (if beyond threshold)'
@@ -477,6 +506,11 @@ class SearchResults:
             for name in names)
 
         self._unanswered_searches.update(new_searches)
+        self._searches.update(new_searches)
+
+        for id, info in new_searches.items():
+            name, *_ = info
+            self._searches_by_name[name] = info
 
     @_locked
     def check_cache(self, names):
@@ -725,7 +759,6 @@ class SharedBroadcaster:
         server_protocol_versions = self.server_protocol_versions
         queues = defaultdict(list)
 
-        results_by_cid = deque(maxlen=1000)
         self.log.debug('Broadcaster command loop is running.')
 
         while not self._close_event.is_set():
@@ -753,7 +786,7 @@ class SharedBroadcaster:
                         # We made a new friend!
                         self.log.info("Watching Beacons from %s:%d",
                                       *address)
-                        search_results.new_server_found()
+                        search_results.new_server_found(address)
                     else:
                         interval = now - self.last_beacon[address]
                         if interval < self.last_beacon_interval.get(address, 0) / 4:
@@ -762,7 +795,7 @@ class SharedBroadcaster:
                             self.log.info(
                                 "Beacon anomaly: %s:%d may have restarted.",
                                 *address)
-                            search_results.new_server_found()
+                            search_results.new_server_found(address)
                         self.last_beacon_interval[address] = interval
                     self.last_beacon[address] = now
                 elif isinstance(command, ca.VersionResponse):
@@ -779,36 +812,14 @@ class SharedBroadcaster:
                             "Quality of support is unknown.")
 
                 elif isinstance(command, ca.SearchResponse):
-                    cid = command.cid
-                    try:
-                        name, queue, *_ = search_results.remove_unanswered_by_cid(cid)
-                    except KeyError:
-                        # This is a redundant response, which the EPICS
-                        # spec tells us to ignore. (The first responder
-                        # to a given request wins.)
-                        try:
-                            _, name = next(r for r in results_by_cid if r[0] == cid)
-                        except StopIteration:
-                            continue
-                        else:
-                            if name in search_results:
-                                accepted_address = search_results.get_cached_search_result(name)
-                                new_address = ca.extract_address(command)
-                                if new_address != accepted_address:
-                                    self.log.warning(
-                                        "PV %s with cid %d found on multiple "
-                                        "servers. Accepted address is %s:%d. "
-                                        "Also found on %s:%d",
-                                        name, cid, *accepted_address, *new_address)
-                    else:
-                        results_by_cid.append((cid, name))
-                        address = ca.extract_address(command)
+                    address = ca.extract_address(command)
+                    server_protocol_versions[address] = command.version
+
+                    res = search_results.received_search_response(
+                        command.cid, address)
+                    if res is not None:
+                        name, queue = res
                         queues[queue].append(name)
-                        # Cache this to save time on future searches.
-                        # (Entries expire after STALE_SEARCH_EXPIRATION.)
-                        self.log.debug('Found %s at %s:%d', name, *address)
-                        search_results.mark_name_found(name, address)
-                        server_protocol_versions[address] = command.version
             # Send the search results to the Contexts that asked for
             # them. This is probably more general than is has to be but
             # I'm playing it safe for now.
