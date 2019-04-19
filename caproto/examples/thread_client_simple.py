@@ -1,6 +1,4 @@
-import logging
-import subprocess
-import sys
+import time
 
 from caproto.threading.client import SharedBroadcaster, Context
 
@@ -39,9 +37,13 @@ def main(pvname1='int', pvname2='str'):
     reading = pv1.read()
     print(f'wrote {value1} and read back: {reading.data}')
 
+    time.sleep(0.1)
+
     pv1.write(value2, timeout=5)
     reading = pv1.read()
     print(f'wrote {value2} and read back: {reading.data}')
+
+    time.sleep(0.1)
 
     # Clean up the subscription
     sub.clear()
@@ -55,10 +57,4 @@ def main(pvname1='int', pvname2='str'):
 
 
 if __name__ == '__main__':
-    logging.getLogger('caproto').setLevel('DEBUG')
-    p = subprocess.Popen([sys.executable, '-um',
-                         'caproto.ioc_examples.type_varieties'])
-    try:
-        main()
-    finally:
-        p.kill()
+    main(pvname1='simple:A', pvname2='simple:B')
