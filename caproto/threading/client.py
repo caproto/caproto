@@ -27,7 +27,7 @@ import weakref
 
 from queue import Queue, Empty
 from inspect import Parameter, Signature
-from collections import defaultdict, deque
+from collections import defaultdict
 import caproto as ca
 from .._constants import (MAX_ID, STALE_SEARCH_EXPIRATION,
                           SEARCH_MAX_DATAGRAM_BYTES, RESPONSIVENESS_TIMEOUT)
