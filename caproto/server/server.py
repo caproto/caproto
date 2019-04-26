@@ -1308,7 +1308,7 @@ def template_arg_parser(*, desc, default_prefix, argv=None, macros=None,
     parser.add_argument('--async-lib', default=choices[0],
                         choices=choices,
                         help=("Which asynchronous library to use. "
-                              "Default is curio."))
+                              "Default is asyncio."))
     default_intf = get_server_address_list()
     if default_intf == ['0.0.0.0']:
         default_msg = '0.0.0.0'
