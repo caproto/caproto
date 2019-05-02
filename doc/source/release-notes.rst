@@ -2,6 +2,16 @@
 Release History
 ***************
 
+v0.3.4 (2019-05-02)
+===================
+
+Fixes
+-----
+* Several fixes and documentation for the commandline utilities' formatting
+  parameters added in v0.3.3.
+* Put an upper limit on how quickly a given search result may be reissued.
+* Documentation fix in server help string.
+
 v0.3.3 (2019-04-11)
 ===================
 
