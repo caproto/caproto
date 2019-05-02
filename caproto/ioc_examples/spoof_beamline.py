@@ -2,7 +2,8 @@
 from caproto.server import ioc_arg_parser, run
 
 from collections import defaultdict
-from caproto import ChannelData, ChannelString, ChannelEnum
+from caproto import (ChannelString, ChannelEnum, ChannelDouble,
+                     ChannelChar, ChannelData)
 import re
 
 
@@ -53,11 +54,20 @@ def fabricate_channel(key):
         return ChannelEnum(value=0, enum_strings=['Disabled', 'Enabled'])
     elif 'BlockingCallbacks' in key:
         return ChannelEnum(value=0, enum_strings=['No', 'Yes'])
+    elif 'Auto' in key:
+        return ChannelEnum(value=0, enum_strings=['No', 'Yes'])
     elif 'ImageMode' in key:
-        return ChannelEnum(value=0, enum_strings=['Single', 'Multiple', 'Continious'])
+        return ChannelEnum(value=0, enum_strings=['Single', 'Multiple', 'Continuous'])
     elif 'TriggerMode' in key:
         return ChannelEnum(value=0, enum_strings=['Internal', 'External'])
-    return ChannelData(value=0)
+    elif 'FileWriteMode' in key:
+        return ChannelEnum(value=0, enum_strings=['Single'])
+    elif 'FilePathExists' in key:
+        return ChannelData(value=1)
+    elif ('file' in key.lower() and 'number' not in key.lower() and
+          'mode' not in key.lower()):
+        return ChannelChar(value='a' * 250)
+    return ChannelDouble(value=0.0)
 
 
 def main():

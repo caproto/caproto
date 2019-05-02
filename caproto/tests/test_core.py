@@ -25,6 +25,9 @@ def test_counter_wraparound(circuit_pair):
     circuit, _ = circuit_pair
     broadcaster = ca.Broadcaster(ca.CLIENT)
 
+    # Force the initial value of search IDs to make this test work
+    broadcaster._search_id_counter.value = -1
+
     MAX = 2**16
     for i in range(MAX + 2):
         assert i % MAX == circuit.new_channel_id()
@@ -36,6 +39,10 @@ def test_counter_wraparound(circuit_pair):
 def test_counter_skipping(circuit_pair):
     circuit, _ = circuit_pair
     broadcaster = ca.Broadcaster(ca.CLIENT)
+
+    # Force the initial value of search IDs to make this test work
+    broadcaster._search_id_counter.value = -1
+    circuit._channel_id_counter.value = -1
 
     broadcaster.unanswered_searches[0] = 'placeholder'
     broadcaster.unanswered_searches[2] = 'placeholder'
@@ -367,3 +374,43 @@ def test_circuit_equality():
     b = ca.VirtualCircuit(ca.CLIENT, ('asdf', 1234), 1)
     c = ca.VirtualCircuit(ca.CLIENT, ('asdf', 1234), 2)
     assert a == b != c
+
+
+def test_ioid_exhaustion(circuit_pair):
+    max_id = 15
+    cli_circuit, srv_circuit = circuit_pair
+    # make the test run faster by not doing it 2**16 times
+    cli_circuit._ioid_counter.MAX_ID = max_id
+    srv_circuit._ioid_counter.MAX_ID = max_id
+
+    cli_channel, srv_channel = make_channels(*circuit_pair, 5, 1, name='a')
+
+    data = [1]
+    data_count = 1
+
+    # if this is broken it will hang
+    for N in range(max_id + 10):
+        # create a read request and serialize
+        req = cli_channel.read()
+        assert req.ioid < max_id
+        buffers_to_send = cli_circuit.send(req)
+
+        # set the bits to the server and create a response
+        (command,), _ = srv_circuit.recv(*buffers_to_send)
+        srv_circuit.process_command(command)
+        assert command.ioid < max_id
+        resp = srv_channel.read(data=data, data_type=command.data_type,
+                                data_count=data_count, status=0,
+                                ioid=command.ioid, metadata=None,
+                                notify=True)
+        buffers_to_send = srv_circuit.send(resp)
+
+        # send the results back to the client
+        (cmd, ), _ = cli_circuit.recv(*buffers_to_send)
+
+        cli_circuit.process_command(cmd)
+
+        # IMPLEMENTATION DETAIL CHECK that will fail quickly,
+        # but depends on an implementation detail.
+        assert len(cli_circuit._ioids) == 0
+        assert len(srv_circuit._ioids) == 0

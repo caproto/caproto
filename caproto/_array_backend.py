@@ -1,10 +1,10 @@
 import array
+import copy
 import ctypes
 import sys
-from ._backend import Backend, register_backend
-from ._dbr import (ChannelType, DbrStringArray,
-                   native_int_types, native_float_types,
-                   native_types, DBR_TYPES)
+from ._backend import Backend, register_backend, convert_values
+from ._dbr import (ChannelType, DbrStringArray, native_int_types,
+                   native_float_types, native_types, DBR_TYPES)
 
 
 default_endian = ('>' if sys.byteorder == 'big'
@@ -13,7 +13,7 @@ default_endian = ('>' if sys.byteorder == 'big'
 
 class Array(array.ArrayType):
     'Simple array.array subclass which tracks endianness'
-    __dict__ = {}
+    __slots__ = ('endian',)
 
     def __init__(self, type_code, values, *, endian=default_endian):
         self.endian = endian
@@ -32,6 +32,12 @@ class Array(array.ArrayType):
         self.endian = {'<': '>',
                        '>': '<'}[self.endian]
         super().byteswap()
+
+    if 'pypy' in sys.implementation.name:
+        def __deepcopy__(self, memo):
+            # this works around a bug in deepcopy on pypy
+            ret = copy.deepcopy(array.ArrayType(self.typecode, self))
+            return Array(self.typecode, ret, endian=self.endian)
 
 
 type_map = {
@@ -111,15 +117,16 @@ def _setup():
     try:
         import numpy
     except ImportError:
-        array_types = (Array, array.ArrayType, )
+        array_types = (Array, array.ArrayType, DbrStringArray)
     else:
-        array_types = (Array, array.ArrayType, numpy.ndarray)
+        array_types = (Array, array.ArrayType, numpy.ndarray, DbrStringArray)
 
     return Backend(name='array',
                    array_types=array_types,
                    type_map=type_map,
                    epics_to_python=epics_to_python,
                    python_to_epics=python_to_epics,
+                   convert_values=convert_values,
                    )
 
 

@@ -4,9 +4,14 @@ import trio
 from caproto.trio.client import (SharedBroadcaster, Context)
 
 
-async def main(pv1="XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL",
-               pv2="XF:31IDA-OP{Tbl-Ax:X2}Mtr.VAL"):
-    '''Simple example which connects to two motorsim PVs (by default).
+async def main(pv1="simple:A", pv2="simple:B"):
+    '''Simple example which connects to two PVs on the simple IOC (by default).
+
+    Start the simple IOC like so:
+
+    python -m caproto.ioc_examples.simple
+
+    and then run this example.
 
     It tests reading, writing, and subscriptions.
     '''

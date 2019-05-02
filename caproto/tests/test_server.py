@@ -1,7 +1,9 @@
-import array
 import ast
+import asyncio
+import copy
 import datetime
 import sys
+import time
 
 import pytest
 
@@ -10,7 +12,7 @@ import caproto as ca
 from caproto import ChannelType
 from .epics_test_utils import (run_caget, run_caput)
 from .conftest import array_types, run_example_ioc
-from caproto.sync.client import write, ErrorResponseReceived
+from caproto.sync.client import write, read, ErrorResponseReceived
 
 
 caget_checks = sum(
@@ -172,22 +174,21 @@ def test_with_caget(backends, prefix, pvdb_from_server_example, server, pv,
     print('done')
 
 
-caput_checks = [('int', '1', [1]),
-                ('pi', '3.15', [3.15]),
-                ('enum', 'd', ['d']),
-                ('enum2', 'cc', ['cc']),
-                ('str', 'resolve', ['resolve']),
+caput_checks = [('int', '1', 1),
+                ('pi', '3.15', 3.15),
+                ('enum', 'd', 'd'),
+                ('enum2', 'cc', 'cc'),
+                ('str', 'resolve', 'resolve'),
                 ('char', '51', b'3'),
-                ('chararray', 'testing', ['testing']),
-                # ('bytearray', 'testing', list(b'testing')),
+                ('chararray', 'testing', 'testing'),
+                ('bytearray', 'testing', b'testing'),
                 ('stra', ['char array'], ['char array']),
                 ]
 
 
 @pytest.mark.parametrize('pv, put_value, check_value', caput_checks)
-# @pytest.mark.parametrize('async_put', [True, False])
 def test_with_caput(backends, prefix, pvdb_from_server_example, server, pv,
-                    put_value, check_value, async_put=True):
+                    put_value, check_value):
 
     caget_pvdb = {prefix + pv_: value
                   for pv_, value in pvdb_from_server_example.items()
@@ -210,43 +211,33 @@ def test_with_caput(backends, prefix, pvdb_from_server_example, server, pv,
                                                                ca.ChannelChar)))
         db_new = db_entry.value
 
+        clean_func = None
         if isinstance(db_entry, (ca.ChannelInteger, ca.ChannelDouble)):
             def clean_func(v):
-                return [ast.literal_eval(v)]
+                return ast.literal_eval(v)
         elif isinstance(db_entry, (ca.ChannelEnum, )):
             def clean_func(v):
                 if ' ' not in v:
-                    return [v]
-                return [v.split(' ', 1)[1]]
-            # db_new = [db_entry.enum_strings[db_new[0]]]
+                    return v
+                return v.split(' ', 1)[1]
         elif isinstance(db_entry, ca.ChannelByte):
-            if pv.endswith('bytearray'):
-                def clean_func(v):
-                    try:
-                        import numpy
-                    except ImportError:
-                        return numpy.frombuffer(
-                            v.encode('latin-1'), dtype=numpy.uint8)
-                    else:
-                        return array.array('I', v.encode('latin-1'))
-            else:
-                def clean_func(v):
+            def clean_func(v):
+                if pv.endswith('bytearray'):
+                    return v.encode('latin-1')
+                else:
                     return chr(int(v)).encode('latin-1')
-        elif isinstance(db_entry, (ca.ChannelChar, ca.ChannelString)):
+        elif isinstance(db_entry, ca.ChannelChar):
+            ...
+        elif isinstance(db_entry, ca.ChannelString):
             if pv.endswith('stra'):
                 # database holds ['char array'], caput shows [len char array]
                 def clean_func(v):
                     return [v.split(' ', 1)[1]]
-            else:
-                # database holds ['string'], caput doesn't show it
-                def clean_func(v):
-                    return [v]
-        else:
-            clean_func = None
 
         if clean_func is not None:
             for key in ('old', 'new'):
                 data[key] = clean_func(data[key])
+
         print('caput data', data)
         print('old from db', db_old)
         print('new from db', db_new)
@@ -275,14 +266,99 @@ def test_with_caput(backends, prefix, pvdb_from_server_example, server, pv,
     print('done')
 
 
-def test_limits_enforced(request, prefix):
-    pv = f'{prefix}pi'
-    run_example_ioc('caproto.ioc_examples.type_varieties', request=request,
-                    args=['--prefix', prefix],
-                    pv_to_check=pv)
+def test_limits_enforced(request, caproto_ioc):
+    pv = caproto_ioc.pvs['float']
     write(pv, 3.101, notify=True)  # within limit
     write(pv, 3.179, notify=True)  # within limit
     with pytest.raises(ErrorResponseReceived):
         write(pv, 3.09, notify=True)  # beyond limit
     with pytest.raises(ErrorResponseReceived):
         write(pv, 3.181, notify=True)  # beyond limit
+
+
+def test_empties_with_caproto_client(request, caproto_ioc):
+    assert read(caproto_ioc.pvs['empty_string']).data == [b'']
+    assert list(read(caproto_ioc.pvs['empty_bytes']).data) == []
+    assert list(read(caproto_ioc.pvs['empty_char']).data) == []
+    assert list(read(caproto_ioc.pvs['empty_float']).data) == []
+
+
+def test_empties_with_caget(request, caproto_ioc):
+    async def test():
+        info = await run_caget('asyncio', caproto_ioc.pvs['empty_string'])
+        assert info['value'] == ''
+
+        info = await run_caget('asyncio', caproto_ioc.pvs['empty_bytes'])
+        # NOTE: this zero is not a value, it's actually the length:
+        # $ caget  type_varieties:empty_bytes
+        # type_varieties:empty_bytes     0
+        # $ caget -#0  type_varieties:empty_bytes
+        # type_varieties:empty_bytes     0
+        # $ caget -#1  type_varieties:empty_bytes
+        # type_varieties:empty_bytes     1 0
+        assert info['value'] == '0'
+
+        info = await run_caget('asyncio', caproto_ioc.pvs['empty_char'])
+        assert info['value'] == '0'
+
+        info = await run_caget('asyncio', caproto_ioc.pvs['empty_float'])
+        # NOTE: 2 below is length, with 2 elements of 0
+        assert info['value'] == ['2', '0', '0']
+        # TODO: somehow caget gets the max_length instead of the current
+        # length.  caproto-get does not have this issue.
+
+    asyncio.get_event_loop().run_until_complete(test())
+
+
+def test_char_write(request, caproto_ioc):
+    pv = caproto_ioc.pvs['chararray']
+    write(pv, b'testtesttest', notify=True)
+    response = read(pv)
+    assert ''.join(chr(c) for c in response.data) == 'testtesttest'
+
+
+@pytest.mark.parametrize('async_lib', ['asyncio', 'curio', 'trio'])
+def test_write_without_notify(request, prefix, async_lib):
+    pv = f'{prefix}pi'
+    run_example_ioc('caproto.ioc_examples.type_varieties', request=request,
+                    args=['--prefix', prefix, '--async-lib', async_lib],
+                    pv_to_check=pv)
+    write(pv, 3.179, notify=False)
+    # We do not get notified so we have to poll for an update.
+    for attempt in range(20):
+        if read(pv).data[0] > 3.178:
+            break
+        time.sleep(0.1)
+    else:
+        raise AssertionError("Server never processed WriteRequest.")
+
+
+@pytest.mark.parametrize(
+    'cls, kwargs',
+    [(ca.ChannelAlarm, {}),
+     (ca.ChannelData, {}),
+     (ca.ChannelByte, {'value': b'b'}),
+     (ca.ChannelChar, {'value': 'b', 'string_encoding': 'latin-1'}),
+     (ca.ChannelDouble, {'value': 0.1}),
+     (ca.ChannelEnum, {'value': 'a', 'string_encoding': 'latin-1',
+                       'enum_strings': ['a', 'b', 'c']}),
+     (ca.ChannelInteger, {'value': 5}),
+     (ca.ChannelNumeric, {'value': 5}),
+     (ca.ChannelShort, {'value': 5}),
+     (ca.ChannelString, {'value': 'abcd'}),
+     ]
+)
+def test_data_copy(cls, kwargs):
+    inst1 = cls(**kwargs)
+    _, args1 = inst1.__getnewargs_ex__()
+
+    inst2 = copy.deepcopy(inst1)
+    _, args2 = inst2.__getnewargs_ex__()
+
+    def patch_alarm(args):
+        if 'alarm' in args:
+            args['alarm'] = args['alarm'].__getnewargs_ex__()
+
+    patch_alarm(args1)
+    patch_alarm(args2)
+    assert args1 == args2

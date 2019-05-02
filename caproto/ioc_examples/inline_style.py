@@ -13,7 +13,7 @@ class InlineStyleIOC(PVGroup):
     async def random_str(self, instance):
         return random.choice('abc')
 
-    @pvproperty(value=['c'])  # initializes value and, implicitly, dtype
+    @pvproperty(value='c')  # initializes value and, implicitly, dtype
     async def A(self, instance):
         print('reading A')
         return instance.value

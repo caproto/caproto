@@ -53,15 +53,7 @@ async def run_epics_base_binary(backend, *args, max_attempts=3):
         return raw_stdout, raw_stderr
 
     if backend == 'curio':
-        if sys.platform == 'win32':
-            raw_stdout, raw_stderr = await curio.run_in_thread(runner)
-        else:
-            p = curio.subprocess.Popen(args, env=env,
-                                       stdout=curio.subprocess.PIPE,
-                                       stderr=curio.subprocess.PIPE)
-            await p.wait()
-            raw_stdout = await p.stdout.read()
-            raw_stderr = await p.stderr.read()
+        raw_stdout, raw_stderr = await curio.run_in_thread(runner)
     elif backend == 'trio':
         raw_stdout, raw_stderr = await trio.run_sync_in_worker_thread(runner)
     elif backend == 'asyncio':
@@ -137,13 +129,22 @@ async def run_caget(backend, pv, *, dbr_type=None):
 
     if wide_mode:
         print('lines')
-        print(lines[0].split(sep))
-        pv, timestamp, value, stat, sevr = lines[0].split(sep)
-        info = dict(pv=pv,
-                    timestamp=timestamp,
-                    value=value,
-                    status=stat,
-                    severity=sevr)
+        if '*** CA error' in lines[0]:
+            error_message = lines[0]
+            info = dict(pv=pv,
+                        value=error_message[error_message.index('*'):]
+                        )
+        else:
+            print(lines[0].split(sep))
+            pv, timestamp, *value, stat, sevr = lines[0].split(sep)
+            if len(value) == 1:
+                value = value[0]
+
+            info = dict(pv=pv,
+                        timestamp=timestamp,
+                        value=value,
+                        status=stat,
+                        severity=sevr)
     else:
         info = dict(pv=lines[0])
         in_enum_section = False

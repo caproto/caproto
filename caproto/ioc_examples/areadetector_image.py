@@ -15,8 +15,17 @@ async def get_images(w, h):
             yield img
 
 
+class SC(ophyd.areadetector.cam.SimDetectorCam):
+    pool_max_buffers = None
+
+
+class IP(ophyd.ImagePlugin):
+    pool_max_buffers = None
+
+
 class Detector(ophyd.SimDetector):
-    image1 = ophyd.Component(ophyd.ImagePlugin, 'image1:')
+    image1 = ophyd.Component(IP, 'image1:')
+    cam = ophyd.Component(SC, 'cam1:')
 
 
 pvproperty_with_rbv = get_pv_pair_wrapper(setpoint_suffix='',
@@ -33,7 +42,8 @@ class DetectorGroup(PVGroup):
         array_rate = pvproperty(
             name='ArrayRate_RBV', dtype=float, read_only=True)
         asyn_io = pvproperty(name='AsynIO', dtype=int)
-        nd_attributes_file = pvproperty(name='NDAttributesFile', dtype=str)
+        nd_attributes_file = pvproperty(
+            name='NDAttributesFile', dtype=str, max_length=256)
         pool_alloc_buffers = pvproperty(
             name='PoolAllocBuffers', dtype=int, read_only=True)
         pool_free_buffers = pvproperty(
@@ -124,11 +134,20 @@ class DetectorGroup(PVGroup):
         size = SubGroup(SimDetectorCamSizeGroup, prefix='')
 
         status_message = pvproperty(
-            name='StatusMessage_RBV', dtype=str, read_only=True)
+            name='StatusMessage_RBV',
+            dtype=str,
+            max_length=256,
+            read_only=True)
         string_from_server = pvproperty(
-            name='StringFromServer_RBV', dtype=str, read_only=True)
+            name='StringFromServer_RBV',
+            dtype=str,
+            max_length=256,
+            read_only=True)
         string_to_server = pvproperty(
-            name='StringToServer_RBV', dtype=str, read_only=True)
+            name='StringToServer_RBV',
+            dtype=str,
+            max_length=256,
+            read_only=True)
         temperature = pvproperty_with_rbv(name='Temperature', dtype=float)
         temperature_actual = pvproperty(name='TemperatureActual', dtype=float)
         time_remaining = pvproperty(
@@ -187,7 +206,8 @@ class DetectorGroup(PVGroup):
         array_rate = pvproperty(
             name='ArrayRate_RBV', dtype=float, read_only=True)
         asyn_io = pvproperty(name='AsynIO', dtype=int)
-        nd_attributes_file = pvproperty(name='NDAttributesFile', dtype=str)
+        nd_attributes_file = pvproperty(
+            name='NDAttributesFile', dtype=str, max_length=256)
         pool_alloc_buffers = pvproperty(
             name='PoolAllocBuffers', dtype=int, read_only=True)
         pool_free_buffers = pvproperty(
@@ -223,19 +243,19 @@ class DetectorGroup(PVGroup):
         color_mode = pvproperty(
             name='ColorMode_RBV', dtype=int, read_only=True)
         data_type = pvproperty(name='DataType_RBV', dtype=str, read_only=True)
-        # dim0_sa = pvproperty(name='Dim0SA', dtype=int)
-        # dim1_sa = pvproperty(name='Dim1SA', dtype=int)
-        # dim2_sa = pvproperty(name='Dim2SA', dtype=int)
+        # dim0_sa = pvproperty(name='Dim0SA', dtype=int, max_length=10)
+        # dim1_sa = pvproperty(name='Dim1SA', dtype=int, max_length=10)
+        # dim2_sa = pvproperty(name='Dim2SA', dtype=int, max_length=10)
 
         class ImagePluginDimSaGroup(PVGroup):
-            dim0 = pvproperty(name='Dim0SA', dtype=int)
-            dim1 = pvproperty(name='Dim1SA', dtype=int)
-            dim2 = pvproperty(name='Dim2SA', dtype=int)
+            dim0 = pvproperty(name='Dim0SA', dtype=int, max_length=10)
+            dim1 = pvproperty(name='Dim1SA', dtype=int, max_length=10)
+            dim2 = pvproperty(name='Dim2SA', dtype=int, max_length=10)
 
         dim_sa = SubGroup(ImagePluginDimSaGroup, prefix='')
 
         dimensions = pvproperty(
-            name='Dimensions_RBV', dtype=int, read_only=True)
+            name='Dimensions_RBV', dtype=int, max_length=10, read_only=True)
         dropped_arrays = pvproperty_with_rbv(name='DroppedArrays', dtype=int)
         enable = pvproperty_with_rbv(name='EnableCallbacks', dtype=str)
         min_callback_time = pvproperty_with_rbv(
@@ -256,10 +276,10 @@ class DetectorGroup(PVGroup):
         time_stamp = pvproperty(
             name='TimeStamp_RBV', dtype=float, read_only=True)
         unique_id = pvproperty(name='UniqueId_RBV', dtype=int, read_only=True)
-        array_data = pvproperty(name='ArrayData', dtype=int)
+        array_data = pvproperty(
+            name='ArrayData', dtype=int, max_length=300000)
 
         # NOTE: this portion written by hand:
-        # --
         @array_data.startup
         async def array_data(self, instance, async_lib):
             await self.plugin_type.write('NDPluginStdArrays')

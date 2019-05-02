@@ -12,21 +12,25 @@ Python session, do not import this module; instead import caproto.sync.client.
 """
 import argparse
 import ast
+import sys
 from datetime import datetime
 import logging
+from .. import set_handler, __version__
 from ..sync.client import read_write_read
-from .. import color_logs
+from .._utils import ShowVersionAction
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Write a value to a PV.')
+    parser = argparse.ArgumentParser(description='Write a value to a PV.',
+                                     epilog=f'caproto version {__version__}')
+    parser.register('action', 'show_version', ShowVersionAction)
     fmt_group = parser.add_mutually_exclusive_group()
     parser.add_argument('pv_name', type=str,
                         help="PV (channel) name")
     parser.add_argument('data', type=str,
                         help="Value or values to write.")
     parser.add_argument('--verbose', '-v', action='count',
-                        help="Show DEBUG log messages.")
+                        help="Show more log messages. (Use -vvv for even more.)")
     fmt_group.add_argument('--format', type=str,
                            help=("Python format string. Available tokens are "
                                  "{pv_name}, {response} and {which} (Old/New)."
@@ -47,9 +51,9 @@ def main():
     fmt_group.add_argument('--terse', '-t', action='store_true',
                            help=("Display data only. Unpack scalars: "
                                  "[3.] -> 3."))
-    # caget calls this "wide mode" with -a and caput calls it "long mode" with
-    # -l. We will support both -a and -l in both caproto-get and caproto-put.
-    fmt_group.add_argument('--wide', '-a', '-l', action='store_true',
+    # caget calls this "wide mode" with -a  (used for array mode in caput) and
+    # caput calls it "long mode" with -l.
+    fmt_group.add_argument('--wide', '-l', action='store_true',
                            help=("Wide mode, showing "
                                  "'name timestamp value status'"
                                  "(implies -d 'time')"))
@@ -58,25 +62,43 @@ def main():
     parser.add_argument('-n', action='store_true',
                         help=("Retrieve enums as integers (default is "
                               "strings)."))
+    parser.add_argument('--array', '-a', action='store_true',
+                        help=("Interprets `data` as an array, delimited by "
+                              "space"))
+    parser.add_argument('--array-pad', type=int, default=0,
+                        help=("Pad the array up to a specified length"))
     parser.add_argument('--no-color', action='store_true',
                         help="Suppress ANSI color codes in log messages.")
     parser.add_argument('--no-repeater', action='store_true',
                         help=("Do not spawn a Channel Access repeater daemon "
                               "process."))
+    parser.add_argument('--version', '-V', action='show_version',
+                        default=argparse.SUPPRESS,
+                        help="Show caproto version and exit.")
     args = parser.parse_args()
     if args.no_color:
-        color_logs(False)
+        set_handler(color=False)
     if args.verbose:
         logging.getLogger(f'caproto.ch').setLevel('DEBUG')
         logging.getLogger(f'caproto.ctx').setLevel('DEBUG')
         if args.verbose > 2:
             logging.getLogger('caproto').setLevel('DEBUG')
     logger = logging.getLogger(f'caproto.ch.{args.pv_name}')
-    try:
-        data = ast.literal_eval(args.data)
-    except ValueError:
-        # interpret as string
-        data = args.data
+
+    if args.array:
+        data = [ast.literal_eval(val) for val in args.data.split(' ')]
+        if args.array_pad > 0:
+            if len(data) < args.array:
+                data.extend([0] * (args.array - len(data)))
+            elif len(data) > args.array:
+                logger.error('Pad value smaller than array size')
+                sys.exit(1)
+    else:
+        try:
+            data = ast.literal_eval(args.data)
+        except ValueError:
+            # interpret as string
+            data = args.data
     if args.wide:
         read_data_type = 'time'
     else:

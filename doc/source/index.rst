@@ -56,10 +56,10 @@ In another, use the command-line client:
 
 .. code-block:: bash
 
-   caproto-put -c simple:A 42
+   caproto-put simple:A 42
 
-This sets the value to 42 and wait for it to "complete" (``-c``). Read more
-about the :doc:`command-line-client` and :doc:`iocs`.
+This sets the value to 42. Read more about the :doc:`command-line-client` and
+:doc:`iocs`.
 
 10 Reasons To Use Caproto and 1 Big Reason Not To
 =================================================
@@ -153,6 +153,8 @@ learning exercises.
    iocs
    mock-records
    servers
+   shark
+   loggers
 
 .. toctree::
    :maxdepth: 2

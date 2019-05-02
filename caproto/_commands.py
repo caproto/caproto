@@ -57,7 +57,7 @@ from ._backend import backend
 from ._status import eca_value_to_status, ensure_eca_value
 from ._utils import (CLIENT, NEED_DATA, REQUEST, RESPONSE, SERVER,
                      CaprotoTypeError, CaprotoValueError,
-                     CaprotoNotImplementedError,
+                     CaprotoNotImplementedError, ValidationError,
                      ensure_bytes)
 
 
@@ -288,11 +288,7 @@ def extract_metadata(payload, data_type):
 
 
 def get_command_class(role, header):
-    _class = Commands[role][header.command]
-    # Special case for EventCancelResponse which is coded inconsistently.
-    if role is SERVER and header.command == 1 and header.payload_size == 0:
-        _class = Commands[role][2]
-    return _class
+    return Commands[role][header.command]
 
 
 def read_datagram(data, address, role):
@@ -302,7 +298,7 @@ def read_datagram(data, address, role):
     while barray:
         header = MessageHeader.from_buffer(barray)
         barray = barray[_MessageHeaderSize:]
-        _class = get_command_class(role, header)
+        _class = Commands[role][header.command]
         payload_size = header.payload_size
         if _class.HAS_PAYLOAD:
             payload_bytes = barray[:header.payload_size]
@@ -369,7 +365,7 @@ def read_from_bytestream(data, role):
     if num_bytes_needed > 0:
         return data, NEED_DATA, num_bytes_needed
 
-    _class = get_command_class(role, header)
+    _class = Commands[role][header.command]
 
     header_size = ctypes.sizeof(header)
     total_size = header_size + header.payload_size
@@ -387,33 +383,31 @@ Commands[SERVER] = {}
 _commands = set()
 
 
-class _MetaDirectionalMessage(type):
-    # see what you've done, @tacaswell and @danielballan?
-    def __new__(metacls, name, bases, dct):
-        if name.endswith('Request'):
-            direction = REQUEST
-            command_dict = Commands[CLIENT]
-        else:
-            direction = RESPONSE
-            command_dict = Commands[SERVER]
-
-        dct['DIRECTION'] = direction
-        new_class = super().__new__(metacls, name, bases, dct)
-
-        if new_class.ID is not None:
-            command_dict[new_class.ID] = new_class
-
-        if name in ('Beacon, '):
-            Commands[CLIENT][new_class.ID] = new_class
-            Commands[SERVER][new_class.ID] = new_class
-
-        _commands.add(new_class)
-        return new_class
-
-
-class Message(metaclass=_MetaDirectionalMessage):
+class Message:
     __slots__ = ('header', 'buffers', 'sender_address')
     ID = None  # integer, to be overriden by subclass
+
+    def __init_subclass__(cls, register=True):
+        if register:
+            # Add this class to the global registries of commands.
+            name = cls.__name__
+            if name.endswith('Request'):
+                direction = REQUEST
+                command_dict = Commands[CLIENT]
+            else:
+                direction = RESPONSE
+                command_dict = Commands[SERVER]
+
+            cls.DIRECTION = direction
+
+            if cls.ID is not None:
+                command_dict[cls.ID] = cls
+
+            if name in ('Beacon, '):
+                Commands[CLIENT][cls.ID] = cls
+                Commands[SERVER][cls.ID] = cls
+
+            _commands.add(cls)
 
     def __init__(self, header, *buffers, validate=True, sender_address=None):
         self.header = header
@@ -425,44 +419,58 @@ class Message(metaclass=_MetaDirectionalMessage):
 
     def validate(self):
         size = sum(bytelen(buf) for buf in self.buffers)
-        if self.buffers is () and self.header.payload_size != 0:
-            raise CaprotoValueError(
+        if self.buffers == () and self.header.payload_size != 0:
+            raise ValidationError(
                 "{}.header.payload_size {} > 0 but payload is None."
                 "".format(type(self).__name__, self.header.payload_size))
         elif self.header.payload_size != size:
-            raise CaprotoValueError(
+            raise ValidationError(
                 "{}.header.payload_size {} != payload size of {}"
                 "".format(type(self).__name__, self.header.payload_size, size))
         if self.header.command != self.ID:
-            raise CaprotoTypeError(
+            raise ValidationError(
                 "A {} must have a header with header.command == {}, not {}."
                 "".format(type(self).__name__, self.ID, self.header.command))
 
     @classmethod
-    def from_wire(cls, header, payload_bytes, *, sender_address=None):
+    def from_wire(cls, header, payload_bytes, *, sender_address=None,
+                  validate=False):
         """
         Use header.dbr_type to pack payload bytes into the right structure.
 
         Some Command types allocate a different meaning to the header.dbr_type
         field, and these override this method in their subclass.
+
+        We do *not* validate by default, both for performance and for
+        forward-compability. But validation may be useful to turn on in the
+        context of consuming network traffic and trying to identify CA packets
+        (e.g. caproto.sync.shark).
         """
         if not cls.HAS_PAYLOAD:
             return cls.from_components(header)
         payload = from_buffer(header.data_type, header.data_count,
                               payload_bytes)
-        return cls.from_components(header, *payload)
+        return cls.from_components(header, *payload,
+                                   sender_address=sender_address,
+                                   validate=validate)
 
     @classmethod
-    def from_components(cls, header, *buffers, sender_address=None):
+    def from_components(cls, header, *buffers, sender_address=None,
+                        validate=False):
         # Bwahahahaha
         instance = cls.__new__(cls)
         instance.header = header
         instance.buffers = buffers
         instance.sender_address = sender_address
+        if validate:
+            instance.validate()
         return instance
 
     def __eq__(self, other):
         return bytes(self) == bytes(other)
+
+    def __hash__(self):
+        return hash(bytes(self))
 
     def __ne__(self, other):
         return bytes(self) != bytes(other)
@@ -525,13 +533,15 @@ class VersionRequest(Message):
     HAS_PAYLOAD = False
 
     def __init__(self, priority, version):
-        if not (0 <= priority < 100):
-            raise CaprotoValueError("Expecting 0 < priority < 100")
         header = VersionRequestHeader(priority, version)
         super().__init__(header)
 
     priority = property(lambda self: self.header.data_type)
     version = property(lambda self: self.header.data_count)
+
+    def validate(self):
+        if not (0 <= self.priority < 100):
+            raise ValidationError("Expecting 0 < priority < 100")
 
 
 class VersionResponse(Message):
@@ -599,14 +609,15 @@ class SearchRequest(Message):
         super().__init__(header, b'', payload)
 
     @classmethod
-    def from_wire(cls, header, *buffers, sender_address=None):
+    def from_wire(cls, header, *buffers, sender_address=None, validate=False):
         # Special-case to handle the fact that data_type holds whether or not
         # to reply to the request upon failure - this can cause part of the
         # payload to be interpreted as metadata in from_buffer (TODO: is there
         # a better place to special-case/fix this?)
         payload_buffer = b''.join(buffers)
         return cls.from_components(header, b'', payload_buffer,
-                                   sender_address=sender_address)
+                                   sender_address=sender_address,
+                                   validate=validate)
 
     payload_size = property(lambda self: self.header.payload_size)
     reply = property(lambda self: self.header.data_type)
@@ -654,11 +665,12 @@ class SearchResponse(Message):
         super().__init__(header, payload)
 
     @classmethod
-    def from_wire(cls, header, *buffers, sender_address=None):
+    def from_wire(cls, header, *buffers, sender_address=None, validate=False):
         # Special-case to handle the fact that data_type field is not the data
         # type. (It's used to hold the server port, unrelated to the payload.)
         return cls.from_components(header, *buffers,
-                                   sender_address=sender_address)
+                                   sender_address=sender_address,
+                                   validate=validate)
 
     @property
     def ip(self):
@@ -908,10 +920,12 @@ class EventAddRequest(Message):
         super().__init__(header, payload)
 
     @classmethod
-    def from_wire(cls, header, *buffers, sender_address=None):
+    def from_wire(cls, header, *buffers, sender_address=None,
+                  validate=False):
         payload_struct = EventAddRequestPayload.from_buffer(buffers[0])
         return cls.from_components(header, payload_struct,
-                                   sender_address=sender_address)
+                                   sender_address=sender_address,
+                                   validate=validate)
 
     @property
     def payload_struct(self):
@@ -958,7 +972,7 @@ class EventAddResponse(Message):
 
         Echoing the :data:`subscriptionid` in the :class:`EventAddRequest`
     """
-    __slots__ = ()
+    __slots__ = ('__weakref__',)
     ID = 1
     HAS_PAYLOAD = True
 
@@ -988,16 +1002,19 @@ class EventAddResponse(Message):
         return eca_value_to_status[self.header.parameter1]
 
     @classmethod
-    def from_wire(cls, header, payload_bytes, *, sender_address=None):
+    def from_wire(cls, header, payload_bytes, *, sender_address=None,
+                  validate=False):
         # libca responds to EventCancelRequest with an
         # EventAddResponse with an empty payload.
         if not payload_bytes:
             return cls.from_components(header,
-                                       sender_address=sender_address)
+                                       sender_address=sender_address,
+                                       validate=validate)
         payload = from_buffer(header.data_type, header.data_count,
                               payload_bytes)
         return cls.from_components(header, *payload,
-                                   sender_address=sender_address)
+                                   sender_address=sender_address,
+                                   validate=validate)
 
 
 class EventCancelRequest(Message):
@@ -1050,8 +1067,6 @@ class EventCancelResponse(Message):
         Integer ID for this subscription.
     """
     # Actually this is coded with the ID = 1 like EventAdd*.
-    # This is the only weird exception so we special-case it in the function
-    # get_command_class.
     __slots__ = ()
     ID = 2
     HAS_PAYLOAD = False
@@ -1069,13 +1084,13 @@ class EventCancelResponse(Message):
     def validate(self):
         # special case because of weird ID
         if self.header.command != 1:
-            raise CaprotoTypeError("A {} must have a header with "
-                                   "header.command == 1, not {}."
-                                   "".format(type(self), self.header.command))
+            raise ValidationError("A {} must have a header with "
+                                  "header.command == 1, not {}."
+                                  "".format(type(self), self.header.command))
 
         if any(len(buf) for buf in self.buffers):
-            raise CaprotoTypeError("A {} must have no payload."
-                                   "".format(type(self)))
+            raise ValidationError("A {} must have no payload."
+                                  "".format(type(self)))
         # do not call super()
 
 
@@ -1102,11 +1117,14 @@ class ReadResponse(Message):
     HAS_PAYLOAD = True
 
     @classmethod
-    def from_wire(cls, header, payload_bytes, *, sender_address=None):
+    def from_wire(cls, header, payload_bytes, *, sender_address=None,
+                  validate=False):
         warnings.warn("ReadResponse was deprecated by ChannelAccess in 3.13, "
                       "and is not well-supported by caproto. De-serialization "
                       "may not be correct.")
-        return super().from_wire(header, payload_bytes, sender_address=sender_address)
+        return super().from_wire(header, payload_bytes,
+                                 sender_address=sender_address,
+                                 validate=validate)
 
     def __init__(self, data, data_type, data_count, sid, ioid, *,
                  metadata=None):
@@ -1247,9 +1265,11 @@ class ErrorResponse(Message):
         return eca_value_to_status[self.header.parameter2]
 
     @classmethod
-    def from_wire(cls, header, payload_bytes, *, sender_address=None):
+    def from_wire(cls, header, payload_bytes, *, sender_address=None,
+                  validate=False):
         return cls.from_components(header, b'', payload_bytes,
-                                   sender_address=sender_address)
+                                   sender_address=sender_address,
+                                   validate=validate)
 
 
 class ClearChannelRequest(Message):
@@ -1431,7 +1451,8 @@ class CreateChanRequest(Message):
         super().__init__(header, b'', payload)
 
     @classmethod
-    def from_wire(cls, header, payload_bytes, *, sender_address=None):
+    def from_wire(cls, header, payload_bytes, *, sender_address=None,
+                  validate=False):
         """
         Use header.dbr_type to pack payload bytes into the right strucutre.
 
@@ -1440,7 +1461,8 @@ class CreateChanRequest(Message):
         """
 
         return cls.from_components(header, b'', payload_bytes,
-                                   sender_address=sender_address)
+                                   sender_address=sender_address,
+                                   validate=validate)
 
     payload_size = property(lambda self: self.header.payload_size)
     cid = property(lambda self: self.header.parameter1)
@@ -1609,7 +1631,8 @@ class ClientNameRequest(Message):
         super().__init__(header, b'', payload)
 
     @classmethod
-    def from_wire(cls, header, payload_bytes, *, sender_address=None):
+    def from_wire(cls, header, payload_bytes, *, sender_address=None,
+                  validate=False):
         """
         Use header.dbr_type to pack payload bytes into the right strucutre.
 
@@ -1617,7 +1640,8 @@ class ClientNameRequest(Message):
         field, and these override this method in their subclass.
         """
         return cls.from_components(header, b'', payload_bytes,
-                                   sender_address=sender_address)
+                                   sender_address=sender_address,
+                                   validate=validate)
 
     payload_size = property(lambda self: self.header.payload_size)
     name = property(lambda self: bytes(self.buffers[1]).rstrip(b'\x00').decode(STR_ENC))
@@ -1646,9 +1670,11 @@ class HostNameRequest(Message):
     name = property(lambda self: bytes(self.buffers[1]).rstrip(b'\x00').decode(STR_ENC))
 
     @classmethod
-    def from_wire(cls, header, payload_bytes, *, sender_address=None):
+    def from_wire(cls, header, payload_bytes, *, sender_address=None,
+                  validate=False):
         return cls.from_components(header, b'', payload_bytes,
-                                   sender_address=sender_address)
+                                   sender_address=sender_address,
+                                   validate=validate)
 
 
 class AccessRightsResponse(Message):

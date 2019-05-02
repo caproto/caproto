@@ -33,11 +33,14 @@ Supported:
   interfaces and ports.
 * Connection caching
 * Automatic reconnection
-* Batching of requests for efficiency
+* Batch of requests for efficiency.
+* Monitor server beacons to notice new CA servers on the network or servers
+  that have become responsive. Respond accordingly.
+* Adapt rate of sending ``SearchRequest``, accounting for how long a request
+  has gone unanswered and for the appearance of new servers on the network.
 
 TO DO:
 
-* Back-off of unanswered search requests
 * "Flow control" --- automatic temporary suspension of subscriptions when
   under high load using ``EventsOn`` and ``EventsOff``
 
@@ -67,10 +70,17 @@ Supported:
 * Channel Access filters (arr, dbnd, ts, sync) including their "shorthand"
   syntax
 * DBE mask specification
+* Enforces quota per subscription to avoid one prolific subscription (or slow
+  client) from drowning out others
+* Respects ``EventsOn`` and ``EventsOff``
+* Under high load (with many subscription updates queued up to send) batches
+  subscriptions into blocks, trading a little latency for efficiency. Under low
+  load, prioritizes low latency.
 
 TO DO:
 
-* Enforcing quotas per subscription to avoid one prolific subscription (or slow
-  client) from drowning out others
-* Respecting ``EventsOn`` and ``EventsOff``
 * Deprecated mask specification (low, high, to)
+* Circuit "priority" is ignored by the server. Python does not implement
+  "thread priority" or any analogue of it for task scheduling. Caproto could
+  roll its own mechanism for this, but the performance trade-off may not be
+  worthwhile given that this mechanism is important when under high load.

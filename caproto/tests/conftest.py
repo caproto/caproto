@@ -27,9 +27,12 @@ _repeater_process = None
 
 REPEATER_PORT = 5065
 SERVER_HOST = '0.0.0.0'
+# make the logs noisy
 logger = logging.getLogger('caproto')
 logger.setLevel('DEBUG')
-
+# except for the broadcaster
+bcast_logger = logging.getLogger('caproto.bcast')
+bcast_logger.setLevel('INFO')
 
 array_types = (array.array,)
 try:
@@ -57,7 +60,7 @@ def assert_array_almost_equal(arr1, arr2):
 
 
 def run_example_ioc(module_name, *, request, pv_to_check, args=None,
-                    stdin=None, stdout=None, stderr=None):
+                    stdin=None, stdout=None, stderr=None, very_verbose=True):
     '''Run an example IOC by module name as a subprocess
 
     Parameters
@@ -75,7 +78,7 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
     else:
         logger.debug(f'Running {module_name}')
 
-    if '-vvv' not in args:
+    if '-vvv' not in args and very_verbose:
         args = list(args) + ['-vvv']
 
     os.environ['COVERAGE_PROCESS_START'] = '.coveragerc'
@@ -131,7 +134,7 @@ def poll_readiness(pv_to_check, attempts=5, timeout=1):
             break
     else:
         raise TimeoutError(f"ioc fixture failed to start in "
-                           f"{attempts} seconds (pv: {pv_to_check})")
+                           f"{attempts * timeout} seconds (pv: {pv_to_check})")
 
 
 def run_softioc(request, db, additional_db=None, **kwargs):
@@ -166,8 +169,7 @@ def prefix():
     return str(uuid.uuid4())[:8] + ':'
 
 
-@pytest.fixture(scope='function')
-def epics_base_ioc(prefix, request):
+def _epics_base_ioc(prefix, request):
     name = 'Waveform and standard record IOC'
     db = {
         ('{}waveform'.format(prefix), 'waveform'):
@@ -231,8 +233,7 @@ def epics_base_ioc(prefix, request):
                            type='epics-base')
 
 
-@pytest.fixture(scope='function')
-def caproto_ioc(prefix, request):
+def _caproto_ioc(prefix, request):
     name = 'Caproto type varieties example'
     pvs = dict(int=prefix + 'int',
                int2=prefix + 'int2',
@@ -240,6 +241,12 @@ def caproto_ioc(prefix, request):
                float=prefix + 'pi',
                str=prefix + 'str',
                enum=prefix + 'enum',
+               waveform=prefix + 'waveform',
+               chararray=prefix + 'chararray',
+               empty_string=prefix + 'empty_string',
+               empty_bytes=prefix + 'empty_bytes',
+               empty_char=prefix + 'empty_char',
+               empty_float=prefix + 'empty_float',
                )
     process = run_example_ioc('caproto.ioc_examples.type_varieties',
                               request=request,
@@ -249,14 +256,18 @@ def caproto_ioc(prefix, request):
                            type='caproto')
 
 
+caproto_ioc = pytest.fixture(scope='function')(_caproto_ioc)
+epics_base_ioc = pytest.fixture(scope='function')(_epics_base_ioc)
+
+
 @pytest.fixture(params=['caproto', 'epics-base'], scope='function')
 def ioc_factory(prefix, request):
     'A fixture that runs more than one IOC: caproto, epics'
     # Get a new prefix for each IOC type:
     if request.param == 'caproto':
-        return functools.partial(caproto_ioc, prefix, request)
+        return functools.partial(_caproto_ioc, prefix, request)
     elif request.param == 'epics-base':
-        return functools.partial(epics_base_ioc, prefix, request)
+        return functools.partial(_epics_base_ioc, prefix, request)
 
 
 @pytest.fixture(params=['caproto', 'epics-base'], scope='function')
@@ -264,9 +275,10 @@ def ioc(prefix, request):
     'A fixture that runs more than one IOC: caproto, epics'
     # Get a new prefix for each IOC type:
     if request.param == 'caproto':
-        ioc_ = caproto_ioc(prefix, request)
+        ioc_ = _caproto_ioc(prefix, request)
     elif request.param == 'epics-base':
-        ioc_ = epics_base_ioc(prefix, request)
+        ioc_ = _epics_base_ioc(prefix, request)
+
     return ioc_
 
 
@@ -434,12 +446,7 @@ def curio_server(prefix):
         server_task = await curio.spawn(_server, pvdb, daemon=True)
 
         try:
-            if hasattr(client, 'wait'):
-                # NOTE: wrapped by threaded_in_curio_wrapper
-                await curio.run_in_thread(client)
-                await client.wait()
-            else:
-                await client()
+            await client()
         except caproto.curio.server.ServerExit:
             ...
         finally:
@@ -638,7 +645,6 @@ def threaded_in_curio_wrapper(fcn):
     '''
     uqueue = curio.UniversalQueue()
 
-    @functools.wraps(fcn)
     def wrapped_threaded_func():
         try:
             fcn()
@@ -647,15 +653,15 @@ def threaded_in_curio_wrapper(fcn):
         else:
             uqueue.put(None)
 
-    async def wait():
+    @functools.wraps(fcn)
+    async def test_runner():
         'Wait for the test function completion'
         await curio.run_in_thread(wrapped_threaded_func)
         res = await uqueue.get()
         if res is not None:
             raise res
 
-    wrapped_threaded_func.wait = wait
-    return wrapped_threaded_func
+    return test_runner
 
 
 @pytest.fixture(scope='function', params=['array', 'numpy'])
@@ -684,3 +690,42 @@ def dump_process_output(prefix, stdout, stderr):
         for line in stderr.decode('latin-1').split('\n'):
             print(f'[{prefix}-stderr]', line)
     print('--')
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_call(item):
+    'Socket and thread debugging hook'
+    from .debug import use_debug_socket, use_thread_counter
+
+    with use_thread_counter() as (dangling_threads, thread_counter):
+        with use_debug_socket() as (sockets, socket_counter):
+            yield
+
+    num_dangling = len(dangling_threads)
+    num_threads = thread_counter.value
+
+    if num_threads:
+        if num_dangling:
+            thread_info = ', '.join(str(thread) for thread in dangling_threads)
+            logger.warning('%d thread(s) left dangling out of %d! %s',
+                           num_dangling, num_threads, thread_info)
+            # pytest.fail() ?
+        else:
+            logger.debug('%d thread(s) OK', num_threads)
+
+    item.user_properties.append(('total_threads', num_threads))
+    item.user_properties.append(('dangling_threads', num_dangling))
+
+    num_sockets = socket_counter.value
+    num_open = len(sockets)
+
+    if num_sockets:
+        if num_open:
+            logger.warning('%d sockets still open of %d', num_open,
+                           num_sockets)
+            # pytest.fail() ?
+        else:
+            logger.debug('%d sockets OK', socket_counter.value)
+
+    item.user_properties.append(('total_sockets', num_sockets))
+    item.user_properties.append(('open_sockets', num_open))

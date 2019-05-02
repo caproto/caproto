@@ -13,7 +13,7 @@ class BarcodeIOC(PVGroup):
         super().__init__(**kwargs)
         self._event_path = event_path
 
-    barcode = pvproperty(value=[''])
+    barcode = pvproperty(value='', max_length=100)
 
     @barcode.startup
     async def barcode(self, instance, async_lib):

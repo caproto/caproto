@@ -2,7 +2,6 @@
 # as three top-level functions: read, write, subscribe. They are comparatively
 # simple and naive, with no caching or concurrency, and therefore less
 # performant but more robust.
-from collections import Iterable
 import inspect
 import getpass
 import logging
@@ -15,7 +14,7 @@ import weakref
 
 import caproto as ca
 from .._dbr import (field_types, ChannelType, native_type, SubscriptionType)
-from .._utils import ErrorResponseReceived, CaprotoError
+from .._utils import ErrorResponseReceived, CaprotoError, CaprotoTimeoutError
 from .repeater import spawn_repeater
 
 
@@ -27,6 +26,7 @@ CA_SERVER_PORT = 5064  # just a default
 
 # Make a dict to hold our tcp sockets.
 sockets = {}
+global_circuits = {}
 
 _permission_to_block = []  # mutable state shared by block and interrupt
 
@@ -55,7 +55,10 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
 
     repeater_port = os.environ.get('EPICS_CA_REPEATER_PORT', 5065)
     for host in ca.get_address_list():
-        udp_sock.sendto(bytes_to_send, (host, repeater_port))
+        try:
+            udp_sock.sendto(bytes_to_send, (host, repeater_port))
+        except OSError as exc:
+            raise ca.CaprotoNetworkError(f"Failed to send to {host}:{repeater_port}") from exc
 
     logger.debug("Searching for '%s'....", pv_name)
     bytes_to_send = b.send(
@@ -69,7 +72,11 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
                 dest = (host, int(specified_port))
             else:
                 dest = (host, CA_SERVER_PORT)
-            udp_sock.sendto(bytes_to_send, dest)
+            try:
+                udp_sock.sendto(bytes_to_send, dest)
+            except OSError as exc:
+                host, port = dest
+                raise ca.CaprotoNetworkError(f"Failed to send to {host}:{port}") from exc
             logger.debug('Search request sent to %r.', dest)
 
     def check_timeout():
@@ -80,10 +87,10 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
             retry_at = time.monotonic() + retry_timeout
 
         if time.monotonic() - t > timeout:
-            raise TimeoutError(f"Timed out while awaiting a response "
-                               f"from the search for {pv_name!r}. Search "
-                               f"requests were sent to this address list: "
-                               f"{ca.get_address_list()}.")
+            raise CaprotoTimeoutError(f"Timed out while awaiting a response "
+                                      f"from the search for {pv_name!r}. Search "
+                                      f"requests were sent to this address list: "
+                                      f"{ca.get_address_list()}.")
 
     # Initial search attempt
     send_search()
@@ -123,20 +130,30 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
 def make_channel(pv_name, udp_sock, priority, timeout):
     log = logging.getLogger(f'caproto.ch.{pv_name}.{priority}')
     address = search(pv_name, udp_sock, timeout)
-    circuit = ca.VirtualCircuit(our_role=ca.CLIENT,
-                                address=address,
-                                priority=priority)
+    try:
+        circuit = global_circuits[(address, priority)]
+    except KeyError:
+
+        circuit = global_circuits[(address, priority)] = ca.VirtualCircuit(
+            our_role=ca.CLIENT,
+            address=address,
+            priority=priority)
+
     chan = ca.ClientChannel(pv_name, circuit)
-    sockets[chan.circuit] = socket.create_connection(chan.circuit.address,
-                                                     timeout)
+    new = False
+    if chan.circuit not in sockets:
+        new = True
+        sockets[chan.circuit] = socket.create_connection(chan.circuit.address,
+                                                         timeout)
 
     try:
-        # Initialize our new TCP-based CA connection with a VersionRequest.
-        send(chan.circuit, ca.VersionRequest(
-            priority=priority,
-            version=ca.DEFAULT_PROTOCOL_VERSION))
-        send(chan.circuit, chan.host_name(socket.gethostname()))
-        send(chan.circuit, chan.client_name(getpass.getuser()))
+        if new:
+            # Initialize our new TCP-based CA connection with a VersionRequest.
+            send(chan.circuit, ca.VersionRequest(
+                priority=priority,
+                version=ca.DEFAULT_PROTOCOL_VERSION))
+            send(chan.circuit, chan.host_name(socket.gethostname()))
+            send(chan.circuit, chan.client_name(getpass.getuser()))
         send(chan.circuit, chan.create())
         t = time.monotonic()
         while True:
@@ -145,7 +162,8 @@ def make_channel(pv_name, udp_sock, priority, timeout):
                 if time.monotonic() - t > timeout:
                     raise socket.timeout
             except socket.timeout:
-                raise TimeoutError("Timeout while awaiting channel creation.")
+                raise CaprotoTimeoutError("Timeout while awaiting channel "
+                                          "creation.")
             if chan.states[ca.CLIENT] is ca.CONNECTED:
                 log.info('%s connected' % pv_name)
                 break
@@ -155,6 +173,8 @@ def make_channel(pv_name, udp_sock, priority, timeout):
 
     except BaseException:
         sockets[chan.circuit].close()
+        del sockets[chan.circuit]
+        del global_circuits[(chan.circuit.address, chan.circuit.priority)]
         raise
     return chan
 
@@ -177,7 +197,7 @@ def _read(chan, timeout, data_type, notify, force_int_enums):
             commands = []
 
         if time.monotonic() - t > timeout:
-            raise TimeoutError("Timeout while awaiting reading.")
+            raise CaprotoTimeoutError("Timeout while awaiting reading.")
 
         for command in commands:
             if (isinstance(command, (ca.ReadResponse, ca.ReadNotifyResponse)) and
@@ -244,6 +264,8 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0, notify=True,
                 send(chan.circuit, chan.clear())
         finally:
             sockets[chan.circuit].close()
+            del sockets[chan.circuit]
+            del global_circuits[(chan.circuit.address, chan.circuit.priority)]
 
 
 def subscribe(pv_name, priority=0, data_type=None, data_count=None,
@@ -434,13 +456,11 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
             for chan in channels.values():
                 sockets[chan.circuit].settimeout(timeout)
                 sockets[chan.circuit].close()
+                del sockets[chan.circuit]
+                del global_circuits[(chan.circuit.address, chan.circuit.priority)]
 
 
 def _write(chan, data, metadata, timeout, data_type, notify):
-    if not isinstance(data, Iterable) or isinstance(data, (str, bytes)):
-        data = [data]
-    if data and isinstance(data[0], str):
-        data = [val.encode('latin-1') for val in data]
     logger.debug("Detected native data_type %r.", chan.native_data_type)
     # abundance of caution
     ntype = field_types['native'][chan.native_data_type]
@@ -463,7 +483,7 @@ def _write(chan, data, metadata, timeout, data_type, notify):
                 commands = []
 
             if time.monotonic() - t > timeout:
-                raise TimeoutError("Timeout while awaiting write reply.")
+                raise CaprotoTimeoutError("Timeout while awaiting write reply.")
 
             for command in commands:
                 if (isinstance(command, ca.WriteNotifyResponse) and
@@ -541,6 +561,8 @@ def write(pv_name, data, *, notify=False, data_type=None, metadata=None,
                 send(chan.circuit, chan.clear())
         finally:
             sockets[chan.circuit].close()
+            del sockets[chan.circuit]
+            del global_circuits[(chan.circuit.address, chan.circuit.priority)]
 
 
 def read_write_read(pv_name, data, *, notify=False,
@@ -625,6 +647,8 @@ def read_write_read(pv_name, data, *, notify=False,
                 send(chan.circuit, chan.clear())
         finally:
             sockets[chan.circuit].close()
+            del sockets[chan.circuit]
+            del global_circuits[(chan.circuit.address, chan.circuit.priority)]
     return initial, res, final
 
 

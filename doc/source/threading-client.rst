@@ -321,6 +321,61 @@ call ``go_idle()`` on any PV at any time, knowing that the PV will decline to
 disconnect if it is being actively used and that, if it is currently unused, it
 will transparently reconnect the next time it is used.
 
+Canceling Searches
+------------------
+
+All unanswered searches are retried repeatedly, with decreasing frequency,
+forever. Each new call to :meth:`~Context.get_pvs` causes all unanswered
+searches to be retried at least once immediately. This can generate unwanted
+network traffic. To fully cancel a search that is never expected to complete,
+access the method :class:`SharedBroadcaster.cancel`.
+
+.. code-block:: python
+
+   ctx.broadcaster.cancel('some typo-ed PV name, for example')
+
+As the name suggestions, it is possible to construct multiple Contexts that
+share one SharedBroadcaster. In that scenario, notice that canceling the
+search will affect all contexts using the SharedBroadcaster.
+
+Events Off and On
+-----------------
+
+If a given circuit produces updates faster than a client can process them, the
+client can suspend subscriptions on that circuit. This will causes the server
+to discard all backlogged updates and all new updates during the period of
+supsension. When the client reactives subscriptions, it will immediate receive
+the most recent update and then any future updates.
+
+.. code-block:: python
+
+   x.circuit_manager.events_off()
+   ...
+   x.circuit_manager.events_on()
+
+.. _server_health_check:
+
+Server Health Check
+-------------------
+
+To check how much time has passed (in seconds) since each known server was last
+heard from, use:
+
+.. code-block:: python
+
+   ctx.broadcaster.time_since_last_heard()
+
+As a convenience, check on the server connected to a specific PV using:
+
+.. code-block:: python
+
+   x.time_since_last_heard()
+
+See the :meth:`SharedBroadcaster.time_since_last_heard` API documentation below
+for details.
+
+.. _threading_loggers:
+
 Loggers for Debugging
 ---------------------
 
@@ -352,6 +407,14 @@ or, equivalently:
 .. code-block:: python
 
     x.context.log.setLevel('DEBUG')
+
+To log (non-batch) read/write requests and read/write/event responses for *all*
+PVs, access the channel logger by name like so:
+
+.. code-block:: python
+
+   import logging
+   logging.getLogger('caproto.ch').setLevel('DEBUG')
 
 Finally, to turn on *maximal* debugging, use:
 

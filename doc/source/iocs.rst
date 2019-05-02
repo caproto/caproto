@@ -56,6 +56,7 @@ Use ``--list-pvs`` to display which PVs they serve:
     [I 16:52:36.089 server:123] PVs available:
         simple:A
         simple:B
+        simple:C
 
 and use ``--prefix`` to conveniently customize the PV prefix:
 
@@ -68,6 +69,7 @@ and use ``--prefix`` to conveniently customize the PV prefix:
     [I 16:54:14.530 server:123] PVs available:
         my_custom_prefix:A
         my_custom_prefix:B
+        my_custom_prefix:C
 
 Type ``python3 -m caproto.ioc_examples.simple -h`` for more options.
 
@@ -117,17 +119,21 @@ This IOC has two PVs that simply store a value.
     [I 18:08:47.630 server:123] PVs available:
         simple:A
         simple:B
+        simple:C
 
 Using the threading client context we created above, we can read these values
 and write to them.
 
 .. ipython:: python
 
-    a, b = ctx.get_pvs('simple:A', 'simple:B')
+    a, b, c = ctx.get_pvs('simple:A', 'simple:B', 'simple:C')
     a.read()
     b.read()
-    b.write([5], wait=True)
+    c.read()
+    b.write(5)
     b.read()
+    c.write([4, 5, 6])
+    c.read()
 
 Write to a File When a PV is Written To
 ---------------------------------------
@@ -149,15 +155,15 @@ Write to a File When a PV is Written To
 
     run_example('caproto.ioc_examples.custom_write')
 
-On the machine where the server redies, we will see files update whenever any
+On the machine where the server resides, we will see files update whenever any
 client writes.
 
 .. ipython:: python
 
     a, b = ctx.get_pvs('custom_write:A', 'custom_write:B')
-    a.write([5], wait=True)
+    a.write(5)
     print(open('/tmp/A').read())
-    a.write([10], wait=True)
+    a.write(10)
     print(open('/tmp/A').read())
 
 It is easy to imagine extending this example to write a socket or a serial

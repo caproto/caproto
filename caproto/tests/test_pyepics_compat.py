@@ -514,7 +514,7 @@ def test_get1(pvnames):
     assert int(cval) == val
 
 
-@pytest.mark.xfail(os.environ.get('BASE') in ('R3.16.1', 'R7.0.1.1'),
+@pytest.mark.xfail(os.environ.get('BASE_VER') in ('R3.16.1', 'R7.0.1.1'),
                    reason='known issues with simulator on some BASE versions')
 def test_get_string_waveform(pvnames, simulator):
     print('String Array: \n')
@@ -626,7 +626,7 @@ def test_putwait(pvnames):
     assert count > 3
 
 
-@pytest.mark.xfail(os.environ.get('BASE') in ('R3.16.1', 'R7.0.1.1'),
+@pytest.mark.xfail(os.environ.get('BASE_VER') in ('R3.16.1', 'R7.0.1.1'),
                    reason='known issues with simulator on some BASE versions')
 def test_get_callback(pvnames, simulator):
     print("Callback test:  changing PV must be updated\n")
@@ -719,7 +719,7 @@ def test_waveform_get_with_count_arg(pvnames):
     assert len(val) == wf.nelm
 
 
-@pytest.mark.xfail(os.environ.get('BASE') in ('R3.16.1', 'R7.0.1.1'),
+@pytest.mark.xfail(os.environ.get('BASE_VER') in ('R3.16.1', 'R7.0.1.1'),
                    reason='known issues with simulator on some BASE versions')
 def test_waveform_callback_with_count_arg(pvnames, simulator):
     values = []
@@ -803,7 +803,7 @@ def testEnumPut(pvnames):
     assert pv.get(as_string=True) == 'Stop'
 
 
-@pytest.mark.xfail(os.environ.get('BASE') in ('R3.16.1', 'R7.0.1.1'),
+@pytest.mark.xfail(os.environ.get('BASE_VER') in ('R3.16.1', 'R7.0.1.1'),
                    reason='known issues with simulator on some BASE versions')
 def test_DoubleVal(pvnames, simulator):
     pvn = pvnames.double_pv
@@ -1022,3 +1022,24 @@ def test_pv_access_event_callback(access_security_softioc):
     time.sleep(0.2)
 
     assert bo.flag is True
+
+
+def test_get_with_metadata(pvnames):
+    with no_simulator_updates(pvnames):
+        pv = PV(pvnames.int_pv, form='native')
+        # Request time type
+        md = pv.get_with_metadata(use_monitor=False, form='time')
+        assert 'timestamp' in md
+        assert 'lower_ctrl_limit' not in md
+        # Request control type
+        md = pv.get_with_metadata(use_monitor=False, form='ctrl')
+        assert 'lower_ctrl_limit' in md
+        assert 'timestamp' not in md
+        # Use monitor: all metadata should come through
+        md = pv.get_with_metadata(use_monitor=True)
+        assert 'timestamp' in md
+        assert 'lower_ctrl_limit' in md
+        # Get a namespace
+        ns = pv.get_with_metadata(use_monitor=True, as_namespace=True)
+        assert hasattr(ns, 'timestamp')
+        assert hasattr(ns, 'lower_ctrl_limit')

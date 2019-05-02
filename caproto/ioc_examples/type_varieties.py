@@ -8,6 +8,7 @@ specification much more succinct.
 import warnings
 import caproto as ca
 from caproto.server import ioc_arg_parser, run
+import numpy as np
 
 
 alarm = ca.ChannelAlarm(
@@ -79,6 +80,11 @@ pvdb = {'pi': ca.ChannelDouble(value=3.14,
                                  alarm=alarm),
         'stra': ca.ChannelString(value=['hello', 'how is it', 'going'],
                                  string_encoding='latin-1'),
+        'waveform': ca.ChannelData(value=np.random.poisson(100, 4000)),
+        'empty_string': ca.ChannelString(value='', string_encoding='latin-1'),
+        'empty_bytes': ca.ChannelByte(value=b''),
+        'empty_char': ca.ChannelChar(value=b''),
+        'empty_float': ca.ChannelDouble(value=[], max_length=2),
         }
 
 

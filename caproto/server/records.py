@@ -2,11 +2,16 @@
 Contains PVGroups representing all fields of EPICS base records (minus .VAL)
 '''
 
-import inspect
+import logging
 
 from .server import PVGroup, pvproperty
 from .._data import ChannelType
+from .._dbr import AlarmSeverity
 from . import menus
+
+
+logger = logging.getLogger(__name__)
+records = {}
 
 
 def _link_parent_attribute(pvprop, parent_attr_name, *, read_only=False,
@@ -33,7 +38,16 @@ def _link_parent_attribute(pvprop, parent_attr_name, *, read_only=False,
     return pvprop
 
 
+def register_record(cls):
+    'Register a record type to be used with pvproperty mock_record'
+    assert issubclass(cls, PVGroup)
+    records[cls._record_type] = cls
+    logger.debug('Registered record type %r', cls._record_type)
+    return cls
+
+
 class RecordFieldGroup(PVGroup):
+    _scan_rate_sec = None
     alarm_acknowledge_severity = pvproperty(
         name='ACKS',
         dtype=ChannelType.ENUM,
@@ -116,7 +130,7 @@ class RecordFieldGroup(PVGroup):
         read_only=True)
     reprocess = pvproperty(
         name='RPRO', dtype=ChannelType.CHAR, doc='Reprocess', read_only=True)
-    scanning_rate = pvproperty(
+    scan_rate = pvproperty(
         name='SCAN',
         dtype=ChannelType.ENUM,
         enum_strings=menus.menuScan.get_string_tuple(),
@@ -150,7 +164,9 @@ class RecordFieldGroup(PVGroup):
         super().__init__(prefix, **kw)
 
         parent = self.parent
+        # set .NAME
         self.record_name._data['value'] = parent.pvname
+        # set .RTYP
         self.record_type._data['value'] = self._record_type
 
         # automatic alarm handling
@@ -169,12 +185,134 @@ class RecordFieldGroup(PVGroup):
 
     # TODO: server single-char issue with caget?
 
+    @scan_rate.putter
+    async def scan_rate(self, instance, value):
+        idx = value
+        scan_string = self.scan_rate.enum_strings[idx]
+        if scan_string in ('I/O Intr', 'Passive', 'Event'):
+            self._scan_rate_sec = 0
+        else:
+            self._scan_rate_sec = float(scan_string.split(' ')[0])
+
+        if hasattr(self.parent, 'scan_rate'):
+            self.parent.scan_rate = self._scan_rate_sec
+
+    @property
+    def scan_rate_sec(self):
+        'Record scan rate, in seconds (read-only)'
+        return self._scan_rate_sec
+
     @process_record.putter
     async def process_record(self, instance, value):
         await self.parent.write(self.parent.value)
 
 
-class AiFields(RecordFieldGroup):
+class _Limits(PVGroup):
+    high_alarm_limit = pvproperty(
+        name='HIGH', dtype=ChannelType.DOUBLE, doc='High Alarm Limit')
+    high_severity = pvproperty(
+        name='HSV',
+        dtype=ChannelType.ENUM,
+        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
+        doc='High Severity',
+        value=menus.menuAlarmSevr.get_string_tuple()[
+            AlarmSeverity.MINOR_ALARM])
+    hihi_alarm_limit = pvproperty(
+        name='HIHI', dtype=ChannelType.DOUBLE, doc='Hihi Alarm Limit')
+    hihi_severity = pvproperty(
+        name='HHSV',
+        dtype=ChannelType.ENUM,
+        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
+        doc='Hihi Severity',
+        value=menus.menuAlarmSevr.get_string_tuple()[
+            AlarmSeverity.MAJOR_ALARM])
+    lolo_alarm_limit = pvproperty(
+        name='LOLO', dtype=ChannelType.DOUBLE, doc='Lolo Alarm Limit')
+    lolo_severity = pvproperty(
+        name='LLSV',
+        dtype=ChannelType.ENUM,
+        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
+        doc='Lolo Severity',
+        value=menus.menuAlarmSevr.get_string_tuple()[
+            AlarmSeverity.MAJOR_ALARM])
+    low_alarm_limit = pvproperty(
+        name='LOW', dtype=ChannelType.DOUBLE, doc='Low Alarm Limit')
+    low_severity = pvproperty(
+        name='LSV',
+        dtype=ChannelType.ENUM,
+        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
+        doc='Low Severity',
+        value=menus.menuAlarmSevr.get_string_tuple()[
+            AlarmSeverity.MINOR_ALARM])
+    high_operating_range = pvproperty(
+        name='HOPR', dtype=ChannelType.DOUBLE, doc='High Operating Range')
+    low_operating_range = pvproperty(
+        name='LOPR', dtype=ChannelType.DOUBLE, doc='Low Operating Range')
+
+    _link_parent_attribute(hihi_alarm_limit, 'upper_alarm_limit')
+    _link_parent_attribute(lolo_alarm_limit, 'lower_alarm_limit')
+
+    _link_parent_attribute(high_alarm_limit, 'upper_warning_limit')
+    _link_parent_attribute(low_alarm_limit, 'lower_warning_limit')
+
+    _link_parent_attribute(high_operating_range, 'upper_ctrl_limit')
+    _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
+
+
+class _LimitsLong(PVGroup):
+    high_alarm_limit = pvproperty(
+        name='HIGH', dtype=ChannelType.LONG, doc='High Alarm Limit')
+    high_severity = pvproperty(
+        name='HSV',
+        dtype=ChannelType.ENUM,
+        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
+        doc='High Severity',
+        value=menus.menuAlarmSevr.get_string_tuple()[
+            AlarmSeverity.MINOR_ALARM])
+    hihi_alarm_limit = pvproperty(
+        name='HIHI', dtype=ChannelType.LONG, doc='Hihi Alarm Limit')
+    hihi_severity = pvproperty(
+        name='HHSV',
+        dtype=ChannelType.ENUM,
+        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
+        doc='Hihi Severity',
+        value=menus.menuAlarmSevr.get_string_tuple()[
+            AlarmSeverity.MAJOR_ALARM])
+    lolo_alarm_limit = pvproperty(
+        name='LOLO', dtype=ChannelType.LONG, doc='Lolo Alarm Limit')
+    lolo_severity = pvproperty(
+        name='LLSV',
+        dtype=ChannelType.ENUM,
+        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
+        doc='Lolo Severity',
+        value=menus.menuAlarmSevr.get_string_tuple()[
+            AlarmSeverity.MAJOR_ALARM])
+    low_alarm_limit = pvproperty(
+        name='LOW', dtype=ChannelType.LONG, doc='Low Alarm Limit')
+    low_severity = pvproperty(
+        name='LSV',
+        dtype=ChannelType.ENUM,
+        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
+        doc='Low Severity',
+        value=menus.menuAlarmSevr.get_string_tuple()[
+            AlarmSeverity.MINOR_ALARM])
+    high_operating_range = pvproperty(
+        name='HOPR', dtype=ChannelType.LONG, doc='High Operating Range')
+    low_operating_range = pvproperty(
+        name='LOPR', dtype=ChannelType.LONG, doc='Low Operating Range')
+
+    _link_parent_attribute(hihi_alarm_limit, 'upper_alarm_limit')
+    _link_parent_attribute(lolo_alarm_limit, 'lower_alarm_limit')
+
+    _link_parent_attribute(high_alarm_limit, 'upper_warning_limit')
+    _link_parent_attribute(low_alarm_limit, 'lower_warning_limit')
+
+    _link_parent_attribute(high_operating_range, 'upper_ctrl_limit')
+    _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
+
+
+@register_record
+class AiFields(RecordFieldGroup, _Limits):
     _record_type = 'ai'
     # value = pvproperty(
     #     name='VAL', dtype=ChannelType.DOUBLE, doc='Current EGU Value')
@@ -227,34 +365,6 @@ class AiFields(RecordFieldGroup):
         name='SVAL', dtype=ChannelType.DOUBLE, doc='Simulation Value')
     alarm_deadband = pvproperty(
         name='HYST', dtype=ChannelType.DOUBLE, doc='Alarm Deadband')
-    high_alarm_limit = pvproperty(
-        name='HIGH', dtype=ChannelType.DOUBLE, doc='High Alarm Limit')
-    high_severity = pvproperty(
-        name='HSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='High Severity')
-    hihi_alarm_limit = pvproperty(
-        name='HIHI', dtype=ChannelType.DOUBLE, doc='Hihi Alarm Limit')
-    hihi_severity = pvproperty(
-        name='HHSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='Hihi Severity')
-    lolo_alarm_limit = pvproperty(
-        name='LOLO', dtype=ChannelType.DOUBLE, doc='Lolo Alarm Limit')
-    lolo_severity = pvproperty(
-        name='LLSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='Lolo Severity')
-    low_alarm_limit = pvproperty(
-        name='LOW', dtype=ChannelType.DOUBLE, doc='Low Alarm Limit')
-    low_severity = pvproperty(
-        name='LSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='Low Severity')
     adjustment_offset = pvproperty(
         name='AOFF', dtype=ChannelType.DOUBLE, doc='Adjustment Offset')
     adjustment_slope = pvproperty(
@@ -283,10 +393,6 @@ class AiFields(RecordFieldGroup):
         dtype=ChannelType.CHAR,
         max_length=16,
         doc='Engineering Units')
-    high_operating_range = pvproperty(
-        name='HOPR', dtype=ChannelType.DOUBLE, doc='High Operating Range')
-    low_operating_range = pvproperty(
-        name='LOPR', dtype=ChannelType.DOUBLE, doc='Low Operating Range')
     monitor_deadband = pvproperty(
         name='MDEL', dtype=ChannelType.DOUBLE, doc='Monitor Deadband')
     input_specification = pvproperty(
@@ -301,12 +407,6 @@ class AiFields(RecordFieldGroup):
         enum_strings=menus.menuAlarmSevr.get_string_tuple(),
         doc='Sim mode Alarm Svrty')
 
-    _link_parent_attribute(hihi_alarm_limit, 'upper_alarm_limit')
-    _link_parent_attribute(high_alarm_limit, 'upper_warning_limit')
-    _link_parent_attribute(low_alarm_limit, 'lower_warning_limit')
-    _link_parent_attribute(lolo_alarm_limit, 'lower_alarm_limit')
-    _link_parent_attribute(high_operating_range, 'upper_ctrl_limit')
-    _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
     _link_parent_attribute(archive_deadband, 'log_atol')
     _link_parent_attribute(monitor_deadband, 'value_atol')
 
@@ -324,6 +424,7 @@ class AiFields(RecordFieldGroup):
     #     await self.parent.write_metadata(precision=value)
 
 
+@register_record
 class AsubFields(RecordFieldGroup):
     _record_type = 'aSub'
     # value = pvproperty(
@@ -381,6 +482,7 @@ class AsubFields(RecordFieldGroup):
     _link_parent_attribute(display_precision, 'precision')
 
 
+@register_record
 class AaiFields(RecordFieldGroup):
     _record_type = 'aai'
     alarm_status = pvproperty(
@@ -447,8 +549,11 @@ class AaiFields(RecordFieldGroup):
     _link_parent_attribute(display_precision, 'precision')
     _link_parent_attribute(high_operating_range, 'upper_ctrl_limit')
     _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
+    _link_parent_attribute(number_of_elements, 'max_length')
+    _link_parent_attribute(number_elements_read, 'length')
 
 
+@register_record
 class AaoFields(RecordFieldGroup):
     _record_type = 'aao'
     alarm_status = pvproperty(
@@ -515,9 +620,12 @@ class AaoFields(RecordFieldGroup):
     _link_parent_attribute(display_precision, 'precision')
     _link_parent_attribute(high_operating_range, 'upper_ctrl_limit')
     _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
+    _link_parent_attribute(number_of_elements, 'max_length')
+    _link_parent_attribute(number_elements_read, 'length')
 
 
-class AcalcoutFields(RecordFieldGroup):
+@register_record
+class AcalcoutFields(RecordFieldGroup, _Limits):
     _record_type = 'acalcout'
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Result')
     alarm_status = pvproperty(
@@ -593,34 +701,6 @@ class AcalcoutFields(RecordFieldGroup):
         read_only=True)
     alarm_deadband = pvproperty(
         name='HYST', dtype=ChannelType.DOUBLE, doc='Alarm Deadband')
-    high_alarm_limit = pvproperty(
-        name='HIGH', dtype=ChannelType.DOUBLE, doc='High Alarm Limit')
-    high_severity = pvproperty(
-        name='HSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='High Severity')
-    hihi_alarm_limit = pvproperty(
-        name='HIHI', dtype=ChannelType.DOUBLE, doc='Hihi Alarm Limit')
-    hihi_severity = pvproperty(
-        name='HHSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='Hihi Severity')
-    lolo_alarm_limit = pvproperty(
-        name='LOLO', dtype=ChannelType.DOUBLE, doc='Lolo Alarm Limit')
-    lolo_severity = pvproperty(
-        name='LLSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='Lolo Severity')
-    low_alarm_limit = pvproperty(
-        name='LOW', dtype=ChannelType.DOUBLE, doc='Low Alarm Limit')
-    low_severity = pvproperty(
-        name='LSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='Low Severity')
     output_execute_delay = pvproperty(
         name='ODLY', dtype=ChannelType.DOUBLE, doc='Output Execute Delay')
     calculation = pvproperty(
@@ -646,10 +726,6 @@ class AcalcoutFields(RecordFieldGroup):
         name='ADEL', dtype=ChannelType.DOUBLE, doc='Archive Deadband')
     display_precision = pvproperty(
         name='PREC', dtype=ChannelType.LONG, doc='Display Precision')
-    high_operating_rng = pvproperty(
-        name='HOPR', dtype=ChannelType.DOUBLE, doc='High Operating Rng')
-    low_operating_range = pvproperty(
-        name='LOPR', dtype=ChannelType.DOUBLE, doc='Low Operating Range')
     monitor_deadband = pvproperty(
         name='MDEL', dtype=ChannelType.DOUBLE, doc='Monitor Deadband')
     units_name = pvproperty(
@@ -671,16 +747,13 @@ class AcalcoutFields(RecordFieldGroup):
         doc='Number of Elements',
         read_only=True)
     _link_parent_attribute(display_precision, 'precision')
-    _link_parent_attribute(hihi_alarm_limit, 'upper_alarm_limit')
-    _link_parent_attribute(high_alarm_limit, 'upper_warning_limit')
-    _link_parent_attribute(low_alarm_limit, 'lower_warning_limit')
-    _link_parent_attribute(lolo_alarm_limit, 'lower_alarm_limit')
-    _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
     _link_parent_attribute(archive_deadband, 'log_atol')
     _link_parent_attribute(monitor_deadband, 'value_atol')
+    _link_parent_attribute(number_of_elements, 'max_length')
 
 
-class AoFields(RecordFieldGroup):
+@register_record
+class AoFields(RecordFieldGroup, _Limits):
     _record_type = 'ao'
     # value = pvproperty(
     #     name='VAL', dtype=ChannelType.DOUBLE, doc='Desired Output')
@@ -753,34 +826,6 @@ class AoFields(RecordFieldGroup):
         read_only=True)
     alarm_deadband = pvproperty(
         name='HYST', dtype=ChannelType.DOUBLE, doc='Alarm Deadband')
-    high_alarm_limit = pvproperty(
-        name='HIGH', dtype=ChannelType.DOUBLE, doc='High Alarm Limit')
-    high_severity = pvproperty(
-        name='HSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='High Severity')
-    hihi_alarm_limit = pvproperty(
-        name='HIHI', dtype=ChannelType.DOUBLE, doc='Hihi Alarm Limit')
-    hihi_severity = pvproperty(
-        name='HHSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='Hihi Severity')
-    lolo_alarm_limit = pvproperty(
-        name='LOLO', dtype=ChannelType.DOUBLE, doc='Lolo Alarm Limit')
-    lolo_severity = pvproperty(
-        name='LLSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='Lolo Severity')
-    low_alarm_limit = pvproperty(
-        name='LOW', dtype=ChannelType.DOUBLE, doc='Low Alarm Limit')
-    low_severity = pvproperty(
-        name='LSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='Low Severity')
     adjustment_offset = pvproperty(
         name='AOFF', dtype=ChannelType.DOUBLE, doc='Adjustment Offset')
     adjustment_slope = pvproperty(
@@ -807,10 +852,6 @@ class AoFields(RecordFieldGroup):
         dtype=ChannelType.CHAR,
         max_length=16,
         doc='Engineering Units')
-    high_operating_range = pvproperty(
-        name='HOPR', dtype=ChannelType.DOUBLE, doc='High Operating Range')
-    low_operating_range = pvproperty(
-        name='LOPR', dtype=ChannelType.DOUBLE, doc='Low Operating Range')
     monitor_deadband = pvproperty(
         name='MDEL', dtype=ChannelType.DOUBLE, doc='Monitor Deadband')
     sim_mode_location = pvproperty(
@@ -850,16 +891,11 @@ class AoFields(RecordFieldGroup):
     output_specification = pvproperty(
         name='OUT', dtype=ChannelType.STRING, doc='Output Specification')
     _link_parent_attribute(display_precision, 'precision')
-    _link_parent_attribute(hihi_alarm_limit, 'upper_alarm_limit')
-    _link_parent_attribute(high_alarm_limit, 'upper_warning_limit')
-    _link_parent_attribute(low_alarm_limit, 'lower_warning_limit')
-    _link_parent_attribute(lolo_alarm_limit, 'lower_alarm_limit')
-    _link_parent_attribute(high_operating_range, 'upper_ctrl_limit')
-    _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
     _link_parent_attribute(archive_deadband, 'log_atol')
     _link_parent_attribute(monitor_deadband, 'value_atol')
 
 
+@register_record
 class AsynFields(RecordFieldGroup):
     _record_type = 'asyn'
     # value = pvproperty(
@@ -1164,6 +1200,7 @@ class AsynFields(RecordFieldGroup):
         name='UI32OUT', dtype=ChannelType.LONG, doc='asynUInt32Digital output')
 
 
+@register_record
 class BiFields(RecordFieldGroup):
     _record_type = 'bi'
     # value = pvproperty(name='VAL', dtype=ChannelType.ENUM, doc='Current Value')
@@ -1234,6 +1271,7 @@ class BiFields(RecordFieldGroup):
         doc='Sim mode Alarm Svrty')
 
 
+@register_record
 class BoFields(RecordFieldGroup):
     _record_type = 'bo'
     # value = pvproperty(name='VAL', dtype=ChannelType.ENUM, doc='Current Value')
@@ -1328,6 +1366,7 @@ class BoFields(RecordFieldGroup):
         name='HIGH', dtype=ChannelType.DOUBLE, doc='Seconds to Hold High')
 
 
+@register_record
 class BusyFields(RecordFieldGroup):
     _record_type = 'busy'
     # value = pvproperty(name='VAL', dtype=ChannelType.ENUM, doc='Current Value')
@@ -1424,7 +1463,8 @@ class BusyFields(RecordFieldGroup):
         name='HIGH', dtype=ChannelType.DOUBLE, doc='Seconds to Hold High')
 
 
-class CalcFields(RecordFieldGroup):
+@register_record
+class CalcFields(RecordFieldGroup, _Limits):
     _record_type = 'calc'
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Result')
     alarm_status = pvproperty(
@@ -1450,59 +1490,23 @@ class CalcFields(RecordFieldGroup):
         read_only=True)
     alarm_deadband = pvproperty(
         name='HYST', dtype=ChannelType.DOUBLE, doc='Alarm Deadband')
-    high_alarm_limit = pvproperty(
-        name='HIGH', dtype=ChannelType.DOUBLE, doc='High Alarm Limit')
-    high_severity = pvproperty(
-        name='HSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='High Severity')
-    hihi_alarm_limit = pvproperty(
-        name='HIHI', dtype=ChannelType.DOUBLE, doc='Hihi Alarm Limit')
-    hihi_severity = pvproperty(
-        name='HHSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='Hihi Severity')
-    lolo_alarm_limit = pvproperty(
-        name='LOLO', dtype=ChannelType.DOUBLE, doc='Lolo Alarm Limit')
-    lolo_severity = pvproperty(
-        name='LLSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='Lolo Severity')
-    low_alarm_limit = pvproperty(
-        name='LOW', dtype=ChannelType.DOUBLE, doc='Low Alarm Limit')
-    low_severity = pvproperty(
-        name='LSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='Low Severity')
     calculation = pvproperty(
         name='CALC', dtype=ChannelType.CHAR, max_length=80, doc='Calculation')
     archive_deadband = pvproperty(
         name='ADEL', dtype=ChannelType.DOUBLE, doc='Archive Deadband')
     display_precision = pvproperty(
         name='PREC', dtype=ChannelType.LONG, doc='Display Precision')
-    high_operating_rng = pvproperty(
-        name='HOPR', dtype=ChannelType.DOUBLE, doc='High Operating Rng')
-    low_operating_range = pvproperty(
-        name='LOPR', dtype=ChannelType.DOUBLE, doc='Low Operating Range')
     monitor_deadband = pvproperty(
         name='MDEL', dtype=ChannelType.DOUBLE, doc='Monitor Deadband')
     units_name = pvproperty(
         name='EGU', dtype=ChannelType.CHAR, max_length=16, doc='Units Name')
     _link_parent_attribute(display_precision, 'precision')
-    _link_parent_attribute(hihi_alarm_limit, 'upper_alarm_limit')
-    _link_parent_attribute(high_alarm_limit, 'upper_warning_limit')
-    _link_parent_attribute(low_alarm_limit, 'lower_warning_limit')
-    _link_parent_attribute(lolo_alarm_limit, 'lower_alarm_limit')
-    _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
     _link_parent_attribute(archive_deadband, 'log_atol')
     _link_parent_attribute(monitor_deadband, 'value_atol')
 
 
-class CalcoutFields(RecordFieldGroup):
+@register_record
+class CalcoutFields(RecordFieldGroup, _Limits):
     _record_type = 'calcout'
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Result')
     alarm_status = pvproperty(
@@ -1549,34 +1553,6 @@ class CalcoutFields(RecordFieldGroup):
         name='PVAL', dtype=ChannelType.DOUBLE, doc='Previous Value')
     alarm_deadband = pvproperty(
         name='HYST', dtype=ChannelType.DOUBLE, doc='Alarm Deadband')
-    high_alarm_limit = pvproperty(
-        name='HIGH', dtype=ChannelType.DOUBLE, doc='High Alarm Limit')
-    high_severity = pvproperty(
-        name='HSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='High Severity')
-    hihi_alarm_limit = pvproperty(
-        name='HIHI', dtype=ChannelType.DOUBLE, doc='Hihi Alarm Limit')
-    hihi_severity = pvproperty(
-        name='HHSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='Hihi Severity')
-    lolo_alarm_limit = pvproperty(
-        name='LOLO', dtype=ChannelType.DOUBLE, doc='Lolo Alarm Limit')
-    lolo_severity = pvproperty(
-        name='LLSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='Lolo Severity')
-    low_alarm_limit = pvproperty(
-        name='LOW', dtype=ChannelType.DOUBLE, doc='Low Alarm Limit')
-    low_severity = pvproperty(
-        name='LSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='Low Severity')
     output_execute_delay = pvproperty(
         name='ODLY', dtype=ChannelType.DOUBLE, doc='Output Execute Delay')
     calculation = pvproperty(
@@ -1602,10 +1578,6 @@ class CalcoutFields(RecordFieldGroup):
         name='ADEL', dtype=ChannelType.DOUBLE, doc='Archive Deadband')
     display_precision = pvproperty(
         name='PREC', dtype=ChannelType.LONG, doc='Display Precision')
-    high_operating_rng = pvproperty(
-        name='HOPR', dtype=ChannelType.DOUBLE, doc='High Operating Rng')
-    low_operating_range = pvproperty(
-        name='LOPR', dtype=ChannelType.DOUBLE, doc='Low Operating Range')
     monitor_deadband = pvproperty(
         name='MDEL', dtype=ChannelType.DOUBLE, doc='Monitor Deadband')
     units_name = pvproperty(
@@ -1620,15 +1592,11 @@ class CalcoutFields(RecordFieldGroup):
     output_specification = pvproperty(
         name='OUT', dtype=ChannelType.STRING, doc='Output Specification')
     _link_parent_attribute(display_precision, 'precision')
-    _link_parent_attribute(hihi_alarm_limit, 'upper_alarm_limit')
-    _link_parent_attribute(high_alarm_limit, 'upper_warning_limit')
-    _link_parent_attribute(low_alarm_limit, 'lower_warning_limit')
-    _link_parent_attribute(lolo_alarm_limit, 'lower_alarm_limit')
-    _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
     _link_parent_attribute(archive_deadband, 'log_atol')
     _link_parent_attribute(monitor_deadband, 'value_atol')
 
 
+@register_record
 class CompressFields(RecordFieldGroup):
     _record_type = 'compress'
     alarm_status = pvproperty(
@@ -1694,7 +1662,8 @@ class CompressFields(RecordFieldGroup):
     _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
 
 
-class DfanoutFields(RecordFieldGroup):
+@register_record
+class DfanoutFields(RecordFieldGroup, _Limits):
     _record_type = 'dfanout'
     # value = pvproperty(
     #     name='VAL', dtype=ChannelType.DOUBLE, doc='Desired Output')
@@ -1723,42 +1692,10 @@ class DfanoutFields(RecordFieldGroup):
         name='SELN', dtype=ChannelType.LONG, doc='Link Selection')
     alarm_deadband = pvproperty(
         name='HYST', dtype=ChannelType.DOUBLE, doc='Alarm Deadband')
-    high_alarm_limit = pvproperty(
-        name='HIGH', dtype=ChannelType.DOUBLE, doc='High Alarm Limit')
-    high_severity = pvproperty(
-        name='HSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='High Severity')
-    hihi_alarm_limit = pvproperty(
-        name='HIHI', dtype=ChannelType.DOUBLE, doc='Hihi Alarm Limit')
-    hihi_severity = pvproperty(
-        name='HHSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='Hihi Severity')
-    lolo_alarm_limit = pvproperty(
-        name='LOLO', dtype=ChannelType.DOUBLE, doc='Lolo Alarm Limit')
-    lolo_severity = pvproperty(
-        name='LLSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='Lolo Severity')
-    low_alarm_limit = pvproperty(
-        name='LOW', dtype=ChannelType.DOUBLE, doc='Low Alarm Limit')
-    low_severity = pvproperty(
-        name='LSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='Low Severity')
     archive_deadband = pvproperty(
         name='ADEL', dtype=ChannelType.DOUBLE, doc='Archive Deadband')
     display_precision = pvproperty(
         name='PREC', dtype=ChannelType.LONG, doc='Display Precision')
-    high_operating_range = pvproperty(
-        name='HOPR', dtype=ChannelType.DOUBLE, doc='High Operating Range')
-    low_operating_range = pvproperty(
-        name='LOPR', dtype=ChannelType.DOUBLE, doc='Low Operating Range')
     monitor_deadband = pvproperty(
         name='MDEL', dtype=ChannelType.DOUBLE, doc='Monitor Deadband')
     units_name = pvproperty(
@@ -1794,16 +1731,11 @@ class DfanoutFields(RecordFieldGroup):
     output_spec_h = pvproperty(
         name='OUTH', dtype=ChannelType.STRING, doc='Output Spec H')
     _link_parent_attribute(display_precision, 'precision')
-    _link_parent_attribute(hihi_alarm_limit, 'upper_alarm_limit')
-    _link_parent_attribute(high_alarm_limit, 'upper_warning_limit')
-    _link_parent_attribute(low_alarm_limit, 'lower_warning_limit')
-    _link_parent_attribute(lolo_alarm_limit, 'lower_alarm_limit')
-    _link_parent_attribute(high_operating_range, 'upper_ctrl_limit')
-    _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
     _link_parent_attribute(archive_deadband, 'log_atol')
     _link_parent_attribute(monitor_deadband, 'value_atol')
 
 
+@register_record
 class DigitelFields(RecordFieldGroup):
     _record_type = 'digitel'
     # value = pvproperty(
@@ -2304,6 +2236,7 @@ class DigitelFields(RecordFieldGroup):
         name='HVTR', dtype=ChannelType.DOUBLE, doc='Voltage Display Hi')
 
 
+@register_record
 class EpidFields(RecordFieldGroup):
     _record_type = 'epid'
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Setpoint')
@@ -2472,6 +2405,7 @@ class EpidFields(RecordFieldGroup):
     _link_parent_attribute(monitor_deadband, 'value_atol')
 
 
+@register_record
 class EventFields(RecordFieldGroup):
     _record_type = 'event'
     # value = pvproperty(
@@ -2502,6 +2436,7 @@ class EventFields(RecordFieldGroup):
         doc='Sim mode Alarm Svrty')
 
 
+@register_record
 class FanoutFields(RecordFieldGroup):
     _record_type = 'fanout'
     # value = pvproperty(
@@ -2535,6 +2470,7 @@ class FanoutFields(RecordFieldGroup):
         doc='Select Mechanism')
 
 
+@register_record
 class GensubFields(RecordFieldGroup):
     _record_type = 'genSub'
     # value = pvproperty(
@@ -3510,6 +3446,7 @@ class GensubFields(RecordFieldGroup):
     _link_parent_attribute(display_precision, 'precision')
 
 
+@register_record
 class HistogramFields(RecordFieldGroup):
     _record_type = 'histogram'
     alarm_status = pvproperty(
@@ -3559,7 +3496,7 @@ class HistogramFields(RecordFieldGroup):
         name='MDEL', dtype=ChannelType.LONG, doc='Monitor Count Deadband')
     monitor_seconds_dband = pvproperty(
         name='SDEL', dtype=ChannelType.DOUBLE, doc='Monitor Seconds Dband')
-    num_of_array_elements = pvproperty(
+    number_of_elements = pvproperty(
         name='NELM',
         dtype=ChannelType.LONG,
         doc='Num of Array Elements',
@@ -3580,9 +3517,11 @@ class HistogramFields(RecordFieldGroup):
     _link_parent_attribute(display_precision, 'precision')
     _link_parent_attribute(high_operating_range, 'upper_ctrl_limit')
     _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
+    _link_parent_attribute(number_of_elements, 'max_length')
 
 
-class LonginFields(RecordFieldGroup):
+@register_record
+class LonginFields(RecordFieldGroup, _LimitsLong):
     _record_type = 'longin'
     # value = pvproperty(name='VAL', dtype=ChannelType.LONG, doc='Current value')
     alarm_status = pvproperty(
@@ -3615,40 +3554,8 @@ class LonginFields(RecordFieldGroup):
         name='SVAL', dtype=ChannelType.LONG, doc='Simulation Value')
     alarm_deadband = pvproperty(
         name='HYST', dtype=ChannelType.LONG, doc='Alarm Deadband')
-    high_alarm_limit = pvproperty(
-        name='HIGH', dtype=ChannelType.LONG, doc='High Alarm Limit')
-    high_severity = pvproperty(
-        name='HSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='High Severity')
-    hihi_alarm_limit = pvproperty(
-        name='HIHI', dtype=ChannelType.LONG, doc='Hihi Alarm Limit')
-    hihi_severity = pvproperty(
-        name='HHSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='Hihi Severity')
-    lolo_alarm_limit = pvproperty(
-        name='LOLO', dtype=ChannelType.LONG, doc='Lolo Alarm Limit')
-    lolo_severity = pvproperty(
-        name='LLSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='Lolo Severity')
-    low_alarm_limit = pvproperty(
-        name='LOW', dtype=ChannelType.LONG, doc='Low Alarm Limit')
-    low_severity = pvproperty(
-        name='LSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='Low Severity')
     archive_deadband = pvproperty(
         name='ADEL', dtype=ChannelType.LONG, doc='Archive Deadband')
-    high_operating_range = pvproperty(
-        name='HOPR', dtype=ChannelType.LONG, doc='High Operating Range')
-    low_operating_range = pvproperty(
-        name='LOPR', dtype=ChannelType.LONG, doc='Low Operating Range')
     monitor_deadband = pvproperty(
         name='MDEL', dtype=ChannelType.LONG, doc='Monitor Deadband')
     units_name = pvproperty(
@@ -3664,17 +3571,12 @@ class LonginFields(RecordFieldGroup):
         dtype=ChannelType.ENUM,
         enum_strings=menus.menuAlarmSevr.get_string_tuple(),
         doc='Sim mode Alarm Svrty')
-    _link_parent_attribute(hihi_alarm_limit, 'upper_alarm_limit')
-    _link_parent_attribute(high_alarm_limit, 'upper_warning_limit')
-    _link_parent_attribute(low_alarm_limit, 'lower_warning_limit')
-    _link_parent_attribute(lolo_alarm_limit, 'lower_alarm_limit')
-    _link_parent_attribute(high_operating_range, 'upper_ctrl_limit')
-    _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
     _link_parent_attribute(archive_deadband, 'log_atol')
     _link_parent_attribute(monitor_deadband, 'value_atol')
 
 
-class LongoutFields(RecordFieldGroup):
+@register_record
+class LongoutFields(RecordFieldGroup, _LimitsLong):
     _record_type = 'longout'
     # value = pvproperty(
     #     name='VAL', dtype=ChannelType.LONG, doc='Desired Output')
@@ -3706,40 +3608,8 @@ class LongoutFields(RecordFieldGroup):
         doc='Simulation Mode')
     alarm_deadband = pvproperty(
         name='HYST', dtype=ChannelType.LONG, doc='Alarm Deadband')
-    high_alarm_limit = pvproperty(
-        name='HIGH', dtype=ChannelType.LONG, doc='High Alarm Limit')
-    high_severity = pvproperty(
-        name='HSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='High Severity')
-    hihi_alarm_limit = pvproperty(
-        name='HIHI', dtype=ChannelType.LONG, doc='Hihi Alarm Limit')
-    hihi_severity = pvproperty(
-        name='HHSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='Hihi Severity')
-    lolo_alarm_limit = pvproperty(
-        name='LOLO', dtype=ChannelType.LONG, doc='Lolo Alarm Limit')
-    lolo_severity = pvproperty(
-        name='LLSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='Lolo Severity')
-    low_alarm_limit = pvproperty(
-        name='LOW', dtype=ChannelType.LONG, doc='Low Alarm Limit')
-    low_severity = pvproperty(
-        name='LSV',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='Low Severity')
     archive_deadband = pvproperty(
         name='ADEL', dtype=ChannelType.LONG, doc='Archive Deadband')
-    high_operating_range = pvproperty(
-        name='HOPR', dtype=ChannelType.LONG, doc='High Operating Range')
-    low_operating_range = pvproperty(
-        name='LOPR', dtype=ChannelType.LONG, doc='Low Operating Range')
     monitor_deadband = pvproperty(
         name='MDEL', dtype=ChannelType.LONG, doc='Monitor Deadband')
     units_name = pvproperty(
@@ -3773,16 +3643,11 @@ class LongoutFields(RecordFieldGroup):
         doc='Output Mode Select')
     output_specification = pvproperty(
         name='OUT', dtype=ChannelType.STRING, doc='Output Specification')
-    _link_parent_attribute(hihi_alarm_limit, 'upper_alarm_limit')
-    _link_parent_attribute(high_alarm_limit, 'upper_warning_limit')
-    _link_parent_attribute(low_alarm_limit, 'lower_warning_limit')
-    _link_parent_attribute(lolo_alarm_limit, 'lower_alarm_limit')
-    _link_parent_attribute(high_operating_range, 'upper_ctrl_limit')
-    _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
     _link_parent_attribute(archive_deadband, 'log_atol')
     _link_parent_attribute(monitor_deadband, 'value_atol')
 
 
+@register_record
 class MbbiFields(RecordFieldGroup):
     _record_type = 'mbbi'
     # value = pvproperty(name='VAL', dtype=ChannelType.ENUM, doc='Current Value')
@@ -3853,6 +3718,7 @@ class MbbiFields(RecordFieldGroup):
         name='SVAL', dtype=ChannelType.LONG, doc='Simulation Value')
 
 
+@register_record
 class MbbidirectFields(RecordFieldGroup):
     _record_type = 'mbbiDirect'
     # value = pvproperty(name='VAL', dtype=ChannelType.LONG, doc='Current Value')
@@ -3931,6 +3797,7 @@ class MbbidirectFields(RecordFieldGroup):
         doc='Sim mode Alarm Svrty')
 
 
+@register_record
 class MbboFields(RecordFieldGroup):
     _record_type = 'mbbo'
     # value = pvproperty(name='VAL', dtype=ChannelType.ENUM, doc='Desired Value')
@@ -4023,6 +3890,7 @@ class MbboFields(RecordFieldGroup):
         name='SIOL', dtype=ChannelType.STRING, doc='Sim Output Specifctn')
 
 
+@register_record
 class MbbodirectFields(RecordFieldGroup):
     _record_type = 'mbboDirect'
     # value = pvproperty(name='VAL', dtype=ChannelType.LONG, doc='Word')
@@ -4118,6 +3986,7 @@ class MbbodirectFields(RecordFieldGroup):
         doc='Sim mode Alarm Svrty')
 
 
+@register_record
 class MotorFields(RecordFieldGroup):
     _record_type = 'motor'
     # value = pvproperty(
@@ -4316,6 +4185,10 @@ class MotorFields(RecordFieldGroup):
         dtype=ChannelType.LONG,
         doc='User Low Limit Switch',
         read_only=True)
+    user_offset = pvproperty(
+        name='OFF',
+        dtype=ChannelType.DOUBLE,
+        doc='User Offset (EGU)')
     user_readback_value = pvproperty(
         name='RBV',
         dtype=ChannelType.DOUBLE,
@@ -4527,6 +4400,7 @@ class MotorFields(RecordFieldGroup):
     _link_parent_attribute(monitor_deadband, 'value_atol')
 
 
+@register_record
 class PermissiveFields(RecordFieldGroup):
     _record_type = 'permissive'
     # value = pvproperty(name='VAL', dtype=ChannelType.LONG, doc='Status')
@@ -4546,6 +4420,7 @@ class PermissiveFields(RecordFieldGroup):
         name='LABL', dtype=ChannelType.CHAR, max_length=20, doc='Button Label')
 
 
+@register_record
 class ScalcoutFields(RecordFieldGroup):
     _record_type = 'scalcout'
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Result')
@@ -4705,6 +4580,7 @@ class ScalcoutFields(RecordFieldGroup):
     _link_parent_attribute(monitor_deadband, 'value_atol')
 
 
+@register_record
 class ScanparmFields(RecordFieldGroup):
     _record_type = 'scanparm'
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Result')
@@ -4832,6 +4708,7 @@ class ScanparmFields(RecordFieldGroup):
     _link_parent_attribute(display_precision, 'precision')
 
 
+@register_record
 class SelFields(RecordFieldGroup):
     _record_type = 'sel'
     # value = pvproperty(
@@ -4923,6 +4800,7 @@ class SelFields(RecordFieldGroup):
     _link_parent_attribute(monitor_deadband, 'value_atol')
 
 
+@register_record
 class SeqFields(RecordFieldGroup):
     _record_type = 'seq'
     # value = pvproperty(
@@ -5018,6 +4896,7 @@ class SeqFields(RecordFieldGroup):
     _link_parent_attribute(display_precision, 'precision')
 
 
+@register_record
 class SscanFields(RecordFieldGroup):
     _record_type = 'sscan'
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Value Field')
@@ -5229,6 +5108,7 @@ class SscanFields(RecordFieldGroup):
         doc='Freeze Num of Points')
 
 
+@register_record
 class SseqFields(RecordFieldGroup):
     _record_type = 'sseq'
     # value = pvproperty(
@@ -5689,6 +5569,7 @@ class SseqFields(RecordFieldGroup):
     _link_parent_attribute(display_precision, 'precision')
 
 
+@register_record
 class StateFields(RecordFieldGroup):
     _record_type = 'state'
     # value = pvproperty(
@@ -5707,6 +5588,7 @@ class StateFields(RecordFieldGroup):
         read_only=True)
 
 
+@register_record
 class StringinFields(RecordFieldGroup):
     _record_type = 'stringin'
     # value = pvproperty(
@@ -5756,6 +5638,7 @@ class StringinFields(RecordFieldGroup):
         doc='Sim mode Alarm Svrty')
 
 
+@register_record
 class StringoutFields(RecordFieldGroup):
     _record_type = 'stringout'
     # value = pvproperty(
@@ -5817,6 +5700,7 @@ class StringoutFields(RecordFieldGroup):
         name='OUT', dtype=ChannelType.STRING, doc='Output Specification')
 
 
+@register_record
 class SubFields(RecordFieldGroup):
     _record_type = 'sub'
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Result')
@@ -6005,6 +5889,7 @@ class SubFields(RecordFieldGroup):
     _link_parent_attribute(monitor_deadband, 'value_atol')
 
 
+@register_record
 class SubarrayFields(RecordFieldGroup):
     _record_type = 'subArray'
     alarm_status = pvproperty(
@@ -6054,8 +5939,11 @@ class SubarrayFields(RecordFieldGroup):
     _link_parent_attribute(display_precision, 'precision')
     _link_parent_attribute(high_operating_range, 'upper_ctrl_limit')
     _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
+    _link_parent_attribute(maximum_elements, 'max_length')
+    _link_parent_attribute(number_of_elements, 'length')
 
 
+@register_record
 class SwaitFields(RecordFieldGroup):
     _record_type = 'swait'
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Value Field')
@@ -6156,6 +6044,7 @@ class SwaitFields(RecordFieldGroup):
     _link_parent_attribute(monitor_deadband, 'value_atol')
 
 
+@register_record
 class TableFields(RecordFieldGroup):
     _record_type = 'table'
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Result')
@@ -6790,6 +6679,7 @@ class TableFields(RecordFieldGroup):
     _link_parent_attribute(display_precision, 'precision')
 
 
+@register_record
 class TimestampFields(RecordFieldGroup):
     _record_type = 'timestamp'
     # value = pvproperty(
@@ -6815,6 +6705,7 @@ class TimestampFields(RecordFieldGroup):
         doc='Time Stamp Type')
 
 
+@register_record
 class TransformFields(RecordFieldGroup):
     _record_type = 'transform'
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Result')
@@ -6848,6 +6739,7 @@ class TransformFields(RecordFieldGroup):
     _link_parent_attribute(display_precision, 'precision')
 
 
+@register_record
 class VmeFields(RecordFieldGroup):
     _record_type = 'vme'
     # value = pvproperty(name='VAL', dtype=ChannelType.LONG, doc='Current value')
@@ -6884,6 +6776,7 @@ class VmeFields(RecordFieldGroup):
         name='ADDR', dtype=ChannelType.LONG, doc='VME address (hex)')
 
 
+@register_record
 class VsFields(RecordFieldGroup):
     _record_type = 'vs'
     # value = pvproperty(
@@ -7261,6 +7154,7 @@ class VsFields(RecordFieldGroup):
         name='LBLR', dtype=ChannelType.DOUBLE, doc='CGB Log10 Low Display')
 
 
+@register_record
 class WaveformFields(RecordFieldGroup):
     _record_type = 'waveform'
     alarm_status = pvproperty(
@@ -7334,12 +7228,7 @@ class WaveformFields(RecordFieldGroup):
     _link_parent_attribute(display_precision, 'precision')
     _link_parent_attribute(high_operating_range, 'upper_ctrl_limit')
     _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
+    _link_parent_attribute(number_of_elements, 'max_length')
 
 
-records = {record._record_type: record
-           for name, record in globals().items()
-           if inspect.isclass(record) and
-           issubclass(record, PVGroup) and
-           record not in (PVGroup, RecordFieldGroup)
-           }
 __all__ = ['records', 'RecordFieldGroup'] + list(records.keys())

@@ -20,10 +20,12 @@ import pytest
 from .conftest import default_setup_module as setup_module  # noqa
 from .conftest import default_teardown_module as teardown_module  # noqa
 
+THREAD_TIMEOUT_SCALE = 2
+
 
 def test_go_idle(context, ioc):
     pv, = context.get_pvs(ioc.pvs['str'])
-    pv.wait_for_connection()
+    pv.wait_for_connection(timeout=10)
     assert pv.connected
     print(pv.read())
 
@@ -38,7 +40,7 @@ def test_go_idle(context, ioc):
 
 def test_context_disconnect_is_terminal(context, ioc):
     pv, = context.get_pvs(ioc.pvs['str'])
-    pv.wait_for_connection()
+    pv.wait_for_connection(timeout=10)
     assert pv.connected
 
     pv.read()
@@ -51,7 +53,7 @@ def test_context_disconnect_is_terminal(context, ioc):
 
 def test_put_complete(backends, context, ioc):
     pv, = context.get_pvs(ioc.pvs['int'])
-    pv.wait_for_connection()
+    pv.wait_for_connection(timeout=10)
     assert pv.connected
 
     # start in a known initial state
@@ -86,7 +88,7 @@ def test_put_complete(backends, context, ioc):
 
 def test_specified_port(monkeypatch, context, ioc):
     pv, = context.get_pvs(ioc.pvs['float'])
-    pv.wait_for_connection()
+    pv.wait_for_connection(timeout=10)
 
     circuit = pv.circuit_manager.circuit
     address_list = list(caproto.get_address_list())
@@ -171,7 +173,7 @@ def test_server_crash(context, ioc_factory):
 
     # Wait for everything to connect.
     for pv in pvs:
-        pv.wait_for_connection()
+        pv.wait_for_connection(timeout=10)
     # Wait to confirm that the subscription produced a response.
     while not collector:
         time.sleep(0.05)
@@ -184,7 +186,7 @@ def test_server_crash(context, ioc_factory):
     # Start the ioc again (it has the same prefix).
     second_ioc = ioc_factory()
     for pv in pvs:
-        pv.wait_for_connection()
+        pv.wait_for_connection(timeout=10)
         assert pv.connected
     # Wait to confirm that the subscription produced a new response.
     while not collector:
@@ -199,7 +201,7 @@ def test_subscriptions(ioc, context):
     cntx = context
 
     pv, = cntx.get_pvs(ioc.pvs['int'])
-    pv.wait_for_connection()
+    pv.wait_for_connection(timeout=10)
 
     monitor_values = []
 
@@ -246,7 +248,7 @@ def test_many_priorities_same_name(ioc, context):
     for priority in range(0, 10, 9):
         pvs[priority], = context.get_pvs(pv_name, priority=priority)
     for pv in pvs.values():
-        pv.wait_for_connection()
+        pv.wait_for_connection(timeout=10)
 
 
 def test_two_iocs_one_pv(ioc_factory, context):
@@ -258,7 +260,7 @@ def test_two_iocs_one_pv(ioc_factory, context):
     assert first_ioc.pvs == second_ioc.pvs
     pv_name, *_others = first_ioc.pvs.values()
     pv, = context.get_pvs(pv_name)
-    pv.wait_for_connection()
+    pv.wait_for_connection(timeout=10)
     time.sleep(0.2)  # By now both IOC will have answered.
     # Exercise it a bit as a smoke test of sorts.
     pv.read()
@@ -272,7 +274,7 @@ def test_two_iocs_one_pv(ioc_factory, context):
 def test_multiple_subscriptions_one_server(ioc, context):
     pvs = context.get_pvs(*ioc.pvs.values())
     for pv in pvs:
-        pv.wait_for_connection()
+        pv.wait_for_connection(timeout=10)
     collector = collections.defaultdict(list)
 
     def collect(sub, response):
@@ -291,7 +293,7 @@ def test_multiple_subscriptions_one_server(ioc, context):
 def test_subscription_objects_are_reused(ioc, context):
     pv, = context.get_pvs(ioc.pvs['int'])
 
-    pv.wait_for_connection()
+    pv.wait_for_connection(timeout=10)
     sub = pv.subscribe(data_type=0)
     sub_redundant = pv.subscribe(data_type=0)  # should return `sub` again
     sub_different = pv.subscribe(data_type=1)  # different args -- new sub
@@ -315,7 +317,7 @@ def test_subscription_objects_are_reused(ioc, context):
 
 def test_unsubscribe_all(ioc, context):
     pv, = context.get_pvs(ioc.pvs['int'])
-    pv.wait_for_connection()
+    pv.wait_for_connection(timeout=10)
     sub0 = pv.subscribe(data_type=0)
     sub1 = pv.subscribe(data_type=1)
 
@@ -345,7 +347,7 @@ def test_unsubscribe_all(ioc, context):
 
 def test_timeout(ioc, context):
     pv, = context.get_pvs(ioc.pvs['int'])
-    pv.wait_for_connection()
+    pv.wait_for_connection(timeout=10)
 
     # Check that timeout=None is allowed.
     pv.write((1, ), timeout=None)
@@ -372,17 +374,20 @@ def thread_count(request):
     return request.param
 
 
-@pytest.fixture(params=[f'iter{i}' for i in range(1, 3)])
+@pytest.fixture(params=[f'iter{i}' for i in [1]])
 def multi_iterations(request):
     return request.param
 
 
-def _multithreaded_exec(test_func, thread_count, *, start_timeout=5,
+def _multithreaded_exec(test_func, thread_count, *, start_timeout=1,
                         end_timeout=2):
     threads = {}
     return_values = {i: None for i in range(thread_count)}
     start_barrier = threading.Barrier(parties=thread_count + 1)
     end_barrier = threading.Barrier(parties=thread_count + 1)
+
+    start_timeout *= thread_count
+    end_timeout *= thread_count
 
     def thread_wrapper(thread_id):
         try:
@@ -436,7 +441,7 @@ def test_multithreaded_many_get_pvs(ioc, context, thread_count,
                                     multi_iterations):
     def _test(thread_id):
         pv, = context.get_pvs(ioc.pvs['int'])
-        pv.wait_for_connection()
+        pv.wait_for_connection(timeout=THREAD_TIMEOUT_SCALE * thread_count)
 
         pvs[thread_id] = pv
         return pv.connected
@@ -445,13 +450,17 @@ def test_multithreaded_many_get_pvs(ioc, context, thread_count,
     for connected in _multithreaded_exec(_test, thread_count):
         assert connected
 
+    pv, = context.get_pvs(ioc.pvs['int'])
+    for thread_pv in pvs.values():
+        assert pv is thread_pv
+
     assert len(set(pvs.values())) == 1
 
 
 def test_multithreaded_many_wait_for_connection(ioc, context, thread_count,
                                                 multi_iterations):
     def _test(thread_id):
-        pv.wait_for_connection()
+        pv.wait_for_connection(timeout=THREAD_TIMEOUT_SCALE * thread_count)
         return pv.connected
 
     pv, = context.get_pvs(ioc.pvs['int'])
@@ -464,7 +473,7 @@ def test_multithreaded_many_read(ioc, context, thread_count,
                                  multi_iterations):
     def _test(thread_id):
         data_id = thread_id % max(data_types)
-        pv.wait_for_connection()
+        pv.wait_for_connection(timeout=THREAD_TIMEOUT_SCALE * thread_count)
         value = pv.read(data_type=data_types[data_id])
         values[data_id] = value
         return (data_id, value)
@@ -485,7 +494,7 @@ def test_multithreaded_many_read(ioc, context, thread_count,
 def test_multithreaded_many_write(ioc, context, thread_count,
                                   multi_iterations):
     def _test(thread_id):
-        pv.wait_for_connection()
+        pv.wait_for_connection(timeout=THREAD_TIMEOUT_SCALE * thread_count)
         ret = pv.write(data=[thread_id], wait=True)
         time.sleep(0.2)  # Wait for EventAddResponse to be received, processed.
         return ret
@@ -511,7 +520,7 @@ def test_multithreaded_many_subscribe(ioc, context, thread_count,
                                       multi_iterations):
     def _test(thread_id):
         if thread_id == 0:
-            init_barrier.wait(timeout=2)
+            init_barrier.wait(timeout=THREAD_TIMEOUT_SCALE * thread_count)
             print('-- write thread initialized --')
             pv.write((1, ), wait=True)
             time.sleep(0.01)
@@ -520,7 +529,7 @@ def test_multithreaded_many_subscribe(ioc, context, thread_count,
             pv.write((3, ), wait=True)
             time.sleep(0.2)
             print('-- write thread hit sub barrier --')
-            sub_ended_barrier.wait(timeout=2)
+            sub_ended_barrier.wait(timeout=THREAD_TIMEOUT_SCALE * thread_count)
             print('-- write thread exiting --')
             return [initial_value, 1, 2, 3]
 
@@ -532,13 +541,26 @@ def test_multithreaded_many_subscribe(ioc, context, thread_count,
 
         sub = pv.subscribe()
         sub.add_callback(callback)
-        time.sleep(0.2)  # Wait for EventAddRequest to be sent and processed.
+        # Wait <= 20 seconds until first EventAddResponse is received.
+        for i in range(200):
+            if values[thread_id]:
+                break
+            time.sleep(0.1)
+        else:
+            raise Exception(f"{thread_id} never saw initial EventAddResponse")
         # print(thread_id, sub)
-        init_barrier.wait(timeout=2)
-        # Everybody here? On my signal... SUBSCRIBE!! Ahahahahaha!
+        init_barrier.wait(timeout=THREAD_TIMEOUT_SCALE * thread_count)
+        # Everybody here? On my signal... SEND UPDATES!! Ahahahahaha!
         # Destruction!!
-        time.sleep(1)  # Wait for EventAddRequest to be sent and processed.
-        sub_ended_barrier.wait(timeout=2)
+        # Wait <= 20 seconds until three more EventAddResponses are received.
+        for i in range(200):
+            if len(values[thread_id]) == 4:
+                break
+            time.sleep(0.1)
+        else:
+            raise Exception(f"{thread_id} only got {len(values[thread_id])}"
+                            f"EventAddResponses.")
+        sub_ended_barrier.wait(timeout=THREAD_TIMEOUT_SCALE * thread_count)
 
         sub.clear()
         return values[thread_id]
@@ -548,7 +570,7 @@ def test_multithreaded_many_subscribe(ioc, context, thread_count,
     sub_ended_barrier = threading.Barrier(parties=thread_count + 1)
 
     pv, = context.get_pvs(ioc.pvs['int'])
-    pv.wait_for_connection()
+    pv.wait_for_connection(timeout=10)
     initial_value = pv.read().data.tolist()[0]
 
     print()
@@ -556,7 +578,7 @@ def test_multithreaded_many_subscribe(ioc, context, thread_count,
     print(f'initial value is: {initial_value!r}')
     try:
         results = _multithreaded_exec(_test, thread_count + 1)
-    except threading.BrokenBarrierError as ex:
+    except threading.BrokenBarrierError:
         if init_barrier.broken:
             print(f'Init barrier broken!')
         if sub_ended_barrier.broken:
@@ -571,7 +593,7 @@ def test_multithreaded_many_subscribe(ioc, context, thread_count,
 def test_batch_read(context, ioc):
     pvs = context.get_pvs(ioc.pvs['int'], ioc.pvs['int2'], ioc.pvs['int3'])
     for pv in pvs:
-        pv.wait_for_connection()
+        pv.wait_for_connection(timeout=10)
     results = {}
 
     def stash_result(name, response):
@@ -587,7 +609,7 @@ def test_batch_read(context, ioc):
 def test_batch_write(context, ioc):
     pvs = context.get_pvs(ioc.pvs['int'], ioc.pvs['int2'], ioc.pvs['int3'])
     for pv in pvs:
-        pv.wait_for_connection()
+        pv.wait_for_connection(timeout=10)
     results = {}
 
     def stash_result(name, response):
@@ -605,7 +627,7 @@ def test_batch_write(context, ioc):
 def test_batch_write_no_callback(context, ioc):
     pvs = context.get_pvs(ioc.pvs['int'], ioc.pvs['int2'], ioc.pvs['int3'])
     for pv in pvs:
-        pv.wait_for_connection()
+        pv.wait_for_connection(timeout=10)
     with Batch() as b:
         for pv in pvs:
             b.write(pv, [4407])
@@ -617,8 +639,69 @@ def test_batch_write_no_callback(context, ioc):
 def test_write_accepts_scalar(context, ioc):
     int_pv, str_pv = context.get_pvs(ioc.pvs['int'], ioc.pvs['str'])
     for pv in (int_pv, str_pv):
-        pv.wait_for_connection()
+        pv.wait_for_connection(timeout=10)
     int_pv.write(17, wait=True)
     assert list(int_pv.read().data) == [17]
     str_pv.write('caprotoss', wait=True)
     assert list(str_pv.read().data) == [b'caprotoss']
+
+
+def test_events_off_and_on(ioc, context):
+    pv, = context.get_pvs(ioc.pvs['int'])
+    pv.wait_for_connection(timeout=10)
+
+    monitor_values = []
+
+    def callback(command, **kwargs):
+        assert isinstance(command, ca.EventAddResponse)
+        monitor_values.append(command.data[0])
+
+    sub = pv.subscribe()
+    sub.add_callback(callback)
+    time.sleep(0.2)  # Wait for EventAddRequest to be sent and processed.
+    pv.write((1, ), wait=True)
+    pv.write((2, ), wait=True)
+    pv.write((3, ), wait=True)
+    time.sleep(0.2)  # Wait for the last update to be processed.
+
+    for i in range(3):
+        if pv.read().data[0] == 3:
+            time.sleep(0.2)
+            break
+        else:
+            time.sleep(0.2)
+
+    assert monitor_values[1:] == [1, 2, 3]
+
+    pv.circuit_manager.events_off()
+    time.sleep(0.2)  # Wait for EventsOffRequest to be processed.
+    pv.write((4, ), wait=True)
+    pv.write((5, ), wait=True)
+    pv.write((6, ), wait=True)
+    time.sleep(0.2)  # Wait for the last update to be processed.
+    pv.circuit_manager.events_on()
+    time.sleep(0.2)  # Wait for EventsOnRequest to be processed.
+    # The last update, 6, should be sent at this time.
+
+    pv.write((7, ), wait=True)
+    pv.write((8, ), wait=True)
+    pv.write((9, ), wait=True)
+
+    for i in range(3):
+        if pv.read().data[0] == 7:
+            time.sleep(0.2)
+            break
+        else:
+            time.sleep(0.2)
+
+    assert monitor_values[1:] == [1, 2, 3, 6, 7, 8, 9]
+
+
+def test_time_since_last_heard(context, ioc):
+    pv, = context.get_pvs(ioc.pvs['str'])
+    pv.wait_for_connection(timeout=10)
+    time.sleep(1)
+    (address, t), = context.broadcaster.time_since_last_heard().items()
+    assert address == pv.circuit_manager.circuit.address
+    assert 0 < t < 10
+    pv.time_since_last_heard() - t < 10  # wide tolerance here for slow CI

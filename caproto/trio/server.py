@@ -1,34 +1,49 @@
 import functools
-from ..server import AsyncLibraryLayer
+
 import caproto as ca
 import trio
 from trio import socket
 
+from ..server import AsyncLibraryLayer
 from ..server.common import (VirtualCircuit as _VirtualCircuit,
-                             Context as _Context)
+                             Context as _Context, LoopExit,
+                             DisconnectedCircuit)
+from .util import open_memory_channel
 
 
 class ServerExit(Exception):
     ...
 
 
+class Event(trio.Event):
+    async def wait(self, timeout=None):
+        if timeout is not None:
+            with trio.move_on_after(timeout):
+                await super().wait()
+                return True
+            return False
+        else:
+            await super().wait()
+            return True
+
+
 def _universal_queue(portal, max_len=1000):
     class UniversalQueue:
         def __init__(self):
-            self.queue = trio.Queue(max_len)
+            self._send, self._recv = open_memory_channel(max_len)
             self.portal = portal
 
         def put(self, value):
-            self.portal.run(self.queue.put, value)
+            self.portal.run(self._send.send, value)
 
         async def async_put(self, value):
-            await self.queue.put(value)
+            await self._send.send(value)
 
         def get(self):
-            return self.portal.run(self.queue.get)
+            return self.portal.run(self._recv.receive)
 
         async def async_get(self):
-            return await self.queue.get()
+            return await self._recv.receive()
 
     return UniversalQueue
 
@@ -50,15 +65,61 @@ class VirtualCircuit(_VirtualCircuit):
     def __init__(self, circuit, client, context):
         super().__init__(circuit, client, context)
         self.nursery = context.nursery
-        self.command_queue = trio.Queue(1000)
+        self.QueueFull = trio.WouldBlock
+
+        self.command_chan = open_memory_channel(ca.MAX_COMMAND_BACKLOG)
+
+        # For compatibility with server common:
+        self.command_queue = self.command_chan.send
+
         self.new_command_condition = trio.Condition()
+        self.subscription_chan = open_memory_channel(ca.MAX_TOTAL_SUBSCRIPTION_BACKLOG)
+
+        # For compatibility with server common:
+        self.subscription_queue = self.subscription_chan.send
+
+        self.write_event = Event()
+        self.events_on = trio.Event()
 
     async def run(self):
         await self.nursery.start(self.command_queue_loop)
+        await self.nursery.start(self.subscription_queue_loop)
 
     async def command_queue_loop(self, task_status):
+        self.write_event.set()
+
+        send, recv = self.command_chan
+        async with send:
+            async with recv:
+                task_status.started()
+                try:
+                    async for command in recv:
+                        response = await self._command_queue_iteration(command)
+                        if response is not None:
+                            await self.send(*response)
+                        await self._wake_new_command()
+                except DisconnectedCircuit:
+                    await self._on_disconnect()
+                    self.circuit.disconnect()
+                    await self.context.circuit_disconnected(self)
+                except trio.Cancelled:
+                    ...
+                except LoopExit:
+                    ...
+
+    async def subscription_queue_loop(self, task_status):
         task_status.started()
-        await super().command_queue_loop()
+        await super().subscription_queue_loop()
+
+    async def get_from_sub_queue(self, timeout=None):
+        # Timeouts work very differently between our server implementations,
+        # so we do this little stub in its own method.
+        _, recv = self.subscription_chan
+        if timeout is None:
+            return await recv.receive()
+
+        with trio.move_on_after(timeout):
+            return await recv.receive()
 
     async def _on_disconnect(self):
         """Executed when disconnection detected"""
@@ -82,8 +143,11 @@ class Context(_Context):
     def __init__(self, pvdb, interfaces=None):
         super().__init__(pvdb, interfaces)
         self.nursery = None
-        self.command_bundle_queue = trio.Queue(1000)
-        self.subscription_queue = trio.Queue(1000)
+        self.command_chan = open_memory_channel(ca.MAX_COMMAND_BACKLOG)
+        self.command_bundle_queue = self.command_chan.send
+
+        self.subscription_chan = open_memory_channel(ca.MAX_TOTAL_SUBSCRIPTION_BACKLOG)
+        self.subscription_queue = self.subscription_chan.send
         self.beacon_sock = ca.bcast_socket(socket)
 
     async def broadcaster_udp_server_loop(self, task_status):
@@ -107,30 +171,45 @@ class Context(_Context):
         task_status.started()
 
     async def broadcaster_queue_loop(self, task_status):
-        task_status.started()
-        await super().broadcaster_queue_loop()
+        send, recv = self.command_chan
+        async with send:
+            async with recv:
+                try:
+                    task_status.started()
+                    async for addr, commands in recv:
+                        await super()._broadcaster_queue_iteration(addr, commands)
+                except trio.Cancelled:
+                    ...
+                except LoopExit:
+                    ...
 
     async def subscription_queue_loop(self, task_status):
-        task_status.started()
-        await super().subscription_queue_loop()
+        send, recv = self.subscription_chan
+        async with send:
+            async with recv:
+                task_status.started()
+                async for item in recv:
+                    sub_specs, metadata, values, flags, sub = item
+                    await self._subscription_queue_iteration(
+                        sub_specs, metadata, values, flags, sub)
 
     async def broadcast_beacon_loop(self, task_status):
         task_status.started()
         await super().broadcast_beacon_loop()
 
     async def server_accept_loop(self, listen_sock, *, task_status):
-            try:
-                listen_sock.listen()
-                task_status.started()
-                while True:
-                    client_sock, addr = await listen_sock.accept()
-                    self.nursery.start_soon(self.tcp_handler, client_sock, addr)
-            finally:
-                listen_sock.close()
+        try:
+            listen_sock.listen()
+            task_status.started()
+            while True:
+                client_sock, addr = await listen_sock.accept()
+                self.nursery.start_soon(self.tcp_handler, client_sock, addr)
+        finally:
+            listen_sock.close()
 
     async def run(self, *, log_pv_names=False):
         'Start the server'
-        self.log.info('Server starting up...')
+        self.log.info('Trio server starting up...')
         try:
             async with trio.open_nursery() as self.nursery:
                 for address in ca.get_beacon_address_list():
@@ -148,14 +227,16 @@ class Context(_Context):
                     make_socket)
                 self.port, self.tcp_sockets = res
 
-                for interface, listen_sock in self.tcp_sockets.items():
-                    self.log.info("Listening on %s:%d", interface, self.port)
-                    await self.nursery.start(self.server_accept_loop,
-                                             listen_sock)
                 await self.nursery.start(self.broadcaster_udp_server_loop)
                 await self.nursery.start(self.broadcaster_queue_loop)
                 await self.nursery.start(self.subscription_queue_loop)
                 await self.nursery.start(self.broadcast_beacon_loop)
+
+                # Only after all loops have been started, begin listening:
+                for interface, listen_sock in self.tcp_sockets.items():
+                    self.log.info("Listening on %s:%d", interface, self.port)
+                    await self.nursery.start(self.server_accept_loop,
+                                             listen_sock)
 
                 async_lib = TrioAsyncLayer()
                 for name, method in self.startup_methods.items():
@@ -173,6 +254,16 @@ class Context(_Context):
             self.log.info('Server task cancelled. Will shut down.')
         finally:
             self.log.info('Server exiting....')
+            async_lib = TrioAsyncLayer()
+            async with trio.open_nursery() as nursery:
+                for name, method in self.shutdown_methods.items():
+                    self.log.debug('Calling shutdown method %r', name)
+
+                    async def shutdown(task_status):
+                        task_status.started()
+                        await method(async_lib)
+
+                    await nursery.start(shutdown)
             for sock in self.tcp_sockets.values():
                 sock.close()
             for sock in self.udp_socks.values():

@@ -4,14 +4,14 @@ import caproto as ca
 from caproto._headers import MessageHeader
 
 
-def test_broadcast_address_list_from_interfaces():
-    # Smoke test broadcast_address_list_from_interfaces by setting the right
-    # env vars and calling get_address_list.
+def test_broadcast_auto_address_list():
+    pytest.importorskip('netifaces')
     env = os.environ.copy()
     try:
         os.environ['EPICS_CA_ADDR_LIST'] = ''
         os.environ['EPICS_CA_AUTO_ADDR_LIST'] = 'YES'
-        ca.get_address_list()
+        expected = [bcast for addr, bcast in ca.get_netifaces_addresses()]
+        assert ca.get_address_list() == expected
     finally:
         os.environ = env
 

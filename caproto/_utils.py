@@ -1,6 +1,7 @@
 # This module includes all exceptions raised by caproto, sentinel objects used
 # throughout the package (see detailed comment below), various network-related
 # helper functions, and other miscellaneous utilities.
+import argparse
 import array
 import collections
 import os
@@ -13,6 +14,9 @@ import threading
 from collections import namedtuple
 from contextlib import contextmanager
 from warnings import warn
+
+from ._version import get_versions
+__version__ = get_versions()['version']
 
 try:
     import fcntl
@@ -37,7 +41,6 @@ __all__ = (  # noqa F822
     'get_server_address_list',
     'get_beacon_address_list',
     'get_netifaces_addresses',
-    'broadcast_address_list_from_interfaces',
     'ensure_bytes',
     'random_ports',
     'bcast_socket',
@@ -52,17 +55,22 @@ __all__ = (  # noqa F822
     'ProtocolError',
     'LocalProtocolError',
     'RemoteProtocolError',
+    'CaprotoTimeoutError',
     'CaprotoKeyError',
+    'CaprotoAttributeError',
     'CaprotoNotImplementedError',
     'CaprotoValueError',
     'CaprotoTypeError',
+    'CaprotoConversionError',
     'CaprotoRuntimeError',
+    'CaprotoNetworkError',
     'ErrorResponseReceived',
     'SendAllRetry',
     'RecordModifiers',
     'RecordModifier',
     'RecordAndField',
     'ThreadsafeCounter',
+    '__version__',
      # sentinels dynamically defined and added to globals() below
     'CLIENT', 'SERVER', 'RESPONSE', 'REQUEST', 'NEED_DATA',
     'SEND_SEARCH_REQUEST', 'AWAIT_SEARCH_RESPONSE',
@@ -113,6 +121,11 @@ class States(_SimpleReprEnum):
     NEED_DATA = enum.auto()
 
 
+class ConversionDirection(_SimpleReprEnum):
+    FROM_WIRE = enum.auto()
+    TO_WIRE = enum.auto()
+
+
 globals().update(
     {token: getattr(_enum, token)
      for _enum in [Role, Direction, States]
@@ -146,6 +159,21 @@ class RemoteProtocolError(ProtocolError):
     ...
 
 
+class ValidationError(CaprotoError):
+    """
+    Could not parse into valid command.
+    """
+    ...
+
+
+class CaprotoTimeoutError(TimeoutError, CaprotoError):
+    ...
+
+
+class CaprotoAttributeError(AttributeError, CaprotoError):
+    ...
+
+
 class CaprotoKeyError(KeyError, CaprotoError):
     ...
 
@@ -155,6 +183,10 @@ class CaprotoNotImplementedError(NotImplementedError, CaprotoError):
 
 
 class CaprotoValueError(ValueError, CaprotoError):
+    ...
+
+
+class CaprotoConversionError(CaprotoValueError):
     ...
 
 
@@ -171,6 +203,10 @@ class CaprotoTypeError(TypeError, CaprotoError):
 
 
 class CaprotoRuntimeError(RuntimeError, CaprotoError):
+    ...
+
+
+class CaprotoNetworkError(OSError, CaprotoError):
     ...
 
 
@@ -237,7 +273,10 @@ def get_address_list():
     addr_list = env['EPICS_CA_ADDR_LIST']
 
     if not addr_list or auto_addr_list.lower() == 'yes':
-        return broadcast_address_list_from_interfaces()
+        if netifaces is not None:
+            return [bcast for addr, bcast in get_netifaces_addresses()]
+        else:
+            return ['255.255.255.255']
 
     return addr_list.split(' ')
 
@@ -285,8 +324,7 @@ def get_beacon_address_list():
         return (addr, beacon_port)
 
     if not addr_list or auto_addr_list.lower() == 'yes':
-        return [get_addr_port(addr) for addr in
-                broadcast_address_list_from_interfaces()]
+        return [('255.255.255.255', beacon_port)]
 
     return [get_addr_port(addr) for addr in addr_list.split(' ')]
 
@@ -297,7 +335,7 @@ def get_netifaces_addresses():
     Yields (address, broadcast_address)
     '''
     if netifaces is None:
-        raise RuntimeError('netifaces unavailable')
+        raise CaprotoRuntimeError('netifaces unavailable')
 
     for iface in netifaces.interfaces():
         interface = netifaces.ifaddresses(iface)
@@ -315,18 +353,6 @@ def get_netifaces_addresses():
                     yield (addr, addr)
                 elif peer is not None:
                     yield (peer, peer)
-
-
-def broadcast_address_list_from_interfaces():
-    '''Get a list of broadcast addresses using netifaces
-
-    If netifaces is unavailable, the standard IPv4 255.255.255.255 broadcast
-    address is returned.
-    '''
-    if netifaces is None:
-        return ['255.255.255.255']
-
-    return [bcast for addr, bcast in get_netifaces_addresses()]
 
 
 def ensure_bytes(s):
@@ -384,12 +410,27 @@ def bcast_socket(socket_module=socket):
     return sock
 
 
+if 'pypy' in sys.implementation.name:
+    def _cast_buffers_to_byte(buffers):
+        def inner(b):
+            try:
+                return memoryview(b).cast('b')
+            except TypeError:
+                target_type = b.dtype.str.replace('>', '<')
+                return memoryview(b.astype(target_type)).cast('b')
+        return tuple(inner(b) for b in buffers)
+
+else:
+    def _cast_buffers_to_byte(buffers):
+        return tuple(memoryview(b).cast('b') for b in buffers)
+
+
 def buffer_list_slice(*buffers, offset):
     'Helper function for slicing a list of buffers'
     if offset < 0:
-        raise ValueError('Negative offset')
+        raise CaprotoValueError('Negative offset')
 
-    buffers = tuple(memoryview(b).cast('b') for b in buffers)
+    buffers = _cast_buffers_to_byte(buffers)
 
     start = 0
     for bufidx, buf in enumerate(buffers):
@@ -400,13 +441,13 @@ def buffer_list_slice(*buffers, offset):
 
         start = end
 
-    raise ValueError('Offset beyond end of buffers (total length={} offset={})'
-                     ''.format(end, offset))
+    raise CaprotoValueError('Offset beyond end of buffers '
+                            '(total length={} offset={})'.format(end, offset))
 
 
 def incremental_buffer_list_slice(*buffers):
     'Incrementally slice a list of buffers'
-    buffers = tuple(memoryview(b).cast('b') for b in buffers)
+    buffers = _cast_buffers_to_byte(buffers)
     total_size = sum(len(b) for b in buffers)
     total_sent = 0
 
@@ -751,30 +792,24 @@ class ThreadsafeCounter:
     '''
     MAX_ID = 2 ** 16
 
-    def __init__(self, *, initial_value=0, dont_clash_with=None):
+    def __init__(self, *, initial_value=-1, dont_clash_with=None):
+        if dont_clash_with is None:
+            dont_clash_with = set()
+
         self.value = initial_value
         self.lock = threading.RLock()
         self.dont_clash_with = dont_clash_with
 
     def __call__(self):
         'Get next ID, wrapping around at 2**16, ensuring no clashes'
-        if not self.dont_clash_with:
-            with self.lock:
-                self.value += 1
-                if self.value >= self.MAX_ID:
-                    self.value = 0
-                return self.value
-        else:
-            with self.lock:
-                value = self.value
+        with self.lock:
+            value = self.value + 1
 
-                while value in self.dont_clash_with or value >= self.MAX_ID:
-                    value += 1
-                    if value >= self.MAX_ID:
-                        value = 0
+            while value in self.dont_clash_with or value >= self.MAX_ID:
+                value = 0 if value >= self.MAX_ID else value + 1
 
-                self.value = value
-                return value
+            self.value = value
+            return self.value
 
 
 if sys.platform == 'win32' or fcntl is None:
@@ -817,3 +852,24 @@ def named_temporary_file(*args, delete=True, **kwargs):
         finally:
             if delete:
                 os.unlink(f.name)
+
+
+class ShowVersionAction(argparse.Action):
+    # a special action that allows the usage --version to override
+    # any 'required args' requirements, the same way that --help does
+
+    def __init__(self,
+                 option_strings,
+                 dest=argparse.SUPPRESS,
+                 default=argparse.SUPPRESS,
+                 help=None):
+        super().__init__(
+            option_strings=option_strings,
+            dest=dest,
+            default=default,
+            nargs=0,
+            help=help)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        print(__version__)
+        parser.exit()

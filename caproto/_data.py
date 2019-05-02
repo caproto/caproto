@@ -3,24 +3,22 @@
 # metadata. They perform data type conversions in response to requests to read
 # data as a certain type, and they push updates into queues registered by a
 # higher-level server.
-from collections import defaultdict, Iterable
+from collections import defaultdict, Iterable, namedtuple
 import copy
-import enum
 import time
-import warnings
 import weakref
 
-from ._dbr import (DBR_TYPES, ChannelType, native_type, native_float_types,
-                   native_int_types, native_types, timestamp_to_epics,
-                   time_types, DBR_STSACK_STRING, AccessRights,
-                   GraphicControlBase, AlarmStatus, AlarmSeverity,
-                   SubscriptionType, DbrStringArray)
+from ._dbr import (DBR_TYPES, ChannelType, native_type, native_types,
+                   timestamp_to_epics, time_types, DBR_STSACK_STRING,
+                   AccessRights, GraphicControlBase, AlarmStatus,
+                   AlarmSeverity, SubscriptionType)
 
-from ._utils import CaprotoError, CaprotoValueError
+from ._utils import CaprotoError, CaprotoValueError, ConversionDirection
 from ._commands import parse_metadata
 from ._backend import backend
 
-__all__ = ('Forbidden', 'ConversionError', 'ConversionDirection',
+
+__all__ = ('Forbidden',
            'ChannelAlarm',
            'ChannelByte',
            'ChannelChar',
@@ -33,260 +31,17 @@ __all__ = ('Forbidden', 'ConversionError', 'ConversionDirection',
            'ChannelString',
            )
 
+SubscriptionUpdate = namedtuple('SubscriptionUpdate',
+                                ('sub_specs', 'metadata', 'values',
+                                 'flags', 'sub'))
+
 
 class Forbidden(CaprotoError):
     ...
 
 
-class ConversionError(CaprotoValueError):
-    ...
-
-
 class CannotExceedLimits(CaprotoValueError):
     ...
-
-
-class ConversionDirection(enum.Enum):
-    FROM_WIRE = enum.auto()
-    TO_WIRE = enum.auto()
-
-
-def _convert_enum_values(values, to_dtype, string_encoding, enum_strings,
-                         direction):
-    if enum_strings is None:
-        raise ConversionError('enum_strings not specified')
-
-    num_strings = len(enum_strings)
-
-    if to_dtype == ChannelType.STRING:
-        def get_value(v):
-            if isinstance(v, bytes):
-                raise ConversionError('Enum strings must be integer or string')
-
-            if isinstance(v, str):
-                if v not in enum_strings:
-                    raise ConversionError(f'Invalid enum string: {v!r}')
-                return v
-
-            if 0 <= v < num_strings:
-                return enum_strings[v]
-            raise ConversionError(f'Invalid enum index: {v!r} '
-                                  f'count={num_strings}')
-    else:
-        def get_value(v):
-            if isinstance(v, bytes):
-                raise ConversionError('Enum strings must be integer or string')
-
-            if isinstance(v, str):
-                try:
-                    return enum_strings.index(v)
-                except ValueError:
-                    raise ConversionError(f'Invalid enum string: {v!r}')
-
-            if 0 <= v < num_strings:
-                return v
-            raise ConversionError(f'Invalid enum index: {v!r} '
-                                  f'count={num_strings}')
-
-    return [get_value(v) for v in values]
-
-
-def _convert_char_values(values, to_dtype, string_encoding, enum_strings,
-                         direction):
-    if isinstance(values, list) and len(values) == 1:
-        # exception to handling things as lists...
-        values = values[0]
-
-    if direction == ConversionDirection.FROM_WIRE:
-        values = values.tobytes()  # b''.join(values)
-
-    if to_dtype == ChannelType.STRING:
-        if direction == ConversionDirection.TO_WIRE:
-            # NOTE: accurate, but results in very inefficient CA response
-            #       40 * len(values)
-            if isinstance(values, str):
-                return [bytes([v])
-                        for v in encode_or_fail(values, string_encoding)]
-            elif isinstance(values, bytes):
-                return [bytes([v]) for v in values]
-            else:
-                # list of numbers
-                return values
-        else:
-            return [decode_or_fail(values, string_encoding)]
-    elif to_dtype == ChannelType.CHAR:
-        if direction == ConversionDirection.FROM_WIRE and string_encoding:
-            values = values.decode(string_encoding)
-            try:
-                return [values[:values.index('\x00')]]
-            except ValueError:
-                return [values]
-
-    # if not converting to a string, we need a list of numbers.
-    if isinstance(values, bytes):
-        # b'bytes' -> [ord('b'), ord('y'), ...]
-        values = list(values)
-    elif isinstance(values, str):
-        values = encode_or_fail(values, string_encoding)
-        # b'bytes' -> [ord('b'), ord('y'), ...]
-        values = list(values)
-    else:
-        # list of bytes already
-        ...
-
-    try:
-        # TODO lazy check
-        values[0]
-    except TypeError:
-        return [values]
-    else:
-        return values
-
-
-def encode_or_fail(s, encoding):
-    if isinstance(s, str):
-        if encoding is None:
-            raise ConversionError('String encoding required')
-        return s.encode(encoding)
-    elif isinstance(s, bytes):
-        return s
-
-    raise ConversionError('Expected string or bytes')
-
-
-def decode_or_fail(s, encoding):
-    if isinstance(s, bytes):
-        if encoding is None:
-            raise ConversionError('String encoding required')
-        return s.decode(encoding)
-    elif isinstance(s, str):
-        return s
-
-    raise ConversionError('Expected string or bytes')
-
-
-def _convert_string_values(values, to_dtype, string_encoding, enum_strings,
-                           direction):
-    if to_dtype == ChannelType.STRING:
-        return values
-
-    if (direction == ConversionDirection.FROM_WIRE or
-            to_dtype == ChannelType.ENUM):
-        # from the wire (or for enums), decode bytes -> strings
-        values = [decode_or_fail(v, string_encoding)
-                  if isinstance(v, bytes)
-                  else v
-                  for v in values]
-
-    if to_dtype == ChannelType.ENUM:
-        # TODO: this is used where caput('enum', 'string_value')
-        #       i.e., putting a string to an enum
-        return _convert_enum_values(values, to_dtype=ChannelType.INT,
-                                    string_encoding=string_encoding,
-                                    enum_strings=enum_strings,
-                                    direction=direction)
-    elif to_dtype in native_int_types:
-        # TODO ca_test: for enums, string arrays seem to work, but not
-        # scalars?
-        return [int(v) for v in values]
-    elif to_dtype in native_float_types:
-        return [float(v) for v in values]
-
-
-_custom_conversions = {
-    ChannelType.ENUM: _convert_enum_values,
-    ChannelType.CHAR: _convert_char_values,
-    ChannelType.STRING: _convert_string_values,
-}
-
-
-def convert_values(values, from_dtype, to_dtype, *, direction,
-                   string_encoding='latin-1', enum_strings=None,
-                   auto_byteswap=True):
-    '''Convert values from one ChannelType to another
-
-    Parameters
-    ----------
-    values :
-    from_dtype : caproto.ChannelType
-        The dtype of the values
-    to_dtype : caproto.ChannelType
-        The dtype to convert to
-    direction : caproto.ConversionDirection
-        Direction of conversion, from or to the wire
-    string_encoding : str, optional
-        The encoding to be used for strings
-    enum_strings : list, optional
-        List of enum strings, if available
-    auto_byteswap : bool, optional
-        If sending over the wire and using built-in arrays, the data should
-        first be byte-swapped to big-endian.
-    '''
-
-    if (from_dtype in (ChannelType.STSACK_STRING, ChannelType.CLASS_NAME) or
-            (to_dtype in (ChannelType.STSACK_STRING, ChannelType.CLASS_NAME))):
-        if from_dtype != to_dtype:
-            raise ConversionError('Cannot convert values for stsack_string or '
-                                  'class_name to other types')
-        return values
-
-    if to_dtype not in native_types or from_dtype not in native_types:
-        raise ConversionError('Expecting a native type')
-
-    if isinstance(values, (str, bytes)):
-        values = [values]
-    else:
-        try:
-            len(values)
-        except TypeError:
-            values = (values, )
-
-    try:
-        convert_func = _custom_conversions[from_dtype]
-    except KeyError:
-        ...
-    else:
-        try:
-            values = convert_func(values=values, to_dtype=to_dtype,
-                                  string_encoding=string_encoding,
-                                  enum_strings=enum_strings,
-                                  direction=direction)
-        except Exception as ex:
-            raise ConversionError() from ex
-
-    if to_dtype == ChannelType.STRING:
-        if direction == ConversionDirection.TO_WIRE:
-            string_target = bytes
-        else:
-            string_target = str
-
-        if string_target is str:
-            def get_value(v):
-                if isinstance(v, bytes):
-                    if string_encoding:  # can have bytes in ChannelString
-                        return v.decode(string_encoding)
-                    return v
-                elif isinstance(v, str):
-                    return v
-                else:
-                    return str(v)
-            return [get_value(v) for v in values]
-
-        def get_value(v):
-            if isinstance(v, bytes):
-                return v
-            elif isinstance(v, str):
-                return encode_or_fail(v, string_encoding)
-            else:
-                return encode_or_fail(str(v), string_encoding)
-        return DbrStringArray(get_value(v) for v in values)
-    elif to_dtype == ChannelType.CHAR:
-        if string_encoding and isinstance(values[0], str):
-            return values
-
-    byteswap = (auto_byteswap and direction == ConversionDirection.TO_WIRE)
-    return backend.python_to_epics(to_dtype, values, byteswap=byteswap,
-                                   convert_from=from_dtype)
 
 
 def dbr_metadata_to_dict(dbr_metadata, string_encoding):
@@ -321,13 +76,16 @@ class ChannelAlarm:
             severity_to_acknowledge=severity_to_acknowledge,
             alarm_string=alarm_string)
 
-    def __setstate__(self, val):
-        self._channels = weakref.WeakSet()
-        self.string_encoding = val['string_encoding']
-        self._data = val['data']
-
-    def __getstate__(self):
-        return {'data': self._data, 'string_encoding': self.string_encoding}
+    def __getnewargs_ex__(self):
+        kwargs = {
+            'status': self.status,
+            'severity': self.severity,
+            'must_acknowledge_transient': self.must_acknowledge_transient,
+            'severity_to_acknowledge': self.severity_to_acknowledge,
+            'alarm_string': self.alarm_string,
+            'string_encoding': self.string_encoding,
+        }
+        return ((), kwargs)
 
     status = _read_only_property('status',
                                  doc='Current alarm status')
@@ -343,6 +101,9 @@ class ChannelAlarm:
 
     alarm_string = _read_only_property('alarm_string',
                                        doc='String associated with alarm')
+
+    def __repr__(self):
+        return f'<ChannelAlarm(status={self.status}, severity={self.severity})>'
 
     def connect(self, channel_data):
         self._channels.add(channel_data)
@@ -364,7 +125,7 @@ class ChannelAlarm:
                     must_acknowledge_transient=None,
                     severity_to_acknowledge=None,
                     alarm_string=None, caller=None,
-                    flags=0):
+                    flags=0, publish=True):
         data = self._data
 
         if status is not None:
@@ -400,15 +161,22 @@ class ChannelAlarm:
             data['alarm_string'] = alarm_string
             flags |= SubscriptionType.DBE_ALARM
 
+        if publish:
+            await self.publish(flags)
+
+    async def publish(self, flags, *, except_for=()):
+
         for channel in self._channels:
-            await channel.publish(flags)
+            if channel not in except_for:
+                await channel.publish(flags)
 
 
 class ChannelData:
     data_type = ChannelType.LONG
 
     def __init__(self, *, alarm=None, value=None, timestamp=None,
-                 string_encoding='latin-1', reported_record_type='caproto'):
+                 max_length=None, string_encoding='latin-1',
+                 reported_record_type='caproto'):
         '''Metadata and Data for a single caproto Channel
 
         Parameters
@@ -418,6 +186,8 @@ class ChannelData:
         timestamp : float, optional
             Posix timestamp associated with the value
             Defaults to `time.time()`
+        max_length : int, optional
+            Maximum array length of the data
         string_encoding : str, optional
             Encoding to use for strings, used both in and out
         reported_record_type : str, optional
@@ -432,12 +202,23 @@ class ChannelData:
             alarm = ChannelAlarm()
 
         self._alarm = None
+        self._status = None
+        self._severity = None
 
         # now use the setter to attach the alarm correctly:
         self.alarm = alarm
-
+        self._max_length = max_length
         self.string_encoding = string_encoding
         self.reported_record_type = reported_record_type
+
+        if self._max_length is None:
+            # Use the current length as maximum, if unspecified.
+            self._max_length = max(self.calculate_length(value), 1)
+            # It is possible to pass in a zero-length array to start with.
+            # However, it is not useful to have an empty value forever, so the
+            # minimum length here is required to be at least 1.
+
+        value = self.preprocess_value(value)
         self._data = dict(value=value,
                           timestamp=timestamp)
         # This is a dict keyed on queues that will receive subscription
@@ -454,27 +235,71 @@ class ChannelData:
         self._snapshots = defaultdict(dict)
         self._fill_at_next_write = list()
 
-    def __setstate__(self, val):
-        self.timetstamp = val['timestamp']
-        self._alarm = val['alarm']
-        self.string_encoding = val['string_encoding']
-        self.reported_record_type = val['reported_record_type']
-        self._data = val['data']
-        self.string_encoding = val['string_encoding']
-        self._data = val['data']
-        self._queues = defaultdict(
-            lambda: defaultdict(
-                lambda: defaultdict(set)))
-        self._content = {}
-        self._snapshots = defaultdict(dict)
-        self._fill_at_next_write = list()
+    def calculate_length(self, value):
+        'Calculate the number of elements given a value'
+        is_array = isinstance(value, (list, tuple) + backend.array_types)
+        if is_array:
+            return len(value)
+        if isinstance(value, (bytes, str, bytearray)):
+            if self.data_type == ChannelType.CHAR:
+                return len(value)
+        return 1
 
-    def __getstate__(self):
-        return {'timestamp': self.timestamp,
-                'alarm': self.alarm,
-                'string_encoding': self.string_encoding,
-                'reported_record_type': self.reported_record_type,
-                'data': self._data}
+    @property
+    def length(self):
+        'The number of elements (length) of the current value'
+        return self.calculate_length(self.value)
+
+    @property
+    def max_length(self):
+        'The maximum number of elements (length) this channel can hold'
+        return self._max_length
+
+    def preprocess_value(self, value):
+        '''Pre-process values destined for verify_value and write
+
+        A few basic things are done here, based on max_count:
+        1. If length >= 2, ensure the value is a list
+        2. If length == 1, ensure the value is an unpacked scalar
+        3. Ensure len(value) <= length
+
+        Raises
+        ------
+        CaprotoValueError
+        '''
+        is_array = isinstance(value, (list, tuple) + backend.array_types)
+        if is_array:
+            if len(value) > self._max_length:
+                # TODO consider an exception for caproto-only environments that
+                # can handle dynamically resized arrays (i.e., sizes greater
+                # than the initial max_length)?
+                raise CaprotoValueError(
+                    f'Value of length {len(value)} is too large for '
+                    f'{self.__class__.__name__}(max_length={self._max_length})'
+                )
+
+        if self._max_length == 1:
+            if is_array:
+                if len(value):
+                    # scalar value in a list -> scalar value
+                    return value[0]
+                else:
+                    raise CaprotoValueError(
+                        'Cannot set a scalar to an empty array')
+        elif not is_array:
+            # scalar value that should be in a list -> list
+            return [value]
+        return value
+
+    def __getnewargs_ex__(self):
+        # ref: https://docs.python.org/3/library/pickle.html
+        kwargs = {'timestamp': self.timestamp,
+                  'alarm': self.alarm,
+                  'string_encoding': self.string_encoding,
+                  'reported_record_type': self.reported_record_type,
+                  'data': self._data,
+                  'max_length': self._max_length}
+        return ((), kwargs)
 
     value = _read_only_property('value')
     timestamp = _read_only_property('timestamp')
@@ -533,7 +358,7 @@ class ChannelData:
         if alarm is not None:
             alarm.connect(self)
 
-    async def subscribe(self, queue, sub_spec):
+    async def subscribe(self, queue, sub_spec, sub):
         self._queues[queue][sub_spec.channel_filter.sync][sub_spec.data_type].add(sub_spec)
         # Always send current reading immediately upon subscription.
         data_type = sub_spec.data_type
@@ -544,7 +369,7 @@ class ChannelData:
             # a future subscription wants the same data type.
             metadata, values = await self._read(data_type)
             self._content[data_type] = metadata, values
-        await queue.put(((sub_spec,), metadata, values, 0))
+        await queue.put(SubscriptionUpdate((sub_spec,), metadata, values, 0, sub))
 
     async def unsubscribe(self, queue, sub_spec):
         self._queues[queue][sub_spec.channel_filter.sync][sub_spec.data_type].discard(sub_spec)
@@ -575,12 +400,13 @@ class ChannelData:
             return class_name, b''
 
         native_to = native_type(data_type)
-        values = convert_values(values=self._data['value'],
-                                from_dtype=self.data_type,
-                                to_dtype=native_to,
-                                string_encoding=self.string_encoding,
-                                enum_strings=self._data.get('enum_strings'),
-                                direction=ConversionDirection.TO_WIRE)
+        values = backend.convert_values(
+            values=self._data['value'],
+            from_dtype=self.data_type,
+            to_dtype=native_to,
+            string_encoding=self.string_encoding,
+            enum_strings=self._data.get('enum_strings'),
+            direction=ConversionDirection.TO_WIRE)
 
         # for native types, there is no dbr metadata - just data
         if data_type in native_types:
@@ -623,32 +449,19 @@ class ChannelData:
             await self.alarm.write(must_acknowledge_transient=metadata.value)
             return
         elif data_type in (ChannelType.STSACK_STRING, ChannelType.CLASS_NAME):
-            raise ValueError('Bad request')
+            raise CaprotoValueError('Bad request')
 
         timestamp = time.time()
         native_from = native_type(data_type)
-        value = convert_values(values=data, from_dtype=native_from,
-                               to_dtype=self.data_type,
-                               string_encoding=self.string_encoding,
-                               enum_strings=getattr(self, 'enum_strings',
-                                                    None),
-                               direction=ConversionDirection.FROM_WIRE)
-
-        try:
-            modified_value = await self.verify_value(value)
-        except Exception as ex:
-            # TODO: should allow exception to optionally pass alarm
-            # status/severity through exception instance
-            await self.alarm.write(status=AlarmStatus.WRITE,
-                                   severity=AlarmSeverity.MAJOR_ALARM,
-                                   )
-            raise
-
-        new = modified_value if modified_value is not None else value
-        self._data['value'] = new
+        value = backend.convert_values(
+            values=data, from_dtype=native_from,
+            to_dtype=self.data_type,
+            string_encoding=self.string_encoding,
+            enum_strings=getattr(self, 'enum_strings', None),
+            direction=ConversionDirection.FROM_WIRE)
 
         if metadata is None:
-            self._data['timestamp'] = timestamp
+            metadata_dict = {'timestamp': timestamp}
         else:
             # Convert `metadata` to bytes-like (or pass it through).
             md_payload = parse_metadata(metadata, data_type)
@@ -659,31 +472,47 @@ class ChannelData:
             dbr_metadata = DBR_TYPES[data_type].from_buffer(md_payload)
             metadata_dict = dbr_metadata_to_dict(dbr_metadata,
                                                  self.string_encoding)
-            await self.write_metadata(publish=False, **metadata_dict)
+            metadata_dict.setdefault('timestamp', timestamp)
 
-        if self._fill_at_next_write:
-            snapshot = copy.deepcopy(self)
-            for state, mode in self._fill_at_next_write:
-                self._snapshots[state][mode] = snapshot
-            self._fill_at_next_write.clear()
+        return (await self.write(value, flags=flags, **metadata_dict))
 
-        # Send a new event to subscribers.
-        await self.publish(flags)
-
-    async def write(self, value, flags=0, **metadata):
+    async def write(self, value, *, flags=0, **metadata):
         '''Set data from native Python types'''
-        metadata['timestamp'] = metadata.get('timestamp', time.time())
-        modified_value = await self.verify_value(value)
+        try:
+            value = self.preprocess_value(value)
+            modified_value = await self.verify_value(value)
+        except GeneratorExit:
+            raise
+        except Exception:
+            # TODO: should allow exception to optionally pass alarm
+            # status/severity through exception instance
+            await self.alarm.write(status=AlarmStatus.WRITE,
+                                   severity=AlarmSeverity.MAJOR_ALARM,
+                                   )
+            raise
+        finally:
+            alarm_md = self._collect_alarm()
+
+        # issues of over-riding user passed in data here!
+        metadata.update(alarm_md)
+        metadata.setdefault('timestamp', time.time())
+
         if self._fill_at_next_write:
             snapshot = copy.deepcopy(self)
             for state, mode in self._fill_at_next_write:
                 self._snapshots[state][mode] = snapshot
             self._fill_at_next_write.clear()
+
         new = modified_value if modified_value is not None else value
+
+        # TODO the next 5 lines should be done in one move
         self._data['value'] = new
         await self.write_metadata(publish=False, **metadata)
         # Send a new event to subscribers.
         await self.publish(flags)
+        # and publish any linked alarms
+        if 'status' in metadata or 'severity' in metadata:
+            await self.alarm.publish(flags, except_for=(self,))
 
     def _is_eligible(self, ss):
         sync = ss.channel_filter.sync
@@ -732,7 +561,7 @@ class ChannelData:
                     # want a different slice. Sending the whole array through
                     # the queue isn't any more expensive that sending a slice;
                     # this is just a reference.
-                    await queue.put((eligible, metadata, values, flags))
+                    await queue.put(SubscriptionUpdate(eligible, metadata, values, flags, None))
 
     def _read_metadata(self, dbr_metadata):
         'Set all metadata fields of a given DBR type instance'
@@ -752,7 +581,8 @@ class ChannelData:
 
         if to_type in time_types:
             epics_ts = timestamp_to_epics(data['timestamp'])
-            dbr_metadata.secondsSinceEpoch, dbr_metadata.nanoSeconds = epics_ts
+            stamp = dbr_metadata.stamp
+            stamp.secondsSinceEpoch, stamp.nanoSeconds = epics_ts
 
         convert_attrs = (GraphicControlBase.control_fields +
                          GraphicControlBase.graphic_fields)
@@ -762,13 +592,13 @@ class ChannelData:
             dt = (self.data_type
                   if self.data_type != ChannelType.ENUM
                   else ChannelType.INT)
-            values = convert_values(values=[data.get(key, 0)
-                                            for key in convert_attrs],
-                                    from_dtype=dt,
-                                    to_dtype=native_type(to_type),
-                                    string_encoding=self.string_encoding,
-                                    direction=ConversionDirection.TO_WIRE,
-                                    auto_byteswap=False)
+            values = backend.convert_values(
+                values=[data.get(key, 0) for key in convert_attrs],
+                from_dtype=dt,
+                to_dtype=native_type(to_type),
+                string_encoding=self.string_encoding,
+                direction=ConversionDirection.TO_WIRE,
+                auto_byteswap=False)
             if isinstance(values, backend.array_types):
                 values = values.tolist()
             for attr, value in zip(convert_attrs, values):
@@ -802,7 +632,8 @@ class ChannelData:
 
         if any(alarm_val is not None
                for alarm_val in (status, severity)):
-            await self.alarm.write(status=status, severity=severity)
+            await self.alarm.write(status=status, severity=severity,
+                                   publish=publish)
 
         if publish:
             await self.publish(SubscriptionType.DBE_PROPERTY)
@@ -815,12 +646,37 @@ class ChannelData:
     @property
     def status(self):
         '''Alarm status'''
-        return self.alarm.status
+        return (self.alarm.status
+                if self._status is None
+                else self._status)
+
+    @status.setter
+    def status(self, value):
+        self._status = AlarmStatus(value)
 
     @property
     def severity(self):
         '''Alarm severity'''
-        return self.alarm.severity
+        return (self.alarm.severity
+                if self._severity is None
+                else self._severity)
+
+    @severity.setter
+    def severity(self, value):
+        self._severity = AlarmSeverity(value)
+
+    def _collect_alarm(self):
+        out = {}
+        if self._status is not None and self._status != self.alarm.status:
+            out['status'] = self._status
+        if self._severity is not None and self._status != self.alarm.status:
+            out['severity'] = self._severity
+
+        self._clear_cached_alarms()
+        return out
+
+    def _clear_cached_alarms(self):
+        self._status = self._severity = None
 
     def __len__(self):
         try:
@@ -863,9 +719,14 @@ class ChannelEnum(ChannelData):
 
     enum_strings = _read_only_property('enum_strings')
 
+    def __getnewargs_ex__(self):
+        args, kwargs = super().__getnewargs_ex__()
+        kwargs['enum_strings'] = self.enum_strings
+        return (args, kwargs)
+
     async def verify_value(self, data):
         try:
-            return [self.enum_strings[data[0]]]
+            return self.enum_strings[data]
         except (IndexError, TypeError):
             ...
         return data
@@ -910,14 +771,33 @@ class ChannelNumeric(ChannelData):
         self.log_atol = log_atol
 
     units = _read_only_property('units')
+
     upper_disp_limit = _read_only_property('upper_disp_limit')
     lower_disp_limit = _read_only_property('lower_disp_limit')
+
     upper_alarm_limit = _read_only_property('upper_alarm_limit')
+    lower_alarm_limit = _read_only_property('lower_alarm_limit')
+
     upper_warning_limit = _read_only_property('upper_warning_limit')
     lower_warning_limit = _read_only_property('lower_warning_limit')
-    lower_alarm_limit = _read_only_property('lower_alarm_limit')
+
     upper_ctrl_limit = _read_only_property('upper_ctrl_limit')
     lower_ctrl_limit = _read_only_property('lower_ctrl_limit')
+
+    def __getnewargs_ex__(self):
+        args, kwargs = super().__getnewargs_ex__()
+        kwargs.update(
+            units=self.units,
+            upper_disp_limit=self.upper_disp_limit,
+            lower_disp_limit=self.lower_disp_limit,
+            upper_alarm_limit=self.upper_alarm_limit,
+            lower_alarm_limit=self.lower_alarm_limit,
+            upper_warning_limit=self.upper_warning_limit,
+            lower_warning_limit=self.lower_warning_limit,
+            upper_ctrl_limit=self.upper_ctrl_limit,
+            lower_ctrl_limit=self.lower_ctrl_limit,
+        )
+        return (args, kwargs)
 
     async def verify_value(self, data):
         if not isinstance(data, Iterable):
@@ -931,13 +811,71 @@ class ChannelNumeric(ChannelData):
             if not self.lower_ctrl_limit <= val <= self.upper_ctrl_limit:
                 raise CannotExceedLimits(
                     f"Cannot write data {val}. Limits are set to "
-                    f"{self.lower_ctrl_limit} and {self.upper_ctrl_limit}.")
-        if self.lower_warning_limit != self.upper_warning_limit:
-            if not self.lower_ctrl_limit <= val <= self.upper_warning_limit:
-                warnings.warn(
-                    f"Writing {val} outside warning limits which are are "
-                    f"set to {self.lower_ctrl_limit} and "
-                    f"{self.upper_warning_limit}.")
+                    f"{self.lower_ctrl_limit} and {self.upper_ctrl_limit}."
+                )
+
+        def limit_checker(
+                value,
+                lo_attr, hi_attr,
+                lo_status, hi_status,
+                lo_severity_attr,
+                hi_severity_attr,
+                dflt_lo_severity,
+                dflt_hi_severity):
+
+            def limit_getter(limit_attr, severity_attr, dflt_severity):
+                sev = dflt_severity
+                limit = getattr(self, limit_attr)
+
+                sev_prop = getattr(
+                    getattr(self, 'field_inst', None),
+                    severity_attr, None)
+                if sev_prop is not None:
+                    # TODO sort out where ints are getting through...
+                    if isinstance(sev_prop.value, str):
+                        sev = sev_prop.enum_strings.index(sev_prop.value)
+
+                return limit, AlarmSeverity(sev)
+
+            lo_limit, lo_severity = limit_getter(
+                lo_attr, lo_severity_attr, dflt_lo_severity)
+            hi_limit, hi_severity = limit_getter(
+                hi_attr, hi_severity_attr, dflt_hi_severity)
+            if lo_limit != hi_limit:
+                if value <= lo_limit:
+                    return lo_status, lo_severity
+
+                elif hi_limit <= value:
+                    return hi_status, hi_severity
+
+            return AlarmStatus.NO_ALARM, AlarmSeverity.NO_ALARM
+
+        # this is HIHI and LOLO limits
+        asts, asver = limit_checker(val,
+                                    'lower_alarm_limit',
+                                    'upper_alarm_limit',
+                                    AlarmStatus.LOLO,
+                                    AlarmStatus.HIHI,
+                                    'lolo_severity',
+                                    'hihi_severity',
+                                    AlarmSeverity.MAJOR_ALARM,
+                                    AlarmSeverity.MAJOR_ALARM)
+        # if HIHI and LOLO did not trigger as alarm, see if HIGH and LOW do
+        if asts is AlarmStatus.NO_ALARM:
+            # this is HIGH and LOW limits
+            asts, asver = limit_checker(val,
+                                        'lower_warning_limit',
+                                        'upper_warning_limit',
+                                        AlarmStatus.LOW,
+                                        AlarmStatus.HIGH,
+                                        'low_severity',
+                                        'high_severity',
+                                        AlarmSeverity.MINOR_ALARM,
+                                        AlarmSeverity.MINOR_ALARM)
+
+        self.status = asts
+        self.severity = asver
+
         return data
 
 
@@ -959,43 +897,69 @@ class ChannelDouble(ChannelNumeric):
 
     precision = _read_only_property('precision')
 
+    def __getnewargs_ex__(self):
+        args, kwargs = super().__getnewargs_ex__()
+        kwargs['precision'] = self.precision
+        return (args, kwargs)
+
 
 class ChannelByte(ChannelNumeric):
     'CHAR data which has no encoding'
     # 'Limits' on chars do not make much sense and are rarely used.
     data_type = ChannelType.CHAR
 
-    def __init__(self, *, value=None, max_length=100, string_encoding=None,
+    def __init__(self, *, string_encoding=None, strip_null_terminator=True,
                  **kwargs):
         if string_encoding is not None:
-            raise ValueError('ChannelByte cannot have a string encoding')
+            raise CaprotoValueError('ChannelByte cannot have a string encoding')
 
-        super().__init__(value=value, string_encoding=None, **kwargs)
-        self.max_length = max_length
+        self.strip_null_terminator = strip_null_terminator
+        super().__init__(string_encoding=None, **kwargs)
 
-    async def verify_value(self, data):
-        if isinstance(data, list):
-            data = data[0]
+    def preprocess_value(self, value):
+        value = super().preprocess_value(value)
 
-        if isinstance(data, str):
-            # return list(data.encode('ascii'))  # TODO: just reject?
-            raise ValueError('ChannelByte does not accept decoded strings')
+        if isinstance(value, (list, tuple) + backend.array_types):
+            if not len(value):
+                return b''
+            elif len(value) == 1:
+                value = value[0]
+            else:
+                value = b''.join(map(bytes, ([v] for v in value)))
 
-        return data
+        if isinstance(value, str):
+            raise CaprotoValueError('ChannelByte does not accept decoded strings')
+
+        if self.strip_null_terminator:
+            if not isinstance(value, bytes):
+                value = value.tobytes()
+            value = value.rstrip(b'\x00')
+
+        return value
 
 
 class ChannelChar(ChannelData):
     'CHAR data which masquerades as a string'
     data_type = ChannelType.CHAR
 
-    def __init__(self, *, value=None, max_length=100,
-                 string_encoding='latin-1', **kwargs):
-        if isinstance(value, (str, bytes)):
-            if isinstance(value, bytes):
-                value = value.decode(string_encoding)
+    def preprocess_value(self, value):
+        value = super().preprocess_value(value)
 
-        super().__init__(value=value, **kwargs)
-        self.max_length = max_length
+        if isinstance(value, (list, tuple) + backend.array_types):
+            if not len(value):
+                return b''
+            elif len(value) == 1:
+                value = value[0]
+            else:
+                value = b''.join(map(bytes, ([v] for v in value)))
+
+        if isinstance(value, bytes):
+            value = value.decode(self.string_encoding)
+
+        if not isinstance(value, str):
+            raise CaprotoValueError('Invalid string')
+
+        return value
 
     async def write(self, *args, flags=0, **kwargs):
         flags |= (SubscriptionType.DBE_LOG | SubscriptionType.DBE_VALUE)
@@ -1010,21 +974,7 @@ class ChannelString(ChannelData):
     data_type = ChannelType.STRING
     # There is no CTRL or GR variant of STRING.
 
-    def __init__(self, *, alarm=None,
-                 value=None, timestamp=None,
-                 string_encoding='latin-1',
-                 reported_record_type='caproto'):
-        if isinstance(value, (str, bytes)):
-            if isinstance(value, bytes):
-                value = value.decode(string_encoding)
-            value = [value]
-        super().__init__(alarm=alarm, value=value, timestamp=timestamp,
-                         string_encoding=string_encoding,
-                         reported_record_type=reported_record_type)
-
     async def write(self, value, *, flags=0, **metadata):
-        if isinstance(value, (str, bytes)):
-            value = [value]
         flags |= (SubscriptionType.DBE_LOG | SubscriptionType.DBE_VALUE)
         await super().write(value, flags=flags, **metadata)
 

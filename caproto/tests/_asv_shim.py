@@ -237,7 +237,7 @@ def pytest_benchmark_update_json(config, benchmarks, output_json):
 
         logger.info('Saving asv-style JSON to %s', asv_path)
         save_asv_results(asv_path, **results)
-    except Exception as ex:
+    except Exception:
         logger.exception('Failed to update pytest benchmark json; '
                          'asv results not saved')
 
@@ -246,11 +246,21 @@ def get_all_params_from_marked_test(node_or_func):
     'Returns (all_param_names, all_param_values)'
     # TODO: important - verify ordering of kwargs
     decorated_test = getattr(node_or_func, 'obj', node_or_func)
-    pinfo = decorated_test.parametrize
 
-    arg_names, arg_values = pinfo.args[::2], pinfo.args[1::2]
-    kwarg_names = list(sorted(pinfo.kwargs.keys()))
-    kwarg_values = [pinfo.kwargs[key] for key in kwarg_names]
+    arg_names = []
+    arg_values = []
+    kwarg_names = []
+    kwarg_values = []
+    for pinfo in decorated_test.pytestmark:
+        if pinfo.name != 'parametrize':
+            continue
+        _arg_names, _arg_values = pinfo.args[::2], pinfo.args[1::2]
+        _kwarg_names = list(sorted(pinfo.kwargs.keys()))
+        _kwarg_values = [pinfo.kwargs[key] for key in _kwarg_names]
+        arg_names += _arg_names
+        arg_values += _arg_values
+        kwarg_names += _kwarg_names
+        kwarg_values += _kwarg_values
 
     return (list(arg_names) + kwarg_names,
             [[repr(arg) for arg in arg_list]
@@ -324,7 +334,7 @@ def asv_bench(request):
                     "used).")
     else:
         node = request.node
-        marker = node.get_marker("benchmark")
+        marker = node.get_closest_marker("benchmark")
         options = marker.kwargs if marker else {}
         if "timer" in options:
             options["timer"] = NameWrapper(options["timer"])

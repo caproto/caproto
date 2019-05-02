@@ -73,6 +73,13 @@ def ophyd_component_to_caproto(attr, component, *, depth=0, dev=None):
             except ImportError:
                 return False
 
+        try:
+            # NELM reflects the actual maximum length of the value, as opposed
+            # to the current length
+            max_length = sig._read_pv.nelm
+        except Exception:
+            max_length = 1
+
         if array_checker(value):
             # hack, as value can be a zero-length array
             # FUTURE_TODO: support numpy types directly in pvproperty type map
@@ -85,6 +92,8 @@ def ophyd_component_to_caproto(attr, component, *, depth=0, dev=None):
                 ...
 
         kwargs['dtype'] = type(value).__name__
+        if max_length > 1:
+            kwargs['max_length'] = max_length
     else:
         cpt_kwargs = getattr(component, 'kwargs', {})
         is_string = cpt_kwargs.get('string', False)
@@ -277,6 +286,8 @@ def record_to_field_info(record_type):
 
         if type_ == 'DBF_STRING' and size > 0:
             type_ = 'DBF_UCHAR'
+            kwargs['max_length'] = size
+        elif size > 1:
             kwargs['max_length'] = size
 
         if type_ == 'DBF_MENU':

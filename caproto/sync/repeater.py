@@ -27,7 +27,8 @@ import time
 import warnings
 
 import caproto
-from caproto._constants import MAX_UDP_RECV, SERVER_MIA_PRESUMED_DEAD
+from caproto._constants import MAX_UDP_RECV
+from caproto._utils import get_environment_variables
 
 
 logger = logging.getLogger('caproto.repeater')
@@ -47,7 +48,7 @@ def check_clients(clients, skip=None):
                                  socket.IPPROTO_UDP)
         try:
             sock.bind(addr)
-        except Exception as ex:
+        except Exception:
             # in use, still taken by client
             ...
         else:
@@ -56,8 +57,11 @@ def check_clients(clients, skip=None):
             yield addr
 
 
+checkin_threshold = get_environment_variables()['EPICS_CA_CONN_TMO']
+
+
 def _update_all(clients, servers, *, remove_clients=None,
-                checkin_threshold=SERVER_MIA_PRESUMED_DEAD):
+                checkin_threshold=checkin_threshold):
     'Update client and server dicts (remove clients, check heartbeat)'
     nclients_init, nservers_init = len(clients), len(servers)
     if remove_clients:
@@ -97,7 +101,7 @@ def _run_repeater(server_sock, bind_addr):
         try:
             commands = broadcaster.recv(msg, addr)
             broadcaster.process_commands(commands)
-        except Exception as ex:
+        except Exception:
             logger.exception('Failed to process incoming datagram')
             continue
 
@@ -135,7 +139,11 @@ def _run_repeater(server_sock, bind_addr):
                 confirmation_bytes = broadcaster.send(
                     caproto.RepeaterConfirmResponse(host))
 
-                server_sock.sendto(confirmation_bytes, (host, port))
+                try:
+                    server_sock.sendto(confirmation_bytes, (host, port))
+                except OSError as exc:
+                    raise caproto.CaprotoNetworkError(
+                        f"Failed to send to {host}:{port}") from exc
 
                 remove_clients = list(check_clients(clients, skip=port))
                 _update_all(clients, servers, remove_clients=remove_clients)
@@ -150,7 +158,7 @@ def _run_repeater(server_sock, bind_addr):
                 try:
                     server_sock.sendto(bytes_to_broadcast, (other_host,
                                                             other_port))
-                except Exception as ex:
+                except Exception:
                     to_remove.append((other_host, other_port))
 
         if to_remove:

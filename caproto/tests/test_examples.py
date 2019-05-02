@@ -1,7 +1,9 @@
 import curio
+import functools
 import os
 import pytest
 import trio
+import time
 import sys
 
 import caproto as ca
@@ -29,7 +31,11 @@ def test_curio_client_example():
                     reason='win32 motorsim IOC')
 def test_trio_client_example():
     from caproto.examples.trio_client_simple import main
-    trio.run(main)
+    main_with_motorsim = functools.partial(
+        main,
+        pv1="XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL",
+        pv2="XF:31IDA-OP{Tbl-Ax:X2}Mtr.VAL")
+    trio.run(main_with_motorsim)
 
 
 def test_thread_client_example(curio_server):
@@ -103,7 +109,8 @@ async def update_metadata(chan1, pvdb, ctx):
     assert actual == expected
     # check timestamp
     expected = 4
-    actual = reading.metadata.secondsSinceEpoch
+    # work around pypy bug in _anonymous_
+    actual = reading.metadata.stamp.secondsSinceEpoch
     assert actual == expected
     print('reading:', reading)
 
@@ -303,6 +310,9 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
         (PvpropertyReadOnlyData, None),
         (ca.ChannelNumeric, [1]),
         (ca.ChannelString, ['USD']),
+        (ca.ChannelChar, 'USD'),
+        (ca.ChannelByte, b'USD'),
+        (ca.ChannelEnum, [b'no']),
     ]
 
     skip_pvs = [('ophyd', ':exit')]
@@ -328,15 +338,20 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
             continue
 
         print(f'Writing {value} to {pv}')
-        write(pv, value)
+        write(pv, value, timeout=15)
 
-        value = read(pv)
+        value = read(pv, timeout=15)
         print(f'Read {pv} = {value}')
 
 
+# TODO sort out why these are flaky on travis
+@pytest.mark.flaky(reruns=2, reruns_delay=2)
 @pytest.mark.parametrize(
     'module_name, pvdb_class_name, class_kwargs',
-    [('caproto.ioc_examples.chirp', 'Chirp', {'ramprate': 0.75}),
+    [('caproto.ioc_examples.all_in_one', 'MyPVGroup',
+      dict(macros={'macro': 'expanded'})),
+     ('caproto.ioc_examples.chirp', 'Chirp', {'ramprate': 0.75}),
+     ('caproto.ioc_examples.thermo_sim', 'Thermo', {}),
      ('caproto.ioc_examples.custom_write', 'CustomWrite', {}),
      ('caproto.ioc_examples.inline_style', 'InlineStyleIOC', {}),
      ('caproto.ioc_examples.io_interrupt', 'IOInterruptIOC', {}),
@@ -346,11 +361,12 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
      ('caproto.ioc_examples.random_walk', 'RandomWalkIOC', {}),
      ('caproto.ioc_examples.reading_counter', 'ReadingCounter', {}),
      ('caproto.ioc_examples.rpc_function', 'MyPVGroup', {}),
-     ('caproto.ioc_examples.simple', 'SimpleIOC', {}),
-     ('caproto.ioc_examples.subgroups', 'MyPVGroup', {}),
+     ('caproto.ioc_examples.scalars_and_arrays', 'ArrayIOC', {}),
+     ('caproto.ioc_examples.scan_rate', 'MyPVGroup', {}),
      ('caproto.ioc_examples.setpoint_rbv_pair', 'Group', {}),
-     ('caproto.ioc_examples.all_in_one', 'MyPVGroup',
-      dict(macros={'macro': 'expanded'})),
+     ('caproto.ioc_examples.simple', 'SimpleIOC', {}),
+     ('caproto.ioc_examples.startup_and_shutdown_hooks', 'StartupAndShutdown', {}),
+     ('caproto.ioc_examples.subgroups', 'MyPVGroup', {}),
      ]
 )
 @pytest.mark.parametrize('async_lib', ['curio', 'trio', 'asyncio'])
@@ -363,7 +379,8 @@ def test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
         'caproto.ioc_examples.io_interrupt',
     )
 
-    skip_if_no_numpy = ('caproto.ioc_examples.mini_beamline',)
+    skip_if_no_numpy = ('caproto.ioc_examples.mini_beamline',
+                        'caproto.ioc_examples.thermo_sim')
 
     if sys.platform == 'win32' and module_name in skip_on_windows:
         raise pytest.skip('win32 TODO')
@@ -387,23 +404,6 @@ def test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
 def test_special_ioc_examples(request, module_name, pvdb_class_name,
                               class_kwargs, prefix):
     pytest.importorskip('numpy')
-    return _test_ioc_examples(request, module_name, pvdb_class_name,
-                              class_kwargs, prefix)
-
-
-# Use pytest-rerunfailures plugin to try these a couple times due to flaky
-# Google API calls. Ultimately, xfail.
-@pytest.mark.xfail()
-@pytest.mark.flaky(reruns=5, reruns_delay=2)
-@pytest.mark.parametrize(
-    'module_name, pvdb_class_name, class_kwargs',
-    [('caproto.ioc_examples.currency_conversion_polling', 'CurrencyPollingIOC',
-      {}),
-     ('caproto.ioc_examples.currency_conversion', 'CurrencyConversionIOC', {}),
-     ]
-)
-def test_flaky_ioc_examples(request, module_name, pvdb_class_name,
-                            class_kwargs, prefix):
     return _test_ioc_examples(request, module_name, pvdb_class_name,
                               class_kwargs, prefix)
 
@@ -466,3 +466,36 @@ def test_mocking_records(request, prefix):
     # does writing to .PREC update the ChannelData metadata?
     data = read(b, data_type=ca.ChannelType.CTRL_DOUBLE)
     assert data.metadata.precision == 4
+
+
+def test_mocking_records_subclass(request, prefix):
+    from .conftest import run_example_ioc
+    run_example_ioc('caproto.ioc_examples.mocking_records_subclass',
+                    request=request,
+                    args=['--prefix', prefix], pv_to_check=f'{prefix}motor1')
+
+    from caproto.sync.client import read, write
+    motor = f'{prefix}motor1'
+    motor_val = f'{motor}.VAL'
+    motor_rbv = f'{motor}.RBV'
+    motor_drbv = f'{motor}.DRBV'
+
+    write(motor_val, 100, notify=True)
+    # sleep for a few pollling periods:
+    time.sleep(0.5)
+    assert abs(read(motor_rbv).data[0] - 100) < 0.1
+    assert abs(read(motor_drbv).data[0] - 100) < 0.1
+
+
+def test_pvproperty_string_array(request, prefix):
+    from .conftest import run_example_ioc
+    run_example_ioc('caproto.ioc_examples.scalars_and_arrays',
+                    request=request,
+                    args=['--prefix', prefix], pv_to_check=f'{prefix}scalar_int')
+
+    from caproto.sync.client import read, write
+    array_string_pv = f'{prefix}array_string'
+
+    write(array_string_pv, ['array', 'of', 'strings'], notify=True)
+    time.sleep(0.5)
+    assert read(array_string_pv).data == [b'array', b'of', b'strings']

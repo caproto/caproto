@@ -58,7 +58,7 @@ def start_io_interrupt_monitor(new_value_callback):
 
 
 class IOInterruptIOC(PVGroup):
-    keypress = pvproperty(value=[''])
+    keypress = pvproperty(value='', max_length=10)
 
     # NOTE the decorator used here:
     @keypress.startup

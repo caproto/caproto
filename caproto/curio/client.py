@@ -84,8 +84,11 @@ class VirtualCircuit:
                 self.ioid_data[command.ioid] = command
                 await user_event.set()
             elif isinstance(command, ca.EventAddResponse):
-                user_queue = self.subscriptionids[command.subscriptionid]
-                await user_queue.put(command)
+                if command.subscriptionid in self.circuit.event_add_commands:
+                    user_queue = self.subscriptionids[command.subscriptionid]
+                    await user_queue.put(command)
+                else:
+                    self.subscriptionids.pop(command.subscriptionid)
             elif isinstance(command, ca.EventCancelResponse):
                 self.subscriptionids.pop(command.subscriptionid)
             elif isinstance(command, ca.ErrorResponse):
@@ -241,6 +244,12 @@ class SharedBroadcaster:
         self.environ = ca.get_environment_variables()
         self.ca_server_port = self.environ['EPICS_CA_SERVER_PORT']
 
+    async def disconnect(self):
+        'Disconnect the broadcaster and stop listening'
+        await self.udp_sock.close()
+        self.udp_sock = None
+        self.log.debug('Broadcaster disconnect complete')
+
     async def send(self, port, *commands):
         """
         Process a command and tranport it over the UDP socket.
@@ -248,11 +257,20 @@ class SharedBroadcaster:
         bytes_to_send = self.broadcaster.send(*commands)
         for host in ca.get_address_list():
             if ':' in host:
-                host, _, specified_port = host.partition(':')
-                await self.udp_sock.sendto(bytes_to_send,
-                                           (host, int(specified_port)))
+                host, _, port_as_str = host.partition(':')
+                specified_port = int(port_as_str)
             else:
-                await self.udp_sock.sendto(bytes_to_send, (host, port))
+                specified_port = port
+            self.broadcaster.log.debug(
+                'Sending %d bytes to %s:%d',
+                len(bytes_to_send), host, specified_port)
+            try:
+                await self.udp_sock.sendto(bytes_to_send,
+                                           (host, specified_port))
+            except OSError as ex:
+                raise ca.CaprotoNetworkError(
+                    f'{ex} while sending {len(bytes_to_send)} bytes to '
+                    f'{host}:{specified_port}') from ex
 
     async def register(self):
         "Register this client with the CA Repeater."

@@ -176,6 +176,10 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
         },
         CLOSED: {
             # a terminal state
+            # Sometimes RSRV sends EventCancelResponse messages too late, so we
+            # have to tolerate it. This is against the spec, FWIW, and caproto
+            # servers do not do this.
+            EventCancelResponse: CLOSED,
         },
         FAILED: {
             # a terminal state
