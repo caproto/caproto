@@ -786,7 +786,6 @@ class SharedBroadcaster:
                 continue
 
             queues.clear()
-            now = time.monotonic()
             for command in commands:
                 if isinstance(command, ca.Beacon):
                     now = time.monotonic()
