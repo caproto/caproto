@@ -335,9 +335,15 @@ class SearchResults:
     addr_to_name : dict
         Holds search results.
         Maps address -> {name1, name2, ...}
+    _searches : dict
+        Holds all searches, answered and unanswered
+        Maps search_id -> [name, results_queue, resend_deadline, retirement_deadline]
+    _searches_by_name : dict
+        Holds all searches, answered and unanswered
+        Maps name -> [name, results_queue, resend_deadline, retirement_deadline]
     _unanswered_searches : dict
         Holds pending searches
-        Maps search_id -> [name, results_queue, retirement_deadline]
+        Maps search_id -> [name, results_queue, resend_deadline, retirement_deadline]
     _lock : threading.RLock
         Lock for internal updates to SearchResults status
     _search_id_counter : ThreadsafeCounter
