@@ -39,9 +39,9 @@ from .._utils import (batch_requests, CaprotoError, ThreadsafeCounter,
 
 CIRCUIT_DEATH_ATTEMPTS = 3
 
-# sentinels used as default values for arguments
 
 def _sentinel(name):
+    "Sentinels are used as default values for arguments."
     class Sentinel:
         def __repr__(self):
             return name
