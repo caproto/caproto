@@ -418,8 +418,9 @@ class SearchResults:
     @_locked
     def mark_server_alive(self, addr):
         'Beacon from a server received'
+        now = time.monotonic()
         for name in self.addr_to_names[addr]:
-            self.name_to_addrs[name][addr] = time.monotonic()
+            self.name_to_addrs[name][addr] = now
 
     @_locked
     def mark_server_disconnected(self, addr):
@@ -454,9 +455,10 @@ class SearchResults:
         entry = self.name_to_addrs[name]
         result_addr = None
         result_timestamp = None
+        now = time.monotonic()
         for addr, timestamp in list(entry.items()):
             if ((timestamp is VALID_CHANNEL_MARKER) or
-                    (time.monotonic() - timestamp) < threshold):
+                    (now - timestamp) < threshold):
                 if result_timestamp is not VALID_CHANNEL_MARKER:
                     result_addr = addr
                     result_timestamp = timestamp
