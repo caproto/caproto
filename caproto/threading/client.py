@@ -572,7 +572,6 @@ class SharedBroadcaster:
         # PVs (via Context.get_pvs).
         self._search_now = threading.Event()
 
-        self.results = SearchResults()
         self.server_protocol_versions = {}  # map address to protocol version
 
         self.listeners = weakref.WeakSet()
