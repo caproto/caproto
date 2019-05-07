@@ -385,7 +385,8 @@ class SearchResults:
 
     @property
     def num_unanswered_searches(self):
-        'All unanswered searches'
+        'Number of unanswered searches'
+        # This is used in the Context's __repr__. Might be useful in general.
         return len(self._unanswered_searches)
 
     @_locked
