@@ -705,3 +705,18 @@ def test_time_since_last_heard(context, ioc):
     assert address == pv.circuit_manager.circuit.address
     assert 0 < t < 10
     pv.time_since_last_heard() - t < 10  # wide tolerance here for slow CI
+
+
+def test_cancel(context):
+    name = 'does_not_exist'
+    context.get_pvs(name)
+    assert context.broadcaster.search_results._searches_by_name
+    assert context.broadcaster.search_results._searches
+    assert context.broadcaster.search_results._unanswered_searches
+    context.broadcaster.cancel(name)
+    assert context.broadcaster.search_results._searches
+    assert not context.broadcaster.search_results._unanswered_searches
+    assert not context.broadcaster.search_results._searches_by_name
+
+    # This should not raise.
+    context.broadcaster.cancel('never searched for this in the first place')
