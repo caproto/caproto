@@ -378,10 +378,9 @@ class SearchResults:
             item[-1] = retirement_deadline
 
     @property
-    @_locked
-    def unanswered_searches(self):
+    def num_unanswered_searches(self):
         'All unanswered searches'
-        return dict(self._unanswered_searches)
+        return len(self._unanswered_searches)
 
     @_locked
     def cancel(self, *names):
@@ -1118,7 +1117,7 @@ class Context:
 
     def __repr__(self):
         return (f"<Context "
-                f"searches_pending={len(self.broadcaster.search_results.unanswered_searches)} "
+                f"searches_pending={self.broadcaster.search_results.num_unanswered_searches} "
                 f"circuits={len(self.circuit_managers)} "
                 f"pvs={len(self.pvs)} "
                 f"idle={len([1 for pv in self.pvs.values() if pv._idle])}>")
