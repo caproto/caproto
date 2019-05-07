@@ -660,15 +660,14 @@ class SharedBroadcaster:
                                     accepted_address, _ = search_results[name]
                                     new_address = ca.extract_address(command)
                                     if new_address != accepted_address:
-                                        pv_name_logger = logging.LoggerAdapter(search_logger, {
-                                                        'pv': name,
-                                                        'their_address': accepted_address,
-                                                        'our_address': self.udp_sock.getsockname()[:2]})
-                                        pv_name_logger.warning(
+                                        search_logger.warning(
                                             "PV %s with cid %d found on multiple "
                                             "servers. Accepted address is %s:%d. "
                                             "Also found on %s:%d",
-                                            name, cid, *accepted_address, *new_address)
+                                            name, cid, *accepted_address, *new_address, extra = {
+                                                        'pv': name,
+                                                        'their_address': accepted_address,
+                                                        'our_address': self.udp_sock.getsockname()[:2]})
                     else:
                         results_by_cid.append((cid, name))
                         address = ca.extract_address(command)
@@ -1093,12 +1092,11 @@ class Context:
             # and tracking circuit state, as well as a ClientChannel for
             # tracking channel state.
             for name in names:
-                log = logging.LoggerAdapter(search_logger, {'pv': name,
+                search_logger.debug('Connecting %s on circuit with %s:%d', name, *address, extra = {'pv': name,
                                                     'their_address': address,
                                                     'our_address': self.broadcaster.udp_sock.getsockname()[:2],
                                                     'direction': '--->>>',
                                                     'role': 'CLIENT'})
-                log.debug('Connecting %s on circuit with %s:%d', name, *address)
                 # There could be multiple PVs with the same name and
                 # different priority. That is what we are looping over
                 # here. There could also be NO PVs with this name that need

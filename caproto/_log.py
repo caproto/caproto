@@ -13,6 +13,7 @@ try:
     import curses
 except ImportError:
     curses = None
+from ._utils import CaprotoValueError
 
 __all__ = ('color_logs', 'set_handler')
 
@@ -129,7 +130,6 @@ class LogFormatter(logging.Formatter):
             record.end_color = ''
 
         formatted = self._fmt % record.__dict__
-        #formatted = self._fmt.format(**record.__dict__)
 
         if record.exc_info and not record.exc_text:
             record.exc_text = self.formatException(record.exc_info)
@@ -141,7 +141,6 @@ class LogFormatter(logging.Formatter):
 plain_log_format = "[%(levelname)1.1s %(asctime)s.%(msecs)03d %(module)s:%(lineno)d] %(message)s"
 color_log_format = ("%(color)s[%(levelname)1.1s %(asctime)s.%(msecs)03d "
                     "%(module)15s:%(lineno)5d]%(end_color)s %(message)s")
-#color_log_format = "{color:s}[{levelname:1.1s} {asctime:s.}{msecs:03d}{module:15s}:{lineno:5d}]{end_color:s} {message:s}'
 
 
 def color_logs(color):
@@ -185,8 +184,9 @@ def validate_level(level)-> int:
     if isinstance(levelno, int):
         return levelno
     else:
-        raise ValueError('argument level should be either one of string in LOG LEVEL or int')
-
+        raise CaprotoValueError("The target addresses should given as a list of strings "
+                "like 'XX.XX.XX.XX:YYYY' "
+                "or tuples like ('XX.XX.XX.XX', YYYY).")
 
 class PVFilter(logging.Filter):
     '''
@@ -228,17 +228,21 @@ class AddressFilter(logging.Filter):
         for address in addresses_list:
             if isinstance(address, str):
                 if ':' in address:
-                    address_temp = address.split(':')
-                    self.addresses_list.append((address_temp[0], int(address[1])))
+                    host, port_as_str = address.split(':')
+                    self.addresses_list.append((host, int(port_as_str)))
                 else:
                     self.hosts_list.append(address)
             elif isinstance(address, tuple):
                 if len(address) == 2:
                     self.addresses_list.append(address)
                 else:
-                    raise ValueError('The target addresses should be a list of string, \'XX.XX.XX.XX:YYYY\' or tuple, (\'XX.XX.XX.XX\', YYYY)')
+                    raise CaprotoValueError("The target addresses should given as a list of strings "
+                            "like 'XX.XX.XX.XX:YYYY' "
+                            "or tuples like ('XX.XX.XX.XX', YYYY).")
             else:
-                raise ValueError('The target addresses should be a list of string, \'XX.XX.XX.XX:YYYY\' or tuple, (\'XX.XX.XX.XX\', YYYY)')
+                raise CaprotoValueError("The target addresses should given as a list of strings "
+                        "like 'XX.XX.XX.XX:YYYY' "
+                        "or tuples like ('XX.XX.XX.XX', YYYY).")
 
         self.levelno = validate_level(level)
         self.exclusive = exclusive
@@ -246,10 +250,10 @@ class AddressFilter(logging.Filter):
     def filter(self, record):
         if hasattr(record, 'our_address') or hasattr(record, 'their_address'):
             if record.levelno >= self.levelno:
-                return record.our_address in self.addresses_list \
-                        or record.our_address[0] in self.hosts_list \
-                        or record.their_address in self.addresses_list \
-                        or record.their_address[0] in self.hosts_list
+                return (record.our_address in self.addresses_list 
+                        or record.our_address[0] in self.hosts_list
+                        or record.their_address in self.addresses_list
+                        or record.their_address[0] in self.hosts_list)
             else:
                 return False
         else:
@@ -269,7 +273,7 @@ class RoleFilter(logging.Filter):
             return not exclusive
 
 
-def set_handler(file=sys.stdout, datefmt='%H:%M:%S', level='INFO', color=True):
+def set_handler(file=sys.stdout, datefmt='%H:%M:%S', color=True, level='WARNING'):
     """
     Set a new handler on the ``logging.getLogger('caproto')`` logger.
 
