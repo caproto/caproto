@@ -40,6 +40,7 @@ class VirtualCircuit:
     async def connect(self):
         async with self._socket_lock:
             self.socket = await socket.create_connection(self.circuit.address)
+            self.circuit.our_address = self.socket.getsockname()[:2]
             # Kick off background loops that read from the socket
             # and process the commands read from it.
             await curio.spawn(self._receive_loop, daemon=True)
@@ -236,6 +237,7 @@ class SharedBroadcaster:
 
         # UDP socket broadcasting to CA servers
         self.udp_sock = ca.bcast_socket(socket)
+        self.broadcaster.our_address = self.udp_sock.getsockname()[:2]
         self.registered = False  # refers to RepeaterRegisterRequest
         self.loop_ready_event = curio.Event()
         self.unanswered_searches = {}  # map search id (cid) to name

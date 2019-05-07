@@ -36,6 +36,7 @@ from .._utils import (batch_requests, CaprotoError, ThreadsafeCounter,
                       socket_bytes_available, CaprotoTimeoutError,
                       CaprotoTypeError, CaprotoRuntimeError, CaprotoValueError,
                       CaprotoKeyError, CaprotoNetworkError)
+from .._log import logger, ch_logger, search_logger
 
 
 print = partial(print, flush=True)
@@ -338,7 +339,9 @@ class SharedBroadcaster:
         self.listeners = weakref.WeakSet()
 
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
-        self.log = self.broadcaster.log
+        self.broadcaster.our_address = self.udp_sock.getsockname()[:2]
+        self.log = logging.LoggerAdapter(self.broadcaster.log, {'role': 'CLIENT'})
+        self.search_log = logging.LoggerAdapter(logging.getLogger(f'caproto.bcast.search'), {'role': 'CLIENT'})
         self.command_bundle_queue = Queue()
         self.last_beacon = {}
         self.last_beacon_interval = {}
@@ -435,16 +438,20 @@ class SharedBroadcaster:
         Process a command and transport it over the UDP socket.
         """
         bytes_to_send = self.broadcaster.send(*commands)
+        tags = {'role': 'CLIENT',
+                'our_address': self.broadcaster.our_address,
+                'direction': '--->>>'}
         for host in ca.get_address_list():
             if ':' in host:
                 host, _, port_as_str = host.partition(':')
                 specified_port = int(port_as_str)
             else:
                 specified_port = port
+                tags['their_address'] = (host, specified_port)
             try:
                 self.broadcaster.log.debug(
                     'Sending %d bytes to %s:%d',
-                    len(bytes_to_send), host, specified_port)
+                    len(bytes_to_send), host, specified_port, extra=tags)
                 self.udp_sock.sendto(bytes_to_send, (host, specified_port))
             except OSError as ex:
                 raise CaprotoNetworkError(
@@ -597,23 +604,27 @@ class SharedBroadcaster:
 
             queues.clear()
             now = time.monotonic()
+            tags = {'role': 'CLIENT',
+                    'our_address': self.broadcaster.our_address,
+                    'direction': '<<<---'}
             for command in commands:
                 if isinstance(command, ca.Beacon):
                     now = time.monotonic()
                     address = (command.address, command.server_port)
+                    tags['their_address'] = address
                     if address not in self.last_beacon:
                         # We made a new friend!
-                        self.log.info("Watching Beacons from %s:%d",
-                                      *address)
+                        self.broadcaster.log.info("Watching Beacons from %s:%d",
+                                      *address, extra=tags)
                         self._new_server_found()
                     else:
                         interval = now - self.last_beacon[address]
                         if interval < self.last_beacon_interval.get(address, 0) / 4:
                             # Beacons are arriving *faster*? The server at this
                             # address may have restarted.
-                            self.log.info(
+                            self.broadcaster.log.info(
                                 "Beacon anomaly: %s:%d may have restarted.",
-                                *address)
+                                *address, extra=tags)
                             self._new_server_found()
                         self.last_beacon_interval[address] = interval
                     self.last_beacon[address] = now
@@ -649,7 +660,11 @@ class SharedBroadcaster:
                                     accepted_address, _ = search_results[name]
                                     new_address = ca.extract_address(command)
                                     if new_address != accepted_address:
-                                        self.log.warning(
+                                        pv_name_logger = logging.LoggerAdapter(search_logger, {
+                                                        'pv': name,
+                                                        'their_address': accepted_address,
+                                                        'our_address': self.udp_sock.getsockname()[:2]})
+                                        pv_name_logger.warning(
                                             "PV %s with cid %d found on multiple "
                                             "servers. Accepted address is %s:%d. "
                                             "Also found on %s:%d",
@@ -660,7 +675,6 @@ class SharedBroadcaster:
                         queues[queue].append(name)
                         # Cache this to save time on future searches.
                         # (Entries expire after STALE_SEARCH_EXPIRATION.)
-                        self.log.debug('Found %s at %s:%d', name, *address)
                         with self._search_lock:
                             search_results[name] = (address, now)
                         server_protocol_versions[address] = command.version
@@ -745,9 +759,14 @@ class SharedBroadcaster:
                     # Record that we are checking on this address and set a
                     # deadline for a response.
                     checking[address] = now + RESPONSIVENESS_TIMEOUT
-                    self.log.debug(
+                    tags = {'role': 'CLIENT',
+                            'their_address': address,
+                            'our_address': self.udp_sock.getsockname()[:2],
+                            'direction': '->>-'}
+
+                    self.broadcaster.log.debug(
                         "Missed Beacons from %s:%d. Sending EchoRequest to "
-                        "check that server is responsive.", *address)
+                        "check that server is responsive.", *address, extra=tags)
                     # Send on all circuits. One might be less backlogged
                     # with queued commands than the others and thus able to
                     # respond faster. In the majority of cases there will only
@@ -851,7 +870,7 @@ class SharedBroadcaster:
                 continue
 
             if items:
-                self.log.debug('Sending %d SearchRequests', len(items))
+                self.search_log.debug('Sending %d SearchRequests', len(items))
 
             version_req = ca.VersionRequest(0, ca.DEFAULT_PROTOCOL_VERSION)
             for batch in batch_requests(requests,
@@ -923,7 +942,7 @@ class Context:
             client_name = getpass.getuser()
         self.max_workers = max_workers
         self.client_name = client_name
-        self.log = logging.getLogger(f'caproto.ctx.{id(self)}')
+        self.log = logging.LoggerAdapter(logging.getLogger(f'caproto.ctx'), {'role': 'CLIENT'})
         self.pv_cache_lock = threading.RLock()
         self.circuit_managers = {}  # keyed on ((host, port), priority)
         self._lock_during_get_circuit_manager = threading.RLock()
@@ -964,6 +983,7 @@ class Context:
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.disconnect(wait=True)
+
 
     def get_pvs(self, *names, priority=0, connection_state_callback=None,
                 access_rights_callback=None,
@@ -1073,6 +1093,12 @@ class Context:
             # and tracking circuit state, as well as a ClientChannel for
             # tracking channel state.
             for name in names:
+                log = logging.LoggerAdapter(search_logger, {'pv': name,
+                                                    'their_address': address,
+                                                    'our_address': self.broadcaster.udp_sock.getsockname()[:2],
+                                                    'direction': '--->>>',
+                                                    'role': 'CLIENT'})
+                log.debug('Connecting %s on circuit with %s:%d', name, *address)
                 # There could be multiple PVs with the same name and
                 # different priority. That is what we are looping over
                 # here. There could also be NO PVs with this name that need
@@ -1266,6 +1292,7 @@ class VirtualCircuitManager:
             self.socket = socket.create_connection(self.circuit.address)
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
             self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            self.circuit.our_address = self.socket.getsockname()[:2]
             self.selector.add_socket(self.socket, self)
             self.send(ca.VersionRequest(self.circuit.priority,
                                         ca.DEFAULT_PROTOCOL_VERSION),
@@ -1432,8 +1459,10 @@ class VirtualCircuitManager:
         # Ensure that this method is idempotent.
         if self.dead.is_set():
             return
+        tags = {'their_address': self.circuit.address,
+                'our_address': self.sock.getsockname()[:2]}
         self.log.debug('Virtual circuit with address %s:%d has disconnected.',
-                       *self.circuit.address)
+                       *self.circuit.address, extra=tags)
         # Update circuit state. This will be reflected on all PVs, which
         # continue to hold a reference to this disconnected circuit.
         self.circuit.disconnect()
@@ -1472,17 +1501,19 @@ class VirtualCircuitManager:
 
             sock.close()
 
+        tags = {'their_address': self.circuit.address,
+                'our_address': self.sock.getsockname()[:2]}
         if reconnect:
             # Kick off attempt to reconnect all PVs via fresh circuit(s).
             self.log.debug('Kicking off reconnection attempts for %d PVs '
                            'disconnected from %s:%d....',
-                           len(self.channels), *self.circuit.address)
+                           len(self.channels), *self.circuit.address, extra=tags)
             self.context.reconnect(((chan.name, chan.circuit.priority)
                                     for chan in self.channels.values()))
         else:
-            self.log.debug('Not attempting reconnection')
+            self.log.debug('Not attempting reconnection', extra=tags)
 
-        self.log.debug("Shutting down ThreadPoolExecutor for user callbacks")
+        self.log.debug("Shutting down ThreadPoolExecutor for user callbacks", extra=tags)
         self.user_callback_executor.shutdown()
 
     def disconnect(self):
@@ -1527,7 +1558,7 @@ class PV:
         self.priority = priority
         self.context = context
         self.access_rights = None  # will be overwritten with AccessRights
-        self.log = logging.getLogger(f'caproto.ch.{name}.{priority}')
+        self.log = logging.LoggerAdapter(ch_logger, {'pv': self.name, 'role': 'CLIENT'})
         # Use this lock whenever we touch circuit_manager or channel.
         self.component_lock = threading.RLock()
         self.circuit_ready = threading.Event()
@@ -1550,6 +1581,7 @@ class PV:
         self._idle = False
         self._in_use = threading.Condition()
         self._usages = 0
+
 
     @property
     def timeout(self):
@@ -1593,7 +1625,7 @@ class PV:
         self.access_rights_callback.process(self, rights)
 
     def connection_state_changed(self, state, channel):
-        self.log.info('%s connection state changed to %s.', self.name, state)
+        self.log.info('connection state changed to %s.', state)
         self.connection_state_callback.process(self, state)
         if state == 'disconnected':
             for sub in self.subscriptions.values():

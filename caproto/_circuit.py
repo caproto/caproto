@@ -16,8 +16,8 @@ from ._commands import (AccessRightsResponse, CreateChFailResponse,
                         ClientNameRequest, CreateChanRequest,
                         CreateChanResponse, EventAddRequest, EventAddResponse,
                         EventCancelRequest, EventCancelResponse,
-                        HostNameRequest, ReadNotifyRequest, ReadRequest,
-                        ReadNotifyResponse, ReadResponse,
+                        HostNameRequest, ClientNameRequest, ReadNotifyRequest,
+                        ReadRequest, ReadNotifyResponse, ReadResponse,
                         SearchResponse, ServerDisconnResponse,
                         VersionRequest, VersionResponse, WriteNotifyRequest,
                         WriteNotifyResponse, WriteRequest,
@@ -31,6 +31,7 @@ from ._utils import (CLIENT, SERVER, NEED_DATA, DISCONNECTED, CaprotoKeyError,
 from ._dbr import (ChannelType, SubscriptionType, field_types, native_type)
 from ._constants import DEFAULT_PROTOCOL_VERSION
 from ._status import CAStatus
+from ._log import logger, search_logger, ch_logger
 
 
 __all__ = ('VirtualCircuit', 'ClientChannel', 'ServerChannel',
@@ -64,6 +65,7 @@ class VirtualCircuit:
         else:
             self.their_role = CLIENT
         self.address = address
+        self.our_address = None
         self.priority = priority
         self.channels = {}  # map cid to Channel
         self.channels_sid = {}  # map sid to Channel
@@ -152,9 +154,15 @@ class VirtualCircuit:
             list of buffers to send over a socket
         """
         buffers_to_send = []
+        tags = {'their_address': self.address,
+            'our_address': self.our_address,
+            'direction': '--->>>',
+            'role': repr(self.our_role)}
         for command in commands:
             self._process_command(self.our_role, command)
-            self.log.debug("Serializing %r", command)
+            if hasattr(command, 'name') and not isinstance(command, (ClientNameRequest, HostNameRequest)):
+                tags['pv'] = command.name
+            self.log.debug("(%dB) %r", len(command), command, extra=tags)
             buffers_to_send.append(memoryview(command.header))
             buffers_to_send.extend(command.buffers)
         return buffers_to_send
@@ -183,16 +191,19 @@ class VirtualCircuit:
             commands.append(DISCONNECTED)
             return commands, 0
 
-        self.log.debug("Received %d bytes.", total_received)
         self._data += b''.join(buffers)
 
+        tags = {'their_address': self.address,
+            'our_address': self.our_address,
+            'direction': '<<<---',
+            'role': repr(self.our_role)}
         while True:
             (self._data,
              command,
              num_bytes_needed) = read_from_bytestream(self._data,
                                                       self.their_role)
             if command is not NEED_DATA:
-                self.log.debug("%d bytes -> %r", len(command), command)
+                self.log.debug("(%dB) %r", len(command), command, extra=tags)
                 commands.append(command)
             else:
                 # Less than a full command's worth of bytes are cached. Wait

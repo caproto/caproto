@@ -14,7 +14,7 @@ from .._dbr import SubscriptionType
 # ** Tuning this parameters will affect the servers' performance **
 # ** under high load. **
 # If the queue of subscriptions to has a new update ready within this timeout,
-# we consider ourselves under high load and trade accept some latency for some
+# we consider ourselves under high load and trade accept some latency for some 
 # efficiency.
 HIGH_LOAD_TIMEOUT = 0.01
 # When a batch of subscription updates has this many bytes or more, send it.
@@ -52,6 +52,7 @@ class VirtualCircuit:
     def __init__(self, circuit, client, context):
         self.connected = True
         self.circuit = circuit  # a caproto.VirtualCircuit
+        self.circuit.our_address = client.getsockname()[:2]
         self.log = circuit.log
         self.client = client
         self.context = context
@@ -584,6 +585,7 @@ class Context:
         self.pvdb = pvdb
         self.log = logging.getLogger(f'caproto.ctx.{id(self)}')
 
+        self.addresses = []
         self.circuits = set()
         self.broadcaster = ca.Broadcaster(our_role=ca.SERVER)
 

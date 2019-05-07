@@ -1,6 +1,6 @@
 # The LogFormatter is adapted light from tornado, which is licensed under
 # Apache 2.0. See other_licenses/ in the repository directory.
-
+import fnmatch
 import logging
 import sys
 import warnings
@@ -108,6 +108,17 @@ class LogFormatter(logging.Formatter):
 
     def format(self, record):
         record.message = record.getMessage()
+        if hasattr(record, 'their_address'):
+            record.message = '[%s] %s' % (record.their_address[0] + ':' + str(record.their_address[1]), record.message)
+        if hasattr(record, 'direction'):
+            record.message = '%s %s' % (record.direction, record.message)
+        if hasattr(record, 'our_address'):
+            record.message = '[%s] %s' % (record.our_address[0] + ':' + str(record.our_address[1]), record.message)
+        if hasattr(record, 'pv'):
+            record.message = '[%s] %s' % (record.pv, record.message)
+        if hasattr(record, 'role'):
+            record.message = '[%s] %s' % (record.role, record.message)
+
         record.asctime = self.formatTime(record, self.datefmt)
 
         try:
@@ -118,6 +129,7 @@ class LogFormatter(logging.Formatter):
             record.end_color = ''
 
         formatted = self._fmt % record.__dict__
+        #formatted = self._fmt.format(**record.__dict__)
 
         if record.exc_info and not record.exc_text:
             record.exc_text = self.formatException(record.exc_info)
@@ -128,7 +140,8 @@ class LogFormatter(logging.Formatter):
 
 plain_log_format = "[%(levelname)1.1s %(asctime)s.%(msecs)03d %(module)s:%(lineno)d] %(message)s"
 color_log_format = ("%(color)s[%(levelname)1.1s %(asctime)s.%(msecs)03d "
-                    "%(module)s:%(lineno)d]%(end_color)s %(message)s")
+                    "%(module)15s:%(lineno)5d]%(end_color)s %(message)s")
+#color_log_format = "{color:s}[{levelname:1.1s} {asctime:s.}{msecs:03d}{module:15s}:{lineno:5d}]{end_color:s} {message:s}'
 
 
 def color_logs(color):
@@ -143,10 +156,120 @@ def color_logs(color):
 
 
 logger = logging.getLogger('caproto')
+ch_logger = logging.getLogger('caproto.ch')
+search_logger = logging.getLogger('caproto.bcast.search')
 current_handler = None  # overwritten below
 
 
-def set_handler(file=sys.stdout, datefmt='%H:%M:%S', color=True):
+class LoggerNameFilter(logging.Filter):
+    def __init__(self, logger_names, level='NOSET'):
+        self.logger_names = logger_names
+        self.levelno = validate_level(level)
+    def filter(self, record):
+        for i in self.logger_names:
+            if fnmatch.fnmatch(record.name, i) and record.levelno >= self.levelno:
+                return True
+        return False
+
+
+def validate_level(level)-> int:
+    '''
+    Return a int for level comparison
+
+    '''
+    if isinstance(level, int):
+        levelno = level
+    elif isinstance(level, str):
+        levelno = logging.getLevelName(level)
+
+    if isinstance(levelno, int):
+        return levelno
+    else:
+        raise ValueError('argument level should be either one of string in LOG LEVEL or int')
+
+
+class PVFilter(logging.Filter):
+    '''
+    Pass through only messages relevant to one or more PV names and
+    pv-unrelated messages.
+
+    Parameters
+    ----------
+    names : string or list of string
+        PV name or PV name list which will be filtered in.
+
+    Returns
+    -------
+    Bool: True or False
+        True if message is not PV related which doesn't have 'pv' as key in extra
+        True if 'pv' as key exists and pv name exists in Filter list.
+        False if message is PV related but pv name isn't in Filter list.
+    '''
+    def __init__(self, names, level='NOTSET', exclusive=False):
+        self.names = names
+        self.levelno = validate_level(level)
+        self.exclusive = exclusive
+
+    def filter(self, record):
+        if hasattr(record, 'pv'):
+            for i in self.names:
+                if fnmatch.fnmatch(record.pv, i) and record.levelno >= self.levelno:
+                    return True
+            return False
+        else:
+            return not self.exclusive
+
+
+class AddressFilter(logging.Filter):
+
+    def __init__(self, addresses_list, level='NOTSET', exclusive=False):
+        self.addresses_list = []
+        self.hosts_list = []
+        for address in addresses_list:
+            if isinstance(address, str):
+                if ':' in address:
+                    address_temp = address.split(':')
+                    self.addresses_list.append((address_temp[0], int(address[1])))
+                else:
+                    self.hosts_list.append(address)
+            elif isinstance(address, tuple):
+                if len(address) == 2:
+                    self.addresses_list.append(address)
+                else:
+                    raise ValueError('The target addresses should be a list of string, \'XX.XX.XX.XX:YYYY\' or tuple, (\'XX.XX.XX.XX\', YYYY)')
+            else:
+                raise ValueError('The target addresses should be a list of string, \'XX.XX.XX.XX:YYYY\' or tuple, (\'XX.XX.XX.XX\', YYYY)')
+
+        self.levelno = validate_level(level)
+        self.exclusive = exclusive
+
+    def filter(self, record):
+        if hasattr(record, 'our_address') or hasattr(record, 'their_address'):
+            if record.levelno >= self.levelno:
+                return record.our_address in self.addresses_list \
+                        or record.our_address[0] in self.hosts_list \
+                        or record.their_address in self.addresses_list \
+                        or record.their_address[0] in self.hosts_list
+            else:
+                return False
+        else:
+            return not self.exclusive
+
+
+class RoleFilter(logging.Filter):
+    def __init__(self, role, level='NOTSET', exclusive=False):
+        self.roles = role
+        self.levelno = validate_level(level)
+        self.exclusive = exclusive
+
+    def filter(self, record):
+        if hasattr(record, 'role'):
+            return record.role is self.role and record.levelno >= self.levelno
+        else:
+            return not exclusive
+
+
+def set_handler(file=sys.stdout, datefmt='%H:%M:%S', level='INFO', color=True):
     """
     Set a new handler on the ``logging.getLogger('caproto')`` logger.
 
@@ -188,6 +311,7 @@ def set_handler(file=sys.stdout, datefmt='%H:%M:%S', color=True):
         handler = logging.FileHandler(file)
     else:
         handler = logging.StreamHandler(file)
+    handler.setLevel(level)
     if color:
         format = color_log_format
     else:

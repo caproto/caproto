@@ -76,6 +76,9 @@ class VirtualCircuit(_VirtualCircuit):
                 self.loop = loop
                 self.client = client
 
+            def getsockname(self):
+                return self.client.getsockname()
+
             async def recv(self, nbytes):
                 return (await self.loop.sock_recv(self.client, 4096))
 
@@ -162,6 +165,7 @@ class Context(_Context):
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.setblocking(False)
             s.bind((interface, port))
+            self.broadcaster._our_addresses.append(s.getsockname()[:2])
             return s
         self.port, self.tcp_sockets = await self._bind_tcp_sockets_with_consistent_port_number(
             make_socket)
@@ -197,6 +201,9 @@ class Context(_Context):
             """Make an asyncio transport something you can call sendto on."""
             def __init__(self, transport):
                 self.transport = transport
+
+            def getsockname(self):
+                return self.transport.get_extra_info('sockname')
 
             async def sendto(self, bytes_to_send, addr_port):
                 try:

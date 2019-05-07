@@ -66,6 +66,7 @@ class VirtualCircuit:
     async def connect(self):
         async with self._socket_lock:
             self.socket = await trio.open_tcp_stream(*self.circuit.address)
+            self.circuit.our_address = self.socket.getsockname()[:2]
         # Kick off background loops that read from the socket
         # and process the commands read from it.
         self.nursery.start_soon(self._receive_loop)
@@ -321,6 +322,7 @@ class SharedBroadcaster:
 
     async def _broadcaster_recv_loop(self, task_status):
         self.udp_sock = ca.bcast_socket(socket_module=socket)
+        self.broadcaster.our_address = self.udp_sock.getsockname()[:2]
         command = self.broadcaster.register('127.0.0.1')
         await self.send(ca.EPICS_CA2_PORT, command)
         task_status.started()
