@@ -402,10 +402,15 @@ class SearchResults:
         Any PV instances that were awaiting these results will be stuck until
         :meth:`get_pvs` is called again.
         """
+        items = []
         for name in names:
-            cid = self._searches_by_name.pop(name, None)
-            if cid is not None:
-                self._unanswered_searches.pop(cid, None)
+            item = self._searches_by_name.pop(name, None)
+            if item is not None:
+                items.append(item)
+        if items:
+            for search_id, item in list(self._unanswered_searches.items()):
+                if item in items:
+                    del self._unanswered_searches[search_id]
 
     def __contains__(self, name):
         return bool(self.name_to_addrs.get(name, {}))
