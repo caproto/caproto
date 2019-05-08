@@ -13,15 +13,56 @@ by caproto, below. Because recalling the name is not always convenient, certain
 objects in caproto's Python API expose a ``log`` attribute, such as ``pv.log``,
 ``pv.context.log`` and ``pv.circuit_manager.log``.
 
+You could find python logging flow here.
+https://docs.python.org/2/_images/logging_flow.png
+
+
 Useful snippets
 ===============
 
-To turn on maximal logging (usually way too much information!) use
+Make sure you understand how level control loggging in logger.
+and handler. Both has method setLevel(...) which allow you do logger.setLevel(...) or
+handler.setLevel(...). You may only have one logger in your package. But, mutiple
+handlers could be added to one logger. Logger's level influence all handler. So the
+effective level is the intersection of logger's level and handler's level.
 
+
+Here INFO will effect
 .. code-block:: python
 
     import logging
-    logging.getLogger('caproto').setLevel('DEBUG')
+    logger = logging.getLogger('caproto')
+    logger.setLevel('DEBUG')
+    handler = logging.StreamHandler()
+    handler.setLevel('INFO')
+    logger.addHandler(handler)
+    logger.debug('This is debug message')
+    logger.info('This is info message')
+    logger.warning('This is warn message')
+
+.. code-block:: python
+
+    This is info message
+    This is warn message
+
+Here WARNING will effect
+.. code-block:: python
+
+    import logging
+    logger = logging.getLogger('caproto')
+    logger.setLevel('WARNING')
+    handler = logging.StreamHandler()
+    handler.setLevel('INFO')
+    logger.addHandler(handler)
+    logger.debug('This is debug message')
+    logger.info('This is info message')
+    logger.warning('This is warn message')
+
+..code-block:: python
+    This is warn message
+
+To avoid confused level setting, we recommend leave logger's level 'NOTSET' and use
+handler's level domain independently.
 
 To log (non-batch) read/write requests and read/write/event responses in the
 threading and pyepics-compat clients:
@@ -29,8 +70,46 @@ threading and pyepics-compat clients:
 .. code-block:: python
 
    import logging
-   logging.getLogger('caproto.ch').setLevel('DEBUG')
+   logger = logging.getLogger('caproto')
 
+To add a stdout handler with level, default level is WARNING
+
+.. code-block:: python
+
+    from caproto._log import set_handler
+    std_handler = set_handler(level='DEBUG')
+    logger.addHandler(std_handler)
+
+To add logstash handler, this will pipe log message to elasticsearch to kibana on cmb03
+
+.. code-block:: python
+
+    import logstash
+    logstash_handler = logstash.TCPLogstashHandler(<host>, <port>, version=1)
+    logger.addHandler(logstash_handler)
+
+To add file handler
+
+.. code-block:: python
+
+    file_handler = logging.FileHandler('caproto.log')
+    file_handler.setLevel('DEBUG')
+    logger.addHandler(file_filter)
+
+To add filter
+
+.. code-block:: python
+
+    from caproto._log import PVFilter, AddressFilter, RoleFilter
+    std_handler.addFilter(PVFilter(['complex:*', 'simple:B'], level='DEBUG', exclusive=False))
+    std_handler.addFilter(AddressFilter(['10.2.227.105']))
+    std_handler.addFilter(RoleFilter('Client', level = 'DEBUG'))
+
+For example, ``PVFilter(['complex:*', 'simple:B'], level='DEBUG', exclusive=False)`` meaning
+You want to block any message below level=DEBUG level except it related complex:* or simple:B and
+keep the env, config or misc message by exclusive=False
+
+In caproto, you almost never want to addFilter to logger even you could.
 See :ref:`threading_loggers` for more handy examples.
 
 Logger names
