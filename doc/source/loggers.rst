@@ -28,6 +28,7 @@ effective level is the intersection of logger's level and handler's level.
 
 
 Here INFO will effect
+
 .. code-block:: python
 
     import logging
@@ -46,6 +47,7 @@ Here INFO will effect
     This is warn message
 
 Here WARNING will effect
+
 .. code-block:: python
 
     import logging
@@ -59,6 +61,7 @@ Here WARNING will effect
     logger.warning('This is warn message')
 
 ..code-block:: python
+
     This is warn message
 
 To avoid confused level setting, we recommend leave logger's level 'NOTSET' and use
