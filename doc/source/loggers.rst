@@ -60,10 +60,9 @@ Here WARNING will effect
     logger.info('This is info message')
     logger.warning('This is warn message')
 
-..code-block:: python
+.. code-block:: python
 
     This is warn message
-
 
 To avoid confused level setting, we recommend leave logger's level 'NOTSET' and use
 handler's level domain independently.
