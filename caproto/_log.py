@@ -211,9 +211,11 @@ class PVFilter(logging.Filter):
         self.exclusive = exclusive
 
     def filter(self, record):
-        if hasattr(record, 'pv'):
+        if record.levelno < self.levelno:
+            return False
+        elif hasattr(record, 'pv'):
             for i in self.names:
-                if fnmatch.fnmatch(record.pv, i) and record.levelno >= self.levelno:
+                if fnmatch.fnmatch(record.pv, i):
                     return True
             return False
         else:
@@ -248,14 +250,13 @@ class AddressFilter(logging.Filter):
         self.exclusive = exclusive
 
     def filter(self, record):
-        if hasattr(record, 'our_address') or hasattr(record, 'their_address'):
-            if record.levelno >= self.levelno:
-                return (record.our_address in self.addresses_list 
-                        or record.our_address[0] in self.hosts_list
-                        or record.their_address in self.addresses_list
-                        or record.their_address[0] in self.hosts_list)
-            else:
-                return False
+        if record.levelno < self.levelno:
+            return False
+        elif hasattr(record, 'our_address') or hasattr(record, 'their_address'):
+            return (record.our_address in self.addresses_list
+                    or record.our_address[0] in self.hosts_list
+                    or record.their_address in self.addresses_list
+                    or record.their_address[0] in self.hosts_list)
         else:
             return not self.exclusive
 
@@ -267,8 +268,10 @@ class RoleFilter(logging.Filter):
         self.exclusive = exclusive
 
     def filter(self, record):
-        if hasattr(record, 'role'):
-            return record.role is self.role and record.levelno >= self.levelno
+        if record.levelno < self.levelno:
+            return False
+        elif hasattr(record, 'role'):
+            return record.role is self.role
         else:
             return not exclusive
 
@@ -327,6 +330,10 @@ def set_handler(file=sys.stdout, datefmt='%H:%M:%S', color=True, level='WARNING'
     logger.addHandler(handler)
     current_handler = handler
     return handler
+
+
+def get_handler():
+    return current_handler
 
 
 # Add a handler with the default parameters at import time.
