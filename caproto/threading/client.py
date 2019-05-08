@@ -761,7 +761,7 @@ class SharedBroadcaster:
                     tags = {'role': 'CLIENT',
                             'their_address': address,
                             'our_address': self.udp_sock.getsockname()[:2],
-                            'direction': '->>-'}
+                            'direction': '--->>>'}
 
                     self.broadcaster.log.debug(
                         "Missed Beacons from %s:%d. Sending EchoRequest to "
