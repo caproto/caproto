@@ -20,15 +20,14 @@ https://docs.python.org/3/howto/logging.html#logging-flow
 Useful snippets
 ===============
 
-To log (non-batch) read/write requests and read/write/event responses in the
-threading and pyepics-compat clients:
+To get the caproto logger by python built-in logging framework:
 
 .. code-block:: python
 
    import logging
    logger = logging.getLogger('caproto')
 
-To add a stdout handler with level
+To add a stdout handler with level:
 
 .. code-block:: python
 
@@ -36,14 +35,14 @@ To add a stdout handler with level
     logger.addHandler(std_handler)
 
 To have a nicer stdout, we offer you a convenient way to setup. It summarize
-code above by one commmand.
+code above by one commmand:
 
 .. code-block:: python
 
     from caproto._log import set_handler
     set_handler(level='DEBUG')
 
-The output is like
+The output is like:
 
 .. code-block:: python
 
@@ -55,7 +54,7 @@ The output is like
     [D 15:19:14.136          client: 1079] [CLIENT] Context search-results processing loop has started.
     [D 15:19:14.137          client:  872] [CLIENT] Sending 6 SearchRequests
 
-To add logstash handler, you can submit logs to a centralized log database.
+To add logstash handler, you can submit logs to a centralized log database:
 
 .. code-block:: python
 
@@ -63,7 +62,7 @@ To add logstash handler, you can submit logs to a centralized log database.
     logstash_handler = logstash.TCPLogstashHandler(<host>, <port>, version=1)
     logger.addHandler(logstash_handler)
 
-To add file handler
+To add a file handler:
 
 .. code-block:: python
 
@@ -71,7 +70,7 @@ To add file handler
     file_handler.setLevel('DEBUG')
     logger.addHandler(file_filter)
 
-To add filter
+To add a filter:
 
 .. code-block:: python
 
@@ -84,11 +83,14 @@ For example, ``PVFilter(['complex:*', 'simple:B'], level='DEBUG', exclusive=Fals
 You want to block any message below level=DEBUG level except it related complex:* or simple:B and
 keep the env, config or misc message by exclusive=False
 
-Make sure you understand how level control loggging in logger.
-and handler. Both has method setLevel(...) which allow you do logger.setLevel(...) or
-handler.setLevel(...). You may only have one logger in your package. But, mutiple
-handlers could be added to one logger. Logger's level influence all handler. So the
-effective level is the intersection of logger's level and handler's level.
+Logger's level vs handler's level
+=================================
+
+Make sure you understand how level control loggging in logger and handler.
+Both has method setLevel(...) which allow you do logger.setLevel(...) or handler.setLevel(...).
+You may only have one logger in your package. But, mutiple handlers could be added to one logger.
+Logger's level influence all handler. So the effective level is the intersection of logger's level
+and handler's level.
 
 
 Here INFO will effect
