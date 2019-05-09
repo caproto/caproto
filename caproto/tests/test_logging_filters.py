@@ -50,7 +50,7 @@ def test_not_relevant():
     # A not relevant record passes through a nonexclusive filter.
     filter = PVFilter(['a'], level='WARNING', exclusive=False)
     record = make_record('INFO', None)
-    assert ex_filter.filter(record)
+    assert filter.filter(record)
 
 
 def test_relevant():
