@@ -211,7 +211,7 @@ class PVFilter(logging.Filter):
         self.exclusive = exclusive
 
     def filter(self, record):
-        if record.levelno > self.levelno:
+        if record.levelno >= self.levelno:
             return True
         elif hasattr(record, 'pv'):
             for i in self.names:
