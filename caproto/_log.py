@@ -250,8 +250,8 @@ class AddressFilter(logging.Filter):
         self.exclusive = exclusive
 
     def filter(self, record):
-        if record.levelno < self.levelno:
-            return False
+        if record.levelno >= self.levelno:
+            return True
         elif hasattr(record, 'our_address') or hasattr(record, 'their_address'):
             return (record.our_address in self.addresses_list
                     or record.our_address[0] in self.hosts_list
@@ -268,8 +268,8 @@ class RoleFilter(logging.Filter):
         self.exclusive = exclusive
 
     def filter(self, record):
-        if record.levelno < self.levelno:
-            return False
+        if record.levelno >= self.levelno:
+            return True
         elif hasattr(record, 'role'):
             return record.role is self.role
         else:
