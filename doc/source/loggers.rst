@@ -14,7 +14,7 @@ objects in caproto's Python API expose a ``log`` attribute, such as ``pv.log``,
 ``pv.context.log`` and ``pv.circuit_manager.log``.
 
 You could find python logging flow here.
-https://docs.python.org/2/_images/logging_flow.png
+https://docs.python.org/3/howto/logging.html#logging-flow
 
 
 Useful snippets
@@ -83,7 +83,7 @@ To add a stdout handler with level, default level is WARNING
     std_handler = set_handler(level='DEBUG')
     logger.addHandler(std_handler)
 
-To add logstash handler, this will pipe log message to elasticsearch to kibana on cmb03
+To add logstash handler, you can submit logs to a centralized log database.
 
 .. code-block:: python
 
