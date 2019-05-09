@@ -44,7 +44,7 @@ code above by one commmand:
 
 The output is like:
 
-.. code-block:: python
+.. code-block:: guess
 
     [D 15:19:14.132          client:  588] [CLIENT] Broadcaster command loop is running.
     [D 15:19:14.133          client:  719] [CLIENT] Broadcaster check for unresponsive servers loop is running.
