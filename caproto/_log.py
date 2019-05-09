@@ -211,8 +211,8 @@ class PVFilter(logging.Filter):
         self.exclusive = exclusive
 
     def filter(self, record):
-        if record.levelno < self.levelno:
-            return False
+        if record.levelno > self.levelno:
+            return True
         elif hasattr(record, 'pv'):
             for i in self.names:
                 if fnmatch.fnmatch(record.pv, i):
@@ -292,6 +292,8 @@ def set_handler(file=sys.stdout, datefmt='%H:%M:%S', color=True, level='WARNING'
         Date format. Default is ``'%H:%M:%S'``.
     color : boolean
         Use ANSI color codes. True by default.
+    level : String of python logging level
+        Default is 'WARNING'.
 
     Returns
     -------
@@ -312,6 +314,10 @@ def set_handler(file=sys.stdout, datefmt='%H:%M:%S', color=True, level='WARNING'
     Turn off ANSI color codes.
 
     >>> set_handler(color=False)
+
+    Set log to have more INFO message
+
+    >>> set_handler(level='INFO')
     """
     global current_handler
     if isinstance(file, str):
