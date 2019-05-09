@@ -83,6 +83,8 @@ For example, ``PVFilter(['complex:*', 'simple:B'], level='DEBUG', exclusive=Fals
 You want to block any message below level=DEBUG level except it related complex:* or simple:B and
 keep the env, config or misc message by exclusive=False
 
+See :ref:`threading_loggers` for more handy examples.
+
 Logger's level vs handler's level
 =================================
 
@@ -132,8 +134,11 @@ Here WARNING will effect
 
 To avoid confused level setting, we recommend leave logger's level 'NOTSET' and use
 handler's level domain independently.
-In caproto, you almost never want to addFilter to logger even you could.
-See :ref:`threading_loggers` for more handy examples.
+In caproto, you almost never want to addFilter to logger even you could. Because
+there are always multiple(at least one by set_handler) handlers added to logger.
+Logger level flow control will influence all handlers. If there is only one handler,
+everything you want to be filtered on logger level could be filtered on handler level.
+In conclusion, handler level filter is recommended.
 
 Logger names
 ============
