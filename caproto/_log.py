@@ -275,7 +275,7 @@ class AddressFilter(logging.Filter):
     def filter(self, record):
         if record.levelno >= self.levelno:
             return True
-        elif hasattr(record, 'our_address') or hasattr(record, 'their_address'):
+        elif hasattr(record, 'our_address'):
             return (record.our_address in self.addresses_list
                     or record.our_address[0] in self.hosts_list
                     or record.their_address in self.addresses_list
