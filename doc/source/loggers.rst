@@ -16,6 +16,7 @@ objects in caproto's Python API expose a ``log`` attribute, such as ``pv.log``,
 The flow of log event information in loggers and handlers is illustrated in the following diagram:
 
 .. image:: https://docs.python.org/3/_images/logging_flow.png
+For further reference, see the Python 3 logging howto:
 https://docs.python.org/3/howto/logging.html#logging-flow
 
 
