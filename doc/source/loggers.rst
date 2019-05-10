@@ -13,7 +13,9 @@ by caproto, below. Because recalling the name is not always convenient, certain
 objects in caproto's Python API expose a ``log`` attribute, such as ``pv.log``,
 ``pv.context.log`` and ``pv.circuit_manager.log``.
 
-You could find python logging flow here.
+The flow of log event information in loggers and handlers is illustrated in the following diagram:
+
+.. image:: https://docs.python.org/3/_images/logging_flow.png
 https://docs.python.org/3/howto/logging.html#logging-flow
 
 
