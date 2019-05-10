@@ -170,6 +170,10 @@ The following log messages will be displayed:
 
 To avoid confused level setting, we recommend leave logger's level 'NOTSET' and use
 handler's level domain independently.
+DO NOT USE
+.. code-block:: python
+  logger.setLevel(...)
+
 In caproto, you almost never want to addFilter to logger even you could. Because
 there are always multiple(at least one by set_handler) handlers added to logger.
 Logger level flow control will influence all handlers. If there is only one handler,
