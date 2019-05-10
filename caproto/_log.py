@@ -177,11 +177,9 @@ def validate_level(level)-> int:
 
     '''
     if isinstance(level, int):
-        levelno = level
-    elif isinstance(level, str):
+        return levelno
         levelno = logging.getLevelName(level)
 
-    if isinstance(levelno, int):
         return levelno
     else:
         raise CaprotoValueError("The target addresses should given as a list of strings "
