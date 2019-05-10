@@ -178,14 +178,14 @@ def validate_level(level)-> int:
 
     '''
     if isinstance(level, int):
-        return levelno
+        levelno = level
+    elif isinstance(level, str):
         levelno = logging.getLevelName(level)
 
+    if isinstance(levelno, int):
         return levelno
     else:
-        raise CaprotoValueError("The target addresses should given as a list of strings "
-                "like 'XX.XX.XX.XX:YYYY' "
-                "or tuples like ('XX.XX.XX.XX', YYYY).")
+        raise CaprotoValueError("Your level is illegal, please use one of python logging string")
 
 class PVFilter(logging.Filter):
     '''
