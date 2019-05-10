@@ -164,6 +164,7 @@ class LoggerNameFilter(logging.Filter):
     def __init__(self, logger_names, level='NOSET'):
         self.logger_names = logger_names
         self.levelno = validate_level(level)
+
     def filter(self, record):
         for i in self.logger_names:
             if fnmatch.fnmatch(record.name, i) and record.levelno >= self.levelno:
@@ -177,11 +178,9 @@ def validate_level(level)-> int:
 
     '''
     if isinstance(level, int):
-        levelno = level
-    elif isinstance(level, str):
+        return levelno
         levelno = logging.getLevelName(level)
 
-    if isinstance(levelno, int):
         return levelno
     else:
         raise CaprotoValueError("The target addresses should given as a list of strings "
@@ -363,7 +362,7 @@ def set_handler(file=sys.stdout, datefmt='%H:%M:%S', color=True, level='WARNING'
 
     >>> set_handler(color=False)
 
-    Set log to have more INFO message
+    Increase verbosity: show level INFO or higher.
 
     >>> set_handler(level='INFO')
     """
