@@ -23,29 +23,31 @@ https://docs.python.org/3/howto/logging.html#logging-flow
 Useful snippets
 ===============
 
-To get the caproto logger by python built-in logging framework:
+To get the caproto logger using Python's built-in logging framework:
 
 .. code-block:: python
 
    import logging
    logger = logging.getLogger('caproto')
 
-To add a stdout handler with level:
+To add a stdout handler (i.e., one that prints messages to the standard output in your terminal) with level `DEBUG`:
 
 .. code-block:: python
 
     std_handler = logging.StreamHandler()
     logger.addHandler(std_handler)
+    std_handler.setLevel('DEBUG')
 
-To have a nicer stdout, we offer you a convenient way to setup. It summarize
+caproto offers a number of convenient methods for configuring logging.  The following
+would replace the above code with only one line:
 code above by one commmand:
 
 .. code-block:: python
 
-    from caproto._log import set_handler
+    from caproto import set_handler
     set_handler(level='DEBUG')
 
-The output is like:
+With this handler, you would see messages like the following:
 
 .. code-block:: guess
 
@@ -57,7 +59,10 @@ The output is like:
     [D 15:19:14.136          client: 1079] [CLIENT] Context search-results processing loop has started.
     [D 15:19:14.137          client:  872] [CLIENT] Sending 6 SearchRequests
 
-To add logstash handler, you can submit logs to a centralized log database:
+The logging framework is not only limited to printing to the console, of course.
+For example, using Logstash - an open source tool for collecting, parsing, and
+storing logs to a centralized database for future use - is also straightforward.
+To send log messages to `<host>:<port>`, one might use the following:
 
 .. code-block:: python
 
@@ -65,7 +70,7 @@ To add logstash handler, you can submit logs to a centralized log database:
     logstash_handler = logstash.TCPLogstashHandler(<host>, <port>, version=1)
     logger.addHandler(logstash_handler)
 
-To add a file handler:
+To redirect logging output to a file, in this case `caproto.log`:
 
 .. code-block:: python
 
@@ -73,11 +78,19 @@ To add a file handler:
     file_handler.setLevel('DEBUG')
     logger.addHandler(file_filter)
 
-To add a filter:
+Filters
+=======
+
+Filters are where caproto's logging framework shines. Several easy-to-use filters
+allow users to very specifically customize logging, based on one or more of the following:
+
+1. `PV` names: using `PVFilter`, only PVs that match wildcard-style strings will be shown
+2. Addresses: using `AddressFilter`, only PVs on specific IP addresses (and optionally ports) will be displayed
+3. Client/server roles: caproto provides both clients and servers - limit messages to one or the other.
 
 .. code-block:: python
 
-    from caproto._log import PVFilter, AddressFilter, RoleFilter
+    from caproto import PVFilter, AddressFilter, RoleFilter
     std_handler.addFilter(PVFilter(['complex:*', 'simple:B'], level='DEBUG', exclusive=False))
     std_handler.addFilter(AddressFilter(['10.2.227.105']))
     std_handler.addFilter(RoleFilter('Client', level = 'DEBUG'))
@@ -98,7 +111,7 @@ Logger's level influence all handler. So the effective level is the intersection
 and handler's level.
 
 
-Here INFO will effect
+Here, with a handler level of `INFO` and a logger level of `DEBUG`:
 
 .. code-block:: python
 
@@ -112,12 +125,15 @@ Here INFO will effect
     logger.info('This is info message')
     logger.warning('This is warn message')
 
+
+The following log messages will be shown:
+
 .. code-block:: python
 
     This is info message
     This is warn message
 
-Here WARNING will effect
+Whereas with a logger level of `WARNING`:
 
 .. code-block:: python
 
@@ -130,6 +146,9 @@ Here WARNING will effect
     logger.debug('This is debug message')
     logger.info('This is info message')
     logger.warning('This is warn message')
+
+
+The following log messages will be displayed:
 
 .. code-block:: python
 
