@@ -315,7 +315,7 @@ def set_handler(file=sys.stdout, datefmt='%H:%M:%S', color=True, level='WARNING'
 
     >>> set_handler(color=False)
 
-    Set log to have more INFO message
+    Increase verbosity: show level INFO or higher.
 
     >>> set_handler(level='INFO')
     """
