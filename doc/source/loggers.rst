@@ -1,3 +1,4 @@
+.. currentmodule:: caproto
 .. _loggers:
 
 *******
@@ -81,23 +82,36 @@ To redirect logging output to a file, in this case `caproto.log`:
 Filters
 =======
 
-Filters are where caproto's logging framework shines. Several easy-to-use filters
-allow users to very specifically customize logging, based on one or more of the following:
-
-1. `PV` names: using `PVFilter`, only PVs that match wildcard-style strings will be shown
-2. Addresses: using `AddressFilter`, only PVs on specific IP addresses (and optionally ports) will be displayed
-3. Client/server roles: caproto provides both clients and servers - limit messages to one or the other.
+Filters are where caproto's logging framework shines.
+You could import thoese filters from caproto
 
 .. code-block:: python
 
     from caproto import PVFilter, AddressFilter, RoleFilter
-    std_handler.addFilter(PVFilter(['complex:*', 'simple:B'], level='DEBUG', exclusive=False))
+
+Several easy-to-use filters allow users to very specifically customize logging, based on one or more of the following:
+
+1. `PV` names: using `PVFilter`, only PVs that match wildcard-style strings will be shown
+
+.. code-block:: python
+
+    std_handler.addFilter(PVFilter(['complex:*', 'simple:B'])
+
+2. Addresses: using `AddressFilter`, only PVs on specific IP addresses (and optionally ports) will be displayed
+
+.. code-block:: python
+
     std_handler.addFilter(AddressFilter(['10.2.227.105']))
-    std_handler.addFilter(RoleFilter('Client', level = 'DEBUG'))
+
+3. Client/server roles: caproto provides both clients and servers - limit messages to one or the other.
+
+.. code-block:: python
+
+    std_handler.addFilter(RoleFilter('Client'))
 
 For example, ``PVFilter(['complex:*', 'simple:B'], level='DEBUG', exclusive=False)`` meaning
-You want to block any message below level=DEBUG level except it related complex:* or simple:B and
-keep the env, config or misc message by exclusive=False
+You want to block any message below ``DEBUG`` level except it related ``complex:*`` or ``simple:B``, and
+keep the env, config or misc message by ``exclusive=False``. Check API section of this page for more details
 
 See :ref:`threading_loggers` for more handy examples.
 
@@ -198,4 +212,9 @@ makes it easy to address to common cases.
 
 See the Examples section below.
 
+API
+===
 .. autofunction:: caproto.set_handler
+.. autoclass:: PVFilter
+.. autoclass:: AddressFilter
+.. autoclass:: RoleFilter
