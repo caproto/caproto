@@ -15,7 +15,7 @@ except ImportError:
     curses = None
 from ._utils import CaprotoValueError
 
-__all__ = ('color_logs', 'set_handler')
+__all__ = ('color_logs', 'set_handler', 'PVFilter', 'AddressFilter', 'RoleFilter')
 
 
 def _stderr_supports_color():
@@ -190,20 +190,24 @@ def validate_level(level)-> int:
 
 class PVFilter(logging.Filter):
     '''
-    Pass through only messages relevant to one or more PV names and
-    pv-unrelated messages.
+    Block any message that is lower than certain level except it related to target
+    pvs. You have option to choose whether env, config and misc message is exclusive
+    or not.
 
     Parameters
     ----------
     names : string or list of string
-        PV name or PV name list which will be filtered in.
+        PVs list which will be filtered in.
+
+    level : str
+        python logging level
+
+    exclusive : bool
+        whether env, config and misc message will be exclusive or not
 
     Returns
     -------
     Bool: True or False
-        True if message is not PV related which doesn't have 'pv' as key in extra
-        True if 'pv' as key exists and pv name exists in Filter list.
-        False if message is PV related but pv name isn't in Filter list.
     '''
     def __init__(self, names, level='NOTSET', exclusive=False):
         self.names = names
@@ -223,6 +227,26 @@ class PVFilter(logging.Filter):
 
 
 class AddressFilter(logging.Filter):
+    '''
+    Block any message that is lower than certain level except it related to target
+    addresses. You have option to choose whether env, config and misc message is
+    exclusive or not.
+
+    Parameters
+    ----------
+    addresses_list : list of address. address is a tuple of (host_str, port_val)
+        Addresses list which will be filtered in.
+
+    level : str
+        python logging level
+
+    exclusive : bool
+        whether env, config and misc message will be exclusive or not
+
+    Returns
+    -------
+    Bool: True or False
+    '''
 
     def __init__(self, addresses_list, level='NOTSET', exclusive=False):
         self.addresses_list = []
@@ -262,8 +286,32 @@ class AddressFilter(logging.Filter):
 
 
 class RoleFilter(logging.Filter):
+    '''
+    Block any message that is lower than certain level except it related to target
+    role. You have option to choose whether env, config and misc message is
+    exclusive or not
+
+    Parameters
+    ----------
+    role : 'CLIENT' or 'SERVER'
+        Role of the local machine.
+
+    level : str
+        python logging level
+
+    exclusive : bool
+        whether env, config and misc message will be exclusive or not
+
+    Parameters
+    ----------
+    record: python logging record
+
+    Returns
+    -------
+    Bool: True or False
+    '''
     def __init__(self, role, level='NOTSET', exclusive=False):
-        self.roles = role
+        self.role = role
         self.levelno = validate_level(level)
         self.exclusive = exclusive
 
