@@ -105,11 +105,11 @@ class LogFormatter(logging.Formatter):
     def format(self, record):
         record.message = record.getMessage()
         if hasattr(record, 'their_address'):
-            record.message = '[%s] %s' % (record.their_address[0] + ':' + str(record.their_address[1]), record.message)
+            record.message = '[%s] %s' % (':'.join(record.their_address), record.message)
         if hasattr(record, 'direction'):
             record.message = '%s %s' % (record.direction, record.message)
         if hasattr(record, 'our_address'):
-            record.message = '[%s] %s' % (record.our_address[0] + ':' + str(record.our_address[1]), record.message)
+            record.message = '[%s] %s' % (':'.join(record.our_address), record.message)
         if hasattr(record, 'pv'):
             record.message = '[%s] %s' % (record.pv, record.message)
         if hasattr(record, 'role'):
