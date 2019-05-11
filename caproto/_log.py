@@ -155,6 +155,7 @@ def color_logs(color):
 
 
 logger = logging.getLogger('caproto')
+logger.setLevel('DEBUG')
 ch_logger = logging.getLogger('caproto.ch')
 search_logger = logging.getLogger('caproto.bcast.search')
 current_handler = None  # overwritten below
