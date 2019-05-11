@@ -2,7 +2,7 @@
 .. _loggers:
 
 *******
-Loggers
+Logging
 *******
 
 .. versionchanged:: 0.4.0
@@ -12,7 +12,8 @@ Loggers
 
 Caproto uses Python's logging framework, following Python's own guidelines for
 best practices. Users with a sophisticated knowledge of that framework may wish
-to skip ahead to :ref:`logger_api`.
+to skip ahead to :ref:`logger_api`. Convenience functions are provided to
+streamline simple cases.
 
 Command-line tools
 ==================
@@ -51,6 +52,15 @@ complete account of the Channel Access traffic handled by caproto.
 
    from caproto import set_handler
    set_handler(level='DEBUG')
+
+.. important::
+
+   We strongly recommend setting levels on *handlers* not on *loggers*.
+   In previous versions of caproto, we recommended adjusting the level on the
+   *logger*, as in ``some_pv.log.setLevel('DEBUG')``. We now recommended
+   that you *avoid* setting levels on loggers because it would affect all
+   handlers downstream, potentially inhibiting some other part of the program
+   from collecting the records it wants to collect.
 
 Log to a file
 -------------
@@ -112,81 +122,25 @@ based on one or more of the following:
 
    .. code-block:: python
 
-       from caproto import RoleFilter
+      from caproto import RoleFilter
 
-       handler.addFilter(RoleFilter('CLIENT'))
+      handler.addFilter(RoleFilter('CLIENT'))
 
 Note that if multiple filters are added to the same handler, they are composed
 using "logical AND" by Python's logging framework. See the section on
 :ref:`logging_filters` below for more information or composing filters or
 writing complex filters.
 
+.. important::
+
+   In the examples above we add filters to handlers, as in
+   ``handler.addFilter(...)``. The Python logging framework also allows filters
+   to be added to *loggers*, as in ``some_pv.log.addFilter(...)``. But we
+   recommend that you *avoid* adding filters to loggers because it would affect
+   all handlers downstream, potentially inhibiting some other part of the
+   program from collecting the records it wants to collect.
+
 See :ref:`threading_loggers` for more handy examples.
-
-Logger's level vs handler's level
-=================================
-
-Make sure you understand how level control loggging in logger and handler.
-Both has method setLevel(...) which allow you do logger.setLevel(...) or handler.setLevel(...).
-You may only have one logger in your package. But, mutiple handlers could be added to one logger.
-Logger's level influence all handler. So the effective level is the intersection of logger's level
-and handler's level.
-
-
-Here, with a handler level of `INFO` and a logger level of `DEBUG`:
-
-.. code-block:: python
-
-    import logging
-    logger = logging.getLogger('caproto')
-    logger.setLevel('DEBUG')
-    handler = logging.StreamHandler()
-    handler.setLevel('INFO')
-    logger.addHandler(handler)
-    logger.debug('This is debug message')
-    logger.info('This is info message')
-    logger.warning('This is warn message')
-
-
-The following log messages will be shown:
-
-.. code-block:: python
-
-    This is info message
-    This is warn message
-
-Whereas with a logger level of `WARNING`:
-
-.. code-block:: python
-
-    import logging
-    logger = logging.getLogger('caproto')
-    logger.setLevel('WARNING')
-    handler = logging.StreamHandler()
-    handler.setLevel('INFO')
-    logger.addHandler(handler)
-    logger.debug('This is debug message')
-    logger.info('This is info message')
-    logger.warning('This is warn message')
-
-
-The following log messages will be displayed:
-
-.. code-block:: python
-
-    This is warn message
-
-To avoid confused level setting, we recommend leave logger's level 'NOTSET' and use
-handler's level domain independently.
-DO NOT USE
-.. code-block:: python
-  logger.setLevel(...)
-
-In caproto, you almost never want to addFilter to logger even you could. Because
-there are always multiple(at least one by set_handler) handlers added to logger.
-Logger level flow control will influence all handlers. If there is only one handler,
-everything you want to be filtered on logger level could be filtered on handler level.
-In conclusion, handler level filter is recommended.
 
 .. _logger_api:
 
@@ -208,6 +162,12 @@ Here is the complete list of loggers used by caproto.
 * ``'caproto.ctx'`` -- logs updates from Contexts, such (on the client side)
   how many search requests are still awaiting replies and (on the server side)
   the number of connected clients and performance metrics when under load
+
+Certain objects in the caproto API, including Context, VirtualCircuits,
+Broadcasters, and PVs, have a ``log`` attribute, referencing a
+:py:class:`logging.Logger` or a :py:class:`logging.LoggerAdapter`` that
+encapsulates one of the loggers above with some context-specific information,
+enumerated below.
 
 Extra Context in LogRecords
 ---------------------------
@@ -255,7 +215,10 @@ Formatter
 Global Handler
 ---------------
 
-The convenience function :func:`set_handler` may be used to log messages at a
+By default, following Python's recommendation, caproto does not install any
+handlers, but it provides a function to install a suitable handler in one line.
+
+The convenience function :func:`set_handler` may be used to write records at a
 specific level of verbosity to the terminal (standard out) or a file. It is
 designed to streamline common use cases without interfering with more
 sophisticated use cases.
@@ -263,8 +226,8 @@ sophisticated use cases.
 .. autofunction:: set_handler
 .. autofunction:: get_handler
 
-Primer in Python Logging
-========================
+Python Logging Illustration
+===========================
 
 The flow of log event information in loggers and handlers is illustrated in the following diagram:
 
@@ -273,13 +236,18 @@ The flow of log event information in loggers and handlers is illustrated in the 
 For further reference, see the Python 3 logging howto:
 https://docs.python.org/3/howto/logging.html#logging-flow
 
-Advanced Examples
-=================
+As an illustrative example, we will outline how a specific logging call from
+inside caproto works it way through this system.
 
-The logging framework is not only limited to printing to the console, of course.
-For example, using `Logstash <https://www.elastic.co/products/logstash>`_ is
-also straightforward.  To send log messages to `<host>:<port>`, one might use
-the following:
+Suppose we set up a handler aimed at a file:
+
+.. code-block:: python
+
+    file_handler = logging.FileHandler('caproto.log')
+    file_handler.setLevel('DEBUG')
+    logger.addHandler(file_filter)
+
+And another aimed at `Logstash <https://www.elastic.co/products/logstash>`_:
 
 .. code-block:: python
 
@@ -287,10 +255,4 @@ the following:
     logstash_handler = logstash.TCPLogstashHandler(<host>, <port>, version=1)
     logger.addHandler(logstash_handler)
 
-To redirect logging output to a file, in this case `caproto.log`:
-
-.. code-block:: python
-
-    file_handler = logging.FileHandler('caproto.log')
-    file_handler.setLevel('DEBUG')
-    logger.addHandler(file_filter)
+TODO: Discuss ``logging.disable``, ``getEffectiveLevel``, etc.
