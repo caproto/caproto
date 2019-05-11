@@ -5,21 +5,19 @@
 Loggers
 *******
 
-Caproto uses Python's built-in logging framework. The commandline interface,
-including both the clients (e.g. ``caproto-get``) and the server modules
-(``python3 -m caproto.ioc_examples.*``), accept ``-v`` and ``-vvv`` to control
-log verbosity. In Python, any logger instance can accessed via its name as 
-``logging.getLogger(logger_name)``. See the complete list off logger names used
-by caproto, below. Because recalling the name is not always convenient, certain
-objects in caproto's Python API expose a ``log`` attribute, such as ``pv.log``,
-``pv.context.log`` and ``pv.circuit_manager.log``.
+.. versionchanged:: 0.4.0
 
-The flow of log event information in loggers and handlers is illustrated in the following diagram:
+   Caproto's use of Python logging framework has been completely reworked to
+   follow Python's own guidelines for best practices.
 
-.. image:: https://docs.python.org/3/_images/logging_flow.png
-For further reference, see the Python 3 logging howto:
-https://docs.python.org/3/howto/logging.html#logging-flow
+Caproto uses Python's logging framework, following Python's own guidelines for
+best practices. Users with a sophisticated knowledge of that framework may wish
+to skip ahead to :ref:`logger_api`. Other users, perhaps unfamiliar or
+uninterested in the many-layered Python logging framework, may find that the
+copy-pasteable examples in :ref:`logging_snippets` just below address their
+immediate needs.
 
+.. _logging_snippets:
 
 Useful snippets
 ===============
@@ -180,8 +178,13 @@ Logger level flow control will influence all handlers. If there is only one hand
 everything you want to be filtered on logger level could be filtered on handler level.
 In conclusion, handler level filter is recommended.
 
-Logger names
-============
+.. _logger_api:
+
+Caproto's Logging-Related API
+=============================
+
+Loggers
+-------
 
 Here is the complete list of loggers used by caproto.
 
@@ -189,36 +192,51 @@ Here is the complete list of loggers used by caproto.
 * ``'caproto.ch'`` --- INFO-logs changes to channel connection state on all
   channels; DEBUG-logs read/write requests and read/write/event responses for
   the threading client (other async clients TODO)
-* ``'caproto.ch.<name>'`` --- narrows to channel(s) with a given PV name, as in
-  ``'caproto.ch.random_walk:x'``
-* ``'caproto.ch.<name>.<priority>'`` --- narrows one channel with a given PV
-  name and priority, as in ``'caproto.ch.random_walk:x.0'``
 * ``'caproto.circ'`` --- DEBUG-logs commands sent and received over TCP
-* ``'caproto.circ.<addr>'`` -- narrows to circuits connected to the address
-  ``<addr>``, as in ``'caproto.circ.127.0.0.1:49384'``
-* ``'caproto.circ.<addr>.<priority>'`` -- specifies example one circuit with a
-  certain address and priority, as in ``'caproto.circ.127.0.0.1:49384.0'``
 * ``'caproto.bcast'`` --- logs command sent and received over UDP
+* ``'caproto.bcast.search'`` --- logs seach-related commands
 * ``'caproto.ctx'`` -- logs updates from Contexts, such (on the client side)
   how many search requests are still awaiting replies and (on the server side)
   the number of connected clients and performance metrics when under load
-* ``'caproto.ctx.<id>'`` -- narrows to one specific Context instance ``ctx``
-  where ``<id>`` ``str(id(ctx))``
 
-Logging Handlers
-================
+Extra Context in LogRecords
+---------------------------
 
-By default, caproto prints log messages to the standard out by adding a
-:class:`logging.StreamHandler` to the ``'caproto'`` logger at import time. You
-can, of course, configure the handlers manually in the standard fashion
-supported by Python. But a convenience function :func:`caproto.set_handler`,
-makes it easy to address to common cases.
+The records issued by caproto's loggers may have some or all of the following
+attributes, as applicable:
 
-See the Examples section below.
+* ``pv`` --- PV name
+* ``our_address`` --- local interface, given as ``(host, port)``
+* ``their_address`` --- address of peer, given as ``(host, port)``
+* ``direction`` --- indicating whether the message is being sent or received
+* ``role`` --- ``'CLIENT'`` or ``'SERVER'``
 
-API
-===
-.. autofunction:: caproto.set_handler
+Filters
+-------
+
 .. autoclass:: PVFilter
 .. autoclass:: AddressFilter
 .. autoclass:: RoleFilter
+
+Formatter
+---------
+
+.. autoclass:: LogFormatter
+
+Global Handler
+---------------
+
+The convenience function :func:`set_handler` may be used to log messages at a
+specific level of verbosity to the terminal (standard out) or a file.
+
+.. autofunction:: set_handler
+
+Primer in Python Logging
+========================
+
+The flow of log event information in loggers and handlers is illustrated in the following diagram:
+
+.. image:: https://docs.python.org/3/_images/logging_flow.png
+
+For further reference, see the Python 3 logging howto:
+https://docs.python.org/3/howto/logging.html#logging-flow
