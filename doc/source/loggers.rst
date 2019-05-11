@@ -22,6 +22,13 @@ immediate needs.
 Useful snippets
 ===============
 
+Command-line tools
+-------------------
+
+Caproto's commandline tools, including both the clients (e.g.  ``caproto-get``)
+and the server modules (``python3 -m caproto.ioc_examples.*``), accept ``-v``
+and ``-vvv`` to control log verbosity.
+
 To get the caproto logger using Python's built-in logging framework:
 
 .. code-block:: python
