@@ -1457,8 +1457,7 @@ class VirtualCircuitManager:
         # Ensure that this method is idempotent.
         if self.dead.is_set():
             return
-        tags = {'their_address': self.circuit.address,
-                'our_address': self.sock.getsockname()[:2]}
+        tags = {'their_address': self.circuit.address}
         self.log.debug('Virtual circuit with address %s:%d has disconnected.',
                        *self.circuit.address, extra=tags)
         # Update circuit state. This will be reflected on all PVs, which
@@ -1499,8 +1498,7 @@ class VirtualCircuitManager:
 
             sock.close()
 
-        tags = {'their_address': self.circuit.address,
-                'our_address': self.sock.getsockname()[:2]}
+        tags = {'their_address': self.circuit.address}
         if reconnect:
             # Kick off attempt to reconnect all PVs via fresh circuit(s).
             self.log.debug('Kicking off reconnection attempts for %d PVs '
