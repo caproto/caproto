@@ -152,7 +152,7 @@ def color_logs(color):
 logger = logging.getLogger('caproto')
 ch_logger = logging.getLogger('caproto.ch')
 search_logger = logging.getLogger('caproto.bcast.search')
-current_handler = None  # overwritten below
+current_handler = None
 
 
 class LoggerNameFilter(logging.Filter):
@@ -384,8 +384,7 @@ def set_handler(file=sys.stdout, datefmt='%H:%M:%S', color=True, level='WARNING'
 
 
 def get_handler():
+    """
+    Return the handler configured by the most recent call to :func:`set_handler`.
+    """
     return current_handler
-
-
-# Add a handler with the default parameters at import time.
-current_handler = set_handler()
