@@ -10,10 +10,11 @@ Logging
    Caproto's use of Python logging framework has been completely reworked to
    follow Python's own guidelines for best practices.
 
-Caproto uses Python's logging framework, following Python's own guidelines for
-best practices. Users with a sophisticated knowledge of that framework may wish
-to skip ahead to :ref:`logger_api`. Convenience functions are provided to
-streamline simple cases.
+Caproto uses Python's logging framework, which enables sophisiticated log
+management. Users who are familiar with that framework or who need to route
+logs to multiple destinations may wish to skip ahead to :ref:`logger_api`. But
+for common simple cases, including viewing logs in the terminal or writing them
+to a file, the next section illustrates streamlined, copy/paste-able examples.
 
 Command-line tools
 ==================
@@ -32,7 +33,7 @@ configuration can be achieved using the standard Python logging interafce.
 Log warnings
 ------------
 
-This is the recommended standard setup.
+This is the recommended standard setup for interactive use.
 
 .. code-block:: python
 
