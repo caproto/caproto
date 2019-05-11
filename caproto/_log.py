@@ -15,7 +15,8 @@ except ImportError:
     curses = None
 from ._utils import CaprotoValueError
 
-__all__ = ('color_logs', 'set_handler', 'PVFilter', 'AddressFilter', 'RoleFilter')
+__all__ = ('color_logs', 'set_handler', 'get_handler',
+           'PVFilter', 'AddressFilter', 'RoleFilter', 'LogFormatter')
 
 
 def _stderr_supports_color():
@@ -37,22 +38,16 @@ def _stderr_supports_color():
 
 
 class LogFormatter(logging.Formatter):
-    """Log formatter used in Tornado, modified for Python3-only caproto.
+    """Log formatter for caproto records.
+
+    Adapted from the log formatter used in Tornado.
     Key features of this formatter are:
+
     * Color support when logging to a terminal that supports it.
     * Timestamps on every log line.
-    * Robust against str/bytes encoding problems.
-    This formatter is enabled automatically by
-    `tornado.options.parse_command_line` or `tornado.options.parse_config_file`
-    (unless ``--logging=none`` is used).
-    Color support on Windows versions that do not support ANSI color codes is
-    enabled by use of the colorama__ library. Applications that wish to use
-    this must first initialize colorama with a call to ``colorama.init``.
-    See the colorama documentation for details.
-    __ https://pypi.python.org/pypi/colorama
-    .. versionchanged:: 4.5
-       Added support for ``colorama``. Changed the constructor
-       signature to be compatible with `logging.config.dictConfig`.
+    * Includes extra record attributes (pv, our_address, their_address,
+      direction, role) when present.
+
     """
     DEFAULT_FORMAT = \
         '%(color)s[%(levelname)1.1s %(asctime)s %(module)s:%(lineno)d]%(end_color)s %(message)s'
