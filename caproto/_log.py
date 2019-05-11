@@ -383,7 +383,7 @@ def set_handler(file=sys.stdout, datefmt='%H:%M:%S', color=True, level='WARNING'
         logger.removeHandler(current_handler)
     logger.addHandler(handler)
     current_handler = handler
-    if logger.getEffectiveLevel() < levelno:
+    if logger.getEffectiveLevel() > levelno:
         logger.setLevel(levelno)
     return handler
 
