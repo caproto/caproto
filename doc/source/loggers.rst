@@ -12,111 +12,114 @@ Loggers
 
 Caproto uses Python's logging framework, following Python's own guidelines for
 best practices. Users with a sophisticated knowledge of that framework may wish
-to skip ahead to :ref:`logger_api`. Other users, perhaps unfamiliar or
-uninterested in the many-layered Python logging framework, may find that the
-copy-pasteable examples in :ref:`logging_snippets` just below address their
-immediate needs.
-
-.. _logging_snippets:
-
-Useful snippets
-===============
+to skip ahead to :ref:`logger_api`.
 
 Command-line tools
--------------------
+==================
 
 Caproto's commandline tools, including both the clients (e.g.  ``caproto-get``)
 and the server modules (``python3 -m caproto.ioc_examples.*``), accept ``-v``
 and ``-vvv`` to control log verbosity.
 
-To get the caproto logger using Python's built-in logging framework:
+Basic Examples
+==============
+
+In scripts or interactive sessions, the convenience function
+:func:`set_handler` can address common use cases succinctly. An equivalent
+configuration can be achieved using the standard Python logging interafce.
+
+Log warnings
+------------
+
+This is the recommended standard setup.
 
 .. code-block:: python
 
-   import logging
-   logger = logging.getLogger('caproto')
+   from caproto import set_handler
+   set_handler()
 
-To add a stdout handler (i.e., one that prints messages to the standard output in your terminal) with level `DEBUG`:
+It will display log records of ``WARNING`` level or higher in the terminal
+(standard out) with a formatting tailored to caproto.
+
+Maximum verbosity
+-----------------
+
+This will display all Channel Access commands sent or received, comprising a
+complete account of the Channel Access traffic handled by caproto.
 
 .. code-block:: python
 
-    std_handler = logging.StreamHandler()
-    logger.addHandler(std_handler)
-    std_handler.setLevel('DEBUG')
+   from caproto import set_handler
+   set_handler(level='DEBUG')
 
-caproto offers a number of convenient methods for configuring logging.  The following
-would replace the above code with only one line:
-code above by one commmand:
+Log to a file
+-------------
+
+This will direct all log messages to a file, instaed to the terminal (standard
+out).
 
 .. code-block:: python
 
     from caproto import set_handler
-    set_handler(level='DEBUG')
+    set_handler(file='/tmp/caproto.log', level='DEBUG')
 
-With this handler, you would see messages like the following:
+Filter by PV, Address, or Role
+------------------------------
 
-.. code-block:: guess
-
-    [D 15:19:14.132          client:  588] [CLIENT] Broadcaster command loop is running.
-    [D 15:19:14.133          client:  719] [CLIENT] Broadcaster check for unresponsive servers loop is running.
-    [D 15:19:14.134          client:  454] [CLIENT] [0.0.0.0:0] --->>> [127.0.0.1:5065] Sending 16 bytes to 127.0.0.1:5065
-    [D 15:19:14.135          client:  454] [CLIENT] [0.0.0.0:0] --->>> [10.2.255.255:5065] Sending 16 bytes to 10.2.255.255:5065
-    [D 15:19:14.136          client:  832] [CLIENT] Broadcaster search-retry thread has started.
-    [D 15:19:14.136          client: 1079] [CLIENT] Context search-results processing loop has started.
-    [D 15:19:14.137          client:  872] [CLIENT] Sending 6 SearchRequests
-
-The logging framework is not only limited to printing to the console, of course.
-For example, using Logstash - an open source tool for collecting, parsing, and
-storing logs to a centralized database for future use - is also straightforward.
-To send log messages to `<host>:<port>`, one might use the following:
+To debug a particular issue, it is often convenient to focus on log records
+related to a specific PV, address, or role (CLIENT or SERVER). To add filters,
+you will need a reference to a handler. Typically, you will want to set the
+handler to ``'DEBUG'`` or ``'INFO'``. Capture its return value in a variable.
 
 .. code-block:: python
 
-    import logstash
-    logstash_handler = logstash.TCPLogstashHandler(<host>, <port>, version=1)
-    logger.addHandler(logstash_handler)
+   handler = set_handler(level='INFO')
 
-To redirect logging output to a file, in this case `caproto.log`:
-
-.. code-block:: python
-
-    file_handler = logging.FileHandler('caproto.log')
-    file_handler.setLevel('DEBUG')
-    logger.addHandler(file_filter)
-
-Filters
-=======
-
-Filters are where caproto's logging framework shines.
-You could import thoese filters from caproto
+You can later access the current caproto global handler at any point by using
+:func:`get_handler`.
 
 .. code-block:: python
 
-    from caproto import PVFilter, AddressFilter, RoleFilter
+   from caproto import get_handler
+   handler = get_handler()
 
-Several easy-to-use filters allow users to very specifically customize logging, based on one or more of the following:
+Several easy-to-use filters allow users to very specifically customize logging,
+based on one or more of the following:
 
-1. `PV` names: using `PVFilter`, only PVs that match wildcard-style strings will be shown
+#. Show only records related to specific PVs---or partial PVs with a ``*``
+   wildcard.
 
-.. code-block:: python
+   .. code-block:: python
 
-    std_handler.addFilter(PVFilter(['complex:*', 'simple:B'])
+       from caproto import PVFilter
 
-2. Addresses: using `AddressFilter`, only PVs on specific IP addresses (and optionally ports) will be displayed
+       handler.addFilter(PVFilter(['random_walk:*', 'simple:B'])
 
-.. code-block:: python
+#. Show only records related to specific hosts or addresses.
 
-    std_handler.addFilter(AddressFilter(['10.2.227.105']))
+   .. code-block:: python
 
-3. Client/server roles: caproto provides both clients and servers - limit messages to one or the other.
+      from caproto import AddressFilter
 
-.. code-block:: python
+      # Multiple ways to specify:
+      handler.addFilter(AddressFilter(['10.2.227.105']))  # host (all ports)
+      handler.addFilter(AddressFilter(['10.2.227.105:59384']))  # host:port
+      handler.addFilter(AddressFilter(('10.2.227.105', 59384))  # equivalent
 
-    std_handler.addFilter(RoleFilter('Client'))
+#. In special situations (usually testing) one process may be acting as client
+   and server, and it may be useful to filter by role (``'CLIENT'`` or
+   ``'SERVER'``).
 
-For example, ``PVFilter(['complex:*', 'simple:B'], level='DEBUG', exclusive=False)`` meaning
-You want to block any message below ``DEBUG`` level except it related ``complex:*`` or ``simple:B``, and
-keep the env, config or misc message by ``exclusive=False``. Check API section of this page for more details
+   .. code-block:: python
+
+       from caproto import RoleFilter
+
+       handler.addFilter(RoleFilter('CLIENT'))
+
+Note that if multiple filters are added to the same handler, they are composed
+using "logical AND" by Python's logging framework. See the section on
+:ref:`logging_filters` below for more information or composing filters or
+writing complex filters.
 
 See :ref:`threading_loggers` for more handy examples.
 
@@ -218,8 +221,27 @@ attributes, as applicable:
 * ``direction`` --- indicating whether the message is being sent or received
 * ``role`` --- ``'CLIENT'`` or ``'SERVER'``
 
+.. _logging_filters:
+
 Filters
 -------
+
+Python's logging framework supports using simple functions as filters, as in:
+
+.. code-block:: python
+
+   def my_filter(record):
+       if hasattr(record, 'pv'):
+           return record.pv == 'simple:A'
+       return False
+
+   handler.add_filter(my_filter)
+
+An *ad hoc* function such as the above is the best approach for complex
+filtering. But for simple filtering by PV, address, or role, caproto provides
+built-in filters. Note the functionality of the ``level`` and ``exclusive``
+arguments, explained the docstrings below, which aim to support composition of
+multiple filters.:
 
 .. autoclass:: PVFilter
 .. autoclass:: AddressFilter
@@ -234,9 +256,12 @@ Global Handler
 ---------------
 
 The convenience function :func:`set_handler` may be used to log messages at a
-specific level of verbosity to the terminal (standard out) or a file.
+specific level of verbosity to the terminal (standard out) or a file. It is
+designed to streamline common use cases without interfering with more
+sophisticated use cases.
 
 .. autofunction:: set_handler
+.. autofunction:: get_handler
 
 Primer in Python Logging
 ========================
@@ -247,3 +272,25 @@ The flow of log event information in loggers and handlers is illustrated in the 
 
 For further reference, see the Python 3 logging howto:
 https://docs.python.org/3/howto/logging.html#logging-flow
+
+Advanced Examples
+=================
+
+The logging framework is not only limited to printing to the console, of course.
+For example, using `Logstash <https://www.elastic.co/products/logstash>`_ is
+also straightforward.  To send log messages to `<host>:<port>`, one might use
+the following:
+
+.. code-block:: python
+
+    import logstash  # requires python-logstash package
+    logstash_handler = logstash.TCPLogstashHandler(<host>, <port>, version=1)
+    logger.addHandler(logstash_handler)
+
+To redirect logging output to a file, in this case `caproto.log`:
+
+.. code-block:: python
+
+    file_handler = logging.FileHandler('caproto.log')
+    file_handler.setLevel('DEBUG')
+    logger.addHandler(file_filter)
