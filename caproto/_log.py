@@ -201,7 +201,7 @@ class PVFilter(logging.Filter):
 
     Returns
     -------
-    Bool: True or False
+    passes : bool
     '''
     def __init__(self, names, level='NOTSET', exclusive=False):
         self.names = names
@@ -239,7 +239,7 @@ class AddressFilter(logging.Filter):
 
     Returns
     -------
-    Bool: True or False
+    passes : bool
     '''
 
     def __init__(self, addresses_list, level='NOTSET', exclusive=False):
@@ -296,13 +296,9 @@ class RoleFilter(logging.Filter):
     exclusive : bool
         whether env, config and misc message will be exclusive or not
 
-    Parameters
-    ----------
-    record: python logging record
-
     Returns
     -------
-    Bool: True or False
+    passes: bool
     '''
     def __init__(self, role, level='NOTSET', exclusive=False):
         self.role = role
