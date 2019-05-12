@@ -318,9 +318,8 @@ def set_handler(file=sys.stdout, datefmt='%H:%M:%S', color=True, level='WARNING'
     """
     Set a new handler on the ``logging.getLogger('caproto')`` logger.
 
-    This function is run at import time with default paramters. If it is run
-    again by the user, the handler from the previous invocation is removed (if
-    still present) and replaced.
+    If this is called more than once, the handler from the previous invocation
+    is removed (if still present) and replaced.
 
     Parameters
     ----------
@@ -382,5 +381,7 @@ def set_handler(file=sys.stdout, datefmt='%H:%M:%S', color=True, level='WARNING'
 def get_handler():
     """
     Return the handler configured by the most recent call to :func:`set_handler`.
+
+    If :func:`set_handler` has not yet been called, this returns ``None``.
     """
     return current_handler

@@ -8,7 +8,7 @@ Logging
 .. versionchanged:: 0.4.0
 
    Caproto's use of Python logging framework has been completely reworked to
-   follow Python's own guidelines for best practices.
+   follow Python's documented best practices for libraries.
 
 Caproto uses Python's logging framework, which enables sophisiticated log
 management. Users who are familiar with that framework or who need to route
@@ -166,7 +166,7 @@ Here is the complete list of loggers used by caproto.
 
 Certain objects in the caproto API, including Context, VirtualCircuits,
 Broadcasters, and PVs, have a ``log`` attribute, referencing a
-:py:class:`logging.Logger` or a :py:class:`logging.LoggerAdapter`` that
+:py:class:`logging.Logger` or a :py:class:`logging.LoggerAdapter` that
 encapsulates one of the loggers above with some context-specific information,
 enumerated below.
 
@@ -217,12 +217,12 @@ Global Handler
 ---------------
 
 By default, following Python's recommendation, caproto does not install any
-handlers, but it provides a function to install a suitable handler in one line.
-
-The convenience function :func:`set_handler` may be used to write records at a
-specific level of verbosity to the terminal (standard out) or a file. It is
-designed to streamline common use cases without interfering with more
-sophisticated use cases.
+handlers by default, but it provides a function to set up a basic useful
+configuration in one line, similar to Python's
+:py:class:`logging.basicConfig` but with some additional options---and scoped
+to the ``'caproto'`` logger with caproto's :class:`LogFormatter`. It
+streamlines common use cases without interfering with more sophisticated use
+cases.
 
 .. autofunction:: set_handler
 .. autofunction:: get_handler
