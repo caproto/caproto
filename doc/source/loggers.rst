@@ -104,7 +104,7 @@ based on one or more of the following:
 
        from caproto import PVFilter
 
-       handler.addFilter(PVFilter(['random_walk:*', 'simple:B'])
+       handler.addFilter(PVFilter('random_walk:*', 'simple:B')
 
 #. Show only records related to specific hosts or addresses.
 
@@ -113,8 +113,8 @@ based on one or more of the following:
       from caproto import AddressFilter
 
       # Multiple ways to specify:
-      handler.addFilter(AddressFilter(['10.2.227.105']))  # host (all ports)
-      handler.addFilter(AddressFilter(['10.2.227.105:59384']))  # host:port
+      handler.addFilter(AddressFilter('10.2.227.105'))  # host (all ports)
+      handler.addFilter(AddressFilter('10.2.227.105:59384'))  # host:port
       handler.addFilter(AddressFilter(('10.2.227.105', 59384))  # equivalent
 
 #. In special situations (usually testing) one process may be acting as client
