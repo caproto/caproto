@@ -220,8 +220,8 @@ class PVFilter(logging.Filter):
         if record.levelno >= self.levelno:
             return True
         elif hasattr(record, 'pv'):
-            for i in self.names:
-                if fnmatch.fnmatch(record.pv, i):
+            for name in self.names:
+                if fnmatch.fnmatch(record.pv, name):
                     return True
             return False
         else:
