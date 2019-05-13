@@ -102,7 +102,7 @@ class VirtualCircuit:
         # instantiation, so we need a setter.
         self._priority = priority
         # The logger_name includes the priority so we have to set it.
-        self.log = logging.getLogger(f'caproto.circ')
+        self.log = logging.getLogger('caproto.circ')
 
     @property
     def host(self):
@@ -470,7 +470,7 @@ class _BaseChannel:
     # methods for composing requests and repsponses, respectively. All of the
     # important code is here in the base class.
     def __init__(self, name, circuit, cid=None, string_encoding=STRING_ENCODING):
-        self.log = logging.LoggerAdapter(logging.getLogger(f'caproto.ch'), {'pv': name})
+        self.log = logging.LoggerAdapter(logging.getLogger('caproto.ch'), {'pv': name})
         self.protocol_version = circuit.protocol_version
         self.name = name
         self.string_encoding = string_encoding

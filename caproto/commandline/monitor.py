@@ -121,7 +121,7 @@ def main():
         set_handler(color=False)
     if args.verbose:
         logging.getLogger('caproto.ch').setLevel('DEBUG')
-        logging.getLogger(f'caproto.ctx').setLevel('DEBUG')
+        logging.getLogger('caproto.ctx').setLevel('DEBUG')
         if args.verbose > 2:
             logging.getLogger('caproto').setLevel('DEBUG')
 

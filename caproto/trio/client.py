@@ -482,7 +482,7 @@ class Context:
         if broadcaster is None:
             broadcaster = SharedBroadcaster(nursery=nursery)
         self.broadcaster = broadcaster
-        self.log = logging.getLogger(f'caproto.ctx.{id(self)}')
+        self.log = logging.getLogger('caproto.ctx')
 
     async def get_circuit(self, address, priority):
         """
