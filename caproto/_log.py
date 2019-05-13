@@ -205,7 +205,7 @@ class PVFilter(logging.Filter):
     -------
     passes : bool
     '''
-    def __init__(self, *names, level='NOTSET', exclusive=False):
+    def __init__(self, *names, level='WARNING', exclusive=False):
         self.names = names
         self.levelno = validate_level(level)
         self.exclusive = exclusive
@@ -244,7 +244,7 @@ class AddressFilter(logging.Filter):
     passes : bool
     '''
 
-    def __init__(self, *addresses_list, level='NOTSET', exclusive=False):
+    def __init__(self, *addresses_list, level='WARNING', exclusive=False):
         self.addresses_list = []
         self.hosts_list = []
         for address in addresses_list:
@@ -302,7 +302,7 @@ class RoleFilter(logging.Filter):
     -------
     passes: bool
     '''
-    def __init__(self, role, level='NOTSET', exclusive=False):
+    def __init__(self, role, level='WARNING', exclusive=False):
         self.role = role
         self.levelno = validate_level(level)
         self.exclusive = exclusive
