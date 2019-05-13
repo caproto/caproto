@@ -157,18 +157,6 @@ search_logger = logging.getLogger('caproto.bcast.search')
 current_handler = None
 
 
-class LoggerNameFilter(logging.Filter):
-    def __init__(self, logger_names, level='NOSET'):
-        self.logger_names = logger_names
-        self.levelno = validate_level(level)
-
-    def filter(self, record):
-        for i in self.logger_names:
-            if fnmatch.fnmatch(record.name, i) and record.levelno >= self.levelno:
-                return True
-        return False
-
-
 def validate_level(level) -> int:
     '''
     Return a int for level comparison
