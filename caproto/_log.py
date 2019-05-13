@@ -16,7 +16,8 @@ except ImportError:
 from ._utils import CaprotoValueError
 
 __all__ = ('color_logs', 'config_caproto_logging', 'get_handler',
-           'PVFilter', 'AddressFilter', 'RoleFilter', 'LogFormatter')
+           'PVFilter', 'AddressFilter', 'RoleFilter', 'LogFormatter',
+           'set_handler')
 
 
 def _stderr_supports_color():
