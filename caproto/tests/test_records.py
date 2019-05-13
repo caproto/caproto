@@ -2,7 +2,7 @@ import pytest
 from .conftest import run_example_ioc
 from caproto.threading.pyepics_compat import get_pv
 from caproto.sync.client import read, write
-from caproto import AlarmSeverity, AlarmStatus
+from caproto import AlarmSeverity, AlarmStatus, ChannelType
 from .test_threading_client import (
     context as _context,
     shared_broadcaster as _sb)
@@ -22,7 +22,7 @@ field_map = {
 }
 
 
-def test_limit_fields(request, prefix, context):
+def test_limit_fields_and_description(request, prefix, context):
     pv = f'{prefix}C'
     run_example_ioc('caproto.ioc_examples.mocking_records',
                     request=request,
@@ -41,6 +41,13 @@ def test_limit_fields(request, prefix, context):
         work_pv = f'{pv}.{v}'
         write(work_pv, 2 * read(work_pv).data)
     check_fields()
+
+    def string_read(pv):
+        return b''.join(read(pv, data_type=ChannelType.STRING).data)
+
+    assert string_read(f'{pv}.DESC') == b'The C pvproperty'
+    write(f'{pv}.DESC', 'a new description', notify=True)
+    assert string_read(f'{pv}.DESC') == b'a new description'
 
 
 @pytest.mark.parametrize('sevr_target', ['LLSV', 'LSV', 'HSV', 'HHSV'])

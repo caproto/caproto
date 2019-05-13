@@ -18,7 +18,8 @@ class RecordMockingIOC(PVGroup):
                    upper_ctrl_limit=3.0,
                    lower_ctrl_limit=-3.0,
                    units="mm",
-                   precision=3)
+                   precision=3,
+                   doc='The C pvproperty')
 
     @B.putter
     async def B(self, instance, value):

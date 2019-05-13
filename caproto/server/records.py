@@ -208,6 +208,8 @@ class RecordFieldGroup(PVGroup):
     async def process_record(self, instance, value):
         await self.parent.write(self.parent.value)
 
+    _link_parent_attribute(description, '__doc__', use_setattr=True)
+
 
 class _Limits(PVGroup):
     high_alarm_limit = pvproperty(
