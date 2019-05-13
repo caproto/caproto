@@ -379,6 +379,9 @@ def config_caproto_logging(file=sys.stdout, datefmt='%H:%M:%S', color=True, leve
     return handler
 
 
+set_handler = config_caproto_logging  # for back-compat
+
+
 def get_handler():
     """
     Return the handler configured by the most recent call to :func:`config_caproto_logging`.
