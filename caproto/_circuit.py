@@ -102,10 +102,7 @@ class VirtualCircuit:
         # instantiation, so we need a setter.
         self._priority = priority
         # The logger_name includes the priority so we have to set it.
-        logger_name = (f"caproto.circ."
-                       f"{self.address[0]}:{self.address[1]}."
-                       f"{priority}")
-        self.log = logging.getLogger(logger_name)
+        self.log = logging.getLogger(f'caproto.circ')
 
     @property
     def host(self):
