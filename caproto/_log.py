@@ -103,7 +103,7 @@ class LogFormatter(logging.Formatter):
             self._normal = ''
 
     def format(self, record):
-        message = [record.getMessage()]
+        message = []
         if hasattr(record, 'their_address'):
             message.append('[%s]' % ':'.join(map(str, record.their_address)))
         if hasattr(record, 'direction'):
@@ -114,6 +114,7 @@ class LogFormatter(logging.Formatter):
             message.append('[%s]' % record.pv)
         if hasattr(record, 'role'):
             message.append('[%s]' % record.role)
+        message.append(record.getMessage())
         record.message = ' '.join(message)
         record.asctime = self.formatTime(record, self.datefmt)
 
