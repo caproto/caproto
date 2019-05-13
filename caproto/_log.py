@@ -375,6 +375,8 @@ def config_caproto_logging(file=sys.stdout, datefmt='%H:%M:%S', color=True, leve
         logger.removeHandler(current_handler)
     logger.addHandler(handler)
     current_handler = handler
+    if logger.getEffectiveLevel() > levelno:
+        logger.setLevel(levelno)
     return handler
 
 
