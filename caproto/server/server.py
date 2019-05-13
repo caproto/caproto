@@ -24,6 +24,7 @@ from .. import (ChannelDouble, ChannelShort, ChannelInteger, ChannelString,
                 CaprotoValueError, CaprotoTypeError, CaprotoAttributeError,
                 __version__)
 from .._backend import backend
+from caproto._log import set_handler
 
 
 module_logger = logging.getLogger(__name__)
@@ -1342,15 +1343,9 @@ def template_arg_parser(*, desc, default_prefix, argv=None, macros=None,
             kwargs to be handed to run
         """
         if args.verbose:
-            if args.verbose > 1:
-                logging.getLogger('caproto').setLevel('DEBUG')
-            else:
-                logging.getLogger('caproto.ctx').setLevel('DEBUG')
-                logging.getLogger('caproto.circ').setLevel('INFO')
-        elif args.quiet:
-            logging.getLogger('caproto').setLevel('WARNING')
+            set_handler(level='DEBUG')
         else:
-            logging.getLogger('caproto.ctx').setLevel('INFO')
+            set_handler(level='WARNING')
 
         return ({'prefix': args.prefix,
                  'macros': {key: getattr(args, key) for key in macros}},

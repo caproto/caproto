@@ -150,6 +150,7 @@ def color_logs(color):
 
 
 logger = logging.getLogger('caproto')
+logger.setLevel('DEBUG')
 ch_logger = logging.getLogger('caproto.ch')
 search_logger = logging.getLogger('caproto.bcast.search')
 current_handler = None
@@ -374,8 +375,6 @@ def set_handler(file=sys.stdout, datefmt='%H:%M:%S', color=True, level='WARNING'
         logger.removeHandler(current_handler)
     logger.addHandler(handler)
     current_handler = handler
-    if logger.getEffectiveLevel() > levelno:
-        logger.setLevel(levelno)
     return handler
 
 
