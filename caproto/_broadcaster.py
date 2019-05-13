@@ -53,7 +53,7 @@ class Broadcaster:
             initial_value=random.randint(0, MAX_ID),
             dont_clash_with=self.unanswered_searches,
         )
-        self.log = logging.getLogger(f"caproto.bcast")
+        self.log = logging.getLogger("caproto.bcast")
         self.beacon_log = logging.getLogger('caproto.bcast.beacon')
 
     @property

@@ -583,7 +583,7 @@ class Context:
         self.udp_socks = {}  # map each interface to a UDP socket for searches
         self.beacon_socks = {}  # map each interface to a UDP socket for beacons
         self.pvdb = pvdb
-        self.log = logging.getLogger(f'caproto.ctx')
+        self.log = logging.getLogger('caproto.ctx')
 
         self.addresses = []
         self.circuits = set()

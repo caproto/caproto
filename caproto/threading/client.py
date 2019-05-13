@@ -340,8 +340,10 @@ class SharedBroadcaster:
 
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
         self.broadcaster.our_address = self.udp_sock.getsockname()[:2]
-        self.log = logging.LoggerAdapter(self.broadcaster.log, {'role': 'CLIENT'})
-        self.search_log = logging.LoggerAdapter(logging.getLogger(f'caproto.bcast.search'), {'role': 'CLIENT'})
+        self.log = logging.LoggerAdapter(
+            self.broadcaster.log, {'role': 'CLIENT'})
+        self.search_log = logging.LoggerAdapter(
+            logging.getLogger('caproto.bcast.search'), {'role': 'CLIENT'})
         self.command_bundle_queue = Queue()
         self.last_beacon = {}
         self.last_beacon_interval = {}
@@ -941,7 +943,8 @@ class Context:
             client_name = getpass.getuser()
         self.max_workers = max_workers
         self.client_name = client_name
-        self.log = logging.LoggerAdapter(logging.getLogger(f'caproto.ctx'), {'role': 'CLIENT'})
+        self.log = logging.LoggerAdapter(
+            logging.getLogger('caproto.ctx'), {'role': 'CLIENT'})
         self.pv_cache_lock = threading.RLock()
         self.circuit_managers = {}  # keyed on ((host, port), priority)
         self._lock_during_get_circuit_manager = threading.RLock()

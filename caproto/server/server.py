@@ -1187,7 +1187,7 @@ class PVGroup(metaclass=PVGroupMeta):
             base = self.__class__.__module__
 
         # Instantiate the logger
-        self.log = logging.getLogger(f'{base}.{log_name}')
+        self.log = logging.getLogger('{base}.{log_name}')
         self._create_pvdb()
 
         # Prime the snapshots to the current state.

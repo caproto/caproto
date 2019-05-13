@@ -16,7 +16,8 @@ except ImportError:
 from ._utils import CaprotoValueError
 
 __all__ = ('color_logs', 'config_caproto_logging', 'get_handler',
-           'PVFilter', 'AddressFilter', 'RoleFilter', 'LogFormatter')
+           'PVFilter', 'AddressFilter', 'RoleFilter', 'LogFormatter',
+           'set_handler')
 
 
 def _stderr_supports_color():
@@ -103,7 +104,7 @@ class LogFormatter(logging.Formatter):
             self._normal = ''
 
     def format(self, record):
-        message = [record.getMessage()]
+        message = []
         if hasattr(record, 'their_address'):
             message.append('[%s]' % ':'.join(map(str, record.their_address)))
         if hasattr(record, 'direction'):
@@ -114,6 +115,7 @@ class LogFormatter(logging.Formatter):
             message.append('[%s]' % record.pv)
         if hasattr(record, 'role'):
             message.append('[%s]' % record.role)
+        message.append(record.getMessage())
         record.message = ' '.join(message)
         record.asctime = self.formatTime(record, self.datefmt)
 
@@ -150,22 +152,9 @@ def color_logs(color):
 
 
 logger = logging.getLogger('caproto')
-logger.setLevel('DEBUG')
 ch_logger = logging.getLogger('caproto.ch')
 search_logger = logging.getLogger('caproto.bcast.search')
 current_handler = None
-
-
-class LoggerNameFilter(logging.Filter):
-    def __init__(self, logger_names, level='NOSET'):
-        self.logger_names = logger_names
-        self.levelno = validate_level(level)
-
-    def filter(self, record):
-        for i in self.logger_names:
-            if fnmatch.fnmatch(record.name, i) and record.levelno >= self.levelno:
-                return True
-        return False
 
 
 def validate_level(level) -> int:
@@ -195,11 +184,16 @@ class PVFilter(logging.Filter):
     names : string or list of string
         PVs list which will be filtered in.
 
-    level : str
-        python logging level
+    level : str or int
+        Represents the "barrier height" of this filter: any records with a
+        levelno greater than or equal to this will always pass through. Default
+        is 'WARNING'. Python log level names or their corresponding integers
+        are accepted.
 
     exclusive : bool
-        whether env, config and misc message will be exclusive or not
+        If True, records for which this filter is "not applicable" (i.e. the
+        relevant extra context is not present) will be blocked. False by
+        default.
 
     Returns
     -------
@@ -214,8 +208,8 @@ class PVFilter(logging.Filter):
         if record.levelno >= self.levelno:
             return True
         elif hasattr(record, 'pv'):
-            for i in self.names:
-                if fnmatch.fnmatch(record.pv, i):
+            for name in self.names:
+                if fnmatch.fnmatch(record.pv, name):
                     return True
             return False
         else:
@@ -233,11 +227,16 @@ class AddressFilter(logging.Filter):
     addresses_list : list of address. address is a tuple of (host_str, port_val)
         Addresses list which will be filtered in.
 
-    level : str
-        python logging level
+    level : str or int
+        Represents the "barrier height" of this filter: any records with a
+        levelno greater than or equal to this will always pass through. Default
+        is 'WARNING'. Python log level names or their corresponding integers
+        are accepted.
 
     exclusive : bool
-        whether env, config and misc message will be exclusive or not
+        If True, records for which this filter is "not applicable" (i.e. the
+        relevant extra context is not present) will be blocked. False by
+        default.
 
     Returns
     -------
@@ -292,11 +291,16 @@ class RoleFilter(logging.Filter):
     role : 'CLIENT' or 'SERVER'
         Role of the local machine.
 
-    level : str
-        python logging level
+    level : str or int
+        Represents the "barrier height" of this filter: any records with a
+        levelno greater than or equal to this will always pass through. Default
+        is 'WARNING'. Python log level names or their corresponding integers
+        are accepted.
 
     exclusive : bool
-        whether env, config and misc message will be exclusive or not
+        If True, records for which this filter is "not applicable" (i.e. the
+        relevant extra context is not present) will be blocked. False by
+        default.
 
     Returns
     -------
@@ -331,7 +335,8 @@ def config_caproto_logging(file=sys.stdout, datefmt='%H:%M:%S', color=True, leve
         Date format. Default is ``'%H:%M:%S'``.
     color : boolean
         Use ANSI color codes. True by default.
-    level : String of python logging level
+    level : str or int
+        Python logging level, given as string or corresponding integer.
         Default is 'WARNING'.
 
     Returns
@@ -378,6 +383,9 @@ def config_caproto_logging(file=sys.stdout, datefmt='%H:%M:%S', color=True, leve
     if logger.getEffectiveLevel() > levelno:
         logger.setLevel(levelno)
     return handler
+
+
+set_handler = config_caproto_logging  # for back-compat
 
 
 def get_handler():

@@ -79,11 +79,11 @@ def main():
     if args.no_color:
         set_handler(color=False)
     if args.verbose:
-        logging.getLogger(f'caproto.ch').setLevel('DEBUG')
-        logging.getLogger(f'caproto.ctx').setLevel('DEBUG')
+        logging.getLogger('caproto.ch').setLevel('DEBUG')
+        logging.getLogger('caproto.ctx').setLevel('DEBUG')
         if args.verbose > 2:
             logging.getLogger('caproto').setLevel('DEBUG')
-    logger = logging.LoggerAdapter(logging.getLogger(f'caproto.ch'), {'pv': args.pv_name})
+    logger = logging.LoggerAdapter(logging.getLogger('caproto.ch'), {'pv': args.pv_name})
 
     if args.array:
         data = [ast.literal_eval(val) for val in args.data.split(' ')]
