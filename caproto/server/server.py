@@ -703,7 +703,7 @@ class SubGroup:
     _class_dict = None
 
     def __init__(self, group=None, *, prefix=None, macros=None,
-                 attr_separator=None, doc=None, base=None):
+                 attr_separator=None, doc=None, base=None, **init_kwargs):
         self.attr_name = None  # to be set later
 
         # group_dict is passed in -> generate class_dict -> generate group_cls
@@ -716,6 +716,7 @@ class SubGroup:
             self.attr_separator = attr_separator
         self.base = (PVGroup, ) if base is None else base
         self.__doc__ = doc
+        self.init_kwargs = dict(init_kwargs) if init_kwargs else {}
         # Set last with setter
         self.group = group
 
@@ -733,6 +734,20 @@ class SubGroup:
             assert inspect.isclass(group), 'Group should be dict or SubGroup'
             assert issubclass(group, PVGroup)
             self.group_cls = group
+            valid_init_kw = {
+                key
+                for cls in inspect.getmro(self.group_cls)
+                for key in inspect.signature(cls).parameters.keys()
+            }
+            invalid_kwargs = [kw
+                              for kw in self.init_kwargs
+                              if kw not in valid_init_kw
+                              ]
+            if invalid_kwargs:
+                raise RuntimeError(
+                    f'Invalid kwargs used for class {group.__name__}: '
+                    f'{invalid_kwargs}'
+                )
         else:
             self.group_dict = None
             self.group_cls = None
@@ -1251,7 +1266,8 @@ class PVGroup(metaclass=PVGroupMeta):
 
             # instantiate the subgroup
             inst = subgroup_cls(prefix=prefix, macros=macros, parent=self,
-                                name=f'{self.name}.{attr}')
+                                name=f'{self.name}.{attr}',
+                                **subgroup.init_kwargs)
             self.groups[attr] = inst
 
             # find all sub-subgroups, giving direct access to them
