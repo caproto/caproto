@@ -15,7 +15,7 @@ except ImportError:
     curses = None
 from ._utils import CaprotoValueError
 
-__all__ = ('color_logs', 'set_handler', 'get_handler',
+__all__ = ('color_logs', 'config_caproto_logging', 'get_handler',
            'PVFilter', 'AddressFilter', 'RoleFilter', 'LogFormatter')
 
 
@@ -145,8 +145,8 @@ def color_logs(color):
     If False, do the opposite.
     """
     warnings.warn(f"The function color_logs is deprecated. "
-                  f"Use `set_handler(color={color})` instead.")
-    set_handler(color=color)
+                  f"Use `config_caproto_logging(color={color})` instead.")
+    config_caproto_logging(color=color)
 
 
 logger = logging.getLogger('caproto')
@@ -343,20 +343,20 @@ def config_caproto_logging(file=sys.stdout, datefmt='%H:%M:%S', color=True, leve
     --------
     Log to a file.
 
-    >>> set_handler(file='/tmp/what_is_happening.txt')
+    >>> config_caproto_logging(file='/tmp/what_is_happening.txt')
 
     Include the date along with the time. (The log messages will always include
     microseconds, which are configured separately, not as part of 'datefmt'.)
 
-    >>> set_handler(datefmt="%Y-%m-%d %H:%M:%S")
+    >>> config_caproto_logging(datefmt="%Y-%m-%d %H:%M:%S")
 
     Turn off ANSI color codes.
 
-    >>> set_handler(color=False)
+    >>> config_caproto_logging(color=False)
 
     Increase verbosity: show level INFO or higher.
 
-    >>> set_handler(level='INFO')
+    >>> config_caproto_logging(level='INFO')
     """
     global current_handler
     if isinstance(file, str):
@@ -382,8 +382,8 @@ def config_caproto_logging(file=sys.stdout, datefmt='%H:%M:%S', color=True, leve
 
 def get_handler():
     """
-    Return the handler configured by the most recent call to :func:`set_handler`.
+    Return the handler configured by the most recent call to :func:`config_caproto_logging`.
 
-    If :func:`set_handler` has not yet been called, this returns ``None``.
+    If :func:`config_caproto_logging` has not yet been called, this returns ``None``.
     """
     return current_handler
