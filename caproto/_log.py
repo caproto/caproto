@@ -316,7 +316,7 @@ class RoleFilter(logging.Filter):
             return not self.exclusive
 
 
-def set_handler(file=sys.stdout, datefmt='%H:%M:%S', color=True, level='WARNING'):
+def config_caproto_logging(file=sys.stdout, datefmt='%H:%M:%S', color=True, level='WARNING'):
     """
     Set a new handler on the ``logging.getLogger('caproto')`` logger.
 
