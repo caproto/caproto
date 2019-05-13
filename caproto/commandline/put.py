@@ -83,7 +83,7 @@ def main():
         logging.getLogger(f'caproto.ctx').setLevel('DEBUG')
         if args.verbose > 2:
             logging.getLogger('caproto').setLevel('DEBUG')
-    logger = logging.getLogger(f'caproto.ch.{args.pv_name}')
+    logger = logging.LoggerAdapter(logging.getLogger(f'caproto.ch'), {'pv': args.pv_name})
 
     if args.array:
         data = [ast.literal_eval(val) for val in args.data.split(' ')]

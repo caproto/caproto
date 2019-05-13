@@ -129,7 +129,7 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
 
 
 def make_channel(pv_name, udp_sock, priority, timeout):
-    log = logging.getLogger(f'caproto.ch.{pv_name}.{priority}')
+    log = logging.LoggerAdapter(logging.getLogger(f'caproto.ch'), {'pv': pv_name})
     address = search(pv_name, udp_sock, timeout)
     try:
         circuit = global_circuits[(address, priority)]
@@ -381,7 +381,8 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
         spawn_repeater()
     loggers = {}
     for sub in subscriptions:
-        loggers[sub.pv_name] = logging.getLogger(f'caproto.ch.{sub.pv_name}')
+        loggers[sub.pv_name] = logging.LoggerAdapter(logging.getLogger(f'caproto.ch'),
+                                                     {'pv': sub.pv_name})
     udp_sock = ca.bcast_socket()
     try:
         udp_sock.settimeout(timeout)
