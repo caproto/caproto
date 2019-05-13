@@ -36,7 +36,7 @@ from .._utils import (batch_requests, CaprotoError, ThreadsafeCounter,
                       socket_bytes_available, CaprotoTimeoutError,
                       CaprotoTypeError, CaprotoRuntimeError, CaprotoValueError,
                       CaprotoKeyError, CaprotoNetworkError)
-from .._log import logger, ch_logger, search_logger
+from .._log import ch_logger, search_logger
 
 
 print = partial(print, flush=True)
@@ -615,7 +615,7 @@ class SharedBroadcaster:
                     if address not in self.last_beacon:
                         # We made a new friend!
                         self.broadcaster.log.info("Watching Beacons from %s:%d",
-                                      *address, extra=tags)
+                                                  *address, extra=tags)
                         self._new_server_found()
                     else:
                         interval = now - self.last_beacon[address]
@@ -664,10 +664,10 @@ class SharedBroadcaster:
                                             "PV %s with cid %d found on multiple "
                                             "servers. Accepted address is %s:%d. "
                                             "Also found on %s:%d",
-                                            name, cid, *accepted_address, *new_address, extra = {
-                                                        'pv': name,
-                                                        'their_address': accepted_address,
-                                                        'our_address': self.udp_sock.getsockname()[:2]})
+                                            name, cid, *accepted_address, *new_address,
+                                            extra={'pv': name,
+                                                   'their_address': accepted_address,
+                                                   'our_address': self.udp_sock.getsockname()[:2]})
                     else:
                         results_by_cid.append((cid, name))
                         address = ca.extract_address(command)
@@ -983,7 +983,6 @@ class Context:
     def __exit__(self, exc_type, exc_value, traceback):
         self.disconnect(wait=True)
 
-
     def get_pvs(self, *names, priority=0, connection_state_callback=None,
                 access_rights_callback=None,
                 timeout=CONTEXT_DEFAULT_TIMEOUT):
@@ -1092,11 +1091,12 @@ class Context:
             # and tracking circuit state, as well as a ClientChannel for
             # tracking channel state.
             for name in names:
-                search_logger.debug('Connecting %s on circuit with %s:%d', name, *address, extra = {'pv': name,
-                                                    'their_address': address,
-                                                    'our_address': self.broadcaster.udp_sock.getsockname()[:2],
-                                                    'direction': '--->>>',
-                                                    'role': 'CLIENT'})
+                search_logger.debug('Connecting %s on circuit with %s:%d', name, *address,
+                                    extra={'pv': name,
+                                           'their_address': address,
+                                           'our_address': self.broadcaster.udp_sock.getsockname()[:2],
+                                           'direction': '--->>>',
+                                           'role': 'CLIENT'})
                 # There could be multiple PVs with the same name and
                 # different priority. That is what we are looping over
                 # here. There could also be NO PVs with this name that need
@@ -1577,7 +1577,6 @@ class PV:
         self._idle = False
         self._in_use = threading.Condition()
         self._usages = 0
-
 
     @property
     def timeout(self):

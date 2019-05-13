@@ -16,7 +16,7 @@ from ._commands import (AccessRightsResponse, CreateChFailResponse,
                         ClientNameRequest, CreateChanRequest,
                         CreateChanResponse, EventAddRequest, EventAddResponse,
                         EventCancelRequest, EventCancelResponse,
-                        HostNameRequest, ClientNameRequest, ReadNotifyRequest,
+                        HostNameRequest, ReadNotifyRequest,
                         ReadRequest, ReadNotifyResponse, ReadResponse,
                         SearchResponse, ServerDisconnResponse,
                         VersionRequest, VersionResponse, WriteNotifyRequest,
@@ -31,7 +31,6 @@ from ._utils import (CLIENT, SERVER, NEED_DATA, DISCONNECTED, CaprotoKeyError,
 from ._dbr import (ChannelType, SubscriptionType, field_types, native_type)
 from ._constants import DEFAULT_PROTOCOL_VERSION
 from ._status import CAStatus
-from ._log import logger, search_logger, ch_logger
 
 
 __all__ = ('VirtualCircuit', 'ClientChannel', 'ServerChannel',
@@ -155,9 +154,9 @@ class VirtualCircuit:
         """
         buffers_to_send = []
         tags = {'their_address': self.address,
-            'our_address': self.our_address,
-            'direction': '--->>>',
-            'role': repr(self.our_role)}
+                'our_address': self.our_address,
+                'direction': '--->>>',
+                'role': repr(self.our_role)}
         for command in commands:
             self._process_command(self.our_role, command)
             if hasattr(command, 'name') and not isinstance(command, (ClientNameRequest, HostNameRequest)):
@@ -194,9 +193,9 @@ class VirtualCircuit:
         self._data += b''.join(buffers)
 
         tags = {'their_address': self.address,
-            'our_address': self.our_address,
-            'direction': '<<<---',
-            'role': repr(self.our_role)}
+                'our_address': self.our_address,
+                'direction': '<<<---',
+                'role': repr(self.our_role)}
         while True:
             (self._data,
              command,

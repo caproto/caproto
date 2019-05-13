@@ -167,7 +167,7 @@ class LoggerNameFilter(logging.Filter):
         return False
 
 
-def validate_level(level)-> int:
+def validate_level(level) -> int:
     '''
     Return a int for level comparison
 
@@ -181,6 +181,7 @@ def validate_level(level)-> int:
         return levelno
     else:
         raise CaprotoValueError("Your level is illegal, please use one of python logging string")
+
 
 class PVFilter(logging.Filter):
     '''
@@ -257,12 +258,12 @@ class AddressFilter(logging.Filter):
                     self.addresses_list.append(address)
                 else:
                     raise CaprotoValueError("The target addresses should given as a list of strings "
-                            "like 'XX.XX.XX.XX:YYYY' "
-                            "or tuples like ('XX.XX.XX.XX', YYYY).")
+                                            "like 'XX.XX.XX.XX:YYYY' "
+                                            "or tuples like ('XX.XX.XX.XX', YYYY).")
             else:
                 raise CaprotoValueError("The target addresses should given as a list of strings "
-                        "like 'XX.XX.XX.XX:YYYY' "
-                        "or tuples like ('XX.XX.XX.XX', YYYY).")
+                                        "like 'XX.XX.XX.XX:YYYY' "
+                                        "or tuples like ('XX.XX.XX.XX', YYYY).")
 
         self.levelno = validate_level(level)
         self.exclusive = exclusive
@@ -271,10 +272,10 @@ class AddressFilter(logging.Filter):
         if record.levelno >= self.levelno:
             return True
         elif hasattr(record, 'our_address'):
-            return (record.our_address in self.addresses_list
-                    or record.our_address[0] in self.hosts_list
-                    or record.their_address in self.addresses_list
-                    or record.their_address[0] in self.hosts_list)
+            return (record.our_address in self.addresses_list or
+                    record.our_address[0] in self.hosts_list or
+                    record.their_address in self.addresses_list or
+                    record.their_address[0] in self.hosts_list)
         else:
             return not self.exclusive
 
@@ -311,7 +312,7 @@ class RoleFilter(logging.Filter):
         elif hasattr(record, 'role'):
             return record.role is self.role
         else:
-            return not exclusive
+            return not self.exclusive
 
 
 def set_handler(file=sys.stdout, datefmt='%H:%M:%S', color=True, level='WARNING'):

@@ -14,7 +14,7 @@ from .._dbr import SubscriptionType
 # ** Tuning this parameters will affect the servers' performance **
 # ** under high load. **
 # If the queue of subscriptions to has a new update ready within this timeout,
-# we consider ourselves under high load and trade accept some latency for some 
+# we consider ourselves under high load and trade accept some latency for some
 # efficiency.
 HIGH_LOAD_TIMEOUT = 0.01
 # When a batch of subscription updates has this many bytes or more, send it.

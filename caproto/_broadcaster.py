@@ -12,7 +12,7 @@ from ._commands import (Beacon, RepeaterConfirmResponse, RepeaterRegisterRequest
                         SearchRequest, SearchResponse, VersionRequest,
                         read_datagram,
                         )
-from ._log import logger, ch_logger, search_logger
+from ._log import search_logger
 
 __all__ = ('Broadcaster',)
 
@@ -63,7 +63,8 @@ class Broadcaster:
     @our_addresses.setter
     def our_addresses(self, value):
         self._our_addresses = value
-        self.loggers = {address: CaprotoLoggerAdapter(self.log, extra={'our_address': address}) for address in self._our_addresses}
+        self.loggers = {address: CaprotoLoggerAdapter(self.log,
+                        extra={'our_address': address}) for address in self._our_addresses}
 
     def send(self, *commands):
         """
@@ -119,10 +120,9 @@ class Broadcaster:
             raise RemoteProtocolError(f'Broadcaster malformed packet received:'
                                       f' {ex.__class__.__name__} {ex}') from ex
 
-
         tags = {'their_address': address,
-            'direction': '<<<---',
-            'role': repr(self.our_role)}
+                'direction': '<<<---',
+                'role': repr(self.our_role)}
         for command in commands:
             for address in self._our_addresses:
                 tags['our_address'] = address
