@@ -196,17 +196,22 @@ class PVFilter(logging.Filter):
     names : string or list of string
         PVs list which will be filtered in.
 
-    level : str
-        python logging level
+    level : str or int
+        Represents the "barrier height" of this filter: any records with a
+        levelno greater than or equal to this will always pass through. Default
+        is 'WARNING'. Python log level names or their corresponding integers
+        are accepted.
 
     exclusive : bool
-        whether env, config and misc message will be exclusive or not
+        If True, records for which this filter is "not applicable" (i.e. the
+        relevant extra context is not present) will be blocked. False by
+        default.
 
     Returns
     -------
     passes : bool
     '''
-    def __init__(self, *names, level='NOTSET', exclusive=False):
+    def __init__(self, *names, level='WARNING', exclusive=False):
         self.names = names
         self.levelno = validate_level(level)
         self.exclusive = exclusive
@@ -234,18 +239,23 @@ class AddressFilter(logging.Filter):
     addresses_list : list of address. address is a tuple of (host_str, port_val)
         Addresses list which will be filtered in.
 
-    level : str
-        python logging level
+    level : str or int
+        Represents the "barrier height" of this filter: any records with a
+        levelno greater than or equal to this will always pass through. Default
+        is 'WARNING'. Python log level names or their corresponding integers
+        are accepted.
 
     exclusive : bool
-        whether env, config and misc message will be exclusive or not
+        If True, records for which this filter is "not applicable" (i.e. the
+        relevant extra context is not present) will be blocked. False by
+        default.
 
     Returns
     -------
     passes : bool
     '''
 
-    def __init__(self, *addresses_list, level='NOTSET', exclusive=False):
+    def __init__(self, *addresses_list, level='WARNING', exclusive=False):
         self.addresses_list = []
         self.hosts_list = []
         for address in addresses_list:
@@ -293,17 +303,22 @@ class RoleFilter(logging.Filter):
     role : 'CLIENT' or 'SERVER'
         Role of the local machine.
 
-    level : str
-        python logging level
+    level : str or int
+        Represents the "barrier height" of this filter: any records with a
+        levelno greater than or equal to this will always pass through. Default
+        is 'WARNING'. Python log level names or their corresponding integers
+        are accepted.
 
     exclusive : bool
-        whether env, config and misc message will be exclusive or not
+        If True, records for which this filter is "not applicable" (i.e. the
+        relevant extra context is not present) will be blocked. False by
+        default.
 
     Returns
     -------
     passes: bool
     '''
-    def __init__(self, role, level='NOTSET', exclusive=False):
+    def __init__(self, role, level='WARNING', exclusive=False):
         self.role = role
         self.levelno = validate_level(level)
         self.exclusive = exclusive
@@ -332,7 +347,8 @@ def config_caproto_logging(file=sys.stdout, datefmt='%H:%M:%S', color=True, leve
         Date format. Default is ``'%H:%M:%S'``.
     color : boolean
         Use ANSI color codes. True by default.
-    level : String of python logging level
+    level : str or int
+        Python logging level, given as string or corresponding integer.
         Default is 'WARNING'.
 
     Returns
