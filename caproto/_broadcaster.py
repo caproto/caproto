@@ -63,8 +63,6 @@ class Broadcaster:
     @our_addresses.setter
     def our_addresses(self, value):
         self._our_addresses = value
-        self.loggers = {address: CaprotoLoggerAdapter(self.log,
-                        extra={'our_address': address}) for address in self._our_addresses}
 
     def send(self, *commands):
         """
