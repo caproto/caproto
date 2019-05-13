@@ -205,7 +205,7 @@ class PVFilter(logging.Filter):
     -------
     passes : bool
     '''
-    def __init__(self, names, level='NOTSET', exclusive=False):
+    def __init__(self, *names, level='NOTSET', exclusive=False):
         self.names = names
         self.levelno = validate_level(level)
         self.exclusive = exclusive
@@ -244,7 +244,7 @@ class AddressFilter(logging.Filter):
     passes : bool
     '''
 
-    def __init__(self, addresses_list, level='NOTSET', exclusive=False):
+    def __init__(self, *addresses_list, level='NOTSET', exclusive=False):
         self.addresses_list = []
         self.hosts_list = []
         for address in addresses_list:
@@ -258,11 +258,11 @@ class AddressFilter(logging.Filter):
                 if len(address) == 2:
                     self.addresses_list.append(address)
                 else:
-                    raise CaprotoValueError("The target addresses should given as a list of strings "
+                    raise CaprotoValueError("The target addresses should given as strings"
                                             "like 'XX.XX.XX.XX:YYYY' "
                                             "or tuples like ('XX.XX.XX.XX', YYYY).")
             else:
-                raise CaprotoValueError("The target addresses should given as a list of strings "
+                raise CaprotoValueError("The target addresses should given as strings "
                                         "like 'XX.XX.XX.XX:YYYY' "
                                         "or tuples like ('XX.XX.XX.XX', YYYY).")
 
