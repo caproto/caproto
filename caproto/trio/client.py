@@ -65,8 +65,9 @@ class VirtualCircuit:
 
     async def connect(self):
         async with self._socket_lock:
+            # This is a trio.SocketStream.
             self.socket = await trio.open_tcp_stream(*self.circuit.address)
-            self.circuit.our_address = self.socket.getsockname()[:2]
+            self.circuit.our_address = self.socket.socket.getsockname()[:2]
         # Kick off background loops that read from the socket
         # and process the commands read from it.
         self.nursery.start_soon(self._receive_loop)
