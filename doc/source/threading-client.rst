@@ -376,54 +376,12 @@ for details.
 
 .. _threading_loggers:
 
-Loggers for Debugging
----------------------
+Logs for Debugging
+------------------
 
-Various Python loggers are available. They inherit Python's default of
-silencing log messages below the WARNING level. To receive more information
-about a given PV, turn up the verbosity of the ``PV.log`` logger:
-
-.. code-block:: python
-
-    x.log.setLevel('DEBUG')
-
-To see the individual requests sent and responses received by the TCP
-connection supporting ``x`` (and any other PVs on that same Virtual Circuit)
-use the ``PV.circuit_manager.log`` logger:
-
-.. code-block:: python
-
-    x.circuit_manager.log.setLevel('DEBUG')
-
-For updates about the overall state of the Context (number of unanswered
-searches still awaiting responses, etc.) use ``Context.log``:
-
-.. code-block:: python
-
-    ctx.log.setLevel('DEBUG')
-
-or, equivalently:
-
-.. code-block:: python
-
-    x.context.log.setLevel('DEBUG')
-
-To log (non-batch) read/write requests and read/write/event responses for *all*
-PVs, access the channel logger by name like so:
-
-.. code-block:: python
-
-   import logging
-   logging.getLogger('caproto.ch').setLevel('DEBUG')
-
-Finally, to turn on *maximal* debugging, use:
-
-.. code-block:: python
-
-    import logging
-    logging.getLogger('caproto').setLevel('DEBUG')
-
-For more information see :ref:`loggers`.
+Caproto uses Python's logging framework, which enables sophisticated log
+management. For more information and copy/paste-able examples, see
+:ref:`loggers`.
 
 .. ipython:: python
     :suppress:
