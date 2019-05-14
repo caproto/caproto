@@ -146,7 +146,7 @@ def make_channel(pv_name, udp_sock, priority, timeout):
         new = True
         sockets[chan.circuit] = socket.create_connection(chan.circuit.address,
                                                          timeout)
-        circuit.our_address = sockets[chan.circuit]
+        circuit.our_address = sockets[chan.circuit].getsockname()[:2]
     try:
         if new:
             # Initialize our new TCP-based CA connection with a VersionRequest.
