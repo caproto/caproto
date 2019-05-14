@@ -8,14 +8,13 @@ class EnumIOC(PVGroup):
     """
     An IOC with some enums
 
+    Each mock actual EPICS record fields and link the ZNAM and ONAM fields
+    appropriately.
+
     Scalar PVs
     ----------
-    A (int)
-    B (float)
-
-    Vectors PVs
-    -----------
-    C (vector of int)
+    bo (enum) - a mocked binary output record
+    bi (enum) - a mocked binary input record
     """
     bo = pvproperty(value='One Value',
                     enum_strings=['Zero Value', 'One Value'],
