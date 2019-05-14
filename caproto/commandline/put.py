@@ -78,9 +78,10 @@ def main():
                         help="Show caproto version and exit.")
     args = parser.parse_args()
     if args.verbose:
-        _set_handler_with_logger(color=not args.no_color, level='DEBUG', logger_name='caproto.ch')
-        _set_handler_with_logger(color=not args.no_color, level='DEBUG', logger_name='caproto.ctx')
-        if args.verbose > 2:
+        if args.verbose <= 2:
+            _set_handler_with_logger(color=not args.no_color, level='DEBUG', logger_name='caproto.ch')
+            _set_handler_with_logger(color=not args.no_color, level='DEBUG', logger_name='caproto.ctx')
+        else:
             set_handler(color=not args.no_color, level='DEBUG')
     logger = logging.LoggerAdapter(logging.getLogger('caproto.ch'), {'pv': args.pv_name})
 

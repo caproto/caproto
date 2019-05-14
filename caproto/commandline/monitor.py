@@ -118,9 +118,10 @@ def main():
     clean_format_args(args=args)
 
     if args.verbose:
-        _set_handler_with_logger(color=not args.no_color, level='DEBUG', logger_name='caproto.ch')
-        _set_handler_with_logger(color=not args.no_color, level='DEBUG', logger_name='caproto.ctx')
-        if args.verbose > 2:
+        if args.verbose <= 2:
+            _set_handler_with_logger(color=not args.no_color, level='DEBUG', logger_name='caproto.ch')
+            _set_handler_with_logger(color=not args.no_color, level='DEBUG', logger_name='caproto.ctx')
+        else:
             set_handler(color=not args.no_color, level='DEBUG')
 
     mask = 0
