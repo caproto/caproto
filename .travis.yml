@@ -19,7 +19,12 @@ env:
     - ID=R7_ARRAY INSTALL_NUMPY=0 PACKAGED_DEPS=0.8.2/epics-ci-0.8.2_R7.0.1.1_pva_areadetector3-2_motor6-10.tar.bz2
 
   global:
+    # Doctr deploy key for NSLS-II/caproto (not used)
     - secure: "Hnz9c6x13kaAc7IqH4/wJWNel2rzEC8/x0KhFoGLVLHjmiH1LMmpGh/P5CPADlmKS80WFz4vhJ0YtSjtHCPI+9Y2aBGn8z732WM86OyGHITviCMTxtyVZfRFCkOAVlU0qpIyWu4p0rEfxrXCztSKE4bBO/wWnFhGGw9CJROnFhJwoJlbI9i28zscyeGsdqHNUfXHkyUAN3c3LKoYZgnJco5HiHLwXVvsy3DMkvOizLgslf6lrHwnQOT1F49ShgPcGGWpkuRARXkGII7lB0LOn2TBoTzmhgjoC3OmC4nZGJfzitwH9+nHc+iJ3mTlshsXb366B/D5TNVIL/4rzYV8zw49DogQIWYtECK4/z7fOzG61yCU33b3aeXU2OI4k5eZ2qN3gp3KQ4+PWyCMTHsBVgs6o49K1HWtFuuFLuhUPT4FVs2Pzz6yTka9NUukPO1LoTeQAUvGxRbc/15CjIWXtqqzEGmlPi8AFEo2kw33EtTawMU9w8nzAfdk5DX28Qcuzh9XA9nVUD0j7Rum7nGY1f5+icXh0FsOuP1uHt82bXIYvw3rey3RkWcqVcniJXlkq0bAZM/ZSXWX5VHyQ2e7C4kxCdnzVqjgtlGT2ARSlD6o8FKKRKTAKD7kQ9ajTjZHRhO+xbvP+X4K9GlbGvPyU9bnDFa14fXBJS4dTMd8GgQ="
+    # Doctr deploy key for NSLS-II/NSLS-II.github.io (for old URLs)
+    - secure: "Pnqun4Pd3qH7P3hpCJ6qRS64CdQPGxBkPiFMVT5MYZaxK3UCENmERsUm+Onk7rqMvqAUooVp6cFWSta9/BvgJSXnp41sKJZMiK3UmRfvyGAx0Wg/jpkKKAxSUr5ke9OCh4a8LB2L1hHJVybS2QA7IbBfkx8uiKSSH803eg7dGDacW6jhMxEej6Ne7gGvMmRfthbbPqeTLTNLzLqRfXX1zxG9G7ywoY3HiaYe5Ti3gAsAo7BK56ApHSxUNX4c4rsalZVYaBz51zAG+oecJ1JnpTq+Ix6YE6cKIV3wvz79vYbzbvHhDNR6efZ3WaJfA0i07KhRLxgRRMUwxiPBGZdRqftUR8losgxhlUEcBecu/OsvIgRy12gGuP6dIjw8tN2YhmVtkFZWnnA9DwnYzkCFsIB/sPbmWfI7WVFblY+Ij6EFYySQQFcgw047cl/SbzSaN2DZjTKdyYiZA/gd5b2azC8trS6K2OXD2rgptERGa/qQqgEieVqWeJ2XHewZ5FZpuJBoT9wEF3/i/P8HpOFxob7lrTVx4gluiTlVTfmbnLmjdgyBOJ5Ch3YEsPzipS738NlIlXOhHfRztno5lnKSG4pARK4jnQd2E19NyJQLmcog6aux648N7X2O1Y+yOs7zyuqCm8nIHsf5c9LAV19KN+zJkHHRK3P8cR4ffVdZD8E="
+    # Doctr deploy key for caproto/caproto.github.io
+    - secure: "j6XZWU6sRp74RxbwDRf0vgTyp38xnyVsX+Upsh4D9DrltQ9evSskgYl94XOTN9LVawmJTXvwy8A2Tjcy/+4SMD/snhSP3y0WpwyunA4FQoG+jmS40QB0FlamnQkNgxPv8LjP6o0nl2ZN7QdTf1/ANy813cH6ZR9Vc3JRyyHew+z6qs2u2hDqUiDhqdVq6m+FOZQGzHEdiexowJOe2w6SOS2FfqDYWtrG0IEmykctUYiMFuDxHXbqaPuu68/GNjSqTXW3bdXX//LOE2H68XRDHvbW+lnidU4G6T3SqDyvJSAiwZfxKdjYQzjvQhTCrNCwNe99ORFlHmVU4rr19+VtL68Ta5ADfHHvkmM78zCb+OPV4N6Pv2mqbtpM1Qn9h920x3lH+5i0qoK8kVocrlmRokd4nY7jyGOTX0SyYKGnBL+KXrKsPSabLO2kyW6+eHc4p4eCopZDhEg5GyXw3g1dA5w3MhfCeEY/0N/7tRBGlooFbIK4rVj7KRJxS5if6B1TKlTgilRhFvMMGMxJG2fTVjAaqrbQqtiy6GwKfCWyNYfUcB6TUpyu7jgStrGJ9lsm5VrrJR7/atlJN4E1GA0HjBWoCUn1NgH+5upjvG9Z1s9FUdp4Kqohw/0gr0CQQwvjRxyZLGKLYDNgL1gY/eBYzTjxb8t3r5+ZKFjQmldg2qk="
 
 matrix:
   exclude:
@@ -102,6 +107,7 @@ script:
   - flake8
 
   # Upload the docs to gh-pages.
-  - if [[ $TRAVIS_PULL_REQUEST == false && $TRAVIS_REPO_SLUG == 'NSLS-II/caproto' && $PUBLISH_DOCS == 1 && $TRAVIS_BRANCH == 'master' ]]; then
-        doctr deploy --key-path=doc/github_deploy_key.enc .;
+  - if [[ $PUBLISH_DOCS ]]; then
+        doctr deploy --deploy-repo NSLS-II/NSLS-II.github.io --deploy-branch-name master caproto;
+        doctr deploy --deploy-repo bluesky/bluesky.github.io --deploy-branch-name master caproto;
     fi
