@@ -51,7 +51,7 @@ EPICS_CA_REPEATER_PORT. It defaults to the standard 5065. The current value is
             level = 'WARNING'
         else:
             level = 'INFO'
-        _set_handler_with_logger(logger_name='cpaorot.repeater', color=not args.no_color, level=level)
+        _set_handler_with_logger(logger_name='caproto.repeater', color=not args.no_color, level=level)
     try:
         run()
     except BaseException as exc:
