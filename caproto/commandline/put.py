@@ -17,6 +17,7 @@ from datetime import datetime
 import logging
 from .. import set_handler, __version__
 from ..sync.client import read_write_read
+from .._log import _set_handler_with_logger
 from .._utils import ShowVersionAction
 
 
@@ -76,14 +77,13 @@ def main():
                         default=argparse.SUPPRESS,
                         help="Show caproto version and exit.")
     args = parser.parse_args()
-    if args.no_color:
-        set_handler(color=False)
     if args.verbose:
-        logging.getLogger(f'caproto.ch').setLevel('DEBUG')
-        logging.getLogger(f'caproto.ctx').setLevel('DEBUG')
-        if args.verbose > 2:
-            logging.getLogger('caproto').setLevel('DEBUG')
-    logger = logging.getLogger(f'caproto.ch.{args.pv_name}')
+        if args.verbose <= 2:
+            _set_handler_with_logger(color=not args.no_color, level='DEBUG', logger_name='caproto.ch')
+            _set_handler_with_logger(color=not args.no_color, level='DEBUG', logger_name='caproto.ctx')
+        else:
+            set_handler(color=not args.no_color, level='DEBUG')
+    logger = logging.LoggerAdapter(logging.getLogger('caproto.ch'), {'pv': args.pv_name})
 
     if args.array:
         data = [ast.literal_eval(val) for val in args.data.split(' ')]
