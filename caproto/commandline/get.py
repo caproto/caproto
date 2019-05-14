@@ -12,9 +12,9 @@ Python session, do not import this module; instead import caproto.sync.client.
 """
 import argparse
 from datetime import datetime
-import logging
 from .. import ChannelType, set_handler, field_types, __version__
 from ..sync.client import read
+from .._log import _set_handler_with_logger
 from .._utils import ShowVersionAction
 from .cli_print_formats import (format_response_data, gen_data_format,
                                 clean_format_args, format_str_adjust)
@@ -137,13 +137,11 @@ def main():
     #        if the functionality is not desired.
     clean_format_args(args=args)
 
-    if args.no_color:
-        set_handler(color=False)
     if args.verbose:
-        logging.getLogger('caproto.ch').setLevel('DEBUG')
-        logging.getLogger('caproto.ctx').setLevel('DEBUG')
+        _set_handler_with_logger(color=not args.no_color, level='DEBUG', logger_name='caproto.ch')
+        _set_handler_with_logger(color=not args.no_color, level='DEBUG', logger_name='caproto.ctx')
         if args.verbose > 2:
-            logging.getLogger('caproto').setLevel('DEBUG')
+            set_handler(color=not args.no_color, level='DEBUG')
     data_type = args.d
     # data_type might be '0', 'STRING', or a class like 'control'.
     # The client functions accepts 0, ChannelType.STRING, or 'control'.

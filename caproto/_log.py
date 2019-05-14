@@ -320,6 +320,25 @@ class RoleFilter(logging.Filter):
             return not self.exclusive
 
 
+def _set_handler_with_logger(logger_name='caproto', file=sys.stdout, datefmt='%H:%M:%S', color=True,
+                             level='WARNING'):
+    if isinstance(file, str):
+        handler = logging.FileHandler(file)
+    else:
+        handler = logging.StreamHandler(file)
+    levelno = validate_level(level)
+    handler.setLevel(levelno)
+    if color:
+        format = color_log_format
+    else:
+        format = plain_log_format
+    handler.setFormatter(
+        LogFormatter(format, datefmt=datefmt))
+    logging.getLogger(logger_name).addHandler(handler)
+    if logger.getEffectiveLevel() > levelno:
+        logger.setLevel(levelno)
+
+
 def config_caproto_logging(file=sys.stdout, datefmt='%H:%M:%S', color=True, level='WARNING'):
     """
     Set a new handler on the ``logging.getLogger('caproto')`` logger.
