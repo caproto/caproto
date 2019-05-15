@@ -153,6 +153,7 @@ class Context(_Context):
     async def broadcaster_udp_server_loop(self, task_status):
         for interface in self.interfaces:
             udp_sock = ca.bcast_socket(socket)
+            self.broadcaster._our_addresses.append(udp_sock.getsockname()[:2])
             try:
                 await udp_sock.bind((interface, self.ca_server_port))
             except Exception:

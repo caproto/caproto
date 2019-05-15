@@ -24,6 +24,7 @@ from .. import (ChannelDouble, ChannelShort, ChannelInteger, ChannelString,
                 CaprotoValueError, CaprotoTypeError, CaprotoAttributeError,
                 __version__)
 from .._backend import backend
+from caproto._log import set_handler, _set_handler_with_logger
 
 
 module_logger = logging.getLogger(__name__)
@@ -1186,7 +1187,7 @@ class PVGroup(metaclass=PVGroupMeta):
             base = self.__class__.__module__
 
         # Instantiate the logger
-        self.log = logging.getLogger(f'{base}.{log_name}')
+        self.log = logging.getLogger('{base}.{log_name}')
         self._create_pvdb()
 
         # Prime the snapshots to the current state.
@@ -1343,14 +1344,14 @@ def template_arg_parser(*, desc, default_prefix, argv=None, macros=None,
         """
         if args.verbose:
             if args.verbose > 1:
-                logging.getLogger('caproto').setLevel('DEBUG')
+                set_handler(level='DEBUG')
             else:
-                logging.getLogger('caproto.ctx').setLevel('DEBUG')
-                logging.getLogger('caproto.circ').setLevel('INFO')
+                _set_handler_with_logger(logger_name='caproto.ctx', level='DEBUG')
+                _set_handler_with_logger(logger_name='caproto.circ', level='INFO')
         elif args.quiet:
-            logging.getLogger('caproto').setLevel('WARNING')
+            set_handler(level='WARNING')
         else:
-            logging.getLogger('caproto.ctx').setLevel('INFO')
+            _set_handler_with_logger(logger_name='caproto.ctx', level='INFO')
 
         return ({'prefix': args.prefix,
                  'macros': {key: getattr(args, key) for key in macros}},

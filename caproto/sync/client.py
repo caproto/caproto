@@ -48,6 +48,7 @@ def recv(circuit):
 def search(pv_name, udp_sock, timeout, *, max_retries=2):
     # Set Broadcaster log level to match our logger.
     b = ca.Broadcaster(our_role=ca.CLIENT)
+    b.our_address = udp_sock.getsockname()[:2]
 
     # Send registration request to the repeater
     logger.debug('Registering with the Channel Access repeater.')
@@ -128,7 +129,7 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
 
 
 def make_channel(pv_name, udp_sock, priority, timeout):
-    log = logging.getLogger(f'caproto.ch.{pv_name}.{priority}')
+    log = logging.LoggerAdapter(logging.getLogger('caproto.ch'), {'pv': pv_name})
     address = search(pv_name, udp_sock, timeout)
     try:
         circuit = global_circuits[(address, priority)]
@@ -145,7 +146,7 @@ def make_channel(pv_name, udp_sock, priority, timeout):
         new = True
         sockets[chan.circuit] = socket.create_connection(chan.circuit.address,
                                                          timeout)
-
+        circuit.our_address = sockets[chan.circuit].getsockname()[:2]
     try:
         if new:
             # Initialize our new TCP-based CA connection with a VersionRequest.
@@ -380,7 +381,8 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
         spawn_repeater()
     loggers = {}
     for sub in subscriptions:
-        loggers[sub.pv_name] = logging.getLogger(f'caproto.ch.{sub.pv_name}')
+        loggers[sub.pv_name] = logging.LoggerAdapter(logging.getLogger('caproto.ch'),
+                                                     {'pv': sub.pv_name})
     udp_sock = ca.bcast_socket()
     try:
         udp_sock.settimeout(timeout)

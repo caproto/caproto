@@ -8,11 +8,11 @@ from ._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
 from ._utils import (CLIENT, SERVER, CaprotoValueError,
                      RemoteProtocolError, ThreadsafeCounter)
 from ._state import get_exception
-from ._commands import (RepeaterConfirmResponse, RepeaterRegisterRequest,
+from ._commands import (Beacon, RepeaterConfirmResponse, RepeaterRegisterRequest,
                         SearchRequest, SearchResponse, VersionRequest,
                         read_datagram,
                         )
-
+from ._log import search_logger
 
 __all__ = ('Broadcaster',)
 
@@ -41,6 +41,8 @@ class Broadcaster:
             self.their_role = SERVER
         else:
             self.their_role = CLIENT
+        self.our_address = None
+        self._our_addresses = []
         self.protocol_version = protocol_version
         self.unanswered_searches = {}  # map search id (cid) to name
         # Unlike VirtualCircuit and Channel, there is very little state to
@@ -51,7 +53,16 @@ class Broadcaster:
             initial_value=random.randint(0, MAX_ID),
             dont_clash_with=self.unanswered_searches,
         )
-        self.log = logging.getLogger(f"caproto.bcast")
+        self.log = logging.getLogger("caproto.bcast")
+        self.beacon_log = logging.getLogger('caproto.bcast.beacon')
+
+    @property
+    def our_addresses(self):
+        return self._our_addresses
+
+    @our_addresses.setter
+    def our_addresses(self, value):
+        self._our_addresses = value
 
     def send(self, *commands):
         """
@@ -70,11 +81,15 @@ class Broadcaster:
             bytes to send over a socket
         """
         bytes_to_send = b''
-        self.log.debug("Serializing %d commands into one datagram",
-                       len(commands))
         history = []
+        total_commands = len(commands)
+        tags = {'role': repr(self.our_role)}
         for i, command in enumerate(commands):
-            self.log.debug("%d of %d %r", 1 + i, len(commands), command)
+            if hasattr(command, 'name'):
+                tags['pv'] = command.name
+            for address in self._our_addresses:
+                tags['our_address'] = address
+                search_logger.debug(f"%d of %d %r", 1 + i, total_commands, command, extra=tags)
             self._process_command(self.our_role, command, history=history)
             bytes_to_send += bytes(command)
         return bytes_to_send
@@ -97,16 +112,22 @@ class Broadcaster:
         -------
         commands : list
         """
-        self.log.debug("Received datagram from %s:%d with %d bytes.",
-                       *address, len(byteslike))
         try:
             commands = read_datagram(byteslike, address, self.their_role)
         except Exception as ex:
             raise RemoteProtocolError(f'Broadcaster malformed packet received:'
                                       f' {ex.__class__.__name__} {ex}') from ex
 
+        tags = {'their_address': address,
+                'direction': '<<<---',
+                'role': repr(self.our_role)}
         for command in commands:
-            self.log.debug("%d bytes -> %r", len(command), command)
+            for address in self._our_addresses:
+                tags['our_address'] = address
+                if isinstance(command, Beacon):
+                    self.beacon_log.debug("%s:%d (%dB) %r", *address, len(command), command, extra=tags)
+                else:
+                    self.log.debug("(%dB) %r", len(command), command, extra=tags)
         return commands
 
     def process_commands(self, commands):
