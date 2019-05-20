@@ -21,7 +21,7 @@ class _JitterDetector(PVGroup):
     async def det(self, instance):
         return (await self._read(instance))
 
-    mtr = pvproperty(value=0, dtype=float)
+    mtr = pvproperty(value=0, dtype=float, precision=3)
     exp = pvproperty(value=1, dtype=float)
 
     @exp.putter
