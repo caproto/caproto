@@ -156,8 +156,8 @@ class Broadcaster:
         if isinstance(command, SearchRequest):
             if VersionRequest not in map(type, history):
                 err = get_exception(self.our_role, command)
-                raise err("A broadcasted SearchResponse must be preceded by a "
-                          "VersionResponse in the same datagram.")
+                raise err("A broadcasted SearchRequest must be preceded by a "
+                          "VersionRequest in the same datagram.")
             self.unanswered_searches[command.cid] = command.name
         elif isinstance(command, SearchResponse):
             # TODO Do all versions of Rsrv respect this? Unclear why softIoc
