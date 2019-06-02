@@ -618,6 +618,9 @@ def parse_channel_filter(filter_text):
     "Parse and validate filter_text into a ChannelFilter."
     # https://epics.anl.gov/base/R3-15/5-docs/filters.html
 
+    if not filter_text:
+        return ChannelFilter(ts=False, dbnd=None, sync=None, arr=None)
+
     # If there is a shorthand array filter, that is the only filter allowed, so
     # we parse that and return, shortcircuiting the rest.
     if filter_text.startswith('[') and filter_text.endswith(']'):
