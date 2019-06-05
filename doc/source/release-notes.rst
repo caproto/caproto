@@ -12,7 +12,7 @@ Features
 
 Bug Fixes
 ---------
-* Scan field write in server.
+* Fix bug in `scan_rate` that raised errors when it was written to
 * Handle case where filter is None or empty.
 
 v0.3.4 (2019-05-02)
