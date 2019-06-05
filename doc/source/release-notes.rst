@@ -8,7 +8,7 @@ v1.0.0 (2019-06-03)
 Features
 --------
 * Rewrite approach to logging.
-* Add precision to motor_ph in mini_beamline.
+* Add precision to motor_ph in mini_beamline example IOC.
 
 Fixes
 -----
