@@ -13,7 +13,7 @@ Features
 Bug Fixes
 ---------
 * Fix bug in `scan_rate` that raised errors when it was written to
-* Handle case where filter is None or empty.
+* Respond correctly when channel filter is set but empty.
 
 v0.3.4 (2019-05-02)
 ===================
