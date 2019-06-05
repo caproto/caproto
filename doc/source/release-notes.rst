@@ -2,7 +2,7 @@
 Release History
 ***************
 
-v1.0.0 (2019-06-03)
+v0.4.0 (2019-06-03)
 ===================
 
 Features
@@ -10,8 +10,8 @@ Features
 * Rewrite approach to logging.
 * Add precision to motor_ph in mini_beamline example IOC.
 
-Fixes
------
+Bug Fixes
+---------
 * Scan field write in server.
 * Handle case where filter is None or empty.
 
