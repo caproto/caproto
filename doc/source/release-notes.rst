@@ -2,6 +2,19 @@
 Release History
 ***************
 
+v0.4.0 (2019-06-06)
+===================
+
+Features
+--------
+* Rewrite approach to logging. See :doc:`loggers` for details.
+* Add precision to motor_ph in mini_beamline example IOC.
+
+Bug Fixes
+---------
+* Fix bug in `scan_rate` that raised errors when it was written to
+* Respond correctly when channel filter is set but empty.
+
 v0.3.4 (2019-05-02)
 ===================
 
