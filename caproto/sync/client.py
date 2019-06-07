@@ -14,7 +14,8 @@ import weakref
 
 import caproto as ca
 from .._dbr import (field_types, ChannelType, native_type, SubscriptionType)
-from .._utils import ErrorResponseReceived, CaprotoError, CaprotoTimeoutError
+from .._utils import (ErrorResponseReceived, CaprotoError, CaprotoTimeoutError,
+                      get_environment_variables)
 from .repeater import spawn_repeater
 
 
@@ -54,7 +55,7 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
     logger.debug('Registering with the Channel Access repeater.')
     bytes_to_send = b.send(ca.RepeaterRegisterRequest())
 
-    repeater_port = os.environ.get('EPICS_CA_REPEATER_PORT', 5065)
+    repeater_port = get_environment_variables()['EPICS_CA_REPEATER_PORT']
     for host in ca.get_address_list():
         try:
             udp_sock.sendto(bytes_to_send, (host, repeater_port))
