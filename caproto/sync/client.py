@@ -5,7 +5,6 @@
 import inspect
 import getpass
 import logging
-import os
 import selectors
 import socket
 import threading  # just to make callback processing thread-safe
