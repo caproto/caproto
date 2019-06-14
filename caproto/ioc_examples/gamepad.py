@@ -13,7 +13,7 @@ class GampadIOC(PVGroup):
         super().__init__(**kwargs)
         self._event_path = event_path
 
-    # normal buttons
+    # normal buttons, digital values as [0, 1]
     a = pvproperty(value=0)
     b = pvproperty(value=0)
     x = pvproperty(value=0)
@@ -23,25 +23,26 @@ class GampadIOC(PVGroup):
 
     # joysticks
 
-    # left joystick
+    # left joystick, analog values as int16
     lx = pvproperty(value=0)
     ly = pvproperty(value=0)
     ld = pvproperty(value=0)
 
-    # right joystick, always analog
+    # right joystick, analog values as int16
     rx = pvproperty(value=0)
     ry = pvproperty(value=0)
     rd = pvproperty(value=0)
 
     # DPAD, depending on mode, may also come from left joystick
+    # "digital" values as {-1, 0, 1}
     dx = pvproperty(value=0)
     dy = pvproperty(value=0)
 
-    # Trigger buttons
+    # Triggers, analog values as uint8
     lt = pvproperty(value=0)
     rt = pvproperty(value=0)
 
-    # admin
+    # admin, digital values as [0, 1]
     sel = pvproperty(value=0)
     back = pvproperty(value=0)
 
