@@ -14,38 +14,38 @@ class GampadIOC(PVGroup):
         self._event_path = event_path
 
     # normal buttons
-    a = pvproperty(value=0, max_length=1)
-    b = pvproperty(value=0, max_length=1)
-    x = pvproperty(value=0, max_length=1)
-    y = pvproperty(value=0, max_length=1)
-    lb = pvproperty(value=0, max_length=1)
-    rb = pvproperty(value=0, max_length=1)
+    a = pvproperty(value=0)
+    b = pvproperty(value=0)
+    x = pvproperty(value=0)
+    y = pvproperty(value=0)
+    lb = pvproperty(value=0)
+    rb = pvproperty(value=0)
 
     # joysticks
 
     # left joystick
-    lx = pvproperty(value=0, max_length=1)
-    ly = pvproperty(value=0, max_length=1)
-    ld = pvproperty(value=0, max_length=1)
+    lx = pvproperty(value=0)
+    ly = pvproperty(value=0)
+    ld = pvproperty(value=0)
 
     # right joystick, always analog
-    rx = pvproperty(value=0, max_length=1)
-    ry = pvproperty(value=0, max_length=1)
-    rd = pvproperty(value=0, max_length=1)
+    rx = pvproperty(value=0)
+    ry = pvproperty(value=0)
+    rd = pvproperty(value=0)
 
     # DPAD, depending on mode, may also come from left joystick
-    dx = pvproperty(value=0, max_length=1)
-    dy = pvproperty(value=0, max_length=1)
+    dx = pvproperty(value=0)
+    dy = pvproperty(value=0)
 
     # Trigger buttons
-    lt = pvproperty(value=0, max_length=1)
-    rt = pvproperty(value=0, max_length=1)
+    lt = pvproperty(value=0)
+    rt = pvproperty(value=0)
 
     # admin
-    sel = pvproperty(value=0, max_length=1)
-    back = pvproperty(value=0, max_length=1)
+    sel = pvproperty(value=0)
+    back = pvproperty(value=0)
 
-    alive = pvproperty(value=0, max_length=1)
+    alive = pvproperty(value=0)
 
     @alive.startup
     async def alive(self, instance, async_lib):
