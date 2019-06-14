@@ -26,10 +26,12 @@ class GampadIOC(PVGroup):
     # left joystick
     lx = pvproperty(value=0, max_length=1)
     ly = pvproperty(value=0, max_length=1)
+    ld = pvproperty(value=0, max_length=1)
 
     # right joystick, always analog
     rx = pvproperty(value=0, max_length=1)
     ry = pvproperty(value=0, max_length=1)
+    rd = pvproperty(value=0, max_length=1)
 
     # DPAD, depending on mode, may also come from left joystick
     dx = pvproperty(value=0, max_length=1)
@@ -82,6 +84,10 @@ async def gp_driver(dev):
         # admin
         315: 'sel',
         314: 'back',
+
+        # joystick down
+        317: 'ld',
+        318: 'rd',
     }
     with dev.grab_context():
         async for ev in dev.async_read_loop():
