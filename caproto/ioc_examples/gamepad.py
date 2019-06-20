@@ -97,13 +97,17 @@ async def gp_driver(dev):
             if ev.type not in (1, 3):
                 continue
 
-            # TODO also yield the event timestamp
-            if ev.type == 1:
-                key = digital_mapping[ev.code]
-                yield key, ev.value
-            elif ev.type == 3:
-                key = analog_mapping[ev.code]
-                yield key, ev.value
+            try:
+
+                # TODO also yield the event timestamp
+                if ev.type == 1:
+                    key = digital_mapping[ev.code]
+                    yield key, ev.value
+                elif ev.type == 3:
+                    key = analog_mapping[ev.code]
+                    yield key, ev.value
+            except KeyError:
+                print((ev.type, ev.code, ev.value))
 
 
 if __name__ == '__main__':
