@@ -20,6 +20,7 @@ class GampadIOC(PVGroup):
     y = pvproperty(value=0)
     lb = pvproperty(value=0)
     rb = pvproperty(value=0)
+    home = pvproperty(value=0)
 
     # joysticks
 
@@ -85,6 +86,7 @@ async def gp_driver(dev):
         # admin
         315: 'sel',
         314: 'back',
+        316: 'home',
 
         # joystick down
         317: 'ld',
