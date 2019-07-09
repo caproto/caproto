@@ -477,11 +477,11 @@ class ChannelData:
 
         return (await self.write(value, flags=flags, **metadata_dict))
 
-    async def write(self, value, *, flags=0, with_callback=True, **metadata):
+    async def write(self, value, *, flags=0, verify_value=True, **metadata):
         '''Set data from native Python types'''
         try:
             value = self.preprocess_value(value)
-            if with_callback:
+            if verify_value:
                 modified_value = await self.verify_value(value)
             else:
                 modified_value = None
