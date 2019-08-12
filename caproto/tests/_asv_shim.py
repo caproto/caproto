@@ -281,7 +281,7 @@ class AsvBenchmarkFixture(BenchmarkFixture):
         callspec = self.node.callspec
         params = OrderedDict(
             (arg, callspec.params[arg])
-            for arg in callspec.metafunc.funcargnames
+            for arg in callspec.metafunc.fixturenames
             if arg in callspec.params
         )
 
