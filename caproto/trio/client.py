@@ -39,7 +39,7 @@ if not hasattr(trio.SocketStream, 'sendmsg'):
         if self.socket.did_shutdown_SHUT_WR:
             await trio._core.checkpoint()
             raise trio.ClosedStreamError("can't send data after sending EOF")
-        with self._send_conflict_detector.sync:
+        with self._send_conflict_detector:
             with _translate_socket_errors_to_stream_errors():
                 return (await self.socket.sendmsg(buffers))
 
