@@ -32,10 +32,10 @@ class Thermo(PVGroup):
         self._T0 = time.monotonic()
 
     readback = pvproperty(value=0, dtype=float, read_only=True,
-                          name='I',
+                          name='T-RB',
                           mock_record='ai')
 
-    setpoint = pvproperty(value=100, dtype=float, name='SP')
+    setpoint = pvproperty(value=100, dtype=float, name='T-SP')
     K = pvproperty(value=10, dtype=float)
     omega = pvproperty(value=np.pi, dtype=float)
     Tvar = pvproperty(value=10, dtype=float)
