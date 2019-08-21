@@ -108,5 +108,5 @@ script:
   # Upload the docs to gh-pages.
   - if [[ $PUBLISH_DOCS ]]; then
         doctr deploy --deploy-repo NSLS-II/NSLS-II.github.io --deploy-branch-name master caproto;
-        doctr deploy --deploy-repo bluesky/bluesky.github.io --deploy-branch-name master caproto;
+        doctr deploy --deploy-repo caproto/caproto.github.io --deploy-branch-name master caproto;
     fi
