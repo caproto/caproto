@@ -103,11 +103,8 @@ script:
   # Run a CA Repeater for the docs examples to use.
   - caproto-repeater &
   # Build the docs.
-  - pushd doc
-  - make html
-  - popd
+  - make -C doc html
   - flake8
-
   # Upload the docs to gh-pages.
   - if [[ $PUBLISH_DOCS ]]; then
         doctr deploy --deploy-repo NSLS-II/NSLS-II.github.io --deploy-branch-name master caproto;
