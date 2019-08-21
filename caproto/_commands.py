@@ -19,7 +19,7 @@
 # ``next_command`` method of a :class:`Broadcaster` or a
 # :class:`VirtualCircuit`.
 import array
-import collections
+from collections.abc import Iterable
 import ctypes
 import _ctypes
 import inspect
@@ -211,7 +211,7 @@ def parse_metadata(metadata, data_type):
         md_payload = metadata
     elif metadata is None:
         md_payload = b''
-    elif isinstance(metadata, collections.Iterable):
+    elif isinstance(metadata, Iterable):
         # This is a tuple of values to be encoded into a DBR.
         justified_md = []
         for val in metadata:
@@ -253,7 +253,7 @@ def data_payload(data, metadata, data_type, data_count):
         # Assume bytes are big-endian; we have no way of checking.
         data_payload = data
     elif (isinstance(data, backend.array_types) or
-          isinstance(data, collections.Iterable)):
+          isinstance(data, Iterable)):
         data_payload = backend.python_to_epics(
             native_type(data_type), data, byteswap=True)
     elif data is None:
