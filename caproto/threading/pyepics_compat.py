@@ -6,7 +6,7 @@ import threading
 import types
 
 from math import log10
-from collections import Iterable
+from collections.abc import Iterable
 
 import caproto as ca
 from .client import (Context, SharedBroadcaster, AUTOMONITOR_MAXLENGTH,

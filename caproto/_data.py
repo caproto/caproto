@@ -3,7 +3,8 @@
 # metadata. They perform data type conversions in response to requests to read
 # data as a certain type, and they push updates into queues registered by a
 # higher-level server.
-from collections import defaultdict, Iterable, namedtuple
+from collections import defaultdict, namedtuple
+from collections.abc import Iterable
 import copy
 import time
 import weakref
