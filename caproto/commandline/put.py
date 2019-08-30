@@ -68,7 +68,7 @@ def main():
                               "space"))
     parser.add_argument('--array-pad', type=int, default=0,
                         help=("Pad the array up to a specified length"))
-    parser.add_argument('-S', action='store_true',
+    parser.add_argument('-S', dest='as_string', action='store_true',
                         help=("Interpret `data` as a string of characters."))
     parser.add_argument('--no-color', action='store_true',
                         help="Suppress ANSI color codes in log messages.")
@@ -86,7 +86,7 @@ def main():
         else:
             set_handler(color=not args.no_color, level='DEBUG')
     logger = logging.LoggerAdapter(logging.getLogger('caproto.ch'), {'pv': args.pv_name})
-    if args.S:
+    if args.as_string:
         # interpret as string
         data = args.data
     elif args.array:
