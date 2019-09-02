@@ -367,6 +367,7 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
      ('caproto.ioc_examples.simple', 'SimpleIOC', {}),
      ('caproto.ioc_examples.startup_and_shutdown_hooks', 'StartupAndShutdown', {}),
      ('caproto.ioc_examples.subgroups', 'MyPVGroup', {}),
+     ('caproto.ioc_examples.worker_thread', 'WorkerThreadIOC', {}),
      ]
 )
 @pytest.mark.parametrize('async_lib', ['curio', 'trio', 'asyncio'])
