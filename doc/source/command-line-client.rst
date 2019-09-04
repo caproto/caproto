@@ -338,7 +338,7 @@ provided by its counterparts in EPICS' reference implementation, epics-base:
 ``caget``, ``caput``, ``camonitor``, and ``caRepeater``. It is our goal to make
 caproto's variants safe to use as drop-in replacements. As yet, some arguments
 related to string formatting are not yet implemented (`Code contributions
-welcome!  <https://github.com/NSLS-II/caproto/issues/147>`_) but similar
+welcome!  <https://github.com/caproto/caproto/issues/147>`_) but similar
 functionality is available via ``--format``.
 
 caproto-get

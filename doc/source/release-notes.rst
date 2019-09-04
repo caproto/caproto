@@ -294,16 +294,16 @@ Features
   `catvs <https://github.com/mdavidsaver/catvs>`_. This has generated several
   fixes improving protocol compliance, list a section below. There are a small
   number of known failures wherein the best/correct behavior is arguable; see
-  `caproto#327 on GitHub <https://github.com/NSLS-II/caproto/pull/327>`_ for
+  `caproto#327 on GitHub <https://github.com/caproto/caproto/pull/327>`_ for
   discussion. There may be more progress on these in future releases of
   caproto.
 * Added ``pvproperty.scan``. See
-  the `mini_beamline example IOC <https://github.com/NSLS-II/caproto/blob/master/caproto/ioc_examples/mini_beamline.py>`_
+  the `mini_beamline example IOC <https://github.com/caproto/caproto/blob/master/caproto/ioc_examples/mini_beamline.py>`_
   for a usage example.
 * Add a server-side data source for ``ChannelType.INT`` (a.k.a SHORT) data.
 * The default printed output of the ``caproto-monitor`` CLI utility now
   includes microseconds.
-* There are several new `IOC examples <https://github.com/NSLS-II/caproto/tree/master/caproto/ioc_examples>`_.
+* There are several new `IOC examples <https://github.com/caproto/caproto/tree/master/caproto/ioc_examples>`_.
 
 Breaking Changes
 ----------------
