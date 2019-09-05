@@ -50,7 +50,7 @@ Development Installation
 
 .. code-block:: bash
 
-    git clone https://github.com/NSLS-II/caproto
+    git clone https://github.com/caproto/caproto
     cd caproto
     pip install -e .
 

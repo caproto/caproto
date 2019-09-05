@@ -7,7 +7,7 @@ The following have been tested on an Ubuntu 16.04 LTS VM.
 1. Clone the repository.
 
 ```bash
-git clone https://github.com/NSLS-II/caproto
+git clone https://github.com/caproto/caproto
 cd caproto
 ```
 
