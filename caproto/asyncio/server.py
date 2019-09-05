@@ -51,6 +51,7 @@ def _get_asyncio_queue(loop):
 class AsyncioAsyncLayer(AsyncLibraryLayer):
     name = 'asyncio'
     ThreadsafeQueue = None
+    Event = asyncio.Event
     library = asyncio
 
     def __init__(self, loop=None):
