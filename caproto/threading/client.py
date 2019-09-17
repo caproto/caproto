@@ -910,8 +910,9 @@ class Context:
         If None is specified, a fresh one is instantiated.
     timeout : number or None, optional
         Number of seconds before a CaprotoTimeoutError is raised. This default
-        can be overridden at the PV level or for any given operation. If
-        unset, the default is 2 seconds. If None, never timeout.
+        can be overridden at the PV level or for any given operation. If unset,
+        the default is 2 seconds. If None, never timeout. A global timeout can
+        be specified via an environment variable ``CAPROTO_TIMEOUT``.
     host_name : string, optional
         uses value of ``socket.gethostname()`` by default
     client_name : string, optional
@@ -935,7 +936,7 @@ class Context:
         if broadcaster is None:
             broadcaster = SharedBroadcaster()
         self.broadcaster = broadcaster
-        self.timeout = timeout
+        self.timeout = float(os.environ.get('CAPROTO_TIMEOUT', timeout))
         if host_name is None:
             host_name = socket.gethostname()
         self.host_name = host_name
