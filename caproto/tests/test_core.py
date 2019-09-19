@@ -184,9 +184,11 @@ def test_register_convenience_method():
 
 def test_broadcaster_checks():
     b = ca.Broadcaster(ca.CLIENT)
-    with pytest.raises(ca.LocalProtocolError):
-        b.send(ca.SearchRequest(name='LIRR', cid=0,
-                                version=ca.DEFAULT_PROTOCOL_VERSION))
+    # Similar to check below, not all clients provide the version before
+    # the search request so we forgive this one as well
+    # with pytest.raises(ca.LocalProtocolError):
+    #     b.send(ca.SearchRequest(name='LIRR', cid=0,
+    #                             version=ca.DEFAULT_PROTOCOL_VERSION))
 
     b.send(ca.RepeaterRegisterRequest('1.2.3.4'))
     res = ca.RepeaterConfirmResponse('5.6.7.8')
@@ -196,8 +198,9 @@ def test_broadcaster_checks():
 
     req = ca.SearchRequest(name='LIRR', cid=0,
                            version=ca.DEFAULT_PROTOCOL_VERSION)
-    with pytest.raises(ca.LocalProtocolError):
-        b.send(req)
+    # commented out for same reason as above and below
+    # with pytest.raises(ca.LocalProtocolError):
+    #     b.send(req)
     b.send(ca.VersionRequest(priority=0,
                              version=ca.DEFAULT_PROTOCOL_VERSION), req)
 
