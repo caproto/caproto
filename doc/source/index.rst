@@ -108,7 +108,7 @@ Why write something from scratch in Python instead of just wrapping those?
 All that said, some applications of EPICS --- such as running an accelerator
 --- rely on the battle-tested reliability of EPICS' reference implementation.
 We would advise those kinds of users to steer well clear of caproto. It is best
-suited to applications to reward convenience, fast iteration, and
+suited to applications that reward convenience, fast iteration, and
 accessibility.
 
 Vital Statistics
