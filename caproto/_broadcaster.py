@@ -7,7 +7,6 @@ import random
 from ._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
 from ._utils import (CLIENT, SERVER, CaprotoValueError,
                      RemoteProtocolError, ThreadsafeCounter)
-from ._state import get_exception
 from ._commands import (Beacon, RepeaterConfirmResponse, RepeaterRegisterRequest,
                         SearchRequest, SearchResponse, VersionRequest,
                         read_datagram,
