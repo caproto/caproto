@@ -121,7 +121,7 @@ Let us set the value to ``1``.
     dt.write([1])
 
 By default, we send ``WriteNotifyResponse``, wait for a response, and return
-it. There are a couple others ways we can handle writes:
+it. There are a couple other ways we can handle writes:
 
 * Return immediately, not asking for or waiting for a response.
 
