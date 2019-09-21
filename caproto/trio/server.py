@@ -55,6 +55,7 @@ class TrioAsyncLayer(AsyncLibraryLayer):
 
     name = 'trio'
     ThreadsafeQueue = None
+    Event = Event
     library = trio
 
 

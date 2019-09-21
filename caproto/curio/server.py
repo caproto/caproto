@@ -56,6 +56,7 @@ class QueueWithFullError(curio.Queue):
 class CurioAsyncLayer(AsyncLibraryLayer):
     name = 'curio'
     ThreadsafeQueue = UniversalQueue
+    Event = curio.UniversalEvent
     library = curio
 
 
