@@ -145,11 +145,7 @@ learning exercises.
    :maxdepth: 2
    :caption: EPICS Clients and Servers
 
-   command-line-client
-   sync-client
-   threading-client
-   pyepics-compat-client
-   async-clients
+   clients
    iocs
    mock-records
    servers
