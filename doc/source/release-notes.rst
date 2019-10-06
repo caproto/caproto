@@ -2,6 +2,18 @@
 Release History
 ***************
 
+v0.4.1 (2019-10-06)
+===================
+
+This release adds some small improvements and updates to address deprecations
+in Python and caproto's optional dependencies.
+
+Features
+--------
+* Added support for ``-S`` argument in the ``caproto-put`` commandline tool.
+* Added support for using ``Event`` synchronization primitives in servers, used
+  in the new example ``caproto.ioc_examples.worker_thread_pc``.
+
 v0.4.0 (2019-06-06)
 ===================
 
