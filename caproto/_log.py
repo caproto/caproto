@@ -51,7 +51,7 @@ class LogFormatter(logging.Formatter):
 
     """
     DEFAULT_FORMAT = \
-        '%(color)s[%(levelname)1.1s %(asctime)s %(module)s:%(lineno)d]%(end_color)s %(message)s'
+        '%(color)s[%(levelname)1.1s %(asctime)s %(module)12s:%(lineno)d]%(end_color)s %(message)s'
     DEFAULT_DATE_FORMAT = '%y%m%d %H:%M:%S'
     DEFAULT_COLORS = {
         logging.DEBUG: 4,  # Blue
@@ -106,13 +106,13 @@ class LogFormatter(logging.Formatter):
     def format(self, record):
         message = []
         if hasattr(record, 'our_address'):
-            message.append('[%s]' % ':'.join(map(str, record.our_address)))
+            message.append('%s' % ':'.join(map(str, record.our_address)))
         if hasattr(record, 'direction'):
             message.append('%s' % record.direction)
         if hasattr(record, 'their_address'):
-            message.append('[%s]' % ':'.join(map(str, record.their_address)))
+            message.append('%s' % ':'.join(map(str, record.their_address)))
         if hasattr(record, 'pv'):
-            message.append('[%s]' % record.pv)
+            message.append('%s' % record.pv)
         message.append(record.getMessage())
         record.message = ' '.join(message)
         record.asctime = self.formatTime(record, self.datefmt)
@@ -133,9 +133,9 @@ class LogFormatter(logging.Formatter):
         return formatted.replace("\n", "\n    ")
 
 
-plain_log_format = "[%(levelname)1.1s %(asctime)s.%(msecs)03d %(module)15s:%(lineno)5d] %(message)s"
+plain_log_format = "[%(levelname)1.1s %(asctime)s.%(msecs)03d %(module)12s:%(lineno)5d] %(message)s"
 color_log_format = ("%(color)s[%(levelname)1.1s %(asctime)s.%(msecs)03d "
-                    "%(module)15s:%(lineno)5d]%(end_color)s %(message)s")
+                    "%(module)12s:%(lineno)5d]%(end_color)s %(message)s")
 
 
 def color_logs(color):

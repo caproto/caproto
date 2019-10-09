@@ -158,7 +158,7 @@ class VirtualCircuit:
             self._process_command(self.our_role, command)
             if hasattr(command, 'name') and not isinstance(command, (ClientNameRequest, HostNameRequest)):
                 tags['pv'] = command.name
-            self.log.debug("(%dB) %r", len(command), command, extra=tags)
+            self.log.debug("%dB %r", len(command), command, extra=tags)
             buffers_to_send.append(memoryview(command.header))
             buffers_to_send.extend(command.buffers)
         return buffers_to_send
@@ -199,7 +199,7 @@ class VirtualCircuit:
              num_bytes_needed) = read_from_bytestream(self._data,
                                                       self.their_role)
             if command is not NEED_DATA:
-                self.log.debug("(%dB) %r", len(command), command, extra=tags)
+                self.log.debug("%dB %r", len(command), command, extra=tags)
                 commands.append(command)
             else:
                 # Less than a full command's worth of bytes are cached. Wait
