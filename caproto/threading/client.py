@@ -47,6 +47,7 @@ CIRCUIT_DEATH_ATTEMPTS = 3
 # sentinels used as default values for arguments
 CONTEXT_DEFAULT_TIMEOUT = object()
 PV_DEFAULT_TIMEOUT = object()
+GLOBAL_DEFAULT_TIMEOUT = os.environ.get("CAPROTO_DEFAULT_TIMEOUT", 2)
 
 
 class DeadCircuitError(CaprotoError):
@@ -910,8 +911,9 @@ class Context:
         If None is specified, a fresh one is instantiated.
     timeout : number or None, optional
         Number of seconds before a CaprotoTimeoutError is raised. This default
-        can be overridden at the PV level or for any given operation. If
-        unset, the default is 2 seconds. If None, never timeout.
+        can be overridden at the PV level or for any given operation. If unset,
+        the default is 2 seconds. If None, never timeout. A global timeout can
+        be specified via an environment variable ``CAPROTO_DEFAULT_TIMEOUT``.
     host_name : string, optional
         uses value of ``socket.gethostname()`` by default
     client_name : string, optional
@@ -930,7 +932,7 @@ class Context:
         value from 1.
     """
     def __init__(self, broadcaster=None, *,
-                 timeout=2,
+                 timeout=GLOBAL_DEFAULT_TIMEOUT,
                  host_name=None, client_name=None, max_workers=1):
         if broadcaster is None:
             broadcaster = SharedBroadcaster()
