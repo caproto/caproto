@@ -182,7 +182,7 @@ update rate controlled by a second PV, ``random_walk:dt``.
    **What is async_lib.library.sleep?**
 
    As caproto supports three different async libraries, we have an "async
-   layer" class that gives compatible async versions of commonly used
+   layer" class that gives compatible async versions of commonly-used
    synchronization primitives. The attribute ``async_lib.library`` would be either
    the Python module ``asyncio`` (default), ``trio``, or ``curio``, depending on how
    the server is run.  It happens that all three of these modules have a ``sleep``
@@ -196,7 +196,7 @@ update rate controlled by a second PV, ``random_walk:dt``.
    sleeping. The function ``time.sleep``, on the other hand, would cause
    noticeable delays and problems.
 
-   This is a fundamenatal consideration in concurrent programming generally,
+   This is a fundamental consideration in concurrent programming generally,
    not specific to caproto. See for example
    `this StackOverflow post <https://stackoverflow.com/questions/46207991/what-does-yield-from-asyncio-sleepdelay-do>`_
    for more information.
