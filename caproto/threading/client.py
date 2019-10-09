@@ -340,7 +340,7 @@ class SharedBroadcaster:
         self.listeners = weakref.WeakSet()
 
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
-        self.broadcaster.our_address = self.udp_sock.getsockname()[:2]
+        self.broadcaster.client_address = self.udp_sock.getsockname()[:2]
         self.log = logging.LoggerAdapter(
             self.broadcaster.log, {'role': 'CLIENT'})
         self.search_log = logging.LoggerAdapter(
@@ -442,7 +442,7 @@ class SharedBroadcaster:
         """
         bytes_to_send = self.broadcaster.send(*commands)
         tags = {'role': 'CLIENT',
-                'our_address': self.broadcaster.our_address,
+                'our_address': self.broadcaster.client_address,
                 'direction': '--->>>'}
         for host in ca.get_address_list():
             if ':' in host:
@@ -450,11 +450,11 @@ class SharedBroadcaster:
                 specified_port = int(port_as_str)
             else:
                 specified_port = port
-                tags['their_address'] = (host, specified_port)
+            tags['their_address'] = (host, specified_port)
+            self.broadcaster.log.debug(
+                '%d commands %dB',
+                len(commands), len(bytes_to_send), extra=tags)
             try:
-                self.broadcaster.log.debug(
-                    'Sending %d bytes to %s:%d',
-                    len(bytes_to_send), host, specified_port, extra=tags)
                 self.udp_sock.sendto(bytes_to_send, (host, specified_port))
             except OSError as ex:
                 raise CaprotoNetworkError(
@@ -608,7 +608,7 @@ class SharedBroadcaster:
             queues.clear()
             now = time.monotonic()
             tags = {'role': 'CLIENT',
-                    'our_address': self.broadcaster.our_address,
+                    'our_address': self.broadcaster.client_address,
                     'direction': '<<<---'}
             for command in commands:
                 if isinstance(command, ca.Beacon):
@@ -670,7 +670,7 @@ class SharedBroadcaster:
                                             name, cid, *accepted_address, *new_address,
                                             extra={'pv': name,
                                                    'their_address': accepted_address,
-                                                   'our_address': self.udp_sock.getsockname()[:2]})
+                                                   'our_address': self.broadcaster.client_address})
                     else:
                         results_by_cid.append((cid, name))
                         address = ca.extract_address(command)
@@ -763,7 +763,7 @@ class SharedBroadcaster:
                     checking[address] = now + RESPONSIVENESS_TIMEOUT
                     tags = {'role': 'CLIENT',
                             'their_address': address,
-                            'our_address': self.udp_sock.getsockname()[:2],
+                            'our_address': self.broadcaster.broadcaster.client_address,
                             'direction': '--->>>'}
 
                     self.broadcaster.log.debug(
@@ -1099,7 +1099,7 @@ class Context:
                 search_logger.debug('Connecting %s on circuit with %s:%d', name, *address,
                                     extra={'pv': name,
                                            'their_address': address,
-                                           'our_address': self.broadcaster.udp_sock.getsockname()[:2],
+                                           'our_address': self.broadcaster.broadcaster.client_address,
                                            'direction': '--->>>',
                                            'role': 'CLIENT'})
                 # There could be multiple PVs with the same name and
@@ -1407,7 +1407,7 @@ class VirtualCircuitManager:
                                  pv.name, time.monotonic() - deadline)
                 return
 
-            pv.log.debug("%r: %r", pv.name, command)
+            pv.log.debug("%r", command)
             event = ioid_info.get('event')
             if event is not None:
                 # If PV.read() or PV.write() are waiting on this response,
@@ -1785,7 +1785,7 @@ class PV:
         deadline = time.monotonic() + timeout if timeout is not None else None
         ioid_info['deadline'] = deadline
         cm.send(command)
-        self.log.debug("%r: %r", self.name, command)
+        self.log.debug("%r", command)
         if not wait:
             return
 
@@ -1865,7 +1865,7 @@ class PV:
             ioid_info['deadline'] = deadline
             # do not need to lock this, locking happens in circuit command
             cm.send(command)
-            self.log.debug("%r: %r", self.name, command)
+            self.log.debug("%r", command)
         else:
             if wait or callback is not None:
                 raise CaprotoValueError("Must set notify=True in order to use "
@@ -1874,7 +1874,7 @@ class PV:
                                         "server, there is nothing to wait on or to "
                                         "trigger a callback.")
             cm.send(command)
-            self.log.debug("%r: %r", self.name, command)
+            self.log.debug("%r", command)
 
         if not wait:
             return
@@ -2150,7 +2150,7 @@ class Subscription(CallbackHandler):
         # the CA servers from processing. (-> ThreadPool, etc.)
 
         super().process(command)
-        self.log.debug("%r: %r", self.pv.name, command)
+        self.log.debug("%r", command)
         self.most_recent_response = command
 
     def add_callback(self, func):
@@ -2321,7 +2321,7 @@ class Batch:
         for ioid_info in self._ioid_infos:
             ioid_info['deadline'] = deadline
             pv = ioid_info['pv']
-            pv.log.debug("%r: %r", pv.name, ioid_info['request'])
+            pv.log.debug("%r", ioid_info['request'])
         for circuit_manager, commands in self._commands.items():
             circuit_manager.send(*commands)
 

@@ -48,7 +48,7 @@ def recv(circuit):
 def search(pv_name, udp_sock, timeout, *, max_retries=2):
     # Set Broadcaster log level to match our logger.
     b = ca.Broadcaster(our_role=ca.CLIENT)
-    b.our_address = udp_sock.getsockname()[:2]
+    b.client_address = udp_sock.getsockname()[:2]
 
     # Send registration request to the repeater
     logger.debug('Registering with the Channel Access repeater.')
@@ -62,9 +62,13 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
             raise ca.CaprotoNetworkError(f"Failed to send to {host}:{repeater_port}") from exc
 
     logger.debug("Searching for %r....", pv_name)
-    bytes_to_send = b.send(
+    commands = (
         ca.VersionRequest(0, ca.DEFAULT_PROTOCOL_VERSION),
         ca.SearchRequest(pv_name, 0, ca.DEFAULT_PROTOCOL_VERSION))
+    bytes_to_send = b.send(*commands)
+    tags = {'role': 'CLIENT',
+            'our_address': b.client_address,
+            'direction': '--->>>'}
 
     def send_search():
         for host in ca.get_address_list():
@@ -73,12 +77,15 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
                 dest = (host, int(specified_port))
             else:
                 dest = (host, CA_SERVER_PORT)
+            tags['their_address'] = dest
+            b.log.debug(
+                '%d commands %dB',
+                len(commands), len(bytes_to_send), extra=tags)
             try:
                 udp_sock.sendto(bytes_to_send, dest)
             except OSError as exc:
                 host, port = dest
                 raise ca.CaprotoNetworkError(f"Failed to send to {host}:{port}") from exc
-            logger.debug('Search request sent to %s:%d.', *dest)
 
     def check_timeout():
         nonlocal retry_at
