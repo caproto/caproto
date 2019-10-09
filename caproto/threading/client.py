@@ -88,7 +88,7 @@ def ensure_connected(func):
                     chan = ca.ClientChannel(pv.name, cm.circuit, cid=cid)
                     cm.channels[cid] = chan
                     cm.pvs[cid] = pv
-                    pv.circuit_manager.send(chan.create())
+                    pv.circuit_manager.send(chan.create(), extra={'pv': pv.name})
                     self._idle = False
             # increment the usage at the very end in case anything
             # goes wrong in the block of code above this.
@@ -776,7 +776,7 @@ class SharedBroadcaster:
                     # distinction.
                     for circuit_manager in circuit_managers:
                         try:
-                            circuit_manager.send(ca.EchoRequest())
+                            circuit_manager.send(ca.EchoRequest(), extra={'pv': pv.name})
                         except Exception:
                             # Send failed. Server is likely dead, but we'll
                             # catch that shortly; no need to handle it
@@ -1332,10 +1332,10 @@ class VirtualCircuitManager:
         except BlockingIOError:
             raise ca.SendAllRetry()
 
-    def send(self, *commands):
+    def send(self, *commands, extra=None):
         # Turn the crank: inform the VirtualCircuit that these commands will
         # be send, and convert them to buffers.
-        buffers_to_send = self.circuit.send(*commands)
+        buffers_to_send = self.circuit.send(*commands, extra=extra)
         # Send bytes over the wire using some caproto utilities.
         ca.send_all(buffers_to_send, self._socket_send)
 
@@ -1407,7 +1407,7 @@ class VirtualCircuitManager:
                                  pv.name, time.monotonic() - deadline)
                 return
 
-            pv.log.debug("%r", command)
+            pv.log.debug("%r", command, )
             event = ioid_info.get('event')
             if event is not None:
                 # If PV.read() or PV.write() are waiting on this response,
@@ -1728,7 +1728,7 @@ class PV:
             # after it acquires the lock.
             try:
                 self.channel_ready.clear()
-                self.circuit_manager.send(self.channel.clear())
+                self.circuit_manager.send(self.channel.clear(), extra={'pv': pv.name})
             except OSError:
                 # the socket is dead-dead, do nothing
                 ...
@@ -1784,7 +1784,7 @@ class PV:
 
         deadline = time.monotonic() + timeout if timeout is not None else None
         ioid_info['deadline'] = deadline
-        cm.send(command)
+        cm.send(command, extra={'pv': self.name})
         self.log.debug("%r", command)
         if not wait:
             return
@@ -1864,8 +1864,6 @@ class PV:
             deadline = time.monotonic() + timeout if timeout is not None else None
             ioid_info['deadline'] = deadline
             # do not need to lock this, locking happens in circuit command
-            cm.send(command)
-            self.log.debug("%r", command)
         else:
             if wait or callback is not None:
                 raise CaprotoValueError("Must set notify=True in order to use "
@@ -1873,8 +1871,7 @@ class PV:
                                         "notification of 'put-completion' from the "
                                         "server, there is nothing to wait on or to "
                                         "trigger a callback.")
-            cm.send(command)
-            self.log.debug("%r", command)
+        cm.send(command, extra={'pv': self.name})
 
         if not wait:
             return
@@ -2141,7 +2138,7 @@ class Subscription(CallbackHandler):
             except ca.CaprotoKeyError:
                 pass
             else:
-                self.pv.circuit_manager.send(command)
+                self.pv.circuit_manager.send(command, extra={'pv': self.pv.name})
 
     def process(self, command):
         # TODO here i think we can decouple PV update rates and callback

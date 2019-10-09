@@ -133,7 +133,7 @@ class VirtualCircuit:
     def __hash__(self):
         return hash((self.address, self.priority, self.our_role))
 
-    def send(self, *commands):
+    def send(self, *commands, extra=None):
         """
         Convert one or more high-level Commands into buffers of bytes that may
         be broadcast together in one TCP packet. Update our internal
@@ -154,6 +154,7 @@ class VirtualCircuit:
                 'our_address': self.our_address,
                 'direction': '--->>>',
                 'role': repr(self.our_role)}
+        tags.update(extra or {})
         for command in commands:
             self._process_command(self.our_role, command)
             if hasattr(command, 'name') and not isinstance(command, (ClientNameRequest, HostNameRequest)):
