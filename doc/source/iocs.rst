@@ -186,8 +186,8 @@ update rate controlled by a second PV, ``random_walk:dt``.
    synchronization primitives. The attribute ``async_lib.library`` would be either
    the Python module ``asyncio`` (default), ``trio``, or ``curio``, depending on how
    the server is run.  It happens that all three of these modules have a ``sleep``
-   function at top level, so ``async_lib.library.sleep`` accesses the appropriate
-   sleep function for each library.
+   function at the top level, so ``async_lib.library.sleep`` accesses the
+   appropriate sleep function for each library.
 
    **Why not use time.sleep?**
 
