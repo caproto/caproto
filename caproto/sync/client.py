@@ -61,7 +61,7 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
         except OSError as exc:
             raise ca.CaprotoNetworkError(f"Failed to send to {host}:{repeater_port}") from exc
 
-    logger.debug("Searching for '%s'....", pv_name)
+    logger.debug("Searching for %r....", pv_name)
     bytes_to_send = b.send(
         ca.VersionRequest(0, ca.DEFAULT_PROTOCOL_VERSION),
         ca.SearchRequest(pv_name, 0, ca.DEFAULT_PROTOCOL_VERSION))
@@ -78,7 +78,7 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
             except OSError as exc:
                 host, port = dest
                 raise ca.CaprotoNetworkError(f"Failed to send to {host}:{port}") from exc
-            logger.debug('Search request sent to %r.', dest)
+            logger.debug('Search request sent to %s:%d.', *dest)
 
     def check_timeout():
         nonlocal retry_at
@@ -118,7 +118,7 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
             for command in commands:
                 if isinstance(command, ca.SearchResponse) and command.cid == 0:
                     address = ca.extract_address(command)
-                    logger.debug('Found %s at %s', pv_name, address)
+                    logger.debug('Found %r at %s:%d', pv_name, *address)
                     return address
             else:
                 # None of the commands we have seen are a reply to our request.
