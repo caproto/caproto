@@ -748,6 +748,12 @@ class ChannelEnum(ChannelData):
         flags |= (SubscriptionType.DBE_LOG | SubscriptionType.DBE_VALUE)
         await super().write_from_dbr(*args, flags=flags, **kwargs)
 
+    async def write_metadata(self, enum_strings=None, **kwargs):
+        if enum_strings is not None:
+            self._data['enum_strings'] = tuple(enum_strings)
+
+        return await super().write_metadata(**kwargs)
+
 
 class ChannelNumeric(ChannelData):
     def __init__(self, *, value, units='',
