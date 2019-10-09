@@ -104,12 +104,12 @@ Use the ``data_type`` parameter to request a richer data type.
 .. ipython:: python
 
 
-   richer_res = pv.read(data_type='time')
+   richer_res = dt.read(data_type='time')
    richer_res.metadata
    richer_res.metadata.timestamp
-   richer_res.metadata.stamp.to_datetime()  # a convenience method
+   richer_res.metadata.stamp.as_datetime()  # a convenience method
 
-See :doc:`read` for more information on the values accepted by the
+See :meth:`PV.read` for more information on the values accepted by the
 ``data_type`` parameter.
 
 .. note::

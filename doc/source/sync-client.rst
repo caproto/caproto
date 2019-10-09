@@ -75,9 +75,9 @@ Use the ``data_type`` parameter to request a richer data type.
    richer_res = read('random_walk:dt', data_type='time')
    richer_res.metadata
    richer_res.metadata.timestamp
-   richer_res.stamp.to_datetime()  # a convenience method
+   richer_res.metadata.stamp.as_datetime()  # a convenience method
 
-See :doc:`read` for more information on the values accepted by the
+See :func:`read` for more information on the values accepted by the
 ``data_type`` parameter.
 
 .. note::

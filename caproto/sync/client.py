@@ -280,7 +280,7 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0, notify=True,
     A convenience method is provided for access the timestamp as a Python
     datetime object.
 
-    >>> read('cat' data_type='time').stamp.as_datetime()
+    >>> read('cat' data_type='time').metadata.stamp.as_datetime()
     datetime.datetime(2019, 10, 9, 11, 58, 59, 42392)
 
     The requested data type may also been given as a specific Channel Access
