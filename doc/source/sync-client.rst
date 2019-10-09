@@ -71,7 +71,6 @@ Use the ``data_type`` parameter to request a richer data type.
 
 .. ipython:: python
 
-
    richer_res = read('random_walk:dt', data_type='time')
    richer_res.metadata
    richer_res.metadata.timestamp
