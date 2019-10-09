@@ -128,7 +128,7 @@ def poll_readiness(pv_to_check, attempts=5, timeout=1):
     for attempt in range(attempts):
         try:
             read(pv_to_check, timeout=timeout, repeater=False)
-        except TimeoutError:
+        except (TimeoutError, ConnectionRefusedError):
             continue
         else:
             break
