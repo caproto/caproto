@@ -93,6 +93,25 @@ Access particular fields in the response using attribute ("dot") access on ``res
 
     res.data
 
+By default, the client does not request any metadata
+
+.. ipython:: python
+
+   res.metadata
+
+Use the ``data_type`` parameter to request a richer data type.
+
+.. ipython:: python
+
+
+   richer_res = pv.read(data_type='time')
+   richer_res.metadata
+   richer_res.metadata.timestamp
+   richer_res.metadata.stamp.to_datetime()  # a convenience method
+
+See :doc:`read` for more information on the values accepted by the
+``data_type`` parameter.
+
 .. note::
 
     **Performance Note**
