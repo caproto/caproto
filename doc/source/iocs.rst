@@ -177,6 +177,31 @@ update rate controlled by a second PV, ``random_walk:dt``.
 
 .. literalinclude:: ../../caproto/ioc_examples/random_walk.py
 
+.. note::
+
+   **What is async_lib.library.sleep?**
+
+   As caproto supports three different async libraries, we have an "async
+   layer" class that gives compatible async versions of commonly used
+   synchronization primitives. The attribute ``async_lib.library`` would be either
+   the Python module ``asyncio`` (default), ``trio``, or ``curio``, depending on how
+   the server is run.  It happens that all three of these modules have a ``sleep``
+   function at top level, so ``async_lib.library.sleep`` accesses the appropriate
+   sleep method for each library.
+
+   **Why not use time.sleep?**
+
+   The gist is that ``asyncio.sleep`` doesn't hold up your entire thread /
+   event loop, but gives back control to the event loop to run other tasks while
+   sleeping. The function ``time.sleep``, on the other hand, would cause
+   noticeable delays and problems.
+
+   This is a fundamenatal consideration in concurrent programming generally,
+   not specific to caproto. See for example
+   `this StackOverflow post <https://stackoverflow.com/questions/46207991/what-does-yield-from-asyncio-sleepdelay-do>`_
+   for more information.
+
+
 I/O Interrupt
 -------------
 
