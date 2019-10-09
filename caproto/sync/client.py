@@ -266,9 +266,34 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0, notify=True,
     Examples
     --------
 
-    Get the value of a Channel named 'cat'.
+    Get the value of a Channel named 'simple:A'.
 
-    >>> read('cat').data
+    >>> read('simple:A').data
+    array([1], dtype=int32)
+
+    Request a richer Channel Access data type that includes the timestamp, and
+    access the timestamp.
+
+    >>> read('cat', data_type='time').metadata.timestmap
+    1570622339.042392
+
+    A convenience method is provided for access the timestamp as a Python
+    datetime object.
+
+    >>> read('cat' data_type='time').stamp.as_datetime()
+    datetime.datetime(2019, 10, 9, 11, 58, 59, 42392)
+
+    The requested data type may also been given as a specific Channel Access
+    type
+
+    >>> from caproto import ChannelType
+    >>> read('cat', data_type=ChannelType.CTRL_FLOAT).metadata
+    DBR_CTRL_FLOAT(status=<AlarmStatus.NO_ALARM: 0>, severity=<AlarmSeverity.NO_ALARM: 0>, upper_disp_limit=0.0, lower_disp_limit=0.0, upper_alarm_limit=0.0, upper_warning_limit=0.0, lower_warning_limit=0.0, lower_alarm_limit=0.0, upper_ctrl_limit=0.0, lower_ctrl_limit=0.0, precision=0, units=b'')
+
+    or the corresponding integer identifer
+
+    >>> read('cat', data_type=30).metadata
+    DBR_CTRL_FLOAT(status=<AlarmStatus.NO_ALARM: 0>, severity=<AlarmSeverity.NO_ALARM: 0>, upper_disp_limit=0.0, lower_disp_limit=0.0, upper_alarm_limit=0.0, upper_warning_limit=0.0, lower_warning_limit=0.0, lower_alarm_limit=0.0, upper_ctrl_limit=0.0, lower_ctrl_limit=0.0, precision=0, units=b'')
     """
     if repeater:
         # As per the EPICS spec, a well-behaved client should start a
@@ -319,9 +344,9 @@ def subscribe(pv_name, priority=0, data_type=None, data_count=None,
     Examples
     --------
 
-    Define a subscription on the ``cat`` PV.
+    Define a subscription on the ``random_walk:x`` PV.
 
-    >>> sub = subscribe('cat')
+    >>> sub = subscribe('random_walk:x')
 
     Add one or more user-defined callbacks to process responses.
 
@@ -567,12 +592,13 @@ def write(pv_name, data, *, notify=False, data_type=None, metadata=None,
 
     Examples
     --------
-    Write the value 5 to a Channel named 'cat'.
+    Write the value 5 to a Channel named 'simple:A'.
 
-    >>> write('cat', 5)  # returns None
+    >>> write('simple:A', 5)  # returns None
 
     Request notification of completion ("put completion") and wait for it.
-    >>> write('cat', 5, notify=True)  # returns a WriteNotifyResponse
+    >>> write('cat', 5, notify=True)  # blocks until complete, then returns:
+    WriteNotifyResponse(data_type=<ChannelType.LONG: 5>, data_count=1, status=CAStatusCode(name='ECA_NORMAL', code=0, code_with_severity=1, severity=<CASeverity.SUCCESS: 1>, success=1, defunct=False, description='Normal successful completion'), ioid=0)
     """
     if repeater:
         # As per the EPICS spec, a well-behaved client should start a
@@ -648,7 +674,7 @@ def read_write_read(pv_name, data, *, notify=False,
     Examples
     --------
 
-    Write the value 5 to a Channel named 'cat'.
+    Write the value 5 to a Channel named 'simple:A'.
 
     >>> read_write_read('cat', 5)  # returns initial, None, final
 
