@@ -108,6 +108,7 @@ class PvpropertyData:
             self.field_inst = field_class(
                 prefix='', parent=self,
                 name=f'{self.name}.fields')
+
             self.fields = self.field_inst.pvdb
         else:
             self.field_inst = None
