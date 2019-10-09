@@ -82,7 +82,7 @@ class VirtualCircuit(_VirtualCircuit):
 
             async def recv(self, nbytes):
                 return (await self.loop.sock_recv(self.client, 4096))
-
+        self._raw_lock = asyncio.Lock()
         self._raw_client = client
         super().__init__(circuit, SockWrapper(loop, client), context)
         self.QueueFull = asyncio.QueueFull
@@ -109,8 +109,11 @@ class VirtualCircuit(_VirtualCircuit):
     async def send(self, *commands):
         if self.connected:
             buffers_to_send = self.circuit.send(*commands)
-            await self.loop.sock_sendall(self._raw_client,
-                                         b''.join(buffers_to_send))
+            # lock to make sure a AddEvent does not write bytes
+            # to the socket while we are sending
+            async with self._raw_lock:
+                await self.loop.sock_sendall(self._raw_client,
+                                             b''.join(buffers_to_send))
 
     async def run(self):
         self._cq_task = self.loop.create_task(self.command_queue_loop())
