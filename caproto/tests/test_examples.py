@@ -541,7 +541,7 @@ def test_event_read_collision(request, prefix, async_lib):
     t1.add_callback(lambda value, **kwargs: None)
 
     for j in range(4):
-        image.get(timeout=20)
+        image.get(timeout=45)
 
     image.disconnect()
     t1.disconnect()
