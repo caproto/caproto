@@ -65,6 +65,7 @@ class VirtualCircuit(_VirtualCircuit):
 
     def __init__(self, circuit, client, context):
         super().__init__(circuit, client, context)
+        self._raw_lock = trio.Lock()
         self.nursery = context.nursery
         self.QueueFull = trio.WouldBlock
 

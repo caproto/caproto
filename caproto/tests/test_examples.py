@@ -520,5 +520,30 @@ def test_enum_linking(request, prefix):
         assert string_read(f'{pv}.ONAM') == onam
 
         for value, expected in ([0, znam], [1, onam]):
+
             write(pv, [value], notify=True)
             assert string_read(pv) == expected
+
+
+@pytest.mark.parametrize('async_lib', ['curio', 'trio', 'asyncio'])
+def test_event_read_collision(request, prefix, async_lib):
+    # this is testing that monitors do not get pushed into
+    # the socket while a ReadResponse is being pushed in parts.
+    from .conftest import run_example_ioc
+    run_example_ioc('caproto.ioc_examples.big_image_noisy_neighbor',
+                    request=request,
+                    args=['--prefix', prefix, '--async-lib', async_lib],
+                    pv_to_check=f'{prefix}t1')
+    from caproto.threading.pyepics_compat import get_pv, Context
+    cntx = Context()
+    image = get_pv(pvname=f'{prefix}image', context=cntx)
+    t1 = get_pv(pvname=f'{prefix}t1', context=cntx)
+    t1.add_callback(lambda value, **kwargs: None)
+
+    for j in range(4):
+        image.get(timeout=45)
+
+    image.disconnect()
+    t1.disconnect()
+
+    cntx.disconnect()
