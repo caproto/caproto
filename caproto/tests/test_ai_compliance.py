@@ -5,7 +5,9 @@ import os
 from epics import ca
 import urllib.request  # for fetching "epics-base" code to compare types
 import pytest
-import subprocess, sys
+import subprocess
+import sys
+import signal
 
 # this is to run on windows
 os.environ["EPICS_CA_ADDR_LIST"] = "127.0.0.1"  # local
