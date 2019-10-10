@@ -438,7 +438,8 @@ class PV:
                 (self._auto_monitor_sub is None) or
                 (cached_value is None) or
                 (count is not None and count > len(cached_value))):
-            command = self._caproto_pv.read(data_type=dt, data_count=count)
+            command = self._caproto_pv.read(data_type=dt, data_count=count,
+                                            timeout=timeout)
             response = _read_response_to_pyepics(self.typefull, command)
             self._args.update(**response)
             md.update(**response)

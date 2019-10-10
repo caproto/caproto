@@ -311,6 +311,6 @@ def run(pvdb, *, interfaces=None, log_pv_names=False):
         start_server(pvdb, interfaces=interfaces, log_pv_names=log_pv_names))
     try:
         loop.run_until_complete(task)
-    except KeyboardInterrupt:
+    finally:
         task.cancel()
         loop.run_until_complete(task)
