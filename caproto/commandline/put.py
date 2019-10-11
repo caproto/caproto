@@ -93,7 +93,6 @@ def main():
         # interpret as string
         data = args.data
     elif args.file:
-        print(args.file, args.data)
         with open(str(args.data), mode='rb') as file:
             data = file.read()
     elif args.array:
