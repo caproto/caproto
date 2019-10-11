@@ -1,4 +1,4 @@
-#!/USSR/bin/env python3
+#!/usr/bin/env python3
 from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
 import numpy as np
 import time

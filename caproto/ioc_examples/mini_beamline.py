@@ -49,7 +49,6 @@ class _JitterDetector(PVGroup):
 
     @mtr.startup
     async def mtr(self, instance, async_lib):
-        print('here')
         instance.ev = async_lib.library.Event()
         instance.async_lib = async_lib
 
@@ -61,7 +60,6 @@ class _JitterDetector(PVGroup):
         step_size = .1
         N = max(1, int(disp / step_size))
         for j in range(N):
-            print(f'step {j}')
             await instance.write(instance.value + step_size)
             await instance.async_lib.library.sleep(dwell)
 
