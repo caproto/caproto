@@ -66,7 +66,7 @@ def main():
     parser.add_argument('--array', '-a', action='store_true',
                         help=("Interprets `data` as an array, delimited by "
                               "space"))
-    parser.add_argument('--file', '-f', action='store_true',
+    parser.add_argument('--file', action='store_true',
                         help=("Interprets `data` as a file"))
     parser.add_argument('--array-pad', type=int, default=0,
                         help=("Pad the array up to a specified length"))
