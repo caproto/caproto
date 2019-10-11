@@ -243,6 +243,7 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0, notify=True,
     Parameters
     ----------
     pv_name : str
+        The PV name to read from
     data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
         Request specific data type or a class of data types, matched to the
         channel's native data type. Default is Channel's native data type.
@@ -350,6 +351,7 @@ def subscribe(pv_name, priority=0, data_type=None, data_count=None,
     Parameters
     ----------
     pv_name : string
+        The PV name to subscribe to
     priority : integer, optional
         Used by the server to triage subscription responses when under high
         load. 0 is lowest; 99 is highest.
@@ -422,6 +424,7 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
     Parameters
     ----------
     *subscriptions : Subscriptions
+        The list of subscriptions.
     duration : float, optional
         How many seconds to run for. Run forever (None) by default.
     timeout : float, optional
@@ -593,6 +596,7 @@ def write(pv_name, data, *, notify=False, data_type=None, metadata=None,
     Parameters
     ----------
     pv_name : str
+        The PV name to write to
     data : str, int, or float or any Iterable of these
         Value(s) to write.
     notify : boolean, optional
@@ -626,10 +630,10 @@ def write(pv_name, data, *, notify=False, data_type=None, metadata=None,
         data_type=<ChannelType.LONG: 5>,
         data_count=1,
         status=CAStatusCode(
-            name='ECA_NORMAL', code=0, code_with_severity=1,
-            severity=<CASeverity.SUCCESS: 1>,
-            success=1, defunct=False,
-            description='Normal successful completion'),
+        name='ECA_NORMAL', code=0, code_with_severity=1,
+        severity=<CASeverity.SUCCESS: 1>,
+        success=1, defunct=False,
+        description='Normal successful completion'),
         ioid=0)
     """
     if repeater:
@@ -675,6 +679,7 @@ def read_write_read(pv_name, data, *, notify=False,
     Parameters
     ----------
     pv_name : str
+        The PV name to write/read/write
     data : str, int, or float or a list of these
         Value to write.
     notify : boolean, optional
