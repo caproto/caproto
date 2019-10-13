@@ -32,8 +32,12 @@ _permission_to_block = []  # mutable state shared by block and interrupt
 
 
 # Convenience functions that do both transport and caproto validation/ingest.
-def send(circuit, command):
-    buffers_to_send = circuit.send(command)
+def send(circuit, command, pv_name=None):
+    if pv_name is not None:
+        tags = {'pv': pv_name}
+    else:
+        tags = None
+    buffers_to_send = circuit.send(command, extra=tags)
     sockets[circuit].sendmsg(buffers_to_send)
 
 
@@ -159,10 +163,11 @@ def make_channel(pv_name, udp_sock, priority, timeout):
             # Initialize our new TCP-based CA connection with a VersionRequest.
             send(chan.circuit, ca.VersionRequest(
                 priority=priority,
-                version=ca.DEFAULT_PROTOCOL_VERSION))
+                version=ca.DEFAULT_PROTOCOL_VERSION),
+                pv_name)
             send(chan.circuit, chan.host_name(socket.gethostname()))
             send(chan.circuit, chan.client_name(getpass.getuser()))
-        send(chan.circuit, chan.create())
+        send(chan.circuit, chan.create(), pv_name)
         t = time.monotonic()
         while True:
             try:
@@ -196,7 +201,7 @@ def _read(chan, timeout, data_type, notify, force_int_enums):
         logger.debug("Changing requested data_type to STRING.")
         data_type = ChannelType.STRING
     req = chan.read(data_type=data_type, notify=notify)
-    send(chan.circuit, req)
+    send(chan.circuit, req, chan.name)
     t = time.monotonic()
     while True:
         try:
@@ -208,6 +213,12 @@ def _read(chan, timeout, data_type, notify, force_int_enums):
             raise CaprotoTimeoutError("Timeout while awaiting reading.")
 
         for command in commands:
+            if isinstance(command, ca.Message):
+                tags = {'direction': '<<<---',
+                        'bytesize': len(command),
+                        'our_address': chan.circuit.our_address,
+                        'their_address': chan.circuit.address}
+                logger.debug("%r", command, extra=tags)
             if (isinstance(command, (ca.ReadResponse, ca.ReadNotifyResponse)) and
                     command.ioid == req.ioid):
                 return command
@@ -269,7 +280,7 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0, notify=True,
     finally:
         try:
             if chan.states[ca.CLIENT] is ca.CONNECTED:
-                send(chan.circuit, chan.clear())
+                send(chan.circuit, chan.clear(), chan.name)
         finally:
             sockets[chan.circuit].close()
             del sockets[chan.circuit]
@@ -417,7 +428,7 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
             loggers[chan.name].debug("Subscribing with data_type %r.",
                                      time_type)
             req = chan.subscribe(data_type=time_type, mask=sub.mask)
-            send(chan.circuit, req)
+            send(chan.circuit, req, chan.name)
             sub_ids[(chan.circuit, req.subscriptionid)] = sub
         logger.debug('Subscribed. Building socket selector.')
         try:
@@ -459,7 +470,7 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
         try:
             for chan in channels.values():
                 if chan.states[ca.CLIENT] is ca.CONNECTED:
-                    send(chan.circuit, chan.clear())
+                    send(chan.circuit, chan.clear(), chan.name)
         finally:
             # Reinstate the timeout for channel cleanup.
             for chan in channels.values():
@@ -482,7 +493,7 @@ def _write(chan, data, metadata, timeout, data_type, notify):
     logger.debug("Writing.")
     req = chan.write(data=data, notify=notify,
                      data_type=data_type, metadata=metadata)
-    send(chan.circuit, req)
+    send(chan.circuit, req, chan.name)
     t = time.monotonic()
     if notify:
         while True:
@@ -567,7 +578,7 @@ def write(pv_name, data, *, notify=False, data_type=None, metadata=None,
     finally:
         try:
             if chan.states[ca.CLIENT] is ca.CONNECTED:
-                send(chan.circuit, chan.clear())
+                send(chan.circuit, chan.clear(), chan.name)
         finally:
             sockets[chan.circuit].close()
             del sockets[chan.circuit]
@@ -653,7 +664,7 @@ def read_write_read(pv_name, data, *, notify=False,
     finally:
         try:
             if chan.states[ca.CLIENT] is ca.CONNECTED:
-                send(chan.circuit, chan.clear())
+                send(chan.circuit, chan.clear(), chan.name)
         finally:
             sockets[chan.circuit].close()
             del sockets[chan.circuit]

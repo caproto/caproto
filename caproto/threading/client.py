@@ -763,7 +763,7 @@ class SharedBroadcaster:
                     checking[address] = now + RESPONSIVENESS_TIMEOUT
                     tags = {'role': 'CLIENT',
                             'their_address': address,
-                            'our_address': self.broadcaster.broadcaster.client_address,
+                            'our_address': self.broadcaster.client_address,
                             'direction': '--->>>'}
 
                     self.broadcaster.log.debug(
@@ -1266,7 +1266,7 @@ class VirtualCircuitManager:
                  'socket', 'selector', 'pvs', 'all_created_pvnames',
                  'dead', 'process_queue', 'processing',
                  '_subscriptionid_counter', 'user_callback_executor',
-                 'last_tcp_receipt', '__weakref__')
+                 'last_tcp_receipt', '__weakref__', '_tags')
 
     def __init__(self, context, circuit, selector, timeout=TIMEOUT):
         self.context = context
@@ -1296,11 +1296,17 @@ class VirtualCircuitManager:
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
             self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             self.circuit.our_address = self.socket.getsockname()[:2]
+            # This dict is passed to the loggers.
+            self._tags = {'their_address': self.circuit.address,
+                          'our_address': self.circuit.our_address,
+                          'direction': '<<<---',
+                          'role': repr(self.circuit.our_role)}
             self.selector.add_socket(self.socket, self)
             self.send(ca.VersionRequest(self.circuit.priority,
                                         ca.DEFAULT_PROTOCOL_VERSION),
                       ca.HostNameRequest(self.context.host_name),
-                      ca.ClientNameRequest(self.context.client_name))
+                      ca.ClientNameRequest(self.context.client_name),
+                      extra=self._tags)
         else:
             raise CaprotoRuntimeError("Cannot connect. States are {} "
                                       "".format(self.circuit.states))
@@ -1388,6 +1394,7 @@ class VirtualCircuitManager:
                 self.disconnect()
                 return
 
+        tags = self._tags
         if command is ca.DISCONNECTED:
             self._disconnected()
         elif isinstance(command, (ca.VersionResponse,)):
@@ -1399,6 +1406,7 @@ class VirtualCircuitManager:
             ioid_info = self.ioids.pop(command.ioid)
             deadline = ioid_info['deadline']
             pv = ioid_info['pv']
+            tags = {'pv': pv.name, **tags}
             if deadline is not None and time.monotonic() > deadline:
                 self.log.warning("Ignoring late response with ioid=%d regarding "
                                  "PV named %s because "
@@ -1407,7 +1415,6 @@ class VirtualCircuitManager:
                                  pv.name, time.monotonic() - deadline)
                 return
 
-            pv.log.debug("%r", command, )
             event = ioid_info.get('event')
             if event is not None:
                 # If PV.read() or PV.write() are waiting on this response,
@@ -1432,10 +1439,13 @@ class VirtualCircuitManager:
                 # This method submits jobs to the Contexts's
                 # ThreadPoolExecutor for user callbacks.
                 sub.process(command)
+            tags = {'pv': pv.name, **tags}
         elif isinstance(command, ca.AccessRightsResponse):
             pv = self.pvs[command.cid]
             pv.access_rights_changed(command.access_rights)
+            tags = {'pv': pv.name, **tags}
         elif isinstance(command, ca.EventCancelResponse):
+            # TODO Any way to add the pv name to tags here?
             ...
         elif isinstance(command, ca.CreateChanResponse):
             pv = self.pvs[command.cid]
@@ -1445,18 +1455,21 @@ class VirtualCircuitManager:
                 pv.channel = chan
                 pv.channel_ready.set()
             pv.connection_state_changed('connected', chan)
+            tags = {'pv': pv.name, **tags}
         elif isinstance(command, (ca.ServerDisconnResponse,
                                   ca.ClearChannelResponse)):
             pv = self.pvs[command.cid]
             pv.connection_state_changed('disconnected', None)
+            tags = {'pv': pv.name, **tags}
             # NOTE: pv remains valid until server goes down
         elif isinstance(command, ca.EchoResponse):
             # The important effect here is that it will have updated
             # self.last_tcp_receipt when the bytes flowed through
             # self.received.
             ...
-        else:
-            self.log.debug('other command %s', command)
+        if isinstance(command, ca.Message):
+            tags['bytesize'] = len(command)
+            self.log.debug("%r", command, extra=tags)
 
     def _disconnected(self, *, reconnect=True):
         # Ensure that this method is idempotent.
@@ -1785,7 +1798,6 @@ class PV:
         deadline = time.monotonic() + timeout if timeout is not None else None
         ioid_info['deadline'] = deadline
         cm.send(command, extra={'pv': self.name})
-        self.log.debug("%r", command)
         if not wait:
             return
 
@@ -2147,7 +2159,6 @@ class Subscription(CallbackHandler):
         # the CA servers from processing. (-> ThreadPool, etc.)
 
         super().process(command)
-        self.log.debug("%r", command)
         self.most_recent_response = command
 
     def add_callback(self, func):
@@ -2318,7 +2329,6 @@ class Batch:
         for ioid_info in self._ioid_infos:
             ioid_info['deadline'] = deadline
             pv = ioid_info['pv']
-            pv.log.debug("%r", ioid_info['request'])
         for circuit_manager, commands in self._commands.items():
             circuit_manager.send(*commands)
 

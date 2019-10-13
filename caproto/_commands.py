@@ -81,7 +81,7 @@ __all__ = ('AccessRightsResponse', 'ClearChannelRequest',
            'ServerDisconnResponse', 'VersionRequest',
            'VersionResponse', 'WriteNotifyRequest',
            'WriteNotifyResponse', 'WriteRequest',
-           )
+           'Message')
 
 
 _MessageHeaderSize = ctypes.sizeof(MessageHeader)

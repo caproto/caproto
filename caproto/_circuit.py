@@ -30,6 +30,7 @@ from ._utils import (CLIENT, SERVER, NEED_DATA, DISCONNECTED, CaprotoKeyError,
                      ChannelFilter, ThreadsafeCounter)
 from ._dbr import (ChannelType, SubscriptionType, field_types, native_type)
 from ._constants import DEFAULT_PROTOCOL_VERSION
+from ._log import ComposableLogAdapter
 from ._status import CAStatus
 
 
@@ -143,6 +144,10 @@ class VirtualCircuit:
         ----------
         *commands :
             any number of :class:`Message` objects
+        extra : dict or None
+            Used for logging purposes. This is merged into the ``extra``
+            parameter passed to the logger to provide information like ``'pv'``
+            to the logger.
 
         Returns
         -------
@@ -157,8 +162,6 @@ class VirtualCircuit:
         tags.update(extra or {})
         for command in commands:
             self._process_command(self.our_role, command)
-            if hasattr(command, 'name') and not isinstance(command, (ClientNameRequest, HostNameRequest)):
-                tags['pv'] = command.name
             tags['bytesize'] = len(command)
             self.log.debug("%r", command, extra=tags)
             buffers_to_send.append(memoryview(command.header))
@@ -188,21 +191,13 @@ class VirtualCircuit:
             self.log.debug('Zero-length recv; sending disconnect notification')
             commands.append(DISCONNECTED)
             return commands, 0
-
         self._data += b''.join(buffers)
-
-        tags = {'their_address': self.address,
-                'our_address': self.our_address,
-                'direction': '<<<---',
-                'role': repr(self.our_role)}
         while True:
             (self._data,
              command,
              num_bytes_needed) = read_from_bytestream(self._data,
                                                       self.their_role)
             if command is not NEED_DATA:
-                tags['bytesize'] = len(command)
-                self.log.debug("%r", command, extra=tags)
                 commands.append(command)
             else:
                 # Less than a full command's worth of bytes are cached. Wait
@@ -473,7 +468,10 @@ class _BaseChannel:
     # methods for composing requests and repsponses, respectively. All of the
     # important code is here in the base class.
     def __init__(self, name, circuit, cid=None, string_encoding=STRING_ENCODING):
-        self.log = logging.LoggerAdapter(logging.getLogger('caproto.ch'), {'pv': name})
+        tags =  {'pv': name,
+                 'their_address': circuit.address,
+                 'role': repr(circuit.our_role)}
+        self.log = ComposableLogAdapter(logging.getLogger('caproto.ch'), tags)
         self.protocol_version = circuit.protocol_version
         self.name = name
         self.string_encoding = string_encoding
