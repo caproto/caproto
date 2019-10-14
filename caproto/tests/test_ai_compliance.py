@@ -1,15 +1,20 @@
-# we are going to test the ai record from ioc_examples/mocking_records
-# and see if it matches the "real" 'ai' record
-import epics, time, re
+#!/usr/bin/env python3
+# we are going to test the mock 'ai' record from ioc_examples/mocking_records
+# and see if:
+# - the types match the "real" 'ai' record
+# - all the .* PVs can be read
+# - all the enums of the .* can be read
+import epics
+import time
+import re
 import os
 from epics import ca
 import urllib.request  # for fetching "epics-base" code to compare types
-import pytest
 import subprocess
 import sys
 import signal
 
-# this is to run on windows
+# only want local responses.
 os.environ["EPICS_CA_ADDR_LIST"] = "127.0.0.1"  # local
 os.environ["EPICS_CA_AUTO_ADDR_LIST"] = "NO"
 
@@ -60,149 +65,173 @@ pyepics_type_lookup = {
     "ctrl_double": 34
 }
 
-# load up the db and type
-# fetching "aiRecord.dbd" & "dbCommon.dbd" from the community
-# this could similarly be done for the other PV types.
-# these are from; 
-# https://github.com/epicsdeb/epics-base/tree/master/src/std/rec
-# eg https://github.com/epics-base/epics-base/tree/3.16/src/std/rec
-real_record_db_lines=[]
-real_record_db_lines += urllib.request.urlopen("https://raw.githubusercontent.com/epics-base/epics-base/3.16/src/std/rec/aiRecord.dbd.pod")
-real_record_db_lines += urllib.request.urlopen("https://raw.githubusercontent.com/epics-base/epics-base/3.16/src/ioc/db/dbCommon.dbd")
 
-# extract out the types
-# the record files don't include the, "RTYP" & ".RTYP$"
-real_PV_types = [("RTYP", "DBF_STRING"), ("RTYP$", "DBF_STRING")]
-for line in real_record_db_lines:
-    # eg line="field(VAL,DBF_DOUBLE) {"
-    line=line.decode("utf-8")
-    regex = re.compile(r"[\s].*field\((?P<name>[A-Za-z_].*)[,\s](?P<type>[A-Za-z_].*)\) {")
-    m = regex.match(line)
-    if m is not None:
-        real_PV_types.append((m.group('name'), m.group('type')))
-        if m.group('type') in ["DBF_STRING", "DBF_FWDLINK", "DBF_INLINK"]:
-            real_PV_types.append((f"{m.group('name')}$", "DBF_CHAR"))
-
-
-def run_example_ioc(module_name, *, pv_to_check,
-                    stdin=None, stdout=None, stderr=None):
-
+def run_example_ioc(module_name, *, pv_to_check):
     os.environ['COVERAGE_PROCESS_START'] = '.coveragerc'
     print(f'Running {module_name}')
     args = list([]) + ['-vvv']
-    p = subprocess.Popen([sys.executable, '-um', 'caproto.tests.example_runner',
+    with open(os.devnull, 'w') as nowhere:
+    #nowhere=None
+        p = subprocess.Popen([sys.executable, '-um', 'caproto.tests.example_runner',
                           module_name] + list(args),
-                         stdout=stdout, stderr=stderr, stdin=stdin,
+                         stdout=nowhere, stderr=None, stdin=nowhere,
                          env=os.environ)
 
     poll_readiness_pye(pv_to_check)
 
+    import atexit
+    @atexit.register
+    def stop_ioc():
+        if p.poll() is None:
+            if sys.platform != 'win32':
+                print('Sending Ctrl-C to the example IOC')
+                p.send_signal(signal.SIGINT)
+                print('Waiting on process...')
+
+            try:
+                p.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                print('IOC did not exit in a timely fashion')
+                p.terminate()
+                print('IOC terminated')
+            else:
+                print('IOC has exited')
+        else:
+            print('Example IOC has already exited')
     return p
 
 
-def stop_ioc(p):
-    if p.poll() is None:
-        if sys.platform != 'win32':
-            print('Sending Ctrl-C to the example IOC')
-            p.send_signal(signal.SIGINT)
-            print('Waiting on process...')
-
-        try:
-            p.wait(timeout=1)
-        except subprocess.TimeoutExpired:
-            print('IOC did not exit in a timely fashion')
-            p.terminate()
-            print('IOC terminated')
-        else:
-            print('IOC has exited')
-    else:
-        print('Example IOC has already exited')
-
 
 def poll_readiness_pye(pv_to_check, attempts=5, timeout=1):
-    print(f'polling PV {pv_to_check}')
+    print(f'polling PV {pv_to_check}..')
+    pv_temp_connected = False
     for attempt in range(attempts):
         try:
-            epics.caget(pv_to_check, timeout=timeout)
+            pv_temp = epics.PV(pv_to_check)
+            pv_temp_connected = pv_temp.connect(timeout=timeout)
         except TimeoutError:
             continue
-        else:
+        if pv_temp_connected is True:
             break
-    else:
+
+    if pv_temp_connected is False:
         raise TimeoutError(f"ioc fixture failed to start in "
                            f"{attempts * timeout} seconds (pv: {pv_to_check})")
+    print(f'connected to PV: {pv_to_check}')
 
-#host a caproto record to test, you could also try this test on a real record.
-pv = f"mock:A" #
-p = run_example_ioc('caproto.ioc_examples.mocking_records',
-                    pv_to_check=f"{pv}")
+def get_real_pv_types():
+    '''
+    fetch "aiRecord.dbd" & "dbCommon.dbd" from the community, and
+    make a {PV extension:type} dict
+    (this could similarly be done for the other PV types).
+    '''
+    try:
+        real_record_db_lines = []
+        real_record_db_lines += urllib.request.urlopen(
+            "https://raw.githubusercontent.com/epics-base/epics-base/3.16/src/std/rec/aiRecord.dbd.pod")
+        real_record_db_lines += urllib.request.urlopen(
+            "https://raw.githubusercontent.com/epics-base/epics-base/3.16/src/ioc/db/dbCommon.dbd")
+    except Exception as e:
+        assert False, "need the internet to fetch the real record db files."
 
-# i pre-connect like this because it seems to be the only way not to get
-# false "not connected", and connecting with a timeout later on is slower..
-pv_list = {}
-for pv_name_ext,dbf_type in real_PV_types:
-    full_pv = f"{pv}.{pv_name_ext}"
-    pv_temp = epics.PV(full_pv)
-    pv_list[full_pv] = pv_temp
-    pv_temp.connect(timeout=0.1)  # just get it to try to connect once (some will not reply fast enough)
+    # extract out the types
+    # the record files don't include "RTYP" & ".RTYP$"
+    real_PV_types = {"RTYP": "DBF_STRING", "RTYP$": "DBF_CHAR"}
+    for line in real_record_db_lines:
+        # eg line="field(VAL,DBF_DOUBLE) {"
+        line = line.decode("utf-8")
+        regex = re.compile(
+            r"[\s].*field\((?P<name>[A-Za-z_].*)[,\s](?P<type>[A-Za-z_].*)\) {")
+        m = regex.match(line)
+        if m is not None:
+            real_PV_types[m.group('name')] = m.group('type')
+            if m.group('type') in ["DBF_STRING", "DBF_FWDLINK", "DBF_INLINK"]:
+                real_PV_types[f"{m.group('name')}$"] = "DBF_CHAR"
 
-# wait for all to connect at same time
-time.sleep(5) # allows a significant amount of time to connect.
-
-
-@pytest.mark.parametrize("extension,expected_type", real_PV_types)
-def test_pv_types(extension, expected_type):
-    global pv_list
-    full_pv = f"{pv}.{extension}"
-    pv_temp = pv_list[full_pv] #epics.PV(full_pv)
-
-    temp_real_pv_type=""
-    for i in range(len(real_PV_types)):
-        if real_PV_types[i][0] == extension:
-            temp_real_pv_type = real_PV_types[i][1] #real_PV_types[extension]
-
-    #if pv_temp.connect(10) is False:
-    if pv_temp.connected is False:
-        assert temp_real_pv_type == "DBF_NOACCESS"
-    else:
-        # make a list of acceptable results
-        acceptable = []
-        for acc_type in type_equal[expected_type]:
-            acceptable.append(acc_type)
-        for acc_type in type_equal[expected_type]:
-            acceptable.append(f"time_{acc_type}")
-        for acc_type in type_equal[expected_type]:
-            acceptable.append(f"ctrl_{acc_type}")
-
-        assert pv_temp.type in acceptable
+    return real_PV_types
 
 
-        try:
-            chid = pv_temp.chid #pv_list[full_pv].chid #
+def test_ai_compliance():
+    real_PV_types = get_real_pv_types()
 
+    # host a caproto record to test(you could also try this test on a real record).
+    # NOTE: using the below will actually run a seperate program from command line,
+    # bypassing whatever virtual env you are using for this test..
+    pv = f"mock:A"
+    p = run_example_ioc('caproto.ioc_examples.mocking_records',
+                        pv_to_check=f"{pv}")
 
-            # normally it is time_char so we add time_
-            type_read_temp_str = f"time_{type_equal[temp_real_pv_type][0]}"
-            type_read_temp = pyepics_type_lookup[type_read_temp_str]
-            # reading this way highlights problems, whereas pv.get() seems to just work.
-            
-            if "$" in extension:
-                read_temp = ca.get(chid, ftype=type_read_temp, as_string=True)
-            else:
-                read_temp = ca.get(chid, ftype=type_read_temp)
-        except Exception as e:
-            assert False, "can't be read"
+    # pre-connect.
+    # I found it seems to be the only way to avoid getting false "not connected",
+    # and connecting with a timeout later on is slower..
+    pv_list = {}
+    for extension in real_PV_types:
+        full_pv = f"{pv}.{extension}"
+        pv_temp = epics.PV(full_pv)
+        pv_list[full_pv] = pv_temp
+        pv_temp.connect(timeout=0.1)
 
-        enum_str = ""
-        if "MENU" in temp_real_pv_type: # real_PV_types[extension]
+    # wait for all to connect at same time
+    time.sleep(5)
+
+    # now do the testing
+    ai_compliant = True
+    for extension in real_PV_types:
+        full_pv = f"{pv}.{extension}"
+        pv_temp = pv_list[full_pv]
+
+        expected_type=real_PV_types[extension]
+
+        if pv_temp.connected is False:
+            #assert expected_type == "DBF_NOACCESS"
+            if expected_type != "DBF_NOACCESS":
+                print("**************************************************************")
+                print(f"{extension}: type is not hosted, but should be {expected_type}")
+                ai_compliant = False
+        else:
+            # make a list of acceptable results
+            acceptable = []
+            for acc_type in type_equal[expected_type]:
+                acceptable.append(acc_type)
+            for acc_type in type_equal[expected_type]:
+                acceptable.append(f"time_{acc_type}")
+            for acc_type in type_equal[expected_type]:
+                acceptable.append(f"ctrl_{acc_type}")
+
+            #assert pv_temp.type in acceptable
+            if pv_temp.type not in acceptable:
+                print("**************************************************************")
+                print(f"{extension}: type is {pv_temp.type} , but should be {expected_type}")
+                ai_compliant = False
             try:
-                enum_str = pv_temp.enum_strs
+                # normally it is time_char so we add time_
+                type_read_temp_str = f"time_{type_equal[expected_type][0]}"
+                type_read_temp = pyepics_type_lookup[type_read_temp_str]
+
+                # reading with ca.get highlights problems, whereas pv.get() seems to just work.
+                if "$" in extension:
+                    read_temp = ca.get(pv_temp.chid, as_string=True) #, ftype=type_read_temp)
+                else:
+                    read_temp = ca.get(pv_temp.chid) #, ftype=type_read_temp)
             except Exception as e:
-                assert False, "enum not readable" # assert enum_str != "" #pass
+                #assert False, "can't be read"
+                print("**************************************************************")
+                print(f"{extension}: can't be read")
+                print(e)
+                ai_compliant = False
 
+            enum_str = ""
+            if "MENU" in expected_type:
+                try:
+                    enum_str = pv_temp.enum_strs
+                except Exception as e:
+                    #assert False, "enum not readable"
+                    print("**************************************************************")
+                    print(f"{extension}: can't read enum")
+                    print(e)
+                    ai_compliant = False
 
-
-#test_pv_types(real_PV_types[0][0],real_PV_types[0][1])
-
-stop_ioc(p)
-print("END")
+    # because I can't fetch the epics db files and feed them into the parameterize,
+    # and I want to startup one ioc and connect to all the pv's at the same time
+    # I have to do it like this, sorry
+    assert ai_compliant is True
