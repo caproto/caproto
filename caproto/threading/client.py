@@ -1741,7 +1741,8 @@ class PV:
             # after it acquires the lock.
             try:
                 self.channel_ready.clear()
-                self.circuit_manager.send(self.channel.clear(), extra={'pv': pv.name})
+                self.circuit_manager.send(self.channel.clear(),
+                                          extra={'pv': self.name})
             except OSError:
                 # the socket is dead-dead, do nothing
                 ...
