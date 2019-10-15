@@ -36,10 +36,10 @@ from .._utils import (batch_requests, CaprotoError, ThreadsafeCounter,
                       socket_bytes_available, CaprotoTimeoutError,
                       CaprotoTypeError, CaprotoRuntimeError, CaprotoValueError,
                       CaprotoKeyError, CaprotoNetworkError)
-from .._log import ch_logger, search_logger
 
 
-print = partial(print, flush=True)
+ch_logger = logging.getLogger('caproto.ch')
+search_logger = logging.getLogger('caproto.bcast.search')
 
 
 CIRCUIT_DEATH_ATTEMPTS = 3

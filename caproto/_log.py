@@ -164,9 +164,6 @@ def color_logs(color):
     config_caproto_logging(color=color)
 
 
-logger = logging.getLogger('caproto')
-ch_logger = logging.getLogger('caproto.ch')
-search_logger = logging.getLogger('caproto.bcast.search')
 current_handler = None
 
 
@@ -408,6 +405,7 @@ def config_caproto_logging(file=sys.stdout, datefmt='%H:%M:%S', color=True, leve
         format = plain_log_format
     handler.setFormatter(
         LogFormatter(format, datefmt=datefmt))
+    logger = logging.getLogger('caproto')
     if current_handler in logger.handlers:
         logger.removeHandler(current_handler)
     logger.addHandler(handler)
