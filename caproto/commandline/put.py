@@ -90,7 +90,7 @@ def main():
     logger = logging.LoggerAdapter(logging.getLogger('caproto.ch'), {'pv': args.pv_name})
 
     if args.file:
-        with open(str(args.data), mode='rb') as file:
+        with open(str(args.data), mode='r') as file:
             raw_data = file.read()
     else:
         raw_data = args.data
