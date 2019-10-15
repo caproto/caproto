@@ -89,14 +89,17 @@ def main():
             set_handler(color=not args.no_color, level='DEBUG')
     logger = logging.LoggerAdapter(logging.getLogger('caproto.ch'), {'pv': args.pv_name})
 
+    if args.file:
+        with open(str(args.data), mode='rb') as file:
+            raw_data = file.read()
+    else:
+        raw_data = args.data
+
     if args.as_string:
         # interpret as string
-        data = args.data
-    elif args.file:
-        with open(str(args.data), mode='rb') as file:
-            data = file.read()
+        data = raw_data
     elif args.array:
-        data = [ast.literal_eval(val) for val in args.data.split(' ')]
+        data = [ast.literal_eval(val) for val in raw_data.split(' ')]
         if args.array_pad > 0:
             if len(data) < args.array:
                 data.extend([0] * (args.array - len(data)))
@@ -105,10 +108,12 @@ def main():
                 sys.exit(1)
     else:
         try:
-            data = ast.literal_eval(args.data)
+            data = ast.literal_eval(raw_data)
         except ValueError:
             # interpret as string
-            data = args.data
+            data = raw_data
+
+
     if args.wide:
         read_data_type = 'time'
     else:
