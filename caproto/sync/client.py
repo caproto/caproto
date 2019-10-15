@@ -212,12 +212,12 @@ def _read(chan, timeout, data_type, notify, force_int_enums):
         if time.monotonic() - t > timeout:
             raise CaprotoTimeoutError("Timeout while awaiting reading.")
 
+        tags = {'direction': '<<<---',
+                'our_address': chan.circuit.our_address,
+                'their_address': chan.circuit.address}
         for command in commands:
             if isinstance(command, ca.Message):
-                tags = {'direction': '<<<---',
-                        'bytesize': len(command),
-                        'our_address': chan.circuit.our_address,
-                        'their_address': chan.circuit.address}
+                tags['bytesize'] = len(command)
                 logger.debug("%r", command, extra=tags)
             if (isinstance(command, (ca.ReadResponse, ca.ReadNotifyResponse)) and
                     command.ioid == req.ioid):
@@ -505,7 +505,13 @@ def _write(chan, data, metadata, timeout, data_type, notify):
             if time.monotonic() - t > timeout:
                 raise CaprotoTimeoutError("Timeout while awaiting write reply.")
 
+            tags = {'direction': '<<<---',
+                    'our_address': chan.circuit.our_address,
+                    'their_address': chan.circuit.address}
             for command in commands:
+                if isinstance(command, ca.Message):
+                    tags['bytesize'] = len(command)
+                    logger.debug("%r", command, extra=tags)
                 if (isinstance(command, ca.WriteNotifyResponse) and
                         command.ioid == req.ioid):
                     response = command
