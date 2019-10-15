@@ -97,7 +97,7 @@ class Broadcaster:
         tags = {'role': repr(self.our_role)}
         for i, command in enumerate(commands):
             tags['counter'] = (1 + i, total_commands)
-            if isinstance(command, SearchRequest):
+            if isinstance(command, (SearchRequest, SearchResponse)):
                 # Send to a particular logger, and include the PV name.
                 self.search_log.debug("%r", command,
                                       extra={'pv': command.name, **tags})

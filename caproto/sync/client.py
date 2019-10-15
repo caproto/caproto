@@ -177,12 +177,18 @@ def make_channel(pv_name, udp_sock, priority, timeout):
             except socket.timeout:
                 raise CaprotoTimeoutError("Timeout while awaiting channel "
                                           "creation.")
+            tags = {'direction': '<<<---',
+                    'our_address': chan.circuit.our_address,
+                    'their_address': chan.circuit.address}
+            for command in commands:
+                if isinstance(command, ca.Message):
+                    tags['bytesize'] = len(command)
+                    logger.debug("%r", command, extra=tags)
+                elif command is ca.DISCONNECTED:
+                    raise CaprotoError('Disconnected during initialization')
             if chan.states[ca.CLIENT] is ca.CONNECTED:
                 log.info("Channel connected.")
                 break
-            for command in commands:
-                if command is ca.DISCONNECTED:
-                    raise CaprotoError('Disconnected during initialization')
 
     except BaseException:
         sockets[chan.circuit].close()
