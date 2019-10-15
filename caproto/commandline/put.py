@@ -113,7 +113,6 @@ def main():
             # interpret as string
             data = raw_data
 
-
     if args.wide:
         read_data_type = 'time'
     else:
