@@ -1439,7 +1439,7 @@ class VirtualCircuitManager:
                 # This method submits jobs to the Contexts's
                 # ThreadPoolExecutor for user callbacks.
                 sub.process(command)
-            tags = {'pv': pv.name, **tags}
+            tags = {'pv': sub.pv.name, **tags}
         elif isinstance(command, ca.AccessRightsResponse):
             pv = self.pvs[command.cid]
             pv.access_rights_changed(command.access_rights)
