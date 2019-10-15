@@ -178,7 +178,7 @@ def make_channel(pv_name, udp_sock, priority, timeout):
                 raise CaprotoTimeoutError("Timeout while awaiting channel "
                                           "creation.")
             if chan.states[ca.CLIENT] is ca.CONNECTED:
-                log.info('%s connected' % pv_name)
+                log.info("Channel connected.")
                 break
             for command in commands:
                 if command is ca.DISCONNECTED:
