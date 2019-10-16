@@ -66,7 +66,7 @@ richer data type.
     lower_warning_limit=0.0, lower_alarm_limit=0.0, upper_ctrl_limit=0.0,
     lower_ctrl_limit=0.0, precision=0, units=b'')
 
-To view the list of data types, use ``-list-types``.
+To view the list of data types, use ``--list-types``.
 
 .. code-block:: bash
 
@@ -182,7 +182,7 @@ The client issues three requests:
 2. Write ``1``.
 3. Read the value again.
 
-By default it does actually wait for confirmation that the write has been
+By default it does not actually wait for confirmation that the write has been
 processed by the server before moving on to the final read, so it is possible
 to receive a reading that isn't up to date. Use ``-c`` to ask the server to
 confirm the write's success and to wait on that confirmation before doing the

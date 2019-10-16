@@ -334,7 +334,7 @@ access the method :class:`SharedBroadcaster.cancel`.
 
    ctx.broadcaster.cancel('some typo-ed PV name, for example')
 
-As the name suggestions, it is possible to construct multiple Contexts that
+As the name suggests, it is possible to construct multiple Contexts that
 share one SharedBroadcaster. In that scenario, notice that canceling the
 search will affect all contexts using the SharedBroadcaster.
 
