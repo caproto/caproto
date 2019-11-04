@@ -2,6 +2,33 @@
 Release History
 ***************
 
+v0.4.2 (2019-11-04)
+===================
+
+This release contains some important bug fixes and some minor new features.
+
+Features
+--------
+* Make the default timeout for the threading client configurable via the
+  environment variable ``CAPROTO_DEFAULT_TIMEOUT``. It was previously
+  hard-coded to ``2`` (seconds).
+* Add ``--file`` argument to ``caproto-put``, which obtains the value to be put
+  from reading a file.
+* Link ZNAM and ONAM fields to the parent enum_strings.
+* Automatically populate ``pvproperty`` DESC using doc keyword argument.
+
+Bug Fixes
+---------
+* Fix a critical race condition wherein data could be written into a buffer as
+  it was being sent.
+* Propagate timeout specific to pyepics-compatible client to the next layer
+  down.
+* Correctly handle reconnection if the server dies.
+* Allow asyncio server to do cleanup in all cases. (Previously,
+  ``KeyboardInterrupt`` was erroneously exempted from cleanup.)
+* Let the server's ``write`` method provide the timestamp. This is significant
+  if the putter takes significant time to process or does any internal writes.
+
 v0.4.1 (2019-10-06)
 ===================
 
