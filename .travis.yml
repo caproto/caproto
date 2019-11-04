@@ -78,6 +78,8 @@ script:
     fi
 
   - pip install git+https://github.com/klauer/catvs.git@py3k
+  # Work around pip bug that fails to respect trio's pin of attrs.
+  - pip install -U attrs
 
   # give us an early warning of flake8 failure
   # the weird quating in to make searching in the results webpage easier
