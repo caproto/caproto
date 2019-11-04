@@ -1,5 +1,4 @@
 import array
-import curio
 import functools
 import logging
 import os
@@ -10,16 +9,13 @@ import sys
 import threading
 import time
 import uuid
-import trio
 
 from types import SimpleNamespace
 
 import caproto as ca
 import caproto.benchmarking  # noqa
 from caproto.sync.client import read
-import caproto.curio  # noqa
 import caproto.threading  # noqa
-import caproto.trio  # noqa
 import caproto.asyncio  # noqa
 
 
@@ -432,6 +428,11 @@ def curio_server(prefix):
     caget_pvdb = {prefix + key: value
                   for key, value in caget_pvdb.items()}
 
+    # Hide these imports so that the other fixtures are usable by other
+    # libraries (e.g. ophyd) without the experimental dependencies.
+    import curio
+    import caproto.curio
+
     async def _server(pvdb):
         ctx = caproto.curio.server.Context(pvdb)
         try:
@@ -457,6 +458,9 @@ def curio_server(prefix):
 
 async def get_curio_context():
     logger.debug('New curio broadcaster')
+    # Hide this import so that the other fixtures are usable by other
+    # libraries (e.g. ophyd) without the experimental dependencies.
+    import caproto.curio
     broadcaster = caproto.curio.client.SharedBroadcaster()
     logger.debug('Registering...')
     await broadcaster.register()
@@ -465,6 +469,11 @@ async def get_curio_context():
 
 
 def run_with_trio_context(func, **kwargs):
+    # Hide these imports so that the other fixtures are usable by other
+    # libraries (e.g. ophyd) without the experimental dependencies.
+    import caproto.trio
+    import trio
+
     async def runner():
         async with trio.open_nursery() as nursery:
             logger.debug('New trio broadcaster')
@@ -492,6 +501,11 @@ def run_with_trio_context(func, **kwargs):
 def server(request):
 
     def curio_runner(pvdb, client, *, threaded_client=False):
+        # Hide these imports so that the other fixtures are usable by other
+        # libraries (e.g. ophyd) without the experimental dependencies.
+        import curio
+        import caproto.curio
+
         async def server_main():
             try:
                 ctx = caproto.curio.server.Context(pvdb)
@@ -525,6 +539,11 @@ def server(request):
             kernel.run(run_server_and_client)
 
     def trio_runner(pvdb, client, *, threaded_client=False):
+        # Hide these imports so that the other fixtures are usable by other
+        # libraries (e.g. ophyd) without the experimental dependencies.
+        import trio
+        import caproto.trio
+
         async def trio_server_main(task_status):
             try:
                 ctx = caproto.trio.server.Context(pvdb)
@@ -643,6 +662,9 @@ def threaded_in_curio_wrapper(fcn):
     using `curio.run_in_thread` and then await wrapped_function.wait() inside
     the test kernel.
     '''
+    # Hide this import so that the other fixtures are usable by other
+    # libraries (e.g. ophyd) without the experimental dependencies.
+    import curio
     uqueue = curio.UniversalQueue()
 
     def wrapped_threaded_func():
