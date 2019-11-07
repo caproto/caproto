@@ -48,6 +48,7 @@ def recv(circuit):
 def search(pv_name, udp_sock, timeout, *, max_retries=2):
     # Set Broadcaster log level to match our logger.
     b = ca.Broadcaster(our_role=ca.CLIENT)
+    udp_sock.bind(('', 0))
     b.our_address = udp_sock.getsockname()[:2]
 
     # Send registration request to the repeater

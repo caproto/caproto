@@ -340,6 +340,7 @@ class SharedBroadcaster:
         self.listeners = weakref.WeakSet()
 
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
+        self.udp_sock.bind(('', 0))
         self.broadcaster.our_address = self.udp_sock.getsockname()[:2]
         self.log = logging.LoggerAdapter(
             self.broadcaster.log, {'role': 'CLIENT'})
