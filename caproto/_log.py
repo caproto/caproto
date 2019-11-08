@@ -344,7 +344,8 @@ def _set_handler_with_logger(logger_name='caproto', file=sys.stdout, datefmt='%H
         format = plain_log_format
     handler.setFormatter(
         LogFormatter(format, datefmt=datefmt))
-    logging.getLogger(logger_name).addHandler(handler)
+    logger = logging.getLogger(logger_name)
+    logger.addHandler(handler)
     if logger.getEffectiveLevel() > levelno:
         logger.setLevel(levelno)
 
