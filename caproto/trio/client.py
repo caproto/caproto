@@ -436,7 +436,7 @@ class SharedBroadcaster:
             else:
                 use_cached_search[address].append(name)
 
-        for addr, names in use_cached_search.items():
+        for names in use_cached_search.values():
             yield (address, names)
 
         use_cached_search.clear()
@@ -466,11 +466,11 @@ class SharedBroadcaster:
                      if search_id not in self.unanswered_searches]
             needs_search = [key for key in needs_search
                             if key not in found]
-            for search_id, name in found:
+            for _search_id, name in found:
                 address, timestamp = self.search_results[name]
                 results[address].append(name)
 
-            for addr, names in results.items():
+            for names in results.values():
                 yield (address, names)
 
     async def wait_on_new_command(self):
@@ -560,7 +560,7 @@ class Context:
                                                                priority=priority)
 
             if wait_for_connection:
-                for name, channel in channels.items():
+                for channel in channels.values():
                     await channel.wait_for_connection()
 
         if move_on_after is not None:

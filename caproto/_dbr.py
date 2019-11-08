@@ -187,7 +187,7 @@ class DbrStringArray(collections.UserList):
 
         buf = bytes(buf)
         strings = cls()
-        for i in range(data_count):
+        for _ in range(data_count):
             strings.append(buf[:safely_find_eos()])
             buf = buf[MAX_STRING_SIZE:]
 

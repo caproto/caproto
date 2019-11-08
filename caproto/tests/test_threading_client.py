@@ -219,7 +219,7 @@ def test_subscriptions(ioc, context):
     sub.clear()
     pv.write((4, ), wait=True)  # This update should not be received by us.
 
-    for i in range(3):
+    for _ in range(3):
         if pv.read().data[0] == 3:
             time.sleep(0.2)
             break
@@ -285,7 +285,7 @@ def test_multiple_subscriptions_one_server(ioc, context):
     for sub, cb in cbs.items():
         sub.add_callback(cb)
     time.sleep(0.2)
-    for sub, responses in collector.items():
+    for responses in collector.values():
         assert len(responses) == 1
     assert len(pv.circuit_manager.subscriptions) == len(pvs) > 1
 
@@ -542,7 +542,7 @@ def test_multithreaded_many_subscribe(ioc, context, thread_count,
         sub = pv.subscribe()
         sub.add_callback(callback)
         # Wait <= 20 seconds until first EventAddResponse is received.
-        for i in range(200):
+        for _ in range(200):
             if values[thread_id]:
                 break
             time.sleep(0.1)
@@ -553,7 +553,7 @@ def test_multithreaded_many_subscribe(ioc, context, thread_count,
         # Everybody here? On my signal... SEND UPDATES!! Ahahahahaha!
         # Destruction!!
         # Wait <= 20 seconds until three more EventAddResponses are received.
-        for i in range(200):
+        for _ in range(200):
             if len(values[thread_id]) == 4:
                 break
             time.sleep(0.1)
@@ -664,7 +664,7 @@ def test_events_off_and_on(ioc, context):
     pv.write((3, ), wait=True)
     time.sleep(0.2)  # Wait for the last update to be processed.
 
-    for i in range(3):
+    for _ in range(3):
         if pv.read().data[0] == 3:
             time.sleep(0.2)
             break
@@ -687,7 +687,7 @@ def test_events_off_and_on(ioc, context):
     pv.write((8, ), wait=True)
     pv.write((9, ), wait=True)
 
-    for i in range(3):
+    for _ in range(3):
         if pv.read().data[0] == 7:
             time.sleep(0.2)
             break

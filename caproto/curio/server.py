@@ -194,7 +194,7 @@ class Context(_Context):
                 await sock.close()
             for sock in self.udp_socks.values():
                 await sock.close()
-            for interface, sock in self.beacon_socks.values():
+            for _interface, sock in self.beacon_socks.values():
                 await sock.close()
             self._task_group = None
 

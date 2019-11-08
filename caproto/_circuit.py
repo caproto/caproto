@@ -419,7 +419,7 @@ class VirtualCircuit:
                                                           self.priority))
             protocol_version = min(self.protocol_version, command.version)
             self.protocol_version = protocol_version
-            for cid, chan in self.channels.items():
+            for chan in self.channels.values():
                 chan.protocol_version = protocol_version
 
         if isinstance(command, VersionResponse):
@@ -432,7 +432,7 @@ class VirtualCircuit:
                 return
             protocol_version = min(self.protocol_version, command.version)
             self.protocol_version = protocol_version
-            for cid, chan in self.channels.items():
+            for chan in self.channels.values():
                 chan.protocol_version = protocol_version
 
     def disconnect(self):
@@ -468,9 +468,9 @@ class _BaseChannel:
     # methods for composing requests and repsponses, respectively. All of the
     # important code is here in the base class.
     def __init__(self, name, circuit, cid=None, string_encoding=STRING_ENCODING):
-        tags =  {'pv': name,
-                 'their_address': circuit.address,
-                 'role': repr(circuit.our_role)}
+        tags = {'pv': name,
+                'their_address': circuit.address,
+                'role': repr(circuit.our_role)}
         self.log = ComposableLogAdapter(logging.getLogger('caproto.ch'), tags)
         self.protocol_version = circuit.protocol_version
         self.name = name

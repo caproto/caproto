@@ -456,7 +456,7 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
                     logger.debug("Interrupted via "
                                  "caproto.sync.client.interrupt().")
                     break
-                for selector_key, mask in events:
+                for selector_key, _ in events:
                     circuit = sock_to_circuit[selector_key.fileobj]
                     commands = recv(circuit)
                     for response in commands:

@@ -392,7 +392,7 @@ def test_ioid_exhaustion(circuit_pair):
     data_count = 1
 
     # if this is broken it will hang
-    for N in range(max_id + 10):
+    for _ in range(max_id + 10):
         # create a read request and serialize
         req = cli_channel.read()
         assert req.ioid < max_id

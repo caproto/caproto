@@ -317,7 +317,7 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
 
     skip_pvs = [('ophyd', ':exit')]
 
-    def find_put_value(pv):
+    def find_put_value(pv, channeldata):
         'Determine value to write to pv'
         for skip_ioc, skip_suffix in skip_pvs:
             if skip_ioc in module_name:
@@ -332,7 +332,7 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
                             f'{channeldata.__class__}')
 
     for pv, channeldata in pvdb.items():
-        value = find_put_value(pv)
+        value = find_put_value(pv, channeldata)
         if value is None:
             print(f'Skipping write to {pv}')
             continue
@@ -540,7 +540,7 @@ def test_event_read_collision(request, prefix, async_lib):
     t1 = get_pv(pvname=f'{prefix}t1', context=cntx)
     t1.add_callback(lambda value, **kwargs: None)
 
-    for j in range(4):
+    for _ in range(4):
         image.get(timeout=45)
 
     image.disconnect()

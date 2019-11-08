@@ -27,7 +27,6 @@ import weakref
 
 from queue import Queue, Empty
 from inspect import Parameter, Signature
-from functools import partial
 from collections import defaultdict, deque
 import caproto as ca
 from .._constants import (MAX_ID, STALE_SEARCH_EXPIRATION,
@@ -95,7 +94,7 @@ def ensure_connected(func):
             pv._usages += 1
 
         try:
-            for i in range(CIRCUIT_DEATH_ATTEMPTS):
+            for _ in range(CIRCUIT_DEATH_ATTEMPTS):
                 # On each iteration, subtract the time we already spent on any
                 # previous attempts.
                 if timeout is not None:
@@ -473,7 +472,7 @@ class SharedBroadcaster:
         if time.monotonic() - timestamp > threshold:
             # TODO this is very inefficient
             for context in self.listeners:
-                for addr, cm in context.circuit_managers.items():
+                for cm in context.circuit_managers.values():
                     if cm.connected and name in cm.all_created_pvnames:
                         # A valid connection exists in one of our clients, so
                         # ignore the stale result status
@@ -776,7 +775,7 @@ class SharedBroadcaster:
                     # distinction.
                     for circuit_manager in circuit_managers:
                         try:
-                            circuit_manager.send(ca.EchoRequest(), extra={'pv': pv.name})
+                            circuit_manager.send(ca.EchoRequest())
                         except Exception:
                             # Send failed. Server is likely dead, but we'll
                             # catch that shortly; no need to handle it
@@ -2329,7 +2328,6 @@ class Batch:
         deadline = time.monotonic() + timeout if timeout is not None else None
         for ioid_info in self._ioid_infos:
             ioid_info['deadline'] = deadline
-            pv = ioid_info['pv']
         for circuit_manager, commands in self._commands.items():
             circuit_manager.send(*commands)
 

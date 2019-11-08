@@ -121,9 +121,9 @@ class LogFormatter(logging.Formatter):
         if hasattr(record, 'direction'):
             message.append('%s' % record.direction)
         if hasattr(record, 'their_address'):
-            message.append('%s:%d'  % record.their_address)
+            message.append('%s:%d' % record.their_address)
         if hasattr(record, 'bytesize'):
-            message.append('%dB'  % record.bytesize)
+            message.append('%dB' % record.bytesize)
         if hasattr(record, 'counter'):
             message.append('(%d of %d)' % record.counter)
         if hasattr(record, 'pv'):
