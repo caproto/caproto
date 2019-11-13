@@ -462,7 +462,7 @@ class SharedBroadcaster:
                 self.broadcaster.log.debug(
                     '%d commands %dB',
                     len(commands), len(bytes_to_send), extra=tags)
-                
+
     def get_cached_search_result(self, name, *,
                                  threshold=STALE_SEARCH_EXPIRATION):
         'Returns address if found, raises KeyError if missing or stale.'
