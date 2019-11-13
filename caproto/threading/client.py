@@ -340,8 +340,7 @@ class SharedBroadcaster:
         self.listeners = weakref.WeakSet()
 
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
-        self.udp_sock.bind(('', 0))
-        self.broadcaster.our_address = self.udp_sock.getsockname()[:2]
+        self.broadcaster.client_address = None
         self.log = logging.LoggerAdapter(
             self.broadcaster.log, {'role': 'CLIENT'})
         self.search_log = logging.LoggerAdapter(
@@ -443,7 +442,6 @@ class SharedBroadcaster:
         """
         bytes_to_send = self.broadcaster.send(*commands)
         tags = {'role': 'CLIENT',
-                'our_address': self.broadcaster.our_address,
                 'direction': '--->>>'}
         for host in ca.get_address_list():
             if ':' in host:
@@ -451,17 +449,20 @@ class SharedBroadcaster:
                 specified_port = int(port_as_str)
             else:
                 specified_port = port
-                tags['their_address'] = (host, specified_port)
             try:
-                self.broadcaster.log.debug(
-                    'Sending %d bytes to %s:%d',
-                    len(bytes_to_send), host, specified_port, extra=tags)
                 self.udp_sock.sendto(bytes_to_send, (host, specified_port))
             except OSError as ex:
                 raise CaprotoNetworkError(
                     f'{ex} while sending {len(bytes_to_send)} bytes to '
                     f'{host}:{specified_port}') from ex
-
+            else:
+                tags['their_address'] = (host, specified_port)
+                self.broadcaster.client_address = self.udp_sock.getsockname()[:2]
+                tags['our_address'] = self.broadcaster.client_address,
+                self.broadcaster.log.debug(
+                    '%d commands %dB',
+                    len(commands), len(bytes_to_send), extra=tags)
+                
     def get_cached_search_result(self, name, *,
                                  threshold=STALE_SEARCH_EXPIRATION):
         'Returns address if found, raises KeyError if missing or stale.'
