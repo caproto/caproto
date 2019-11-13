@@ -2,7 +2,7 @@
 Release History
 ***************
 
-v0.4.2 (2019-11-04)
+v0.4.2 (2019-11-13)
 ===================
 
 This release contains some important bug fixes and some minor new features.
