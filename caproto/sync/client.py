@@ -48,8 +48,7 @@ def recv(circuit):
 def search(pv_name, udp_sock, timeout, *, max_retries=2):
     # Set Broadcaster log level to match our logger.
     b = ca.Broadcaster(our_role=ca.CLIENT)
-    udp_sock.bind(('', 0))
-    b.our_address = udp_sock.getsockname()[:2]
+    b.our_address = None
 
     # Send registration request to the repeater
     logger.debug('Registering with the Channel Access repeater.')
@@ -61,6 +60,8 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
             udp_sock.sendto(bytes_to_send, (host, repeater_port))
         except OSError as exc:
             raise ca.CaprotoNetworkError(f"Failed to send to {host}:{repeater_port}") from exc
+        else:
+            b.our_address = udp_sock.getsockname()[:2]
 
     logger.debug("Searching for '%s'....", pv_name)
     bytes_to_send = b.send(
