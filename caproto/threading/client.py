@@ -340,7 +340,7 @@ class SharedBroadcaster:
         self.listeners = weakref.WeakSet()
 
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
-        self.broadcaster.client_address = None
+        self.broadcaster.our_address = None
         self.log = logging.LoggerAdapter(
             self.broadcaster.log, {'role': 'CLIENT'})
         self.search_log = logging.LoggerAdapter(
@@ -457,8 +457,8 @@ class SharedBroadcaster:
                     f'{host}:{specified_port}') from ex
             else:
                 tags['their_address'] = (host, specified_port)
-                self.broadcaster.client_address = self.udp_sock.getsockname()[:2]
-                tags['our_address'] = self.broadcaster.client_address,
+                self.broadcaster.our_address = self.udp_sock.getsockname()[:2]
+                tags['our_address'] = self.broadcaster.our_address,
                 self.broadcaster.log.debug(
                     '%d commands %dB',
                     len(commands), len(bytes_to_send), extra=tags)
@@ -672,7 +672,7 @@ class SharedBroadcaster:
                                             name, cid, *accepted_address, *new_address,
                                             extra={'pv': name,
                                                    'their_address': accepted_address,
-                                                   'our_address': self.broadcaster.client_address})
+                                                   'our_address': self.broadcaster.our_address})
                     else:
                         results_by_cid.append((cid, name))
                         address = ca.extract_address(command)
@@ -765,7 +765,7 @@ class SharedBroadcaster:
                     checking[address] = now + RESPONSIVENESS_TIMEOUT
                     tags = {'role': 'CLIENT',
                             'their_address': address,
-                            'our_address': self.broadcaster.client_address,
+                            'our_address': self.broadcaster.our_address,
                             'direction': '--->>>'}
 
                     self.broadcaster.log.debug(
@@ -1101,7 +1101,7 @@ class Context:
                 search_logger.debug('Connecting %s on circuit with %s:%d', name, *address,
                                     extra={'pv': name,
                                            'their_address': address,
-                                           'our_address': self.broadcaster.broadcaster.client_address,
+                                           'our_address': self.broadcaster.broadcaster.our_address,
                                            'direction': '--->>>',
                                            'role': 'CLIENT'})
                 # There could be multiple PVs with the same name and
