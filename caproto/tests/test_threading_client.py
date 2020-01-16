@@ -167,7 +167,7 @@ def test_server_crash(context, ioc_factory):
     # Add a user callback so that the subscription takes effect.
     collector = []
 
-    def collect(item):
+    def collect(item, pv):
         collector.append(item)
     sub.add_callback(collect)
 
@@ -205,7 +205,7 @@ def test_subscriptions(ioc, context):
 
     monitor_values = []
 
-    def callback(command, **kwargs):
+    def callback(command, pv, **kwargs):
         assert isinstance(command, ca.EventAddResponse)
         monitor_values.append(command.data[0])
 
@@ -227,6 +227,23 @@ def test_subscriptions(ioc, context):
             time.sleep(0.2)
 
     assert monitor_values[1:] == [1, 2, 3]
+
+
+def test_deprecated_callback_signature(ioc, context):
+    cntx = context
+
+    pv, = cntx.get_pvs(ioc.pvs['int'])
+    pv.wait_for_connection(timeout=10)
+
+    monitor_values = []
+
+    def callback(command):
+        "Old-style signature (missing pv argument)"
+        ...
+
+    sub = pv.subscribe()
+    with pytest.warns(UserWarning):
+        sub.add_callback(callback)
 
 
 def test_client_and_host_name(shared_broadcaster):
@@ -277,7 +294,7 @@ def test_multiple_subscriptions_one_server(ioc, context):
         pv.wait_for_connection(timeout=10)
     collector = collections.defaultdict(list)
 
-    def collect(sub, response):
+    def collect(sub, response, pv):
         collector[sub].append(response)
 
     subs = [pv.subscribe() for pv in pvs]
@@ -304,7 +321,7 @@ def test_subscription_objects_are_reused(ioc, context):
     # Attach a callback so that these subs are activated and enter the
     # Context's cache.
 
-    def f(item):
+    def f(item, pv):
         ...
 
     sub.add_callback(f)
@@ -323,7 +340,7 @@ def test_unsubscribe_all(ioc, context):
 
     collector = []
 
-    def f(response):
+    def f(response, pv):
         collector.append(response)
 
     sub0.add_callback(f)
@@ -502,7 +519,7 @@ def test_multithreaded_many_write(ioc, context, thread_count,
     pv, = context.get_pvs(ioc.pvs['int'])
     values = []
 
-    def callback(command):
+    def callback(command, pv):
         values.append(command.data.tolist()[0])
 
     sub = pv.subscribe()
@@ -535,7 +552,7 @@ def test_multithreaded_many_subscribe(ioc, context, thread_count,
 
         values[thread_id] = []
 
-        def callback(command):
+        def callback(command, pv):
             print(thread_id, command)
             values[thread_id].append(command.data.tolist()[0])
 
@@ -652,7 +669,7 @@ def test_events_off_and_on(ioc, context):
 
     monitor_values = []
 
-    def callback(command, **kwargs):
+    def callback(command, pv, **kwargs):
         assert isinstance(command, ca.EventAddResponse)
         monitor_values.append(command.data[0])
 
