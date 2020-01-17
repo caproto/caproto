@@ -11,7 +11,6 @@ from ._commands import (Beacon, RepeaterConfirmResponse, RepeaterRegisterRequest
                         SearchRequest, SearchResponse, VersionRequest,
                         read_datagram,
                         )
-from ._log import search_logger
 
 __all__ = ('Broadcaster',)
 
@@ -40,8 +39,14 @@ class Broadcaster:
             self.their_role = SERVER
         else:
             self.their_role = CLIENT
-        self.our_address = None
-        self._our_addresses = []
+        # Whereas VirtualCircuit has one client address and one server address,
+        # the Broadcaster has multiple addresses on the server side (one per
+        # interface that it listens on) and one on the client side.
+        # We also provide the properties `our_addresses` and `their_addresses`,
+        # whose meaning depends on our_role. Whichever one corresponds to the
+        # client role will have a length of one.
+        self.server_addresses = []
+        self.client_address = None
         self.protocol_version = protocol_version
         self.unanswered_searches = {}  # map search id (cid) to name
         # Unlike VirtualCircuit and Channel, there is very little state to
@@ -54,14 +59,21 @@ class Broadcaster:
         )
         self.log = logging.getLogger("caproto.bcast")
         self.beacon_log = logging.getLogger('caproto.bcast.beacon')
+        self.search_log = logging.getLogger('caproto.bcast.search')
 
     @property
     def our_addresses(self):
-        return self._our_addresses
+        if self.our_role is CLIENT:
+            return [self.client_address]  # always return a list
+        else:
+            return self.server_addresses
 
-    @our_addresses.setter
-    def our_addresses(self, value):
-        self._our_addresses = value
+    @property
+    def their_addresses(self):
+        if self.their_role is CLIENT:
+            return [self.client_address]  # always return a list
+        else:
+            return self.server_addresses
 
     def send(self, *commands):
         """
@@ -84,11 +96,11 @@ class Broadcaster:
         total_commands = len(commands)
         tags = {'role': repr(self.our_role)}
         for i, command in enumerate(commands):
-            if hasattr(command, 'name'):
-                tags['pv'] = command.name
-            for address in self._our_addresses:
-                tags['our_address'] = address
-                search_logger.debug(f"%d of %d %r", 1 + i, total_commands, command, extra=tags)
+            tags['counter'] = (1 + i, total_commands)
+            if isinstance(command, (SearchRequest, SearchResponse)):
+                self.search_log.debug("%r", command, extra=tags)
+            else:
+                self.log.debug("%r", command, extra=tags)
             self._process_command(self.our_role, command, history=history)
             bytes_to_send += bytes(command)
         return bytes_to_send
@@ -121,12 +133,14 @@ class Broadcaster:
                 'direction': '<<<---',
                 'role': repr(self.our_role)}
         for command in commands:
-            for address in self._our_addresses:
+            tags['bytesize'] = len(command)
+            for address in self.our_addresses:
                 tags['our_address'] = address
                 if isinstance(command, Beacon):
-                    self.beacon_log.debug("%s:%d (%dB) %r", *address, len(command), command, extra=tags)
+                    log = self.beacon_log
                 else:
-                    self.log.debug("(%dB) %r", len(command), command, extra=tags)
+                    log = self.log
+                log.debug("%r", command, extra=tags)
         return commands
 
     def process_commands(self, commands):

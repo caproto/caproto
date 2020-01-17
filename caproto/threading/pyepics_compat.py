@@ -219,10 +219,10 @@ class PV:
 
         if isinstance(callback, (tuple, list)):
             for i, thiscb in enumerate(callback):
-                if hasattr(thiscb, '__call__'):
+                if callable(thiscb):
                     self.callbacks[i] = (thiscb, {})
 
-        elif hasattr(callback, '__call__'):
+        elif callable(callback):
             self.callbacks[0] = (callback, {})
 
         self._caproto_pv, = self._context.get_pvs(
@@ -635,7 +635,7 @@ class PV:
         kwd = copy.copy(self._args)
         kwd.update(kwargs)
         kwd['cb_info'] = (index, self)
-        if hasattr(fcn, '__call__'):
+        if callable(fcn):
             fcn(**kwd)
 
     def add_callback(self, callback, *, index=None, run_now=False,

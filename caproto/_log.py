@@ -38,6 +38,17 @@ def _stderr_supports_color():
     return False
 
 
+class ComposableLogAdapter(logging.LoggerAdapter):
+    def process(self, msg, kwargs):
+        # The logging.LoggerAdapter siliently ignores `extra` in this usage:
+        # log_adapter.debug(msg, extra={...})
+        # and passes through log_adapater.extra instead. This subclass merges
+        # the extra passed via keyword argument with the extra in the
+        # attribute, giving precedence to the keyword argument.
+        kwargs["extra"] = {**self.extra, **kwargs.get('extra', {})}
+        return msg, kwargs
+
+
 class LogFormatter(logging.Formatter):
     """Log formatter for caproto records.
 
@@ -51,7 +62,7 @@ class LogFormatter(logging.Formatter):
 
     """
     DEFAULT_FORMAT = \
-        '%(color)s[%(levelname)1.1s %(asctime)s %(module)s:%(lineno)d]%(end_color)s %(message)s'
+        '%(color)s[%(levelname)1.1s %(asctime)s %(module)12s:%(lineno)d]%(end_color)s %(message)s'
     DEFAULT_DATE_FORMAT = '%y%m%d %H:%M:%S'
     DEFAULT_COLORS = {
         logging.DEBUG: 4,  # Blue
@@ -106,13 +117,17 @@ class LogFormatter(logging.Formatter):
     def format(self, record):
         message = []
         if hasattr(record, 'our_address'):
-            message.append('[%s]' % ':'.join(map(str, record.our_address)))
+            message.append('%s:%d' % record.our_address)
         if hasattr(record, 'direction'):
             message.append('%s' % record.direction)
         if hasattr(record, 'their_address'):
-            message.append('[%s]' % ':'.join(map(str, record.their_address)))
+            message.append('%s:%d' % record.their_address)
+        if hasattr(record, 'bytesize'):
+            message.append('%dB' % record.bytesize)
+        if hasattr(record, 'counter'):
+            message.append('(%d of %d)' % record.counter)
         if hasattr(record, 'pv'):
-            message.append('[%s]' % record.pv)
+            message.append(record.pv)
         message.append(record.getMessage())
         record.message = ' '.join(message)
         record.asctime = self.formatTime(record, self.datefmt)
@@ -133,9 +148,9 @@ class LogFormatter(logging.Formatter):
         return formatted.replace("\n", "\n    ")
 
 
-plain_log_format = "[%(levelname)1.1s %(asctime)s.%(msecs)03d %(module)15s:%(lineno)5d] %(message)s"
+plain_log_format = "[%(levelname)1.1s %(asctime)s.%(msecs)03d %(module)12s:%(lineno)5d] %(message)s"
 color_log_format = ("%(color)s[%(levelname)1.1s %(asctime)s.%(msecs)03d "
-                    "%(module)15s:%(lineno)5d]%(end_color)s %(message)s")
+                    "%(module)12s:%(lineno)5d]%(end_color)s %(message)s")
 
 
 def color_logs(color):
@@ -149,9 +164,6 @@ def color_logs(color):
     config_caproto_logging(color=color)
 
 
-logger = logging.getLogger('caproto')
-ch_logger = logging.getLogger('caproto.ch')
-search_logger = logging.getLogger('caproto.bcast.search')
 current_handler = None
 
 
@@ -332,7 +344,8 @@ def _set_handler_with_logger(logger_name='caproto', file=sys.stdout, datefmt='%H
         format = plain_log_format
     handler.setFormatter(
         LogFormatter(format, datefmt=datefmt))
-    logging.getLogger(logger_name).addHandler(handler)
+    logger = logging.getLogger(logger_name)
+    logger.addHandler(handler)
     if logger.getEffectiveLevel() > levelno:
         logger.setLevel(levelno)
 
@@ -393,6 +406,7 @@ def config_caproto_logging(file=sys.stdout, datefmt='%H:%M:%S', color=True, leve
         format = plain_log_format
     handler.setFormatter(
         LogFormatter(format, datefmt=datefmt))
+    logger = logging.getLogger('caproto')
     if current_handler in logger.handlers:
         logger.removeHandler(current_handler)
     logger.addHandler(handler)

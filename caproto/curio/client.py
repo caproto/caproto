@@ -257,15 +257,19 @@ class SharedBroadcaster:
         Process a command and tranport it over the UDP socket.
         """
         bytes_to_send = self.broadcaster.send(*commands)
+        tags = {'role': 'CLIENT',
+                'our_address': self.broadcaster.client_address,
+                'direction': '--->>>'}
         for host in ca.get_address_list():
             if ':' in host:
                 host, _, port_as_str = host.partition(':')
                 specified_port = int(port_as_str)
             else:
                 specified_port = port
+            tags['their_address'] = (host, specified_port)
             self.broadcaster.log.debug(
-                'Sending %d bytes to %s:%d',
-                len(bytes_to_send), host, specified_port)
+                '%d commands %dB',
+                len(commands), len(bytes_to_send), extra=tags)
             try:
                 await self.udp_sock.sendto(bytes_to_send,
                                            (host, specified_port))

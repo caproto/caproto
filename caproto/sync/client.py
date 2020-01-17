@@ -32,8 +32,12 @@ _permission_to_block = []  # mutable state shared by block and interrupt
 
 
 # Convenience functions that do both transport and caproto validation/ingest.
-def send(circuit, command):
-    buffers_to_send = circuit.send(command)
+def send(circuit, command, pv_name=None):
+    if pv_name is not None:
+        tags = {'pv': pv_name}
+    else:
+        tags = None
+    buffers_to_send = circuit.send(command, extra=tags)
     sockets[circuit].sendmsg(buffers_to_send)
 
 
@@ -48,7 +52,7 @@ def recv(circuit):
 def search(pv_name, udp_sock, timeout, *, max_retries=2):
     # Set Broadcaster log level to match our logger.
     b = ca.Broadcaster(our_role=ca.CLIENT)
-    b.our_address = udp_sock.getsockname()[:2]
+    b.client_address = udp_sock.getsockname()[:2]
 
     # Send registration request to the repeater
     logger.debug('Registering with the Channel Access repeater.')
@@ -61,10 +65,14 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
         except OSError as exc:
             raise ca.CaprotoNetworkError(f"Failed to send to {host}:{repeater_port}") from exc
 
-    logger.debug("Searching for '%s'....", pv_name)
-    bytes_to_send = b.send(
+    logger.debug("Searching for %r....", pv_name)
+    commands = (
         ca.VersionRequest(0, ca.DEFAULT_PROTOCOL_VERSION),
         ca.SearchRequest(pv_name, 0, ca.DEFAULT_PROTOCOL_VERSION))
+    bytes_to_send = b.send(*commands)
+    tags = {'role': 'CLIENT',
+            'our_address': b.client_address,
+            'direction': '--->>>'}
 
     def send_search():
         for host in ca.get_address_list():
@@ -73,12 +81,15 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
                 dest = (host, int(specified_port))
             else:
                 dest = (host, CA_SERVER_PORT)
+            tags['their_address'] = dest
+            b.log.debug(
+                '%d commands %dB',
+                len(commands), len(bytes_to_send), extra=tags)
             try:
                 udp_sock.sendto(bytes_to_send, dest)
             except OSError as exc:
                 host, port = dest
                 raise ca.CaprotoNetworkError(f"Failed to send to {host}:{port}") from exc
-            logger.debug('Search request sent to %r.', dest)
 
     def check_timeout():
         nonlocal retry_at
@@ -118,7 +129,7 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
             for command in commands:
                 if isinstance(command, ca.SearchResponse) and command.cid == 0:
                     address = ca.extract_address(command)
-                    logger.debug('Found %s at %s', pv_name, address)
+                    logger.debug('Found %r at %s:%d', pv_name, *address)
                     return address
             else:
                 # None of the commands we have seen are a reply to our request.
@@ -152,10 +163,11 @@ def make_channel(pv_name, udp_sock, priority, timeout):
             # Initialize our new TCP-based CA connection with a VersionRequest.
             send(chan.circuit, ca.VersionRequest(
                 priority=priority,
-                version=ca.DEFAULT_PROTOCOL_VERSION))
+                version=ca.DEFAULT_PROTOCOL_VERSION),
+                pv_name)
             send(chan.circuit, chan.host_name(socket.gethostname()))
             send(chan.circuit, chan.client_name(getpass.getuser()))
-        send(chan.circuit, chan.create())
+        send(chan.circuit, chan.create(), pv_name)
         t = time.monotonic()
         while True:
             try:
@@ -165,12 +177,18 @@ def make_channel(pv_name, udp_sock, priority, timeout):
             except socket.timeout:
                 raise CaprotoTimeoutError("Timeout while awaiting channel "
                                           "creation.")
-            if chan.states[ca.CLIENT] is ca.CONNECTED:
-                log.info('%s connected' % pv_name)
-                break
+            tags = {'direction': '<<<---',
+                    'our_address': chan.circuit.our_address,
+                    'their_address': chan.circuit.address}
             for command in commands:
-                if command is ca.DISCONNECTED:
+                if isinstance(command, ca.Message):
+                    tags['bytesize'] = len(command)
+                    logger.debug("%r", command, extra=tags)
+                elif command is ca.DISCONNECTED:
                     raise CaprotoError('Disconnected during initialization')
+            if chan.states[ca.CLIENT] is ca.CONNECTED:
+                log.info("Channel connected.")
+                break
 
     except BaseException:
         sockets[chan.circuit].close()
@@ -189,7 +207,7 @@ def _read(chan, timeout, data_type, notify, force_int_enums):
         logger.debug("Changing requested data_type to STRING.")
         data_type = ChannelType.STRING
     req = chan.read(data_type=data_type, notify=notify)
-    send(chan.circuit, req)
+    send(chan.circuit, req, chan.name)
     t = time.monotonic()
     while True:
         try:
@@ -200,7 +218,13 @@ def _read(chan, timeout, data_type, notify, force_int_enums):
         if time.monotonic() - t > timeout:
             raise CaprotoTimeoutError("Timeout while awaiting reading.")
 
+        tags = {'direction': '<<<---',
+                'our_address': chan.circuit.our_address,
+                'their_address': chan.circuit.address}
         for command in commands:
+            if isinstance(command, ca.Message):
+                tags['bytesize'] = len(command)
+                logger.debug("%r", command, extra=tags)
             if (isinstance(command, (ca.ReadResponse, ca.ReadNotifyResponse)) and
                     command.ioid == req.ioid):
                 return command
@@ -262,7 +286,7 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0, notify=True,
     finally:
         try:
             if chan.states[ca.CLIENT] is ca.CONNECTED:
-                send(chan.circuit, chan.clear())
+                send(chan.circuit, chan.clear(), chan.name)
         finally:
             sockets[chan.circuit].close()
             del sockets[chan.circuit]
@@ -410,7 +434,7 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
             loggers[chan.name].debug("Subscribing with data_type %r.",
                                      time_type)
             req = chan.subscribe(data_type=time_type, mask=sub.mask)
-            send(chan.circuit, req)
+            send(chan.circuit, req, chan.name)
             sub_ids[(chan.circuit, req.subscriptionid)] = sub
         logger.debug('Subscribed. Building socket selector.')
         try:
@@ -432,7 +456,7 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
                     logger.debug("Interrupted via "
                                  "caproto.sync.client.interrupt().")
                     break
-                for selector_key, mask in events:
+                for selector_key, _ in events:
                     circuit = sock_to_circuit[selector_key.fileobj]
                     commands = recv(circuit)
                     for response in commands:
@@ -452,7 +476,7 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
         try:
             for chan in channels.values():
                 if chan.states[ca.CLIENT] is ca.CONNECTED:
-                    send(chan.circuit, chan.clear())
+                    send(chan.circuit, chan.clear(), chan.name)
         finally:
             # Reinstate the timeout for channel cleanup.
             for chan in channels.values():
@@ -475,7 +499,7 @@ def _write(chan, data, metadata, timeout, data_type, notify):
     logger.debug("Writing.")
     req = chan.write(data=data, notify=notify,
                      data_type=data_type, metadata=metadata)
-    send(chan.circuit, req)
+    send(chan.circuit, req, chan.name)
     t = time.monotonic()
     if notify:
         while True:
@@ -487,7 +511,13 @@ def _write(chan, data, metadata, timeout, data_type, notify):
             if time.monotonic() - t > timeout:
                 raise CaprotoTimeoutError("Timeout while awaiting write reply.")
 
+            tags = {'direction': '<<<---',
+                    'our_address': chan.circuit.our_address,
+                    'their_address': chan.circuit.address}
             for command in commands:
+                if isinstance(command, ca.Message):
+                    tags['bytesize'] = len(command)
+                    logger.debug("%r", command, extra=tags)
                 if (isinstance(command, ca.WriteNotifyResponse) and
                         command.ioid == req.ioid):
                     response = command
@@ -560,7 +590,7 @@ def write(pv_name, data, *, notify=False, data_type=None, metadata=None,
     finally:
         try:
             if chan.states[ca.CLIENT] is ca.CONNECTED:
-                send(chan.circuit, chan.clear())
+                send(chan.circuit, chan.clear(), chan.name)
         finally:
             sockets[chan.circuit].close()
             del sockets[chan.circuit]
@@ -646,7 +676,7 @@ def read_write_read(pv_name, data, *, notify=False,
     finally:
         try:
             if chan.states[ca.CLIENT] is ca.CONNECTED:
-                send(chan.circuit, chan.clear())
+                send(chan.circuit, chan.clear(), chan.name)
         finally:
             sockets[chan.circuit].close()
             del sockets[chan.circuit]

@@ -325,7 +325,7 @@ def test_write_without_notify(request, prefix, async_lib):
                     pv_to_check=pv)
     write(pv, 3.179, notify=False)
     # We do not get notified so we have to poll for an update.
-    for attempt in range(20):
+    for _attempt in range(20):
         if read(pv).data[0] > 3.178:
             break
         time.sleep(0.1)

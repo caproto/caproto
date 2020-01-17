@@ -121,7 +121,7 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
 def poll_readiness(pv_to_check, attempts=5, timeout=1):
     logger.debug(f'Checking PV {pv_to_check}')
     start_repeater()
-    for attempt in range(attempts):
+    for _attempt in range(attempts):
         try:
             read(pv_to_check, timeout=timeout, repeater=False)
         except (TimeoutError, ConnectionRefusedError):
@@ -140,7 +140,7 @@ def run_softioc(request, db, additional_db=None, **kwargs):
         db_text = '\n'.join((db_text, additional_db))
 
     err = None
-    for attempt in range(3):
+    for _attempt in range(3):
         ioc_handler = ca.benchmarking.IocHandler()
         ioc_handler.setup_ioc(db_text=db_text, max_array_bytes='10000000',
                               **kwargs)

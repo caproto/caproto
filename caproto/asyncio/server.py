@@ -169,13 +169,13 @@ class Context(_Context):
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.setblocking(False)
             s.bind((interface, port))
-            self.broadcaster._our_addresses.append(s.getsockname()[:2])
             return s
         self.port, self.tcp_sockets = await self._bind_tcp_sockets_with_consistent_port_number(
             make_socket)
         tasks = []
         for interface, sock in self.tcp_sockets.items():
             self.log.info("Listening on %s:%d", interface, self.port)
+            self.broadcaster.server_addresses.append((interface, self.port))
             tasks.append(self.loop.create_task(self.server_accept_loop(sock)))
 
         class BcastLoop(asyncio.Protocol):
@@ -294,7 +294,7 @@ class Context(_Context):
                 sock.close()
             for sock in self.udp_socks.values():
                 sock.close()
-            for interface, sock in self.beacon_socks.values():
+            for _interface, sock in self.beacon_socks.values():
                 sock.close()
 
 

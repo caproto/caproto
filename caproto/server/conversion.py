@@ -158,7 +158,7 @@ def ophyd_device_to_caproto_ioc(dev, *, depth=0):
                                                dev=dev)
         if isinstance(cpt_lines, dict):
             # new device/sub-group, for now add it on
-            for new_dev, lines in cpt_lines.items():
+            for lines in cpt_lines.values():
                 dev_lines.extend(lines)
         else:
             dev_lines.extend(cpt_lines)
@@ -333,7 +333,7 @@ def record_to_field_dict_code(record_type, *, skip_fields=None):
     yield f"    kw['reported_record_type'] = '{record_type}'"
     yield f"    kw['alarm_group'] = alarm_group"
     yield '    return {'
-    for name, cls, kwargs, finfo in record_to_field_info(record_type):
+    for _name, cls, kwargs, finfo in record_to_field_info(record_type):
         kwarg_string = ', '.join(
             list(f'{k}={v}' for k, v in kwargs.items()) + ['**kw'])
         yield f"        '{finfo.field}': {cls.__name__}({kwarg_string}),"
