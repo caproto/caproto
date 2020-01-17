@@ -127,7 +127,7 @@ class LogFormatter(logging.Formatter):
         if hasattr(record, 'counter'):
             message.append('(%d of %d)' % record.counter)
         if hasattr(record, 'pv'):
-            message.append('%s' % record.pv)
+            message.append(record.pv)
         message.append(record.getMessage())
         record.message = ' '.join(message)
         record.asctime = self.formatTime(record, self.datefmt)
