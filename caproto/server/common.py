@@ -413,17 +413,18 @@ class VirtualCircuit:
                 self.log.debug('Client requested invalid channel name: %s',
                                command.name)
                 to_send = [ca.CreateChFailResponse(cid=command.cid)]
+            else:
 
-            access = db_entry.check_access(self.client_hostname,
-                                           self.client_username)
+                access = db_entry.check_access(self.client_hostname,
+                                               self.client_username)
 
-            to_send = [ca.AccessRightsResponse(cid=command.cid,
-                                               access_rights=access),
-                       ca.CreateChanResponse(data_type=db_entry.data_type,
-                                             data_count=db_entry.max_length,
-                                             cid=command.cid,
-                                             sid=self.circuit.new_channel_id()),
-                       ]
+                to_send = [ca.AccessRightsResponse(cid=command.cid,
+                                                   access_rights=access),
+                           ca.CreateChanResponse(data_type=db_entry.data_type,
+                                                 data_count=db_entry.max_length,
+                                                 cid=command.cid,
+                                                 sid=self.circuit.new_channel_id()),
+                           ]
         elif isinstance(command, ca.HostNameRequest):
             self.client_hostname = command.name
             to_send = []
