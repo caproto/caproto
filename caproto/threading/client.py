@@ -2193,7 +2193,11 @@ class Subscription(CallbackHandler):
            Changed the expected signature of ``func`` to add ``pv``.
         """
         # Handle func with signature func(respons) for back-compat.
-        if len(inspect.signature(func).parameters) == 1:
+        sig = inspect.signature(func)
+        try:
+            # Does this function accept two positional arguments?
+            sig.bind(None, None)
+        except TypeError:
             warnings.warn(
                 "The signature of a subscription callback is now expected to "
                 "be func(response, pv). The signature func(response) is "
