@@ -23,6 +23,7 @@ import socket
 import sys
 import threading
 import time
+import warnings
 import weakref
 
 from queue import Queue, Empty
@@ -2088,6 +2089,9 @@ class Subscription(CallbackHandler):
         self.subscriptionid = None
         self.most_recent_response = None
         self.needs_reactivation = False
+        # This is related to back-compat for user callbacks that have the old
+        # signature, f(response).
+        self.__wrapper_weakrefs = set()
 
     @property
     def log(self):
@@ -2162,8 +2166,9 @@ class Subscription(CallbackHandler):
         # handling rates, if desirable, to not bog down performance.
         # As implemented below, updates are blocking further messages from
         # the CA servers from processing. (-> ThreadPool, etc.)
-
-        super().process(command)
+        pv = self.pv
+        super().process(self, command)
+        self.log.debug("%r: %r", pv.name, command)
         self.most_recent_response = command
 
     def add_callback(self, func):
@@ -2173,13 +2178,56 @@ class Subscription(CallbackHandler):
         Parameters
         ----------
         func : callable
-            Expected signature: ``func(response)``
+            Expected signature: ``func(sub, response)``.
+            The signature ``func(response)`` is also supported for
+            backward-compatibility but will issue warnings. Support will be
+            removed in a future release of caproto.
 
         Returns
         -------
         token : int
             Integer token that can be passed to :meth:`remove_callback`.
+
+        .. versionchanged:: 0.5.0
+
+           Changed the expected signature of ``func`` from ``func(response)``
+           to ``func(sub, response)``.
         """
+        # Handle func with signature func(respons) for back-compat.
+        sig = inspect.signature(func)
+        try:
+            # Does this function accept two positional arguments?
+            sig.bind(None, None)
+        except TypeError:
+            warnings.warn(
+                "The signature of a subscription callback is now expected to "
+                "be func(sub, response). The signature func(response) is "
+                "supported, but support will be removed in a future release "
+                "of caproto.")
+            raw_func = func
+            raw_func_weakref = weakref.ref(raw_func)
+
+            def func(sub, response):
+                # Avoid closing over raw_func itself here or it will never be
+                # garbage collected.
+                raw_func = raw_func_weakref()
+                if raw_func is not None:
+                    # Do nothing with sub because the user-provided func cannot
+                    # accept it.
+                    raw_func(response)
+
+            # Ensure func does not get garbage collected until raw_func does.
+            def called_when_raw_func_is_released(w):
+                # The point of this function is to hold one hard ref to func
+                # until raw_func is garbage collected.
+                func
+                # Clean up after ourselves.
+                self.__wrapper_weakrefs.remove(w)
+
+            w = weakref.ref(raw_func, called_when_raw_func_is_released)
+            # Hold a hard reference to w. Its callback removes it from this set.
+            self.__wrapper_weakrefs.add(w)
+
         with self.callback_lock:
             was_empty = not self.callbacks
             cb_id = super().add_callback(func)
@@ -2196,7 +2244,7 @@ class Subscription(CallbackHandler):
             # for that first response from the server.
             if most_recent_response is not None:
                 try:
-                    func(most_recent_response)
+                    func(self, most_recent_response)
                 except Exception:
                     self.log.exception(
                         "Exception raised during processing most recent "

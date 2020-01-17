@@ -167,7 +167,7 @@ def test_server_crash(context, ioc_factory):
     # Add a user callback so that the subscription takes effect.
     collector = []
 
-    def collect(item):
+    def collect(sub, item):
         collector.append(item)
     sub.add_callback(collect)
 
@@ -205,7 +205,7 @@ def test_subscriptions(ioc, context):
 
     monitor_values = []
 
-    def callback(command, **kwargs):
+    def callback(sub, command, **kwargs):
         assert isinstance(command, ca.EventAddResponse)
         monitor_values.append(command.data[0])
 
@@ -220,6 +220,80 @@ def test_subscriptions(ioc, context):
     pv.write((4, ), wait=True)  # This update should not be received by us.
 
     for _ in range(3):
+        if pv.read().data[0] == 3:
+            time.sleep(0.2)
+            break
+        else:
+            time.sleep(0.2)
+
+    assert monitor_values[1:] == [1, 2, 3]
+
+
+def test_deprecated_callback_signature(ioc, context):
+    cntx = context
+
+    pv, = cntx.get_pvs(ioc.pvs['int'])
+    pv.wait_for_connection(timeout=10)
+
+    monitor_values = []
+
+    def callback(command):
+        "Old-style signature (missing pv argument)"
+        assert isinstance(command, ca.EventAddResponse)
+        monitor_values.append(command.data[0])
+
+    sub = pv.subscribe()
+    # Subscribing should warn about the deprecated signature...
+    with pytest.warns(UserWarning):
+        sub.add_callback(callback)
+
+    # ...but it should work just the same.
+    time.sleep(0.2)  # Wait for EventAddRequest to be sent and processed.
+    pv.write((1, ), wait=True)
+    pv.write((2, ), wait=True)
+    pv.write((3, ), wait=True)
+    time.sleep(0.2)  # Wait for the last update to be processed.
+    sub.clear()
+    pv.write((4, ), wait=True)  # This update should not be received by us.
+
+    for i in range(3):
+        if pv.read().data[0] == 3:
+            time.sleep(0.2)
+            break
+        else:
+            time.sleep(0.2)
+
+    assert monitor_values[1:] == [1, 2, 3]
+
+
+def test_another_deprecated_callback_signature(ioc, context):
+    cntx = context
+
+    pv, = cntx.get_pvs(ioc.pvs['int'])
+    pv.wait_for_connection(timeout=10)
+
+    monitor_values = []
+
+    def callback(command, **kwargs):
+        "Old-style signature (missing pv argument) with optional kwargs"
+        assert isinstance(command, ca.EventAddResponse)
+        monitor_values.append(command.data[0])
+
+    sub = pv.subscribe()
+    # Subscribing should warn about the deprecated signature...
+    with pytest.warns(UserWarning):
+        sub.add_callback(callback)
+
+    # ...but it should work just the same.
+    time.sleep(0.2)  # Wait for EventAddRequest to be sent and processed.
+    pv.write((1, ), wait=True)
+    pv.write((2, ), wait=True)
+    pv.write((3, ), wait=True)
+    time.sleep(0.2)  # Wait for the last update to be processed.
+    sub.clear()
+    pv.write((4, ), wait=True)  # This update should not be received by us.
+
+    for i in range(3):
         if pv.read().data[0] == 3:
             time.sleep(0.2)
             break
@@ -281,9 +355,8 @@ def test_multiple_subscriptions_one_server(ioc, context):
         collector[sub].append(response)
 
     subs = [pv.subscribe() for pv in pvs]
-    cbs = {sub: functools.partial(collect, sub) for sub in subs}
-    for sub, cb in cbs.items():
-        sub.add_callback(cb)
+    for sub in subs:
+        sub.add_callback(collect)
     time.sleep(0.2)
     for responses in collector.values():
         assert len(responses) == 1
@@ -304,7 +377,7 @@ def test_subscription_objects_are_reused(ioc, context):
     # Attach a callback so that these subs are activated and enter the
     # Context's cache.
 
-    def f(item):
+    def f(sub, item):
         ...
 
     sub.add_callback(f)
@@ -323,7 +396,7 @@ def test_unsubscribe_all(ioc, context):
 
     collector = []
 
-    def f(response):
+    def f(sub, response):
         collector.append(response)
 
     sub0.add_callback(f)
@@ -502,7 +575,7 @@ def test_multithreaded_many_write(ioc, context, thread_count,
     pv, = context.get_pvs(ioc.pvs['int'])
     values = []
 
-    def callback(command):
+    def callback(sub, command):
         values.append(command.data.tolist()[0])
 
     sub = pv.subscribe()
@@ -535,7 +608,7 @@ def test_multithreaded_many_subscribe(ioc, context, thread_count,
 
         values[thread_id] = []
 
-        def callback(command):
+        def callback(sub, command):
             print(thread_id, command)
             values[thread_id].append(command.data.tolist()[0])
 
@@ -652,7 +725,7 @@ def test_events_off_and_on(ioc, context):
 
     monitor_values = []
 
-    def callback(command, **kwargs):
+    def callback(sub, command, **kwargs):
         assert isinstance(command, ca.EventAddResponse)
         monitor_values.append(command.data[0])
 
