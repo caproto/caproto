@@ -59,7 +59,7 @@ class Broadcaster:
         )
         self.log = logging.getLogger("caproto.bcast")
         self.beacon_log = logging.getLogger('caproto.bcast.beacon')
-        self.search_log = logging.getLogger('caproto.bcast.beacon')
+        self.search_log = logging.getLogger('caproto.bcast.search')
 
     @property
     def our_addresses(self):
