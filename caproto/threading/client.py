@@ -2167,7 +2167,7 @@ class Subscription(CallbackHandler):
         # As implemented below, updates are blocking further messages from
         # the CA servers from processing. (-> ThreadPool, etc.)
         pv = self.pv
-        super().process(command, self)
+        super().process(self, command)
         self.log.debug("%r: %r", pv.name, command)
         self.most_recent_response = command
 
@@ -2178,7 +2178,7 @@ class Subscription(CallbackHandler):
         Parameters
         ----------
         func : callable
-            Expected signature: ``func(response, sub)``.
+            Expected signature: ``func(sub, response)``.
             The signature ``func(response)`` is also supported for
             backward-compatibility but will issue warnings. Support will be
             removed in a future release of caproto.
@@ -2190,7 +2190,8 @@ class Subscription(CallbackHandler):
 
         .. versionchanged:: 0.5.0
 
-           Changed the expected signature of ``func`` to add ``sub``.
+           Changed the expected signature of ``func`` from ``func(response)``
+           to ``func(sub, response)``.
         """
         # Handle func with signature func(respons) for back-compat.
         sig = inspect.signature(func)
@@ -2200,13 +2201,13 @@ class Subscription(CallbackHandler):
         except TypeError:
             warnings.warn(
                 "The signature of a subscription callback is now expected to "
-                "be func(response, sub). The signature func(response) is "
+                "be func(sub, response). The signature func(response) is "
                 "supported, but support will be removed in a future release "
                 "of caproto.")
             raw_func = func
             raw_func_weakref = weakref.ref(raw_func)
 
-            def func(response, sub):
+            def func(sub, response):
                 # Avoid closing over raw_func itself here or it will never be
                 # garbage collected.
                 raw_func = raw_func_weakref()
@@ -2243,7 +2244,7 @@ class Subscription(CallbackHandler):
             # for that first response from the server.
             if most_recent_response is not None:
                 try:
-                    func(most_recent_response, self)
+                    func(self, most_recent_response)
                 except Exception:
                     self.log.exception(
                         "Exception raised during processing most recent "

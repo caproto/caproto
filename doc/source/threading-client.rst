@@ -160,7 +160,7 @@ the server sends an update. It must accept two positional arguments.
 .. ipython:: python
 
     responses = []
-    def f(response, sub):
+    def f(sub, response):
         print('Received response from', sub.pv.name)
         responses.append(response)
 
@@ -175,10 +175,10 @@ responses when the same function is added to multiple subscriptions.
 .. versionchanged:: 0.5.0
 
    The expected signature of the callback function was changed from
-   ``f(response)`` to ``f(response, sub)``. For backward compatibility,
+   ``f(response)`` to ``f(sub, response)``. For backward compatibility,
    functions with signature ``f(response)`` are still accepted, but caproto
    will issue a warning that a future release may require the new signature,
-   ``f(response, sub)``.
+   ``f(sub, response)``.
 
 We register this function with ``sub``.
 
@@ -192,7 +192,7 @@ define a second callback:
 .. ipython:: python
 
     values = []
-    def g(response, sub):
+    def g(sub, response):
         values.append(response.data[0])
 
 and add it to the same subscription, putting no additional load on the network.
@@ -243,7 +243,7 @@ re-initiates updates. All of this is transparent to the user.
 
     .. code-block:: python
 
-        sub.add_callback(lambda response, sub: print(response.data))
+        sub.add_callback(lambda sub, response: print(response.data))
 
     The lambda function will be promptly garbage collected by Python and
     removed from ``sub`` by caproto. To avoid that, make a reference before
@@ -251,7 +251,7 @@ re-initiates updates. All of this is transparent to the user.
     
     .. code-block:: python
 
-        cb = lambda response, sub: print(response.data)
+        cb = lambda sub, response: print(response.data)
         sub.add_callback(cb)
 
     This can be surprising, but it is a standard approach for avoiding the

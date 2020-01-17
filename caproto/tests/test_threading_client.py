@@ -167,7 +167,7 @@ def test_server_crash(context, ioc_factory):
     # Add a user callback so that the subscription takes effect.
     collector = []
 
-    def collect(item, sub):
+    def collect(sub, item):
         collector.append(item)
     sub.add_callback(collect)
 
@@ -205,7 +205,7 @@ def test_subscriptions(ioc, context):
 
     monitor_values = []
 
-    def callback(command, sub, **kwargs):
+    def callback(sub, command, **kwargs):
         assert isinstance(command, ca.EventAddResponse)
         monitor_values.append(command.data[0])
 
@@ -351,7 +351,7 @@ def test_multiple_subscriptions_one_server(ioc, context):
         pv.wait_for_connection(timeout=10)
     collector = collections.defaultdict(list)
 
-    def collect(response, sub):
+    def collect(sub, response):
         collector[sub].append(response)
 
     subs = [pv.subscribe() for pv in pvs]
@@ -377,7 +377,7 @@ def test_subscription_objects_are_reused(ioc, context):
     # Attach a callback so that these subs are activated and enter the
     # Context's cache.
 
-    def f(item, pv):
+    def f(sub, item):
         ...
 
     sub.add_callback(f)
@@ -396,7 +396,7 @@ def test_unsubscribe_all(ioc, context):
 
     collector = []
 
-    def f(response, sub):
+    def f(sub, response):
         collector.append(response)
 
     sub0.add_callback(f)
@@ -575,7 +575,7 @@ def test_multithreaded_many_write(ioc, context, thread_count,
     pv, = context.get_pvs(ioc.pvs['int'])
     values = []
 
-    def callback(command, sub):
+    def callback(sub, command):
         values.append(command.data.tolist()[0])
 
     sub = pv.subscribe()
@@ -608,7 +608,7 @@ def test_multithreaded_many_subscribe(ioc, context, thread_count,
 
         values[thread_id] = []
 
-        def callback(command, sub):
+        def callback(sub, command):
             print(thread_id, command)
             values[thread_id].append(command.data.tolist()[0])
 
@@ -725,7 +725,7 @@ def test_events_off_and_on(ioc, context):
 
     monitor_values = []
 
-    def callback(command, sub, **kwargs):
+    def callback(sub, command, **kwargs):
         assert isinstance(command, ca.EventAddResponse)
         monitor_values.append(command.data[0])
 
