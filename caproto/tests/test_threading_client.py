@@ -239,11 +239,68 @@ def test_deprecated_callback_signature(ioc, context):
 
     def callback(command):
         "Old-style signature (missing pv argument)"
-        ...
+        assert isinstance(command, ca.EventAddResponse)
+        monitor_values.append(command.data[0])
 
     sub = pv.subscribe()
+    # Subscribing should warn about the deprecated signature...
     with pytest.warns(UserWarning):
         sub.add_callback(callback)
+
+    # ...but it should work just the same.
+    time.sleep(0.2)  # Wait for EventAddRequest to be sent and processed.
+    pv.write((1, ), wait=True)
+    pv.write((2, ), wait=True)
+    pv.write((3, ), wait=True)
+    time.sleep(0.2)  # Wait for the last update to be processed.
+    sub.clear()
+    pv.write((4, ), wait=True)  # This update should not be received by us.
+
+    for i in range(3):
+        if pv.read().data[0] == 3:
+            time.sleep(0.2)
+            break
+        else:
+            time.sleep(0.2)
+
+    assert monitor_values[1:] == [1, 2, 3]
+
+
+def test_another_deprecated_callback_signature(ioc, context):
+    cntx = context
+
+    pv, = cntx.get_pvs(ioc.pvs['int'])
+    pv.wait_for_connection(timeout=10)
+
+    monitor_values = []
+
+    def callback(command, **kwargs):
+        "Old-style signature (missing pv argument) with optional kwargs"
+        assert isinstance(command, ca.EventAddResponse)
+        monitor_values.append(command.data[0])
+
+    sub = pv.subscribe()
+    # Subscribing should warn about the deprecated signature...
+    with pytest.warns(UserWarning):
+        sub.add_callback(callback)
+
+    # ...but it should work just the same.
+    time.sleep(0.2)  # Wait for EventAddRequest to be sent and processed.
+    pv.write((1, ), wait=True)
+    pv.write((2, ), wait=True)
+    pv.write((3, ), wait=True)
+    time.sleep(0.2)  # Wait for the last update to be processed.
+    sub.clear()
+    pv.write((4, ), wait=True)  # This update should not be received by us.
+
+    for i in range(3):
+        if pv.read().data[0] == 3:
+            time.sleep(0.2)
+            break
+        else:
+            time.sleep(0.2)
+
+    assert monitor_values[1:] == [1, 2, 3]
 
 
 def test_client_and_host_name(shared_broadcaster):
