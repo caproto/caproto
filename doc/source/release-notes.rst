@@ -2,6 +2,29 @@
 Release History
 ***************
 
+Unreleased
+==========
+
+* In the threading client, the expected signature of Subscription callbacks has
+  changed from ``f(response)`` to ``f(sub, response)`` where ``sub`` is the
+  pertinent :class:`caproto.threading.client.Subscription`.
+  This change has been made in a backward-compatible way. Callbacks with the
+  old signature, ``f(response)``, will still work but caproto will issue a
+  warning. Support for the old signature may be removed in the future.
+  By giving the callback ``f`` access to ``sub``, we enable usages like
+
+  .. code-block:: python
+
+     def f(sub, response):
+         # Print the name of the pertinent PV.
+         print('Received response from', sub.pv.name)
+
+     def f(sub, response):
+         if ...:
+             sub.remove_callback(f)
+
+* The detail and formatting of the log messages has been improved.
+
 v0.4.2 (2019-11-13)
 ===================
 
