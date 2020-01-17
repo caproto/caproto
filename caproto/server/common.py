@@ -592,7 +592,7 @@ class VirtualCircuit:
         if isinstance(command, ca.Message):
             tags['bytesize'] = len(command)
             self.log.debug("%r", command, extra=tags)
-            return to_send
+        return to_send
 
 
 class Context:
