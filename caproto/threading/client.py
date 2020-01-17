@@ -1405,7 +1405,8 @@ class VirtualCircuitManager:
             ioid_info = self.ioids.pop(command.ioid)
             deadline = ioid_info['deadline']
             pv = ioid_info['pv']
-            tags = {'pv': pv.name, **tags}
+            tags = tags.copy()
+            tags['pv'] = pv.name
             if deadline is not None and time.monotonic() > deadline:
                 self.log.warning("Ignoring late response with ioid=%d regarding "
                                  "PV named %s because "
@@ -1438,11 +1439,13 @@ class VirtualCircuitManager:
                 # This method submits jobs to the Contexts's
                 # ThreadPoolExecutor for user callbacks.
                 sub.process(command)
-                tags = {'pv': sub.pv.name, **tags}
+                tags = tags.copy()
+                tags['pv'] = sub.pv.name
         elif isinstance(command, ca.AccessRightsResponse):
             pv = self.pvs[command.cid]
             pv.access_rights_changed(command.access_rights)
-            tags = {'pv': pv.name, **tags}
+            tags = tags.copy()
+            tags['pv'] = pv.name
         elif isinstance(command, ca.EventCancelResponse):
             # TODO Any way to add the pv name to tags here?
             ...
@@ -1454,12 +1457,14 @@ class VirtualCircuitManager:
                 pv.channel = chan
                 pv.channel_ready.set()
             pv.connection_state_changed('connected', chan)
-            tags = {'pv': pv.name, **tags}
+            tags = tags.copy()
+            tags['pv'] = pv.name
         elif isinstance(command, (ca.ServerDisconnResponse,
                                   ca.ClearChannelResponse)):
             pv = self.pvs[command.cid]
             pv.connection_state_changed('disconnected', None)
-            tags = {'pv': pv.name, **tags}
+            tags = tags.copy()
+            tags['pv'] = pv.name
             # NOTE: pv remains valid until server goes down
         elif isinstance(command, ca.EchoResponse):
             # The important effect here is that it will have updated
