@@ -596,7 +596,7 @@ class PV:
             except Exception:
                 ...
 
-    def __on_changes(self, command, pv):
+    def __on_changes(self, command, sub):
         """internal callback function: do not overwrite!!
         To have user-defined code run when the PV value changes,
         use add_callback()
