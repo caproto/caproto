@@ -237,6 +237,9 @@ class SharedBroadcaster:
 
         # UDP socket broadcasting to CA servers
         self.udp_sock = ca.bcast_socket(socket)
+        # Must bind or getsocketname() will raise on Windows.
+        # See https://github.com/caproto/caproto/issues/514.
+        self.udp_sock.bind(('', 0))
         self.broadcaster.our_address = self.udp_sock.getsockname()[:2]
         self.registered = False  # refers to RepeaterRegisterRequest
         self.loop_ready_event = curio.Event()

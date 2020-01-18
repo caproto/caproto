@@ -275,6 +275,9 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0, notify=True,
         # caproto-repeater that will continue running after it exits.
         spawn_repeater()
     udp_sock = ca.bcast_socket()
+    # Must bind or getsocketname() will raise on Windows.
+    # See https://github.com/caproto/caproto/issues/514.
+    udp_sock.bind(('', 0))
     try:
         udp_sock.settimeout(timeout)
         chan = make_channel(pv_name, udp_sock, priority, timeout)
@@ -408,6 +411,9 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
         loggers[sub.pv_name] = logging.LoggerAdapter(logging.getLogger('caproto.ch'),
                                                      {'pv': sub.pv_name})
     udp_sock = ca.bcast_socket()
+    # Must bind or getsocketname() will raise on Windows.
+    # See https://github.com/caproto/caproto/issues/514.
+    udp_sock.bind(('', 0))
     try:
         udp_sock.settimeout(timeout)
         channels = {}
@@ -580,6 +586,9 @@ def write(pv_name, data, *, notify=False, data_type=None, metadata=None,
         spawn_repeater()
 
     udp_sock = ca.bcast_socket()
+    # Must bind or getsocketname() will raise on Windows.
+    # See https://github.com/caproto/caproto/issues/514.
+    udp_sock.bind(('', 0))
     try:
         udp_sock.settimeout(timeout)
         chan = make_channel(pv_name, udp_sock, priority, timeout)
@@ -662,6 +671,9 @@ def read_write_read(pv_name, data, *, notify=False,
         spawn_repeater()
 
     udp_sock = ca.bcast_socket()
+    # Must bind or getsocketname() will raise on Windows.
+    # See https://github.com/caproto/caproto/issues/514.
+    udp_sock.bind(('', 0))
     try:
         udp_sock.settimeout(timeout)
         chan = make_channel(pv_name, udp_sock, priority, timeout)
