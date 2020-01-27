@@ -256,7 +256,7 @@ def test_deprecated_callback_signature(ioc, context):
     sub.clear()
     pv.write((4, ), wait=True)  # This update should not be received by us.
 
-    for i in range(3):
+    for _ in range(3):
         if pv.read().data[0] == 3:
             time.sleep(0.2)
             break
@@ -293,7 +293,7 @@ def test_another_deprecated_callback_signature(ioc, context):
     sub.clear()
     pv.write((4, ), wait=True)  # This update should not be received by us.
 
-    for i in range(3):
+    for _ in range(3):
         if pv.read().data[0] == 3:
             time.sleep(0.2)
             break
