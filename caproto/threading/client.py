@@ -35,7 +35,7 @@ from .._constants import (MAX_ID, STALE_SEARCH_EXPIRATION,
 from .._utils import (batch_requests, CaprotoError, ThreadsafeCounter,
                       socket_bytes_available, CaprotoTimeoutError,
                       CaprotoTypeError, CaprotoRuntimeError, CaprotoValueError,
-                      CaprotoKeyError, CaprotoNetworkError)
+                      CaprotoKeyError, CaprotoNetworkError, safe_getsockname)
 
 
 ch_logger = logging.getLogger('caproto.ch')
@@ -340,7 +340,7 @@ class SharedBroadcaster:
         self.listeners = weakref.WeakSet()
 
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
-        self.broadcaster.client_address = self.udp_sock.getsockname()[:2]
+        self.broadcaster.client_address = safe_getsockname(self.udp_sock)[:2]
         self.log = logging.LoggerAdapter(
             self.broadcaster.log, {'role': 'CLIENT'})
         self.search_log = logging.LoggerAdapter(

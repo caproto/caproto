@@ -12,6 +12,7 @@ import getpass
 import logging
 
 import caproto as ca
+from caproto._utils import safe_getsockname
 import curio
 
 from collections import OrderedDict
@@ -237,7 +238,7 @@ class SharedBroadcaster:
 
         # UDP socket broadcasting to CA servers
         self.udp_sock = ca.bcast_socket(socket)
-        self.broadcaster.our_address = self.udp_sock.getsockname()[:2]
+        self.broadcaster.our_address = safe_getsockname(self.udp_sock)[:2]
         self.registered = False  # refers to RepeaterRegisterRequest
         self.loop_ready_event = curio.Event()
         self.unanswered_searches = {}  # map search id (cid) to name
