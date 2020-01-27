@@ -4,6 +4,7 @@
 import argparse
 import array
 import collections
+import functools
 import os
 import random
 import socket
@@ -876,3 +877,23 @@ class ShowVersionAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         print(__version__)
         parser.exit()
+
+
+@functools.lru_cache(maxsize=128)
+def safe_getsockname(sock):
+    """
+    Call sock.getsockname() and, on Windows, return ('0.0.0.0', 0) if an error is raised.
+
+    This is a workaround to a critical issue affecting Windows. A better
+    solution should be found but requires more discussion. See
+    https://github.com/caproto/caproto/issues/514
+    and issues/PRs linked from there.
+    """
+    try:
+        return sock.getsockname()
+    except Exception:
+        if sys.platform != 'win32':
+            raise
+        # This is what the Linux OS returns for a unconnected socket that has
+        # not yet been sent from.
+        return ('0.0.0.0', 0)

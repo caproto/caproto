@@ -18,7 +18,7 @@ import trio
 from collections import OrderedDict, defaultdict
 from trio import socket
 from .._utils import (batch_requests, CaprotoError, ThreadsafeCounter,
-                      get_environment_variables)
+                      get_environment_variables, safe_getsockname)
 from .._constants import (STALE_SEARCH_EXPIRATION, SEARCH_MAX_DATAGRAM_BYTES)
 
 from .util import open_memory_channel
@@ -323,7 +323,7 @@ class SharedBroadcaster:
 
     async def _broadcaster_recv_loop(self, task_status):
         self.udp_sock = ca.bcast_socket(socket_module=socket)
-        self.broadcaster.our_address = self.udp_sock.getsockname()[:2]
+        self.broadcaster.our_address = safe_getsockname(self.udp_sock)[:2]
         command = self.broadcaster.register('127.0.0.1')
         await self.send(ca.EPICS_CA2_PORT, command)
         task_status.started()
