@@ -52,7 +52,7 @@ class VirtualCircuit:
     def __init__(self, circuit, client, context):
         self.connected = True
         self.circuit = circuit  # a caproto.VirtualCircuit
-        self.circuit.our_address = client.getsockname()[:2]
+        self.circuit.our_address = client.getsockname()
         self.log = circuit.log
         self.client = client
         self.context = context
