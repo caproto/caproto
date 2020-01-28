@@ -52,7 +52,7 @@ def recv(circuit):
 def search(pv_name, udp_sock, timeout, *, max_retries=2):
     # Set Broadcaster log level to match our logger.
     b = ca.Broadcaster(our_role=ca.CLIENT)
-    b.client_address = safe_getsockname(udp_sock)[:2]
+    b.client_address = safe_getsockname(udp_sock)
 
     # Send registration request to the repeater
     logger.debug('Registering with the Channel Access repeater.')
@@ -157,7 +157,7 @@ def make_channel(pv_name, udp_sock, priority, timeout):
         new = True
         sockets[chan.circuit] = socket.create_connection(chan.circuit.address,
                                                          timeout)
-        circuit.our_address = sockets[chan.circuit].getsockname()[:2]
+        circuit.our_address = sockets[chan.circuit].getsockname()
     try:
         if new:
             # Initialize our new TCP-based CA connection with a VersionRequest.

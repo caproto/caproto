@@ -340,7 +340,7 @@ class SharedBroadcaster:
         self.listeners = weakref.WeakSet()
 
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
-        self.broadcaster.client_address = safe_getsockname(self.udp_sock)[:2]
+        self.broadcaster.client_address = safe_getsockname(self.udp_sock)
         self.log = logging.LoggerAdapter(
             self.broadcaster.log, {'role': 'CLIENT'})
         self.search_log = logging.LoggerAdapter(
@@ -1295,7 +1295,7 @@ class VirtualCircuitManager:
             self.socket = socket.create_connection(self.circuit.address)
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
             self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-            self.circuit.our_address = self.socket.getsockname()[:2]
+            self.circuit.our_address = self.socket.getsockname()
             # This dict is passed to the loggers.
             self._tags = {'their_address': self.circuit.address,
                           'our_address': self.circuit.our_address,

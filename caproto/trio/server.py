@@ -157,7 +157,7 @@ class Context(_Context):
         for interface in self.interfaces:
             udp_sock = ca.bcast_socket(socket)
             self.broadcaster.server_addresses.append(
-                safe_getsockname(udp_sock)[:2])
+                safe_getsockname(udp_sock))
             try:
                 await udp_sock.bind((interface, self.ca_server_port))
             except Exception:
