@@ -25,6 +25,18 @@ Unreleased
 
 * The detail and formatting of the log messages has been improved.
 
+v0.4.3 (2020-01-29)
+===================
+
+Python releases 3.6.10, 3.7.6, and 3.8.1 made a breaking change for security
+reasons that happens to break caproto's asyncio-based server (the default one)
+on all platforms. This release adjusts for that change. See
+:meth:`asyncio.loop.create_datagram_endpoint` for details about this change in
+Python.
+
+This release also fixes a bug introduced in v0.4.0 affecting Windows only that
+made caproto clients and servers unusuable on Windows.
+
 v0.4.2 (2019-11-13)
 ===================
 
