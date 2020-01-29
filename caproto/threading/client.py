@@ -670,7 +670,7 @@ class SharedBroadcaster:
                                             name, cid, *accepted_address, *new_address,
                                             extra={'pv': name,
                                                    'their_address': accepted_address,
-                                                   'our_address': self.udp_sock.getsockname()[:2]})
+                                                   'our_address': safe_getsockname(udp_sock)[:2]})
                     else:
                         results_by_cid.append((cid, name))
                         address = ca.extract_address(command)
@@ -763,7 +763,7 @@ class SharedBroadcaster:
                     checking[address] = now + RESPONSIVENESS_TIMEOUT
                     tags = {'role': 'CLIENT',
                             'their_address': address,
-                            'our_address': self.udp_sock.getsockname()[:2],
+                            'our_address': safe_getsockname(self.udp_sock)[:2],
                             'direction': '--->>>'}
 
                     self.broadcaster.log.debug(
@@ -1099,7 +1099,7 @@ class Context:
                 search_logger.debug('Connecting %s on circuit with %s:%d', name, *address,
                                     extra={'pv': name,
                                            'their_address': address,
-                                           'our_address': self.broadcaster.udp_sock.getsockname()[:2],
+                                           'our_address': safe_getsockname(self.broadcaster.udp_sock)[:2],
                                            'direction': '--->>>',
                                            'role': 'CLIENT'})
                 # There could be multiple PVs with the same name and
