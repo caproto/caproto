@@ -670,7 +670,7 @@ class SharedBroadcaster:
                                             name, cid, *accepted_address, *new_address,
                                             extra={'pv': name,
                                                    'their_address': accepted_address,
-                                                   'our_address': safe_getsockname(udp_sock)[:2]})
+                                                   'our_address': safe_getsockname(self.udp_sock)[:2]})
                     else:
                         results_by_cid.append((cid, name))
                         address = ca.extract_address(command)
