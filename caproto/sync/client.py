@@ -627,14 +627,14 @@ def write(pv_name, data, *, notify=False, data_type=None, metadata=None,
     Request notification of completion ("put completion") and wait for it.
     >>> write('cat', 5, notify=True)  # blocks until complete, then returns:
     WriteNotifyResponse(
-        data_type=<ChannelType.LONG: 5>,
-        data_count=1,
-        status=CAStatusCode(
-        name='ECA_NORMAL', code=0, code_with_severity=1,
-        severity=<CASeverity.SUCCESS: 1>,
-        success=1, defunct=False,
-        description='Normal successful completion'),
-        ioid=0)
+    data_type=<ChannelType.LONG: 5>,
+    data_count=1,
+    status=CAStatusCode(
+    name='ECA_NORMAL', code=0, code_with_severity=1,
+    severity=<CASeverity.SUCCESS: 1>,
+    success=1, defunct=False,
+    description='Normal successful completion'),
+    ioid=0)
     """
     if repeater:
         # As per the EPICS spec, a well-behaved client should start a
