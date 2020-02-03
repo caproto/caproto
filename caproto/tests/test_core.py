@@ -417,3 +417,13 @@ def test_ioid_exhaustion(circuit_pair):
         # but depends on an implementation detail.
         assert len(cli_circuit._ioids) == 0
         assert len(srv_circuit._ioids) == 0
+
+
+def test_enum_too_long():
+    with pytest.raises(ValueError, message='The maximum enum string length is'):
+        ca.ChannelEnum(enum_strings=('a' * 28,))
+
+
+def test_enum_too_many():
+    with pytest.raises(ValueError, message='The maximum number of enum states is'):
+        ca.ChannelEnum(enum_strings='a' * 17)
