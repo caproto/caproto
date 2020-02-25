@@ -7,6 +7,7 @@ import logging
 from .server import PVGroup, pvproperty
 from .._data import ChannelType
 from .._dbr import AlarmSeverity
+from .._constants import MAX_ENUM_STATES
 from . import menus
 
 
@@ -122,7 +123,7 @@ class RecordFieldGroup(PVGroup):
     new_alarm_status = pvproperty(
         name='NSTA',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='New Alarm Status',
         read_only=True)
     processing_active = pvproperty(
@@ -344,7 +345,7 @@ class AiFields(RecordFieldGroup, _Limits):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     current_raw_value = pvproperty(
@@ -457,7 +458,7 @@ class AsubFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     old_return_value = pvproperty(
@@ -513,7 +514,7 @@ class AaiFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     hash_of_onchange_data = pvproperty(
@@ -584,7 +585,7 @@ class AaoFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     hash_of_onchange_data = pvproperty(
@@ -656,7 +657,7 @@ class AcalcoutFields(RecordFieldGroup, _Limits):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     array_mod = pvproperty(
@@ -785,7 +786,7 @@ class AoFields(RecordFieldGroup, _Limits):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     current_raw_value = pvproperty(
@@ -930,7 +931,7 @@ class AsynFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     eom_reason = pvproperty(
@@ -1232,7 +1233,7 @@ class BiFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     hardware_mask = pvproperty(
@@ -1306,7 +1307,7 @@ class BoFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     hardware_mask = pvproperty(
@@ -1404,7 +1405,7 @@ class BusyFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     last_value_alarmed = pvproperty(
@@ -1504,7 +1505,7 @@ class CalcFields(RecordFieldGroup, _Limits):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     last_val_monitored = pvproperty(
@@ -1546,7 +1547,7 @@ class CalcoutFields(RecordFieldGroup, _Limits):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     calc_valid = pvproperty(
@@ -1636,7 +1637,7 @@ class CompressFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     compress_value_buffer = pvproperty(
@@ -1704,7 +1705,7 @@ class DfanoutFields(RecordFieldGroup, _Limits):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     last_val_monitored = pvproperty(
@@ -1784,7 +1785,7 @@ class DigitelFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     bake_installed = pvproperty(
@@ -2277,7 +2278,7 @@ class EpidFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     controlled_value = pvproperty(
@@ -2447,7 +2448,7 @@ class EventFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     simulation_mode = pvproperty(
@@ -2478,7 +2479,7 @@ class FanoutFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     link_selection = pvproperty(
@@ -2512,7 +2513,7 @@ class GensubFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     old_subr_address = pvproperty(
@@ -3486,7 +3487,7 @@ class HistogramFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     collection_control = pvproperty(
@@ -3561,7 +3562,7 @@ class LonginFields(RecordFieldGroup, _LimitsLong):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     last_val_monitored = pvproperty(
@@ -3617,7 +3618,7 @@ class LongoutFields(RecordFieldGroup, _LimitsLong):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     last_val_monitored = pvproperty(
@@ -3688,7 +3689,7 @@ class MbbiFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     hardware_mask = pvproperty(
@@ -3759,7 +3760,7 @@ class MbbidirectFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     bit_0 = pvproperty(name='B0', dtype=ChannelType.CHAR, doc='Bit 0')
@@ -3838,7 +3839,7 @@ class MbboFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     hardware_mask = pvproperty(
@@ -3931,7 +3932,7 @@ class MbbodirectFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     hardware_mask = pvproperty(
@@ -4028,7 +4029,7 @@ class MotorFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     at_home = pvproperty(
@@ -4441,7 +4442,7 @@ class PermissiveFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     old_flag = pvproperty(
@@ -4461,7 +4462,7 @@ class ScalcoutFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     calc_valid = pvproperty(
@@ -4621,7 +4622,7 @@ class ScanparmFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     code_version = pvproperty(
@@ -4750,7 +4751,7 @@ class SelFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     index_value = pvproperty(
@@ -4842,7 +4843,7 @@ class SeqFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     constant_input_1 = pvproperty(
@@ -4954,7 +4955,7 @@ class SscanFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     auto_wait_count = pvproperty(
@@ -5190,7 +5191,7 @@ class SseqFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     dol_link_status = pvproperty(
@@ -5611,7 +5612,7 @@ class StateFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     prev_value = pvproperty(
@@ -5630,7 +5631,7 @@ class StringinFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     previous_value = pvproperty(
@@ -5680,7 +5681,7 @@ class StringoutFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     previous_value = pvproperty(
@@ -5741,7 +5742,7 @@ class SubFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     last_value_alarmed = pvproperty(
@@ -5929,7 +5930,7 @@ class SubarrayFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     busy_indicator = pvproperty(
@@ -5984,7 +5985,7 @@ class SwaitFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     calc_valid = pvproperty(
@@ -6085,7 +6086,7 @@ class TableFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     code_version = pvproperty(
@@ -6721,7 +6722,7 @@ class TimestampFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     current_raw_value = pvproperty(
@@ -6746,7 +6747,7 @@ class TransformFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     code_version = pvproperty(
@@ -6780,7 +6781,7 @@ class VmeFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     status_array = pvproperty(
@@ -6821,7 +6822,7 @@ class VsFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     changed_control = pvproperty(
@@ -7194,7 +7195,7 @@ class WaveformFields(RecordFieldGroup):
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
-        enum_strings=menus.menuAlarmStat.get_string_tuple(),
+        enum_strings=menus.menuAlarmStat.get_string_tuple()[:MAX_ENUM_STATES],
         doc='Alarm Status',
         read_only=True)
     busy_indicator = pvproperty(
