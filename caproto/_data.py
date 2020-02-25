@@ -714,10 +714,10 @@ class ChannelEnum(ChannelData):
     @staticmethod
     def _validate_enum_strings(enum_strings):
         if any(len(es) >= MAX_ENUM_STRING_SIZE for es in enum_strings):
-            over_lenth = tuple(f'{es}: {len(es)}' for es in enum_strings if
-                               len(es) >= MAX_ENUM_STRING_SIZE)
+            over_length = tuple(f'{es}: {len(es)}' for es in enum_strings if
+                                len(es) >= MAX_ENUM_STRING_SIZE)
             msg = (f"The maximum enum string length is {MAX_ENUM_STRING_SIZE} " +
-                   f"but the strings {over_lenth} are too long")
+                   f"but the strings {over_length} are too long")
             raise ValueError(msg)
         if len(enum_strings) > MAX_ENUM_STATES:
             raise ValueError(f"The maximum number of enum states is {MAX_ENUM_STATES} " +
