@@ -545,7 +545,7 @@ def _write(chan, data, metadata, timeout, data_type, notify):
     if data_type is None:
         # Handle ENUM: If data is INT, carry on. If data is STRING,
         # write it specifically as STRING data_Type.
-        if (ntype is ChannelType.ENUM) and isinstance(data[0], bytes):
+        if (ntype is ChannelType.ENUM) and isinstance(data, str):
             logger.debug("Will write to ENUM as data_type STRING.")
             data_type = ChannelType.STRING
     logger.debug("Writing.")
