@@ -1,6 +1,6 @@
 codecov
 coverage
-curio
+curio <1.0
 dpkt
 flake8
 netifaces
