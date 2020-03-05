@@ -548,7 +548,9 @@ def _write(chan, data, metadata, timeout, data_type, notify):
         stringy_data = False
         if isinstance(data, (str, bytes)):
             stringy_data = True
-        if hasattr(data, '__getitem__') and isinstance(data[0], (str, bytes)):
+        if hasattr(data, '__getitem__') \
+                and len(data) > 0 \
+                and isinstance(data[0], (str, bytes)):
             stringy_data = True
 
         if stringy_data:
