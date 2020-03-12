@@ -227,7 +227,7 @@ def find_asv_root(path, *, asv_conf_filename='asv.conf.json',
     return find_asv_root(parent)
 
 
-@pytest.mark.hookwrapper(trylast=True)
+@pytest.hookimpl(trylast=True, hookwrapper=True)
 def pytest_benchmark_update_json(config, benchmarks, output_json):
     yield
 
