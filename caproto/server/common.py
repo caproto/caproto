@@ -1,4 +1,5 @@
-from collections import defaultdict, deque, namedtuple, ChainMap, Iterable
+from collections import defaultdict, deque, namedtuple, ChainMap
+from collections.abc import Iterable
 import copy
 import logging
 import sys
