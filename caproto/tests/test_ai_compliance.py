@@ -34,9 +34,9 @@ type_equal = {
 }
 
 
-def test_ai_compliance(request, prefix, record_type_to_fields):
-    record_type = 'ai'
-    fields = record_type_to_fields[record_type]
+def test_record_compliance(request, prefix, record_type_name,
+                           record_type_to_fields):
+    fields = record_type_to_fields[record_type_name]
 
     # host a caproto record to test(you could also try this test on a real record).
     # NOTE: using the below will actually run a seperate program from command line,
@@ -45,7 +45,7 @@ def test_ai_compliance(request, prefix, record_type_to_fields):
     conftest.run_example_ioc(
         'caproto.tests.ioc_any_record',
         pv_to_check=pv,
-        args=['--prefix', prefix, '-v', '--record-type', record_type],
+        args=['--prefix', prefix, '-v', '--record-type', record_type_name],
         request=request,
         very_verbose=False
     )
@@ -61,7 +61,7 @@ def test_ai_compliance(request, prefix, record_type_to_fields):
         pv_temp.connect(timeout=0.1)
 
     # wait for all to connect at same time
-    time.sleep(5)
+    time.sleep(1)
 
     # now do the testing
     issues = {}
@@ -105,7 +105,7 @@ def test_ai_compliance(request, prefix, record_type_to_fields):
                                for field, issue in issues.items()
                                )
     pytest.fail(
-        f'Record type {record_type} not in compliance with the softIoc.dbd '
+        f'Record type {record_type_name} not in compliance with softIoc.dbd '
         f'specifications.  Found {len(issues)} issues in {len(fields)} fields:'
         f'\n\t{issue_string}'
     )

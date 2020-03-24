@@ -753,3 +753,8 @@ def pytest_runtest_call(item):
 
     item.user_properties.append(('total_sockets', num_sockets))
     item.user_properties.append(('open_sockets', num_open))
+
+
+@pytest.fixture(scope='session', params=list(ca.server.records.records))
+def record_type_name(request):
+    return request.param
