@@ -7,16 +7,9 @@
 import epics
 import time
 import re
-import os
 from epics import ca
-import urllib.request  # for fetching "epics-base" code to compare types
-import subprocess
-import sys
-import signal
 
-# only want local responses.
-os.environ["EPICS_CA_ADDR_LIST"] = "127.0.0.1"  # local
-os.environ["EPICS_CA_AUTO_ADDR_LIST"] = "NO"
+from . import conftest
 
 # type equality between pyepics and "real" epics, **this is assumed **
 type_equal = {
@@ -66,59 +59,6 @@ pyepics_type_lookup = {
 }
 
 
-def run_example_ioc(module_name, *, pv_to_check):
-    os.environ['COVERAGE_PROCESS_START'] = '.coveragerc'
-    print(f'Running {module_name}')
-    args = list([]) + ['-vvv']
-    with open(os.devnull, 'w') as nowhere:
-    #nowhere=None
-        p = subprocess.Popen([sys.executable, '-um', 'caproto.tests.example_runner',
-                          module_name] + list(args),
-                         stdout=nowhere, stderr=None, stdin=nowhere,
-                         env=os.environ)
-
-    poll_readiness_pye(pv_to_check)
-
-    import atexit
-    @atexit.register
-    def stop_ioc():
-        if p.poll() is None:
-            if sys.platform != 'win32':
-                print('Sending Ctrl-C to the example IOC')
-                p.send_signal(signal.SIGINT)
-                print('Waiting on process...')
-
-            try:
-                p.wait(timeout=1)
-            except subprocess.TimeoutExpired:
-                print('IOC did not exit in a timely fashion')
-                p.terminate()
-                print('IOC terminated')
-            else:
-                print('IOC has exited')
-        else:
-            print('Example IOC has already exited')
-    return p
-
-
-
-def poll_readiness_pye(pv_to_check, attempts=5, timeout=1):
-    print(f'polling PV {pv_to_check}..')
-    pv_temp_connected = False
-    for attempt in range(attempts):
-        try:
-            pv_temp = epics.PV(pv_to_check)
-            pv_temp_connected = pv_temp.connect(timeout=timeout)
-        except TimeoutError:
-            continue
-        if pv_temp_connected is True:
-            break
-
-    if pv_temp_connected is False:
-        raise TimeoutError(f"ioc fixture failed to start in "
-                           f"{attempts * timeout} seconds (pv: {pv_to_check})")
-    print(f'connected to PV: {pv_to_check}')
-
 def get_real_pv_types():
     '''
     fetch "aiRecord.dbd" & "dbCommon.dbd" from the community, and
@@ -158,8 +98,8 @@ def test_ai_compliance():
     # NOTE: using the below will actually run a seperate program from command line,
     # bypassing whatever virtual env you are using for this test..
     pv = f"mock:A"
-    p = run_example_ioc('caproto.ioc_examples.mocking_records',
-                        pv_to_check=f"{pv}")
+    p = conftest.run_example_ioc('caproto.ioc_examples.mocking_records',
+                                 pv_to_check=f"{pv}")
 
     # pre-connect.
     # I found it seems to be the only way to avoid getting false "not connected",
