@@ -69,6 +69,8 @@ def register_record(cls):
 
 class RecordFieldGroup(PVGroup):
     _scan_rate_sec = None
+    _dtype = None
+
     alarm_acknowledge_severity = pvproperty(
         name='ACKS',
         dtype=ChannelType.ENUM,
@@ -336,6 +338,7 @@ class _LimitsLong(PVGroup):
 @register_record
 class AiFields(RecordFieldGroup, _Limits):
     _record_type = 'ai'
+    _dtype = ChannelType.DOUBLE
     # value = pvproperty(
     #     name='VAL', dtype=ChannelType.DOUBLE, doc='Current EGU Value')
     alarm_status = pvproperty(
@@ -448,6 +451,7 @@ class AiFields(RecordFieldGroup, _Limits):
 @register_record
 class AsubFields(RecordFieldGroup):
     _record_type = 'aSub'
+    _dtype = ChannelType.LONG
     # value = pvproperty(
     #     name='VAL', dtype=ChannelType.LONG, doc='Subr. return value')
     alarm_status = pvproperty(
@@ -506,6 +510,7 @@ class AsubFields(RecordFieldGroup):
 @register_record
 class AaiFields(RecordFieldGroup):
     _record_type = 'aai'
+    _dtype = ChannelType.LONG  # actually based on FTVL
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
@@ -577,6 +582,7 @@ class AaiFields(RecordFieldGroup):
 @register_record
 class AaoFields(RecordFieldGroup):
     _record_type = 'aao'
+    _dtype = ChannelType.LONG  # actually based on FTVL
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
@@ -648,6 +654,7 @@ class AaoFields(RecordFieldGroup):
 @register_record
 class AcalcoutFields(RecordFieldGroup, _Limits):
     _record_type = 'acalcout'
+    _dtype = ChannelType.DOUBLE
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Result')
     alarm_status = pvproperty(
         name='STAT',
@@ -776,6 +783,7 @@ class AcalcoutFields(RecordFieldGroup, _Limits):
 @register_record
 class AoFields(RecordFieldGroup, _Limits):
     _record_type = 'ao'
+    _dtype = ChannelType.DOUBLE
     # value = pvproperty(
     #     name='VAL', dtype=ChannelType.DOUBLE, doc='Desired Output')
     alarm_status = pvproperty(
@@ -919,6 +927,7 @@ class AoFields(RecordFieldGroup, _Limits):
 @register_record
 class AsynFields(RecordFieldGroup):
     _record_type = 'asyn'
+    _dtype = ChannelType.LONG
     # value = pvproperty(
     #     name='VAL', dtype=ChannelType.LONG, doc='Value field (unused)')
     abort_queuerequest = pvproperty(
@@ -1224,6 +1233,7 @@ class AsynFields(RecordFieldGroup):
 @register_record
 class BiFields(RecordFieldGroup):
     _record_type = 'bi'
+    _dtype = ChannelType.ENUM
     # value = pvproperty(name='VAL', dtype=ChannelType.ENUM, doc='Current Value')
     alarm_status = pvproperty(
         name='STAT',
@@ -1298,6 +1308,7 @@ class BiFields(RecordFieldGroup):
 @register_record
 class BoFields(RecordFieldGroup):
     _record_type = 'bo'
+    _dtype = ChannelType.ENUM
     # value = pvproperty(name='VAL', dtype=ChannelType.ENUM, doc='Current Value')
     alarm_status = pvproperty(
         name='STAT',
@@ -1396,6 +1407,7 @@ class BoFields(RecordFieldGroup):
 @register_record
 class BusyFields(RecordFieldGroup):
     _record_type = 'busy'
+    _dtype = ChannelType.ENUM
     # value = pvproperty(name='VAL', dtype=ChannelType.ENUM, doc='Current Value')
     alarm_status = pvproperty(
         name='STAT',
@@ -1496,6 +1508,7 @@ class BusyFields(RecordFieldGroup):
 @register_record
 class CalcFields(RecordFieldGroup, _Limits):
     _record_type = 'calc'
+    _dtype = ChannelType.DOUBLE
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Result')
     alarm_status = pvproperty(
         name='STAT',
@@ -1538,6 +1551,7 @@ class CalcFields(RecordFieldGroup, _Limits):
 @register_record
 class CalcoutFields(RecordFieldGroup, _Limits):
     _record_type = 'calcout'
+    _dtype = ChannelType.DOUBLE
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Result')
     alarm_status = pvproperty(
         name='STAT',
@@ -1629,6 +1643,7 @@ class CalcoutFields(RecordFieldGroup, _Limits):
 @register_record
 class CompressFields(RecordFieldGroup):
     _record_type = 'compress'
+    _dtype = None  # VAL is DBF_NOACCESS
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
@@ -1695,6 +1710,7 @@ class CompressFields(RecordFieldGroup):
 @register_record
 class DfanoutFields(RecordFieldGroup, _Limits):
     _record_type = 'dfanout'
+    _dtype = ChannelType.DOUBLE
     # value = pvproperty(
     #     name='VAL', dtype=ChannelType.DOUBLE, doc='Desired Output')
     alarm_status = pvproperty(
@@ -1768,6 +1784,7 @@ class DfanoutFields(RecordFieldGroup, _Limits):
 @register_record
 class DigitelFields(RecordFieldGroup):
     _record_type = 'digitel'
+    _dtype = ChannelType.DOUBLE
     # value = pvproperty(
     #     name='VAL', dtype=ChannelType.DOUBLE, doc='Pressure', read_only=True)
     acc_current = pvproperty(
@@ -2269,6 +2286,7 @@ class DigitelFields(RecordFieldGroup):
 @register_record
 class EpidFields(RecordFieldGroup):
     _record_type = 'epid'
+    _dtype = ChannelType.DOUBLE
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Setpoint')
     alarm_status = pvproperty(
         name='STAT',
@@ -2438,6 +2456,7 @@ class EpidFields(RecordFieldGroup):
 @register_record
 class EventFields(RecordFieldGroup):
     _record_type = 'event'
+    _dtype = ChannelType.LONG
     # value = pvproperty(
     #     name='VAL', dtype=ChannelType.LONG, doc='Event Number To Post')
     alarm_status = pvproperty(
@@ -2469,6 +2488,7 @@ class EventFields(RecordFieldGroup):
 @register_record
 class FanoutFields(RecordFieldGroup):
     _record_type = 'fanout'
+    _dtype = ChannelType.LONG
     # value = pvproperty(
     #     name='VAL', dtype=ChannelType.LONG, doc='Used to trigger')
     alarm_status = pvproperty(
@@ -2503,6 +2523,7 @@ class FanoutFields(RecordFieldGroup):
 @register_record
 class GensubFields(RecordFieldGroup):
     _record_type = 'genSub'
+    _dtype = ChannelType.LONG
     # value = pvproperty(
     #     name='VAL', dtype=ChannelType.LONG, doc='Subr. return value')
     alarm_status = pvproperty(
@@ -3479,6 +3500,7 @@ class GensubFields(RecordFieldGroup):
 @register_record
 class HistogramFields(RecordFieldGroup):
     _record_type = 'histogram'
+    _dtype = None  # DBF_NOACCESS
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
@@ -3553,6 +3575,7 @@ class HistogramFields(RecordFieldGroup):
 @register_record
 class LonginFields(RecordFieldGroup, _LimitsLong):
     _record_type = 'longin'
+    _dtype = ChannelType.LONG
     # value = pvproperty(name='VAL', dtype=ChannelType.LONG, doc='Current value')
     alarm_status = pvproperty(
         name='STAT',
@@ -3608,6 +3631,7 @@ class LonginFields(RecordFieldGroup, _LimitsLong):
 @register_record
 class LongoutFields(RecordFieldGroup, _LimitsLong):
     _record_type = 'longout'
+    _dtype = ChannelType.LONG
     # value = pvproperty(
     #     name='VAL', dtype=ChannelType.LONG, doc='Desired Output')
     alarm_status = pvproperty(
@@ -3680,6 +3704,7 @@ class LongoutFields(RecordFieldGroup, _LimitsLong):
 @register_record
 class MbbiFields(RecordFieldGroup):
     _record_type = 'mbbi'
+    _dtype = ChannelType.ENUM
     # value = pvproperty(name='VAL', dtype=ChannelType.ENUM, doc='Current Value')
     alarm_status = pvproperty(
         name='STAT',
@@ -3751,6 +3776,7 @@ class MbbiFields(RecordFieldGroup):
 @register_record
 class MbbidirectFields(RecordFieldGroup):
     _record_type = 'mbbiDirect'
+    _dtype = ChannelType.LONG
     # value = pvproperty(name='VAL', dtype=ChannelType.LONG, doc='Current Value')
     alarm_status = pvproperty(
         name='STAT',
@@ -3830,6 +3856,7 @@ class MbbidirectFields(RecordFieldGroup):
 @register_record
 class MbboFields(RecordFieldGroup):
     _record_type = 'mbbo'
+    _dtype = ChannelType.ENUM
     # value = pvproperty(name='VAL', dtype=ChannelType.ENUM, doc='Desired Value')
     alarm_status = pvproperty(
         name='STAT',
@@ -3923,6 +3950,7 @@ class MbboFields(RecordFieldGroup):
 @register_record
 class MbbodirectFields(RecordFieldGroup):
     _record_type = 'mbboDirect'
+    _dtype = ChannelType.LONG
     # value = pvproperty(name='VAL', dtype=ChannelType.LONG, doc='Word')
     alarm_status = pvproperty(
         name='STAT',
@@ -4019,6 +4047,7 @@ class MbbodirectFields(RecordFieldGroup):
 @register_record
 class MotorFields(RecordFieldGroup):
     _record_type = 'motor'
+    _dtype = ChannelType.DOUBLE
     # value = pvproperty(
     #     name='VAL', dtype=ChannelType.DOUBLE, doc='User Desired Value (EGU')
     alarm_status = pvproperty(
@@ -4433,6 +4462,7 @@ class MotorFields(RecordFieldGroup):
 @register_record
 class PermissiveFields(RecordFieldGroup):
     _record_type = 'permissive'
+    _dtype = ChannelType.LONG
     # value = pvproperty(name='VAL', dtype=ChannelType.LONG, doc='Status')
     alarm_status = pvproperty(
         name='STAT',
@@ -4453,6 +4483,7 @@ class PermissiveFields(RecordFieldGroup):
 @register_record
 class ScalcoutFields(RecordFieldGroup):
     _record_type = 'scalcout'
+    _dtype = ChannelType.DOUBLE
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Result')
     alarm_status = pvproperty(
         name='STAT',
@@ -4613,6 +4644,7 @@ class ScalcoutFields(RecordFieldGroup):
 @register_record
 class ScanparmFields(RecordFieldGroup):
     _record_type = 'scanparm'
+    _dtype = ChannelType.DOUBLE
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Result')
     alarm_status = pvproperty(
         name='STAT',
@@ -4741,6 +4773,7 @@ class ScanparmFields(RecordFieldGroup):
 @register_record
 class SelFields(RecordFieldGroup):
     _record_type = 'sel'
+    _dtype = ChannelType.DOUBLE
     # value = pvproperty(
     #     name='VAL', dtype=ChannelType.DOUBLE, doc='Result', read_only=True)
     alarm_status = pvproperty(
@@ -4833,6 +4866,7 @@ class SelFields(RecordFieldGroup):
 @register_record
 class SeqFields(RecordFieldGroup):
     _record_type = 'seq'
+    _dtype = ChannelType.LONG
     # value = pvproperty(
     #     name='VAL', dtype=ChannelType.LONG, doc='Used to trigger')
     alarm_status = pvproperty(
@@ -4929,6 +4963,7 @@ class SeqFields(RecordFieldGroup):
 @register_record
 class SscanFields(RecordFieldGroup):
     _record_type = 'sscan'
+    _dtype = ChannelType.DOUBLE
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Value Field')
     a1_pv_status = pvproperty(
         name='A1NV',
@@ -5141,6 +5176,7 @@ class SscanFields(RecordFieldGroup):
 @register_record
 class SseqFields(RecordFieldGroup):
     _record_type = 'sseq'
+    _dtype = ChannelType.LONG
     # value = pvproperty(
     #     name='VAL', dtype=ChannelType.LONG, doc='Used to trigger')
     ix1 = pvproperty(name='IX1', dtype=ChannelType.LONG, read_only=True)
@@ -5602,6 +5638,7 @@ class SseqFields(RecordFieldGroup):
 @register_record
 class StateFields(RecordFieldGroup):
     _record_type = 'state'
+    _dtype = ChannelType.CHAR  # TODO: CHAR[20]
     # value = pvproperty(
     #     name='VAL', dtype=ChannelType.CHAR, max_length=20, doc='Value')
     alarm_status = pvproperty(
@@ -5621,6 +5658,7 @@ class StateFields(RecordFieldGroup):
 @register_record
 class StringinFields(RecordFieldGroup):
     _record_type = 'stringin'
+    _dtype = ChannelType.CHAR  # TODO: CHAR[40]
     # value = pvproperty(
     #     name='VAL', dtype=ChannelType.CHAR, max_length=40, doc='Current Value')
     alarm_status = pvproperty(
@@ -5671,6 +5709,7 @@ class StringinFields(RecordFieldGroup):
 @register_record
 class StringoutFields(RecordFieldGroup):
     _record_type = 'stringout'
+    _dtype = ChannelType.CHAR  # TODO: CHAR[40]
     # value = pvproperty(
     #     name='VAL', dtype=ChannelType.CHAR, max_length=40, doc='Current Value')
     alarm_status = pvproperty(
@@ -5733,6 +5772,7 @@ class StringoutFields(RecordFieldGroup):
 @register_record
 class SubFields(RecordFieldGroup):
     _record_type = 'sub'
+    _dtype = ChannelType.DOUBLE
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Result')
     alarm_status = pvproperty(
         name='STAT',
@@ -5922,6 +5962,7 @@ class SubFields(RecordFieldGroup):
 @register_record
 class SubarrayFields(RecordFieldGroup):
     _record_type = 'subArray'
+    _dtype = None  # DBF_NOACCESS
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
@@ -5976,6 +6017,7 @@ class SubarrayFields(RecordFieldGroup):
 @register_record
 class SwaitFields(RecordFieldGroup):
     _record_type = 'swait'
+    _dtype = ChannelType.DOUBLE
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Value Field')
     alarm_status = pvproperty(
         name='STAT',
@@ -6077,6 +6119,7 @@ class SwaitFields(RecordFieldGroup):
 @register_record
 class TableFields(RecordFieldGroup):
     _record_type = 'table'
+    _dtype = ChannelType.DOUBLE
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Result')
     alarm_status = pvproperty(
         name='STAT',
@@ -6712,6 +6755,7 @@ class TableFields(RecordFieldGroup):
 @register_record
 class TimestampFields(RecordFieldGroup):
     _record_type = 'timestamp'
+    _dtype = ChannelType.CHAR  # TODO: CHAR[40]
     # value = pvproperty(
     #     name='VAL', dtype=ChannelType.CHAR, max_length=40, doc='Current Value')
     alarm_status = pvproperty(
@@ -6738,6 +6782,7 @@ class TimestampFields(RecordFieldGroup):
 @register_record
 class TransformFields(RecordFieldGroup):
     _record_type = 'transform'
+    _dtype = ChannelType.DOUBLE
     # value = pvproperty(name='VAL', dtype=ChannelType.DOUBLE, doc='Result')
     alarm_status = pvproperty(
         name='STAT',
@@ -6772,6 +6817,7 @@ class TransformFields(RecordFieldGroup):
 @register_record
 class VmeFields(RecordFieldGroup):
     _record_type = 'vme'
+    _dtype = ChannelType.LONG
     # value = pvproperty(name='VAL', dtype=ChannelType.LONG, doc='Current value')
     alarm_status = pvproperty(
         name='STAT',
@@ -6809,6 +6855,7 @@ class VmeFields(RecordFieldGroup):
 @register_record
 class VsFields(RecordFieldGroup):
     _record_type = 'vs'
+    _dtype = ChannelType.DOUBLE
     # value = pvproperty(
     #     name='VAL',
     #     dtype=ChannelType.DOUBLE,
@@ -7187,6 +7234,7 @@ class VsFields(RecordFieldGroup):
 @register_record
 class WaveformFields(RecordFieldGroup):
     _record_type = 'waveform'
+    _dtype = ChannelType.DOUBLE  # TODO: FTVL-based
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
