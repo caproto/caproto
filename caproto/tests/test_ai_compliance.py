@@ -4,12 +4,15 @@
 # - the types match the "real" 'ai' record
 # - all the .* PVs can be read
 # - all the enums of the .* can be read
-import epics
-import time
 import re
+import time
+
+import caproto
+import epics
 from epics import ca
 
 from . import conftest
+
 
 # type equality between pyepics and "real" epics, **this is assumed **
 type_equal = {
@@ -31,75 +34,18 @@ type_equal = {
     "DBF_NOACCESS": [""]  # for private use by record processing routines
 }
 
-pyepics_type_lookup = {
-    "string": 0,
-    "int": 1,
-    "short": 1,
-    "float": 2,
-    "enum": 3,
-    "char": 4,
-    "long": 5,
-    "double": 6,
-    "time_string": 14,
-    "time_int": 15,
-    "time_short": 15,
-    "time_float": 16,
-    "time_enum": 17,
-    "time_char": 18,
-    "time_long": 19,
-    "time_double": 20,
-    "ctrl_string": 28,
-    "ctrl_int": 29,
-    "ctrl_short": 29,
-    "ctrl_float": 30,
-    "ctrl_enum": 31,
-    "ctrl_char": 32,
-    "ctrl_long": 33,
-    "ctrl_double": 34
-}
 
-
-def get_real_pv_types():
-    '''
-    fetch "aiRecord.dbd" & "dbCommon.dbd" from the community, and
-    make a {PV extension:type} dict
-    (this could similarly be done for the other PV types).
-    '''
-    try:
-        real_record_db_lines = []
-        real_record_db_lines += urllib.request.urlopen(
-            "https://raw.githubusercontent.com/epics-base/epics-base/3.16/src/std/rec/aiRecord.dbd.pod")
-        real_record_db_lines += urllib.request.urlopen(
-            "https://raw.githubusercontent.com/epics-base/epics-base/3.16/src/ioc/db/dbCommon.dbd")
-    except Exception as e:
-        assert False, "need the internet to fetch the real record db files."
-
-    # extract out the types
-    # the record files don't include "RTYP" & ".RTYP$"
-    real_PV_types = {"RTYP": "DBF_STRING", "RTYP$": "DBF_CHAR"}
-    for line in real_record_db_lines:
-        # eg line="field(VAL,DBF_DOUBLE) {"
-        line = line.decode("utf-8")
-        regex = re.compile(
-            r"[\s].*field\((?P<name>[A-Za-z_].*)[,\s](?P<type>[A-Za-z_].*)\) {")
-        m = regex.match(line)
-        if m is not None:
-            real_PV_types[m.group('name')] = m.group('type')
-            if m.group('type') in ["DBF_STRING", "DBF_FWDLINK", "DBF_INLINK"]:
-                real_PV_types[f"{m.group('name')}$"] = "DBF_CHAR"
-
-    return real_PV_types
-
-
-def test_ai_compliance():
-    real_PV_types = get_real_pv_types()
+def test_ai_compliance(request, prefix, record_type_to_fields):
+    real_PV_types = record_type_to_fields['ai']
 
     # host a caproto record to test(you could also try this test on a real record).
     # NOTE: using the below will actually run a seperate program from command line,
     # bypassing whatever virtual env you are using for this test..
-    pv = f"mock:A"
-    p = conftest.run_example_ioc('caproto.ioc_examples.mocking_records',
-                                 pv_to_check=f"{pv}")
+    pv = f"{prefix}A"
+    conftest.run_example_ioc('caproto.ioc_examples.mocking_records',
+                             pv_to_check=pv,
+                             args=['--prefix', prefix],
+                             request=request)
 
     # pre-connect.
     # I found it seems to be the only way to avoid getting false "not connected",
@@ -123,7 +69,6 @@ def test_ai_compliance():
         expected_type=real_PV_types[extension]
 
         if pv_temp.connected is False:
-            #assert expected_type == "DBF_NOACCESS"
             if expected_type != "DBF_NOACCESS":
                 print("**************************************************************")
                 print(f"{extension}: type is not hosted, but should be {expected_type}")
@@ -146,8 +91,6 @@ def test_ai_compliance():
             try:
                 # normally it is time_char so we add time_
                 type_read_temp_str = f"time_{type_equal[expected_type][0]}"
-                type_read_temp = pyepics_type_lookup[type_read_temp_str]
-
                 # reading with ca.get highlights problems, whereas pv.get() seems to just work.
                 if "$" in extension:
                     read_temp = ca.get(pv_temp.chid, as_string=True) #, ftype=type_read_temp)
