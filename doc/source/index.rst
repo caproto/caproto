@@ -2,7 +2,7 @@
 caproto: a pure-Python Channel Access protocol library
 ******************************************************
 
-Caproto is a implementation of the
+Caproto is an implementation of the
 `EPICS <http://www.aps.anl.gov/epics/>`_ Channel Access protocol for
 distributed hardware control in pure Python with a "sans-I/O" architecture.
 

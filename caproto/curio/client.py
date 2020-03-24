@@ -12,6 +12,7 @@ import getpass
 import logging
 
 import caproto as ca
+from caproto._utils import safe_getsockname
 import curio
 
 from collections import OrderedDict
@@ -40,7 +41,7 @@ class VirtualCircuit:
     async def connect(self):
         async with self._socket_lock:
             self.socket = await socket.create_connection(self.circuit.address)
-            self.circuit.our_address = self.socket.getsockname()[:2]
+            self.circuit.our_address = self.socket.getsockname()
             # Kick off background loops that read from the socket
             # and process the commands read from it.
             await curio.spawn(self._receive_loop, daemon=True)
@@ -237,7 +238,7 @@ class SharedBroadcaster:
 
         # UDP socket broadcasting to CA servers
         self.udp_sock = ca.bcast_socket(socket)
-        self.broadcaster.our_address = self.udp_sock.getsockname()[:2]
+        self.broadcaster.our_address = safe_getsockname(self.udp_sock)
         self.registered = False  # refers to RepeaterRegisterRequest
         self.loop_ready_event = curio.Event()
         self.unanswered_searches = {}  # map search id (cid) to name
@@ -257,15 +258,19 @@ class SharedBroadcaster:
         Process a command and tranport it over the UDP socket.
         """
         bytes_to_send = self.broadcaster.send(*commands)
+        tags = {'role': 'CLIENT',
+                'our_address': self.broadcaster.client_address,
+                'direction': '--->>>'}
         for host in ca.get_address_list():
             if ':' in host:
                 host, _, port_as_str = host.partition(':')
                 specified_port = int(port_as_str)
             else:
                 specified_port = port
+            tags['their_address'] = (host, specified_port)
             self.broadcaster.log.debug(
-                'Sending %d bytes to %s:%d',
-                len(bytes_to_send), host, specified_port)
+                '%d commands %dB',
+                len(commands), len(bytes_to_send), extra=tags)
             try:
                 await self.udp_sock.sendto(bytes_to_send,
                                            (host, specified_port))

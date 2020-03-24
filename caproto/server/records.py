@@ -38,6 +38,27 @@ def _link_parent_attribute(pvprop, parent_attr_name, *, read_only=False,
     return pvprop
 
 
+def _link_enum_strings(pvprop, index):
+    'Take a pvproperty and link its parent enum_strings[index]'
+
+    @pvprop.getter
+    async def getter(self, instance):
+        return self.parent.enum_strings[index]
+
+    @pvprop.putter
+    async def putter(self, instance, value):
+        enum_strings = list(self.parent.enum_strings)
+
+        old_enum = enum_strings[index]
+        enum_strings[index] = str(value)[:instance.max_length - 1]
+
+        await self.parent.write_metadata(enum_strings=enum_strings)
+        if self.parent.value in (old_enum, index):
+            await self.parent.write(value=index)
+
+    return pvprop
+
+
 def register_record(cls):
     'Register a record type to be used with pvproperty mock_record'
     assert issubclass(cls, PVGroup)
@@ -204,6 +225,8 @@ class RecordFieldGroup(PVGroup):
     @process_record.putter
     async def process_record(self, instance, value):
         await self.parent.write(self.parent.value)
+
+    _link_parent_attribute(description, '__doc__', use_setattr=True)
 
 
 class _Limits(PVGroup):
@@ -1268,6 +1291,9 @@ class BiFields(RecordFieldGroup):
         enum_strings=menus.menuAlarmSevr.get_string_tuple(),
         doc='Sim mode Alarm Svrty')
 
+    _link_enum_strings(zero_name, index=0)
+    _link_enum_strings(one_name, index=1)
+
 
 @register_record
 class BoFields(RecordFieldGroup):
@@ -1362,6 +1388,9 @@ class BoFields(RecordFieldGroup):
         name='OUT', dtype=ChannelType.STRING, doc='Output Specification')
     seconds_to_hold_high = pvproperty(
         name='HIGH', dtype=ChannelType.DOUBLE, doc='Seconds to Hold High')
+
+    _link_enum_strings(zero_name, index=0)
+    _link_enum_strings(one_name, index=1)
 
 
 @register_record
@@ -1459,6 +1488,9 @@ class BusyFields(RecordFieldGroup):
         name='OUT', dtype=ChannelType.STRING, doc='Output Specification')
     seconds_to_hold_high = pvproperty(
         name='HIGH', dtype=ChannelType.DOUBLE, doc='Seconds to Hold High')
+
+    _link_enum_strings(zero_name, index=0)
+    _link_enum_strings(one_name, index=1)
 
 
 @register_record

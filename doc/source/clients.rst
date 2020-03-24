@@ -11,7 +11,7 @@ use directly, but should generally not be used to build larger programs. It
 opts for simplicity over performance.
 
 The :doc:`threading-client` is a high-performance client and the one with the
-most features and tesitng behind it. We generally recommend this one.
+most features and testing behind it. We generally recommend this one.
 
 The :doc:`pyepics-compat-client` should only be used if you want to have
 compatibility with some existing pyepics-based code.

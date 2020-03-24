@@ -93,6 +93,25 @@ Access particular fields in the response using attribute ("dot") access on ``res
 
     res.data
 
+By default, the client does not request any metadata
+
+.. ipython:: python
+
+   res.metadata
+
+Use the ``data_type`` parameter to request a richer data type.
+
+.. ipython:: python
+
+
+   richer_res = dt.read(data_type='time')
+   richer_res.metadata
+   richer_res.metadata.timestamp
+   richer_res.metadata.stamp.as_datetime()  # a convenience method
+
+See :meth:`PV.read` for more information on the values accepted by the
+``data_type`` parameter.
+
 .. note::
 
     **Performance Note**
@@ -155,13 +174,30 @@ First, we define a :class:`Subscription`.
     sub = x.subscribe()
 
 Next, we define a callback function, a function that will be called whenever
-the server sends an update. It must accept one positional argument.
+the server sends an update. It must accept two positional arguments.
 
 .. ipython:: python
 
     responses = []
-    def f(response):
+    def f(sub, response):
+        print('Received response from', sub.pv.name)
         responses.append(response)
+
+This user-defined function ``f`` has access to the full response from the
+server, which includes data and any metadata. The server's response does not
+include the name of the PV involved (it identifies it indirectly via a
+"subscription ID" code) so caproto provides the function with ``sub`` as well,
+from which you can obtain the pertinent PV ``sub.pv`` and its name
+``sub.pv.name`` as illustrated above. This is useful for distinguishing
+responses when the same function is added to multiple subscriptions.
+
+.. versionchanged:: 0.5.0
+
+   The expected signature of the callback function was changed from
+   ``f(response)`` to ``f(sub, response)``. For backward compatibility,
+   functions with signature ``f(response)`` are still accepted, but caproto
+   will issue a warning that a future release may require the new signature,
+   ``f(sub, response)``.
 
 We register this function with ``sub``.
 
@@ -175,7 +211,7 @@ define a second callback:
 .. ipython:: python
 
     values = []
-    def g(response):
+    def g(sub, response):
         values.append(response.data[0])
 
 and add it to the same subscription, putting no additional load on the network.
@@ -226,7 +262,7 @@ re-initiates updates. All of this is transparent to the user.
 
     .. code-block:: python
 
-        sub.add_callback(lambda response: print(response.data))
+        sub.add_callback(lambda sub, response: print(response.data))
 
     The lambda function will be promptly garbage collected by Python and
     removed from ``sub`` by caproto. To avoid that, make a reference before
@@ -234,7 +270,7 @@ re-initiates updates. All of this is transparent to the user.
     
     .. code-block:: python
 
-        cb = lambda response: print(response.data)
+        cb = lambda sub, response: print(response.data)
         sub.add_callback(cb)
 
     This can be surprising, but it is a standard approach for avoiding the
@@ -334,7 +370,7 @@ access the method :class:`SharedBroadcaster.cancel`.
 
    ctx.broadcaster.cancel('some typo-ed PV name, for example')
 
-As the name suggestions, it is possible to construct multiple Contexts that
+As the name suggests, it is possible to construct multiple Contexts that
 share one SharedBroadcaster. In that scenario, notice that canceling the
 search will affect all contexts using the SharedBroadcaster.
 

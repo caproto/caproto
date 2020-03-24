@@ -462,7 +462,7 @@ class ChannelData:
             direction=ConversionDirection.FROM_WIRE)
 
         if metadata is None:
-            metadata_dict = {'timestamp': timestamp}
+            metadata_dict = {}
         else:
             # Convert `metadata` to bytes-like (or pass it through).
             md_payload = parse_metadata(metadata, data_type)
@@ -747,6 +747,12 @@ class ChannelEnum(ChannelData):
     async def write_from_dbr(self, *args, flags=0, **kwargs):
         flags |= (SubscriptionType.DBE_LOG | SubscriptionType.DBE_VALUE)
         await super().write_from_dbr(*args, flags=flags, **kwargs)
+
+    async def write_metadata(self, enum_strings=None, **kwargs):
+        if enum_strings is not None:
+            self._data['enum_strings'] = tuple(enum_strings)
+
+        return await super().write_metadata(**kwargs)
 
 
 class ChannelNumeric(ChannelData):

@@ -13,7 +13,8 @@ def test_broadcast_auto_address_list():
         expected = [bcast for addr, bcast in ca.get_netifaces_addresses()]
         assert ca.get_address_list() == expected
     finally:
-        os.environ = env
+        os.environ.clear()
+        os.environ.update(env)
 
 
 def test_ensure_bytes():

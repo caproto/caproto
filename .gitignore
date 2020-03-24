@@ -3,6 +3,7 @@ doc/source/_static
 caproto/__pycache__
 caproto.egg-info
 __pycache__/
+*.pyc
 doc/build
 .cache/
 .coverage

@@ -82,7 +82,7 @@ class VirtualCircuit(_VirtualCircuit):
 
             async def recv(self, nbytes):
                 return (await self.loop.sock_recv(self.client, 4096))
-
+        self._raw_lock = asyncio.Lock()
         self._raw_client = client
         super().__init__(circuit, SockWrapper(loop, client), context)
         self.QueueFull = asyncio.QueueFull
@@ -109,8 +109,11 @@ class VirtualCircuit(_VirtualCircuit):
     async def send(self, *commands):
         if self.connected:
             buffers_to_send = self.circuit.send(*commands)
-            await self.loop.sock_sendall(self._raw_client,
-                                         b''.join(buffers_to_send))
+            # lock to make sure a AddEvent does not write bytes
+            # to the socket while we are sending
+            async with self._raw_lock:
+                await self.loop.sock_sendall(self._raw_client,
+                                             b''.join(buffers_to_send))
 
     async def run(self):
         self._cq_task = self.loop.create_task(self.command_queue_loop())
@@ -166,13 +169,13 @@ class Context(_Context):
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.setblocking(False)
             s.bind((interface, port))
-            self.broadcaster._our_addresses.append(s.getsockname()[:2])
             return s
         self.port, self.tcp_sockets = await self._bind_tcp_sockets_with_consistent_port_number(
             make_socket)
         tasks = []
         for interface, sock in self.tcp_sockets.items():
             self.log.info("Listening on %s:%d", interface, self.port)
+            self.broadcaster.server_addresses.append((interface, self.port))
             tasks.append(self.loop.create_task(self.server_accept_loop(sock)))
 
         class BcastLoop(asyncio.Protocol):
@@ -237,14 +240,14 @@ class Context(_Context):
         for address in ca.get_beacon_address_list():
             transport, _ = await self.loop.create_datagram_endpoint(
                 BcastLoop, remote_addr=address, allow_broadcast=True,
-                reuse_address=True, reuse_port=reuse_port)
+                reuse_port=reuse_port)
             wrapped_transport = ConnectedTransportWrapper(transport, address)
             self.beacon_socks[address] = (interface, wrapped_transport)
 
         for interface in self.interfaces:
             transport, self.p = await self.loop.create_datagram_endpoint(
                 BcastLoop, local_addr=(interface, self.ca_server_port),
-                allow_broadcast=True, reuse_address=True,
+                allow_broadcast=True,
                 reuse_port=reuse_port)
             self.udp_socks[interface] = TransportWrapper(transport)
             self.log.debug('UDP socket bound on %s:%d', interface,
@@ -291,7 +294,7 @@ class Context(_Context):
                 sock.close()
             for sock in self.udp_socks.values():
                 sock.close()
-            for interface, sock in self.beacon_socks.values():
+            for _interface, sock in self.beacon_socks.values():
                 sock.close()
 
 
@@ -311,6 +314,6 @@ def run(pvdb, *, interfaces=None, log_pv_names=False):
         start_server(pvdb, interfaces=interfaces, log_pv_names=log_pv_names))
     try:
         loop.run_until_complete(task)
-    except KeyboardInterrupt:
+    finally:
         task.cancel()
         loop.run_until_complete(task)

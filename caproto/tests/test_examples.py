@@ -317,7 +317,7 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
 
     skip_pvs = [('ophyd', ':exit')]
 
-    def find_put_value(pv):
+    def find_put_value(pv, channeldata):
         'Determine value to write to pv'
         for skip_ioc, skip_suffix in skip_pvs:
             if skip_ioc in module_name:
@@ -332,7 +332,7 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
                             f'{channeldata.__class__}')
 
     for pv, channeldata in pvdb.items():
-        value = find_put_value(pv)
+        value = find_put_value(pv, channeldata)
         if value is None:
             print(f'Skipping write to {pv}')
             continue
@@ -501,3 +501,49 @@ def test_pvproperty_string_array(request, prefix):
     write(array_string_pv, ['array', 'of', 'strings'], notify=True)
     time.sleep(0.5)
     assert read(array_string_pv).data == [b'array', b'of', b'strings']
+
+
+def test_enum_linking(request, prefix):
+    from .conftest import run_example_ioc
+    run_example_ioc('caproto.ioc_examples.enums',
+                    request=request,
+                    args=['--prefix', prefix], pv_to_check=f'{prefix}bi')
+
+    from caproto.sync.client import read, write
+
+    def string_read(pv):
+        return b''.join(read(pv, data_type=ca.ChannelType.STRING).data)
+
+    for pv, znam, onam in [(f'{prefix}bi', b'a', b'b'),
+                           (f'{prefix}bo', b'Zero Value', b'One Value')]:
+        assert string_read(f'{pv}.ZNAM') == znam
+        assert string_read(f'{pv}.ONAM') == onam
+
+        for value, expected in ([0, znam], [1, onam]):
+
+            write(pv, [value], notify=True)
+            assert string_read(pv) == expected
+
+
+@pytest.mark.parametrize('async_lib', ['curio', 'trio', 'asyncio'])
+def test_event_read_collision(request, prefix, async_lib):
+    # this is testing that monitors do not get pushed into
+    # the socket while a ReadResponse is being pushed in parts.
+    from .conftest import run_example_ioc
+    run_example_ioc('caproto.ioc_examples.big_image_noisy_neighbor',
+                    request=request,
+                    args=['--prefix', prefix, '--async-lib', async_lib],
+                    pv_to_check=f'{prefix}t1')
+    from caproto.threading.pyepics_compat import get_pv, Context
+    cntx = Context()
+    image = get_pv(pvname=f'{prefix}image', context=cntx)
+    t1 = get_pv(pvname=f'{prefix}t1', context=cntx)
+    t1.add_callback(lambda value, **kwargs: None)
+
+    for _ in range(4):
+        image.get(timeout=45)
+
+    image.disconnect()
+    t1.disconnect()
+
+    cntx.disconnect()
