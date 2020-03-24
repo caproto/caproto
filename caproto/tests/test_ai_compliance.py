@@ -6,7 +6,6 @@
 # - all the enums of the .* can be read
 import time
 
-import caproto
 import epics
 from epics import ca
 import pytest
@@ -37,23 +36,25 @@ type_equal = {
 
 def test_ai_compliance(request, prefix, record_type_to_fields):
     record_type = 'ai'
-    real_PV_types = record_type_to_fields[record_type]
+    fields = record_type_to_fields[record_type]
 
     # host a caproto record to test(you could also try this test on a real record).
     # NOTE: using the below will actually run a seperate program from command line,
     # bypassing whatever virtual env you are using for this test..
     pv = f"{prefix}A"
-    conftest.run_example_ioc('caproto.ioc_examples.mocking_records',
-                             pv_to_check=pv,
-                             args=['--prefix', prefix, '-v'],
-                             request=request,
-                             very_verbose=False)
+    conftest.run_example_ioc(
+        'caproto.tests.ioc_any_record',
+        pv_to_check=pv,
+        args=['--prefix', prefix, '-v', '--record-type', record_type],
+        request=request,
+        very_verbose=False
+    )
 
     # pre-connect.
     # I found it seems to be the only way to avoid getting false "not connected",
     # and connecting with a timeout later on is slower..
     pv_list = {}
-    for field in real_PV_types:
+    for field in fields:
         full_pv = f"{pv}.{field}"
         pv_temp = epics.PV(full_pv)
         pv_list[full_pv] = pv_temp
@@ -64,11 +65,9 @@ def test_ai_compliance(request, prefix, record_type_to_fields):
 
     # now do the testing
     issues = {}
-    for field in real_PV_types:
+    for field, expected_type in fields.items():
         full_pv = f"{pv}.{field}"
         pv_temp = pv_list[full_pv]
-
-        expected_type = real_PV_types[field]
 
         if pv_temp.connected is False:
             if expected_type != "DBF_NOACCESS":
@@ -102,11 +101,11 @@ def test_ai_compliance(request, prefix, record_type_to_fields):
     if not issues:
         return
 
-    issue_string = '\n'.join(f'{field}: {issue}'
-                             for field, issue in issues.items()
-                             )
+    issue_string = '\n\t'.join(f'{field}: {issue}'
+                               for field, issue in issues.items()
+                               )
     pytest.fail(
         f'Record type {record_type} not in compliance with the softIoc.dbd '
-        f'specifications.  The issues found were as follows:\n'
-        f'{issue_string}'
+        f'specifications.  Found {len(issues)} issues in {len(fields)} fields:'
+        f'\n\t{issue_string}'
     )
