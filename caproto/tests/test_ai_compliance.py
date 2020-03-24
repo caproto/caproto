@@ -4,12 +4,12 @@
 # - the types match the "real" 'ai' record
 # - all the .* PVs can be read
 # - all the enums of the .* can be read
-import re
 import time
 
 import caproto
 import epics
 from epics import ca
+import pytest
 
 from . import conftest
 
@@ -36,7 +36,8 @@ type_equal = {
 
 
 def test_ai_compliance(request, prefix, record_type_to_fields):
-    real_PV_types = record_type_to_fields['ai']
+    record_type = 'ai'
+    real_PV_types = record_type_to_fields[record_type]
 
     # host a caproto record to test(you could also try this test on a real record).
     # NOTE: using the below will actually run a seperate program from command line,
@@ -44,15 +45,16 @@ def test_ai_compliance(request, prefix, record_type_to_fields):
     pv = f"{prefix}A"
     conftest.run_example_ioc('caproto.ioc_examples.mocking_records',
                              pv_to_check=pv,
-                             args=['--prefix', prefix],
-                             request=request)
+                             args=['--prefix', prefix, '-v'],
+                             request=request,
+                             very_verbose=False)
 
     # pre-connect.
     # I found it seems to be the only way to avoid getting false "not connected",
     # and connecting with a timeout later on is slower..
     pv_list = {}
-    for extension in real_PV_types:
-        full_pv = f"{pv}.{extension}"
+    for field in real_PV_types:
+        full_pv = f"{pv}.{field}"
         pv_temp = epics.PV(full_pv)
         pv_list[full_pv] = pv_temp
         pv_temp.connect(timeout=0.1)
@@ -61,18 +63,16 @@ def test_ai_compliance(request, prefix, record_type_to_fields):
     time.sleep(5)
 
     # now do the testing
-    ai_compliant = True
-    for extension in real_PV_types:
-        full_pv = f"{pv}.{extension}"
+    issues = {}
+    for field in real_PV_types:
+        full_pv = f"{pv}.{field}"
         pv_temp = pv_list[full_pv]
 
-        expected_type=real_PV_types[extension]
+        expected_type = real_PV_types[field]
 
         if pv_temp.connected is False:
             if expected_type != "DBF_NOACCESS":
-                print("**************************************************************")
-                print(f"{extension}: type is not hosted, but should be {expected_type}")
-                ai_compliant = False
+                issues[field] = f'type is not hosted, but should be {expected_type}'
         else:
             # make a list of acceptable results
             acceptable = []
@@ -83,38 +83,30 @@ def test_ai_compliance(request, prefix, record_type_to_fields):
             for acc_type in type_equal[expected_type]:
                 acceptable.append(f"ctrl_{acc_type}")
 
-            #assert pv_temp.type in acceptable
             if pv_temp.type not in acceptable:
-                print("**************************************************************")
-                print(f"{extension}: type is {pv_temp.type} , but should be {expected_type}")
-                ai_compliant = False
+                issues[field] = f"type is {pv_temp.type}, but should be {expected_type}"
+
             try:
                 # normally it is time_char so we add time_
                 type_read_temp_str = f"time_{type_equal[expected_type][0]}"
-                # reading with ca.get highlights problems, whereas pv.get() seems to just work.
-                if "$" in extension:
-                    read_temp = ca.get(pv_temp.chid, as_string=True) #, ftype=type_read_temp)
-                else:
-                    read_temp = ca.get(pv_temp.chid) #, ftype=type_read_temp)
-            except Exception as e:
-                #assert False, "can't be read"
-                print("**************************************************************")
-                print(f"{extension}: can't be read")
-                print(e)
-                ai_compliant = False
+                read_temp = ca.get(pv_temp.chid, as_string=('$' in field))
+            except Exception as ex:
+                issues[field] = f"can't be read ({ex})"
 
-            enum_str = ""
             if "MENU" in expected_type:
                 try:
                     enum_str = pv_temp.enum_strs
-                except Exception as e:
-                    #assert False, "enum not readable"
-                    print("**************************************************************")
-                    print(f"{extension}: can't read enum")
-                    print(e)
-                    ai_compliant = False
+                except Exception as ex:
+                    issues[field] = f"can't read enum ({ex})"
 
-    # because I can't fetch the epics db files and feed them into the parameterize,
-    # and I want to startup one ioc and connect to all the pv's at the same time
-    # I have to do it like this, sorry
-    assert ai_compliant is True
+    if not issues:
+        return
+
+    issue_string = '\n'.join(f'{field}: {issue}'
+                             for field, issue in issues.items()
+                             )
+    pytest.fail(
+        f'Record type {record_type} not in compliance with the softIoc.dbd '
+        f'specifications.  The issues found were as follows:\n'
+        f'{issue_string}'
+    )
