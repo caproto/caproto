@@ -18,6 +18,8 @@ from caproto.sync.client import read
 import caproto.threading  # noqa
 import caproto.asyncio  # noqa
 
+# DBD parsing-related fixtures:
+from .dbd import softioc_dbd_path, record_type_to_fields  # noqa
 
 _repeater_process = None
 

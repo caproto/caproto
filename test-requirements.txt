@@ -2,6 +2,7 @@ codecov
 coverage
 curio <1.0
 dpkt
+epics-pypdb
 flake8
 netifaces
 pyepics
