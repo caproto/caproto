@@ -518,10 +518,18 @@ def _write(chan, data, metadata, timeout, data_type, notify):
     logger.debug("Detected native data_type %r.", chan.native_data_type)
     # abundance of caution
     ntype = field_types['native'][chan.native_data_type]
-    if data_type is None:
-        # Handle ENUM: If data is INT, carry on. If data is STRING,
-        # write it specifically as STRING data_Type.
-        if (ntype is ChannelType.ENUM) and isinstance(data[0], bytes):
+    if (data_type is None) and (ntype is ChannelType.ENUM):
+        # Change data_type to STRING if data contains string-like data, or
+        # iterable of string-like data
+        stringy_data = False
+        if isinstance(data, (str, bytes)):
+            stringy_data = True
+        if hasattr(data, '__getitem__') \
+                and len(data) > 0 \
+                and isinstance(data[0], (str, bytes)):
+            stringy_data = True
+
+        if stringy_data:
             logger.debug("Will write to ENUM as data_type STRING.")
             data_type = ChannelType.STRING
     logger.debug("Writing.")
@@ -567,7 +575,7 @@ def write(pv_name, data, *, notify=False, data_type=None, metadata=None,
     ----------
     pv_name : str
         The PV name to write to
-    data : str, int, or float or any Iterable of these
+    data : str, bytes, int, or float or any Iterable of these
         Value(s) to write.
     notify : boolean, optional
         Request notification of completion and wait for it. False by default.
@@ -650,7 +658,7 @@ def read_write_read(pv_name, data, *, notify=False,
     ----------
     pv_name : str
         The PV name to write/read/write
-    data : str, int, or float or a list of these
+    data : str, bytes, int, or float or any Iterable of these
         Value to write.
     notify : boolean, optional
         Request notification of completion and wait for it. False by default.
