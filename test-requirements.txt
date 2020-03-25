@@ -8,7 +8,7 @@ netifaces
 pyepics
 pytest
 numpy
-pytest_benchmark
+pytest-benchmark
 pytest-timeout
 pytest-rerunfailures
 pytest-xdist

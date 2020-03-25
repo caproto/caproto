@@ -174,7 +174,7 @@ def _epics_base_ioc(prefix, request):
             dict(FTVL='LONG', NELM=4000),
         ('{}float'.format(prefix), 'ai'): dict(VAL=3.14),
         ('{}enum'.format(prefix), 'bi'):
-            dict(VAL=1, ZNAM="zero", ONAM="one"),
+            dict(VAL=1, ZNAM="a", ONAM="b"),
         ('{}str'.format(prefix), 'stringout'): dict(VAL='test'),
         ('{}int'.format(prefix), 'longout'): dict(VAL=1),
         ('{}int2'.format(prefix), 'longout'): dict(VAL=1),

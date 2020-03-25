@@ -95,6 +95,10 @@ fmt3 = '{response.data}'
                           ('caproto-get', ('float', '--format', fmt1)),
                           ('caproto-get', ('float', '--format', fmt2)),
                           ('caproto-get', ('float', '--format', fmt3)),
+                          ('caproto-put', ('enum', '0')),
+                          ('caproto-put', ('enum', '1')),
+                          ('caproto-put', ('enum', 'a')),
+                          ('caproto-put', ('enum', 'b')),
                           ('caproto-get', ('enum',)),
                           ('caproto-get', ('enum', '-n')),
                           ('caproto-get', ('float', '-n')),  # no effect
