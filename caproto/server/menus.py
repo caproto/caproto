@@ -1,6 +1,8 @@
 import enum
 import inspect
 
+from .._constants import MAX_ENUM_STATES
+
 
 class Menu(enum.IntEnum):
     @classmethod
@@ -15,8 +17,15 @@ class Menu(enum.IntEnum):
 
     @classmethod
     def get_string_tuple(cls):
-        "Ordered tuple of menu display strings"
-        return cls._string_tuple
+        """
+        Ordered tuple of menu display strings
+
+        Note that this limits the maximum number of enum states reported to
+        that which can be sent over Channel Access (MAX_ENUM_STATES).  While it
+        is still possible to use more than that limit internally, it is not
+        recommended to do so.
+        """
+        return cls._string_tuple[:MAX_ENUM_STATES]
 
 
 class NotImplementedMenu(Menu):
