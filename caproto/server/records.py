@@ -431,8 +431,8 @@ class AiFields(RecordFieldGroup, _Limits):
         enum_strings=menus.menuAlarmSevr.get_string_tuple(),
         doc='Sim mode Alarm Svrty')
 
-    _link_parent_attribute(archive_deadband, 'log_atol')
-    _link_parent_attribute(monitor_deadband, 'value_atol')
+    _link_parent_attribute(archive_deadband, 'log_atol', use_setattr=True)
+    _link_parent_attribute(monitor_deadband, 'value_atol', use_setattr=True)
 
     # With this brief line:
     _link_parent_attribute(display_precision, 'precision')
@@ -775,8 +775,8 @@ class AcalcoutFields(RecordFieldGroup, _Limits):
         doc='Number of Elements',
         read_only=True)
     _link_parent_attribute(display_precision, 'precision')
-    _link_parent_attribute(archive_deadband, 'log_atol')
-    _link_parent_attribute(monitor_deadband, 'value_atol')
+    _link_parent_attribute(archive_deadband, 'log_atol', use_setattr=True)
+    _link_parent_attribute(monitor_deadband, 'value_atol', use_setattr=True)
     _link_parent_attribute(number_of_elements, 'max_length')
 
 
@@ -920,8 +920,8 @@ class AoFields(RecordFieldGroup, _Limits):
     output_specification = pvproperty(
         name='OUT', dtype=ChannelType.STRING, doc='Output Specification')
     _link_parent_attribute(display_precision, 'precision')
-    _link_parent_attribute(archive_deadband, 'log_atol')
-    _link_parent_attribute(monitor_deadband, 'value_atol')
+    _link_parent_attribute(archive_deadband, 'log_atol', use_setattr=True)
+    _link_parent_attribute(monitor_deadband, 'value_atol', use_setattr=True)
 
 
 @register_record
@@ -1544,8 +1544,8 @@ class CalcFields(RecordFieldGroup, _Limits):
     units_name = pvproperty(
         name='EGU', dtype=ChannelType.CHAR, max_length=16, doc='Units Name')
     _link_parent_attribute(display_precision, 'precision')
-    _link_parent_attribute(archive_deadband, 'log_atol')
-    _link_parent_attribute(monitor_deadband, 'value_atol')
+    _link_parent_attribute(archive_deadband, 'log_atol', use_setattr=True)
+    _link_parent_attribute(monitor_deadband, 'value_atol', use_setattr=True)
 
 
 @register_record
@@ -1636,8 +1636,8 @@ class CalcoutFields(RecordFieldGroup, _Limits):
     output_specification = pvproperty(
         name='OUT', dtype=ChannelType.STRING, doc='Output Specification')
     _link_parent_attribute(display_precision, 'precision')
-    _link_parent_attribute(archive_deadband, 'log_atol')
-    _link_parent_attribute(monitor_deadband, 'value_atol')
+    _link_parent_attribute(archive_deadband, 'log_atol', use_setattr=True)
+    _link_parent_attribute(monitor_deadband, 'value_atol', use_setattr=True)
 
 
 @register_record
@@ -1777,8 +1777,8 @@ class DfanoutFields(RecordFieldGroup, _Limits):
     output_spec_h = pvproperty(
         name='OUTH', dtype=ChannelType.STRING, doc='Output Spec H')
     _link_parent_attribute(display_precision, 'precision')
-    _link_parent_attribute(archive_deadband, 'log_atol')
-    _link_parent_attribute(monitor_deadband, 'value_atol')
+    _link_parent_attribute(archive_deadband, 'log_atol', use_setattr=True)
+    _link_parent_attribute(monitor_deadband, 'value_atol', use_setattr=True)
 
 
 @register_record
@@ -2449,8 +2449,8 @@ class EpidFields(RecordFieldGroup):
     _link_parent_attribute(display_precision, 'precision')
     _link_parent_attribute(high_operating_range, 'upper_ctrl_limit')
     _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
-    _link_parent_attribute(archive_deadband, 'log_atol')
-    _link_parent_attribute(monitor_deadband, 'value_atol')
+    _link_parent_attribute(archive_deadband, 'log_atol', use_setattr=True)
+    _link_parent_attribute(monitor_deadband, 'value_atol', use_setattr=True)
 
 
 @register_record
@@ -3624,8 +3624,8 @@ class LonginFields(RecordFieldGroup, _LimitsLong):
         dtype=ChannelType.ENUM,
         enum_strings=menus.menuAlarmSevr.get_string_tuple(),
         doc='Sim mode Alarm Svrty')
-    _link_parent_attribute(archive_deadband, 'log_atol')
-    _link_parent_attribute(monitor_deadband, 'value_atol')
+    _link_parent_attribute(archive_deadband, 'log_atol', use_setattr=True)
+    _link_parent_attribute(monitor_deadband, 'value_atol', use_setattr=True)
 
 
 @register_record
@@ -3697,8 +3697,8 @@ class LongoutFields(RecordFieldGroup, _LimitsLong):
         doc='Output Mode Select')
     output_specification = pvproperty(
         name='OUT', dtype=ChannelType.STRING, doc='Output Specification')
-    _link_parent_attribute(archive_deadband, 'log_atol')
-    _link_parent_attribute(monitor_deadband, 'value_atol')
+    _link_parent_attribute(archive_deadband, 'log_atol', use_setattr=True)
+    _link_parent_attribute(monitor_deadband, 'value_atol', use_setattr=True)
 
 
 @register_record
@@ -4455,8 +4455,8 @@ class MotorFields(RecordFieldGroup):
     _link_parent_attribute(display_precision, 'precision')
     _link_parent_attribute(high_operating_range, 'upper_ctrl_limit')
     _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
-    _link_parent_attribute(archive_deadband, 'log_atol')
-    _link_parent_attribute(monitor_deadband, 'value_atol')
+    _link_parent_attribute(archive_deadband, 'log_atol', use_setattr=True)
+    _link_parent_attribute(monitor_deadband, 'value_atol', use_setattr=True)
 
 
 @register_record
@@ -4637,8 +4637,8 @@ class ScalcoutFields(RecordFieldGroup):
     _link_parent_attribute(low_alarm_limit, 'lower_warning_limit')
     _link_parent_attribute(lolo_alarm_limit, 'lower_alarm_limit')
     _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
-    _link_parent_attribute(archive_deadband, 'log_atol')
-    _link_parent_attribute(monitor_deadband, 'value_atol')
+    _link_parent_attribute(archive_deadband, 'log_atol', use_setattr=True)
+    _link_parent_attribute(monitor_deadband, 'value_atol', use_setattr=True)
 
 
 @register_record
@@ -4859,8 +4859,8 @@ class SelFields(RecordFieldGroup):
     _link_parent_attribute(low_alarm_limit, 'lower_warning_limit')
     _link_parent_attribute(lolo_alarm_limit, 'lower_alarm_limit')
     _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
-    _link_parent_attribute(archive_deadband, 'log_atol')
-    _link_parent_attribute(monitor_deadband, 'value_atol')
+    _link_parent_attribute(archive_deadband, 'log_atol', use_setattr=True)
+    _link_parent_attribute(monitor_deadband, 'value_atol', use_setattr=True)
 
 
 @register_record
@@ -5955,8 +5955,8 @@ class SubFields(RecordFieldGroup):
     _link_parent_attribute(low_alarm_limit, 'lower_warning_limit')
     _link_parent_attribute(lolo_alarm_limit, 'lower_alarm_limit')
     _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
-    _link_parent_attribute(archive_deadband, 'log_atol')
-    _link_parent_attribute(monitor_deadband, 'value_atol')
+    _link_parent_attribute(archive_deadband, 'log_atol', use_setattr=True)
+    _link_parent_attribute(monitor_deadband, 'value_atol', use_setattr=True)
 
 
 @register_record
@@ -6112,8 +6112,8 @@ class SwaitFields(RecordFieldGroup):
     _link_parent_attribute(display_precision, 'precision')
     _link_parent_attribute(high_operating_range, 'upper_ctrl_limit')
     _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
-    _link_parent_attribute(archive_deadband, 'log_atol')
-    _link_parent_attribute(monitor_deadband, 'value_atol')
+    _link_parent_attribute(archive_deadband, 'log_atol', use_setattr=True)
+    _link_parent_attribute(monitor_deadband, 'value_atol', use_setattr=True)
 
 
 @register_record
