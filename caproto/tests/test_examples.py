@@ -416,6 +416,7 @@ def test_special_ioc_examples(request, module_name, pvdb_class_name,
 # skip on windows - no areadetector ioc there just yet
 @pytest.mark.skipif(sys.platform == 'win32',
                     reason='win32 AD IOC')
+@pytest.mark.xfail
 def test_areadetector_generate():
     pytest.importorskip('numpy')
     from caproto.ioc_examples import areadetector_image
