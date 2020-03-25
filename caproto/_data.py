@@ -17,7 +17,7 @@ from ._dbr import (DBR_TYPES, ChannelType, native_type, native_types,
 from ._utils import CaprotoError, CaprotoValueError, ConversionDirection
 from ._commands import parse_metadata
 from ._backend import backend
-
+from ._constants import MAX_ENUM_STRING_SIZE, MAX_ENUM_STATES
 
 __all__ = ('Forbidden',
            'ChannelAlarm',
@@ -711,12 +711,25 @@ class ChannelData:
 class ChannelEnum(ChannelData):
     data_type = ChannelType.ENUM
 
+    @staticmethod
+    def _validate_enum_strings(enum_strings):
+        if any(len(es) >= MAX_ENUM_STRING_SIZE for es in enum_strings):
+            over_length = tuple(f'{es}: {len(es)}' for es in enum_strings if
+                                len(es) >= MAX_ENUM_STRING_SIZE)
+            msg = (f"The maximum enum string length is {MAX_ENUM_STRING_SIZE} " +
+                   f"but the strings {over_length} are too long")
+            raise ValueError(msg)
+        if len(enum_strings) > MAX_ENUM_STATES:
+            raise ValueError(f"The maximum number of enum states is {MAX_ENUM_STATES} " +
+                             f"but you passed in {len(enum_strings)}")
+        return tuple(enum_strings)
+
     def __init__(self, *, enum_strings=None, **kwargs):
         super().__init__(**kwargs)
 
         if enum_strings is None:
             enum_strings = tuple()
-        self._data['enum_strings'] = tuple(enum_strings)
+        self._data['enum_strings'] = self._validate_enum_strings(enum_strings)
 
     enum_strings = _read_only_property('enum_strings')
 
@@ -750,7 +763,7 @@ class ChannelEnum(ChannelData):
 
     async def write_metadata(self, enum_strings=None, **kwargs):
         if enum_strings is not None:
-            self._data['enum_strings'] = tuple(enum_strings)
+            self._data['enum_strings'] = self._validate_enum_strings(enum_strings)
 
         return await super().write_metadata(**kwargs)
 
