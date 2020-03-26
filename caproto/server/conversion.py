@@ -1,11 +1,11 @@
 import inspect
 import re
-import sys
 
 from .server import pvfunction, PVGroup
 from .._data import (ChannelDouble, ChannelEnum, ChannelChar,
                      ChannelInteger, ChannelString, ChannelByte)
 from .menus import menus
+from .records import _Limits, _LimitsLong
 
 try:
     # optionally format Python code more nicely
@@ -375,35 +375,57 @@ def get_attr_name_from_dbd_prompt(prompt):
     return attr_name.strip('_')
 
 
-def record_to_high_level_group_code(record_type, dbd_info, *, skip_fields=None):
+LINKABLE = {
+    'display_precision': 'precision',
+    'hihi_alarm_limit': 'upper_alarm_limit',
+    'high_alarm_limit': 'upper_warning_limit',
+    'low_alarm_limit': 'lower_warning_limit',
+    'lolo_alarm_limit': 'lower_alarm_limit',
+    'high_operating_range': 'upper_ctrl_limit',
+    'low_operating_range': 'lower_ctrl_limit',
+    # 'alarm_deadband': '',
+    'archive_deadband': 'log_atol',
+    'monitor_deadband': 'value_atol',
+}
+
+USE_SETATTR = {'archive_deadband', 'monitor_deadband'}
+MIXINS = (_Limits, _LimitsLong)
+MIXIN_SPECS = {
+    mixin: {pv.pvspec.name: pv.pvspec.dtype for pv in mixin._pvs_.values()}
+    for mixin in MIXINS
+}
+
+
+def record_to_template_dict(record_type, dbd_info, *, skip_fields=None):
     'Record name -> yields code to create a PVGroup for all fields'
     if skip_fields is None:
         skip_fields = ['VAL']
 
-    dtype_line = "    _dtype = None"
-    if record_type == 'base':
-        name = 'RecordFieldGroup'
-        base_class = 'PVGroup'
-    else:
-        name = f'{record_type.capitalize()}Fields'
-        base_class = 'RecordFieldGroup'
+    result = {
+        'record_type': record_type,
+        'class_name': f'{record_type.capitalize()}Fields',
+        'dtype': None,
+        'base_class': 'RecordFieldGroup',
+        'mixin': '',
+        'fields': [],
+        'links': [],
+    }
 
+    if record_type == 'base':
+        result['class_name'] = 'RecordFieldGroup'
+        result['base_class'] = 'PVGroup'
+        result['record_type'] = None
+    else:
         field_info = dbd_info[record_type]
         val_type = field_info.get('VAL', {'type': 'DBF_NOACCESS'})['type']
         if val_type != 'DBF_NOACCESS':
             val_channeltype = DBD_TYPE_INFO[val_type].data_type.name
-            dtype_line = f"    _dtype = ChannelType." + val_channeltype
+            result['dtype'] = "ChannelType." + val_channeltype
 
-    yield f"class {name}({base_class}):"
-    if record_type != 'base':
-        yield f"    _record_type = '{record_type}'"
-        yield dtype_line
-
-    fields = {}
-    for name, cls, kwargs, finfo in record_to_field_info(record_type,
-                                                         dbd_info):
-        fields[name] = (cls, kwargs, finfo)
-        kwarg_string = ', '.join(f'{k}={v}' for k, v in kwargs.items())
+    fields_by_attr = {}
+    field_to_attr = {}
+    for item in record_to_field_info(record_type, dbd_info):
+        attr_name, cls, kwargs, finfo = item
         # note to self: next line is e.g.,
         #   ChannelDouble -> ChannelDouble(, ... dtype=ChannelType.FLOAT)
         dtype = DTYPE_OVERRIDES.get(cls.data_type.name, cls.data_type.name)
@@ -413,59 +435,67 @@ def record_to_high_level_group_code(record_type, dbd_info, *, skip_fields=None):
         elif finfo.get('menu') and finfo['menu'] not in menus:
             comment = True
 
-        field_name = finfo['field']
-        lines = _format(f"{name} = pvproperty(name="
-                        f"'{field_name}', "
-                        f"dtype=ChannelData.{dtype}, "
-                        f"{kwarg_string})", indent=4)
+        field_name = finfo['field']  # as in EPICS
+        fields_by_attr[attr_name] = dict(
+            attr=attr_name,
+            field_name=field_name,
+            dtype=dtype,
+            kwargs=kwargs,
+            comment=comment,
+        )
+        field_to_attr[field_name] = attr_name
 
-        if comment:
-            for line in lines:
-                indent = len(line) - len(line.lstrip())
-                if indent >= 4:
-                    yield f'    # {line[4:]}'
-                else:
-                    yield f'# {line}'
+    if record_type != 'base':
+        for mixin, mixin_info in MIXIN_SPECS.items():
+            has_fields = all(field in field_info
+                             for field in mixin_info)
+            types_match = all(
+                DBD_TYPE_INFO[field_info[field]['type']].data_type == mixin_info[field]
+                for field in mixin_info
+                if field in field_info
+            )
+            if has_fields and types_match:
+                # Add the mixin
+                result['mixin'] = [mixin.__name__]
+                # And remove those attributes from the subclass
+                for field in mixin_info:
+                    fields_by_attr.pop(field_to_attr[field])
+
+    for field_attr, field in fields_by_attr.items():
+        result['fields'].append(field)
+        try:
+            channeldata_attr = LINKABLE[field_attr]
+        except KeyError:
+            ...
         else:
-            yield from lines
+            link = dict(field_attr=field_attr,
+                        channeldata_attr=channeldata_attr,
+                        use_setattr=field_attr in USE_SETATTR,
+                        )
+            result['links'].append(link)
 
-    linkable = {
-        'display_precision': 'precision',
-        'hihi_alarm_limit': 'upper_alarm_limit',
-        'high_alarm_limit': 'upper_warning_limit',
-        'low_alarm_limit': 'lower_warning_limit',
-        'lolo_alarm_limit': 'lower_alarm_limit',
-        'high_operating_range': 'upper_ctrl_limit',
-        'low_operating_range': 'lower_ctrl_limit',
-        # 'alarm_deadband': '',
-        'archive_deadband': 'log_atol',
-        'monitor_deadband': 'value_atol',
-    }
-
-    use_setattr = {'archive_deadband', 'monitor_deadband'}
-
-    for field_attr, channeldata_attr in linkable.items():
-        if field_attr not in fields:
-            continue
-
-        yield (f"    _link_parent_attribute({field_attr}, "
-               f"'{channeldata_attr}'" +
-               (', use_setattr=True' if field_attr in use_setattr else '') + ')'
-               )
+    return result
 
 
-def generate_all_records(dbd_file, *, file=sys.stdout):
+def generate_all_records_jinja(dbd_file, *, jinja_env=None,
+                               template='records.jinja2'):
     try:
         from caproto.tests.dbd import get_record_to_field_metadata
+        import jinja2
     except ImportError as ex:
         raise ImportError(f'An optional/testing dependency is missing: {ex}')
 
-    dbd_info = get_record_to_field_metadata(dbd_file)
-    skip = {'VAL', }
+    if jinja_env is None:
+        jinja_env = jinja2.Environment(
+            loader=jinja2.PackageLoader("caproto", "server"),
+            trim_blocks=True,
+            lstrip_blocks=True,
+        )
 
+    dbd_info = get_record_to_field_metadata(dbd_file)
+    records = {}
     for record in ('base', ) + tuple(sorted(dbd_info)):
-        for line in record_to_high_level_group_code(record, dbd_info,
-                                                    skip_fields=skip):
-            print(line, file=file)
-        print(file=file)
-        print(file=file)
+        records[record] = record_to_template_dict(record, dbd_info)
+
+    record_template = jinja_env.get_template(template)
+    return record_template.render(records=records)
