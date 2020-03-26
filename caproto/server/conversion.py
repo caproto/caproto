@@ -369,6 +369,12 @@ LINKABLE = {
 }
 
 USE_SETATTR = {'archive_deadband', 'monitor_deadband'}
+ATTR_RENAMES = {
+    # back-compat
+    'scan_mechanism': 'scan_rate',
+    'descriptor': 'description',
+    'force_processing': 'process_record',
+}
 MIXINS = (_Limits, _LimitsLong)
 MIXIN_SPECS = {
     mixin: {pv.pvspec.name: pv.pvspec.dtype for pv in mixin._pvs_.values()}
@@ -406,6 +412,7 @@ def record_to_template_dict(record_type, dbd_info, *, skip_fields=None):
     field_to_attr = {}
     for item in record_to_field_info(record_type, dbd_info):
         attr_name, cls, kwargs, finfo = item
+        attr_name = ATTR_RENAMES.get(attr_name, attr_name)
         # note to self: next line is e.g.,
         #   ChannelDouble -> ChannelDouble(, ... dtype=ChannelType.FLOAT)
         dtype = DTYPE_OVERRIDES.get(cls.data_type.name, cls.data_type.name)
