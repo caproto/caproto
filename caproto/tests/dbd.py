@@ -163,6 +163,6 @@ def record_type_to_fields(softioc_dbd_path):
         # Add on FTYPE$ entries
         for field, ftype in list(rdict.items()):
             if ftype in {"DBF_STRING", "DBF_FWDLINK", "DBF_INLINK"}:
-                rdict[ftype + '$'] = 'DBF_CHAR'
+                rdict[field + '$'] = 'DBF_CHAR'
 
     return record_to_fields
