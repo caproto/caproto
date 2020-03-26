@@ -7,12 +7,6 @@ from .._data import (ChannelDouble, ChannelEnum, ChannelChar,
 from .menus import menus
 from .records import _Limits, _LimitsLong
 
-try:
-    # optionally format Python code more nicely
-    import yapf
-except ImportError:
-    yapf = None
-
 
 def underscore_to_camel_case(s):
     'Convert abc_def_ghi -> AbcDefGhi'
@@ -330,22 +324,8 @@ def record_to_field_info(record_type, dbd_info):
 
 
 def _format(line, *, indent=0):
-    '''Format Python code lines, with a specific indent
-
-    NOTE: Uses yapf if available
-    '''
-    prefix = ' ' * indent
-    if yapf is None:
-        yield prefix + line
-    else:
-        from yapf.yapflib.yapf_api import FormatCode
-        from yapf.yapflib.style import _style
-
-        # TODO study awkward yapf api more closely
-        _style['COLUMN_LIMIT'] = 79 - indent
-        for formatted_line in FormatCode(line)[0].split('\n'):
-            if formatted_line:
-                yield prefix + formatted_line.rstrip()
+    'Format Python code lines, with a specific indent'
+    yield ' ' * indent + line
 
 
 def record_to_field_dict_code(record_type, *, skip_fields=None):
