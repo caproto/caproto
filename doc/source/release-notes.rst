@@ -25,6 +25,20 @@ Unreleased
 
 * The detail and formatting of the log messages has been improved.
 
+v0.4.4 (2020-03-26)
+===================
+
+Fixed
+-----
+
+* The fix for Python asyncio's servers released in 0.4.3 had the accidental
+  side-effect of preventing multiple servers from running on the same machine
+  (or, to be precise, on the same network interface). This release fixes that
+  regression.
+* Fix bug in ``caproto-put`` which made it impossible to set ENUM-type PVs.
+* Ensure that caproto servers respect the limits on the number of enum members
+  and the length of enum streams.
+
 v0.4.3 (2020-01-29)
 ===================
 
