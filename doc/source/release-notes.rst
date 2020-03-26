@@ -2,6 +2,43 @@
 Release History
 ***************
 
+Unreleased
+==========
+
+* In the threading client, the expected signature of Subscription callbacks has
+  changed from ``f(response)`` to ``f(sub, response)`` where ``sub`` is the
+  pertinent :class:`caproto.threading.client.Subscription`.
+  This change has been made in a backward-compatible way. Callbacks with the
+  old signature, ``f(response)``, will still work but caproto will issue a
+  warning. Support for the old signature may be removed in the future.
+  By giving the callback ``f`` access to ``sub``, we enable usages like
+
+  .. code-block:: python
+
+     def f(sub, response):
+         # Print the name of the pertinent PV.
+         print('Received response from', sub.pv.name)
+
+     def f(sub, response):
+         if ...:
+             sub.remove_callback(f)
+
+* The detail and formatting of the log messages has been improved.
+
+v0.4.4 (2020-03-26)
+===================
+
+Fixed
+-----
+
+* The fix for Python asyncio's servers released in 0.4.3 had the accidental
+  side-effect of preventing multiple servers from running on the same machine
+  (or, to be precise, on the same network interface). This release fixes that
+  regression.
+* Fix bug in ``caproto-put`` which made it impossible to set ENUM-type PVs.
+* Ensure that caproto servers respect the limits on the number of enum members
+  and the length of enum streams.
+
 v0.4.3 (2020-01-29)
 ===================
 
