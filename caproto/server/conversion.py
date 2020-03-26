@@ -1,4 +1,6 @@
 import inspect
+import re
+import sys
 
 from .server import pvfunction, PVGroup
 from .._data import (ChannelDouble, ChannelEnum, ChannelChar,
@@ -238,48 +240,69 @@ def group_to_device(group):
     # yield f"# {lower_name} = {group.__name__}Device(my_prefix)"
 
 
-def record_to_field_info(record_type):
-    import recordwhat
+def get_base_fields(dbd_info):
+    'Get fields that are common to all record types'
+    common_fields = None
+    for record_type, fields in dbd_info.items():
+        fset = set((field, finfo['type'], finfo.get('size', 0))
+                   for field, finfo in fields.items())
+        if common_fields is None:
+            common_fields = fset
+        else:
+            common_fields = fset.intersection(common_fields)
 
-    base = recordwhat.RecordBase
+    return {field: fields[field]
+            for field, ftype, fsize in common_fields}
 
-    if record_type == 'base':
-        cls = recordwhat.RecordBase
-    else:
-        cls = recordwhat.get_record_class(record_type)
 
-    base_metadata = dict(base.field_metadata())
-    field_dict = dict(cls.field_metadata())
+DBD_TYPE_INFO = {
+    'DBF_DEVICE': ChannelString,  # DTYP
+    'DBF_FLOAT': ChannelDouble,
+    'DBF_DOUBLE': ChannelDouble,
+    'DBF_FWDLINK': ChannelString,
+    'DBF_INLINK': ChannelString,
+    'DBF_INT64': ChannelInteger,
+    'DBF_LONG': ChannelInteger,
+    'DBF_MENU': ChannelEnum,
+    'DBF_ENUM': ChannelEnum,
+    'DBF_OUTLINK': ChannelString,
+    'DBF_SHORT': ChannelInteger,
+    'DBF_STRING': ChannelString,
+    'DBF_CHAR': ChannelChar,
 
-    type_info = {
-        'DBF_DEVICE': ChannelString,  # DTYP
-        'DBF_FLOAT': ChannelDouble,
-        'DBF_DOUBLE': ChannelDouble,
-        'DBF_FWDLINK': ChannelString,
-        'DBF_INLINK': ChannelString,
-        'DBF_LONG': ChannelInteger,
-        'DBF_MENU': ChannelEnum,
-        'DBF_ENUM': ChannelEnum,
-        'DBF_OUTLINK': ChannelString,
-        'DBF_SHORT': ChannelInteger,
-        'DBF_STRING': ChannelString,
-        'DBF_CHAR': ChannelChar,
+    # unsigned types which don't actually have ChannelType equivalents:
+    'DBF_UCHAR': ChannelByte,
+    'DBF_ULONG': ChannelInteger,
+    'DBF_USHORT': ChannelInteger,
+}
 
-        # unsigned types which don't actually have ChannelType equivalents:
-        'DBF_UCHAR': ChannelByte,
-        'DBF_ULONG': ChannelInteger,
-        'DBF_USHORT': ChannelInteger,
-    }
 
-    for name, field_info in field_dict.items():
-        if cls is not base and name in base_metadata:
-            if base_metadata[name] == field_info:
+DTYPE_OVERRIDES = {
+    # DBF_FLOAT is ChannelDouble -> DOUBLE; override with FLOAT
+    'DBF_FLOAT': 'FLOAT',
+    # DBF_SHORT is ChannelInteger -> LONG; override with SHORT
+    'DBF_SHORT': 'SHORT',
+    'DBF_USHORT': 'SHORT',
+}
+
+
+def record_to_field_info(record_type, dbd_info):
+    'Yield field information for a given record, removing base fields'
+    base_metadata = get_base_fields(dbd_info)
+    field_dict = (base_metadata if record_type == 'base'
+                  else dbd_info[record_type])
+
+    for field_name, field_info in field_dict.items():
+        if record_type != 'base' and field_name in base_metadata:
+            if base_metadata[field_name] == field_info:
                 # Skip base attrs
                 continue
+        elif field_info['type'] in ('DBF_NOACCESS', ):
+            continue
 
-        type_ = field_info.type
-        size = field_info.size
-        prompt = field_info.prompt
+        type_ = field_info['type']
+        size = field_info.get('size', 0)
+        prompt = field_info['prompt']
 
         # alarm = parent.alarm
         kwargs = {}
@@ -292,18 +315,18 @@ def record_to_field_info(record_type):
 
         if type_ == 'DBF_MENU':
             # note: ordered key assumption here (py3.6+)
-            kwargs['enum_strings'] = (f'menus.{field_info.menu}'
+            kwargs['enum_strings'] = (f'menus.{field_info["menu"]}'
                                       '.get_string_tuple()')
 
         if prompt:
             kwargs['doc'] = repr(prompt)
 
-        if field_info.special == 'SPC_NOMOD':
+        if field_info.get('special') == 'SPC_NOMOD':
             kwargs['read_only'] = True
 
-        type_class = type_info[type_]
-
-        yield name, type_class, kwargs, field_info
+        type_class = DBD_TYPE_INFO[type_]
+        attr_name = get_attr_name_from_dbd_prompt(prompt)
+        yield attr_name, type_class, kwargs, field_info
 
 
 def _format(line, *, indent=0):
@@ -336,24 +359,28 @@ def record_to_field_dict_code(record_type, *, skip_fields=None):
     for _name, cls, kwargs, finfo in record_to_field_info(record_type):
         kwarg_string = ', '.join(
             list(f'{k}={v}' for k, v in kwargs.items()) + ['**kw'])
-        yield f"        '{finfo.field}': {cls.__name__}({kwarg_string}),"
+        field = finfo["field"]
+        yield f"        '{field}': {cls.__name__}({kwarg_string}),"
     yield '    }'
 
 
-dtype_overrides = {
-    # DBF_FLOAT is ChannelDouble -> DOUBLE; override with FLOAT
-    'DBF_FLOAT': 'FLOAT',
-    # DBF_SHORT is ChannelInteger -> LONG; override with SHORT
-    'DBF_SHORT': 'SHORT',
-    'DBF_USHORT': 'SHORT',
-}
+def get_attr_name_from_dbd_prompt(prompt):
+    'Attribute name for fields: e.g., "Sim. Mode Scan" -> "sim_mode_scan"'
+    attr_name = prompt.lower()
+    # Replace bad characters with _
+    attr_name = re.sub('[^a-z_0-9]', '_', attr_name, flags=re.IGNORECASE)
+    # Replace multiple ___ -> single _
+    attr_name = re.sub('_+', '_', attr_name)
+    # Remove starting/ending _
+    return attr_name.strip('_')
 
 
-def record_to_high_level_group_code(record_type, *, skip_fields=None):
+def record_to_high_level_group_code(record_type, dbd_info, *, skip_fields=None):
     'Record name -> yields code to create a PVGroup for all fields'
     if skip_fields is None:
         skip_fields = ['VAL']
 
+    dtype_line = "    _dtype = None"
     if record_type == 'base':
         name = 'RecordFieldGroup'
         base_class = 'PVGroup'
@@ -361,25 +388,35 @@ def record_to_high_level_group_code(record_type, *, skip_fields=None):
         name = f'{record_type.capitalize()}Fields'
         base_class = 'RecordFieldGroup'
 
+        field_info = dbd_info[record_type]
+        val_type = field_info.get('VAL', {'type': 'DBF_NOACCESS'})['type']
+        if val_type != 'DBF_NOACCESS':
+            val_channeltype = DBD_TYPE_INFO[val_type].data_type.name
+            dtype_line = f"    _dtype = ChannelType." + val_channeltype
+
     yield f"class {name}({base_class}):"
     if record_type != 'base':
         yield f"    _record_type = '{record_type}'"
+        yield dtype_line
 
     fields = {}
-
-    for name, cls, kwargs, finfo in record_to_field_info(record_type):
+    for name, cls, kwargs, finfo in record_to_field_info(record_type,
+                                                         dbd_info):
         fields[name] = (cls, kwargs, finfo)
         kwarg_string = ', '.join(f'{k}={v}' for k, v in kwargs.items())
-        dtype = dtype_overrides.get(cls.data_type.name, cls.data_type.name)
+        # note to self: next line is e.g.,
+        #   ChannelDouble -> ChannelDouble(, ... dtype=ChannelType.FLOAT)
+        dtype = DTYPE_OVERRIDES.get(cls.data_type.name, cls.data_type.name)
         comment = False
-        if finfo.field in skip_fields:
+        if finfo['field'] in skip_fields:
             comment = True
-        elif finfo.menu and finfo.menu not in menus:
+        elif finfo.get('menu') and finfo['menu'] not in menus:
             comment = True
 
+        field_name = finfo['field']
         lines = _format(f"{name} = pvproperty(name="
-                        f"'{finfo.field}', "
-                        f"dtype=ChannelType.{dtype}, "
+                        f"'{field_name}', "
+                        f"dtype=ChannelData.{dtype}, "
                         f"{kwarg_string})", indent=4)
 
         if comment:
@@ -405,7 +442,30 @@ def record_to_high_level_group_code(record_type, *, skip_fields=None):
         'monitor_deadband': 'value_atol',
     }
 
+    use_setattr = {'archive_deadband', 'monitor_deadband'}
+
     for field_attr, channeldata_attr in linkable.items():
         if field_attr not in fields:
             continue
-        yield f"    _link_parent_attribute({field_attr}, '{channeldata_attr}')"
+
+        yield (f"    _link_parent_attribute({field_attr}, "
+               f"'{channeldata_attr}'" +
+               (', use_setattr=True' if field_attr in use_setattr else '') + ')'
+               )
+
+
+def generate_all_records(dbd_file, *, file=sys.stdout):
+    try:
+        from caproto.tests.dbd import get_record_to_field_metadata
+    except ImportError as ex:
+        raise ImportError(f'An optional/testing dependency is missing: {ex}')
+
+    dbd_info = get_record_to_field_metadata(dbd_file)
+    skip = {'VAL', }
+
+    for record in ('base', ) + tuple(sorted(dbd_info)):
+        for line in record_to_high_level_group_code(record, dbd_info,
+                                                    skip_fields=skip):
+            print(line, file=file)
+        print(file=file)
+        print(file=file)

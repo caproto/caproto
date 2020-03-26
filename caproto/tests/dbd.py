@@ -4,11 +4,13 @@ definition files and give information about records.
 
 (*) Available on conda-forge as epics-pypdb
 '''
+import ast
 import copy
 import pathlib
 
 import caproto
 import pytest
+import pyPDB.dbd.ast
 import pyPDB.dbd.yacc as _yacc
 import pyPDB.dbdlint as _dbdlint
 
@@ -33,7 +35,7 @@ class Results:
 
     def __init__(self):
         self.whole = True
-        self.node = None
+        self._node = None
         self.stack = []
 
         # These are set by the dbdlint walk step
@@ -41,9 +43,46 @@ class Results:
         self.recdsets = {}
         self.recinst = {}  # {'inst:name':'ao', ...}
         self.extinst = set()
+        self.field_metadata = {}
 
         self.errors = []
         self.warnings = []
+
+    @property
+    def node(self):
+        'The current node being evaluated'
+        return self._node
+
+    @node.setter
+    def node(self, node):
+        self._node = node
+
+        if getattr(node, 'name', '') == 'field':
+            # A hack to aggregate information about fields, using the node
+            # setattr as a callback.  If there's an easier way, let me know...
+            field_name, field_type = node.args
+
+            def block_value(block):
+                if not block.args:
+                    return None
+
+                try:
+                    return ast.literal_eval(block.args[0])
+                except Exception:
+                    return block.args[0]
+
+            blocks = {
+                child.name: block_value(child)
+                for child in node.body
+                if isinstance(child, pyPDB.dbd.ast.Block)
+            }
+            blocks['type'] = field_type
+            blocks['field'] = field_name
+            if self.stack[-1].name == 'recordtype':
+                record_name, = self.stack[-1].args
+                if record_name not in self.field_metadata:
+                    self.field_metadata[record_name] = {}
+                self.field_metadata[record_name][field_name] = blocks
 
     @property
     def all_records(self):
@@ -99,7 +138,7 @@ class Results:
 
 def parse_dbd(fn):
     '''
-    Parse a full EPICS dbd file
+    Parse a full EPICS dbd file and return a `Results` instance.
 
     Parameters
     ----------
@@ -118,51 +157,53 @@ def parse_dbd(fn):
         with open(fn, 'rt') as f:
             contents = f.read()
 
-    return _yacc.parse(contents)
-
-
-def dbd_to_fields(fn):
-    '''
-    Parse a dbd file and return a dictionary of record_type to field
-    dictionary, where field dictionary is {field: field_type}
-
-    For example::
-
-        {'ao':{'OUT':'DBF_OUTLINK', ...}, ...}
-
-    Parameters
-    ----------
-    fn : str or file
-        dbd filename
-    '''
-
-    parsed = parse_dbd(fn)
+    parsed = _yacc.parse(contents)
     results = Results()
     tree = copy.deepcopy(_dbdlint.dbdtree)
 
     # Walk the dbd file, populating the results dictionaries:
     _dbdlint.walk(parsed, tree, results)
-    return results.all_records
+    return results
 
 
-@pytest.fixture(scope='session')
-def softioc_dbd_path():
+def get_softioc_dbd_path():
+    'Get the readily available softIoc.dbd file from EPICS_BASE'
     dbd_path = caproto.benchmarking.find_dbd_path()
-    print(dbd_path)
     return pathlib.Path(dbd_path) / 'softIoc.dbd'
 
 
-@pytest.fixture(scope='session')
-def record_type_to_fields(softioc_dbd_path):
-    record_to_fields = dbd_to_fields(softioc_dbd_path)
+def get_record_to_field_dictionary(dbd_path, *, include_dollar_fields=True):
+    '''
+    Return a {record: {field: ftype, ...}, ...} dictionary from a dbd file
+    '''
+    record_to_fields = parse_dbd(dbd_path).all_records
 
     # the record files don't include "RTYP" & ".RTYP$"
     for rdict in record_to_fields.values():
         rdict['RTYP'] = 'DBF_STRING'
 
-        # Add on FTYPE$ entries
-        for field, ftype in list(rdict.items()):
-            if ftype in {"DBF_STRING", "DBF_FWDLINK", "DBF_INLINK"}:
-                rdict[field + '$'] = 'DBF_CHAR'
+        if include_dollar_fields:
+            # Add on FTYPE$ entries
+            for field, ftype in list(rdict.items()):
+                if ftype in {"DBF_STRING", "DBF_FWDLINK", "DBF_INLINK"}:
+                    rdict[field + '$'] = 'DBF_CHAR'
 
     return record_to_fields
+
+
+def get_record_to_field_metadata(dbd_path):
+    '''
+    Return a {record: {field: field_info, ...}, ...} dictionary from a dbd file
+    '''
+    return parse_dbd(dbd_path).field_metadata
+
+
+@pytest.fixture(scope='session')
+def softioc_dbd_path():
+    return get_softioc_dbd_path()
+
+
+@pytest.fixture(scope='session')
+def record_type_to_fields(softioc_dbd_path):
+    return get_record_to_field_dictionary(
+        softioc_dbd_path, include_dollar_fields=True)
