@@ -729,8 +729,17 @@ class Context:
                 raise CaprotoKeyError(f'Neither record nor field exists: '
                                       f'{rec_field}')
 
-            # Cache record.FIELD for later usage
-            self.pvdb[rec_field] = inst
+        # Verify the modifiers are usable BEFORE caching rec_field in the pvdb:
+        if ca.RecordModifiers.long_string in (mods or {}):
+            if inst.data_type not in (ChannelType.STRING,
+                                      ChannelType.CHAR):
+                raise CaprotoKeyError(
+                    f'Long-string modifier not supported with types '
+                    f'other than string or char ({inst.data_type})'
+                )
+
+        # Cache record.FIELD for later usage
+        self.pvdb[rec_field] = inst
         return inst
 
     async def _broadcaster_queue_iteration(self, addr, commands):
