@@ -259,6 +259,8 @@ def _preprocess_string_to_wire(values, to_dtype, string_encoding,
                                        string_encoding=string_encoding,
                                        enum_strings=enum_strings)
     elif to_dtype in native_int_types:
+        if values and isinstance(values[0], str):
+            return list(''.join(values).encode(string_encoding))
         return [int(v) for v in values]
     elif to_dtype in native_float_types:
         return [float(v) for v in values]

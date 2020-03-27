@@ -8,7 +8,7 @@ import weakref
 import caproto as ca
 from caproto import (apply_arr_filter, get_environment_variables,
                      RemoteProtocolError, CaprotoKeyError, CaprotoRuntimeError,
-                     CaprotoNetworkError)
+                     CaprotoNetworkError, ChannelType)
 from .._dbr import SubscriptionType
 
 
@@ -408,21 +408,30 @@ class VirtualCircuit:
                                       ca.DEFAULT_PROTOCOL_VERSION)
                 ]
         elif isinstance(command, ca.CreateChanRequest):
+            pvname = command.name
             try:
-                db_entry = self.context[command.name]
+                db_entry = self.context[pvname]
             except KeyError:
                 self.log.debug('Client requested invalid channel name: %s',
-                               command.name)
+                               pvname)
                 to_send = [ca.CreateChFailResponse(cid=command.cid)]
             else:
 
                 access = db_entry.check_access(self.client_hostname,
                                                self.client_username)
 
+                modifiers = ca.parse_record_field(pvname).modifiers
+                data_type = db_entry.data_type
+                data_count = db_entry.max_length
+                if ca.RecordModifiers.long_string in (modifiers or {}):
+                    if data_type in (ChannelType.STRING, ):
+                        data_type = ChannelType.CHAR
+                        data_count = len(db_entry.value)
+
                 to_send = [ca.AccessRightsResponse(cid=command.cid,
                                                    access_rights=access),
-                           ca.CreateChanResponse(data_type=db_entry.data_type,
-                                                 data_count=db_entry.max_length,
+                           ca.CreateChanResponse(data_type=data_type,
+                                                 data_count=data_count,
                                                  cid=command.cid,
                                                  sid=self.circuit.new_channel_id()),
                            ]

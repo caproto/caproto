@@ -593,7 +593,7 @@ def parse_record_field(pvname):
                 modifiers |= RecordModifiers.long_string
             else:
                 modifiers = RecordModifiers.long_string
-            field = field.rstrip('$')
+            field = field[:-1]
 
     # NOTE: VAL is equated to 'record' at a higher level than this.
     if field:
