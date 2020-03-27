@@ -319,7 +319,7 @@ def record_to_field_info(record_type, dbd_info):
             kwargs['read_only'] = True
 
         type_class = DBD_TYPE_INFO[type_]
-        attr_name = get_attr_name_from_dbd_prompt(prompt, field_name)
+        attr_name = get_attr_name_from_dbd_prompt(field_name, prompt)
         yield attr_name, type_class, kwargs, field_info
 
 
