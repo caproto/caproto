@@ -116,7 +116,7 @@ def ophyd_component_to_caproto(attr, component, *, depth=0, dev=None):
         line = f"# {attr} = pvproperty({kw_str})"
 
     # single line, no new subclass defined
-    return {'': list(_format(line, indent=4 * depth))}
+    return {'': [' ' * (4 * depth) + line]}
 
 
 def ophyd_device_to_caproto_ioc(dev, *, depth=0):
@@ -212,8 +212,8 @@ def group_to_device(group):
 
     for name, subgroup in group._subgroups_.items():
         doc = f', doc={subgroup.__doc__!r}' if subgroup.__doc__ else ''
-        yield from _format(f"{name.lower()} = Cpt({name}Device, "
-                           f"'{subgroup.prefix}'{doc})", indent=4)
+        yield (f"    {name.lower()} = Cpt({name}Device, '{subgroup.prefix}'"
+               f"{doc})")
 
     if not group._pvs_:
         yield f'    ...'
@@ -227,8 +227,7 @@ def group_to_device(group):
         doc = f', doc={pvspec.doc!r}' if pvspec.doc else ''
         string = f', string=True' if pvspec.dtype == str else ''
         cls = 'EpicsSignalRO' if pvspec.read_only else 'EpicsSignal'
-        yield from _format(f"{name.lower()} = Cpt({cls}, '{pvspec.name}'"
-                           f"{string}{doc})", indent=4)
+        yield (f"    {name.lower()} = Cpt({cls}, '{pvspec.name}'" f"{string}{doc})")
         # TODO will break when full/macro-ified PVs is specified
 
     # lower_name = group.__name__.lower()
@@ -324,11 +323,6 @@ def record_to_field_info(record_type, dbd_info):
         yield attr_name, type_class, kwargs, field_info
 
 
-def _format(line, *, indent=0):
-    'Format Python code lines, with a specific indent'
-    yield ' ' * indent + line
-
-
 def record_to_field_dict_code(record_type, *, skip_fields=None):
     'Record name -> yields code to create {field: ChannelData(), ...}'
     if skip_fields is None:
@@ -348,6 +342,11 @@ def record_to_field_dict_code(record_type, *, skip_fields=None):
 def get_attr_name_from_dbd_prompt(field_name, prompt):
     'Attribute name for fields: e.g., "Sim. Mode Scan" -> "sim_mode_scan"'
     attr_name = prompt.lower()
+    # If there's a parenthesized part not at the beginning, remove it:
+    # e.g., "Velocity (EGU/s)" -> "Velocity"
+    if '(' in attr_name and not attr_name.startswith('('):
+        attr_name = attr_name.split('(')[0].strip()
+
     # Replace bad characters with _
     attr_name = re.sub('[^a-z_0-9]', '_', attr_name, flags=re.IGNORECASE)
     # Replace multiple ___ -> single _
