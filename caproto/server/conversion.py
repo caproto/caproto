@@ -1,4 +1,5 @@
 import inspect
+import keyword
 import re
 
 from .server import pvfunction, PVGroup
@@ -319,7 +320,7 @@ def record_to_field_info(record_type, dbd_info):
             kwargs['read_only'] = True
 
         type_class = DBD_TYPE_INFO[type_]
-        attr_name = get_attr_name_from_dbd_prompt(prompt)
+        attr_name = get_attr_name_from_dbd_prompt(prompt, field_name)
         yield attr_name, type_class, kwargs, field_info
 
 
@@ -344,7 +345,7 @@ def record_to_field_dict_code(record_type, *, skip_fields=None):
     yield '    }'
 
 
-def get_attr_name_from_dbd_prompt(prompt):
+def get_attr_name_from_dbd_prompt(field_name, prompt):
     'Attribute name for fields: e.g., "Sim. Mode Scan" -> "sim_mode_scan"'
     attr_name = prompt.lower()
     # Replace bad characters with _
@@ -352,7 +353,10 @@ def get_attr_name_from_dbd_prompt(prompt):
     # Replace multiple ___ -> single _
     attr_name = re.sub('_+', '_', attr_name)
     # Remove starting/ending _
-    return attr_name.strip('_')
+    attr_name = attr_name.strip('_') or field_name.lower()
+    if keyword.iskeyword(attr_name):
+        attr_name = f'{attr_name}_'
+    return attr_name
 
 
 LINKABLE = {
