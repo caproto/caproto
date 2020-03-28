@@ -136,10 +136,13 @@ the server sends an update. It must accept one positional argument.
 .. ipython:: python
 
    responses = []
-   def f(response):
-       "On each update, print the data and cache the full response in a list."
+   def f(sub, response):
+       """
+       On each update, print the PV name and data
+       Cache the full response in a list.
+       """
        responses.append(response)
-       print(response.data)
+       print(sub.pv_name, response.data)
 
 We register this function with ``sub``. We can register multiple such functions
 is we wish.
@@ -159,10 +162,10 @@ separate, background thread.) To activate the subscription, call
     :verbatim:
 
     In [1]: sub.block()
-    [14.14272394]
-    [14.94322537]
-    [15.35695388]
-    [15.74301991]
+    random_walk:x [14.14272394]
+    random_walk:x [14.94322537]
+    random_walk:x [15.35695388]
+    random_walk:x [15.74301991]
     ^C
 
 This call to ``sub.block()`` blocks indefinitely, sending a message to the
@@ -215,11 +218,19 @@ another thread).
     Out[5]: 0
 
     In [6]: block(sub_x, sub_dt)
-    [63.34866867]
-    [1.]
-    [63.53448681]
-    [64.30532391]
+    random_walk:x [63.34866867]
+    random_walk:dt [1.]
+    random_walk:x [63.53448681]
+    random_walk:x [64.30532391]
     ^C
+
+.. versionchanged:: 0.5.0
+
+   The expected signature of the callback function was changed from
+   ``f(response)`` to ``f(sub, response)``. For backward compatibility,
+   functions with signature ``f(response)`` are still accepted, but caproto
+   will issue a warning that a future release may require the new signature,
+   ``f(sub, response)``.
 
 .. warning::
 
@@ -230,7 +241,7 @@ another thread).
 
     .. code-block:: python
 
-        sub.add_callback(lambda response: print(response.data))
+        sub.add_callback(lambda sub, response: print(response.data))
 
     The lambda function will be promptly garbage collected by Python and
     removed from ``sub`` by caproto. To avoid that, make a reference before
@@ -238,7 +249,7 @@ another thread).
     
     .. code-block:: python
 
-        cb = lambda response: print(response.data)
+        cb = lambda sub, response: print(response.data)
         sub.add_callback(cb)
 
     This can be surprising, but it is a standard approach for avoiding the

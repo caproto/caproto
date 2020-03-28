@@ -12,7 +12,6 @@ Python session, do not import this module; instead import caproto.sync.client.
 """
 import argparse
 from datetime import datetime
-import functools
 import time
 from ..sync.client import subscribe, block
 from .. import SubscriptionType, set_handler, __version__
@@ -137,8 +136,9 @@ def main():
     history = []
     tokens = {'callback_count': 0}
 
-    def callback(pv_name, response):
+    def callback(sub, response):
         tokens['callback_count'] += 1
+        pv_name = sub.pv_name
 
         data_fmt = gen_data_format(args=args, data=response.data)
 
@@ -185,9 +185,8 @@ def main():
             sub = subscribe(pv_name,
                             mask=mask,
                             priority=args.priority)
-            cb = functools.partial(callback, pv_name)
-            sub.add_callback(cb)
-            cbs.append(cb)  # Hold ref to keep cb from being garbage collected.
+            sub.add_callback(callback)
+            cbs.append(callback)  # Hold ref to keep it from being garbage collected.
             subs.append(sub)
         # Wait to be interrupted by KeyboardInterrupt.
         block(*subs, duration=args.duration, timeout=args.timeout,

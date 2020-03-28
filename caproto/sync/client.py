@@ -13,7 +13,8 @@ import weakref
 
 import caproto as ca
 from .._dbr import (field_types, ChannelType, native_type, SubscriptionType)
-from .._utils import (ErrorResponseReceived, CaprotoError, CaprotoTimeoutError,
+from .._utils import (adapt_old_callback_signature,
+                      ErrorResponseReceived, CaprotoError, CaprotoTimeoutError,
                       get_environment_variables, safe_getsockname)
 from .repeater import spawn_repeater
 
@@ -376,7 +377,7 @@ def subscribe(pv_name, priority=0, data_type=None, data_count=None,
 
     Add one or more user-defined callbacks to process responses.
 
-    >>> def f(response):
+    >>> def f(sub, response):
     ...     print(repsonse.data)
     ...
     >>> sub.add_callback(f)
@@ -778,6 +779,10 @@ class Subscription:
         self._callback_id = 0
         self._callback_lock = threading.RLock()
 
+        # This is related to back-compat for user callbacks that have the old
+        # signature, f(response).
+        self.__wrapper_weakrefs = set()
+
     def block(self, duration=None, timeout=1,
               force_int_enums=False,
               repeater=True):
@@ -827,13 +832,24 @@ class Subscription:
         Parameters
         ----------
         func : callable
-            Expected signature: ``func(response)``
+            Expected signature: ``func(sub, response)``.
+
+            The signature ``func(response)`` is also supported for
+            backward-compatibility but will issue warnings. Support will be
+            removed in a future release of caproto.
 
         Returns
         -------
         token : int
             Integer token that can be passed to :meth:`remove_callback`.
+
+        .. versionchanged:: 0.5.0
+
+           Changed the expected signature of ``func`` from ``func(response)``
+           to ``func(sub, response)``.
         """
+        func = adapt_old_callback_signature(func, self.__wrapper_weakrefs)
+
         def removed(_):
             self.remove_callback(cb_id)
 
@@ -873,7 +889,7 @@ class Subscription:
                 to_remove.append(cb_id)
                 continue
 
-            callback(response)
+            callback(self, response)
 
         with self._callback_lock:
             for remove_id in to_remove:
