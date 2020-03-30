@@ -3,6 +3,7 @@ Contains PVGroups representing all fields of EPICS base records (minus .VAL)
 '''
 
 import logging
+import sys
 
 from .server import PVGroup, pvproperty
 from .._data import ChannelType
@@ -7467,6 +7468,21 @@ class WaveformFields(RecordFieldGroup):
     _link_parent_attribute(high_operating_range, 'upper_ctrl_limit')
     _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
     _link_parent_attribute(number_of_elements, 'max_length')
+
+
+def summarize(file=sys.stdout):
+    'Summarize all supported records and their fields'
+    all_records = [('base', RecordFieldGroup)] + list(records.items())
+    for record, rclass in all_records:
+        info = [record, [cls.__name__ for cls in rclass.mro()]]
+        print('\t'.join(str(s) for s in info), file=file)
+        for attr, finfo in rclass._pvs_.items():
+            kwargs = (f'{key}={value}'.format(key, value)
+                      for key, value in sorted(finfo.pvspec.cls_kwargs.items())
+                      )
+            info = [attr] + list(finfo.pvspec) + list(kwargs)
+            print('\t'.join(str(s) for s in info), file=file)
+        print(file=file)
 
 
 __all__ = ['records', 'RecordFieldGroup'] + list(records.keys())

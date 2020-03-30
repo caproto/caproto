@@ -3,12 +3,11 @@ import keyword
 import logging
 import re
 
-import caproto
 from .server import pvfunction, PVGroup
 from .._data import (ChannelDouble, ChannelEnum, ChannelChar,
                      ChannelInteger, ChannelString, ChannelByte)
 from .menus import menus
-from .records import _Limits, _LimitsLong
+from . import records as records_mod
 
 
 logger = logging.getLogger(__name__)
@@ -382,11 +381,13 @@ ATTR_RENAMES = {
     'scan_mechanism': 'scan_rate',
     'descriptor': 'description',
     'force_processing': 'process_record',
+    'forward_process_link': 'forward_link',
 }
 ATTR_REPLACES = {
     re.compile('^alarm_ack_'): 'alarm_acknowledge_',
+    re.compile('_sevrty$'): '_severity',
 }
-MIXINS = (_Limits, _LimitsLong)
+MIXINS = (records_mod._Limits, records_mod._LimitsLong)
 MIXIN_SPECS = {
     mixin: {pv.pvspec.name: pv.pvspec.dtype for pv in mixin._pvs_.values()}
     for mixin in MIXINS
@@ -420,23 +421,22 @@ def record_to_template_dict(record_type, dbd_info, *, skip_fields=None):
         result['class_name'] = 'RecordFieldGroup'
         result['base_class'] = 'PVGroup'
         result['record_type'] = None
-        existing_record = caproto.server.records.RecordFieldGroup
+        existing_record = records_mod.RecordFieldGroup
     else:
         field_info = dbd_info[record_type]
         val_type = field_info.get('VAL', {'type': 'DBF_NOACCESS'})['type']
         if val_type != 'DBF_NOACCESS':
             val_channeltype = DBD_TYPE_INFO[val_type].data_type.name
             result['dtype'] = "ChannelType." + val_channeltype
-        existing_record = caproto.server.records.records.get(record_type)
+        existing_record = records_mod.records.get(record_type)
 
-    sort_order = []
+    existing_field_list = []
     if existing_record:
-        sort_order = [pvprop.pvspec.name
-                      for pvprop in existing_record._pvs_.values()]
+        existing_field_list = [pvprop.pvspec.name
+                               for pvprop in existing_record._pvs_.values()]
 
     fields_by_attr = {}
     field_to_attr = {}
-    new_field_count = 0
     for item in record_to_field_info(record_type, dbd_info):
         attr_name, cls, kwargs, finfo = item
         attr_name = _get_attr_name(attr_name)
@@ -450,22 +450,13 @@ def record_to_template_dict(record_type, dbd_info, *, skip_fields=None):
             comment = True
 
         field_name = finfo['field']  # as in EPICS
-
-        try:
-            sort_id = sort_order.index(field_name)
-        except ValueError:
-            logger.debug('Found new field in %s %s=%s', record_type,
-                         field_name, attr_name)
-            new_field_count += 1
-            sort_id = len(sort_order) + new_field_count
-
         fields_by_attr[attr_name] = dict(
             attr=attr_name,
             field_name=field_name,
             dtype=dtype,
             kwargs=kwargs,
             comment=comment,
-            sort_id=sort_id,
+            sort_id=_get_sort_id(field_name, existing_field_list),
         )
         field_to_attr[field_name] = attr_name
 
@@ -501,6 +492,12 @@ def record_to_template_dict(record_type, dbd_info, *, skip_fields=None):
     return result
 
 
+def _get_sort_id(name, list_):
+    'Returns tuple of (index in list, name)'
+    key1 = list_.index(name) if name in list_ else len(list_)
+    return (key1, name)
+
+
 def generate_all_records_jinja(dbd_file, *, jinja_env=None,
                                template='records.jinja2'):
     try:
@@ -517,9 +514,12 @@ def generate_all_records_jinja(dbd_file, *, jinja_env=None,
         )
 
     dbd_info = get_record_to_field_metadata(dbd_file)
+    existing_record_list = ['base'] + list(records_mod.records)
     records = {}
     for record in ('base', ) + tuple(sorted(dbd_info)):
-        records[record] = record_to_template_dict(record, dbd_info)
+        d = record_to_template_dict(record, dbd_info)
+        d['sort_id'] = _get_sort_id(record, existing_record_list)
+        records[record] = d
 
     record_template = jinja_env.get_template(template)
     return record_template.render(records=records)
