@@ -373,9 +373,12 @@ LINKABLE = {
     # 'alarm_deadband': '',
     'archive_deadband': 'log_atol',
     'monitor_deadband': 'value_atol',
+    'maximum_elements': 'length',
+    'number_of_elements': 'max_length',
 }
 
-USE_SETATTR = {'archive_deadband', 'monitor_deadband'}
+USE_SETATTR = {'archive_deadband', 'monitor_deadband', 'maximum_elements',
+               'number_of_elements'}
 ATTR_RENAMES = {
     # back-compat
     'scan_mechanism': 'scan_rate',
