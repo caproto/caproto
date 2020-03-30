@@ -278,9 +278,9 @@ DBD_TYPE_INFO = {
 DTYPE_OVERRIDES = {
     # DBF_FLOAT is ChannelDouble -> DOUBLE; override with FLOAT
     'DBF_FLOAT': 'FLOAT',
-    # DBF_SHORT is ChannelInteger -> LONG; override with SHORT
-    'DBF_SHORT': 'SHORT',
-    'DBF_USHORT': 'SHORT',
+    # DBF_SHORT is ChannelInteger -> LONG; override with SHORT (=INT)
+    'DBF_SHORT': 'INT',
+    'DBF_USHORT': 'INT',
 }
 
 
@@ -445,7 +445,7 @@ def record_to_template_dict(record_type, dbd_info, *, skip_fields=None):
         attr_name = _get_attr_name(attr_name)
         # note to self: next line is e.g.,
         #   ChannelDouble -> ChannelDouble(, ... dtype=ChannelType.FLOAT)
-        dtype = DTYPE_OVERRIDES.get(cls.data_type.name, cls.data_type.name)
+        dtype = DTYPE_OVERRIDES.get(finfo['type'], cls.data_type.name)
         comment = False
         if finfo['field'] in skip_fields:
             comment = True
