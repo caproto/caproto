@@ -1,12 +1,17 @@
 import inspect
 import keyword
+import logging
 import re
 
+import caproto
 from .server import pvfunction, PVGroup
 from .._data import (ChannelDouble, ChannelEnum, ChannelChar,
                      ChannelInteger, ChannelString, ChannelByte)
 from .menus import menus
 from .records import _Limits, _LimitsLong
+
+
+logger = logging.getLogger(__name__)
 
 
 def underscore_to_camel_case(s):
@@ -234,7 +239,7 @@ def group_to_device(group):
     # yield f"# {lower_name} = {group.__name__}Device(my_prefix)"
 
 
-def get_base_fields(dbd_info):
+def get_base_fields(dbd_info, *, model_record='ai'):
     'Get fields that are common to all record types'
     common_fields = None
     for record_type, fields in dbd_info.items():
@@ -245,7 +250,7 @@ def get_base_fields(dbd_info):
         else:
             common_fields = fset.intersection(common_fields)
 
-    return {field: fields[field]
+    return {field: dbd_info[model_record][field]
             for field, ftype, fsize in common_fields}
 
 
@@ -378,11 +383,22 @@ ATTR_RENAMES = {
     'descriptor': 'description',
     'force_processing': 'process_record',
 }
+ATTR_REPLACES = {
+    re.compile('^alarm_ack_'): 'alarm_acknowledge_',
+}
 MIXINS = (_Limits, _LimitsLong)
 MIXIN_SPECS = {
     mixin: {pv.pvspec.name: pv.pvspec.dtype for pv in mixin._pvs_.values()}
     for mixin in MIXINS
 }
+
+
+def _get_attr_name(attr_name):
+    'Apply any transformations specified in ATTR_RENAMES/REPLACES'
+    attr_name = ATTR_RENAMES.get(attr_name, attr_name)
+    for re_replace, repl_to in ATTR_REPLACES.items():
+        attr_name = re_replace.sub(repl_to, attr_name)
+    return attr_name
 
 
 def record_to_template_dict(record_type, dbd_info, *, skip_fields=None):
@@ -404,18 +420,26 @@ def record_to_template_dict(record_type, dbd_info, *, skip_fields=None):
         result['class_name'] = 'RecordFieldGroup'
         result['base_class'] = 'PVGroup'
         result['record_type'] = None
+        existing_record = caproto.server.records.RecordFieldGroup
     else:
         field_info = dbd_info[record_type]
         val_type = field_info.get('VAL', {'type': 'DBF_NOACCESS'})['type']
         if val_type != 'DBF_NOACCESS':
             val_channeltype = DBD_TYPE_INFO[val_type].data_type.name
             result['dtype'] = "ChannelType." + val_channeltype
+        existing_record = caproto.server.records.records.get(record_type)
+
+    sort_order = []
+    if existing_record:
+        sort_order = [pvprop.pvspec.name
+                      for pvprop in existing_record._pvs_.values()]
 
     fields_by_attr = {}
     field_to_attr = {}
+    new_field_count = 0
     for item in record_to_field_info(record_type, dbd_info):
         attr_name, cls, kwargs, finfo = item
-        attr_name = ATTR_RENAMES.get(attr_name, attr_name)
+        attr_name = _get_attr_name(attr_name)
         # note to self: next line is e.g.,
         #   ChannelDouble -> ChannelDouble(, ... dtype=ChannelType.FLOAT)
         dtype = DTYPE_OVERRIDES.get(cls.data_type.name, cls.data_type.name)
@@ -426,12 +450,22 @@ def record_to_template_dict(record_type, dbd_info, *, skip_fields=None):
             comment = True
 
         field_name = finfo['field']  # as in EPICS
+
+        try:
+            sort_id = sort_order.index(field_name)
+        except ValueError:
+            logger.debug('Found new field in %s %s=%s', record_type,
+                         field_name, attr_name)
+            new_field_count += 1
+            sort_id = len(sort_order) + new_field_count
+
         fields_by_attr[attr_name] = dict(
             attr=attr_name,
             field_name=field_name,
             dtype=dtype,
             kwargs=kwargs,
             comment=comment,
+            sort_id=sort_id,
         )
         field_to_attr[field_name] = attr_name
 

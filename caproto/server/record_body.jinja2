@@ -1,18 +1,14 @@
-        {% for f in rec.fields | sort(attribute='field_name') %}
-    {%+ if f.comment %}# {% endif %}{{ f.attr }} = pvproperty(
-    {%+ if f.comment %}# {% endif %}     name="{{ f.field_name }}",
+        {% for f in rec.fields | sort(attribute='sort_id') %}
+    {%+ if f.comment %}# {% endif %}{{ f.attr }} = pvproperty(name='{{ f.field_name }}',
     {%+ if f.comment %}# {% endif %}     dtype=ChannelType.{{ f.dtype }},
     {%+ if f.comment %}# {% endif %}     {% for kwarg, value in f.kwargs.items() -%}
-                                         {{ kwarg }}={{ value }},
+                                         {{ kwarg }}={{ value }}
+                                         {%- if not loop.last %},{% endif -%}
                                          {%- endfor %}
     {%+ if f.comment %}# {% endif %}     )
         {% endfor%}
         {% for link in rec.links %}
-    _link_parent_attribute(
-        {{ link.field_attr }},
-        '{{ link.channeldata_attr }}',
-        {%- if link.use_setattr %}
-               use_setattr=True
-        {%- endif %}
-        )
+    _link_parent_attribute({{ link.field_attr }}, '{{ link.channeldata_attr }}',
+    {%- if link.use_setattr -%} use_setattr=True {%- endif -%}
+    )
         {% endfor %}
