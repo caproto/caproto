@@ -5,6 +5,7 @@ import argparse
 import array
 import collections
 import functools
+import inspect
 import os
 import random
 import socket
@@ -15,6 +16,7 @@ import threading
 from collections import namedtuple
 from contextlib import contextmanager
 from warnings import warn
+import weakref
 
 from ._version import get_versions
 __version__ = get_versions()['version']
@@ -35,6 +37,7 @@ except ImportError:
 
 
 __all__ = (  # noqa F822
+    'adapt_old_callback_signature',
     'apply_arr_filter',
     'ChannelFilter',
     'get_environment_variables',
@@ -897,3 +900,56 @@ def safe_getsockname(sock):
         # This is what the Linux OS returns for a unconnected socket that has
         # not yet been sent from.
         return ('0.0.0.0', 0)
+
+
+def adapt_old_callback_signature(func, weakref_set):
+    """
+    If func has signature func(response), wrap in signature func(sub, response)
+
+    Parameters
+    ----------
+    func: callable
+        Expected signature ``f(response)`` or ``f(sub, response)``
+    weakref_set: set
+        Will be used to store state.
+
+    Returns
+    -------
+    func: callable
+        Signature ``f(sub, response)``
+    """
+    # Handle func with signature func(respons) for back-compat.
+    sig = inspect.signature(func)
+    try:
+        # Does this function accept two positional arguments?
+        sig.bind(None, None)
+    except TypeError:
+        warn(
+            "The signature of a subscription callback is now expected to "
+            "be func(sub, response). The signature func(response) is "
+            "supported, but support will be removed in a future release "
+            "of caproto.")
+        raw_func = func
+        raw_func_weakref = weakref.ref(raw_func)
+
+        def func(sub, response):
+            # Avoid closing over raw_func itself here or it will never be
+            # garbage collected.
+            raw_func = raw_func_weakref()
+            if raw_func is not None:
+                # Do nothing with sub because the user-provided func cannot
+                # accept it.
+                raw_func(response)
+
+        # Ensure func does not get garbage collected until raw_func does.
+        def called_when_raw_func_is_released(w):
+            # The point of this function is to hold one hard ref to func
+            # until raw_func is garbage collected.
+            func
+            # Clean up after ourselves.
+            weakref_set.remove(w)
+
+        w = weakref.ref(raw_func, called_when_raw_func_is_released)
+        # Hold a hard reference to w. Its callback removes it from this set.
+        weakref_set.add(w)
+    return func
