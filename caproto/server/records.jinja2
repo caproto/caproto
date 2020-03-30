@@ -252,15 +252,30 @@ class {{ rec.class_name }}({{ rec.base_class }}{% if rec.mixin %}, {{ rec.mixin 
 def summarize(file=sys.stdout):
     'Summarize all supported records and their fields'
     all_records = [('base', RecordFieldGroup)] + list(records.items())
+
+    def to_string(s):
+        if callable(s):
+            return 'callable/' + s.__name__
+        return repr(s)
+
+    base_fields = {
+        pvprop.pvspec.name
+        for attr, pvprop in RecordFieldGroup._pvs_.items()
+    }
+
     for record, rclass in all_records:
         info = [record, [cls.__name__ for cls in rclass.mro()]]
-        print('\t'.join(str(s) for s in info), file=file)
-        for attr, finfo in rclass._pvs_.items():
-            kwargs = (f'{key}={value}'.format(key, value)
-                      for key, value in sorted(finfo.pvspec.cls_kwargs.items())
-                      )
-            info = [attr] + list(finfo.pvspec) + list(kwargs)
-            print('\t'.join(str(s) for s in info), file=file)
+        print('\t'.join(to_string(s) for s in info), file=file)
+        for attr, pvprop in rclass._pvs_.items():
+            if record != 'base' and pvprop.pvspec.name in base_fields:
+                continue
+
+            kwargs = (
+                f'{key}={value}'.format(key, value)
+                for key, value in sorted(pvprop.pvspec.cls_kwargs.items())
+            )
+            info = [attr] + list(pvprop.pvspec) + list(kwargs)
+            print('\t'.join(to_string(s) for s in info), file=file)
         print(file=file)
 
 

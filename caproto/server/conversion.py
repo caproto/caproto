@@ -494,7 +494,10 @@ def record_to_template_dict(record_type, dbd_info, *, skip_fields=None):
 
 def _get_sort_id(name, list_):
     'Returns tuple of (index in list, name)'
-    key1 = list_.index(name) if name in list_ else len(list_)
+    key1 = (list_.index(name)
+            if name in list_
+            else len(list_) + 1
+            )
     return (key1, name)
 
 
