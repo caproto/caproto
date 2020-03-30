@@ -237,13 +237,15 @@ class _LimitsLong(PVGroup):
     _link_parent_attribute(low_operating_range, 'lower_ctrl_limit')
 
 
-{% for record_name, rec in records.items() if record_name != 'base' | sort(attribute='sort_id') %}
+{% for rec in records.values() | sort(attribute='sort_id') %}
+{%- if rec.record_type %}
 @register_record
 class {{ rec.class_name }}({{ rec.base_class }}{% if rec.mixin %}, {{ rec.mixin | join(', ') }}{% endif %}):
     _record_type = {% if rec.record_type %}"{{ rec.record_type }}"{% else %}None{% endif %}
 
     _dtype = {{ rec.dtype }}  # DTYP of .VAL
 {% include "record_body.jinja2" %}
+{% endif -%}
 {% endfor %}
 
 
