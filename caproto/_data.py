@@ -416,7 +416,6 @@ class ChannelData:
         )
 
         # for native types, there is no dbr metadata - just data
-        print('data_type', data_type, 'native type?', data_type in native_types)
         if data_type in native_types:
             return b'', values
 
