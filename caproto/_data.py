@@ -967,7 +967,7 @@ class ChannelChar(ChannelData):
 
         if isinstance(value, (list, tuple) + backend.array_types):
             if not len(value):
-                return b''
+                value = b''
             elif len(value) == 1:
                 value = value[0]
             else:
