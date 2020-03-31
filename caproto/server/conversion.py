@@ -492,6 +492,7 @@ def record_to_template_dict(record_type, dbd_info, *, skip_fields=None):
                         )
             result['links'].append(link)
 
+    result['field_to_attr'] = field_to_attr
     return result
 
 
