@@ -54,7 +54,8 @@ def _link_enum_strings(pvprop, index):
         enum_strings = list(self.parent.enum_strings)
 
         if index >= len(enum_strings):
-            enum_strings = enum_strings + [''] * (index - len(enum_strings) + 1)
+            missing_count = index - len(enum_strings) + 1
+            enum_strings = enum_strings + [''] * missing_count
 
         old_enum = enum_strings[index]
         enum_strings[index] = str(value)[:instance.max_length - 1]
