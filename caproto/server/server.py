@@ -114,7 +114,7 @@ class PvpropertyData:
             self.field_inst = None
             self.fields = {}
 
-    async def read(self, data_type, *, long_string=False):
+    async def read(self, data_type):
         value = await self.getter(self)
         if value is not None:
             if self.pvspec.get is None:
@@ -124,7 +124,7 @@ class PvpropertyData:
                 self.log.debug('value for %s updated: %r', self.name, value)
             # update the internal state
             await self.write(value)
-        return await self._read(data_type, long_string=long_string)
+        return await self._read(data_type)
 
     async def verify_value(self, value):
         value = await super().verify_value(value)

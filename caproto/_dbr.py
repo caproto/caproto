@@ -125,6 +125,10 @@ class ChannelType(IntEnum):
     CLASS_NAME = 38
 
 
+class _InternalChannelType(IntEnum):
+    LONG_STRING = 4
+
+
 class SubscriptionType(IntFlag):
     '''Subscription masks
 

@@ -4,7 +4,7 @@ from inspect import isclass
 import pytest
 
 from .._utils import ConversionDirection
-from .._dbr import ChannelType, DbrStringArray
+from .._dbr import _InternalChannelType, ChannelType, DbrStringArray
 from .. import backend
 from .conftest import (array_types, assert_array_almost_equal)
 
@@ -12,6 +12,7 @@ from .conftest import (array_types, assert_array_almost_equal)
 FROM_WIRE = ConversionDirection.FROM_WIRE
 TO_WIRE = ConversionDirection.TO_WIRE
 
+LONG_STRING = _InternalChannelType.LONG_STRING
 STRING = ChannelType.STRING
 INT = ChannelType.INT
 FLOAT = ChannelType.FLOAT
@@ -43,7 +44,7 @@ def test_special_types(backends, ntype):
 
 def run_conversion_test(values, from_dtype, to_dtype, expected,
                         *, direction, string_encoding=None, enum_strings=None,
-                        count=1, long_string=False):
+                        count=1):
     def _test():
         print(f'--- {direction} ---')
         print(f'Convert: {from_dtype.name} {values!r} -> {to_dtype.name} '
@@ -52,7 +53,7 @@ def run_conversion_test(values, from_dtype, to_dtype, expected,
         converted = backend.convert_values(
             values, from_dtype=from_dtype, to_dtype=to_dtype,
             string_encoding=string_encoding, enum_strings=enum_strings,
-            direction=direction, auto_byteswap=False, long_string=long_string)
+            direction=direction, auto_byteswap=False)
         print(f'Converted: {converted!r}')
         return converted
 
@@ -91,8 +92,6 @@ no_encoding = dict(string_encoding=None)
 ascii_encoding = dict(string_encoding='ascii')
 enum_strs = dict(enum_strings=['aa', 'bb', 'cc'],
                  string_encoding='ascii')
-long_str_no_encoding = dict(string_encoding=None, long_string=True)
-long_str_ascii_encoding = dict(string_encoding='ascii', long_string=True)
 
 # TO WIRE: channeldata stores STRING -> caget of DTYPE
 string_to_wire_tests = [
@@ -111,13 +110,11 @@ string_to_wire_tests = [
 
     # we have string b'123' in ChannelString.
     # **long_string=False** [123]
-    # **long_string=True**  [b'1', b'2', b'3']
     [STRING, CHAR, b'123', [123], no_encoding],
     [STRING, CHAR, '123', [123], ascii_encoding],
-    [STRING, LONG, "123", [123], no_encoding],
-    [STRING, CHAR, b'123', [ord(b) for b in '123'], long_str_no_encoding],
-    [STRING, CHAR, '123', [ord(b) for b in '123'], long_str_ascii_encoding],
-    [STRING, LONG, "123", [ord(b) for b in '123'], long_str_ascii_encoding],
+    # **long_string=True**  [b'1', b'2', b'3']
+    [STRING, LONG_STRING, b'123', [ord(b) for b in '123'], no_encoding],
+    [STRING, LONG_STRING, '123', [ord(b) for b in '123'], ascii_encoding],
 
     [STRING, ENUM, 'bad', ValueError, enum_strs],
     [STRING, ENUM, b'bad', ValueError, enum_strs],  # enum data must be str
