@@ -456,7 +456,9 @@ class VirtualCircuit:
 
             metadata, data = await db_entry.auth_read(
                 self.client_hostname, self.client_username,
-                data_type, user_address=self.circuit.address)
+                data_type, user_address=self.circuit.address,
+                long_string=chan.name.endswith('$')
+            )
 
             old_version = self.circuit.protocol_version < 13
             if command.data_count > 0 or old_version:

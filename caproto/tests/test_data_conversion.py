@@ -43,7 +43,7 @@ def test_special_types(backends, ntype):
 
 def run_conversion_test(values, from_dtype, to_dtype, expected,
                         *, direction, string_encoding=None, enum_strings=None,
-                        count=1):
+                        count=1, long_string=False):
     def _test():
         print(f'--- {direction} ---')
         print(f'Convert: {from_dtype.name} {values!r} -> {to_dtype.name} '
@@ -52,7 +52,7 @@ def run_conversion_test(values, from_dtype, to_dtype, expected,
         converted = backend.convert_values(
             values, from_dtype=from_dtype, to_dtype=to_dtype,
             string_encoding=string_encoding, enum_strings=enum_strings,
-            direction=direction, auto_byteswap=False)
+            direction=direction, auto_byteswap=False, long_string=long_string)
         print(f'Converted: {converted!r}')
         return converted
 
@@ -91,6 +91,8 @@ no_encoding = dict(string_encoding=None)
 ascii_encoding = dict(string_encoding='ascii')
 enum_strs = dict(enum_strings=['aa', 'bb', 'cc'],
                  string_encoding='ascii')
+long_str_no_encoding = dict(string_encoding=None, long_string=True)
+long_str_ascii_encoding = dict(string_encoding='ascii', long_string=True)
 
 # TO WIRE: channeldata stores STRING -> caget of DTYPE
 string_to_wire_tests = [
@@ -106,6 +108,16 @@ string_to_wire_tests = [
     [STRING, CHAR, '1', [1], ascii_encoding],
     [STRING, LONG, "1", [1], no_encoding],
     [STRING, DOUBLE, "1.2", [1.2], no_encoding],
+
+    # we have string b'123' in ChannelString.
+    # **long_string=False** [123]
+    # **long_string=True**  [b'1', b'2', b'3']
+    [STRING, CHAR, b'123', [123], no_encoding],
+    [STRING, CHAR, '123', [123], ascii_encoding],
+    [STRING, LONG, "123", [123], no_encoding],
+    [STRING, CHAR, b'123', [ord(b) for b in '123'], long_str_no_encoding],
+    [STRING, CHAR, '123', [ord(b) for b in '123'], long_str_ascii_encoding],
+    [STRING, LONG, "123", [ord(b) for b in '123'], long_str_ascii_encoding],
 
     [STRING, ENUM, 'bad', ValueError, enum_strs],
     [STRING, ENUM, b'bad', ValueError, enum_strs],  # enum data must be str

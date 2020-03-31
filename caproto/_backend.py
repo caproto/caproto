@@ -82,7 +82,8 @@ def decode_or_fail(s, encoding):
     raise CaprotoConversionError('Expected string or bytes')
 
 
-def _preprocess_enum_values(values, to_dtype, string_encoding, enum_strings):
+def _preprocess_enum_values(values, to_dtype, string_encoding, enum_strings,
+                            *, long_string=False):
     if isinstance(values, (str, bytes)):
         values = [values]
 
@@ -123,7 +124,8 @@ def _preprocess_enum_values(values, to_dtype, string_encoding, enum_strings):
     return [enum_to_int(v) for v in values]
 
 
-def _preprocess_char_from_wire(values, to_dtype, string_encoding, enum_strings):
+def _preprocess_char_from_wire(values, to_dtype, string_encoding, enum_strings,
+                               *, long_string=False):
     'From wire: pre-process EPICS CHAR data for conversion to to_dtype'
     if isinstance(values, list):
         # This is from the wire, so it has to be a single value
@@ -151,7 +153,8 @@ def _preprocess_char_from_wire(values, to_dtype, string_encoding, enum_strings):
     return list(bytes_from_wire)
 
 
-def _preprocess_char_to_wire(values, to_dtype, string_encoding, enum_strings):
+def _preprocess_char_to_wire(values, to_dtype, string_encoding, enum_strings,
+                             *, long_string=False):
     'To wire: pre-process python-stored CHAR values for conversion to to_dtype'
     if isinstance(values, list) and len(values) == 1:
         values = values[0]
@@ -216,7 +219,7 @@ def _encode_to_string_array(values, string_encoding):
 
 
 def _preprocess_string_from_wire(values, to_dtype, string_encoding,
-                                 enum_strings):
+                                 enum_strings, *, long_string=False):
     if to_dtype == ChannelType.STRING:
         # caller will handle string decoding
         return values
@@ -240,7 +243,7 @@ def _preprocess_string_from_wire(values, to_dtype, string_encoding,
 
 
 def _preprocess_string_to_wire(values, to_dtype, string_encoding,
-                               enum_strings):
+                               enum_strings, *, long_string=False):
     if isinstance(values, (str, bytes)):
         values = [values]
 
@@ -259,8 +262,11 @@ def _preprocess_string_to_wire(values, to_dtype, string_encoding,
                                        string_encoding=string_encoding,
                                        enum_strings=enum_strings)
     elif to_dtype in native_int_types:
-        if values and isinstance(values[0], str):
-            return list(''.join(values).encode(string_encoding))
+        if long_string and values:
+            if isinstance(values[0], str):
+                return list(encode_or_fail(values[0], string_encoding))
+            if isinstance(values[0], bytes):
+                return list(values[0])
         return [int(v) for v in values]
     elif to_dtype in native_float_types:
         return [float(v) for v in values]
@@ -278,7 +284,7 @@ _custom_preprocess = {
 
 def convert_values(values, from_dtype, to_dtype, *, direction,
                    string_encoding='latin-1', enum_strings=None,
-                   auto_byteswap=True):
+                   auto_byteswap=True, long_string=False):
     '''Convert values from one ChannelType to another
 
     Parameters
@@ -297,6 +303,10 @@ def convert_values(values, from_dtype, to_dtype, *, direction,
     auto_byteswap : bool, optional
         If sending over the wire and using built-in arrays, the data should
         first be byte-swapped to big-endian.
+    long_string : bool, optional
+        If the channel represents a "long string" channel (that is, one stored
+        as STRING internally in which the channel name ends with the long
+        string marker '$')
     '''
 
     if (from_dtype in (ChannelType.STSACK_STRING, ChannelType.CLASS_NAME) or
@@ -324,7 +334,8 @@ def convert_values(values, from_dtype, to_dtype, *, direction,
         try:
             values = preprocess(values=values, to_dtype=to_dtype,
                                 string_encoding=string_encoding,
-                                enum_strings=enum_strings)
+                                enum_strings=enum_strings,
+                                long_string=long_string)
         except Exception as ex:
             raise CaprotoConversionError() from ex
 

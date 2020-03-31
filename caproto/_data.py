@@ -112,7 +112,7 @@ class ChannelAlarm:
     def disconnect(self, channel_data):
         self._channels.remove(channel_data)
 
-    async def read(self, dbr=None):
+    async def read(self, dbr=None, long_string=False):
         if dbr is None:
             dbr = DBR_STSACK_STRING()
         dbr.status = self.status
@@ -376,20 +376,20 @@ class ChannelData:
         self._queues[queue][sub_spec.channel_filter.sync][sub_spec.data_type].discard(sub_spec)
 
     async def auth_read(self, hostname, username, data_type, *,
-                        user_address=None):
+                        user_address=None, long_string=False):
         '''Get DBR data and native data, converted to a specific type'''
         access = self.check_access(hostname, username)
         if AccessRights.READ not in access:
             raise Forbidden("Client with hostname {} and username {} cannot "
                             "read.".format(hostname, username))
-        return (await self.read(data_type))
+        return (await self.read(data_type, long_string=long_string))
 
-    async def read(self, data_type):
-        # Subclass might trigger a write here to update self._data
-        # before reading it out.
-        return (await self._read(data_type))
+    async def read(self, data_type, *, long_string=False):
+        # Subclass might trigger a write here to update self._data before
+        # reading it out.
+        return (await self._read(data_type, long_string))
 
-    async def _read(self, data_type):
+    async def _read(self, data_type, *, long_string=False):
         # special cases for alarm strings and class name
         if data_type == ChannelType.STSACK_STRING:
             ret = await self.alarm.read()
@@ -407,7 +407,9 @@ class ChannelData:
             to_dtype=native_to,
             string_encoding=self.string_encoding,
             enum_strings=self._data.get('enum_strings'),
-            direction=ConversionDirection.TO_WIRE)
+            direction=ConversionDirection.TO_WIRE,
+            long_string=long_string,
+        )
 
         # for native types, there is no dbr metadata - just data
         if data_type in native_types:
