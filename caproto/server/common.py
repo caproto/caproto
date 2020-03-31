@@ -9,7 +9,7 @@ import caproto as ca
 from caproto import (apply_arr_filter, get_environment_variables,
                      RemoteProtocolError, CaprotoKeyError, CaprotoRuntimeError,
                      CaprotoNetworkError, ChannelType)
-from .._dbr import SubscriptionType, _InternalChannelType
+from .._dbr import SubscriptionType, _LongStringChannelType
 
 
 # ** Tuning this parameters will affect the servers' performance **
@@ -455,8 +455,12 @@ class VirtualCircuit:
             await self.write_event.wait(timeout=WRITE_LOCK_TIMEOUT)
 
             read_data_type = data_type
-            if chan.name.endswith('$') and data_type == ChannelType.CHAR:
-                read_data_type = _InternalChannelType.LONG_STRING
+            if chan.name.endswith('$'):
+                try:
+                    read_data_type = _LongStringChannelType(read_data_type)
+                except ValueError:
+                    # Not requesting a LONG_STRING type
+                    ...
 
             metadata, data = await db_entry.auth_read(
                 self.client_hostname, self.client_username,

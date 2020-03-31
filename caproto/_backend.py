@@ -5,7 +5,7 @@ import collections
 import logging
 from types import SimpleNamespace
 
-from ._dbr import (ChannelType, _InternalChannelType, native_float_types,
+from ._dbr import (ChannelType, _LongStringChannelType, native_float_types,
                    native_int_types, native_types, DbrStringArray)
 
 from ._utils import ConversionDirection, CaprotoConversionError
@@ -259,7 +259,7 @@ def _preprocess_string_to_wire(values, to_dtype, string_encoding,
                                        string_encoding=string_encoding,
                                        enum_strings=enum_strings)
     elif to_dtype in native_int_types:
-        if to_dtype is _InternalChannelType.LONG_STRING and values:
+        if to_dtype is _LongStringChannelType.LONG_STRING and values:
             if isinstance(values[0], str):
                 return list(encode_or_fail(values[0], string_encoding))
             if isinstance(values[0], bytes):

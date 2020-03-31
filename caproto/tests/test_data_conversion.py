@@ -4,7 +4,7 @@ from inspect import isclass
 import pytest
 
 from .._utils import ConversionDirection
-from .._dbr import _InternalChannelType, ChannelType, DbrStringArray
+from .._dbr import _LongStringChannelType, ChannelType, DbrStringArray
 from .. import backend
 from .conftest import (array_types, assert_array_almost_equal)
 
@@ -12,7 +12,7 @@ from .conftest import (array_types, assert_array_almost_equal)
 FROM_WIRE = ConversionDirection.FROM_WIRE
 TO_WIRE = ConversionDirection.TO_WIRE
 
-LONG_STRING = _InternalChannelType.LONG_STRING
+LONG_STRING = _LongStringChannelType.LONG_STRING
 STRING = ChannelType.STRING
 INT = ChannelType.INT
 FLOAT = ChannelType.FLOAT

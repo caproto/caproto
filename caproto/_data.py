@@ -9,10 +9,10 @@ import copy
 import time
 import weakref
 
-from ._dbr import (DBR_TYPES, ChannelType, native_type, native_types,
-                   timestamp_to_epics, time_types, DBR_STSACK_STRING,
-                   AccessRights, GraphicControlBase, AlarmStatus,
-                   AlarmSeverity, SubscriptionType)
+from ._dbr import (DBR_TYPES, _LongStringChannelType, ChannelType, native_type,
+                   native_types, timestamp_to_epics, time_types,
+                   DBR_STSACK_STRING, AccessRights, GraphicControlBase,
+                   AlarmStatus, AlarmSeverity, SubscriptionType)
 
 from ._utils import CaprotoError, CaprotoValueError, ConversionDirection
 from ._commands import parse_metadata
@@ -400,7 +400,12 @@ class ChannelData:
             class_name.value = rtyp
             return class_name, b''
 
-        native_to = native_type(data_type)
+        if data_type in _LongStringChannelType:
+            native_to = _LongStringChannelType.LONG_STRING
+            data_type = ChannelType(data_type)
+        else:
+            native_to = native_type(data_type)
+
         values = backend.convert_values(
             values=self._data['value'],
             from_dtype=self.data_type,
@@ -411,6 +416,7 @@ class ChannelData:
         )
 
         # for native types, there is no dbr metadata - just data
+        print('data_type', data_type, 'native type?', data_type in native_types)
         if data_type in native_types:
             return b'', values
 
