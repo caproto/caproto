@@ -715,11 +715,11 @@ class Context:
             try:
                 (rec_field, rec, field, mods) = ca.parse_record_field(pvname)
             except ValueError:
-                raise ex
+                raise ex from None
 
             if not field and not mods:
-                # No field or modifiers, so there's nothing left to check
-                raise
+                # No field or modifiers, but a trailing '.' is valid
+                return self.pvdb[rec]
 
         # Without the modifiers, try 'record[.field]'
         try:
