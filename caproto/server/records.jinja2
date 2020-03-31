@@ -44,11 +44,17 @@ def _link_enum_strings(pvprop, index):
 
     @pvprop.getter
     async def getter(self, instance):
-        return self.parent.enum_strings[index]
+        try:
+            return self.parent.enum_strings[index]
+        except IndexError:
+            return ''
 
     @pvprop.putter
     async def putter(self, instance, value):
         enum_strings = list(self.parent.enum_strings)
+
+        if index >= len(enum_strings):
+            enum_strings = enum_strings + [''] * (index - len(enum_strings) + 1)
 
         old_enum = enum_strings[index]
         enum_strings[index] = str(value)[:instance.max_length - 1]
