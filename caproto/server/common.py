@@ -9,7 +9,7 @@ import caproto as ca
 from caproto import (apply_arr_filter, get_environment_variables,
                      RemoteProtocolError, CaprotoKeyError, CaprotoRuntimeError,
                      CaprotoNetworkError, ChannelType)
-from .._dbr import SubscriptionType
+from .._dbr import SubscriptionType, _InternalChannelType
 
 
 # ** Tuning this parameters will affect the servers' performance **
@@ -454,10 +454,13 @@ class VirtualCircuit:
             # introducing too much latency.
             await self.write_event.wait(timeout=WRITE_LOCK_TIMEOUT)
 
+            read_data_type = data_type
+            if chan.name.endswith('$') and data_type == ChannelType.CHAR:
+                read_data_type = _InternalChannelType.LONG_STRING
+
             metadata, data = await db_entry.auth_read(
                 self.client_hostname, self.client_username,
-                data_type, user_address=self.circuit.address,
-                long_string=chan.name.endswith('$')
+                read_data_type, user_address=self.circuit.address,
             )
 
             old_version = self.circuit.protocol_version < 13
