@@ -15,7 +15,7 @@ import pyPDB.dbd.yacc as _yacc
 import pyPDB.dbdlint as _dbdlint
 
 
-class Results:
+class DbdFile:
     '''
     Container for dbdlint results, with easier-to-access attributes
 
@@ -135,35 +135,34 @@ class Results:
         '''
         return not len(self.errors)
 
+    @classmethod
+    def parse_file(cls, fn):
+        '''
+        Parse a full EPICS dbd file and return a `DbdFile` instance.
 
-def parse_dbd(fn):
-    '''
-    Parse a full EPICS dbd file and return a `Results` instance.
+        Parameters
+        ----------
+        fn : str or file
+            dbd filename
 
-    Parameters
-    ----------
-    fn : str or file
-        dbd filename
+        Returns
+        ----------
+        parsed : list
+            pyPDB parsed dbd nodes
+        '''
+        if hasattr(fn, 'read'):
+            contents = fn.read()
+        else:
+            with open(fn, 'rt') as f:
+                contents = f.read()
 
-    Returns
-    ----------
-    parsed : list
-        pyPDB parsed dbd nodes
-    '''
+        parsed = _yacc.parse(contents)
+        results = cls()
+        tree = copy.deepcopy(_dbdlint.dbdtree)
 
-    if hasattr(fn, 'read'):
-        contents = fn.read()
-    else:
-        with open(fn, 'rt') as f:
-            contents = f.read()
-
-    parsed = _yacc.parse(contents)
-    results = Results()
-    tree = copy.deepcopy(_dbdlint.dbdtree)
-
-    # Walk the dbd file, populating the results dictionaries:
-    _dbdlint.walk(parsed, tree, results)
-    return results
+        # Walk the dbd file, populating the results dictionaries:
+        _dbdlint.walk(parsed, tree, results)
+        return results
 
 
 def get_softioc_dbd_path():
@@ -176,7 +175,7 @@ def get_record_to_field_dictionary(dbd_path, *, include_dollar_fields=True):
     '''
     Return a {record: {field: ftype, ...}, ...} dictionary from a dbd file
     '''
-    record_to_fields = parse_dbd(dbd_path).all_records
+    record_to_fields = DbdFile.parse_file(dbd_path).all_records
 
     # the record files don't include "RTYP" & ".RTYP$"
     for rdict in record_to_fields.values():
@@ -195,7 +194,7 @@ def get_record_to_field_metadata(dbd_path):
     '''
     Return a {record: {field: field_info, ...}, ...} dictionary from a dbd file
     '''
-    return parse_dbd(dbd_path).field_metadata
+    return DbdFile.parse_file(dbd_path).field_metadata
 
 
 @pytest.fixture(scope='session')

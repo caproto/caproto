@@ -254,7 +254,7 @@ def get_base_fields(dbd_info, *, model_record='ai'):
 
 
 DBD_TYPE_INFO = {
-    'DBF_DEVICE': ChannelString,  # DTYP
+    'DBF_DEVICE': ChannelEnum,
     'DBF_FLOAT': ChannelDouble,
     'DBF_DOUBLE': ChannelDouble,
     'DBF_FWDLINK': ChannelString,
@@ -283,22 +283,27 @@ DTYPE_OVERRIDES = {
     'DBF_USHORT': 'INT',
 }
 
+FIELD_OVERRIDE_OK = {'DTYP', }
 
-def record_to_field_info(record_type, dbd_info):
+
+def record_to_field_info(record_type, dbd_info, dtypes):
     'Yield field information for a given record, removing base fields'
     base_metadata = get_base_fields(dbd_info)
     field_dict = (base_metadata if record_type == 'base'
                   else dbd_info[record_type])
 
     for field_name, field_info in field_dict.items():
+        type_ = field_info['type']
+        if type_ in {'DBF_NOACCESS', }:
+            continue
         if record_type != 'base' and field_name in base_metadata:
-            if base_metadata[field_name] == field_info:
+            if field_name in FIELD_OVERRIDE_OK:
+                # Allow this one through
+                ...
+            elif base_metadata[field_name] == field_info:
                 # Skip base attrs
                 continue
-        elif field_info['type'] in ('DBF_NOACCESS', ):
-            continue
 
-        type_ = field_info['type']
         size = field_info.get('size', 0)
         prompt = field_info['prompt']
 
@@ -316,6 +321,8 @@ def record_to_field_info(record_type, dbd_info):
             # note: ordered key assumption here (py3.6+)
             kwargs['enum_strings'] = (f'menus.{field_info["menu"]}'
                                       '.get_string_tuple()')
+        elif type_ == 'DBF_DEVICE':
+            kwargs['enum_strings'] = repr(tuple(dtypes))
 
         if prompt:
             kwargs['doc'] = repr(prompt)
@@ -326,22 +333,6 @@ def record_to_field_info(record_type, dbd_info):
         type_class = DBD_TYPE_INFO[type_]
         attr_name = get_attr_name_from_dbd_prompt(field_name, prompt)
         yield attr_name, type_class, kwargs, field_info
-
-
-def record_to_field_dict_code(record_type, *, skip_fields=None):
-    'Record name -> yields code to create {field: ChannelData(), ...}'
-    if skip_fields is None:
-        skip_fields = ['VAL']
-    yield f"def create_{record_type}_dict(alarm_group, **kw):"
-    yield f"    kw['reported_record_type'] = '{record_type}'"
-    yield f"    kw['alarm_group'] = alarm_group"
-    yield '    return {'
-    for _name, cls, kwargs, finfo in record_to_field_info(record_type):
-        kwarg_string = ', '.join(
-            list(f'{k}={v}' for k, v in kwargs.items()) + ['**kw'])
-        field = finfo["field"]
-        yield f"        '{field}': {cls.__name__}({kwarg_string}),"
-    yield '    }'
 
 
 def get_attr_name_from_dbd_prompt(field_name, prompt):
@@ -406,7 +397,8 @@ def _get_attr_name(attr_name):
     return attr_name
 
 
-def record_to_template_dict(record_type, dbd_info, *, skip_fields=None):
+def record_to_template_dict(record_type, dbd_info, dtypes, *,
+                            skip_fields=None):
     'Record name -> yields code to create a PVGroup for all fields'
     if skip_fields is None:
         skip_fields = ['VAL']
@@ -441,7 +433,9 @@ def record_to_template_dict(record_type, dbd_info, *, skip_fields=None):
 
     fields_by_attr = {}
     field_to_attr = {}
-    for item in record_to_field_info(record_type, dbd_info):
+
+    for item in record_to_field_info(record_type, dbd_info,
+                                     dtypes.get(record_type, [])):
         attr_name, cls, kwargs, finfo = item
         attr_name = _get_attr_name(attr_name)
         # note to self: next line is e.g.,
@@ -509,7 +503,7 @@ def _get_sort_id(name, list_):
 def generate_all_records_jinja(dbd_file, *, jinja_env=None,
                                template='records.jinja2'):
     try:
-        from caproto.tests.dbd import get_record_to_field_metadata
+        from caproto.tests.dbd import DbdFile
         import jinja2
     except ImportError as ex:
         raise ImportError(f'An optional/testing dependency is missing: {ex}')
@@ -521,11 +515,12 @@ def generate_all_records_jinja(dbd_file, *, jinja_env=None,
             lstrip_blocks=True,
         )
 
-    dbd_info = get_record_to_field_metadata(dbd_file)
+    dbd_file = DbdFile.parse_file(dbd_file)
     existing_record_list = ['base'] + list(records_mod.records)
     records = {}
-    for record in ('base', ) + tuple(sorted(dbd_info)):
-        d = record_to_template_dict(record, dbd_info)
+    for record in ('base', ) + tuple(sorted(dbd_file.field_metadata)):
+        d = record_to_template_dict(record, dbd_file.field_metadata,
+                                    dbd_file.record_dtypes)
         d['sort_id'] = _get_sort_id(record, existing_record_list)
         records[record] = d
 
