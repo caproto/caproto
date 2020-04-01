@@ -22,6 +22,8 @@ type_equal = {
     "DBF_USHORT": ["short"],
     "DBF_LONG": ["int", "long"],
     "DBF_ULONG": ["int", "long"],
+    "DBF_INT64": ["long"],
+    "DBF_UINT64": ["long"],
     "DBF_FLOAT": ["float"],
     "DBF_DOUBLE": ["double"],
     "DBF_ENUM": ["enum"],  # have an associated set of ASCII strings
