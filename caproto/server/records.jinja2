@@ -6,6 +6,7 @@ import logging
 import sys
 
 from .server import PVGroup, pvproperty
+from .._constants import MAX_ENUM_STRING_SIZE
 from .._data import ChannelType
 from .._dbr import AlarmSeverity
 from . import menus
@@ -58,7 +59,7 @@ def _link_enum_strings(pvprop, index):
             enum_strings = enum_strings + [''] * missing_count
 
         old_enum = enum_strings[index]
-        enum_strings[index] = str(value)[:instance.max_length - 1]
+        enum_strings[index] = str(value)[:MAX_ENUM_STRING_SIZE - 1]
 
         await self.parent.write_metadata(enum_strings=enum_strings)
         if self.parent.value in (old_enum, index):
