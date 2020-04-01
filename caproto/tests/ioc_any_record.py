@@ -29,7 +29,7 @@ def start_ioc(record_type, *, ioc_options, run_options):
     prefix = ioc_options['prefix']
     print(
         f'{prefix}A is mocking {record_type!r} record with default value '
-        f'{default_value!r} ({val_dtype.name}) and fields:',
+        f'{default_value!r} ({val_dtype}) and fields:',
         ', '.join(ioc.A.fields)
     )
     run(ioc.pvdb, **run_options)
