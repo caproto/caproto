@@ -426,7 +426,7 @@ class VirtualCircuit:
                 if ca.RecordModifiers.long_string in (modifiers or {}):
                     if data_type in (ChannelType.STRING, ):
                         data_type = ChannelType.CHAR
-                        data_count = len(db_entry.value)
+                        data_count = db_entry.long_string_max_length
 
                 to_send = [ca.AccessRightsResponse(cid=command.cid,
                                                    access_rights=access),

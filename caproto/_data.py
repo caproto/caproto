@@ -284,9 +284,8 @@ class ChannelData:
                 if len(value):
                     # scalar value in a list -> scalar value
                     return value[0]
-                else:
-                    raise CaprotoValueError(
-                        'Cannot set a scalar to an empty array')
+                raise CaprotoValueError(
+                    'Cannot set a scalar to an empty array')
         elif not is_array:
             # scalar value that should be in a list -> list
             return [value]
@@ -971,13 +970,18 @@ class ChannelChar(ChannelData):
     def __init__(self, *, alarm=None, value=None, timestamp=None,
                  max_length=None, string_encoding='latin-1',
                  reported_record_type='caproto', report_as_string=False):
-        super().__init__(
-            alarm=alarm, value=value, timestamp=timestamp,
-            max_length=max_length, string_encoding=string_encoding,
-            reported_record_type=reported_record_type)
+        super().__init__(alarm=alarm, value=value, timestamp=timestamp,
+                         max_length=max_length,
+                         string_encoding=string_encoding,
+                         reported_record_type=reported_record_type)
 
         if report_as_string:
             self.data_type = ChannelType.STRING
+
+    @property
+    def long_string_max_length(self):
+        'The maximum number of elements (length) of the current value'
+        return super().max_length
 
     @property
     def max_length(self):
@@ -1016,7 +1020,21 @@ class ChannelChar(ChannelData):
 
 class ChannelString(ChannelData):
     data_type = ChannelType.STRING
-    # There is no CTRL or GR variant of STRING.
+
+    def __init__(self, *, alarm=None, value=None, timestamp=None,
+                 max_length=None, string_encoding='latin-1',
+                 reported_record_type='caproto', long_string_max_length=81):
+        super().__init__(alarm=alarm, value=value, timestamp=timestamp,
+                         max_length=max_length,
+                         string_encoding=string_encoding,
+                         reported_record_type=reported_record_type)
+
+        self._long_string_max_length = long_string_max_length
+
+    @property
+    def long_string_max_length(self):
+        'The maximum number of elements (length) of the current value'
+        return self._long_string_max_length
 
     async def write(self, value, *, flags=0, **metadata):
         flags |= (SubscriptionType.DBE_LOG | SubscriptionType.DBE_VALUE)
