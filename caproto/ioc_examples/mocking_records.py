@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import caproto
 from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
 
 
@@ -51,6 +52,11 @@ class RecordMockingIOC(PVGroup):
     # Now that the field specification has been set on B, it can be reused:
     D = pvproperty(value=2.0, mock_record='ao',
                    precision=3, field_spec=B.field_spec)
+
+    E = pvproperty(value='this is a test',
+                   mock_record='stringin',
+                   dtype=caproto.ChannelType.STRING,
+                   )
 
 
 if __name__ == '__main__':

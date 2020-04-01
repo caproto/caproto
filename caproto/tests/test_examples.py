@@ -12,6 +12,8 @@ from . import conftest
 from .conftest import default_setup_module as setup_module  # noqa
 from .conftest import default_teardown_module as teardown_module  # noqa
 
+from caproto.sync.client import read as sync_read
+
 
 @pytest.mark.skipif(os.environ.get("CAPROTO_SKIP_MOTORSIM_TESTS") is not None,
                     reason='No motorsim IOC')
@@ -550,3 +552,28 @@ def test_event_read_collision(request, prefix, async_lib):
     t1.disconnect()
 
     cntx.disconnect()
+
+
+def test_long_strings(request, prefix):
+    from .conftest import run_example_ioc
+    run_example_ioc('caproto.ioc_examples.mocking_records', request=request,
+                    args=['--prefix', prefix], pv_to_check=f'{prefix}E')
+
+    stringin = f'{prefix}E'
+    regular = sync_read(f'{stringin}.VAL', data_type='native')
+    assert regular.data_type == ca.ChannelType.STRING
+    data, = regular.data
+    length = len(data)
+    assert length > 1  # based on the default value in the test
+
+    for dtype in ('native', 'control', 'time', 'graphic'):
+        longstr = sync_read(f'{stringin}.VAL$', data_type=dtype)
+        longstr_data = b''.join(longstr.data)
+        expected_dtype = ca._dbr.field_types[dtype][ca.ChannelType.CHAR]
+        assert longstr.data_type == expected_dtype
+        assert len(longstr.data) == length
+        assert longstr_data == data
+
+    with pytest.raises(TimeoutError):
+        # an analog input .VAL has no long string option
+        sync_read(f'{prefix}A.VAL$', data_type='native')

@@ -8,8 +8,8 @@ import weakref
 import caproto as ca
 from caproto import (apply_arr_filter, get_environment_variables,
                      RemoteProtocolError, CaprotoKeyError, CaprotoRuntimeError,
-                     CaprotoNetworkError)
-from .._dbr import SubscriptionType
+                     CaprotoNetworkError, ChannelType)
+from .._dbr import SubscriptionType, _LongStringChannelType
 
 
 # ** Tuning this parameters will affect the servers' performance **
@@ -408,21 +408,30 @@ class VirtualCircuit:
                                       ca.DEFAULT_PROTOCOL_VERSION)
                 ]
         elif isinstance(command, ca.CreateChanRequest):
+            pvname = command.name
             try:
-                db_entry = self.context[command.name]
+                db_entry = self.context[pvname]
             except KeyError:
                 self.log.debug('Client requested invalid channel name: %s',
-                               command.name)
+                               pvname)
                 to_send = [ca.CreateChFailResponse(cid=command.cid)]
             else:
 
                 access = db_entry.check_access(self.client_hostname,
                                                self.client_username)
 
+                modifiers = ca.parse_record_field(pvname).modifiers
+                data_type = db_entry.data_type
+                data_count = db_entry.max_length
+                if ca.RecordModifiers.long_string in (modifiers or {}):
+                    if data_type in (ChannelType.STRING, ):
+                        data_type = ChannelType.CHAR
+                        data_count = len(db_entry.value)
+
                 to_send = [ca.AccessRightsResponse(cid=command.cid,
                                                    access_rights=access),
-                           ca.CreateChanResponse(data_type=db_entry.data_type,
-                                                 data_count=db_entry.max_length,
+                           ca.CreateChanResponse(data_type=data_type,
+                                                 data_count=data_count,
                                                  cid=command.cid,
                                                  sid=self.circuit.new_channel_id()),
                            ]
@@ -445,9 +454,18 @@ class VirtualCircuit:
             # introducing too much latency.
             await self.write_event.wait(timeout=WRITE_LOCK_TIMEOUT)
 
+            read_data_type = data_type
+            if chan.name.endswith('$'):
+                try:
+                    read_data_type = _LongStringChannelType(read_data_type)
+                except ValueError:
+                    # Not requesting a LONG_STRING type
+                    ...
+
             metadata, data = await db_entry.auth_read(
                 self.client_hostname, self.client_username,
-                data_type, user_address=self.circuit.address)
+                read_data_type, user_address=self.circuit.address,
+            )
 
             old_version = self.circuit.protocol_version < 13
             if command.data_count > 0 or old_version:
@@ -697,11 +715,11 @@ class Context:
             try:
                 (rec_field, rec, field, mods) = ca.parse_record_field(pvname)
             except ValueError:
-                raise ex
+                raise ex from None
 
             if not field and not mods:
-                # No field or modifiers, so there's nothing left to check
-                raise
+                # No field or modifiers, but a trailing '.' is valid
+                return self.pvdb[rec]
 
         # Without the modifiers, try 'record[.field]'
         try:
@@ -720,8 +738,17 @@ class Context:
                 raise CaprotoKeyError(f'Neither record nor field exists: '
                                       f'{rec_field}')
 
-            # Cache record.FIELD for later usage
-            self.pvdb[rec_field] = inst
+        # Verify the modifiers are usable BEFORE caching rec_field in the pvdb:
+        if ca.RecordModifiers.long_string in (mods or {}):
+            if inst.data_type not in (ChannelType.STRING,
+                                      ChannelType.CHAR):
+                raise CaprotoKeyError(
+                    f'Long-string modifier not supported with types '
+                    f'other than string or char ({inst.data_type})'
+                )
+
+        # Cache record.FIELD for later usage
+        self.pvdb[rec_field] = inst
         return inst
 
     async def _broadcaster_queue_iteration(self, addr, commands):

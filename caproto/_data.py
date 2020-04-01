@@ -9,10 +9,10 @@ import copy
 import time
 import weakref
 
-from ._dbr import (DBR_TYPES, ChannelType, native_type, native_types,
-                   timestamp_to_epics, time_types, DBR_STSACK_STRING,
-                   AccessRights, GraphicControlBase, AlarmStatus,
-                   AlarmSeverity, SubscriptionType)
+from ._dbr import (DBR_TYPES, _LongStringChannelType, ChannelType, native_type,
+                   native_types, timestamp_to_epics, time_types,
+                   DBR_STSACK_STRING, AccessRights, GraphicControlBase,
+                   AlarmStatus, AlarmSeverity, SubscriptionType)
 
 from ._utils import CaprotoError, CaprotoValueError, ConversionDirection
 from ._commands import parse_metadata
@@ -385,8 +385,8 @@ class ChannelData:
         return (await self.read(data_type))
 
     async def read(self, data_type):
-        # Subclass might trigger a write here to update self._data
-        # before reading it out.
+        # Subclass might trigger a write here to update self._data before
+        # reading it out.
         return (await self._read(data_type))
 
     async def _read(self, data_type):
@@ -400,14 +400,20 @@ class ChannelData:
             class_name.value = rtyp
             return class_name, b''
 
-        native_to = native_type(data_type)
+        if data_type in _LongStringChannelType:
+            native_to = _LongStringChannelType.LONG_STRING
+            data_type = ChannelType(data_type)
+        else:
+            native_to = native_type(data_type)
+
         values = backend.convert_values(
             values=self._data['value'],
             from_dtype=self.data_type,
             to_dtype=native_to,
             string_encoding=self.string_encoding,
             enum_strings=self._data.get('enum_strings'),
-            direction=ConversionDirection.TO_WIRE)
+            direction=ConversionDirection.TO_WIRE,
+        )
 
         # for native types, there is no dbr metadata - just data
         if data_type in native_types:

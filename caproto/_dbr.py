@@ -78,6 +78,16 @@ class ConnStatus(IntEnum):
 
 
 class ChannelType(IntEnum):
+    '''
+    All channel types supported by Channel Access
+
+    The ones that should be used in servers to specify the type of pvproperty
+    or ChannelData are only "native" types (STRING, INT, FLOAT, ENUM, CHAR,
+    LONG, DOUBLE)
+
+    The remaining channel data types are used for clients requesting additional
+    metadata from the server.
+    '''
     STRING = 0
     INT = 1
     FLOAT = 2
@@ -123,6 +133,20 @@ class ChannelType(IntEnum):
 
     STSACK_STRING = 37
     CLASS_NAME = 38
+
+
+class _LongStringChannelType(IntEnum):
+    '''
+    An internal data type enum which mirrors CHAR values from ChannelType.
+
+    The key difference for this enum is that the server performs a different
+    conversion for STRING -> CHAR and STRING -> LONG_STRING.
+    '''
+    LONG_STRING = 4
+    STS_LONG_STRING = 11
+    TIME_LONG_STRING = 18
+    GR_LONG_STRING = 25
+    CTRL_LONG_STRING = 32
 
 
 class SubscriptionType(IntFlag):
