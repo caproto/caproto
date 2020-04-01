@@ -133,6 +133,18 @@ class VirtualCircuit:
             await self._on_disconnect()
             raise DisconnectedCircuit()
 
+    def _get_ids_from_command(self, command):
+        """Returns (cid, sid) given a command"""
+        cid, sid = None, None
+        if hasattr(command, 'sid'):
+            sid = command.sid
+            cid = self.circuit.channels_sid[sid].cid
+        elif hasattr(command, 'cid'):
+            cid = command.cid
+            sid = self.circuit.channels[cid].sid
+
+        return cid, sid
+
     async def _command_queue_iteration(self, command):
         """
         Coroutine which evaluates one item from the circuit command queue.
@@ -145,15 +157,7 @@ class VirtualCircuit:
         try:
             self.circuit.process_command(command)
         except ca.RemoteProtocolError:
-            if hasattr(command, 'sid'):
-                sid = command.sid
-                cid = self.circuit.channels_sid[sid].cid
-            elif hasattr(command, 'cid'):
-                cid = command.cid
-                sid = self.circuit.channels[cid].sid
-
-            else:
-                cid, sid = None, None
+            cid, sid = self._get_ids_from_command(command)
 
             if cid is not None:
                 try:
@@ -195,11 +199,13 @@ class VirtualCircuit:
                                    'disconnection: %s', command)
                 raise LoopExit('Server error after client disconnection')
 
-            self.log.exception('Server failed to process command: %s',
-                               command)
+            cid, sid = self._get_ids_from_command(command)
+            chan, _ = self._get_db_entry_from_command(command)
+            self.log.exception(
+                'Server failed to process command (sid=%s) (%r): %s',
+                sid, chan.name, command)
 
-            if hasattr(command, 'sid'):
-                cid = self.circuit.channels_sid[command.sid].cid
+            if cid is not None:
                 error_message = f'Python exception: {type(ex).__name__} {ex}'
                 return [ca.ErrorResponse(command, cid,
                                          status=ca.CAStatus.ECA_INTERNAL,
@@ -378,12 +384,15 @@ class VirtualCircuit:
                 await sub_spec.db_entry.unsubscribe(queue, sub_spec)
         return tuple(to_remove)
 
+    def _get_db_entry_from_command(self, command):
+        """Return a database entry from command, determined by the server id"""
+        cid, sid = self._get_ids_from_command(command)
+        chan = self.circuit.channels_sid[sid]
+        db_entry = self.context[chan.name]
+        return chan, db_entry
+
     async def _process_command(self, command):
         '''Process a command from a client, and return the server response'''
-        def get_db_entry():
-            chan = self.circuit.channels_sid[command.sid]
-            db_entry = self.context[chan.name]
-            return chan, db_entry
         tags = self._tags
         if command is ca.DISCONNECTED:
             raise DisconnectedCircuit()
@@ -442,7 +451,7 @@ class VirtualCircuit:
             self.client_username = command.name
             to_send = []
         elif isinstance(command, (ca.ReadNotifyRequest, ca.ReadRequest)):
-            chan, db_entry = get_db_entry()
+            chan, db_entry = self._get_db_entry_from_command(command)
             try:
                 data_type = command.data_type
             except ValueError:
@@ -490,7 +499,7 @@ class VirtualCircuit:
                                  notify=notify)
                        ]
         elif isinstance(command, (ca.WriteRequest, ca.WriteNotifyRequest)):
-            chan, db_entry = get_db_entry()
+            chan, db_entry = self._get_db_entry_from_command(command)
             client_waiting = isinstance(command, ca.WriteNotifyRequest)
 
             async def handle_write():
@@ -536,7 +545,7 @@ class VirtualCircuit:
             await self._start_write_task(handle_write)
             to_send = []
         elif isinstance(command, ca.EventAddRequest):
-            chan, db_entry = get_db_entry()
+            chan, db_entry = self._get_db_entry_from_command(command)
             # TODO no support for deprecated low/high/to
             sub = Subscription(mask=command.mask,
                                channel_filter=chan.channel_filter,
@@ -565,7 +574,7 @@ class VirtualCircuit:
                                      sub)
             to_send = []
         elif isinstance(command, ca.EventCancelRequest):
-            chan, db_entry = get_db_entry()
+            chan, db_entry = self._get_db_entry_from_command(command)
             removed = await self._cull_subscriptions(
                 db_entry,
                 lambda sub: sub.subscriptionid == command.subscriptionid)
@@ -601,7 +610,7 @@ class VirtualCircuit:
                                   *self.circuit.address)
             to_send = []
         elif isinstance(command, ca.ClearChannelRequest):
-            chan, db_entry = get_db_entry()
+            chan, db_entry = self._get_db_entry_from_command(command)
             await self._cull_subscriptions(
                 db_entry,
                 lambda sub: sub.channel == command.sid)
