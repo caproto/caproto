@@ -83,6 +83,7 @@ def register_record(cls):
 class RecordFieldGroup(PVGroup):
     _scan_rate_sec = None
     _dtype = None  # to be set by subclasses
+    has_val_field = True
 
     alarm_acknowledge_severity = pvproperty(
         name='ACKS',
@@ -393,6 +394,7 @@ class _LimitsLong(PVGroup):
 class AiFields(RecordFieldGroup, _Limits):
     _record_type = "ai"
     _dtype = ChannelType.DOUBLE  # DTYP of .VAL
+    has_val_field = True
     device_type = pvproperty(
         name='DTYP',
         dtype=ChannelType.ENUM,
@@ -518,7 +520,7 @@ class AiFields(RecordFieldGroup, _Limits):
                                doc='Sim. Mode Scan')
     # current_egu_value = pvproperty(name='VAL',
     #      dtype=ChannelType.DOUBLE,
-    # doc='Current EGU Value'    #      )
+    # doc='Current EGU Value')
     _link_parent_attribute(
         display_precision,
         'precision',
@@ -531,6 +533,7 @@ class AiFields(RecordFieldGroup, _Limits):
 class AsubFields(RecordFieldGroup):
     _record_type = "aSub"
     _dtype = ChannelType.LONG  # DTYP of .VAL
+    has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=('Soft Channel', ),
@@ -1336,7 +1339,7 @@ class AsubFields(RecordFieldGroup):
                                       read_only=True)
     # subr_return_value = pvproperty(name='VAL',
     #      dtype=ChannelType.LONG,
-    # doc='Subr. return value'    #      )
+    # doc='Subr. return value')
     _link_parent_attribute(
         display_precision,
         'precision',
@@ -1347,6 +1350,7 @@ class AsubFields(RecordFieldGroup):
 class AaiFields(RecordFieldGroup):
     _record_type = "aai"
     _dtype = None  # DTYP of .VAL
+    has_val_field = False
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=('Soft Channel', ),
@@ -1436,13 +1440,17 @@ class AaiFields(RecordFieldGroup):
         low_operating_range,
         'lower_ctrl_limit',
     )
-    _link_parent_attribute(number_of_elements, 'max_length', use_setattr=True)
+    _link_parent_attribute(number_of_elements,
+                           'max_length',
+                           use_setattr=True,
+                           read_only=True)
 
 
 @register_record
 class AaoFields(RecordFieldGroup):
     _record_type = "aao"
     _dtype = None  # DTYP of .VAL
+    has_val_field = False
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=('Soft Channel', ),
@@ -1532,13 +1540,17 @@ class AaoFields(RecordFieldGroup):
         low_operating_range,
         'lower_ctrl_limit',
     )
-    _link_parent_attribute(number_of_elements, 'max_length', use_setattr=True)
+    _link_parent_attribute(number_of_elements,
+                           'max_length',
+                           use_setattr=True,
+                           read_only=True)
 
 
 @register_record
 class AoFields(RecordFieldGroup, _Limits):
     _record_type = "ao"
     _dtype = ChannelType.DOUBLE  # DTYP of .VAL
+    has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=('Soft Channel', 'Raw Soft Channel',
@@ -1698,7 +1710,7 @@ class AoFields(RecordFieldGroup, _Limits):
                                doc='Sim. Mode Scan')
     # desired_output = pvproperty(name='VAL',
     #      dtype=ChannelType.DOUBLE,
-    # doc='Desired Output'    #      )
+    # doc='Desired Output')
     _link_parent_attribute(
         display_precision,
         'precision',
@@ -1711,6 +1723,7 @@ class AoFields(RecordFieldGroup, _Limits):
 class AsynFields(RecordFieldGroup):
     _record_type = "asyn"
     _dtype = ChannelType.LONG  # DTYP of .VAL
+    has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=('asynRecordDevice', ),
@@ -2014,16 +2027,17 @@ class AsynFields(RecordFieldGroup):
                            doc='host info')
     # disconnect_on_timeout = pvproperty(name='DRTO',
     #      dtype=ChannelType.ENUM,
-    # enum_strings=menus.ipDRTO.get_string_tuple(),doc='Disconnect on timeout'    #      )
+    # enum_strings=menus.ipDRTO.get_string_tuple(),doc='Disconnect on timeout')
     # value_field = pvproperty(name='VAL',
     #      dtype=ChannelType.LONG,
-    # doc='Value field (unused)'    #      )
+    # doc='Value field (unused)')
 
 
 @register_record
 class BiFields(RecordFieldGroup):
     _record_type = "bi"
     _dtype = ChannelType.ENUM  # DTYP of .VAL
+    has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=('Soft Channel', 'Raw Soft Channel',
@@ -2111,7 +2125,7 @@ class BiFields(RecordFieldGroup):
                                doc='Sim. Mode Scan')
     # current_value = pvproperty(name='VAL',
     #      dtype=ChannelType.ENUM,
-    # doc='Current Value'    #      )
+    # doc='Current Value')
     _link_enum_strings(zero_name, index=0)
     _link_enum_strings(one_name, index=1)
 
@@ -2120,6 +2134,7 @@ class BiFields(RecordFieldGroup):
 class BoFields(RecordFieldGroup):
     _record_type = "bo"
     _dtype = ChannelType.ENUM  # DTYP of .VAL
+    has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=('Soft Channel', 'Raw Soft Channel',
@@ -2232,7 +2247,7 @@ class BoFields(RecordFieldGroup):
                                doc='Sim. Mode Scan')
     # current_value = pvproperty(name='VAL',
     #      dtype=ChannelType.ENUM,
-    # doc='Current Value'    #      )
+    # doc='Current Value')
     _link_enum_strings(zero_name, index=0)
     _link_enum_strings(one_name, index=1)
 
@@ -2241,6 +2256,7 @@ class BoFields(RecordFieldGroup):
 class CalcFields(RecordFieldGroup, _Limits):
     _record_type = "calc"
     _dtype = ChannelType.DOUBLE  # DTYP of .VAL
+    has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=('Soft Channel', ),
@@ -2384,7 +2400,7 @@ class CalcFields(RecordFieldGroup, _Limits):
                                  read_only=True)
     # result = pvproperty(name='VAL',
     #      dtype=ChannelType.DOUBLE,
-    # doc='Result'    #      )
+    # doc='Result')
     _link_parent_attribute(
         display_precision,
         'precision',
@@ -2397,6 +2413,7 @@ class CalcFields(RecordFieldGroup, _Limits):
 class CalcoutFields(RecordFieldGroup, _Limits):
     _record_type = "calcout"
     _dtype = ChannelType.DOUBLE  # DTYP of .VAL
+    has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=('Soft Channel',
@@ -2665,7 +2682,7 @@ class CalcoutFields(RecordFieldGroup, _Limits):
                                  read_only=True)
     # result = pvproperty(name='VAL',
     #      dtype=ChannelType.DOUBLE,
-    # doc='Result'    #      )
+    # doc='Result')
     _link_parent_attribute(
         display_precision,
         'precision',
@@ -2678,6 +2695,7 @@ class CalcoutFields(RecordFieldGroup, _Limits):
 class CompressFields(RecordFieldGroup):
     _record_type = "compress"
     _dtype = None  # DTYP of .VAL
+    has_val_field = False
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=('Soft Channel', ),
@@ -2745,7 +2763,7 @@ class CompressFields(RecordFieldGroup):
                         read_only=True)
     # buffering_algorithm = pvproperty(name='BALG',
     #      dtype=ChannelType.ENUM,
-    # enum_strings=menus.bufferingALG.get_string_tuple(),doc='Buffering Algorithm'    #      )
+    # enum_strings=menus.bufferingALG.get_string_tuple(),doc='Buffering Algorithm')
     _link_parent_attribute(
         high_operating_range,
         'upper_ctrl_limit',
@@ -2764,6 +2782,7 @@ class CompressFields(RecordFieldGroup):
 class DfanoutFields(RecordFieldGroup, _Limits):
     _record_type = "dfanout"
     _dtype = ChannelType.DOUBLE  # DTYP of .VAL
+    has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=('Soft Channel', ),
@@ -2842,7 +2861,7 @@ class DfanoutFields(RecordFieldGroup, _Limits):
                                doc='Output Spec H')
     # desired_output = pvproperty(name='VAL',
     #      dtype=ChannelType.DOUBLE,
-    # doc='Desired Output'    #      )
+    # doc='Desired Output')
     _link_parent_attribute(
         display_precision,
         'precision',
@@ -2855,6 +2874,7 @@ class DfanoutFields(RecordFieldGroup, _Limits):
 class EventFields(RecordFieldGroup):
     _record_type = "event"
     _dtype = ChannelType.STRING  # DTYP of .VAL
+    has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=('Soft Channel', ),
@@ -2898,13 +2918,14 @@ class EventFields(RecordFieldGroup):
                                doc='Sim. Mode Scan')
     # event_name_to_post = pvproperty(name='VAL',
     #      dtype=ChannelType.CHAR,
-    # max_length=40,report_as_string=True,doc='Event Name To Post'    #      )
+    # max_length=40,report_as_string=True,doc='Event Name To Post')
 
 
 @register_record
 class FanoutFields(RecordFieldGroup):
     _record_type = "fanout"
     _dtype = ChannelType.LONG  # DTYP of .VAL
+    has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=('Soft Channel', ),
@@ -2976,13 +2997,14 @@ class FanoutFields(RecordFieldGroup):
                                      doc='Shift for Mask mode')
     # used_to_trigger = pvproperty(name='VAL',
     #      dtype=ChannelType.LONG,
-    # doc='Used to trigger'    #      )
+    # doc='Used to trigger')
 
 
 @register_record
 class HistogramFields(RecordFieldGroup):
     _record_type = "histogram"
     _dtype = None  # DTYP of .VAL
+    has_val_field = False
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=('Soft Channel', ),
@@ -3085,6 +3107,7 @@ class HistogramFields(RecordFieldGroup):
 class LonginFields(RecordFieldGroup, _LimitsLong):
     _record_type = "longin"
     _dtype = ChannelType.LONG  # DTYP of .VAL
+    has_val_field = True
     device_type = pvproperty(
         name='DTYP',
         dtype=ChannelType.ENUM,
@@ -3161,7 +3184,7 @@ class LonginFields(RecordFieldGroup, _LimitsLong):
                                doc='Sim. Mode Scan')
     # current_value = pvproperty(name='VAL',
     #      dtype=ChannelType.LONG,
-    # doc='Current value'    #      )
+    # doc='Current value')
     _link_parent_attribute(archive_deadband, 'log_atol', use_setattr=True)
     _link_parent_attribute(monitor_deadband, 'value_atol', use_setattr=True)
 
@@ -3170,6 +3193,7 @@ class LonginFields(RecordFieldGroup, _LimitsLong):
 class LongoutFields(RecordFieldGroup, _LimitsLong):
     _record_type = "longout"
     _dtype = ChannelType.LONG  # DTYP of .VAL
+    has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=('Soft Channel',
@@ -3258,7 +3282,7 @@ class LongoutFields(RecordFieldGroup, _LimitsLong):
                                doc='Sim. Mode Scan')
     # desired_output = pvproperty(name='VAL',
     #      dtype=ChannelType.LONG,
-    # doc='Desired Output'    #      )
+    # doc='Desired Output')
     _link_parent_attribute(archive_deadband, 'log_atol', use_setattr=True)
     _link_parent_attribute(monitor_deadband, 'value_atol', use_setattr=True)
 
@@ -3267,6 +3291,7 @@ class LongoutFields(RecordFieldGroup, _LimitsLong):
 class MbbiFields(RecordFieldGroup):
     _record_type = "mbbi"
     _dtype = ChannelType.ENUM  # DTYP of .VAL
+    has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=('Soft Channel', 'Raw Soft Channel',
@@ -3563,7 +3588,7 @@ class MbbiFields(RecordFieldGroup):
                             doc='Zero Value')
     # current_value = pvproperty(name='VAL',
     #      dtype=ChannelType.ENUM,
-    # doc='Current Value'    #      )
+    # doc='Current Value')
     _link_enum_strings(zero_string, index=0)
     _link_enum_strings(one_string, index=1)
     _link_enum_strings(two_string, index=2)
@@ -3586,6 +3611,7 @@ class MbbiFields(RecordFieldGroup):
 class MbbidirectFields(RecordFieldGroup):
     _record_type = "mbbiDirect"
     _dtype = ChannelType.LONG  # DTYP of .VAL
+    has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=('Soft Channel', 'Raw Soft Channel',
@@ -3681,13 +3707,14 @@ class MbbidirectFields(RecordFieldGroup):
                                doc='Sim. Mode Scan')
     # current_value = pvproperty(name='VAL',
     #      dtype=ChannelType.LONG,
-    # doc='Current Value'    #      )
+    # doc='Current Value')
 
 
 @register_record
 class MbboFields(RecordFieldGroup):
     _record_type = "mbbo"
     _dtype = ChannelType.ENUM  # DTYP of .VAL
+    has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=('Soft Channel', 'Raw Soft Channel',
@@ -3998,7 +4025,7 @@ class MbboFields(RecordFieldGroup):
                             doc='Zero Value')
     # desired_value = pvproperty(name='VAL',
     #      dtype=ChannelType.ENUM,
-    # doc='Desired Value'    #      )
+    # doc='Desired Value')
     _link_enum_strings(one_string, index=1)
     _link_enum_strings(two_string, index=2)
     _link_enum_strings(three_string, index=3)
@@ -4020,6 +4047,7 @@ class MbboFields(RecordFieldGroup):
 class MbbodirectFields(RecordFieldGroup):
     _record_type = "mbboDirect"
     _dtype = ChannelType.LONG  # DTYP of .VAL
+    has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=('Soft Channel', 'Raw Soft Channel',
@@ -4137,13 +4165,14 @@ class MbbodirectFields(RecordFieldGroup):
                                doc='Sim. Mode Scan')
     # word = pvproperty(name='VAL',
     #      dtype=ChannelType.LONG,
-    # doc='Word'    #      )
+    # doc='Word')
 
 
 @register_record
 class MotorFields(RecordFieldGroup, _Limits):
     _record_type = "motor"
     _dtype = ChannelType.DOUBLE  # DTYP of .VAL
+    has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=('asynMotor', 'Motor Simulation'),
@@ -4542,7 +4571,7 @@ class MotorFields(RecordFieldGroup, _Limits):
                                    doc='Setpoint Deadband (EGU)')
     # user_desired_value = pvproperty(name='VAL',
     #      dtype=ChannelType.DOUBLE,
-    # doc='User Desired Value (EGU'    #      )
+    # doc='User Desired Value (EGU')
     _link_parent_attribute(
         display_precision,
         'precision',
@@ -4555,6 +4584,7 @@ class MotorFields(RecordFieldGroup, _Limits):
 class PermissiveFields(RecordFieldGroup):
     _record_type = "permissive"
     _dtype = ChannelType.LONG  # DTYP of .VAL
+    has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=('Soft Channel', ),
@@ -4575,13 +4605,14 @@ class PermissiveFields(RecordFieldGroup):
                               doc='Button Label')
     # status = pvproperty(name='VAL',
     #      dtype=ChannelType.INT,
-    # doc='Status'    #      )
+    # doc='Status')
 
 
 @register_record
 class SelFields(RecordFieldGroup, _Limits):
     _record_type = "sel"
     _dtype = ChannelType.DOUBLE  # DTYP of .VAL
+    has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=('Soft Channel', ),
@@ -4728,7 +4759,7 @@ class SelFields(RecordFieldGroup, _Limits):
                                  read_only=True)
     # result = pvproperty(name='VAL',
     #      dtype=ChannelType.DOUBLE,
-    # doc='Result',read_only=True    #      )
+    # doc='Result',read_only=True)
     _link_parent_attribute(
         display_precision,
         'precision',
@@ -4741,6 +4772,7 @@ class SelFields(RecordFieldGroup, _Limits):
 class SeqFields(RecordFieldGroup):
     _record_type = "seq"
     _dtype = ChannelType.LONG  # DTYP of .VAL
+    has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=('Soft Channel', ),
@@ -4910,7 +4942,7 @@ class SeqFields(RecordFieldGroup):
                                      doc='Shift for Mask mode')
     # used_to_trigger = pvproperty(name='VAL',
     #      dtype=ChannelType.LONG,
-    # doc='Used to trigger'    #      )
+    # doc='Used to trigger')
     _link_parent_attribute(
         display_precision,
         'precision',
@@ -4921,6 +4953,7 @@ class SeqFields(RecordFieldGroup):
 class StateFields(RecordFieldGroup):
     _record_type = "state"
     _dtype = ChannelType.STRING  # DTYP of .VAL
+    has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=('Soft Channel', ),
@@ -4933,13 +4966,14 @@ class StateFields(RecordFieldGroup):
                             read_only=True)
     # value = pvproperty(name='VAL',
     #      dtype=ChannelType.CHAR,
-    # max_length=20,report_as_string=True,doc='Value'    #      )
+    # max_length=20,report_as_string=True,doc='Value')
 
 
 @register_record
 class StringinFields(RecordFieldGroup):
     _record_type = "stringin"
     _dtype = ChannelType.STRING  # DTYP of .VAL
+    has_val_field = True
     device_type = pvproperty(
         name='DTYP',
         dtype=ChannelType.ENUM,
@@ -5002,13 +5036,14 @@ class StringinFields(RecordFieldGroup):
                                doc='Sim. Mode Scan')
     # current_value = pvproperty(name='VAL',
     #      dtype=ChannelType.CHAR,
-    # max_length=40,report_as_string=True,doc='Current Value'    #      )
+    # max_length=40,report_as_string=True,doc='Current Value')
 
 
 @register_record
 class StringoutFields(RecordFieldGroup):
     _record_type = "stringout"
     _dtype = ChannelType.STRING  # DTYP of .VAL
+    has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=('Soft Channel',
@@ -5083,13 +5118,14 @@ class StringoutFields(RecordFieldGroup):
                                doc='Sim. Mode Scan')
     # current_value = pvproperty(name='VAL',
     #      dtype=ChannelType.CHAR,
-    # max_length=40,report_as_string=True,doc='Current Value'    #      )
+    # max_length=40,report_as_string=True,doc='Current Value')
 
 
 @register_record
 class SubFields(RecordFieldGroup, _Limits):
     _record_type = "sub"
     _dtype = ChannelType.DOUBLE  # DTYP of .VAL
+    has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=('Soft Channel', ),
@@ -5237,7 +5273,7 @@ class SubFields(RecordFieldGroup, _Limits):
                                  doc='Subroutine Name')
     # result = pvproperty(name='VAL',
     #      dtype=ChannelType.DOUBLE,
-    # doc='Result'    #      )
+    # doc='Result')
     _link_parent_attribute(
         display_precision,
         'precision',
@@ -5250,6 +5286,7 @@ class SubFields(RecordFieldGroup, _Limits):
 class SubarrayFields(RecordFieldGroup):
     _record_type = "subArray"
     _dtype = None  # DTYP of .VAL
+    has_val_field = False
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=('Soft Channel', ),
@@ -5307,14 +5344,21 @@ class SubarrayFields(RecordFieldGroup):
         low_operating_range,
         'lower_ctrl_limit',
     )
-    _link_parent_attribute(maximum_elements, 'length', use_setattr=True)
-    _link_parent_attribute(number_of_elements, 'max_length', use_setattr=True)
+    _link_parent_attribute(maximum_elements,
+                           'length',
+                           use_setattr=True,
+                           read_only=True)
+    _link_parent_attribute(number_of_elements,
+                           'max_length',
+                           use_setattr=True,
+                           read_only=True)
 
 
 @register_record
 class WaveformFields(RecordFieldGroup):
     _record_type = "waveform"
     _dtype = None  # DTYP of .VAL
+    has_val_field = False
     device_type = pvproperty(
         name='DTYP',
         dtype=ChannelType.ENUM,
@@ -5421,13 +5465,17 @@ class WaveformFields(RecordFieldGroup):
         low_operating_range,
         'lower_ctrl_limit',
     )
-    _link_parent_attribute(number_of_elements, 'max_length', use_setattr=True)
+    _link_parent_attribute(number_of_elements,
+                           'max_length',
+                           use_setattr=True,
+                           read_only=True)
 
 
 @register_record
 class Int64inFields(RecordFieldGroup, _LimitsLong):
     _record_type = "int64in"
     _dtype = ChannelType.LONG  # DTYP of .VAL
+    has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=('Soft Channel',
@@ -5503,7 +5551,7 @@ class Int64inFields(RecordFieldGroup, _LimitsLong):
                                   doc='Simulation Value')
     # current_value = pvproperty(name='VAL',
     #      dtype=ChannelType.LONG,
-    # doc='Current value'    #      )
+    # doc='Current value')
     _link_parent_attribute(archive_deadband, 'log_atol', use_setattr=True)
     _link_parent_attribute(monitor_deadband, 'value_atol', use_setattr=True)
 
@@ -5512,6 +5560,7 @@ class Int64inFields(RecordFieldGroup, _LimitsLong):
 class Int64outFields(RecordFieldGroup, _LimitsLong):
     _record_type = "int64out"
     _dtype = ChannelType.LONG  # DTYP of .VAL
+    has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=('Soft Channel',
@@ -5599,7 +5648,7 @@ class Int64outFields(RecordFieldGroup, _LimitsLong):
                                doc='Sim. Mode Scan')
     # desired_output = pvproperty(name='VAL',
     #      dtype=ChannelType.LONG,
-    # doc='Desired Output'    #      )
+    # doc='Desired Output')
     _link_parent_attribute(archive_deadband, 'log_atol', use_setattr=True)
     _link_parent_attribute(monitor_deadband, 'value_atol', use_setattr=True)
 
@@ -5608,6 +5657,7 @@ class Int64outFields(RecordFieldGroup, _LimitsLong):
 class LsiFields(RecordFieldGroup):
     _record_type = "lsi"
     _dtype = None  # DTYP of .VAL
+    has_val_field = False
     device_type = pvproperty(
         name='DTYP',
         dtype=ChannelType.ENUM,
@@ -5674,6 +5724,7 @@ class LsiFields(RecordFieldGroup):
 class LsoFields(RecordFieldGroup):
     _record_type = "lso"
     _dtype = None  # DTYP of .VAL
+    has_val_field = False
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=('Soft Channel',
@@ -5758,6 +5809,7 @@ class LsoFields(RecordFieldGroup):
 class PrintfFields(RecordFieldGroup):
     _record_type = "printf"
     _dtype = None  # DTYP of .VAL
+    has_val_field = False
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=('Soft Channel',
