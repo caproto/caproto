@@ -10,11 +10,12 @@ def start_ioc(record_type, *, ioc_options, run_options):
 
     default_values = {
         ChannelType.CHAR: 'a',
+        ChannelType.STRING: "string",
         ChannelType.DOUBLE: 0.0,
         ChannelType.LONG: 0,
         ChannelType.ENUM: 0,  # TODO
     }
-    default_value = default_values[val_dtype]
+    default_value = default_values.get(val_dtype, 0)
 
     class RecordMockingIOC(PVGroup):
         A = pvproperty(
