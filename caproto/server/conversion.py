@@ -322,6 +322,9 @@ def record_to_field_info(record_type, dbd_info, dtypes):
             kwargs['enum_strings'] = (f'menus.{field_info["menu"]}'
                                       '.get_string_tuple()')
         elif type_ == 'DBF_DEVICE':
+            if not dtypes:
+                # TODO: empty enums are problematic for caproto at the moment
+                dtypes = ('Soft Channel', )
             kwargs['enum_strings'] = repr(tuple(dtypes))
 
         if prompt:
@@ -378,10 +381,17 @@ ATTR_RENAMES = {
     'force_processing': 'process_record',
     'forward_process_link': 'forward_link',
 }
+ATTR_FIXES = {
+    'aSub': {
+        'ONVH': 'num_elements_in_ovlh',
+    },
+}
+
 ATTR_REPLACES = {
     re.compile('^alarm_ack_'): 'alarm_acknowledge_',
     re.compile('_sevrty$'): '_severity',
 }
+
 MIXINS = (records_mod._Limits, records_mod._LimitsLong)
 MIXIN_SPECS = {
     mixin: {pv.pvspec.name: pv.pvspec.dtype for pv in mixin._pvs_.values()}
@@ -389,8 +399,12 @@ MIXIN_SPECS = {
 }
 
 
-def _get_attr_name(attr_name):
+def _get_attr_name(record_type, attr_name, field_name):
     'Apply any transformations specified in ATTR_RENAMES/REPLACES'
+    manual_fix = ATTR_FIXES.get(record_type, {}).get(field_name, None)
+    if manual_fix is not None:
+        return manual_fix
+
     attr_name = ATTR_RENAMES.get(attr_name, attr_name)
     for re_replace, repl_to in ATTR_REPLACES.items():
         attr_name = re_replace.sub(repl_to, attr_name)
@@ -437,7 +451,7 @@ def record_to_template_dict(record_type, dbd_info, dtypes, *,
     for item in record_to_field_info(record_type, dbd_info,
                                      dtypes.get(record_type, [])):
         attr_name, cls, kwargs, finfo = item
-        attr_name = _get_attr_name(attr_name)
+        attr_name = _get_attr_name(record_type, attr_name, finfo['field'])
         # note to self: next line is e.g.,
         #   ChannelDouble -> ChannelDouble(, ... dtype=ChannelType.FLOAT)
         dtype = DTYPE_OVERRIDES.get(finfo['type'], cls.data_type.name)
