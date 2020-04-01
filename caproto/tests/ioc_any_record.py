@@ -13,16 +13,24 @@ def start_ioc(record_type, *, ioc_options, run_options):
         ChannelType.STRING: "string",
         ChannelType.DOUBLE: 0.0,
         ChannelType.LONG: 0,
-        ChannelType.ENUM: 0,  # TODO
+        ChannelType.ENUM: 0,
     }
     default_value = default_values.get(val_dtype, 0)
 
+    rec_kwargs = dict(
+        value=default_value,
+        mock_record=record_type,
+        dtype=val_dtype,
+    )
+
+    if val_dtype == ChannelType.ENUM:
+        rec_kwargs.update(**dict(
+            enum_strings=['zero', 'one', 'two'],
+            value='zero',
+        ))
+
     class RecordMockingIOC(PVGroup):
-        A = pvproperty(
-            value=default_value,
-            mock_record=record_type,
-            dtype=val_dtype,
-        )
+        A = pvproperty(**rec_kwargs)
 
     ioc = RecordMockingIOC(**ioc_options)
 
