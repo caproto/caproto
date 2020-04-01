@@ -36,7 +36,7 @@ type_equal = {
 
 @pytest.mark.parametrize(
     'include_long_strings',
-    [pytest.param(True, marks=pytest.mark.xfail, id='all'),
+    [pytest.param(True, id='all'),
      pytest.param(False, id='without-long-strings'),
      ]
 )
