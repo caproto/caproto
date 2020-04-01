@@ -34,18 +34,11 @@ type_equal = {
 }
 
 
-@pytest.mark.parametrize(
-    'include_long_strings',
-    [pytest.param(True, id='all'),
-     pytest.param(False, id='without-long-strings'),
-     ]
-)
 def test_record_compliance(request, prefix, record_type_name,
-                           record_type_to_fields, include_long_strings):
+                           record_type_to_fields):
     fields = {
         field: field_info
         for field, field_info in record_type_to_fields[record_type_name].items()
-        if include_long_strings or not field.endswith('$')
     }
 
     # host a caproto record to test(you could also try this test on a real record).
