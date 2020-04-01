@@ -202,8 +202,8 @@ class VirtualCircuit:
             cid, sid = self._get_ids_from_command(command)
             chan, _ = self._get_db_entry_from_command(command)
             self.log.exception(
-                'Server failed to process command (sid=%s) (%r): %s',
-                sid, chan.name, command)
+                'Server failed to process command (%r): %s',
+                chan.name, command)
 
             if cid is not None:
                 error_message = f'Python exception: {type(ex).__name__} {ex}'
