@@ -234,9 +234,9 @@ def _preprocess_string_from_wire(values, to_dtype, string_encoding,
     elif to_dtype in native_int_types:
         # TODO ca_test: for enums, string arrays seem to work, but not
         # scalars?
-        return [int(v) for v in values]
+        return [int(v) if v else 0 for v in values]
     elif to_dtype in native_float_types:
-        return [float(v) for v in values]
+        return [float(v) if v else 0.0 for v in values]
 
 
 def _preprocess_string_to_wire(values, to_dtype, string_encoding,
@@ -264,9 +264,9 @@ def _preprocess_string_to_wire(values, to_dtype, string_encoding,
                 return list(encode_or_fail(values[0], string_encoding))
             if isinstance(values[0], bytes):
                 return list(values[0])
-        return [int(v) for v in values]
+        return [int(v) if v else 0 for v in values]
     elif to_dtype in native_float_types:
-        return [float(v) for v in values]
+        return [float(v) if v else 0.0 for v in values]
 
 
 _custom_preprocess = {
