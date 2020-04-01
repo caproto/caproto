@@ -968,6 +968,24 @@ class ChannelChar(ChannelData):
     'CHAR data which masquerades as a string'
     data_type = ChannelType.CHAR
 
+    def __init__(self, *, alarm=None, value=None, timestamp=None,
+                 max_length=None, string_encoding='latin-1',
+                 reported_record_type='caproto', report_as_string=False):
+        super().__init__(
+            alarm=alarm, value=value, timestamp=timestamp,
+            max_length=max_length, string_encoding=string_encoding,
+            reported_record_type=reported_record_type)
+
+        if report_as_string:
+            self.data_type = ChannelType.STRING
+
+    @property
+    def max_length(self):
+        'The number of elements (length) of the current value'
+        if self.data_type == ChannelType.STRING:
+            return 1
+        return super().max_length
+
     def preprocess_value(self, value):
         value = super().preprocess_value(value)
 

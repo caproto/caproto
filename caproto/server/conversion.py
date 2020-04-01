@@ -308,6 +308,7 @@ def record_to_field_info(record_type, dbd_info):
         if type_ == 'DBF_STRING' and size > 0:
             type_ = 'DBF_UCHAR'
             kwargs['max_length'] = size
+            kwargs['report_as_string'] = True
         elif size > 1:
             kwargs['max_length'] = size
 
