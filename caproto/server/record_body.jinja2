@@ -1,4 +1,5 @@
-        {% for f in rec.fields | sort(attribute='sort_id') %}
+{% for f in rec.fields | sort(attribute='sort_id') %}
+{% if f.dtype %}
     {%+ if f.comment %}# {% endif %}{{ f.attr }} = pvproperty(name='{{ f.field_name }}',
     {%+ if f.comment %}# {% endif %}     dtype=ChannelType.{{ f.dtype }},
     {%+ if f.comment %}# {% endif %}     {% for kwarg, value in f.kwargs.items() -%}
@@ -6,9 +7,14 @@
                                          {%- if not loop.last %},{% endif -%}
                                          {%- endfor %}
     {%+ if f.comment %}# {% endif %}     )
-        {% endfor%}
-        {% for link in rec.links %}
+{% else %}
+    {{ f.attr }} = None  # no access to field {{ f.field_name }}
+{% endif %}
+
+{% endfor%}
+{% for link in rec.links %}
     _link_parent_attribute({{ link.field_attr }}, '{{ link.channeldata_attr }}',
     {%- if link.use_setattr -%} use_setattr=True {%- endif -%}
     )
-        {% endfor %}
+{% endfor %}
+    # End of {{rec.name}}

@@ -334,11 +334,12 @@ def record_to_field_info(record_type, dbd_info, dtypes):
             kwargs['read_only'] = True
 
         type_class = DBD_TYPE_INFO[type_]
-        attr_name = get_attr_name_from_dbd_prompt(field_name, prompt)
+        attr_name = get_attr_name_from_dbd_prompt(
+            record_type, field_name, prompt)
         yield attr_name, type_class, kwargs, field_info
 
 
-def get_attr_name_from_dbd_prompt(field_name, prompt):
+def get_attr_name_from_dbd_prompt(record_type, field_name, prompt):
     'Attribute name for fields: e.g., "Sim. Mode Scan" -> "sim_mode_scan"'
     attr_name = prompt.lower()
     # If there's a parenthesized part not at the beginning, remove it:
@@ -354,6 +355,18 @@ def get_attr_name_from_dbd_prompt(field_name, prompt):
     attr_name = attr_name.strip('_') or field_name.lower()
     if keyword.iskeyword(attr_name):
         attr_name = f'{attr_name}_'
+    return _fix_attr_name(record_type, attr_name, field_name)
+
+
+def _fix_attr_name(record_type, attr_name, field_name):
+    'Apply any transformations specified in ATTR_RENAMES/REPLACES'
+    manual_fix = ATTR_FIXES.get(record_type, {}).get(field_name, None)
+    if manual_fix is not None:
+        return manual_fix
+
+    attr_name = ATTR_RENAMES.get(attr_name, attr_name)
+    for re_replace, repl_to in ATTR_REPLACES.items():
+        attr_name = re_replace.sub(repl_to, attr_name)
     return attr_name
 
 
@@ -399,18 +412,6 @@ MIXIN_SPECS = {
 }
 
 
-def _get_attr_name(record_type, attr_name, field_name):
-    'Apply any transformations specified in ATTR_RENAMES/REPLACES'
-    manual_fix = ATTR_FIXES.get(record_type, {}).get(field_name, None)
-    if manual_fix is not None:
-        return manual_fix
-
-    attr_name = ATTR_RENAMES.get(attr_name, attr_name)
-    for re_replace, repl_to in ATTR_REPLACES.items():
-        attr_name = re_replace.sub(repl_to, attr_name)
-    return attr_name
-
-
 def record_to_template_dict(record_type, dbd_info, dtypes, *,
                             skip_fields=None):
     'Record name -> yields code to create a PVGroup for all fields'
@@ -451,7 +452,6 @@ def record_to_template_dict(record_type, dbd_info, dtypes, *,
     for item in record_to_field_info(record_type, dbd_info,
                                      dtypes.get(record_type, [])):
         attr_name, cls, kwargs, finfo = item
-        attr_name = _get_attr_name(record_type, attr_name, finfo['field'])
         # note to self: next line is e.g.,
         #   ChannelDouble -> ChannelDouble(, ... dtype=ChannelType.FLOAT)
         dtype = DTYPE_OVERRIDES.get(finfo['type'], cls.data_type.name)
