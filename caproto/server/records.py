@@ -120,7 +120,7 @@ class RecordFieldGroup(PVGroup):
                                doc='Disable Value')
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
-                             enum_strings=(),
+                             enum_strings=('Soft Channel', ),
                              doc='Device Type')
     event_name = pvproperty(name='EVNT',
                             dtype=ChannelType.CHAR,
@@ -533,7 +533,7 @@ class AsubFields(RecordFieldGroup):
     _dtype = ChannelType.LONG  # DTYP of .VAL
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
-                             enum_strings=(),
+                             enum_strings=('Soft Channel', ),
                              doc='Device Type')
     old_return_value = pvproperty(name='OVAL',
                                   dtype=ChannelType.LONG,
@@ -1211,7 +1211,7 @@ class AsubFields(RecordFieldGroup):
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in OVLG',
                                       read_only=True)
-    num_elements_in_valh = pvproperty(name='ONVH',
+    num_elements_in_ovlh = pvproperty(name='ONVH',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in VAlH',
                                       read_only=True)
@@ -1330,6 +1330,10 @@ class AsubFields(RecordFieldGroup):
     output_link_u = pvproperty(name='OUTU',
                                dtype=ChannelType.STRING,
                                doc='Output Link U')
+    num_elements_in_valh = pvproperty(name='NEVH',
+                                      dtype=ChannelType.LONG,
+                                      doc='Num. elements in VAlH',
+                                      read_only=True)
     # subr_return_value = pvproperty(name='VAL',
     #      dtype=ChannelType.LONG,
     # doc='Subr. return value'    #      )
@@ -2003,14 +2007,14 @@ class AsynFields(RecordFieldGroup):
     asynuint32digital_output = pvproperty(name='UI32OUT',
                                           dtype=ChannelType.LONG,
                                           doc='asynUInt32Digital output')
-    # disconnect_on_timeout = pvproperty(name='DRTO',
-    #      dtype=ChannelType.ENUM,
-    # enum_strings=menus.ipDRTO.get_string_tuple(),doc='Disconnect on timeout'    #      )
     host_info = pvproperty(name='HOSTINFO',
                            dtype=ChannelType.CHAR,
                            max_length=40,
                            report_as_string=True,
                            doc='host info')
+    # disconnect_on_timeout = pvproperty(name='DRTO',
+    #      dtype=ChannelType.ENUM,
+    # enum_strings=menus.ipDRTO.get_string_tuple(),doc='Disconnect on timeout'    #      )
     # value_field = pvproperty(name='VAL',
     #      dtype=ChannelType.LONG,
     # doc='Value field (unused)'    #      )
@@ -2239,7 +2243,7 @@ class CalcFields(RecordFieldGroup, _Limits):
     _dtype = ChannelType.DOUBLE  # DTYP of .VAL
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
-                             enum_strings=(),
+                             enum_strings=('Soft Channel', ),
                              doc='Device Type')
     last_val_monitored = pvproperty(name='MLST',
                                     dtype=ChannelType.DOUBLE,
@@ -2676,7 +2680,7 @@ class CompressFields(RecordFieldGroup):
     _dtype = None  # DTYP of .VAL
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
-                             enum_strings=(),
+                             enum_strings=('Soft Channel', ),
                              doc='Device Type')
     compress_value_buffer = pvproperty(name='CVB',
                                        dtype=ChannelType.DOUBLE,
@@ -2735,13 +2739,13 @@ class CompressFields(RecordFieldGroup):
     low_operating_range = pvproperty(name='LOPR',
                                      dtype=ChannelType.DOUBLE,
                                      doc='Low Operating Range')
-    # buffering_algorithm = pvproperty(name='BALG',
-    #      dtype=ChannelType.ENUM,
-    # enum_strings=menus.bufferingALG.get_string_tuple(),doc='Buffering Algorithm'    #      )
     offset = pvproperty(name='OFF',
                         dtype=ChannelType.LONG,
                         doc='Offset',
                         read_only=True)
+    # buffering_algorithm = pvproperty(name='BALG',
+    #      dtype=ChannelType.ENUM,
+    # enum_strings=menus.bufferingALG.get_string_tuple(),doc='Buffering Algorithm'    #      )
     _link_parent_attribute(
         high_operating_range,
         'upper_ctrl_limit',
@@ -2762,7 +2766,7 @@ class DfanoutFields(RecordFieldGroup, _Limits):
     _dtype = ChannelType.DOUBLE  # DTYP of .VAL
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
-                             enum_strings=(),
+                             enum_strings=('Soft Channel', ),
                              doc='Device Type')
     last_val_monitored = pvproperty(name='MLST',
                                     dtype=ChannelType.DOUBLE,
@@ -2903,7 +2907,7 @@ class FanoutFields(RecordFieldGroup):
     _dtype = ChannelType.LONG  # DTYP of .VAL
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
-                             enum_strings=(),
+                             enum_strings=('Soft Channel', ),
                              doc='Device Type')
     link_selection = pvproperty(name='SELN',
                                 dtype=ChannelType.INT,
@@ -3544,9 +3548,6 @@ class MbbiFields(RecordFieldGroup):
     two_value = pvproperty(name='TWVL',
                            dtype=ChannelType.LONG,
                            doc='Two Value')
-    # current_value = pvproperty(name='VAL',
-    #      dtype=ChannelType.ENUM,
-    # doc='Current Value'    #      )
     zero_string = pvproperty(name='ZRST',
                              dtype=ChannelType.CHAR,
                              max_length=26,
@@ -3560,6 +3561,9 @@ class MbbiFields(RecordFieldGroup):
     zero_value = pvproperty(name='ZRVL',
                             dtype=ChannelType.LONG,
                             doc='Zero Value')
+    # current_value = pvproperty(name='VAL',
+    #      dtype=ChannelType.ENUM,
+    # doc='Current Value'    #      )
     _link_enum_strings(zero_string, index=0)
     _link_enum_strings(one_string, index=1)
     _link_enum_strings(two_string, index=2)
@@ -3979,9 +3983,6 @@ class MbboFields(RecordFieldGroup):
     two_value = pvproperty(name='TWVL',
                            dtype=ChannelType.LONG,
                            doc='Two Value')
-    # desired_value = pvproperty(name='VAL',
-    #      dtype=ChannelType.ENUM,
-    # doc='Desired Value'    #      )
     zero_string = pvproperty(name='ZRST',
                              dtype=ChannelType.CHAR,
                              max_length=26,
@@ -3995,6 +3996,9 @@ class MbboFields(RecordFieldGroup):
     zero_value = pvproperty(name='ZRVL',
                             dtype=ChannelType.LONG,
                             doc='Zero Value')
+    # desired_value = pvproperty(name='VAL',
+    #      dtype=ChannelType.ENUM,
+    # doc='Desired Value'    #      )
     _link_enum_strings(one_string, index=1)
     _link_enum_strings(two_string, index=2)
     _link_enum_strings(three_string, index=3)
@@ -4553,7 +4557,7 @@ class PermissiveFields(RecordFieldGroup):
     _dtype = ChannelType.LONG  # DTYP of .VAL
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
-                             enum_strings=(),
+                             enum_strings=('Soft Channel', ),
                              doc='Device Type')
     old_flag = pvproperty(name='OFLG',
                           dtype=ChannelType.INT,
@@ -4580,7 +4584,7 @@ class SelFields(RecordFieldGroup, _Limits):
     _dtype = ChannelType.DOUBLE  # DTYP of .VAL
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
-                             enum_strings=(),
+                             enum_strings=('Soft Channel', ),
                              doc='Device Type')
     index_value = pvproperty(name='SELN',
                              dtype=ChannelType.INT,
@@ -4739,7 +4743,7 @@ class SeqFields(RecordFieldGroup):
     _dtype = ChannelType.LONG  # DTYP of .VAL
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
-                             enum_strings=(),
+                             enum_strings=('Soft Channel', ),
                              doc='Device Type')
     value_1 = pvproperty(name='DO1', dtype=ChannelType.DOUBLE, doc='Value 1')
     value_10 = pvproperty(name='DOA', dtype=ChannelType.DOUBLE, doc='Value 10')
@@ -4919,7 +4923,7 @@ class StateFields(RecordFieldGroup):
     _dtype = ChannelType.STRING  # DTYP of .VAL
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
-                             enum_strings=(),
+                             enum_strings=('Soft Channel', ),
                              doc='Device Type')
     prev_value = pvproperty(name='OVAL',
                             dtype=ChannelType.CHAR,
@@ -5088,7 +5092,7 @@ class SubFields(RecordFieldGroup, _Limits):
     _dtype = ChannelType.DOUBLE  # DTYP of .VAL
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
-                             enum_strings=(),
+                             enum_strings=('Soft Channel', ),
                              doc='Device Type')
     last_value_alarmed = pvproperty(name='LALM',
                                     dtype=ChannelType.DOUBLE,
@@ -5424,6 +5428,11 @@ class WaveformFields(RecordFieldGroup):
 class Int64inFields(RecordFieldGroup, _LimitsLong):
     _record_type = "int64in"
     _dtype = ChannelType.LONG  # DTYP of .VAL
+    device_type = pvproperty(name='DTYP',
+                             dtype=ChannelType.ENUM,
+                             enum_strings=('Soft Channel',
+                                           'Async Soft Channel', 'asynInt64'),
+                             doc='Device Type')
     archive_deadband = pvproperty(name='ADEL',
                                   dtype=ChannelType.LONG,
                                   doc='Archive Deadband')
@@ -5438,11 +5447,6 @@ class Int64inFields(RecordFieldGroup, _LimitsLong):
                                      dtype=ChannelType.LONG,
                                      doc='Last Value Archived',
                                      read_only=True)
-    device_type = pvproperty(name='DTYP',
-                             dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel',
-                                           'Async Soft Channel', 'asynInt64'),
-                             doc='Device Type')
     units_name = pvproperty(name='EGU',
                             dtype=ChannelType.CHAR,
                             max_length=16,
@@ -5508,6 +5512,11 @@ class Int64inFields(RecordFieldGroup, _LimitsLong):
 class Int64outFields(RecordFieldGroup, _LimitsLong):
     _record_type = "int64out"
     _dtype = ChannelType.LONG  # DTYP of .VAL
+    device_type = pvproperty(name='DTYP',
+                             dtype=ChannelType.ENUM,
+                             enum_strings=('Soft Channel',
+                                           'Async Soft Channel', 'asynInt64'),
+                             doc='Device Type')
     archive_deadband = pvproperty(name='ADEL',
                                   dtype=ChannelType.LONG,
                                   doc='Archive Deadband')
@@ -5524,11 +5533,6 @@ class Int64outFields(RecordFieldGroup, _LimitsLong):
     drive_low_limit = pvproperty(name='DRVL',
                                  dtype=ChannelType.LONG,
                                  doc='Drive Low Limit')
-    device_type = pvproperty(name='DTYP',
-                             dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel',
-                                           'Async Soft Channel', 'asynInt64'),
-                             doc='Device Type')
     units_name = pvproperty(name='EGU',
                             dtype=ChannelType.CHAR,
                             max_length=16,
@@ -5604,17 +5608,17 @@ class Int64outFields(RecordFieldGroup, _LimitsLong):
 class LsiFields(RecordFieldGroup):
     _record_type = "lsi"
     _dtype = None  # DTYP of .VAL
-    post_archive_monitors = pvproperty(
-        name='APST',
-        dtype=ChannelType.ENUM,
-        enum_strings=menus.menuPost.get_string_tuple(),
-        doc='Post Archive Monitors')
     device_type = pvproperty(
         name='DTYP',
         dtype=ChannelType.ENUM,
         enum_strings=('Soft Channel', 'getenv', 'asynOctetCmdResponse',
                       'asynOctetWriteRead', 'asynOctetRead'),
         doc='Device Type')
+    post_archive_monitors = pvproperty(
+        name='APST',
+        dtype=ChannelType.ENUM,
+        enum_strings=menus.menuPost.get_string_tuple(),
+        doc='Post Archive Monitors')
     input_specification = pvproperty(name='INP',
                                      dtype=ChannelType.STRING,
                                      doc='Input Specification')
@@ -5670,6 +5674,12 @@ class LsiFields(RecordFieldGroup):
 class LsoFields(RecordFieldGroup):
     _record_type = "lso"
     _dtype = None  # DTYP of .VAL
+    device_type = pvproperty(name='DTYP',
+                             dtype=ChannelType.ENUM,
+                             enum_strings=('Soft Channel',
+                                           'Async Soft Channel', 'stdio',
+                                           'asynOctetWrite'),
+                             doc='Device Type')
     post_archive_monitors = pvproperty(
         name='APST',
         dtype=ChannelType.ENUM,
@@ -5678,12 +5688,6 @@ class LsoFields(RecordFieldGroup):
     desired_output_link = pvproperty(name='DOL',
                                      dtype=ChannelType.STRING,
                                      doc='Desired Output Link')
-    device_type = pvproperty(name='DTYP',
-                             dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel',
-                                           'Async Soft Channel', 'stdio',
-                                           'asynOctetWrite'),
-                             doc='Device Type')
     invalid_output_action = pvproperty(
         name='IVOA',
         dtype=ChannelType.ENUM,
