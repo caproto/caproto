@@ -385,8 +385,14 @@ LINKABLE = {
     'number_of_elements': 'max_length',
 }
 
-USE_SETATTR = {'archive_deadband', 'monitor_deadband', 'maximum_elements',
-               'number_of_elements'}
+LINK_KWARGS = {
+    'archive_deadband': dict(use_setattr=True),
+    'monitor_deadband': dict(use_setattr=True),
+    'maximum_elements': dict(use_setattr=True, read_only=True),
+    'number_of_elements': dict(use_setattr=True, read_only=True),
+}
+
+
 ATTR_RENAMES = {
     # back-compat
     'scan_mechanism': 'scan_rate',
@@ -497,7 +503,7 @@ def record_to_template_dict(record_type, dbd_info, dtypes, *,
         else:
             link = dict(field_attr=field_attr,
                         channeldata_attr=channeldata_attr,
-                        use_setattr=field_attr in USE_SETATTR,
+                        kwargs=LINK_KWARGS.get(field_attr, {}),
                         )
             result['links'].append(link)
 

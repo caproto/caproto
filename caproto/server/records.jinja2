@@ -261,6 +261,7 @@ class {{ rec.class_name }}({{ rec.base_class }}{% if rec.mixin %}, {{ rec.mixin 
 {% set record_specific_template = 'record_body_' + rec.record_type + '.jinja2' %}
 {% include record_specific_template ignore missing %}
 
+
 {% endif %}
 {% endfor %}
 
