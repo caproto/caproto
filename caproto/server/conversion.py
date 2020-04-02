@@ -316,7 +316,6 @@ def record_to_field_info(record_type, dbd_info, dtypes):
             kwargs['max_length'] = size
 
         if type_ == 'DBF_MENU':
-            # note: ordered key assumption here (py3.6+)
             kwargs['enum_strings'] = (f'menus.{field_info["menu"]}'
                                       '.get_string_tuple()')
         elif type_ == 'DBF_DEVICE':
