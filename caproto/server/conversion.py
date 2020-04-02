@@ -308,6 +308,9 @@ def record_to_field_info(record_type, dbd_info):
         # alarm = parent.alarm
         kwargs = {}
 
+        if 'value' in field_info:
+            kwargs['value'] = field_info['value']
+
         if type_ == 'DBF_STRING' and size > 0:
             type_ = 'DBF_UCHAR'
             kwargs['max_length'] = size
@@ -420,6 +423,22 @@ MIXIN_SPECS = {
 }
 
 
+def get_initial_field_value(value, dtype):
+    'Get caproto pvproperty value from "initial(value)" portion of dbd file'
+    if isinstance(value, int) and dtype in ('CHAR', 'STRING'):
+        return f'chr({value})'
+    if dtype in ('ENUM', ):
+        if value == 65535:
+            # invalid enum setting -> valid enum setting
+            return 0
+        if value == 'UDF':
+            # TODO: sorry :( enum value outside of range not handled by
+            # caproto for now. And yes, I know this is a bad alternative
+            # default...
+            value = 'SCAN'
+    return repr(value)
+
+
 def record_to_template_dict(record_type, dbd_info, *, skip_fields=None):
     'Record name -> yields code to create a PVGroup for all fields'
     if skip_fields is None:
@@ -466,6 +485,9 @@ def record_to_template_dict(record_type, dbd_info, *, skip_fields=None):
             comment = True
         elif finfo.get('menu') and finfo['menu'] not in menus:
             comment = True
+
+        if 'initial' in finfo:
+            kwargs['value'] = get_initial_field_value(finfo['initial'], dtype)
 
         field_name = finfo['field']  # as in EPICS
         fields_by_attr[attr_name] = dict(
