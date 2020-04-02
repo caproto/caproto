@@ -1889,9 +1889,9 @@ class AsynFields(RecordFieldGroup):
         dtype=ChannelType.ENUM,
         enum_strings=menus.asynAUTOCONNECT.get_string_tuple(),
         doc='Autoconnect')
-    baud_rate = pvproperty(name='LBAUD',
-                           dtype=ChannelType.LONG,
-                           doc='Baud rate')
+    long_baud_rate = pvproperty(name='LBAUD',
+                                dtype=ChannelType.LONG,
+                                doc='Baud rate')
     connect_disconnect = pvproperty(
         name='CNCT',
         dtype=ChannelType.ENUM,
@@ -2031,6 +2031,10 @@ class AsynFields(RecordFieldGroup):
         dtype=ChannelType.ENUM,
         enum_strings=menus.ipDRTO.get_string_tuple(),
         doc='Disconnect on timeout')
+    baud_rate = pvproperty(name='BAUD',
+                           dtype=ChannelType.ENUM,
+                           enum_strings=menus.serialBAUD.get_string_tuple(),
+                           doc='Baud rate')
     # value_field = pvproperty(name='VAL',
     #      dtype=ChannelType.LONG,
     # doc='Value field (unused)')

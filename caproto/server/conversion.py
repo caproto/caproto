@@ -551,3 +551,84 @@ def generate_all_records_jinja(dbd_file, *, jinja_env=None,
 
     record_template = jinja_env.get_template(template)
     return record_template.render(records=records)
+
+
+MENU_FIXES = {
+    'menuScan10_second': 'scan_10_second',
+    'menuScan5_second': 'scan_5_second',
+    'menuScan2_second': 'scan_2_second',
+    'menuScan1_second': 'scan_1_second',
+    'menuScan_5_second': 'scan_point_5_second',
+    'menuScan_2_second': 'scan_point_2_second',
+    'menuScan_1_second': 'scan_point_1_second',
+}
+
+MENU_UNSUPPORTED = {
+    'acalcoutDOPT', 'acalcoutINAV', 'acalcoutOOPT', 'acalcoutSIZE',
+    'acalcoutWAIT', 'digitelBAKS', 'digitelBKIN', 'digitelCMOR', 'digitelDSPL',
+    'digitelKLCK', 'digitelMODR', 'digitelMODS', 'digitelPTYP', 'digitelS1MS',
+    'digitelS1VS', 'digitelS3BS', 'digitelSET1', 'digitelTYPE',
+    'epidFeedbackMode', 'epidFeedbackState', 'genSubEFLG', 'genSubLFLG',
+    'mcaCHAS', 'mcaERAS', 'mcaMODE', 'mcaREAD', 'mcaSTRT', 'scalcoutDOPT',
+    'scalcoutINAV', 'scalcoutOOPT', 'scalcoutWAIT', 'scalerCNT', 'scalerCONT',
+    'scalerD1', 'scalerG1', 'sscanACQM', 'sscanACQT', 'sscanCMND',
+    'sscanDSTATE', 'sscanFAZE', 'sscanFFO', 'sscanFPTS', 'sscanLINKWAIT',
+    'sscanNOYES', 'sscanP1AR', 'sscanP1NV', 'sscanP1SM', 'sscanPASM',
+    'sscanPAUS', 'sseqLNKV', 'sseqSELM', 'sseqWAIT', 'swaitDOPT', 'swaitINAV',
+    'swaitOOPT', 'tableGEOM', 'tableSET', 'timestampTST', 'transformCOPT',
+    'transformIVLA', 'vmeAMOD', 'vmeDSIZ', 'vmeRDWT', 'vsOFFON', 'vsTYPE'}
+
+
+def generate_all_menus_jinja(dbd_file, *, jinja_env=None,
+                             template='menus.jinja2'):
+    try:
+        from caproto.tests.dbd import DbdFile
+        import jinja2
+    except ImportError as ex:
+        raise ImportError(f'An optional/testing dependency is missing: {ex}')
+
+    if jinja_env is None:
+        jinja_env = jinja2.Environment(
+            loader=jinja2.PackageLoader("caproto", "server"),
+            trim_blocks=True,
+            lstrip_blocks=True,
+        )
+
+    dbd_file = DbdFile.parse_file(dbd_file)
+    record_template = jinja_env.get_template(template)
+    menus = dict(dbd_file.menus)
+
+    def fix_item_name(menu_name, name):
+        try:
+            return MENU_FIXES[name]
+        except KeyError:
+            ...
+
+        orig_name = name
+        if name.startswith(menu_name + '_'):
+            name = name[len(menu_name) + 1:]
+        elif name.startswith(menu_name):
+            name = name[len(menu_name):]
+
+        if name == 'None':
+            return 'none'
+
+        name = name.rstrip("_")
+        if name[0] in '0123456789':
+            name = f'choice_{name}'
+
+        if not name.isidentifier():
+            return orig_name
+        return name
+
+    for menu_name, items in list(menus.items()):
+        menus[menu_name] = [
+            (fix_item_name(menu_name, item_name), string_value)
+            for item_name, string_value in items
+        ]
+
+    return record_template.render(
+        menus=menus,
+        unsupported_menus=[menu for menu in MENU_UNSUPPORTED
+                           if menu not in menus]
+    )

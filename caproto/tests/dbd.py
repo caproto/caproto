@@ -46,6 +46,7 @@ class DbdFile:
         self.recdsets = {}
         self.recinst = {}  # {'inst:name':'ao', ...}
         self.extinst = set()
+        self.menus = {}
         self.field_metadata = {}
 
         self.errors = []
@@ -60,10 +61,15 @@ class DbdFile:
     def node(self, node):
         self._node = node
 
-        if getattr(node, 'name', '') == 'field':
+        node_name = getattr(node, 'name', '')
+        # A hack to aggregate information about fields + menus, using the node
+        # setattr as a callback.  If there's an easier way, let me know...
+        if node_name == 'field':
+            self._walk_field(node)
+        elif node_name == 'menu':
             # A hack to aggregate information about fields, using the node
             # setattr as a callback.  If there's an easier way, let me know...
-            self._walk_field(node)
+            self._walk_menu(node)
 
     def _walk_field(self, node):
         field_name, field_type = node.args
@@ -89,6 +95,15 @@ class DbdFile:
             if record_name not in self.field_metadata:
                 self.field_metadata[record_name] = {}
             self.field_metadata[record_name][field_name] = blocks
+
+    def _walk_menu(self, node):
+        menu_name, = node.args
+
+        self.menus[menu_name] = [
+            (child.args[0], child.args[1])
+            for child in node.body
+            if isinstance(child, pyPDB.dbd.ast.Block)
+        ]
 
     @property
     def all_records(self):
