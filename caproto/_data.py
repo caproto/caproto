@@ -12,7 +12,8 @@ import weakref
 from ._dbr import (DBR_TYPES, _LongStringChannelType, ChannelType, native_type,
                    native_types, timestamp_to_epics, time_types,
                    DBR_STSACK_STRING, AccessRights, GraphicControlBase,
-                   AlarmStatus, AlarmSeverity, SubscriptionType)
+                   AlarmStatus, AlarmSeverity, SubscriptionType,
+                   _channel_type_by_name)
 
 from ._utils import CaprotoError, CaprotoValueError, ConversionDirection
 from ._commands import parse_metadata
@@ -359,20 +360,23 @@ class ChannelData:
             alarm.connect(self)
 
     async def subscribe(self, queue, sub_spec, sub):
-        self._queues[queue][sub_spec.channel_filter.sync][sub_spec.data_type].add(sub_spec)
+        by_sync = self._queues[queue][sub_spec.channel_filter.sync]
+        by_sync[sub_spec.data_type_name].add(sub_spec)
+
         # Always send current reading immediately upon subscription.
-        data_type = sub_spec.data_type
         try:
-            metadata, values = self._content[data_type]
+            metadata, values = self._content[sub_spec.data_type_name]
         except KeyError:
             # Do the expensive data type conversion and cache it in case
             # a future subscription wants the same data type.
+            data_type = _channel_type_by_name[sub_spec.data_type_name]
             metadata, values = await self._read(data_type)
-            self._content[data_type] = metadata, values
+            self._content[sub_spec.data_type_name] = metadata, values
         await queue.put(SubscriptionUpdate((sub_spec,), metadata, values, 0, sub))
 
     async def unsubscribe(self, queue, sub_spec):
-        self._queues[queue][sub_spec.channel_filter.sync][sub_spec.data_type].discard(sub_spec)
+        by_sync = self._queues[queue][sub_spec.channel_filter.sync]
+        by_sync[sub_spec.data_type_name].discard(sub_spec)
 
     async def auth_read(self, hostname, username, data_type, *,
                         user_address=None):
@@ -541,7 +545,7 @@ class ChannelData:
             # data_types is a dict grouping the sub_specs for this queue by
             # their data_type.
             for sync, data_types in syncs.items():
-                for data_type, sub_specs in data_types.items():
+                for data_type_name, sub_specs in data_types.items():
                     eligible = tuple(ss for ss in sub_specs
                                      if self._is_eligible(ss))
                     if not eligible:
@@ -554,11 +558,12 @@ class ChannelData:
                         except KeyError:
                             continue
                     try:
-                        metdata, values = self._content[data_type]
+                        metdata, values = self._content[data_type_name]
                     except KeyError:
                         # Do the expensive data type conversion and cache it in
                         # case another queue or a future subscription wants the
                         # same data type.
+                        data_type = _channel_type_by_name[data_type_name]
                         metadata, values = await channel_data._read(data_type)
                         channel_data._content[data_type] = metadata, values
 

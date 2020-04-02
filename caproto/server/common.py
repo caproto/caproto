@@ -38,13 +38,15 @@ class LoopExit(Exception):
     ...
 
 
-Subscription = namedtuple('Subscription', ('mask', 'channel_filter',
-                                           'circuit', 'channel',
-                                           'data_type',
-                                           'data_count', 'subscriptionid',
-                                           'db_entry'))
-SubscriptionSpec = namedtuple('SubscriptionSpec', ('db_entry', 'data_type',
-                                                   'mask', 'channel_filter'))
+Subscription = namedtuple(
+    'Subscription', ('mask', 'channel_filter', 'circuit', 'channel',
+                     'data_type', 'data_count', 'subscriptionid', 'db_entry')
+)
+
+SubscriptionSpec = namedtuple(
+    'SubscriptionSpec', ('db_entry', 'data_type_name', 'mask',
+                         'channel_filter')
+)
 
 host_endian = ('>' if sys.byteorder == 'big' else '<')
 
@@ -547,17 +549,26 @@ class VirtualCircuit:
         elif isinstance(command, ca.EventAddRequest):
             chan, db_entry = self._get_db_entry_from_command(command)
             # TODO no support for deprecated low/high/to
+
+            read_data_type = command.data_type
+            if chan.name.endswith('$'):
+                try:
+                    read_data_type = _LongStringChannelType(read_data_type)
+                except ValueError:
+                    # Not requesting a LONG_STRING type
+                    ...
+
             sub = Subscription(mask=command.mask,
                                channel_filter=chan.channel_filter,
                                channel=chan,
                                circuit=self,
-                               data_type=command.data_type,
+                               data_type=read_data_type,
                                data_count=command.data_count,
                                subscriptionid=command.subscriptionid,
                                db_entry=db_entry)
             sub_spec = SubscriptionSpec(
                 db_entry=db_entry,
-                data_type=command.data_type,
+                data_type_name=read_data_type.name,
                 mask=command.mask,
                 channel_filter=chan.channel_filter)
             self.subscriptions[sub_spec].append(sub)
