@@ -4257,10 +4257,10 @@ class MotorFields(RecordFieldGroup, _Limits):
                                  dtype=ChannelType.INT,
                                  doc='Limit violation',
                                  read_only=True)
-    monitor_mask = pvproperty(name='NMAP',
-                              dtype=ChannelType.LONG,
-                              doc='Monitor Mask (more)',
-                              read_only=True)
+    monitor_mask_more = pvproperty(name='NMAP',
+                                   dtype=ChannelType.LONG,
+                                   doc='Monitor Mask (more)',
+                                   read_only=True)
     motion_in_progress = pvproperty(name='MIP',
                                     dtype=ChannelType.INT,
                                     doc='Motion In Progress',
@@ -4570,6 +4570,10 @@ class MotorFields(RecordFieldGroup, _Limits):
     setpoint_deadband = pvproperty(name='SPDB',
                                    dtype=ChannelType.DOUBLE,
                                    doc='Setpoint Deadband (EGU)')
+    monitor_mask = pvproperty(name='MMAP',
+                              dtype=ChannelType.LONG,
+                              doc='Monitor Mask',
+                              read_only=True)
     # user_desired_value = pvproperty(name='VAL',
     #      dtype=ChannelType.DOUBLE,
     # doc='User Desired Value (EGU')

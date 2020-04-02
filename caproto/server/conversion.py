@@ -402,6 +402,9 @@ ATTR_FIXES = {
     'aSub': {
         'ONVH': 'num_elements_in_ovlh',
     },
+    'motor': {
+        'NMAP': 'monitor_mask_more',
+    },
 }
 
 ATTR_REPLACES = {
