@@ -122,7 +122,7 @@ class RecordFieldGroup(PVGroup):
                                doc='Disable Value')
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel', ),
+                             enum_strings=menus.dtyp_base.get_string_tuple(),
                              doc='Device Type')
     event_name = pvproperty(name='EVNT',
                             dtype=ChannelType.CHAR,
@@ -396,14 +396,10 @@ class AiFields(RecordFieldGroup, _Limits):
     _record_type = "ai"
     _dtype = ChannelType.DOUBLE  # DTYP of .VAL
     has_val_field = True
-    device_type = pvproperty(
-        name='DTYP',
-        dtype=ChannelType.ENUM,
-        enum_strings=('Soft Channel', 'Raw Soft Channel', 'Async Soft Channel',
-                      'Soft Timestamp', 'General Time', 'asynInt32',
-                      'asynInt32Average', 'asynFloat64', 'asynFloat64Average',
-                      'asynInt64'),
-        doc='Device Type')
+    device_type = pvproperty(name='DTYP',
+                             dtype=ChannelType.ENUM,
+                             enum_strings=menus.dtyp_ai.get_string_tuple(),
+                             doc='Device Type')
     current_raw_value = pvproperty(name='RVAL',
                                    dtype=ChannelType.LONG,
                                    doc='Current Raw Value')
@@ -537,7 +533,7 @@ class AsubFields(RecordFieldGroup):
     has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel', ),
+                             enum_strings=menus.dtyp_aSub.get_string_tuple(),
                              doc='Device Type')
     old_return_value = pvproperty(name='OVAL',
                                   dtype=ChannelType.LONG,
@@ -1354,7 +1350,7 @@ class AaiFields(RecordFieldGroup):
     has_val_field = False
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel', ),
+                             enum_strings=menus.dtyp_aai.get_string_tuple(),
                              doc='Device Type')
     hash_of_onchange_data = pvproperty(name='HASH',
                                        dtype=ChannelType.LONG,
@@ -1454,7 +1450,7 @@ class AaoFields(RecordFieldGroup):
     has_val_field = False
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel', ),
+                             enum_strings=menus.dtyp_aao.get_string_tuple(),
                              doc='Device Type')
     hash_of_onchange_data = pvproperty(name='HASH',
                                        dtype=ChannelType.LONG,
@@ -1554,9 +1550,7 @@ class AoFields(RecordFieldGroup, _Limits):
     has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel', 'Raw Soft Channel',
-                                           'Async Soft Channel', 'asynInt32',
-                                           'asynFloat64', 'asynInt64'),
+                             enum_strings=menus.dtyp_ao.get_string_tuple(),
                              doc='Device Type')
     current_raw_value = pvproperty(name='RVAL',
                                    dtype=ChannelType.LONG,
@@ -1727,7 +1721,7 @@ class AsynFields(RecordFieldGroup):
     has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
-                             enum_strings=('asynRecordDevice', ),
+                             enum_strings=menus.dtyp_asyn.get_string_tuple(),
                              doc='Device Type')
     abort_queuerequest = pvproperty(name='AQR',
                                     dtype=ChannelType.CHAR,
@@ -2047,9 +2041,7 @@ class BiFields(RecordFieldGroup):
     has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel', 'Raw Soft Channel',
-                                           'Async Soft Channel', 'Db State',
-                                           'asynInt32', 'asynUInt32Digital'),
+                             enum_strings=menus.dtyp_bi.get_string_tuple(),
                              doc='Device Type')
     hardware_mask = pvproperty(name='MASK',
                                dtype=ChannelType.LONG,
@@ -2144,10 +2136,7 @@ class BoFields(RecordFieldGroup):
     has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel', 'Raw Soft Channel',
-                                           'Async Soft Channel',
-                                           'General Time', 'Db State',
-                                           'asynInt32', 'asynUInt32Digital'),
+                             enum_strings=menus.dtyp_bo.get_string_tuple(),
                              doc='Device Type')
     hardware_mask = pvproperty(name='MASK',
                                dtype=ChannelType.LONG,
@@ -2266,7 +2255,7 @@ class CalcFields(RecordFieldGroup, _Limits):
     has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel', ),
+                             enum_strings=menus.dtyp_calc.get_string_tuple(),
                              doc='Device Type')
     last_val_monitored = pvproperty(name='MLST',
                                     dtype=ChannelType.DOUBLE,
@@ -2421,11 +2410,11 @@ class CalcoutFields(RecordFieldGroup, _Limits):
     _record_type = "calcout"
     _dtype = ChannelType.DOUBLE  # DTYP of .VAL
     has_val_field = True
-    device_type = pvproperty(name='DTYP',
-                             dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel',
-                                           'Async Soft Channel'),
-                             doc='Device Type')
+    device_type = pvproperty(
+        name='DTYP',
+        dtype=ChannelType.ENUM,
+        enum_strings=menus.dtyp_calcout.get_string_tuple(),
+        doc='Device Type')
     calc_valid = pvproperty(name='CLCV',
                             dtype=ChannelType.LONG,
                             doc='CALC Valid')
@@ -2703,10 +2692,11 @@ class CompressFields(RecordFieldGroup):
     _record_type = "compress"
     _dtype = None  # DTYP of .VAL
     has_val_field = False
-    device_type = pvproperty(name='DTYP',
-                             dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel', ),
-                             doc='Device Type')
+    device_type = pvproperty(
+        name='DTYP',
+        dtype=ChannelType.ENUM,
+        enum_strings=menus.dtyp_compress.get_string_tuple(),
+        doc='Device Type')
     compress_value_buffer = pvproperty(name='CVB',
                                        dtype=ChannelType.DOUBLE,
                                        doc='Compress Value Buffer',
@@ -2792,10 +2782,11 @@ class DfanoutFields(RecordFieldGroup, _Limits):
     _record_type = "dfanout"
     _dtype = ChannelType.DOUBLE  # DTYP of .VAL
     has_val_field = True
-    device_type = pvproperty(name='DTYP',
-                             dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel', ),
-                             doc='Device Type')
+    device_type = pvproperty(
+        name='DTYP',
+        dtype=ChannelType.ENUM,
+        enum_strings=menus.dtyp_dfanout.get_string_tuple(),
+        doc='Device Type')
     last_val_monitored = pvproperty(name='MLST',
                                     dtype=ChannelType.DOUBLE,
                                     doc='Last Val Monitored',
@@ -2886,7 +2877,7 @@ class EventFields(RecordFieldGroup):
     has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel', ),
+                             enum_strings=menus.dtyp_event.get_string_tuple(),
                              doc='Device Type')
     simulation_mode = pvproperty(
         name='SIMM',
@@ -2937,7 +2928,7 @@ class FanoutFields(RecordFieldGroup):
     has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel', ),
+                             enum_strings=menus.dtyp_fanout.get_string_tuple(),
                              doc='Device Type')
     link_selection = pvproperty(name='SELN',
                                 dtype=ChannelType.INT,
@@ -3014,10 +3005,11 @@ class HistogramFields(RecordFieldGroup):
     _record_type = "histogram"
     _dtype = None  # DTYP of .VAL
     has_val_field = False
-    device_type = pvproperty(name='DTYP',
-                             dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel', ),
-                             doc='Device Type')
+    device_type = pvproperty(
+        name='DTYP',
+        dtype=ChannelType.ENUM,
+        enum_strings=menus.dtyp_histogram.get_string_tuple(),
+        doc='Device Type')
     collection_control = pvproperty(
         name='CMD',
         dtype=ChannelType.ENUM,
@@ -3117,12 +3109,10 @@ class LonginFields(RecordFieldGroup, _LimitsLong):
     _record_type = "longin"
     _dtype = ChannelType.LONG  # DTYP of .VAL
     has_val_field = True
-    device_type = pvproperty(
-        name='DTYP',
-        dtype=ChannelType.ENUM,
-        enum_strings=('Soft Channel', 'Async Soft Channel', 'General Time',
-                      'asynInt32', 'asynUInt32Digital', 'asynInt64'),
-        doc='Device Type')
+    device_type = pvproperty(name='DTYP',
+                             dtype=ChannelType.ENUM,
+                             enum_strings=menus.dtyp_longin.get_string_tuple(),
+                             doc='Device Type')
     last_val_monitored = pvproperty(name='MLST',
                                     dtype=ChannelType.LONG,
                                     doc='Last Val Monitored',
@@ -3203,12 +3193,11 @@ class LongoutFields(RecordFieldGroup, _LimitsLong):
     _record_type = "longout"
     _dtype = ChannelType.LONG  # DTYP of .VAL
     has_val_field = True
-    device_type = pvproperty(name='DTYP',
-                             dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel',
-                                           'Async Soft Channel', 'asynInt32',
-                                           'asynUInt32Digital', 'asynInt64'),
-                             doc='Device Type')
+    device_type = pvproperty(
+        name='DTYP',
+        dtype=ChannelType.ENUM,
+        enum_strings=menus.dtyp_longout.get_string_tuple(),
+        doc='Device Type')
     last_val_monitored = pvproperty(name='MLST',
                                     dtype=ChannelType.LONG,
                                     doc='Last Val Monitored',
@@ -3303,9 +3292,7 @@ class MbbiFields(RecordFieldGroup):
     has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel', 'Raw Soft Channel',
-                                           'Async Soft Channel', 'asynInt32',
-                                           'asynUInt32Digital'),
+                             enum_strings=menus.dtyp_mbbi.get_string_tuple(),
                              doc='Device Type')
     hardware_mask = pvproperty(name='MASK',
                                dtype=ChannelType.LONG,
@@ -3621,12 +3608,11 @@ class MbbidirectFields(RecordFieldGroup):
     _record_type = "mbbiDirect"
     _dtype = ChannelType.LONG  # DTYP of .VAL
     has_val_field = True
-    device_type = pvproperty(name='DTYP',
-                             dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel', 'Raw Soft Channel',
-                                           'Async Soft Channel',
-                                           'asynUInt32Digital'),
-                             doc='Device Type')
+    device_type = pvproperty(
+        name='DTYP',
+        dtype=ChannelType.ENUM,
+        enum_strings=menus.dtyp_mbbiDirect.get_string_tuple(),
+        doc='Device Type')
     bit_0 = pvproperty(name='B0', dtype=ChannelType.CHAR, doc='Bit 0')
     bit_1 = pvproperty(name='B1', dtype=ChannelType.CHAR, doc='Bit 1')
     bit_2 = pvproperty(name='B2', dtype=ChannelType.CHAR, doc='Bit 2')
@@ -3726,9 +3712,7 @@ class MbboFields(RecordFieldGroup):
     has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel', 'Raw Soft Channel',
-                                           'Async Soft Channel', 'asynInt32',
-                                           'asynUInt32Digital'),
+                             enum_strings=menus.dtyp_mbbo.get_string_tuple(),
                              doc='Device Type')
     hardware_mask = pvproperty(name='MASK',
                                dtype=ChannelType.LONG,
@@ -4057,12 +4041,11 @@ class MbbodirectFields(RecordFieldGroup):
     _record_type = "mbboDirect"
     _dtype = ChannelType.LONG  # DTYP of .VAL
     has_val_field = True
-    device_type = pvproperty(name='DTYP',
-                             dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel', 'Raw Soft Channel',
-                                           'Async Soft Channel',
-                                           'asynUInt32Digital'),
-                             doc='Device Type')
+    device_type = pvproperty(
+        name='DTYP',
+        dtype=ChannelType.ENUM,
+        enum_strings=menus.dtyp_mbboDirect.get_string_tuple(),
+        doc='Device Type')
     hardware_mask = pvproperty(name='MASK',
                                dtype=ChannelType.LONG,
                                doc='Hardware Mask',
@@ -4184,7 +4167,7 @@ class MotorFields(RecordFieldGroup, _Limits):
     has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
-                             enum_strings=('asynMotor', 'Motor Simulation'),
+                             enum_strings=menus.dtyp_motor.get_string_tuple(),
                              doc='Device Type')
     at_home = pvproperty(name='ATHM',
                          dtype=ChannelType.INT,
@@ -4598,10 +4581,11 @@ class PermissiveFields(RecordFieldGroup):
     _record_type = "permissive"
     _dtype = ChannelType.LONG  # DTYP of .VAL
     has_val_field = True
-    device_type = pvproperty(name='DTYP',
-                             dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel', ),
-                             doc='Device Type')
+    device_type = pvproperty(
+        name='DTYP',
+        dtype=ChannelType.ENUM,
+        enum_strings=menus.dtyp_permissive.get_string_tuple(),
+        doc='Device Type')
     old_flag = pvproperty(name='OFLG',
                           dtype=ChannelType.INT,
                           doc='Old Flag',
@@ -4628,7 +4612,7 @@ class SelFields(RecordFieldGroup, _Limits):
     has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel', ),
+                             enum_strings=menus.dtyp_sel.get_string_tuple(),
                              doc='Device Type')
     index_value = pvproperty(name='SELN',
                              dtype=ChannelType.INT,
@@ -4788,7 +4772,7 @@ class SeqFields(RecordFieldGroup):
     has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel', ),
+                             enum_strings=menus.dtyp_seq.get_string_tuple(),
                              doc='Device Type')
     value_1 = pvproperty(name='DO1', dtype=ChannelType.DOUBLE, doc='Value 1')
     value_10 = pvproperty(name='DOA', dtype=ChannelType.DOUBLE, doc='Value 10')
@@ -4969,7 +4953,7 @@ class StateFields(RecordFieldGroup):
     has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel', ),
+                             enum_strings=menus.dtyp_state.get_string_tuple(),
                              doc='Device Type')
     prev_value = pvproperty(name='OVAL',
                             dtype=ChannelType.CHAR,
@@ -4990,9 +4974,7 @@ class StringinFields(RecordFieldGroup):
     device_type = pvproperty(
         name='DTYP',
         dtype=ChannelType.ENUM,
-        enum_strings=('Soft Channel', 'Async Soft Channel', 'Soft Timestamp',
-                      'General Time', 'getenv', 'asynOctetCmdResponse',
-                      'asynOctetWriteRead', 'asynOctetRead'),
+        enum_strings=menus.dtyp_stringin.get_string_tuple(),
         doc='Device Type')
     previous_value = pvproperty(name='OVAL',
                                 dtype=ChannelType.CHAR,
@@ -5057,12 +5039,11 @@ class StringoutFields(RecordFieldGroup):
     _record_type = "stringout"
     _dtype = ChannelType.STRING  # DTYP of .VAL
     has_val_field = True
-    device_type = pvproperty(name='DTYP',
-                             dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel',
-                                           'Async Soft Channel', 'stdio',
-                                           'asynOctetWrite'),
-                             doc='Device Type')
+    device_type = pvproperty(
+        name='DTYP',
+        dtype=ChannelType.ENUM,
+        enum_strings=menus.dtyp_stringout.get_string_tuple(),
+        doc='Device Type')
     previous_value = pvproperty(name='OVAL',
                                 dtype=ChannelType.CHAR,
                                 max_length=40,
@@ -5141,7 +5122,7 @@ class SubFields(RecordFieldGroup, _Limits):
     has_val_field = True
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel', ),
+                             enum_strings=menus.dtyp_sub.get_string_tuple(),
                              doc='Device Type')
     last_value_alarmed = pvproperty(name='LALM',
                                     dtype=ChannelType.DOUBLE,
@@ -5300,10 +5281,11 @@ class SubarrayFields(RecordFieldGroup):
     _record_type = "subArray"
     _dtype = None  # DTYP of .VAL
     has_val_field = False
-    device_type = pvproperty(name='DTYP',
-                             dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel', ),
-                             doc='Device Type')
+    device_type = pvproperty(
+        name='DTYP',
+        dtype=ChannelType.ENUM,
+        enum_strings=menus.dtyp_subArray.get_string_tuple(),
+        doc='Device Type')
     busy_indicator = pvproperty(name='BUSY',
                                 dtype=ChannelType.INT,
                                 doc='Busy Indicator',
@@ -5375,16 +5357,7 @@ class WaveformFields(RecordFieldGroup):
     device_type = pvproperty(
         name='DTYP',
         dtype=ChannelType.ENUM,
-        enum_strings=('Soft Channel', 'asynOctetCmdResponse',
-                      'asynOctetWriteRead', 'asynOctetRead', 'asynOctetWrite',
-                      'asynOctetWriteBinary', 'asynInt8ArrayIn',
-                      'asynInt8ArrayOut', 'asynInt16ArrayIn',
-                      'asynInt16ArrayOut', 'asynInt32ArrayIn',
-                      'asynInt32ArrayOut', 'asynInt32TimeSeries',
-                      'asynFloat32ArrayIn', 'asynFloat32ArrayOut',
-                      'asynFloat64ArrayIn', 'asynFloat64ArrayOut',
-                      'asynFloat64TimeSeries', 'asynInt64ArrayIn',
-                      'asynInt64ArrayOut', 'asynInt64TimeSeries'),
+        enum_strings=menus.dtyp_waveform.get_string_tuple(),
         doc='Device Type')
     busy_indicator = pvproperty(name='BUSY',
                                 dtype=ChannelType.INT,
@@ -5489,11 +5462,11 @@ class Int64inFields(RecordFieldGroup, _LimitsLong):
     _record_type = "int64in"
     _dtype = ChannelType.LONG  # DTYP of .VAL
     has_val_field = True
-    device_type = pvproperty(name='DTYP',
-                             dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel',
-                                           'Async Soft Channel', 'asynInt64'),
-                             doc='Device Type')
+    device_type = pvproperty(
+        name='DTYP',
+        dtype=ChannelType.ENUM,
+        enum_strings=menus.dtyp_int64in.get_string_tuple(),
+        doc='Device Type')
     archive_deadband = pvproperty(name='ADEL',
                                   dtype=ChannelType.LONG,
                                   doc='Archive Deadband')
@@ -5574,11 +5547,11 @@ class Int64outFields(RecordFieldGroup, _LimitsLong):
     _record_type = "int64out"
     _dtype = ChannelType.LONG  # DTYP of .VAL
     has_val_field = True
-    device_type = pvproperty(name='DTYP',
-                             dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel',
-                                           'Async Soft Channel', 'asynInt64'),
-                             doc='Device Type')
+    device_type = pvproperty(
+        name='DTYP',
+        dtype=ChannelType.ENUM,
+        enum_strings=menus.dtyp_int64out.get_string_tuple(),
+        doc='Device Type')
     archive_deadband = pvproperty(name='ADEL',
                                   dtype=ChannelType.LONG,
                                   doc='Archive Deadband')
@@ -5671,12 +5644,10 @@ class LsiFields(RecordFieldGroup):
     _record_type = "lsi"
     _dtype = None  # DTYP of .VAL
     has_val_field = False
-    device_type = pvproperty(
-        name='DTYP',
-        dtype=ChannelType.ENUM,
-        enum_strings=('Soft Channel', 'getenv', 'asynOctetCmdResponse',
-                      'asynOctetWriteRead', 'asynOctetRead'),
-        doc='Device Type')
+    device_type = pvproperty(name='DTYP',
+                             dtype=ChannelType.ENUM,
+                             enum_strings=menus.dtyp_lsi.get_string_tuple(),
+                             doc='Device Type')
     post_archive_monitors = pvproperty(
         name='APST',
         dtype=ChannelType.ENUM,
@@ -5740,9 +5711,7 @@ class LsoFields(RecordFieldGroup):
     has_val_field = False
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel',
-                                           'Async Soft Channel', 'stdio',
-                                           'asynOctetWrite'),
+                             enum_strings=menus.dtyp_lso.get_string_tuple(),
                              doc='Device Type')
     post_archive_monitors = pvproperty(
         name='APST',
@@ -5825,9 +5794,7 @@ class PrintfFields(RecordFieldGroup):
     has_val_field = False
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
-                             enum_strings=('Soft Channel',
-                                           'Async Soft Channel', 'stdio',
-                                           'asynOctetWrite'),
+                             enum_strings=menus.dtyp_printf.get_string_tuple(),
                              doc='Device Type')
     format_string = pvproperty(name='FMT',
                                dtype=ChannelType.CHAR,
