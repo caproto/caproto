@@ -16,9 +16,9 @@ import time
 from collections import (namedtuple, OrderedDict, defaultdict)
 from types import MethodType
 
-from .. import (ChannelDouble, ChannelShort, ChannelInteger, ChannelString,
-                ChannelEnum, ChannelType, ChannelChar, ChannelByte,
-                ChannelAlarm,
+from .. import (ChannelDouble, ChannelFloat, ChannelShort, ChannelInteger,
+                ChannelString, ChannelEnum, ChannelType, ChannelChar,
+                ChannelByte, ChannelAlarm,
                 AccessRights, get_server_address_list,
                 AlarmStatus, AlarmSeverity, CaprotoRuntimeError,
                 CaprotoValueError, CaprotoTypeError, CaprotoAttributeError,
@@ -39,6 +39,7 @@ __all__ = ['AsyncLibraryLayer',
            'PvpropertyByte', 'PvpropertyByteRO',
            'PvpropertyChar', 'PvpropertyCharRO',
            'PvpropertyDouble', 'PvpropertyDoubleRO',
+           'PvpropertyFloat', 'PvpropertyFloatRO',
            'PvpropertyBoolEnum', 'PvpropertyBoolEnumRO',
            'PvpropertyEnum', 'PvpropertyEnumRO',
            'PvpropertyInteger', 'PvpropertyIntegerRO',
@@ -162,6 +163,10 @@ class PvpropertyInteger(PvpropertyData, ChannelInteger):
     ...
 
 
+class PvpropertyFloat(PvpropertyData, ChannelFloat):
+    ...
+
+
 class PvpropertyDouble(PvpropertyData, ChannelDouble):
     ...
 
@@ -203,6 +208,10 @@ class PvpropertyIntegerRO(PvpropertyReadOnlyData, ChannelInteger):
 
 
 class PvpropertyDoubleRO(PvpropertyReadOnlyData, ChannelDouble):
+    ...
+
+
+class PvpropertyFloatRO(PvpropertyReadOnlyData, ChannelFloat):
     ...
 
 
@@ -1114,6 +1123,7 @@ class PVGroup(metaclass=PVGroupMeta):
         ChannelType.INT: PvpropertyShort,
         ChannelType.LONG: PvpropertyInteger,
         ChannelType.DOUBLE: PvpropertyDouble,
+        ChannelType.FLOAT: PvpropertyFloat,
         ChannelType.ENUM: PvpropertyEnum,
         ChannelType.CHAR: PvpropertyChar,
     }
@@ -1134,6 +1144,7 @@ class PVGroup(metaclass=PVGroupMeta):
         ChannelType.INT: 0,
         ChannelType.LONG: 0,
         ChannelType.DOUBLE: 0.0,
+        ChannelType.FLOAT: 0.0,
         ChannelType.ENUM: 0,
         ChannelType.CHAR: '',
     }

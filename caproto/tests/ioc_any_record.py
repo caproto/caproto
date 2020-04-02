@@ -11,6 +11,7 @@ def start_ioc(record_type, *, ioc_options, run_options):
     default_values = {
         ChannelType.CHAR: 'a',
         ChannelType.STRING: "string",
+        ChannelType.FLOAT: 0.0,
         ChannelType.DOUBLE: 0.0,
         ChannelType.LONG: 0,
         ChannelType.ENUM: 0,

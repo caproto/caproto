@@ -27,6 +27,7 @@ __all__ = ('Forbidden',
            'ChannelData',
            'ChannelDouble',
            'ChannelEnum',
+           'ChannelFloat',
            'ChannelInteger',
            'ChannelNumeric',
            'ChannelShort',
@@ -915,6 +916,21 @@ class ChannelShort(ChannelNumeric):
 
 class ChannelInteger(ChannelNumeric):
     data_type = ChannelType.LONG
+
+
+class ChannelFloat(ChannelNumeric):
+    data_type = ChannelType.FLOAT
+
+    def __init__(self, *, precision=0, **kwargs):
+        super().__init__(**kwargs)
+        self._data['precision'] = precision
+
+    precision = _read_only_property('precision')
+
+    def __getnewargs_ex__(self):
+        args, kwargs = super().__getnewargs_ex__()
+        kwargs['precision'] = self.precision
+        return (args, kwargs)
 
 
 class ChannelDouble(ChannelNumeric):

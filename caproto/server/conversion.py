@@ -4,7 +4,7 @@ import logging
 import re
 
 from .server import pvfunction, PVGroup
-from .._data import (ChannelDouble, ChannelEnum, ChannelChar,
+from .._data import (ChannelDouble, ChannelEnum, ChannelFloat, ChannelChar,
                      ChannelInteger, ChannelString, ChannelByte)
 from .menus import menus
 from . import records as records_mod
@@ -255,7 +255,7 @@ def get_base_fields(dbd_info, *, model_record='ai'):
 
 DBD_TYPE_INFO = {
     'DBF_DEVICE': ChannelEnum,
-    'DBF_FLOAT': ChannelDouble,
+    'DBF_FLOAT': ChannelFloat,
     'DBF_DOUBLE': ChannelDouble,
     'DBF_FWDLINK': ChannelString,
     'DBF_INLINK': ChannelString,
@@ -276,8 +276,6 @@ DBD_TYPE_INFO = {
 
 
 DTYPE_OVERRIDES = {
-    # DBF_FLOAT is ChannelDouble -> DOUBLE; override with FLOAT
-    'DBF_FLOAT': 'FLOAT',
     # DBF_SHORT is ChannelInteger -> LONG; override with SHORT (=INT)
     'DBF_SHORT': 'INT',
     'DBF_USHORT': 'INT',
