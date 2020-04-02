@@ -97,7 +97,8 @@ class RecordFieldGroup(PVGroup):
         dtype=ChannelType.ENUM,
         enum_strings=menus.menuYesNo.get_string_tuple(),
         doc='Alarm Ack Transient',
-        read_only=True)
+        read_only=True,
+        value='YES')
     access_security_group = pvproperty(name='ASG',
                                        dtype=ChannelType.CHAR,
                                        max_length=29,
@@ -119,7 +120,8 @@ class RecordFieldGroup(PVGroup):
         doc='Disable Alarm Sevrty')
     disable_value = pvproperty(name='DISV',
                                dtype=ChannelType.INT,
-                               doc='Disable Value')
+                               doc='Disable Value',
+                               value=1)
     device_type = pvproperty(name='DTYP',
                              dtype=ChannelType.ENUM,
                              enum_strings=menus.dtyp_base.get_string_tuple(),
@@ -204,18 +206,23 @@ class RecordFieldGroup(PVGroup):
     time_stamp_link = pvproperty(name='TSEL',
                                  dtype=ChannelType.STRING,
                                  doc='Time Stamp Link')
-    undefined = pvproperty(name='UDF', dtype=ChannelType.CHAR, doc='Undefined')
+    undefined = pvproperty(name='UDF',
+                           dtype=ChannelType.CHAR,
+                           doc='Undefined',
+                           value=chr(1))
     alarm_status = pvproperty(
         name='STAT',
         dtype=ChannelType.ENUM,
         enum_strings=menus.menuAlarmStat.get_string_tuple(),
         doc='Alarm Status',
-        read_only=True)
+        read_only=True,
+        value='SCAN')
     undefined_alarm_severity = pvproperty(
         name='UDFS',
         dtype=ChannelType.ENUM,
         enum_strings=menus.menuAlarmSevr.get_string_tuple(),
-        doc='Undefined Alarm Sevrty')
+        doc='Undefined Alarm Sevrty',
+        value='INVALID')
 
     # -- Above is auto-generated --
 
@@ -446,7 +453,8 @@ class AiFields(RecordFieldGroup, _Limits):
                                    doc='Adjustment Offset')
     adjustment_slope = pvproperty(name='ASLO',
                                   dtype=ChannelType.DOUBLE,
-                                  doc='Adjustment Slope')
+                                  doc='Adjustment Slope',
+                                  value=1)
     engineer_units_full = pvproperty(name='EGUF',
                                      dtype=ChannelType.DOUBLE,
                                      doc='Engineer Units Full')
@@ -463,7 +471,8 @@ class AiFields(RecordFieldGroup, _Limits):
                                    doc='Raw to EGU Offset')
     raw_to_egu_slope = pvproperty(name='ESLO',
                                   dtype=ChannelType.DOUBLE,
-                                  doc='Raw to EGU Slope')
+                                  doc='Raw to EGU Slope',
+                                  value=1)
     smoothing = pvproperty(name='SMOO',
                            dtype=ChannelType.DOUBLE,
                            doc='Smoothing')
@@ -510,11 +519,13 @@ class AiFields(RecordFieldGroup, _Limits):
         read_only=True)
     sim_mode_async_delay = pvproperty(name='SDLY',
                                       dtype=ChannelType.DOUBLE,
-                                      doc='Sim. Mode Async Delay')
+                                      doc='Sim. Mode Async Delay',
+                                      value=-1.0)
     sim_mode_scan = pvproperty(name='SSCN',
                                dtype=ChannelType.ENUM,
                                enum_strings=menus.menuScan.get_string_tuple(),
-                               doc='Sim. Mode Scan')
+                               doc='Sim. Mode Scan',
+                               value=0)
     # current_egu_value = pvproperty(name='VAL',
     #      dtype=ChannelType.DOUBLE,
     # doc='Current EGU Value')
@@ -546,7 +557,8 @@ class AsubFields(RecordFieldGroup):
         name='EFLG',
         dtype=ChannelType.ENUM,
         enum_strings=menus.aSubEFLG.get_string_tuple(),
-        doc='Output Event Flag')
+        doc='Output Event Flag',
+        value=1)
     bad_return_severity = pvproperty(
         name='BRSV',
         dtype=ChannelType.ENUM,
@@ -582,212 +594,254 @@ class AsubFields(RecordFieldGroup):
                            dtype=ChannelType.ENUM,
                            enum_strings=menus.menuFtype.get_string_tuple(),
                            doc='Type of A',
-                           read_only=True)
+                           read_only=True,
+                           value='DOUBLE')
     type_of_b = pvproperty(name='FTB',
                            dtype=ChannelType.ENUM,
                            enum_strings=menus.menuFtype.get_string_tuple(),
                            doc='Type of B',
-                           read_only=True)
+                           read_only=True,
+                           value='DOUBLE')
     type_of_c = pvproperty(name='FTC',
                            dtype=ChannelType.ENUM,
                            enum_strings=menus.menuFtype.get_string_tuple(),
                            doc='Type of C',
-                           read_only=True)
+                           read_only=True,
+                           value='DOUBLE')
     type_of_d = pvproperty(name='FTD',
                            dtype=ChannelType.ENUM,
                            enum_strings=menus.menuFtype.get_string_tuple(),
                            doc='Type of D',
-                           read_only=True)
+                           read_only=True,
+                           value='DOUBLE')
     type_of_e = pvproperty(name='FTE',
                            dtype=ChannelType.ENUM,
                            enum_strings=menus.menuFtype.get_string_tuple(),
                            doc='Type of E',
-                           read_only=True)
+                           read_only=True,
+                           value='DOUBLE')
     type_of_f = pvproperty(name='FTF',
                            dtype=ChannelType.ENUM,
                            enum_strings=menus.menuFtype.get_string_tuple(),
                            doc='Type of F',
-                           read_only=True)
+                           read_only=True,
+                           value='DOUBLE')
     type_of_g = pvproperty(name='FTG',
                            dtype=ChannelType.ENUM,
                            enum_strings=menus.menuFtype.get_string_tuple(),
                            doc='Type of G',
-                           read_only=True)
+                           read_only=True,
+                           value='DOUBLE')
     type_of_h = pvproperty(name='FTH',
                            dtype=ChannelType.ENUM,
                            enum_strings=menus.menuFtype.get_string_tuple(),
                            doc='Type of H',
-                           read_only=True)
+                           read_only=True,
+                           value='DOUBLE')
     type_of_i = pvproperty(name='FTI',
                            dtype=ChannelType.ENUM,
                            enum_strings=menus.menuFtype.get_string_tuple(),
                            doc='Type of I',
-                           read_only=True)
+                           read_only=True,
+                           value='DOUBLE')
     type_of_j = pvproperty(name='FTJ',
                            dtype=ChannelType.ENUM,
                            enum_strings=menus.menuFtype.get_string_tuple(),
                            doc='Type of J',
-                           read_only=True)
+                           read_only=True,
+                           value='DOUBLE')
     type_of_k = pvproperty(name='FTK',
                            dtype=ChannelType.ENUM,
                            enum_strings=menus.menuFtype.get_string_tuple(),
                            doc='Type of K',
-                           read_only=True)
+                           read_only=True,
+                           value='DOUBLE')
     type_of_l = pvproperty(name='FTL',
                            dtype=ChannelType.ENUM,
                            enum_strings=menus.menuFtype.get_string_tuple(),
                            doc='Type of L',
-                           read_only=True)
+                           read_only=True,
+                           value='DOUBLE')
     type_of_m = pvproperty(name='FTM',
                            dtype=ChannelType.ENUM,
                            enum_strings=menus.menuFtype.get_string_tuple(),
                            doc='Type of M',
-                           read_only=True)
+                           read_only=True,
+                           value='DOUBLE')
     type_of_n = pvproperty(name='FTN',
                            dtype=ChannelType.ENUM,
                            enum_strings=menus.menuFtype.get_string_tuple(),
                            doc='Type of N',
-                           read_only=True)
+                           read_only=True,
+                           value='DOUBLE')
     type_of_o = pvproperty(name='FTO',
                            dtype=ChannelType.ENUM,
                            enum_strings=menus.menuFtype.get_string_tuple(),
                            doc='Type of O',
-                           read_only=True)
+                           read_only=True,
+                           value='DOUBLE')
     type_of_p = pvproperty(name='FTP',
                            dtype=ChannelType.ENUM,
                            enum_strings=menus.menuFtype.get_string_tuple(),
                            doc='Type of P',
-                           read_only=True)
+                           read_only=True,
+                           value='DOUBLE')
     type_of_q = pvproperty(name='FTQ',
                            dtype=ChannelType.ENUM,
                            enum_strings=menus.menuFtype.get_string_tuple(),
                            doc='Type of Q',
-                           read_only=True)
+                           read_only=True,
+                           value='DOUBLE')
     type_of_r = pvproperty(name='FTR',
                            dtype=ChannelType.ENUM,
                            enum_strings=menus.menuFtype.get_string_tuple(),
                            doc='Type of R',
-                           read_only=True)
+                           read_only=True,
+                           value='DOUBLE')
     type_of_s = pvproperty(name='FTS',
                            dtype=ChannelType.ENUM,
                            enum_strings=menus.menuFtype.get_string_tuple(),
                            doc='Type of S',
-                           read_only=True)
+                           read_only=True,
+                           value='DOUBLE')
     type_of_t = pvproperty(name='FTT',
                            dtype=ChannelType.ENUM,
                            enum_strings=menus.menuFtype.get_string_tuple(),
                            doc='Type of T',
-                           read_only=True)
+                           read_only=True,
+                           value='DOUBLE')
     type_of_u = pvproperty(name='FTU',
                            dtype=ChannelType.ENUM,
                            enum_strings=menus.menuFtype.get_string_tuple(),
                            doc='Type of U',
-                           read_only=True)
+                           read_only=True,
+                           value='DOUBLE')
     type_of_vala = pvproperty(name='FTVA',
                               dtype=ChannelType.ENUM,
                               enum_strings=menus.menuFtype.get_string_tuple(),
                               doc='Type of VALA',
-                              read_only=True)
+                              read_only=True,
+                              value='DOUBLE')
     type_of_valb = pvproperty(name='FTVB',
                               dtype=ChannelType.ENUM,
                               enum_strings=menus.menuFtype.get_string_tuple(),
                               doc='Type of VALB',
-                              read_only=True)
+                              read_only=True,
+                              value='DOUBLE')
     type_of_valc = pvproperty(name='FTVC',
                               dtype=ChannelType.ENUM,
                               enum_strings=menus.menuFtype.get_string_tuple(),
                               doc='Type of VALC',
-                              read_only=True)
+                              read_only=True,
+                              value='DOUBLE')
     type_of_vald = pvproperty(name='FTVD',
                               dtype=ChannelType.ENUM,
                               enum_strings=menus.menuFtype.get_string_tuple(),
                               doc='Type of VALD',
-                              read_only=True)
+                              read_only=True,
+                              value='DOUBLE')
     type_of_vale = pvproperty(name='FTVE',
                               dtype=ChannelType.ENUM,
                               enum_strings=menus.menuFtype.get_string_tuple(),
                               doc='Type of VALE',
-                              read_only=True)
+                              read_only=True,
+                              value='DOUBLE')
     type_of_valf = pvproperty(name='FTVF',
                               dtype=ChannelType.ENUM,
                               enum_strings=menus.menuFtype.get_string_tuple(),
                               doc='Type of VALF',
-                              read_only=True)
+                              read_only=True,
+                              value='DOUBLE')
     type_of_valg = pvproperty(name='FTVG',
                               dtype=ChannelType.ENUM,
                               enum_strings=menus.menuFtype.get_string_tuple(),
                               doc='Type of VALG',
-                              read_only=True)
+                              read_only=True,
+                              value='DOUBLE')
     type_of_valh = pvproperty(name='FTVH',
                               dtype=ChannelType.ENUM,
                               enum_strings=menus.menuFtype.get_string_tuple(),
                               doc='Type of VALH',
-                              read_only=True)
+                              read_only=True,
+                              value='DOUBLE')
     type_of_vali = pvproperty(name='FTVI',
                               dtype=ChannelType.ENUM,
                               enum_strings=menus.menuFtype.get_string_tuple(),
                               doc='Type of VALI',
-                              read_only=True)
+                              read_only=True,
+                              value='DOUBLE')
     type_of_valj = pvproperty(name='FTVJ',
                               dtype=ChannelType.ENUM,
                               enum_strings=menus.menuFtype.get_string_tuple(),
                               doc='Type of VALJ',
-                              read_only=True)
+                              read_only=True,
+                              value='DOUBLE')
     type_of_valk = pvproperty(name='FTVK',
                               dtype=ChannelType.ENUM,
                               enum_strings=menus.menuFtype.get_string_tuple(),
                               doc='Type of VALK',
-                              read_only=True)
+                              read_only=True,
+                              value='DOUBLE')
     type_of_vall = pvproperty(name='FTVL',
                               dtype=ChannelType.ENUM,
                               enum_strings=menus.menuFtype.get_string_tuple(),
                               doc='Type of VALL',
-                              read_only=True)
+                              read_only=True,
+                              value='DOUBLE')
     type_of_valm = pvproperty(name='FTVM',
                               dtype=ChannelType.ENUM,
                               enum_strings=menus.menuFtype.get_string_tuple(),
                               doc='Type of VALM',
-                              read_only=True)
+                              read_only=True,
+                              value='DOUBLE')
     type_of_valn = pvproperty(name='FTVN',
                               dtype=ChannelType.ENUM,
                               enum_strings=menus.menuFtype.get_string_tuple(),
                               doc='Type of VALN',
-                              read_only=True)
+                              read_only=True,
+                              value='DOUBLE')
     type_of_valo = pvproperty(name='FTVO',
                               dtype=ChannelType.ENUM,
                               enum_strings=menus.menuFtype.get_string_tuple(),
                               doc='Type of VALO',
-                              read_only=True)
+                              read_only=True,
+                              value='DOUBLE')
     type_of_valp = pvproperty(name='FTVP',
                               dtype=ChannelType.ENUM,
                               enum_strings=menus.menuFtype.get_string_tuple(),
                               doc='Type of VALP',
-                              read_only=True)
+                              read_only=True,
+                              value='DOUBLE')
     type_of_valq = pvproperty(name='FTVQ',
                               dtype=ChannelType.ENUM,
                               enum_strings=menus.menuFtype.get_string_tuple(),
                               doc='Type of VALQ',
-                              read_only=True)
+                              read_only=True,
+                              value='DOUBLE')
     type_of_valr = pvproperty(name='FTVR',
                               dtype=ChannelType.ENUM,
                               enum_strings=menus.menuFtype.get_string_tuple(),
                               doc='Type of VALR',
-                              read_only=True)
+                              read_only=True,
+                              value='DOUBLE')
     type_of_vals = pvproperty(name='FTVS',
                               dtype=ChannelType.ENUM,
                               enum_strings=menus.menuFtype.get_string_tuple(),
                               doc='Type of VALS',
-                              read_only=True)
+                              read_only=True,
+                              value='DOUBLE')
     type_of_valt = pvproperty(name='FTVT',
                               dtype=ChannelType.ENUM,
                               enum_strings=menus.menuFtype.get_string_tuple(),
                               doc='Type of VALT',
-                              read_only=True)
+                              read_only=True,
+                              value='DOUBLE')
     type_of_valu = pvproperty(name='FTVU',
                               dtype=ChannelType.ENUM,
                               enum_strings=menus.menuFtype.get_string_tuple(),
                               doc='Type of VALU',
-                              read_only=True)
+                              read_only=True,
+                              value='DOUBLE')
     input_link_a = pvproperty(name='INPA',
                               dtype=ChannelType.STRING,
                               doc='Input Link A')
@@ -854,419 +908,523 @@ class AsubFields(RecordFieldGroup):
     num_elements_in_a = pvproperty(name='NEA',
                                    dtype=ChannelType.LONG,
                                    doc='Num. elements in A',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     num_elements_in_b = pvproperty(name='NEB',
                                    dtype=ChannelType.LONG,
                                    doc='Num. elements in B',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     num_elements_in_c = pvproperty(name='NEC',
                                    dtype=ChannelType.LONG,
                                    doc='Num. elements in C',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     num_elements_in_d = pvproperty(name='NED',
                                    dtype=ChannelType.LONG,
                                    doc='Num. elements in D',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     num_elements_in_e = pvproperty(name='NEE',
                                    dtype=ChannelType.LONG,
                                    doc='Num. elements in E',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     num_elements_in_f = pvproperty(name='NEF',
                                    dtype=ChannelType.LONG,
                                    doc='Num. elements in F',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     num_elements_in_g = pvproperty(name='NEG',
                                    dtype=ChannelType.LONG,
                                    doc='Num. elements in G',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     num_elements_in_h = pvproperty(name='NEH',
                                    dtype=ChannelType.LONG,
                                    doc='Num. elements in H',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     num_elements_in_i = pvproperty(name='NEI',
                                    dtype=ChannelType.LONG,
                                    doc='Num. elements in I',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     num_elements_in_j = pvproperty(name='NEJ',
                                    dtype=ChannelType.LONG,
                                    doc='Num. elements in J',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     num_elements_in_k = pvproperty(name='NEK',
                                    dtype=ChannelType.LONG,
                                    doc='Num. elements in K',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     num_elements_in_l = pvproperty(name='NEL',
                                    dtype=ChannelType.LONG,
                                    doc='Num. elements in L',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     num_elements_in_m = pvproperty(name='NEM',
                                    dtype=ChannelType.LONG,
                                    doc='Num. elements in M',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     num_elements_in_n = pvproperty(name='NEN',
                                    dtype=ChannelType.LONG,
                                    doc='Num. elements in N',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     num_elements_in_o = pvproperty(name='NEO',
                                    dtype=ChannelType.LONG,
                                    doc='Num. elements in O',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     num_elements_in_p = pvproperty(name='NEP',
                                    dtype=ChannelType.LONG,
                                    doc='Num. elements in P',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     num_elements_in_q = pvproperty(name='NEQ',
                                    dtype=ChannelType.LONG,
                                    doc='Num. elements in Q',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     num_elements_in_r = pvproperty(name='NER',
                                    dtype=ChannelType.LONG,
                                    doc='Num. elements in R',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     num_elements_in_s = pvproperty(name='NES',
                                    dtype=ChannelType.LONG,
                                    doc='Num. elements in S',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     num_elements_in_t = pvproperty(name='NET',
                                    dtype=ChannelType.LONG,
                                    doc='Num. elements in T',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     num_elements_in_u = pvproperty(name='NEU',
                                    dtype=ChannelType.LONG,
                                    doc='Num. elements in U',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     num_elements_in_vala = pvproperty(name='NEVA',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in VALA',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_valb = pvproperty(name='NEVB',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in VALB',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_valc = pvproperty(name='NEVC',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in VALC',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_vald = pvproperty(name='NEVD',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in VALD',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_vale = pvproperty(name='NEVE',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in VALE',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_valf = pvproperty(name='NEVF',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in VALF',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_valg = pvproperty(name='NEVG',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in VALG',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_vali = pvproperty(name='NEVI',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in VALI',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_valj = pvproperty(name='NEVJ',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in VALJ',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_valk = pvproperty(name='NEVK',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in VALK',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_vall = pvproperty(name='NEVL',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in VALL',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_valm = pvproperty(name='NEVM',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in VALM',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_valn = pvproperty(name='NEVN',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in VALN',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_valo = pvproperty(name='NEVO',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in VALO',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_valp = pvproperty(name='NEVP',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in VALP',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_valq = pvproperty(name='NEVQ',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in VALQ',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_valr = pvproperty(name='NEVR',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in VALR',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_vals = pvproperty(name='NEVS',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in VALS',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_valt = pvproperty(name='NEVT',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in VALT',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_valu = pvproperty(name='NEVU',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in VALU',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     max_elements_in_a = pvproperty(name='NOA',
                                    dtype=ChannelType.LONG,
                                    doc='Max. elements in A',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     max_elements_in_b = pvproperty(name='NOB',
                                    dtype=ChannelType.LONG,
                                    doc='Max. elements in B',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     max_elements_in_c = pvproperty(name='NOC',
                                    dtype=ChannelType.LONG,
                                    doc='Max. elements in C',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     max_elements_in_d = pvproperty(name='NOD',
                                    dtype=ChannelType.LONG,
                                    doc='Max. elements in D',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     max_elements_in_e = pvproperty(name='NOE',
                                    dtype=ChannelType.LONG,
                                    doc='Max. elements in E',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     max_elements_in_f = pvproperty(name='NOF',
                                    dtype=ChannelType.LONG,
                                    doc='Max. elements in F',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     max_elements_in_g = pvproperty(name='NOG',
                                    dtype=ChannelType.LONG,
                                    doc='Max. elements in G',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     max_elements_in_h = pvproperty(name='NOH',
                                    dtype=ChannelType.LONG,
                                    doc='Max. elements in H',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     max_elements_in_i = pvproperty(name='NOI',
                                    dtype=ChannelType.LONG,
                                    doc='Max. elements in I',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     max_elements_in_j = pvproperty(name='NOJ',
                                    dtype=ChannelType.LONG,
                                    doc='Max. elements in J',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     max_elements_in_k = pvproperty(name='NOK',
                                    dtype=ChannelType.LONG,
                                    doc='Max. elements in K',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     max_elements_in_l = pvproperty(name='NOL',
                                    dtype=ChannelType.LONG,
                                    doc='Max. elements in L',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     max_elements_in_m = pvproperty(name='NOM',
                                    dtype=ChannelType.LONG,
                                    doc='Max. elements in M',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     max_elements_in_n = pvproperty(name='NON',
                                    dtype=ChannelType.LONG,
                                    doc='Max. elements in N',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     max_elements_in_o = pvproperty(name='NOO',
                                    dtype=ChannelType.LONG,
                                    doc='Max. elements in O',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     max_elements_in_p = pvproperty(name='NOP',
                                    dtype=ChannelType.LONG,
                                    doc='Max. elements in P',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     max_elements_in_q = pvproperty(name='NOQ',
                                    dtype=ChannelType.LONG,
                                    doc='Max. elements in Q',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     max_elements_in_r = pvproperty(name='NOR',
                                    dtype=ChannelType.LONG,
                                    doc='Max. elements in R',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     max_elements_in_s = pvproperty(name='NOS',
                                    dtype=ChannelType.LONG,
                                    doc='Max. elements in S',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     max_elements_in_t = pvproperty(name='NOT',
                                    dtype=ChannelType.LONG,
                                    doc='Max. elements in T',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     max_elements_in_u = pvproperty(name='NOU',
                                    dtype=ChannelType.LONG,
                                    doc='Max. elements in U',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     max_elements_in_vala = pvproperty(name='NOVA',
                                       dtype=ChannelType.LONG,
                                       doc='Max. elements in VALA',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     max_elements_in_valb = pvproperty(name='NOVB',
                                       dtype=ChannelType.LONG,
                                       doc='Max. elements in VALB',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     max_elements_in_valc = pvproperty(name='NOVC',
                                       dtype=ChannelType.LONG,
                                       doc='Max. elements in VALC',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     max_elements_in_vald = pvproperty(name='NOVD',
                                       dtype=ChannelType.LONG,
                                       doc='Max. elements in VALD',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     max_elements_in_vale = pvproperty(name='NOVE',
                                       dtype=ChannelType.LONG,
                                       doc='Max. elements in VALE',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     max_elements_in_valf = pvproperty(name='NOVF',
                                       dtype=ChannelType.LONG,
                                       doc='Max. elements in VALF',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     max_elements_in_valg = pvproperty(name='NOVG',
                                       dtype=ChannelType.LONG,
                                       doc='Max. elements in VALG',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     max_elements_in_valh = pvproperty(name='NOVH',
                                       dtype=ChannelType.LONG,
                                       doc='Max. elements in VAlH',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     max_elements_in_vali = pvproperty(name='NOVI',
                                       dtype=ChannelType.LONG,
                                       doc='Max. elements in VALI',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     max_elements_in_valj = pvproperty(name='NOVJ',
                                       dtype=ChannelType.LONG,
                                       doc='Max. elements in VALJ',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     max_elements_in_valk = pvproperty(name='NOVK',
                                       dtype=ChannelType.LONG,
                                       doc='Max. elements in VALK',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     max_elements_in_vall = pvproperty(name='NOVL',
                                       dtype=ChannelType.LONG,
                                       doc='Max. elements in VALL',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     max_elements_in_valm = pvproperty(name='NOVM',
                                       dtype=ChannelType.LONG,
                                       doc='Max. elements in VALM',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     max_elements_in_valn = pvproperty(name='NOVN',
                                       dtype=ChannelType.LONG,
                                       doc='Max. elements in VALN',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     max_elements_in_valo = pvproperty(name='NOVO',
                                       dtype=ChannelType.LONG,
                                       doc='Max. elements in VALO',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     max_elements_in_valp = pvproperty(name='NOVP',
                                       dtype=ChannelType.LONG,
                                       doc='Max. elements in VALP',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     max_elements_in_valq = pvproperty(name='NOVQ',
                                       dtype=ChannelType.LONG,
                                       doc='Max. elements in VALQ',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     max_elements_in_valr = pvproperty(name='NOVR',
                                       dtype=ChannelType.LONG,
                                       doc='Max. elements in VALR',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     max_elements_in_vals = pvproperty(name='NOVS',
                                       dtype=ChannelType.LONG,
                                       doc='Max. elements in VALS',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     max_elements_in_valt = pvproperty(name='NOVT',
                                       dtype=ChannelType.LONG,
                                       doc='Max. elements in VALT',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     max_elements_in_valu = pvproperty(name='NOVU',
                                       dtype=ChannelType.LONG,
                                       doc='Max. elements in VALU',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_ovla = pvproperty(name='ONVA',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in OVLA',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_ovlb = pvproperty(name='ONVB',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in OVLB',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_ovlc = pvproperty(name='ONVC',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in OVLC',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_ovld = pvproperty(name='ONVD',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in OVLD',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_ovle = pvproperty(name='ONVE',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in OVLE',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_ovlf = pvproperty(name='ONVF',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in OVLF',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_ovlg = pvproperty(name='ONVG',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in OVLG',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_ovlh = pvproperty(name='ONVH',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in VAlH',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_ovli = pvproperty(name='ONVI',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in OVLI',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_ovlj = pvproperty(name='ONVJ',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in OVLJ',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_ovlk = pvproperty(name='ONVK',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in OVLK',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_ovll = pvproperty(name='ONVL',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in OVLL',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_ovlm = pvproperty(name='ONVM',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in OVLM',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_ovln = pvproperty(name='ONVN',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in OVLN',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_ovlo = pvproperty(name='ONVO',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in OVLO',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_ovlp = pvproperty(name='ONVP',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in OVLP',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_ovlq = pvproperty(name='ONVQ',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in OVLQ',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_ovlr = pvproperty(name='ONVR',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in OVLR',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_ovls = pvproperty(name='ONVS',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in OVLS',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_ovlt = pvproperty(name='ONVT',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in OVLT',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     num_elements_in_ovlu = pvproperty(name='ONVU',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in OVLU',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     output_link_a = pvproperty(name='OUTA',
                                dtype=ChannelType.STRING,
                                doc='Output Link A')
@@ -1333,7 +1491,8 @@ class AsubFields(RecordFieldGroup):
     num_elements_in_valh = pvproperty(name='NEVH',
                                       dtype=ChannelType.LONG,
                                       doc='Num. elements in VAlH',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     # subr_return_value = pvproperty(name='VAL',
     #      dtype=ChannelType.LONG,
     # doc='Subr. return value')
@@ -1384,7 +1543,8 @@ class AaiFields(RecordFieldGroup):
     number_of_elements = pvproperty(name='NELM',
                                     dtype=ChannelType.LONG,
                                     doc='Number of Elements',
-                                    read_only=True)
+                                    read_only=True,
+                                    value=1)
     field_type_of_value = pvproperty(
         name='FTVL',
         dtype=ChannelType.ENUM,
@@ -1420,11 +1580,13 @@ class AaiFields(RecordFieldGroup):
         read_only=True)
     sim_mode_async_delay = pvproperty(name='SDLY',
                                       dtype=ChannelType.DOUBLE,
-                                      doc='Sim. Mode Async Delay')
+                                      doc='Sim. Mode Async Delay',
+                                      value=-1.0)
     sim_mode_scan = pvproperty(name='SSCN',
                                dtype=ChannelType.ENUM,
                                enum_strings=menus.menuScan.get_string_tuple(),
-                               doc='Sim. Mode Scan')
+                               doc='Sim. Mode Scan',
+                               value=0)
     _link_parent_attribute(
         display_precision,
         'precision',
@@ -1484,7 +1646,8 @@ class AaoFields(RecordFieldGroup):
     number_of_elements = pvproperty(name='NELM',
                                     dtype=ChannelType.LONG,
                                     doc='Number of Elements',
-                                    read_only=True)
+                                    read_only=True,
+                                    value=1)
     field_type_of_value = pvproperty(
         name='FTVL',
         dtype=ChannelType.ENUM,
@@ -1520,11 +1683,13 @@ class AaoFields(RecordFieldGroup):
         read_only=True)
     sim_mode_async_delay = pvproperty(name='SDLY',
                                       dtype=ChannelType.DOUBLE,
-                                      doc='Sim. Mode Async Delay')
+                                      doc='Sim. Mode Async Delay',
+                                      value=-1.0)
     sim_mode_scan = pvproperty(name='SSCN',
                                dtype=ChannelType.ENUM,
                                enum_strings=menus.menuScan.get_string_tuple(),
-                               doc='Sim. Mode Scan')
+                               doc='Sim. Mode Scan',
+                               value=0)
     _link_parent_attribute(
         display_precision,
         'precision',
@@ -1620,7 +1785,8 @@ class AoFields(RecordFieldGroup, _Limits):
                                    doc='EGU to Raw Offset')
     egu_to_raw_slope = pvproperty(name='ESLO',
                                   dtype=ChannelType.DOUBLE,
-                                  doc='EGU to Raw Slope')
+                                  doc='EGU to Raw Slope',
+                                  value=1)
     eng_units_full = pvproperty(name='EGUF',
                                 dtype=ChannelType.DOUBLE,
                                 doc='Eng Units Full')
@@ -1698,11 +1864,13 @@ class AoFields(RecordFieldGroup, _Limits):
         read_only=True)
     sim_mode_async_delay = pvproperty(name='SDLY',
                                       dtype=ChannelType.DOUBLE,
-                                      doc='Sim. Mode Async Delay')
+                                      doc='Sim. Mode Async Delay',
+                                      value=-1.0)
     sim_mode_scan = pvproperty(name='SSCN',
                                dtype=ChannelType.ENUM,
                                enum_strings=menus.menuScan.get_string_tuple(),
-                               doc='Sim. Mode Scan')
+                               doc='Sim. Mode Scan',
+                               value=0)
     # desired_output = pvproperty(name='VAL',
     #      dtype=ChannelType.DOUBLE,
     # doc='Desired Output')
@@ -1899,7 +2067,8 @@ class AsynFields(RecordFieldGroup):
                                     dtype=ChannelType.CHAR,
                                     max_length=40,
                                     report_as_string=True,
-                                    doc='Driver info string')
+                                    doc='Driver info string',
+                                    value='')
     enable_disable = pvproperty(
         name='ENBL',
         dtype=ChannelType.ENUM,
@@ -1929,7 +2098,8 @@ class AsynFields(RecordFieldGroup):
     max_size_of_input_array = pvproperty(name='IMAX',
                                          dtype=ChannelType.LONG,
                                          doc='Max. size of input array',
-                                         read_only=True)
+                                         read_only=True,
+                                         value=80)
     modem_control = pvproperty(
         name='MCTL',
         dtype=ChannelType.ENUM,
@@ -1953,7 +2123,8 @@ class AsynFields(RecordFieldGroup):
                            doc='Stop bits')
     timeout = pvproperty(name='TMOT',
                          dtype=ChannelType.DOUBLE,
-                         doc='Timeout (sec)')
+                         doc='Timeout (sec)',
+                         value=1.0)
     transaction_mode = pvproperty(
         name='TMOD',
         dtype=ChannelType.ENUM,
@@ -1966,12 +2137,14 @@ class AsynFields(RecordFieldGroup):
         doc='XON=any character')
     asyn_address = pvproperty(name='ADDR',
                               dtype=ChannelType.LONG,
-                              doc='asyn address')
+                              doc='asyn address',
+                              value=0)
     asyn_port = pvproperty(name='PORT',
                            dtype=ChannelType.CHAR,
                            max_length=40,
                            report_as_string=True,
-                           doc='asyn port')
+                           doc='asyn port',
+                           value='')
     addressed_command = pvproperty(
         name='ACMD',
         dtype=ChannelType.ENUM,
@@ -1980,10 +2153,12 @@ class AsynFields(RecordFieldGroup):
     max_size_of_output_array = pvproperty(name='OMAX',
                                           dtype=ChannelType.LONG,
                                           doc='Max. size of output array',
-                                          read_only=True)
+                                          read_only=True,
+                                          value=80)
     number_of_bytes_to_write = pvproperty(name='NOWT',
                                           dtype=ChannelType.LONG,
-                                          doc='Number of bytes to write')
+                                          doc='Number of bytes to write',
+                                          value=80)
     output = pvproperty(name='AOUT',
                         dtype=ChannelType.CHAR,
                         max_length=40,
@@ -2011,7 +2186,8 @@ class AsynFields(RecordFieldGroup):
                                   doc='asynInt32 output')
     asynuint32digital_mask = pvproperty(name='UI32MASK',
                                         dtype=ChannelType.LONG,
-                                        doc='asynUInt32Digital mask')
+                                        doc='asynUInt32Digital mask',
+                                        value=4294967295)
     asynuint32digital_output = pvproperty(name='UI32OUT',
                                           dtype=ChannelType.LONG,
                                           doc='asynUInt32Digital output')
@@ -2019,7 +2195,8 @@ class AsynFields(RecordFieldGroup):
                            dtype=ChannelType.CHAR,
                            max_length=40,
                            report_as_string=True,
-                           doc='host info')
+                           doc='host info',
+                           value='')
     disconnect_on_timeout = pvproperty(
         name='DRTO',
         dtype=ChannelType.ENUM,
@@ -2117,11 +2294,13 @@ class BiFields(RecordFieldGroup):
         read_only=True)
     sim_mode_async_delay = pvproperty(name='SDLY',
                                       dtype=ChannelType.DOUBLE,
-                                      doc='Sim. Mode Async Delay')
+                                      doc='Sim. Mode Async Delay',
+                                      value=-1.0)
     sim_mode_scan = pvproperty(name='SSCN',
                                dtype=ChannelType.ENUM,
                                enum_strings=menus.menuScan.get_string_tuple(),
-                               doc='Sim. Mode Scan')
+                               doc='Sim. Mode Scan',
+                               value=0)
     # current_value = pvproperty(name='VAL',
     #      dtype=ChannelType.ENUM,
     # doc='Current Value')
@@ -2236,11 +2415,13 @@ class BoFields(RecordFieldGroup):
         read_only=True)
     sim_mode_async_delay = pvproperty(name='SDLY',
                                       dtype=ChannelType.DOUBLE,
-                                      doc='Sim. Mode Async Delay')
+                                      doc='Sim. Mode Async Delay',
+                                      value=-1.0)
     sim_mode_scan = pvproperty(name='SSCN',
                                dtype=ChannelType.ENUM,
                                enum_strings=menus.menuScan.get_string_tuple(),
-                               doc='Sim. Mode Scan')
+                               doc='Sim. Mode Scan',
+                               value=0)
     # current_value = pvproperty(name='VAL',
     #      dtype=ChannelType.ENUM,
     # doc='Current Value')
@@ -2276,7 +2457,8 @@ class CalcFields(RecordFieldGroup, _Limits):
                              dtype=ChannelType.CHAR,
                              max_length=80,
                              report_as_string=True,
-                             doc='Calculation')
+                             doc='Calculation',
+                             value=chr(0))
     archive_deadband = pvproperty(name='ADEL',
                                   dtype=ChannelType.DOUBLE,
                                   doc='Archive Deadband')
@@ -2462,12 +2644,14 @@ class CalcoutFields(RecordFieldGroup, _Limits):
                              dtype=ChannelType.CHAR,
                              max_length=80,
                              report_as_string=True,
-                             doc='Calculation')
+                             doc='Calculation',
+                             value=chr(0))
     output_calculation = pvproperty(name='OCAL',
                                     dtype=ChannelType.CHAR,
                                     max_length=80,
                                     report_as_string=True,
-                                    doc='Output Calculation')
+                                    doc='Output Calculation',
+                                    value=chr(0))
     output_data_opt = pvproperty(
         name='DOPT',
         dtype=ChannelType.ENUM,
@@ -2540,73 +2724,85 @@ class CalcoutFields(RecordFieldGroup, _Limits):
         dtype=ChannelType.ENUM,
         enum_strings=menus.calcoutINAV.get_string_tuple(),
         doc='INPA PV Status',
-        read_only=True)
+        read_only=True,
+        value=1)
     inpb_pv_status = pvproperty(
         name='INBV',
         dtype=ChannelType.ENUM,
         enum_strings=menus.calcoutINAV.get_string_tuple(),
         doc='INPB PV Status',
-        read_only=True)
+        read_only=True,
+        value=1)
     inpc_pv_status = pvproperty(
         name='INCV',
         dtype=ChannelType.ENUM,
         enum_strings=menus.calcoutINAV.get_string_tuple(),
         doc='INPC PV Status',
-        read_only=True)
+        read_only=True,
+        value=1)
     inpd_pv_status = pvproperty(
         name='INDV',
         dtype=ChannelType.ENUM,
         enum_strings=menus.calcoutINAV.get_string_tuple(),
         doc='INPD PV Status',
-        read_only=True)
+        read_only=True,
+        value=1)
     inpe_pv_status = pvproperty(
         name='INEV',
         dtype=ChannelType.ENUM,
         enum_strings=menus.calcoutINAV.get_string_tuple(),
         doc='INPE PV Status',
-        read_only=True)
+        read_only=True,
+        value=1)
     inpf_pv_status = pvproperty(
         name='INFV',
         dtype=ChannelType.ENUM,
         enum_strings=menus.calcoutINAV.get_string_tuple(),
         doc='INPF PV Status',
-        read_only=True)
+        read_only=True,
+        value=1)
     inpg_pv_status = pvproperty(
         name='INGV',
         dtype=ChannelType.ENUM,
         enum_strings=menus.calcoutINAV.get_string_tuple(),
         doc='INPG PV Status',
-        read_only=True)
+        read_only=True,
+        value=1)
     inph_pv_status = pvproperty(
         name='INHV',
         dtype=ChannelType.ENUM,
         enum_strings=menus.calcoutINAV.get_string_tuple(),
         doc='INPH PV Status',
-        read_only=True)
+        read_only=True,
+        value=1)
     inpi_pv_status = pvproperty(
         name='INIV',
         dtype=ChannelType.ENUM,
         enum_strings=menus.calcoutINAV.get_string_tuple(),
         doc='INPI PV Status',
-        read_only=True)
+        read_only=True,
+        value=1)
     inpj_pv_status = pvproperty(
         name='INJV',
         dtype=ChannelType.ENUM,
         enum_strings=menus.calcoutINAV.get_string_tuple(),
         doc='INPJ PV Status',
-        read_only=True)
+        read_only=True,
+        value=1)
     inpk_pv_status = pvproperty(
         name='INKV',
         dtype=ChannelType.ENUM,
         enum_strings=menus.calcoutINAV.get_string_tuple(),
         doc='INPK PV Status',
-        read_only=True)
+        read_only=True,
+        value=1)
     inpl_pv_status = pvproperty(
         name='INLV',
         dtype=ChannelType.ENUM,
         enum_strings=menus.calcoutINAV.get_string_tuple(),
         doc='INPL PV Status',
-        read_only=True)
+        read_only=True,
+        value=1)
     input_a = pvproperty(name='INPA', dtype=ChannelType.STRING, doc='Input A')
     input_b = pvproperty(name='INPB', dtype=ChannelType.STRING, doc='Input B')
     input_c = pvproperty(name='INPC', dtype=ChannelType.STRING, doc='Input C')
@@ -2735,11 +2931,13 @@ class CompressFields(RecordFieldGroup):
                                      doc='Input Specification')
     n_to_1_compression = pvproperty(name='N',
                                     dtype=ChannelType.LONG,
-                                    doc='N to 1 Compression')
+                                    doc='N to 1 Compression',
+                                    value=1)
     number_of_values = pvproperty(name='NSAM',
                                   dtype=ChannelType.LONG,
                                   doc='Number of Values',
-                                  read_only=True)
+                                  read_only=True,
+                                  value=1)
     display_precision = pvproperty(name='PREC',
                                    dtype=ChannelType.INT,
                                    doc='Display Precision')
@@ -2801,7 +2999,8 @@ class DfanoutFields(RecordFieldGroup, _Limits):
                                      read_only=True)
     link_selection = pvproperty(name='SELN',
                                 dtype=ChannelType.INT,
-                                doc='Link Selection')
+                                doc='Link Selection',
+                                value=1)
     alarm_deadband = pvproperty(name='HYST',
                                 dtype=ChannelType.DOUBLE,
                                 doc='Alarm Deadband')
@@ -2911,11 +3110,13 @@ class EventFields(RecordFieldGroup):
         read_only=True)
     sim_mode_async_delay = pvproperty(name='SDLY',
                                       dtype=ChannelType.DOUBLE,
-                                      doc='Sim. Mode Async Delay')
+                                      doc='Sim. Mode Async Delay',
+                                      value=-1.0)
     sim_mode_scan = pvproperty(name='SSCN',
                                dtype=ChannelType.ENUM,
                                enum_strings=menus.menuScan.get_string_tuple(),
-                               doc='Sim. Mode Scan')
+                               doc='Sim. Mode Scan',
+                               value=0)
     # event_name_to_post = pvproperty(name='VAL',
     #      dtype=ChannelType.CHAR,
     # max_length=40,report_as_string=True,doc='Event Name To Post')
@@ -2932,7 +3133,8 @@ class FanoutFields(RecordFieldGroup):
                              doc='Device Type')
     link_selection = pvproperty(name='SELN',
                                 dtype=ChannelType.INT,
-                                doc='Link Selection')
+                                doc='Link Selection',
+                                value=1)
     forward_link_1 = pvproperty(name='LNK1',
                                 dtype=ChannelType.STRING,
                                 doc='Forward Link 1')
@@ -2991,10 +3193,12 @@ class FanoutFields(RecordFieldGroup):
                                  doc='Forward Link 15')
     offset_for_specified = pvproperty(name='OFFS',
                                       dtype=ChannelType.INT,
-                                      doc='Offset for Specified')
+                                      doc='Offset for Specified',
+                                      value=0)
     shift_for_mask_mode = pvproperty(name='SHFT',
                                      dtype=ChannelType.INT,
-                                     doc='Shift for Mask mode')
+                                     doc='Shift for Mask mode',
+                                     value=-1)
     # used_to_trigger = pvproperty(name='VAL',
     #      dtype=ChannelType.LONG,
     # doc='Used to trigger')
@@ -3018,7 +3222,8 @@ class HistogramFields(RecordFieldGroup):
     collection_status = pvproperty(name='CSTA',
                                    dtype=ChannelType.INT,
                                    doc='Collection Status',
-                                   read_only=True)
+                                   read_only=True,
+                                   value=1)
     counts_since_monitor = pvproperty(name='MCNT',
                                       dtype=ChannelType.INT,
                                       doc='Counts Since Monitor',
@@ -3059,7 +3264,8 @@ class HistogramFields(RecordFieldGroup):
     num_of_array_elements = pvproperty(name='NELM',
                                        dtype=ChannelType.INT,
                                        doc='Num of Array Elements',
-                                       read_only=True)
+                                       read_only=True,
+                                       value=1)
     upper_signal_limit = pvproperty(name='ULIM',
                                     dtype=ChannelType.DOUBLE,
                                     doc='Upper Signal Limit')
@@ -3085,11 +3291,13 @@ class HistogramFields(RecordFieldGroup):
         read_only=True)
     sim_mode_async_delay = pvproperty(name='SDLY',
                                       dtype=ChannelType.DOUBLE,
-                                      doc='Sim. Mode Async Delay')
+                                      doc='Sim. Mode Async Delay',
+                                      value=-1.0)
     sim_mode_scan = pvproperty(name='SSCN',
                                dtype=ChannelType.ENUM,
                                enum_strings=menus.menuScan.get_string_tuple(),
-                               doc='Sim. Mode Scan')
+                               doc='Sim. Mode Scan',
+                               value=0)
     _link_parent_attribute(
         display_precision,
         'precision',
@@ -3176,11 +3384,13 @@ class LonginFields(RecordFieldGroup, _LimitsLong):
         read_only=True)
     sim_mode_async_delay = pvproperty(name='SDLY',
                                       dtype=ChannelType.DOUBLE,
-                                      doc='Sim. Mode Async Delay')
+                                      doc='Sim. Mode Async Delay',
+                                      value=-1.0)
     sim_mode_scan = pvproperty(name='SSCN',
                                dtype=ChannelType.ENUM,
                                enum_strings=menus.menuScan.get_string_tuple(),
-                               doc='Sim. Mode Scan')
+                               doc='Sim. Mode Scan',
+                               value=0)
     # current_value = pvproperty(name='VAL',
     #      dtype=ChannelType.LONG,
     # doc='Current value')
@@ -3273,11 +3483,13 @@ class LongoutFields(RecordFieldGroup, _LimitsLong):
         read_only=True)
     sim_mode_async_delay = pvproperty(name='SDLY',
                                       dtype=ChannelType.DOUBLE,
-                                      doc='Sim. Mode Async Delay')
+                                      doc='Sim. Mode Async Delay',
+                                      value=-1.0)
     sim_mode_scan = pvproperty(name='SSCN',
                                dtype=ChannelType.ENUM,
                                enum_strings=menus.menuScan.get_string_tuple(),
-                               doc='Sim. Mode Scan')
+                               doc='Sim. Mode Scan',
+                               value=0)
     # desired_output = pvproperty(name='VAL',
     #      dtype=ChannelType.LONG,
     # doc='Desired Output')
@@ -3470,14 +3682,16 @@ class MbbiFields(RecordFieldGroup):
                            doc='One Value')
     sim_mode_async_delay = pvproperty(name='SDLY',
                                       dtype=ChannelType.DOUBLE,
-                                      doc='Sim. Mode Async Delay')
+                                      doc='Sim. Mode Async Delay',
+                                      value=-1.0)
     simulation_mode_link = pvproperty(name='SIML',
                                       dtype=ChannelType.STRING,
                                       doc='Simulation Mode Link')
     sim_mode_scan = pvproperty(name='SSCN',
                                dtype=ChannelType.ENUM,
                                enum_strings=menus.menuScan.get_string_tuple(),
-                               doc='Sim. Mode Scan')
+                               doc='Sim. Mode Scan',
+                               value=0)
     seven_string = pvproperty(name='SVST',
                               dtype=ChannelType.CHAR,
                               max_length=26,
@@ -3695,11 +3909,13 @@ class MbbidirectFields(RecordFieldGroup):
         read_only=True)
     sim_mode_async_delay = pvproperty(name='SDLY',
                                       dtype=ChannelType.DOUBLE,
-                                      doc='Sim. Mode Async Delay')
+                                      doc='Sim. Mode Async Delay',
+                                      value=-1.0)
     sim_mode_scan = pvproperty(name='SSCN',
                                dtype=ChannelType.ENUM,
                                enum_strings=menus.menuScan.get_string_tuple(),
-                               doc='Sim. Mode Scan')
+                               doc='Sim. Mode Scan',
+                               value=0)
     # current_value = pvproperty(name='VAL',
     #      dtype=ChannelType.LONG,
     # doc='Current Value')
@@ -3904,14 +4120,16 @@ class MbboFields(RecordFieldGroup):
                            doc='One Value')
     sim_mode_async_delay = pvproperty(name='SDLY',
                                       dtype=ChannelType.DOUBLE,
-                                      doc='Sim. Mode Async Delay')
+                                      doc='Sim. Mode Async Delay',
+                                      value=-1.0)
     simulation_mode_link = pvproperty(name='SIML',
                                       dtype=ChannelType.STRING,
                                       doc='Simulation Mode Link')
     sim_mode_scan = pvproperty(name='SSCN',
                                dtype=ChannelType.ENUM,
                                enum_strings=menus.menuScan.get_string_tuple(),
-                               doc='Sim. Mode Scan')
+                               doc='Sim. Mode Scan',
+                               value=0)
     seven_string = pvproperty(name='SVST',
                               dtype=ChannelType.CHAR,
                               max_length=26,
@@ -4150,11 +4368,13 @@ class MbbodirectFields(RecordFieldGroup):
         read_only=True)
     sim_mode_async_delay = pvproperty(name='SDLY',
                                       dtype=ChannelType.DOUBLE,
-                                      doc='Sim. Mode Async Delay')
+                                      doc='Sim. Mode Async Delay',
+                                      value=-1.0)
     sim_mode_scan = pvproperty(name='SSCN',
                                dtype=ChannelType.ENUM,
                                enum_strings=menus.menuScan.get_string_tuple(),
-                               doc='Sim. Mode Scan')
+                               doc='Sim. Mode Scan',
+                               value=0)
     # word = pvproperty(name='VAL',
     #      dtype=ChannelType.LONG,
     # doc='Word')
@@ -4180,7 +4400,8 @@ class MotorFields(RecordFieldGroup, _Limits):
     code_version = pvproperty(name='VERS',
                               dtype=ChannelType.FLOAT,
                               doc='Code Version',
-                              read_only=True)
+                              read_only=True,
+                              value=1)
     dial_desired_value = pvproperty(name='DVAL',
                                     dtype=ChannelType.DOUBLE,
                                     doc='Dial Desired Value (EGU')
@@ -4231,7 +4452,8 @@ class MotorFields(RecordFieldGroup, _Limits):
                            dtype=ChannelType.ENUM,
                            enum_strings=menus.motorSPMG.get_string_tuple(),
                            doc='Last SPMG',
-                           read_only=True)
+                           read_only=True,
+                           value=3)
     last_user_des_val = pvproperty(name='LVAL',
                                    dtype=ChannelType.DOUBLE,
                                    doc='Last User Des Val (EGU)',
@@ -4247,7 +4469,8 @@ class MotorFields(RecordFieldGroup, _Limits):
     limit_violation = pvproperty(name='LVIO',
                                  dtype=ChannelType.INT,
                                  doc='Limit violation',
-                                 read_only=True)
+                                 read_only=True,
+                                 value=1)
     monitor_mask_more = pvproperty(name='NMAP',
                                    dtype=ChannelType.LONG,
                                    doc='Monitor Mask (more)',
@@ -4267,7 +4490,8 @@ class MotorFields(RecordFieldGroup, _Limits):
     post_process_command = pvproperty(name='PP',
                                       dtype=ChannelType.INT,
                                       doc='Post process command',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=0)
     ran_out_of_retries = pvproperty(name='MISS',
                                     dtype=ChannelType.INT,
                                     doc='Ran out of retries',
@@ -4321,7 +4545,8 @@ class MotorFields(RecordFieldGroup, _Limits):
         name='SPMG',
         dtype=ChannelType.ENUM,
         enum_strings=menus.motorSPMG.get_string_tuple(),
-        doc='Stop/Pause/Move/Go')
+        doc='Stop/Pause/Move/Go',
+        value=3)
     sync_position = pvproperty(name='SYNC',
                                dtype=ChannelType.INT,
                                doc='Sync position')
@@ -4363,7 +4588,8 @@ class MotorFields(RecordFieldGroup, _Limits):
                              doc='BL Distance (EGU)')
     bl_seconds_to_velocity = pvproperty(name='BACC',
                                         dtype=ChannelType.DOUBLE,
-                                        doc='BL Seconds to Velocity')
+                                        doc='BL Seconds to Velocity',
+                                        value=0.5)
     bl_speed = pvproperty(name='SBAK',
                           dtype=ChannelType.DOUBLE,
                           doc='BL Speed (RPS)')
@@ -4381,7 +4607,8 @@ class MotorFields(RecordFieldGroup, _Limits):
                                  doc='DMOV Input Link')
     derivative_gain = pvproperty(name='DCOF',
                                  dtype=ChannelType.DOUBLE,
-                                 doc='Derivative Gain')
+                                 doc='Derivative Gain',
+                                 value=0)
     desired_output_loc = pvproperty(name='DOL',
                                     dtype=ChannelType.STRING,
                                     doc='Desired Output Loc')
@@ -4397,7 +4624,8 @@ class MotorFields(RecordFieldGroup, _Limits):
     done_moving_to_value = pvproperty(name='DMOV',
                                       dtype=ChannelType.INT,
                                       doc='Done moving to value',
-                                      read_only=True)
+                                      read_only=True,
+                                      value=1)
     egu_s_per_revolution = pvproperty(name='UREV',
                                       dtype=ChannelType.DOUBLE,
                                       doc="EGU's per Revolution")
@@ -4424,7 +4652,8 @@ class MotorFields(RecordFieldGroup, _Limits):
                                doc='Home Velocity (EGU/s)')
     integral_gain = pvproperty(name='ICOF',
                                dtype=ChannelType.DOUBLE,
-                               doc='Integral Gain')
+                               doc='Integral Gain',
+                               value=0)
     jog_accel = pvproperty(name='JAR',
                            dtype=ChannelType.DOUBLE,
                            doc='Jog Accel. (EGU/s^2)')
@@ -4433,7 +4662,8 @@ class MotorFields(RecordFieldGroup, _Limits):
                               doc='Jog Velocity (EGU/s)')
     max_retry_count = pvproperty(name='RTRY',
                                  dtype=ChannelType.INT,
-                                 doc='Max retry count')
+                                 doc='Max retry count',
+                                 value=10)
     max_speed = pvproperty(name='SMAX',
                            dtype=ChannelType.DOUBLE,
                            doc='Max. Speed (RPS)')
@@ -4448,15 +4678,18 @@ class MotorFields(RecordFieldGroup, _Limits):
                                  doc='Motor Step Size (EGU)')
     move_fraction = pvproperty(name='FRAC',
                                dtype=ChannelType.FLOAT,
-                               doc='Move Fraction')
+                               doc='Move Fraction',
+                               value=1)
     ntm_deadband_factor = pvproperty(name='NTMF',
                                      dtype=ChannelType.INT,
-                                     doc='NTM Deadband Factor')
+                                     doc='NTM Deadband Factor',
+                                     value=2)
     new_target_monitor = pvproperty(
         name='NTM',
         dtype=ChannelType.ENUM,
         enum_strings=menus.menuYesNo.get_string_tuple(),
-        doc='New Target Monitor')
+        doc='New Target Monitor',
+        value='YES')
     offset_freeze_switch = pvproperty(
         name='FOFF',
         dtype=ChannelType.ENUM,
@@ -4482,7 +4715,8 @@ class MotorFields(RecordFieldGroup, _Limits):
                                    doc='Pre-move commands')
     proportional_gain = pvproperty(name='PCOF',
                                    dtype=ChannelType.DOUBLE,
-                                   doc='Proportional Gain')
+                                   doc='Proportional Gain',
+                                   value=0)
     rmp_input_link = pvproperty(name='RINP',
                                 dtype=ChannelType.STRING,
                                 doc='RMP Input Link')
@@ -4508,18 +4742,21 @@ class MotorFields(RecordFieldGroup, _Limits):
     retry_mode = pvproperty(name='RMOD',
                             dtype=ChannelType.ENUM,
                             enum_strings=menus.motorRMOD.get_string_tuple(),
-                            doc='Retry Mode')
+                            doc='Retry Mode',
+                            value='Default')
     stop_outlink = pvproperty(name='STOO',
                               dtype=ChannelType.STRING,
                               doc='STOP OutLink')
     seconds_to_velocity = pvproperty(name='ACCL',
                                      dtype=ChannelType.DOUBLE,
-                                     doc='Seconds to Velocity')
+                                     doc='Seconds to Velocity',
+                                     value=0.2)
     soft_channel_position_lock = pvproperty(
         name='LOCK',
         dtype=ChannelType.ENUM,
         enum_strings=menus.menuYesNo.get_string_tuple(),
-        doc='Soft Channel Position Lock')
+        doc='Soft Channel Position Lock',
+        value='NO')
     speed = pvproperty(name='S',
                        dtype=ChannelType.DOUBLE,
                        doc='Speed (revolutions/sec)')
@@ -4531,10 +4768,12 @@ class MotorFields(RecordFieldGroup, _Limits):
     status_update = pvproperty(name='STUP',
                                dtype=ChannelType.ENUM,
                                enum_strings=menus.motorSTUP.get_string_tuple(),
-                               doc='Status Update')
+                               doc='Status Update',
+                               value='OFF')
     steps_per_revolution = pvproperty(name='SREV',
                                       dtype=ChannelType.LONG,
-                                      doc='Steps per Revolution')
+                                      doc='Steps per Revolution',
+                                      value=200)
     tweak_step_size = pvproperty(name='TWV',
                                  dtype=ChannelType.DOUBLE,
                                  doc='Tweak Step Size (EGU)')
@@ -4786,7 +5025,8 @@ class SeqFields(RecordFieldGroup):
     value_9 = pvproperty(name='DO9', dtype=ChannelType.DOUBLE, doc='Value 9')
     link_selection = pvproperty(name='SELN',
                                 dtype=ChannelType.INT,
-                                doc='Link Selection')
+                                doc='Link Selection',
+                                value=1)
     display_precision = pvproperty(name='PREC',
                                    dtype=ChannelType.INT,
                                    doc='Display Precision')
@@ -4930,13 +5170,15 @@ class SeqFields(RecordFieldGroup):
                                 doc='Output Link 15')
     offset_for_specified = pvproperty(name='OFFS',
                                       dtype=ChannelType.INT,
-                                      doc='Offset for Specified')
+                                      doc='Offset for Specified',
+                                      value=0)
     old_selection = pvproperty(name='OLDN',
                                dtype=ChannelType.INT,
                                doc='Old Selection')
     shift_for_mask_mode = pvproperty(name='SHFT',
                                      dtype=ChannelType.INT,
-                                     doc='Shift for Mask mode')
+                                     doc='Shift for Mask mode',
+                                     value=-1)
     # used_to_trigger = pvproperty(name='VAL',
     #      dtype=ChannelType.LONG,
     # doc='Used to trigger')
@@ -5024,11 +5266,13 @@ class StringinFields(RecordFieldGroup):
         read_only=True)
     sim_mode_async_delay = pvproperty(name='SDLY',
                                       dtype=ChannelType.DOUBLE,
-                                      doc='Sim. Mode Async Delay')
+                                      doc='Sim. Mode Async Delay',
+                                      value=-1.0)
     sim_mode_scan = pvproperty(name='SSCN',
                                dtype=ChannelType.ENUM,
                                enum_strings=menus.menuScan.get_string_tuple(),
-                               doc='Sim. Mode Scan')
+                               doc='Sim. Mode Scan',
+                               value=0)
     # current_value = pvproperty(name='VAL',
     #      dtype=ChannelType.CHAR,
     # max_length=40,report_as_string=True,doc='Current Value')
@@ -5105,11 +5349,13 @@ class StringoutFields(RecordFieldGroup):
         read_only=True)
     sim_mode_async_delay = pvproperty(name='SDLY',
                                       dtype=ChannelType.DOUBLE,
-                                      doc='Sim. Mode Async Delay')
+                                      doc='Sim. Mode Async Delay',
+                                      value=-1.0)
     sim_mode_scan = pvproperty(name='SSCN',
                                dtype=ChannelType.ENUM,
                                enum_strings=menus.menuScan.get_string_tuple(),
-                               doc='Sim. Mode Scan')
+                               doc='Sim. Mode Scan',
+                               value=0)
     # current_value = pvproperty(name='VAL',
     #      dtype=ChannelType.CHAR,
     # max_length=40,report_as_string=True,doc='Current Value')
@@ -5317,13 +5563,15 @@ class SubarrayFields(RecordFieldGroup):
     maximum_elements = pvproperty(name='MALM',
                                   dtype=ChannelType.LONG,
                                   doc='Maximum Elements',
-                                  read_only=True)
+                                  read_only=True,
+                                  value=1)
     display_precision = pvproperty(name='PREC',
                                    dtype=ChannelType.INT,
                                    doc='Display Precision')
     number_of_elements = pvproperty(name='NELM',
                                     dtype=ChannelType.LONG,
-                                    doc='Number of Elements')
+                                    doc='Number of Elements',
+                                    value=1)
     substring_index = pvproperty(name='INDX',
                                  dtype=ChannelType.LONG,
                                  doc='Substring Index')
@@ -5422,7 +5670,8 @@ class WaveformFields(RecordFieldGroup):
     number_of_elements = pvproperty(name='NELM',
                                     dtype=ChannelType.LONG,
                                     doc='Number of Elements',
-                                    read_only=True)
+                                    read_only=True,
+                                    value=1)
     rearm_the_waveform = pvproperty(name='RARM',
                                     dtype=ChannelType.INT,
                                     doc='Rearm the waveform')
@@ -5434,11 +5683,13 @@ class WaveformFields(RecordFieldGroup):
         read_only=True)
     sim_mode_async_delay = pvproperty(name='SDLY',
                                       dtype=ChannelType.DOUBLE,
-                                      doc='Sim. Mode Async Delay')
+                                      doc='Sim. Mode Async Delay',
+                                      value=-1.0)
     sim_mode_scan = pvproperty(name='SSCN',
                                dtype=ChannelType.ENUM,
                                enum_strings=menus.menuScan.get_string_tuple(),
-                               doc='Sim. Mode Scan')
+                               doc='Sim. Mode Scan',
+                               value=0)
     _link_parent_attribute(
         display_precision,
         'precision',
@@ -5511,7 +5762,8 @@ class Int64inFields(RecordFieldGroup, _LimitsLong):
         read_only=True)
     sim_mode_async_delay = pvproperty(name='SDLY',
                                       dtype=ChannelType.DOUBLE,
-                                      doc='Sim. Mode Async Delay')
+                                      doc='Sim. Mode Async Delay',
+                                      value=-1.0)
     simulation_mode_link = pvproperty(name='SIML',
                                       dtype=ChannelType.STRING,
                                       doc='Simulation Mode Link')
@@ -5531,7 +5783,8 @@ class Int64inFields(RecordFieldGroup, _LimitsLong):
     sim_mode_scan = pvproperty(name='SSCN',
                                dtype=ChannelType.ENUM,
                                enum_strings=menus.menuScan.get_string_tuple(),
-                               doc='Sim. Mode Scan')
+                               doc='Sim. Mode Scan',
+                               value=0)
     simulation_value = pvproperty(name='SVAL',
                                   dtype=ChannelType.LONG,
                                   doc='Simulation Value')
@@ -5611,7 +5864,8 @@ class Int64outFields(RecordFieldGroup, _LimitsLong):
                                       doc='Output Specification')
     sim_mode_async_delay = pvproperty(name='SDLY',
                                       dtype=ChannelType.DOUBLE,
-                                      doc='Sim. Mode Async Delay')
+                                      doc='Sim. Mode Async Delay',
+                                      value=-1.0)
     simulation_mode_link = pvproperty(name='SIML',
                                       dtype=ChannelType.STRING,
                                       doc='Simulation Mode Link')
@@ -5631,7 +5885,8 @@ class Int64outFields(RecordFieldGroup, _LimitsLong):
     sim_mode_scan = pvproperty(name='SSCN',
                                dtype=ChannelType.ENUM,
                                enum_strings=menus.menuScan.get_string_tuple(),
-                               doc='Sim. Mode Scan')
+                               doc='Sim. Mode Scan',
+                               value=0)
     # desired_output = pvproperty(name='VAL',
     #      dtype=ChannelType.LONG,
     # doc='Desired Output')
@@ -5677,7 +5932,8 @@ class LsiFields(RecordFieldGroup):
                                 read_only=True)
     sim_mode_async_delay = pvproperty(name='SDLY',
                                       dtype=ChannelType.DOUBLE,
-                                      doc='Sim. Mode Async Delay')
+                                      doc='Sim. Mode Async Delay',
+                                      value=-1.0)
     simulation_mode_link = pvproperty(name='SIML',
                                       dtype=ChannelType.STRING,
                                       doc='Simulation Mode Link')
@@ -5697,11 +5953,13 @@ class LsiFields(RecordFieldGroup):
     size_of_buffers = pvproperty(name='SIZV',
                                  dtype=ChannelType.INT,
                                  doc='Size of buffers',
-                                 read_only=True)
+                                 read_only=True,
+                                 value=41)
     sim_mode_scan = pvproperty(name='SSCN',
                                dtype=ChannelType.ENUM,
                                enum_strings=menus.menuScan.get_string_tuple(),
-                               doc='Sim. Mode Scan')
+                               doc='Sim. Mode Scan',
+                               value=0)
 
 
 @register_record
@@ -5760,7 +6018,8 @@ class LsoFields(RecordFieldGroup):
                                       doc='Output Specification')
     sim_mode_async_delay = pvproperty(name='SDLY',
                                       dtype=ChannelType.DOUBLE,
-                                      doc='Sim. Mode Async Delay')
+                                      doc='Sim. Mode Async Delay',
+                                      value=-1.0)
     simulation_mode_link = pvproperty(name='SIML',
                                       dtype=ChannelType.STRING,
                                       doc='Simulation Mode link')
@@ -5780,11 +6039,13 @@ class LsoFields(RecordFieldGroup):
     size_of_buffers = pvproperty(name='SIZV',
                                  dtype=ChannelType.INT,
                                  doc='Size of buffers',
-                                 read_only=True)
+                                 read_only=True,
+                                 value=41)
     sim_mode_scan = pvproperty(name='SSCN',
                                dtype=ChannelType.ENUM,
                                enum_strings=menus.menuScan.get_string_tuple(),
-                               doc='Sim. Mode Scan')
+                               doc='Sim. Mode Scan',
+                               value=0)
 
 
 @register_record
@@ -5815,7 +6076,8 @@ class PrintfFields(RecordFieldGroup):
                                      dtype=ChannelType.CHAR,
                                      max_length=16,
                                      report_as_string=True,
-                                     doc='Invalid Link String')
+                                     doc='Invalid Link String',
+                                     value='LNK')
     length_of_val = pvproperty(name='LEN',
                                dtype=ChannelType.LONG,
                                doc='Length of VAL',
@@ -5826,7 +6088,8 @@ class PrintfFields(RecordFieldGroup):
     size_of_val_buffer = pvproperty(name='SIZV',
                                     dtype=ChannelType.INT,
                                     doc='Size of VAL buffer',
-                                    read_only=True)
+                                    read_only=True,
+                                    value=41)
 
 
 def summarize(file=sys.stdout):
