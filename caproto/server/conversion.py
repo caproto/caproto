@@ -284,7 +284,7 @@ DTYPE_OVERRIDES = {
 FIELD_OVERRIDE_OK = {'DTYP', }
 
 
-def record_to_field_info(record_type, dbd_info, dtypes):
+def record_to_field_info(record_type, dbd_info):
     'Yield field information for a given record, removing base fields'
     base_metadata = get_base_fields(dbd_info)
     field_dict = (base_metadata if record_type == 'base'
@@ -319,10 +319,8 @@ def record_to_field_info(record_type, dbd_info, dtypes):
             kwargs['enum_strings'] = (f'menus.{field_info["menu"]}'
                                       '.get_string_tuple()')
         elif type_ == 'DBF_DEVICE':
-            if not dtypes:
-                # TODO: empty enums are problematic for caproto at the moment
-                dtypes = ('Soft Channel', )
-            kwargs['enum_strings'] = repr(tuple(dtypes))
+            kwargs['enum_strings'] = (f'menus.dtyp_{record_type}'
+                                      '.get_string_tuple()')
 
         if prompt:
             kwargs['doc'] = repr(prompt)
@@ -422,8 +420,7 @@ MIXIN_SPECS = {
 }
 
 
-def record_to_template_dict(record_type, dbd_info, dtypes, *,
-                            skip_fields=None):
+def record_to_template_dict(record_type, dbd_info, *, skip_fields=None):
     'Record name -> yields code to create a PVGroup for all fields'
     if skip_fields is None:
         skip_fields = ['VAL']
@@ -459,8 +456,7 @@ def record_to_template_dict(record_type, dbd_info, dtypes, *,
     fields_by_attr = {}
     field_to_attr = {}
 
-    for item in record_to_field_info(record_type, dbd_info,
-                                     dtypes.get(record_type, [])):
+    for item in record_to_field_info(record_type, dbd_info):
         attr_name, cls, kwargs, finfo = item
         # note to self: next line is e.g.,
         #   ChannelDouble -> ChannelDouble(, ... dtype=ChannelType.FLOAT)
@@ -543,8 +539,7 @@ def generate_all_records_jinja(dbd_file, *, jinja_env=None,
     existing_record_list = ['base'] + list(records_mod.records)
     records = {}
     for record in ('base', ) + tuple(sorted(dbd_file.field_metadata)):
-        d = record_to_template_dict(record, dbd_file.field_metadata,
-                                    dbd_file.record_dtypes)
+        d = record_to_template_dict(record, dbd_file.field_metadata)
         d['sort_id'] = _get_sort_id(record, existing_record_list)
         records[record] = d
 
@@ -619,6 +614,18 @@ def generate_all_menus_jinja(dbd_file, *, jinja_env=None,
         if not name.isidentifier():
             return orig_name
         return name
+
+    all_dtypes = [('base', None)] + list(dbd_file.record_dtypes.items())
+    for record_type, dtypes in all_dtypes:
+        if not dtypes:
+            # TODO: caproto has issues with empty enums
+            dtypes = ('Soft Channel', )
+
+        menus[f'dtyp_{record_type}'] = [
+            (get_attr_name_from_dbd_prompt(record_type, None, dtype),
+             dtype)
+            for dtype in dtypes
+        ]
 
     for menu_name, items in list(menus.items()):
         menus[menu_name] = [
