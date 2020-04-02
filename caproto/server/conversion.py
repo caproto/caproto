@@ -397,6 +397,7 @@ ATTR_RENAMES = {
     'descriptor': 'description',
     'force_processing': 'process_record',
     'forward_process_link': 'forward_link',
+    'alarm_severity': 'current_alarm_severity',
 }
 ATTR_FIXES = {
     'aSub': {
