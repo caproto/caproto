@@ -1,6 +1,9 @@
 '''
-Contains PVGroups representing all fields of EPICS base records (minus .VAL)
+Contains PVGroups representing all fields of EPICS base records
 '''
+# **NOTE**
+# This file is auto-generated.  Please edit the source Jinja templates instead.
+# **NOTE**
 
 import logging
 import sys
