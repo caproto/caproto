@@ -38,10 +38,7 @@ type_equal = {
 
 def test_record_compliance(request, prefix, record_type_name,
                            record_type_to_fields):
-    fields = {
-        field: field_info
-        for field, field_info in record_type_to_fields[record_type_name].items()
-    }
+    fields = record_type_to_fields[record_type_name]
 
     # host a caproto record to test(you could also try this test on a real record).
     # NOTE: using the below will actually run a seperate program from command line,

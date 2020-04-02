@@ -60,29 +60,32 @@ class DbdFile:
         if getattr(node, 'name', '') == 'field':
             # A hack to aggregate information about fields, using the node
             # setattr as a callback.  If there's an easier way, let me know...
-            field_name, field_type = node.args
+            self._walk_field(node)
 
-            def block_value(block):
-                if not block.args:
-                    return None
+    def _walk_field(self, node):
+        field_name, field_type = node.args
 
-                try:
-                    return ast.literal_eval(block.args[0])
-                except Exception:
-                    return block.args[0]
+        def block_value(block):
+            if not block.args:
+                return None
 
-            blocks = {
-                child.name: block_value(child)
-                for child in node.body
-                if isinstance(child, pyPDB.dbd.ast.Block)
-            }
-            blocks['type'] = field_type
-            blocks['field'] = field_name
-            if self.stack[-1].name == 'recordtype':
-                record_name, = self.stack[-1].args
-                if record_name not in self.field_metadata:
-                    self.field_metadata[record_name] = {}
-                self.field_metadata[record_name][field_name] = blocks
+            try:
+                return ast.literal_eval(block.args[0])
+            except Exception:
+                return block.args[0]
+
+        blocks = {
+            child.name: block_value(child)
+            for child in node.body
+            if isinstance(child, pyPDB.dbd.ast.Block)
+        }
+        blocks['type'] = field_type
+        blocks['field'] = field_name
+        if self.stack[-1].name == 'recordtype':
+            record_name, = self.stack[-1].args
+            if record_name not in self.field_metadata:
+                self.field_metadata[record_name] = {}
+            self.field_metadata[record_name][field_name] = blocks
 
     @property
     def all_records(self):
