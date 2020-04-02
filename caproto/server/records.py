@@ -194,7 +194,7 @@ class RecordFieldGroup(PVGroup):
     scanning_disable = pvproperty(name='SDIS',
                                   dtype=ChannelType.STRING,
                                   doc='Scanning Disable')
-    alarm_severity = pvproperty(
+    current_alarm_severity = pvproperty(
         name='SEVR',
         dtype=ChannelType.ENUM,
         enum_strings=menus.menuAlarmSevr.get_string_tuple(),
