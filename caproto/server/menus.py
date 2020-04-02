@@ -1,3 +1,10 @@
+'''
+Contains caproto-compatible enums representing all menus of EPICS base records
+'''
+# **NOTE**
+# This file is auto-generated.  Please edit the source Jinja templates instead.
+# **NOTE**
+
 import enum
 import inspect
 
