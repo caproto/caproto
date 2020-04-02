@@ -402,6 +402,10 @@ ATTR_FIXES = {
     'aSub': {
         'ONVH': 'num_elements_in_ovlh',
     },
+    'asyn': {
+        'BAUD': 'baud_rate',
+        'LBAUD': 'long_baud_rate',
+    },
     'motor': {
         'NMAP': 'monitor_mask_more',
     },
