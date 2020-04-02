@@ -89,14 +89,13 @@ def test_record_compliance(request, prefix, record_type_name,
 
             try:
                 # normally it is time_char so we add time_
-                type_read_temp_str = f"time_{type_equal[expected_type][0]}"
-                read_temp = ca.get(pv_temp.chid, as_string=('$' in field))
+                ca.get(pv_temp.chid, as_string=('$' in field))
             except Exception as ex:
                 issues[field] = f"can't be read ({ex})"
 
             if "MENU" in expected_type:
                 try:
-                    enum_str = pv_temp.enum_strs
+                    pv_temp.enum_strs
                 except Exception as ex:
                     issues[field] = f"can't read enum ({ex})"
 
