@@ -19,7 +19,7 @@ import caproto.threading  # noqa
 import caproto.asyncio  # noqa
 
 # DBD parsing-related fixtures:
-from .dbd import softioc_dbd_path, record_type_to_fields  # noqa
+from .dbd import test_dbd_file, record_type_to_fields  # noqa
 
 _repeater_process = None
 

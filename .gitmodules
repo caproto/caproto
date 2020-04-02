@@ -1,3 +1,6 @@
 [submodule ".ci"]
 	path = .ci
 	url = https://github.com/NSLS-II/epics-on-travis/
+[submodule "caproto/tests/reference-dbd"]
+	path = caproto/tests/reference-dbd
+	url = git://github.com/caproto/reference-dbd.git

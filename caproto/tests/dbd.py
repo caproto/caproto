@@ -15,6 +15,9 @@ import pyPDB.dbd.yacc as _yacc
 import pyPDB.dbdlint as _dbdlint
 
 
+TEST_ROOT = pathlib.Path(__file__).parent
+
+
 class DbdFile:
     '''
     Container for dbdlint results, with easier-to-access attributes
@@ -201,11 +204,15 @@ def get_record_to_field_metadata(dbd_path):
 
 
 @pytest.fixture(scope='session')
-def softioc_dbd_path():
-    return get_softioc_dbd_path()
+def test_dbd_file():
+    dbd_file = TEST_ROOT / 'reference-dbd' / 'reference.dbd'
+    if not dbd_file.exists():
+        pytest.skip('Reference dbd file does not exist. Ensure submodules '
+                    'have been checked out.')
+    return dbd_file
 
 
 @pytest.fixture(scope='session')
-def record_type_to_fields(softioc_dbd_path):
+def record_type_to_fields(test_dbd_file):
     return get_record_to_field_dictionary(
-        softioc_dbd_path, include_dollar_fields=True)
+        test_dbd_file, include_dollar_fields=True)
