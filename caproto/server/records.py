@@ -2026,9 +2026,11 @@ class AsynFields(RecordFieldGroup):
                            max_length=40,
                            report_as_string=True,
                            doc='host info')
-    # disconnect_on_timeout = pvproperty(name='DRTO',
-    #      dtype=ChannelType.ENUM,
-    # enum_strings=menus.ipDRTO.get_string_tuple(),doc='Disconnect on timeout')
+    disconnect_on_timeout = pvproperty(
+        name='DRTO',
+        dtype=ChannelType.ENUM,
+        enum_strings=menus.ipDRTO.get_string_tuple(),
+        doc='Disconnect on timeout')
     # value_field = pvproperty(name='VAL',
     #      dtype=ChannelType.LONG,
     # doc='Value field (unused)')
@@ -2762,9 +2764,11 @@ class CompressFields(RecordFieldGroup):
                         dtype=ChannelType.LONG,
                         doc='Offset',
                         read_only=True)
-    # buffering_algorithm = pvproperty(name='BALG',
-    #      dtype=ChannelType.ENUM,
-    # enum_strings=menus.bufferingALG.get_string_tuple(),doc='Buffering Algorithm')
+    buffering_algorithm = pvproperty(
+        name='BALG',
+        dtype=ChannelType.ENUM,
+        enum_strings=menus.bufferingALG.get_string_tuple(),
+        doc='Buffering Algorithm')
     _link_parent_attribute(
         high_operating_range,
         'upper_ctrl_limit',

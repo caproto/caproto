@@ -664,6 +664,8 @@ vmeDSIZ = NotImplementedMenu
 vmeRDWT = NotImplementedMenu
 vsOFFON = NotImplementedMenu
 vsTYPE = NotImplementedMenu
+ipDRTO = NotImplementedMenu
+bufferingALG = NotImplementedMenu
 
 
 menus = {name: menu for name, menu in globals().items()
