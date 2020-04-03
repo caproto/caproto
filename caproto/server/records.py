@@ -219,7 +219,7 @@ class RecordFieldGroup(PVGroup):
         enum_strings=menus.menuAlarmStat.get_string_tuple(),
         doc='Alarm Status',
         read_only=True,
-        value='SCAN')
+        value='NO_ALARM')
     undefined_alarm_severity = pvproperty(
         name='UDFS',
         dtype=ChannelType.ENUM,

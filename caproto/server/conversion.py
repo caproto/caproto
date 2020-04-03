@@ -436,7 +436,7 @@ def get_initial_field_value(value, dtype):
             # TODO: sorry :( enum value outside of range not handled by
             # caproto for now. And yes, I know this is a bad alternative
             # default...
-            value = 'SCAN'
+            value = 'NO_ALARM'
     return repr(value)
 
 
