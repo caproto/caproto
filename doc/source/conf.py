@@ -373,7 +373,9 @@ def rstjinja(app, docname, source):
     rendered = app.builder.templates.render_string(src,
                                                    app.config.html_context)
     source[0] = rendered
-    print('rendered', rendered)
+    # To see the jinja-generated output, uncomment the following:
+    # print('rendered:')
+    # print(rendered)
 
 
 def setup(app):
@@ -381,7 +383,7 @@ def setup(app):
     app.connect("source-read", rstjinja)
 
 
-def table_from_pvs(pvs):
+def table_from_pvs(record_name, pvs):
     col_to_attr = {
         'Attribute': 'attr',
         'PV': 'name',
@@ -400,21 +402,31 @@ def table_from_pvs(pvs):
             return value.name
         return value
 
-    rows = [[get_table_value(attr, getattr(pvprop.pvspec, attr))
-             for _, attr in col_to_attr.items()]
-            for pvprop in pvs.values()
-            ]
+    base_record = caproto.server.records.RecordFieldGroup
+    rows = []
+
+    for pvprop in pvs.values():
+        pvspec = pvprop.pvspec
+        if record_name == 'base' or not hasattr(base_record, pvspec.attr):
+            rows.append([get_table_value(attr, getattr(pvspec, attr))
+                         for _, attr in col_to_attr.items()
+                         ])
 
     return tabulate.tabulate(rows, list(col_to_attr), 'grid')
 
 
 def _get_mocked_records():
-    for rec_name, cls in caproto.server.records.records.items():
+    def all_records():
+        yield ('base', caproto.server.records.RecordFieldGroup)
+        yield from caproto.server.records.records.items()
+
+    for idx, (rec_name, cls) in enumerate(all_records()):
         yield {
             'record_name': rec_name,
             'class_name': cls.__name__,
             'cls': cls,
-            'pv_table': str(table_from_pvs(cls._pvs_)),
+            'pv_table': str(table_from_pvs(rec_name, cls._pvs_)),
+            'sort_index': idx,
         }
 
 
