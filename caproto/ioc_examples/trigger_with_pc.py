@@ -113,8 +113,8 @@ class TriggeredIOC(PVGroup):
 
     fatal = pvproperty(value=0)
 
-    @fatal.getter
-    async def fatal(self, instance):
+    @fatal.setter
+    async def fatal(self, val):
         sys.exit(0)
 
 
