@@ -26,7 +26,7 @@ field_map = {
 
 def test_limit_fields_and_description(request, prefix, context):
     pv = f'{prefix}C'
-    run_example_ioc('caproto.ioc_examples.mocking_records',
+    run_example_ioc('caproto.ioc_examples.records',
                     request=request,
                     args=['--prefix', prefix],
                     pv_to_check=pv)
@@ -56,7 +56,7 @@ def test_limit_fields_and_description(request, prefix, context):
 @pytest.mark.parametrize('sevr_value', AlarmSeverity)
 def test_alarms(request, prefix, sevr_target, sevr_value, context):
     pv = f'{prefix}C'
-    run_example_ioc('caproto.ioc_examples.mocking_records',
+    run_example_ioc('caproto.ioc_examples.records',
                     request=request,
                     args=['--prefix', prefix],
                     pv_to_check=pv)
