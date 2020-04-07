@@ -545,6 +545,22 @@ def _get_sort_id(name, list_):
 
 def generate_all_records_jinja(dbd_file, *, jinja_env=None,
                                template='records.jinja2'):
+    """
+    Generate the module `caproto.server.records` given an EPICS .dbd file, and
+    optionally a Jinja environment and template filename
+
+    By default, the jinja environment and template is the one provided with
+    caproto.
+
+    Parameters
+    ----------
+    dbd_file : str or pathlib.Path
+        Path to the EPICS dbd file
+    jinja_env : jinja2.Environment, optional
+        The jinja environment
+    template : str, optional
+        The template to use to generate the source
+    """
     try:
         from caproto.tests.dbd import DbdFile
         import jinja2
@@ -598,6 +614,23 @@ MENU_UNSUPPORTED = {
 
 def generate_all_menus_jinja(dbd_file, *, jinja_env=None,
                              template='menus.jinja2'):
+    """
+    Generate the module `caproto.server.menus` given an EPICS .dbd file,
+    and optionally a Jinja environment and template filename
+
+    By default, the jinja environment and template is the one provided with
+    caproto.
+
+    Parameters
+    ----------
+    dbd_file : str or pathlib.Path
+        Path to the EPICS dbd file
+    jinja_env : jinja2.Environment, optional
+        The jinja environment
+    template : str, optional
+        The template to use to generate the source
+    """
+
     try:
         from caproto.tests.dbd import DbdFile
         import jinja2
