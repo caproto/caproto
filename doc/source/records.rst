@@ -7,7 +7,7 @@ Records
 These Python classes make it easy to run IOCs that have the record and field
 layout and linking of common EPICS database records. The source code of these
 "mock records" was auto-generated from the reference implementations. See the
-:ref:`mocking_records_example` example for usage.
+:ref:`_records_example` example for usage.
 
 {% for item in mocked_records | sort(attribute='sort_index') %}
 {%- set cls = caproto.server.records.records[item.record_name] -%}
@@ -20,10 +20,10 @@ layout and linking of common EPICS database records. The source code of these
     access.
 
     .. note:: The classes shown here are not meant to be instantiated directly, but
-               rather used as a ``mock_record=`` keyword argument in a
+               rather used as a ``record=`` keyword argument in a
                :class:`pvproperty`.
 {% else %}
-    .. note:: To use this, specify ``mock_record="{{item.record_name}}"`` in a
+    .. note:: To use this, specify ``record="{{item.record_name}}"`` in a
               :class:`pvproperty`.
 {% endif %}
     {{ item.pv_table |indent(4) }}
