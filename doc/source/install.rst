@@ -71,6 +71,36 @@ building the documentation:
     pip install -Ur test-requirements.txt
     pip install -Ur docs-requirements.txt
 
+You may also want to use `pre-commit <https://pre-commit.com/>`_. This is
+optional. It streamlines compliance with code style requirements. If you are a
+first-time contributor or unfamiliar with "precommit" tools, feel free to
+ignore.
+
+.. code-block:: bash
+
+   pip install pre-commit
+   pre-commit install
+
+This uses git hooks to check the changed files every time code is committed.
+
+.. code-block:: bash
+
+   echo "blah" >> setup.py
+   git commit -am "test"   # fails due to linting
+
+Use the git option ``--no-verify`` or ``-n`` to skip the checks.
+
+.. code-block:: bash
+
+   git commit -n "test"  # commits anyway
+
+You can run the checks manually on all files.
+
+.. code-block:: bash
+
+   # run on all files
+   pre-commit run --all-files
+
 To run the tests:
 
 .. code-block:: bash
