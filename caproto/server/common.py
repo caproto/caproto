@@ -38,15 +38,59 @@ class LoopExit(Exception):
     ...
 
 
-Subscription = namedtuple(
-    'Subscription', ('mask', 'channel_filter', 'circuit', 'channel',
-                     'data_type', 'data_count', 'subscriptionid', 'db_entry')
-)
+class Subscription(namedtuple('Subscription',
+                              ('mask', 'channel_filter', 'circuit', 'channel',
+                               'data_type', 'data_count', 'subscriptionid',
+                               'db_entry'))
+                   ):
+    '''
+    An individual subscription from a client
 
-SubscriptionSpec = namedtuple(
-    'SubscriptionSpec', ('db_entry', 'data_type_name', 'mask',
-                         'channel_filter')
-)
+    Attributes
+    ----------
+    mask : SubscriptionType
+        The subscription mask indicating different properties
+    channel_filter : ChannelFilter
+        The channel filter specified, including timestamp, deadband,
+        array and sync options.
+    circuit : VirtualCircuit
+        The associated virtual circuit
+    channel : ServerChannel
+        The associated channel
+    data_type : ChannelType
+        The requested data type
+    data_count : int
+        The number of requested elements
+    subscriptionid : int
+        The ID of the subscription
+    db_entry : ChannelData
+        The database entry
+    '''
+
+
+class SubscriptionSpec(namedtuple('SubscriptionSpec',
+                                  ('db_entry', 'data_type_name', 'mask',
+                                   'channel_filter'))
+                       ):
+    '''
+    Subscription specification used to key all subscription updates
+
+    Attributes
+    ----------
+    db_entry : ChannelData
+        The database entry
+    data_type_name : str
+        The type name associated with the user's request. For example,
+        all of the following are valid: {'STRING', 'INT', 'TIME_STRING',
+        'TIME_INT', 'LONG_STRING'} and so on.  See also :class:`ChannelType`
+        and :class:`_LongStringChannelType`.
+    mask : SubscriptionType
+        The subscription mask indicating different properties
+    channel_filter : ChannelFilter
+        The channel filter specified, including timestamp, deadband,
+        array and sync options.
+    '''
+
 
 host_endian = ('>' if sys.byteorder == 'big' else '<')
 
