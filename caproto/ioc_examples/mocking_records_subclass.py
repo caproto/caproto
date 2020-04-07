@@ -34,8 +34,8 @@ class CustomMotorFields(MotorFields):
 
 class RecordMockingIOC(PVGroup):
     # Define two records, an analog input (ai) record:
-    motor1 = pvproperty(value=1.0, mock_record='my_motor')
-    motor2 = pvproperty(value=2.0, mock_record='my_motor')
+    motor1 = pvproperty(value=1.0, record='my_motor')
+    motor2 = pvproperty(value=2.0, record='my_motor')
 
 
 if __name__ == '__main__':
