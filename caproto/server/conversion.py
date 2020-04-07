@@ -368,6 +368,9 @@ def _fix_attr_name(record_type, attr_name, field_name):
     return attr_name
 
 
+# The following are "linkable" such that field information is already provided
+# in ChannelData. That is to say, a field named `display_precision` links to
+# `ChannelFloat.precision` in the case of an analog input record.
 LINKABLE = {
     'display_precision': 'precision',
     'hihi_alarm_limit': 'upper_alarm_limit',
@@ -383,6 +386,8 @@ LINKABLE = {
     'number_of_elements': 'max_length',
 }
 
+# Some links are attributes, some are read-only, and some writable through the
+# ChannelData.write_metadata interface. Specify any custom kwargs here:
 LINK_KWARGS = {
     'archive_deadband': dict(use_setattr=True),
     'monitor_deadband': dict(use_setattr=True),
@@ -391,6 +396,8 @@ LINK_KWARGS = {
 }
 
 
+# Rename some attributes (for backward-compatibility or otherwise)
+# maps "name generated from dbd" -> "correct attr name"
 ATTR_RENAMES = {
     # back-compat
     'scan_mechanism': 'scan_rate',
@@ -399,25 +406,35 @@ ATTR_RENAMES = {
     'forward_process_link': 'forward_link',
     'alarm_severity': 'current_alarm_severity',
 }
+
+# Record-type specific fixes for attributes
 ATTR_FIXES = {
     'aSub': {
+        # Typo in dbd leads
         'ONVH': 'num_elements_in_ovlh',
     },
     'asyn': {
+        # Both attributes end up being the same otherwise
         'BAUD': 'baud_rate',
         'LBAUD': 'long_baud_rate',
     },
     'motor': {
+        # MMAP/NMAP end up being the same otherwise
         'NMAP': 'monitor_mask_more',
     },
 }
 
+# Regular expression replacements for attributes
+# maps 'compiled regular expression' to 'replace_with'
 ATTR_REPLACES = {
     re.compile('^alarm_ack_'): 'alarm_acknowledge_',
     re.compile('_sevrty$'): '_severity',
 }
 
+# Mixins available in the currently generated records module:
 MIXINS = (records_mod._Limits, records_mod._LimitsLong)
+
+# Keep track of the mixin fields to see if a record can use the mixin or not:
 MIXIN_SPECS = {
     mixin: {pv.pvspec.name: pv.pvspec.dtype for pv in mixin._pvs_.values()}
     for mixin in MIXINS
@@ -586,6 +603,8 @@ def generate_all_records_jinja(dbd_file, *, jinja_env=None,
     return record_template.render(records=records)
 
 
+# Custom fixes for specific menus
+# maps "name found in dbd" to "attribute name generated in enum class"
 MENU_FIXES = {
     'menuScan10_second': 'scan_10_second',
     'menuScan5_second': 'scan_5_second',
@@ -596,6 +615,7 @@ MENU_FIXES = {
     'menuScan_1_second': 'scan_point_1_second',
 }
 
+# Additional unsupported menus to be stubbed in caproto.server.menus
 MENU_UNSUPPORTED = {
     'acalcoutDOPT', 'acalcoutINAV', 'acalcoutOOPT', 'acalcoutSIZE',
     'acalcoutWAIT', 'digitelBAKS', 'digitelBKIN', 'digitelCMOR', 'digitelDSPL',
