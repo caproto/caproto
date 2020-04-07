@@ -6,7 +6,7 @@ Threading Client
 
 .. ipython:: python
     :suppress:
-    
+
     import sys
     import subprocess
     import time
@@ -267,7 +267,7 @@ re-initiates updates. All of this is transparent to the user.
     The lambda function will be promptly garbage collected by Python and
     removed from ``sub`` by caproto. To avoid that, make a reference before
     passing the function to :meth:`Subscription.add_callback`.
-    
+
     .. code-block:: python
 
         cb = lambda sub, response: print(response.data)

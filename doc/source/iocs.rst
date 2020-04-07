@@ -88,7 +88,7 @@ used.
 
 .. ipython:: python
     :suppress:
-    
+
     import sys
     import subprocess
     import time

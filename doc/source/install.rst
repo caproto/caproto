@@ -139,10 +139,10 @@ To get started on iOS:
 1. Purchase and install Pythonista from the app store.
 2. Install `StaSh <https://github.com/ywangd/stash>`_ in Pythonista by creating
    a new script and running:
-   
+
 .. code-block:: python
 
-   import requests as r; exec(r.get('https://bit.ly/get-stash').text) 
+   import requests as r; exec(r.get('https://bit.ly/get-stash').text)
 
 3. Restart Pythonista and launch a StaSh shell. Install caproto with pip:
 
@@ -150,7 +150,7 @@ To get started on iOS:
 
    $ pip install caproto
 
-4. Open an example IOC and give it a try. To find the caproto examples, navigate to 
+4. Open an example IOC and give it a try. To find the caproto examples, navigate to
    "Python Modules > site-packages-3 > caproto > ioc_examples > simple.py"
 
 5. Tap the play button to run it.  From another computer on the same WiFi

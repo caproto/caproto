@@ -70,9 +70,9 @@ This feature is also accessible through a CLI:
 
    $ caproto-shark -h
    usage: caproto-shark [-h] [--format FORMAT] [--version]
-   
+
    Parse pcap (tcpdump) output and pretty-print CA commands.
-   
+
    optional arguments:
      -h, --help       show this help message and exit
      --format FORMAT  Python format string. Available tokens are {timestamp},

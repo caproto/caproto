@@ -6,7 +6,7 @@ Synchronous Client
 
 .. ipython:: python
     :suppress:
-    
+
     import sys
     import subprocess
     import time
@@ -104,7 +104,7 @@ Let us set the value to ``1``.
 
 .. ipython:: python
 
-    from caproto.sync.client import write 
+    from caproto.sync.client import write
     write('random_walk:dt', 1)
 
 The function returns ``None`` immediately. To wait for confirmation that the
@@ -114,7 +114,7 @@ result in an ``ErrorResponse``.)
 
 .. ipython:: python
 
-    from caproto.sync.client import write 
+    from caproto.sync.client import write
     write('random_walk:dt', 1, notify=True)
 
 Subscribe ("Monitor")
@@ -246,7 +246,7 @@ another thread).
     The lambda function will be promptly garbage collected by Python and
     removed from ``sub`` by caproto. To avoid that, make a reference before
     passing the function to :meth:`Subscription.add_callback`.
-    
+
     .. code-block:: python
 
         cb = lambda sub, response: print(response.data)
@@ -291,4 +291,3 @@ API Documentation
 .. autofunction:: read_write_read
 .. autoclass:: Subscription
    :members:
-
