@@ -50,9 +50,10 @@ if __name__ == '__main__':
         desc='Run an IOC that mocks an arbitrary record type'
     )
 
+    record_options = ', '.join(sorted(records))
     parser.add_argument(
         '--record-type',
-        help='The record type to use for `A`',
+        help=f'The record type to use for `A`. Options are: {record_options}',
         type=str,
         default='ai'
     )
