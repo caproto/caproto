@@ -147,7 +147,7 @@ learning exercises.
 
    clients
    iocs
-   mock-records
+   records
    servers
    shark
    loggers

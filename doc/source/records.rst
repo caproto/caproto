@@ -1,10 +1,10 @@
-************
-Mock Records
-************
+*******
+Records
+*******
 
 .. currentmodule:: caproto.server.records
 
-These Python classes make it easy to run IOCs that mock the record and field
+These Python classes make it easy to run IOCs that have the record and field
 layout and linking of common EPICS database records. The source code of these
 "mock records" was auto-generated from the reference implementations. See the
 :ref:`mocking_records_example` example for usage.
