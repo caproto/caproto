@@ -70,6 +70,7 @@ setup(name='caproto',
               'caproto-spoof-beamline = caproto.ioc_examples.spoof_beamline:main',
           ],
       },
+      include_package_data=True,
       python_requires='>=3.6',
       classifiers=classifiers,
       extras_require=extras_require

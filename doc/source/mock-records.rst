@@ -9,96 +9,23 @@ layout and linking of common EPICS database records. The source code of these
 "mock records" was auto-generated from the reference implementations. See the
 :ref:`mocking_records_example` example for usage.
 
-.. autoclass::  RecordFieldGroup
+{% for item in mocked_records | sort(attribute='sort_index') %}
+{%- set cls = caproto.server.records.records[item.record_name] -%}
+.. class:: {{ item.class_name }}
 
-.. autoclass::  AiFields
+{% if item.record_name == 'base' %}
+    This is a PVGroup class used to represent the basic fields from any given
+    EPICS record.  It does not implement the full functionality of that record,
+    but effectively "mocks" up all of the fields for availability over channel
+    access.
 
-.. autoclass::  AsubFields
+    .. note:: The classes shown here are not meant to be instantiated directly, but
+               rather used as a ``mock_record=`` keyword argument in a
+               :class:`pvproperty`.
+{% else %}
+    .. note:: To use this, specify ``mock_record="{{item.record_name}}"`` in a
+              :class:`pvproperty`.
+{% endif %}
+    {{ item.pv_table |indent(4) }}
 
-.. autoclass::  AaiFields
-
-.. autoclass::  AaoFields
-
-.. autoclass::  AcalcoutFields
-
-.. autoclass::  AoFields
-
-.. autoclass::  AsynFields
-
-.. autoclass::  BiFields
-
-.. autoclass::  BoFields
-
-.. autoclass::  BusyFields
-
-.. autoclass::  CalcFields
-
-.. autoclass::  CalcoutFields
-
-.. autoclass::  CompressFields
-
-.. autoclass::  DfanoutFields
-
-.. autoclass::  DigitelFields
-
-.. autoclass::  EpidFields
-
-.. autoclass::  EventFields
-
-.. autoclass::  FanoutFields
-
-.. autoclass::  GensubFields
-
-.. autoclass::  HistogramFields
-
-.. autoclass::  LonginFields
-
-.. autoclass::  LongoutFields
-
-.. autoclass::  MbbiFields
-
-.. autoclass::  MbbidirectFields
-
-.. autoclass::  MbboFields
-
-.. autoclass::  MbbodirectFields
-
-.. autoclass::  MotorFields
-
-.. autoclass::  PermissiveFields
-
-.. autoclass::  ScalcoutFields
-
-.. autoclass::  ScanparmFields
-
-.. autoclass::  SelFields
-
-.. autoclass::  SeqFields
-
-.. autoclass::  SscanFields
-
-.. autoclass::  SseqFields
-
-.. autoclass::  StateFields
-
-.. autoclass::  StringinFields
-
-.. autoclass::  StringoutFields
-
-.. autoclass::  SubFields
-
-.. autoclass::  SubarrayFields
-
-.. autoclass::  SwaitFields
-
-.. autoclass::  TableFields
-
-.. autoclass::  TimestampFields
-
-.. autoclass::  TransformFields
-
-.. autoclass::  VmeFields
-
-.. autoclass::  VsFields
-
-.. autoclass::  WaveformFields
+{% endfor %}

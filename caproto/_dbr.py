@@ -149,6 +149,12 @@ class _LongStringChannelType(IntEnum):
     CTRL_LONG_STRING = 32
 
 
+_channel_type_by_name = {
+    type_.name: type_
+    for type_ in list(ChannelType) + list(_LongStringChannelType)
+}
+
+
 class SubscriptionType(IntFlag):
     '''Subscription masks
 

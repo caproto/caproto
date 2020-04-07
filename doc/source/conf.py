@@ -1,10 +1,6 @@
-import sys
-import os
-import caproto
-import sphinx_rtd_theme
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-#
+
 # caproto documentation build configuration file, created by
 # sphinx-quickstart on Tue Feb 14 00:23:09 2017.
 #
@@ -17,13 +13,14 @@ import sphinx_rtd_theme
 # All configuration values have a default; values that are commented out
 # serve to show the default.
 
-# If extensions (or modules to document with autodoc) are in another directory,
-# add these directories to sys.path here. If the directory is relative to the
-# documentation root, use os.path.abspath to make it absolute, like shown here.
-#
-# import os
-# import sys
-# sys.path.insert(0, os.path.abspath('.'))
+import sys
+import os
+
+import sphinx_rtd_theme
+import tabulate
+
+import caproto
+import caproto.server
 
 # -- General configuration ------------------------------------------------
 
@@ -360,3 +357,80 @@ texinfo_documents = [
 
 # Example configuration for intersphinx: refer to the Python standard library.
 intersphinx_mapping = {'https://docs.python.org/3/': None}
+
+
+def rstjinja(app, docname, source):
+    """
+    Render our pages as a jinja template for fancy templating goodness.
+    """
+    # Borrowed from
+    # https://www.ericholscher.com/blog/2016/jul/25/integrating-jinja-rst-sphinx/
+    # Make sure we're outputting HTML
+    if app.builder.format != 'html':
+        return
+
+    src = source[0]
+    rendered = app.builder.templates.render_string(src,
+                                                   app.config.html_context)
+    source[0] = rendered
+    # To see the jinja-generated output, uncomment the following:
+    # print('rendered:')
+    # print(rendered)
+
+
+def setup(app):
+    # Add 'rstjinja' extension defined above
+    app.connect("source-read", rstjinja)
+
+
+def table_from_pvs(record_name, pvs):
+    col_to_attr = {
+        'Attribute': 'attr',
+        'PV': 'name',
+        'Info': 'doc',
+        'Type': 'dtype',
+        'Read-only': 'read_only',
+        'Max Length': 'max_length',
+        'Alarm Group': 'alarm_group',
+        'Startup': 'startup',
+    }
+
+    def get_table_value(attr, value):
+        if value is None:
+            return ''
+        if attr in {'dtype', }:
+            return value.name
+        return value
+
+    base_record = caproto.server.records.RecordFieldGroup
+    rows = []
+
+    for pvprop in pvs.values():
+        pvspec = pvprop.pvspec
+        if record_name == 'base' or not hasattr(base_record, pvspec.attr):
+            rows.append([get_table_value(attr, getattr(pvspec, attr))
+                         for _, attr in col_to_attr.items()
+                         ])
+
+    return tabulate.tabulate(rows, list(col_to_attr), 'grid')
+
+
+def _get_mocked_records():
+    def all_records():
+        yield ('base', caproto.server.records.RecordFieldGroup)
+        yield from caproto.server.records.records.items()
+
+    for idx, (rec_name, cls) in enumerate(all_records()):
+        yield {
+            'record_name': rec_name,
+            'class_name': cls.__name__,
+            'cls': cls,
+            'pv_table': str(table_from_pvs(rec_name, cls._pvs_)),
+            'sort_index': idx,
+        }
+
+
+html_context = {
+    'caproto': caproto,
+    'mocked_records': list(_get_mocked_records()),
+}

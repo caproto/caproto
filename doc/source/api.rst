@@ -201,10 +201,10 @@ Commands can be parsed.
 
 .. data:: NEED_DATA
 
-Similarly, one sentinel is re-used as a "Command" allowing for consistent
-handling of disconnection events through the command queues:
+Similarly, the sentinel :class:`DISCONNECTED` is re-used as a "Command"
+allowing for consistent handling of disconnection events through the command
+queues.
 
-.. data:: DISCONNECTED
 
 The VirtualCircuit object
 =========================

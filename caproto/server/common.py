@@ -38,13 +38,59 @@ class LoopExit(Exception):
     ...
 
 
-Subscription = namedtuple('Subscription', ('mask', 'channel_filter',
-                                           'circuit', 'channel',
-                                           'data_type',
-                                           'data_count', 'subscriptionid',
-                                           'db_entry'))
-SubscriptionSpec = namedtuple('SubscriptionSpec', ('db_entry', 'data_type',
-                                                   'mask', 'channel_filter'))
+class Subscription(namedtuple('Subscription',
+                              ('mask', 'channel_filter', 'circuit', 'channel',
+                               'data_type', 'data_count', 'subscriptionid',
+                               'db_entry'))
+                   ):
+    '''
+    An individual subscription from a client
+
+    Attributes
+    ----------
+    mask : SubscriptionType
+        The subscription mask indicating different properties
+    channel_filter : ChannelFilter
+        The channel filter specified, including timestamp, deadband,
+        array and sync options.
+    circuit : VirtualCircuit
+        The associated virtual circuit
+    channel : ServerChannel
+        The associated channel
+    data_type : ChannelType
+        The requested data type
+    data_count : int
+        The number of requested elements
+    subscriptionid : int
+        The ID of the subscription
+    db_entry : ChannelData
+        The database entry
+    '''
+
+
+class SubscriptionSpec(namedtuple('SubscriptionSpec',
+                                  ('db_entry', 'data_type_name', 'mask',
+                                   'channel_filter'))
+                       ):
+    '''
+    Subscription specification used to key all subscription updates
+
+    Attributes
+    ----------
+    db_entry : ChannelData
+        The database entry
+    data_type_name : str
+        The type name associated with the user's request. For example,
+        all of the following are valid: {'STRING', 'INT', 'TIME_STRING',
+        'TIME_INT', 'LONG_STRING'} and so on.  See also :class:`ChannelType`
+        and :class:`_LongStringChannelType`.
+    mask : SubscriptionType
+        The subscription mask indicating different properties
+    channel_filter : ChannelFilter
+        The channel filter specified, including timestamp, deadband,
+        array and sync options.
+    '''
+
 
 host_endian = ('>' if sys.byteorder == 'big' else '<')
 
@@ -133,6 +179,18 @@ class VirtualCircuit:
             await self._on_disconnect()
             raise DisconnectedCircuit()
 
+    def _get_ids_from_command(self, command):
+        """Returns (cid, sid) given a command"""
+        cid, sid = None, None
+        if hasattr(command, 'sid'):
+            sid = command.sid
+            cid = self.circuit.channels_sid[sid].cid
+        elif hasattr(command, 'cid'):
+            cid = command.cid
+            sid = self.circuit.channels[cid].sid
+
+        return cid, sid
+
     async def _command_queue_iteration(self, command):
         """
         Coroutine which evaluates one item from the circuit command queue.
@@ -145,15 +203,7 @@ class VirtualCircuit:
         try:
             self.circuit.process_command(command)
         except ca.RemoteProtocolError:
-            if hasattr(command, 'sid'):
-                sid = command.sid
-                cid = self.circuit.channels_sid[sid].cid
-            elif hasattr(command, 'cid'):
-                cid = command.cid
-                sid = self.circuit.channels[cid].sid
-
-            else:
-                cid, sid = None, None
+            cid, sid = self._get_ids_from_command(command)
 
             if cid is not None:
                 try:
@@ -195,11 +245,13 @@ class VirtualCircuit:
                                    'disconnection: %s', command)
                 raise LoopExit('Server error after client disconnection')
 
-            self.log.exception('Server failed to process command: %s',
-                               command)
+            cid, sid = self._get_ids_from_command(command)
+            chan, _ = self._get_db_entry_from_command(command)
+            self.log.exception(
+                'Server failed to process command (%r): %s',
+                chan.name, command)
 
-            if hasattr(command, 'sid'):
-                cid = self.circuit.channels_sid[command.sid].cid
+            if cid is not None:
                 error_message = f'Python exception: {type(ex).__name__} {ex}'
                 return [ca.ErrorResponse(command, cid,
                                          status=ca.CAStatus.ECA_INTERNAL,
@@ -378,12 +430,15 @@ class VirtualCircuit:
                 await sub_spec.db_entry.unsubscribe(queue, sub_spec)
         return tuple(to_remove)
 
+    def _get_db_entry_from_command(self, command):
+        """Return a database entry from command, determined by the server id"""
+        cid, sid = self._get_ids_from_command(command)
+        chan = self.circuit.channels_sid[sid]
+        db_entry = self.context[chan.name]
+        return chan, db_entry
+
     async def _process_command(self, command):
         '''Process a command from a client, and return the server response'''
-        def get_db_entry():
-            chan = self.circuit.channels_sid[command.sid]
-            db_entry = self.context[chan.name]
-            return chan, db_entry
         tags = self._tags
         if command is ca.DISCONNECTED:
             raise DisconnectedCircuit()
@@ -426,7 +481,7 @@ class VirtualCircuit:
                 if ca.RecordModifiers.long_string in (modifiers or {}):
                     if data_type in (ChannelType.STRING, ):
                         data_type = ChannelType.CHAR
-                        data_count = len(db_entry.value)
+                        data_count = db_entry.long_string_max_length
 
                 to_send = [ca.AccessRightsResponse(cid=command.cid,
                                                    access_rights=access),
@@ -442,7 +497,7 @@ class VirtualCircuit:
             self.client_username = command.name
             to_send = []
         elif isinstance(command, (ca.ReadNotifyRequest, ca.ReadRequest)):
-            chan, db_entry = get_db_entry()
+            chan, db_entry = self._get_db_entry_from_command(command)
             try:
                 data_type = command.data_type
             except ValueError:
@@ -490,7 +545,7 @@ class VirtualCircuit:
                                  notify=notify)
                        ]
         elif isinstance(command, (ca.WriteRequest, ca.WriteNotifyRequest)):
-            chan, db_entry = get_db_entry()
+            chan, db_entry = self._get_db_entry_from_command(command)
             client_waiting = isinstance(command, ca.WriteNotifyRequest)
 
             async def handle_write():
@@ -536,19 +591,28 @@ class VirtualCircuit:
             await self._start_write_task(handle_write)
             to_send = []
         elif isinstance(command, ca.EventAddRequest):
-            chan, db_entry = get_db_entry()
+            chan, db_entry = self._get_db_entry_from_command(command)
             # TODO no support for deprecated low/high/to
+
+            read_data_type = command.data_type
+            if chan.name.endswith('$'):
+                try:
+                    read_data_type = _LongStringChannelType(read_data_type)
+                except ValueError:
+                    # Not requesting a LONG_STRING type
+                    ...
+
             sub = Subscription(mask=command.mask,
                                channel_filter=chan.channel_filter,
                                channel=chan,
                                circuit=self,
-                               data_type=command.data_type,
+                               data_type=read_data_type,
                                data_count=command.data_count,
                                subscriptionid=command.subscriptionid,
                                db_entry=db_entry)
             sub_spec = SubscriptionSpec(
                 db_entry=db_entry,
-                data_type=command.data_type,
+                data_type_name=read_data_type.name,
                 mask=command.mask,
                 channel_filter=chan.channel_filter)
             self.subscriptions[sub_spec].append(sub)
@@ -565,7 +629,7 @@ class VirtualCircuit:
                                      sub)
             to_send = []
         elif isinstance(command, ca.EventCancelRequest):
-            chan, db_entry = get_db_entry()
+            chan, db_entry = self._get_db_entry_from_command(command)
             removed = await self._cull_subscriptions(
                 db_entry,
                 lambda sub: sub.subscriptionid == command.subscriptionid)
@@ -601,7 +665,7 @@ class VirtualCircuit:
                                   *self.circuit.address)
             to_send = []
         elif isinstance(command, ca.ClearChannelRequest):
-            chan, db_entry = get_db_entry()
+            chan, db_entry = self._get_db_entry_from_command(command)
             await self._cull_subscriptions(
                 db_entry,
                 lambda sub: sub.channel == command.sid)

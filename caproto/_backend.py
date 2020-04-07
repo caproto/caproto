@@ -65,7 +65,7 @@ def encode_or_fail(s, encoding):
         if encoding is None:
             raise CaprotoConversionError('String encoding required')
         return s.encode(encoding)
-    elif isinstance(s, bytes):
+    if isinstance(s, bytes):
         return s
 
     raise CaprotoConversionError('Expected string or bytes')
@@ -76,7 +76,7 @@ def decode_or_fail(s, encoding):
         if encoding is None:
             raise CaprotoConversionError('String encoding required')
         return s.decode(encoding)
-    elif isinstance(s, str):
+    if isinstance(s, str):
         return s
 
     raise CaprotoConversionError('Expected string or bytes')
@@ -95,7 +95,7 @@ def _preprocess_enum_values(values, to_dtype, string_encoding, enum_strings):
         def enum_to_string(v):
             if isinstance(v, bytes):
                 raise CaprotoConversionError('Enum strings must be integer or string')
-            elif isinstance(v, str):
+            if isinstance(v, str):
                 if v not in enum_strings:
                     raise CaprotoConversionError(f'Invalid enum string: {v!r}')
                 return v
@@ -109,7 +109,7 @@ def _preprocess_enum_values(values, to_dtype, string_encoding, enum_strings):
     def enum_to_int(v):
         if isinstance(v, bytes):
             raise CaprotoConversionError('Enum strings must be integer or string')
-        elif isinstance(v, str):
+        if isinstance(v, str):
             try:
                 return enum_strings.index(v)
             except ValueError:
@@ -196,10 +196,9 @@ def _decode_string_list(values, string_encoding):
             if string_encoding:  # can have bytes in ChannelString
                 return v.decode(string_encoding)
             return v
-        elif isinstance(v, str):
+        if isinstance(v, str):
             return v
-        else:
-            return str(v)
+        return str(v)
     return [get_value(v) for v in values]
 
 
@@ -208,10 +207,9 @@ def _encode_to_string_array(values, string_encoding):
     def get_value(v):
         if isinstance(v, bytes):
             return v
-        elif isinstance(v, str):
+        if isinstance(v, str):
             return encode_or_fail(v, string_encoding)
-        else:
-            return encode_or_fail(str(v), string_encoding)
+        return encode_or_fail(str(v), string_encoding)
     return DbrStringArray(get_value(v) for v in values)
 
 
@@ -231,12 +229,12 @@ def _preprocess_string_from_wire(values, to_dtype, string_encoding,
         return _preprocess_enum_values(values, to_dtype=ChannelType.INT,
                                        string_encoding=string_encoding,
                                        enum_strings=enum_strings)
-    elif to_dtype in native_int_types:
+    if to_dtype in native_int_types:
         # TODO ca_test: for enums, string arrays seem to work, but not
         # scalars?
-        return [int(v) for v in values]
-    elif to_dtype in native_float_types:
-        return [float(v) for v in values]
+        return [int(v) if v else 0 for v in values]
+    if to_dtype in native_float_types:
+        return [float(v) if v else 0.0 for v in values]
 
 
 def _preprocess_string_to_wire(values, to_dtype, string_encoding,
@@ -248,7 +246,7 @@ def _preprocess_string_to_wire(values, to_dtype, string_encoding,
     if to_dtype == ChannelType.STRING:
         # caller will handle string encoding
         return values
-    elif to_dtype == ChannelType.ENUM:
+    if to_dtype == ChannelType.ENUM:
         # for enums, decode bytes -> strings
         values = [decode_or_fail(v, string_encoding)
                   if isinstance(v, bytes)
@@ -258,15 +256,15 @@ def _preprocess_string_to_wire(values, to_dtype, string_encoding,
         return _preprocess_enum_values(values, to_dtype=ChannelType.INT,
                                        string_encoding=string_encoding,
                                        enum_strings=enum_strings)
-    elif to_dtype in native_int_types:
+    if to_dtype in native_int_types:
         if to_dtype is _LongStringChannelType.LONG_STRING and values:
             if isinstance(values[0], str):
                 return list(encode_or_fail(values[0], string_encoding))
             if isinstance(values[0], bytes):
                 return list(values[0])
-        return [int(v) for v in values]
-    elif to_dtype in native_float_types:
-        return [float(v) for v in values]
+        return [int(v) if v else 0 for v in values]
+    if to_dtype in native_float_types:
+        return [float(v) if v else 0.0 for v in values]
 
 
 _custom_preprocess = {
@@ -337,13 +335,12 @@ def convert_values(values, from_dtype, to_dtype, *, direction,
     if to_dtype == ChannelType.STRING:
         if direction == ConversionDirection.TO_WIRE:
             return _encode_to_string_array(values, string_encoding)
-        else:
-            return _decode_string_list(values, string_encoding)
-    elif to_dtype == ChannelType.CHAR:
+        return _decode_string_list(values, string_encoding)
+    if to_dtype == ChannelType.CHAR:
         if len(values):
             if string_encoding and isinstance(values[0], str):
                 return values
-            elif not string_encoding and isinstance(values[0], bytes):
+            if not string_encoding and isinstance(values[0], bytes):
                 return values
 
     byteswap = (auto_byteswap and direction == ConversionDirection.TO_WIRE)
