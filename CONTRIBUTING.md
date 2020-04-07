@@ -26,10 +26,10 @@ source setup_local_dev_env.sh
 4. Install EPICS dependencies.
 
 ```bash
-bash .ci/install-epics-base.sh 
-bash .ci/install-epics-modules.sh 
-bash .ci/install-epics-modules.sh 
-bash .ci/install-epics-iocs.sh 
+bash .ci/install-epics-base.sh
+bash .ci/install-epics-modules.sh
+bash .ci/install-epics-modules.sh
+bash .ci/install-epics-iocs.sh
 ```
 
 5. Run the IOCs that the tests will communicate with.

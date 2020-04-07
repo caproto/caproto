@@ -50,7 +50,7 @@ build_script:
         ci/appveyor-make.bat
         Pop-Location
       }
-  - cmd: dir /s /b %EPICS_BASE%\dbd %EPICS_BASE%\bin 
+  - cmd: dir /s /b %EPICS_BASE%\dbd %EPICS_BASE%\bin
 
   - cmd: echo %APPVEYOR_REPO_COMMIT%
   - cmd: SET PATH=%EPICS_BASE%\bin\win32-x86-static;%EPICS_BASE%\bin\windows-x64-static;%PYTHON%;%PYTHON%\Scripts;;%PATH%
@@ -64,7 +64,7 @@ build_script:
 test_script:
   # Not sure why this setting isn't working above
   # - cmd: set EPICS_CA_AUTO_ADDR_LIST=NO
-  
+
   # - cmd: %RUN_TEST% caproto/tests/test_bench.py
   - "%RUN_TEST% caproto/tests/test_cli_scripts.py
     caproto/tests/test_core.py caproto/tests/test_create_many_channels.py
