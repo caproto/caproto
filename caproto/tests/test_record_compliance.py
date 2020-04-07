@@ -41,8 +41,6 @@ def test_record_compliance(request, prefix, record_type_name,
     fields = record_type_to_fields[record_type_name]
 
     # host a caproto record to test(you could also try this test on a real record).
-    # NOTE: using the below will actually run a seperate program from command line,
-    # bypassing whatever virtual env you are using for this test..
     pv = f"{prefix}A"
     conftest.run_example_ioc(
         'caproto.tests.ioc_any_record',
