@@ -6,18 +6,22 @@ Records
 
 These Python classes make it easy to run IOCs that have the record and field
 layout and linking of common EPICS database records. The source code of these
-"mock records" was auto-generated from the reference implementations. See the
-:ref:`_records_example` example for usage.
+"records" was auto-generated from a reference implementation available `here
+<https://github.com/caproto/reference-dbd>`_.
 
-{% for item in mocked_records | sort(attribute='sort_index') %}
+Please note that none of the classes listed here implement the full
+functionality of the corresponding record, but make available over Channel
+Access all of the fields one would normally expect from that record.
+
+See the :ref:`_records_example` example for usage.
+
+{% for item in records | sort(attribute='sort_index') %}
 {%- set cls = caproto.server.records.records[item.record_name] -%}
 .. class:: {{ item.class_name }}
 
 {% if item.record_name == 'base' %}
     This is a PVGroup class used to represent the basic fields from any given
-    EPICS record.  It does not implement the full functionality of that record,
-    but effectively "mocks" up all of the fields for availability over channel
-    access.
+    EPICS record.
 
     .. note:: The classes shown here are not meant to be instantiated directly, but
                rather used as a ``record=`` keyword argument in a
