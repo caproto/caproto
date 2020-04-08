@@ -13,7 +13,7 @@ Please note that none of the classes listed here implement the full
 functionality of the corresponding record, but make available over Channel
 Access all of the fields one would normally expect from that record.
 
-See the :ref:`_records_example` example for usage.
+See the :ref:`records_example` example for usage.
 
 {% for item in records | sort(attribute='sort_index') %}
 {%- set cls = caproto.server.records.records[item.record_name] -%}
