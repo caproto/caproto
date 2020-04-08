@@ -331,7 +331,7 @@ Access clients and decomposing into flat PVs for Channel Access clients.
 Records
 -------
 
-See :doc:`mock-records`.
+See :doc:`records`.
 
 .. literalinclude:: ../../caproto/ioc_examples/records.py
 
