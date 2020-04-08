@@ -438,9 +438,9 @@ def test_typhon_example(request, prefix):
     caproto_to_typhon.run_typhon(prefix=prefix)
 
 
-def test_mocking_records(request, prefix):
+def test_records(request, prefix):
     from .conftest import run_example_ioc
-    run_example_ioc('caproto.ioc_examples.mocking_records', request=request,
+    run_example_ioc('caproto.ioc_examples.records', request=request,
                     args=['--prefix', prefix], pv_to_check=f'{prefix}A')
 
     from caproto.sync.client import read, write
@@ -475,9 +475,9 @@ def test_mocking_records(request, prefix):
     assert data.metadata.precision == 4
 
 
-def test_mocking_records_subclass(request, prefix):
+def test_records_subclass(request, prefix):
     from .conftest import run_example_ioc
-    run_example_ioc('caproto.ioc_examples.mocking_records_subclass',
+    run_example_ioc('caproto.ioc_examples.records_subclass',
                     request=request,
                     args=['--prefix', prefix], pv_to_check=f'{prefix}motor1')
 
@@ -556,7 +556,7 @@ def test_event_read_collision(request, prefix, async_lib):
 
 def test_long_strings(request, prefix):
     from .conftest import run_example_ioc
-    run_example_ioc('caproto.ioc_examples.mocking_records', request=request,
+    run_example_ioc('caproto.ioc_examples.records', request=request,
                     args=['--prefix', prefix], pv_to_check=f'{prefix}E')
 
     stringin = f'{prefix}E'

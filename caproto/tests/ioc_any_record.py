@@ -20,7 +20,7 @@ def start_ioc(record_type, *, ioc_options, run_options):
 
     rec_kwargs = dict(
         value=default_value,
-        mock_record=record_type,
+        record=record_type,
         dtype=val_dtype,
     )
 

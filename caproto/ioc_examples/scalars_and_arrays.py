@@ -27,7 +27,7 @@ class ArrayIOC(PVGroup):
                       max_length=10)
     # ENUM should not be used as an array type:
     enum = pvproperty(value='no', enum_strings=['no', 'yes'],
-                      dtype=ChannelType.ENUM, mock_record='bi')
+                      dtype=ChannelType.ENUM, record='bi')
 
     @scalar_int.scan(period=1)
     async def scalar_int(self, instance, async_lib):

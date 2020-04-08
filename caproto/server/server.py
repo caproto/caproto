@@ -12,6 +12,7 @@ import inspect
 import logging
 import sys
 import time
+import warnings
 
 from collections import (namedtuple, OrderedDict, defaultdict)
 from types import MethodType
@@ -63,7 +64,7 @@ class AsyncLibraryLayer:
 
 class PvpropertyData:
     def __init__(self, *, pvname, group, pvspec, doc=None, mock_record=None,
-                 logger=None, **kwargs):
+                 record=None, logger=None, **kwargs):
         self.pvname = pvname  # the full, expanded PV name
         self.name = f'{group.name}.{pvspec.attr}'
         self.group = group
@@ -89,13 +90,21 @@ class PvpropertyData:
         if doc is not None:
             self.__doc__ = doc
 
-        self.record_type = mock_record
+        self.record_type = record or mock_record
 
         super().__init__(**kwargs)
 
         if mock_record is not None:
+            if record is not None:
+                raise ValueError(
+                    'Cannot specify both `mock_record` and `record`; '
+                    'please use only `record`')
+            warnings.warn(
+                '`mock_record` is deprecated. Use `pvproperty(record=)`')
+
+        if self.record_type is not None:
             from .records import records
-            field_class = records[mock_record]
+            field_class = records[self.record_type]
             if self.pvspec.fields is not None:
                 new_dict = dict(field_class.__dict__)
                 for (field, field_attr), func in self.pvspec.fields:
@@ -372,6 +381,10 @@ class FieldSpec:
         self._record_type = record_type
         self._fields = {}
 
+    @property
+    def record_type(self):
+        return self._record_type
+
     def __getattr__(self, attr):
         from .records import RecordFieldGroup, records
         rec_class = records.get(self._record_type, RecordFieldGroup)
@@ -444,27 +457,35 @@ class pvproperty:
         if doc is None and get is not None:
             doc = get.__doc__
 
-        if field_spec is None:
-            if name is None or '.' not in name:
-                field_spec = FieldSpec(
-                    self,
-                    record_type=cls_kwargs.get('mock_record'))
+        self.record_type = self._record_type_from_kwargs(cls_kwargs)
+
+        if field_spec is not None:
+            if name and '.' in name:
+                raise ValueError(f'Cannot specify field_spec if '
+                                 f'the PV name has a "." in it: {name!r}')
+            if self.record_type:
+                raise ValueError(
+                    'Cannot specify both field_spec and record; the record '
+                    'type from field_spec must be used')
+            self.record_type = field_spec.record_type
+        elif self.record_type:
+            if name and '.' in name:
+                raise ValueError(f'Cannot specify a record if '
+                                 f'the PV name has a "." in it: {name!r}')
+            field_spec = FieldSpec(self, record_type=self.record_type)
+
         self.field_spec = field_spec
-
-        fields = (None if field_spec is None
-                  else field_spec.fields)
-
-        self.pvspec = PVSpec(get=get, put=put, startup=startup,
-                             shutdown=shutdown, name=name, dtype=dtype,
-                             value=value, max_length=max_length,
-                             alarm_group=alarm_group, read_only=read_only,
-                             doc=doc, fields=fields, cls_kwargs=cls_kwargs)
+        self.pvspec = PVSpec(
+            get=get, put=put, startup=startup, shutdown=shutdown, name=name,
+            dtype=dtype, value=value, max_length=max_length,
+            alarm_group=alarm_group, read_only=read_only, doc=doc,
+            fields=getattr(self.field_spec, 'fields', None),
+            cls_kwargs=cls_kwargs)
         self.__doc__ = doc
 
-    @property
-    def record_type(self):
-        'Record type if mocking a record (or None)'
-        return self.pvspec.cls_kwargs.get('mock_record', None)
+    def _record_type_from_kwargs(self, cls_kwargs):
+        'Get the record type from the given class kwargs'
+        return cls_kwargs.get('record') or cls_kwargs.get('mock_record')
 
     def __get__(self, instance, owner):
         if instance is None:

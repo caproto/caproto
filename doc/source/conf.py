@@ -415,7 +415,7 @@ def table_from_pvs(record_name, pvs):
     return tabulate.tabulate(rows, list(col_to_attr), 'grid')
 
 
-def _get_mocked_records():
+def _get_records():
     def all_records():
         yield ('base', caproto.server.records.RecordFieldGroup)
         yield from caproto.server.records.records.items()
@@ -432,5 +432,5 @@ def _get_mocked_records():
 
 html_context = {
     'caproto': caproto,
-    'mocked_records': list(_get_mocked_records()),
+    'records': list(_get_records()),
 }
