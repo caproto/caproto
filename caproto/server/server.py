@@ -453,24 +453,29 @@ class pvproperty:
         if doc is None and get is not None:
             doc = get.__doc__
 
-        if field_spec is None:
+        # Note: can't use the `self.record_type` property here as `self.pvspec`
+        # is not set yet
+        record_type = self._record_type_from_kwargs(cls_kwargs)
+
+        if field_spec is not None:
             if name and '.' in name:
-                raise ValueError(f'Cannot specify a mocked record if the PV '
-                                 f'name has a "." in it: {name!r}')
-            field_spec = FieldSpec(
-                self, record_type=self._record_type_from_kwargs(cls_kwargs))
-            # Note: can't use the `self.record_type` property here as
-            # `self.pvspec` is not set yet
+                raise ValueError(f'Cannot specify field_spec if '
+                                 f'the PV name has a "." in it: {name!r}')
+            if record_type:
+                raise ValueError('Cannot specify both field_spec and record')
+        elif record_type:
+            if name and '.' in name:
+                raise ValueError(f'Cannot specify a record if '
+                                 f'the PV name has a "." in it: {name!r}')
+            field_spec = FieldSpec(self, record_type=record_type)
 
         self.field_spec = field_spec
-
-        fields = None if field_spec is None else field_spec.fields
-
-        self.pvspec = PVSpec(get=get, put=put, startup=startup,
-                             shutdown=shutdown, name=name, dtype=dtype,
-                             value=value, max_length=max_length,
-                             alarm_group=alarm_group, read_only=read_only,
-                             doc=doc, fields=fields, cls_kwargs=cls_kwargs)
+        self.pvspec = PVSpec(
+            get=get, put=put, startup=startup, shutdown=shutdown, name=name,
+            dtype=dtype, value=value, max_length=max_length,
+            alarm_group=alarm_group, read_only=read_only, doc=doc,
+            fields=getattr(self.field_spec, 'fields', None),
+            cls_kwargs=cls_kwargs)
         self.__doc__ = doc
 
     def _record_type_from_kwargs(self, cls_kwargs):
