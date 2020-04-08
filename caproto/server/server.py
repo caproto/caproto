@@ -381,6 +381,10 @@ class FieldSpec:
         self._record_type = record_type
         self._fields = {}
 
+    @property
+    def record_type(self):
+        return self._record_type
+
     def __getattr__(self, attr):
         from .records import RecordFieldGroup, records
         rec_class = records.get(self._record_type, RecordFieldGroup)
@@ -453,21 +457,22 @@ class pvproperty:
         if doc is None and get is not None:
             doc = get.__doc__
 
-        # Note: can't use the `self.record_type` property here as `self.pvspec`
-        # is not set yet
-        record_type = self._record_type_from_kwargs(cls_kwargs)
+        self.record_type = self._record_type_from_kwargs(cls_kwargs)
 
         if field_spec is not None:
             if name and '.' in name:
                 raise ValueError(f'Cannot specify field_spec if '
                                  f'the PV name has a "." in it: {name!r}')
-            if record_type:
-                raise ValueError('Cannot specify both field_spec and record')
-        elif record_type:
+            if self.record_type:
+                raise ValueError(
+                    'Cannot specify both field_spec and record; the record '
+                    'type from field_spec must be used')
+            self.record_type = field_spec.record_type
+        elif self.record_type:
             if name and '.' in name:
                 raise ValueError(f'Cannot specify a record if '
                                  f'the PV name has a "." in it: {name!r}')
-            field_spec = FieldSpec(self, record_type=record_type)
+            field_spec = FieldSpec(self, record_type=self.record_type)
 
         self.field_spec = field_spec
         self.pvspec = PVSpec(
@@ -481,11 +486,6 @@ class pvproperty:
     def _record_type_from_kwargs(self, cls_kwargs):
         'Get the record type from the given class kwargs'
         return cls_kwargs.get('record') or cls_kwargs.get('mock_record')
-
-    @property
-    def record_type(self):
-        'Record type if mocking a record (or None)'
-        return self._record_type_from_kwargs(self.pvspec.cls_kwargs)
 
     def __get__(self, instance, owner):
         if instance is None:

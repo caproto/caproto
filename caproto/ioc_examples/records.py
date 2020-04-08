@@ -50,8 +50,11 @@ class RecordMockingIOC(PVGroup):
         await ioc.A.write(value - 10)
 
     # Now that the field specification has been set on B, it can be reused:
-    D = pvproperty(value=2.0, record='ao',
-                   precision=3, field_spec=B.field_spec)
+    D = pvproperty(value=2.0,
+                   precision=3,
+                   field_spec=B.field_spec)
+    # D will also be reported as an 'ao' record like B, as it uses the same
+    # field specification.
 
     E = pvproperty(value='this is a test',
                    record='stringin',
