@@ -92,7 +92,7 @@ Use the git option ``--no-verify`` or ``-n`` to skip the checks.
 
 .. code-block:: bash
 
-   git commit -n "test"  # commits anyway
+   git commit -nam "test"  # commits anyway
 
 You can run the checks manually on all files.
 
