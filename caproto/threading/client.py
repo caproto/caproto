@@ -20,7 +20,6 @@ import os
 import random
 import selectors
 import socket
-import sys
 import threading
 import time
 import weakref
@@ -171,16 +170,12 @@ class SelectorThread:
         self._close_event = threading.Event()
         self.selector = selectors.DefaultSelector()
 
-        if sys.platform in {'win32', 'darwin'}:
-            # Empty select() list is problematic for windows and OSX
-            dummy_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self.selector.register(dummy_socket, selectors.EVENT_READ)
-
         self._socket_map_lock = threading.RLock()
         self.objects = weakref.WeakValueDictionary()
         self.id_to_socket = {}
         self.socket_to_id = {}
 
+        self._register_event = threading.Event()
         self._register_sockets = set()
         self._unregister_sockets = set()
         self._object_id = 0
@@ -196,6 +191,9 @@ class SelectorThread:
 
     def stop(self):
         self._close_event.set()
+
+        # Also set the register event, if waiting for a socket to select()
+        self._register_event.set()
 
     def start(self):
         if self._close_event.is_set():
@@ -221,6 +219,7 @@ class SelectorThread:
                              self._object_removed(obj_id))
             self._register_sockets.add(sock)
             # self.log.debug('Socket %s was added (obj %s)', sock, target_obj)
+            self._register_event.set()
 
     def remove_socket(self, sock):
         with self._socket_map_lock:
@@ -241,6 +240,7 @@ class SelectorThread:
                 # self.log.debug('Socket %s was removed '
                 #              '(obj = %s)', sock, obj)
                 self._unregister_sockets.add(sock)
+            self._register_event.set()
 
     def _object_removed(self, obj_id):
         with self._socket_map_lock:
@@ -250,11 +250,12 @@ class SelectorThread:
                 #              sock)
                 del self.socket_to_id[sock]
                 self._unregister_sockets.add(sock)
+                self._register_event.set()
 
     def __call__(self):
         '''Selector poll loop'''
         avail_buf = array.array('i', [0])
-        while not self._close_event.is_set():
+        while self.running:
             with self._socket_map_lock:
                 for sock in self._unregister_sockets:
                     self.selector.unregister(sock)
@@ -263,6 +264,10 @@ class SelectorThread:
                 for sock in self._register_sockets:
                     self.selector.register(sock, selectors.EVENT_READ)
                 self._register_sockets.clear()
+
+            if not len(self.socket_to_id):
+                self._register_event.wait(timeout=0.1)
+                continue
 
             events = self.selector.select(timeout=0.1)
             with self._socket_map_lock:
