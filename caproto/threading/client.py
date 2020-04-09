@@ -171,8 +171,8 @@ class SelectorThread:
         self._close_event = threading.Event()
         self.selector = selectors.DefaultSelector()
 
-        if sys.platform == 'win32':
-            # Empty select() list is problematic for windows
+        if sys.platform in {'win32', 'darwin'}:
+            # Empty select() list is problematic for windows and OSX
             dummy_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.selector.register(dummy_socket, selectors.EVENT_READ)
 
