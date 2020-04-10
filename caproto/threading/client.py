@@ -297,13 +297,18 @@ class SelectorThread:
                         obj.log.debug('Removing %s = %s after DISCONNECTED '
                                       'return value', sock, obj)
                         self.remove_socket(sock)
-                        # TODO: consider adding specific DISCONNECTED instead of b''
-                        # sent to disconnected sockets
+                        # TODO: consider adding specific DISCONNECTED instead
+                        # of b'' sent to disconnected sockets
                 except Exception as ex:
-                    obj.log.exception(
-                        'Removing %s due to an internal error on receipt of '
-                        'new data: %s', obj, ex)
-                    self.remove_socket(sock)
+                    if sock.type == socket.SOCK_DGRAM:
+                        obj.log.exception(
+                            'UDP socket for %s failed on receipt of '
+                            'new data: %s', obj, ex)
+                    else:
+                        obj.log.exception(
+                            'Removing %s due to an internal error on receipt of '
+                            'new data: %s', obj, ex)
+                        self.remove_socket(sock)
 
 
 class SharedBroadcaster:
