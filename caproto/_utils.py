@@ -256,7 +256,7 @@ def get_environment_variables():
 
 def _split_address_list(addr_list):
     '''Split an address list string into individual items'''
-    return [addr for addr in addr_list.split(' ') if addr.strip()]
+    return list(set(addr for addr in addr_list.split(' ') if addr.strip()))
 
 
 def get_manually_specified_beacon_addresses():
