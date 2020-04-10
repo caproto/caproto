@@ -23,7 +23,6 @@ import socket
 import sys
 import threading
 import time
-import warnings
 import weakref
 
 from queue import Queue, Empty
@@ -32,10 +31,11 @@ from collections import defaultdict, deque
 import caproto as ca
 from .._constants import (MAX_ID, STALE_SEARCH_EXPIRATION,
                           SEARCH_MAX_DATAGRAM_BYTES, RESPONSIVENESS_TIMEOUT)
-from .._utils import (batch_requests, CaprotoError, ThreadsafeCounter,
+from .._utils import (adapt_old_callback_signature,
+                      batch_requests, CaprotoError, ThreadsafeCounter,
                       socket_bytes_available, CaprotoTimeoutError,
                       CaprotoTypeError, CaprotoRuntimeError, CaprotoValueError,
-                      CaprotoKeyError, CaprotoNetworkError)
+                      CaprotoKeyError, CaprotoNetworkError, safe_getsockname)
 
 
 ch_logger = logging.getLogger('caproto.ch')
@@ -171,8 +171,8 @@ class SelectorThread:
         self._close_event = threading.Event()
         self.selector = selectors.DefaultSelector()
 
-        if sys.platform == 'win32':
-            # Empty select() list is problematic for windows
+        if sys.platform in {'win32', 'darwin'}:
+            # Empty select() list is problematic for windows and OSX
             dummy_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.selector.register(dummy_socket, selectors.EVENT_READ)
 
@@ -343,7 +343,7 @@ class SharedBroadcaster:
         self.listeners = weakref.WeakSet()
 
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
-        self.broadcaster.client_address = self.udp_sock.getsockname()[:2]
+        self.broadcaster.client_address = safe_getsockname(self.udp_sock)
         self.log = logging.LoggerAdapter(
             self.broadcaster.log, {'role': 'CLIENT'})
         self.search_log = logging.LoggerAdapter(
@@ -1298,7 +1298,7 @@ class VirtualCircuitManager:
             self.socket = socket.create_connection(self.circuit.address)
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
             self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-            self.circuit.our_address = self.socket.getsockname()[:2]
+            self.circuit.our_address = self.socket.getsockname()
             # This dict is passed to the loggers.
             self._tags = {'their_address': self.circuit.address,
                           'our_address': self.circuit.our_address,
@@ -2182,6 +2182,7 @@ class Subscription(CallbackHandler):
         ----------
         func : callable
             Expected signature: ``func(sub, response)``.
+
             The signature ``func(response)`` is also supported for
             backward-compatibility but will issue warnings. Support will be
             removed in a future release of caproto.
@@ -2196,40 +2197,8 @@ class Subscription(CallbackHandler):
            Changed the expected signature of ``func`` from ``func(response)``
            to ``func(sub, response)``.
         """
-        # Handle func with signature func(respons) for back-compat.
-        sig = inspect.signature(func)
-        try:
-            # Does this function accept two positional arguments?
-            sig.bind(None, None)
-        except TypeError:
-            warnings.warn(
-                "The signature of a subscription callback is now expected to "
-                "be func(sub, response). The signature func(response) is "
-                "supported, but support will be removed in a future release "
-                "of caproto.")
-            raw_func = func
-            raw_func_weakref = weakref.ref(raw_func)
-
-            def func(sub, response):
-                # Avoid closing over raw_func itself here or it will never be
-                # garbage collected.
-                raw_func = raw_func_weakref()
-                if raw_func is not None:
-                    # Do nothing with sub because the user-provided func cannot
-                    # accept it.
-                    raw_func(response)
-
-            # Ensure func does not get garbage collected until raw_func does.
-            def called_when_raw_func_is_released(w):
-                # The point of this function is to hold one hard ref to func
-                # until raw_func is garbage collected.
-                func
-                # Clean up after ourselves.
-                self.__wrapper_weakrefs.remove(w)
-
-            w = weakref.ref(raw_func, called_when_raw_func_is_released)
-            # Hold a hard reference to w. Its callback removes it from this set.
-            self.__wrapper_weakrefs.add(w)
+        # Handle func with signature func(response) for back-compat.
+        func = adapt_old_callback_signature(func, self.__wrapper_weakrefs)
 
         with self.callback_lock:
             was_empty = not self.callbacks

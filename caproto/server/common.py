@@ -1,4 +1,5 @@
-from collections import defaultdict, deque, namedtuple, ChainMap, Iterable
+from collections import defaultdict, deque, namedtuple, ChainMap
+from collections.abc import Iterable
 import copy
 import logging
 import sys
@@ -7,8 +8,8 @@ import weakref
 import caproto as ca
 from caproto import (apply_arr_filter, get_environment_variables,
                      RemoteProtocolError, CaprotoKeyError, CaprotoRuntimeError,
-                     CaprotoNetworkError)
-from .._dbr import SubscriptionType
+                     CaprotoNetworkError, ChannelType)
+from .._dbr import SubscriptionType, _LongStringChannelType
 
 
 # ** Tuning this parameters will affect the servers' performance **
@@ -37,13 +38,59 @@ class LoopExit(Exception):
     ...
 
 
-Subscription = namedtuple('Subscription', ('mask', 'channel_filter',
-                                           'circuit', 'channel',
-                                           'data_type',
-                                           'data_count', 'subscriptionid',
-                                           'db_entry'))
-SubscriptionSpec = namedtuple('SubscriptionSpec', ('db_entry', 'data_type',
-                                                   'mask', 'channel_filter'))
+class Subscription(namedtuple('Subscription',
+                              ('mask', 'channel_filter', 'circuit', 'channel',
+                               'data_type', 'data_count', 'subscriptionid',
+                               'db_entry'))
+                   ):
+    '''
+    An individual subscription from a client
+
+    Attributes
+    ----------
+    mask : SubscriptionType
+        The subscription mask indicating different properties
+    channel_filter : ChannelFilter
+        The channel filter specified, including timestamp, deadband,
+        array and sync options.
+    circuit : VirtualCircuit
+        The associated virtual circuit
+    channel : ServerChannel
+        The associated channel
+    data_type : ChannelType
+        The requested data type
+    data_count : int
+        The number of requested elements
+    subscriptionid : int
+        The ID of the subscription
+    db_entry : ChannelData
+        The database entry
+    '''
+
+
+class SubscriptionSpec(namedtuple('SubscriptionSpec',
+                                  ('db_entry', 'data_type_name', 'mask',
+                                   'channel_filter'))
+                       ):
+    '''
+    Subscription specification used to key all subscription updates
+
+    Attributes
+    ----------
+    db_entry : ChannelData
+        The database entry
+    data_type_name : str
+        The type name associated with the user's request. For example,
+        all of the following are valid: {'STRING', 'INT', 'TIME_STRING',
+        'TIME_INT', 'LONG_STRING'} and so on.  See also :class:`ChannelType`
+        and :class:`_LongStringChannelType`.
+    mask : SubscriptionType
+        The subscription mask indicating different properties
+    channel_filter : ChannelFilter
+        The channel filter specified, including timestamp, deadband,
+        array and sync options.
+    '''
+
 
 host_endian = ('>' if sys.byteorder == 'big' else '<')
 
@@ -52,7 +99,7 @@ class VirtualCircuit:
     def __init__(self, circuit, client, context):
         self.connected = True
         self.circuit = circuit  # a caproto.VirtualCircuit
-        self.circuit.our_address = client.getsockname()[:2]
+        self.circuit.our_address = client.getsockname()
         self.log = circuit.log
         self.client = client
         self.context = context
@@ -132,6 +179,18 @@ class VirtualCircuit:
             await self._on_disconnect()
             raise DisconnectedCircuit()
 
+    def _get_ids_from_command(self, command):
+        """Returns (cid, sid) given a command"""
+        cid, sid = None, None
+        if hasattr(command, 'sid'):
+            sid = command.sid
+            cid = self.circuit.channels_sid[sid].cid
+        elif hasattr(command, 'cid'):
+            cid = command.cid
+            sid = self.circuit.channels[cid].sid
+
+        return cid, sid
+
     async def _command_queue_iteration(self, command):
         """
         Coroutine which evaluates one item from the circuit command queue.
@@ -144,15 +203,7 @@ class VirtualCircuit:
         try:
             self.circuit.process_command(command)
         except ca.RemoteProtocolError:
-            if hasattr(command, 'sid'):
-                sid = command.sid
-                cid = self.circuit.channels_sid[sid].cid
-            elif hasattr(command, 'cid'):
-                cid = command.cid
-                sid = self.circuit.channels[cid].sid
-
-            else:
-                cid, sid = None, None
+            cid, sid = self._get_ids_from_command(command)
 
             if cid is not None:
                 try:
@@ -194,11 +245,13 @@ class VirtualCircuit:
                                    'disconnection: %s', command)
                 raise LoopExit('Server error after client disconnection')
 
-            self.log.exception('Server failed to process command: %s',
-                               command)
+            cid, sid = self._get_ids_from_command(command)
+            chan, _ = self._get_db_entry_from_command(command)
+            self.log.exception(
+                'Server failed to process command (%r): %s',
+                chan.name, command)
 
-            if hasattr(command, 'sid'):
-                cid = self.circuit.channels_sid[command.sid].cid
+            if cid is not None:
                 error_message = f'Python exception: {type(ex).__name__} {ex}'
                 return [ca.ErrorResponse(command, cid,
                                          status=ca.CAStatus.ECA_INTERNAL,
@@ -377,12 +430,15 @@ class VirtualCircuit:
                 await sub_spec.db_entry.unsubscribe(queue, sub_spec)
         return tuple(to_remove)
 
+    def _get_db_entry_from_command(self, command):
+        """Return a database entry from command, determined by the server id"""
+        cid, sid = self._get_ids_from_command(command)
+        chan = self.circuit.channels_sid[sid]
+        db_entry = self.context[chan.name]
+        return chan, db_entry
+
     async def _process_command(self, command):
         '''Process a command from a client, and return the server response'''
-        def get_db_entry():
-            chan = self.circuit.channels_sid[command.sid]
-            db_entry = self.context[chan.name]
-            return chan, db_entry
         tags = self._tags
         if command is ca.DISCONNECTED:
             raise DisconnectedCircuit()
@@ -407,21 +463,30 @@ class VirtualCircuit:
                                       ca.DEFAULT_PROTOCOL_VERSION)
                 ]
         elif isinstance(command, ca.CreateChanRequest):
+            pvname = command.name
             try:
-                db_entry = self.context[command.name]
+                db_entry = self.context[pvname]
             except KeyError:
                 self.log.debug('Client requested invalid channel name: %s',
-                               command.name)
+                               pvname)
                 to_send = [ca.CreateChFailResponse(cid=command.cid)]
             else:
 
                 access = db_entry.check_access(self.client_hostname,
                                                self.client_username)
 
+                modifiers = ca.parse_record_field(pvname).modifiers
+                data_type = db_entry.data_type
+                data_count = db_entry.max_length
+                if ca.RecordModifiers.long_string in (modifiers or {}):
+                    if data_type in (ChannelType.STRING, ):
+                        data_type = ChannelType.CHAR
+                        data_count = db_entry.long_string_max_length
+
                 to_send = [ca.AccessRightsResponse(cid=command.cid,
                                                    access_rights=access),
-                           ca.CreateChanResponse(data_type=db_entry.data_type,
-                                                 data_count=db_entry.max_length,
+                           ca.CreateChanResponse(data_type=data_type,
+                                                 data_count=data_count,
                                                  cid=command.cid,
                                                  sid=self.circuit.new_channel_id()),
                            ]
@@ -432,7 +497,7 @@ class VirtualCircuit:
             self.client_username = command.name
             to_send = []
         elif isinstance(command, (ca.ReadNotifyRequest, ca.ReadRequest)):
-            chan, db_entry = get_db_entry()
+            chan, db_entry = self._get_db_entry_from_command(command)
             try:
                 data_type = command.data_type
             except ValueError:
@@ -444,9 +509,18 @@ class VirtualCircuit:
             # introducing too much latency.
             await self.write_event.wait(timeout=WRITE_LOCK_TIMEOUT)
 
+            read_data_type = data_type
+            if chan.name.endswith('$'):
+                try:
+                    read_data_type = _LongStringChannelType(read_data_type)
+                except ValueError:
+                    # Not requesting a LONG_STRING type
+                    ...
+
             metadata, data = await db_entry.auth_read(
                 self.client_hostname, self.client_username,
-                data_type, user_address=self.circuit.address)
+                read_data_type, user_address=self.circuit.address,
+            )
 
             old_version = self.circuit.protocol_version < 13
             if command.data_count > 0 or old_version:
@@ -471,7 +545,7 @@ class VirtualCircuit:
                                  notify=notify)
                        ]
         elif isinstance(command, (ca.WriteRequest, ca.WriteNotifyRequest)):
-            chan, db_entry = get_db_entry()
+            chan, db_entry = self._get_db_entry_from_command(command)
             client_waiting = isinstance(command, ca.WriteNotifyRequest)
 
             async def handle_write():
@@ -517,19 +591,28 @@ class VirtualCircuit:
             await self._start_write_task(handle_write)
             to_send = []
         elif isinstance(command, ca.EventAddRequest):
-            chan, db_entry = get_db_entry()
+            chan, db_entry = self._get_db_entry_from_command(command)
             # TODO no support for deprecated low/high/to
+
+            read_data_type = command.data_type
+            if chan.name.endswith('$'):
+                try:
+                    read_data_type = _LongStringChannelType(read_data_type)
+                except ValueError:
+                    # Not requesting a LONG_STRING type
+                    ...
+
             sub = Subscription(mask=command.mask,
                                channel_filter=chan.channel_filter,
                                channel=chan,
                                circuit=self,
-                               data_type=command.data_type,
+                               data_type=read_data_type,
                                data_count=command.data_count,
                                subscriptionid=command.subscriptionid,
                                db_entry=db_entry)
             sub_spec = SubscriptionSpec(
                 db_entry=db_entry,
-                data_type=command.data_type,
+                data_type_name=read_data_type.name,
                 mask=command.mask,
                 channel_filter=chan.channel_filter)
             self.subscriptions[sub_spec].append(sub)
@@ -546,7 +629,7 @@ class VirtualCircuit:
                                      sub)
             to_send = []
         elif isinstance(command, ca.EventCancelRequest):
-            chan, db_entry = get_db_entry()
+            chan, db_entry = self._get_db_entry_from_command(command)
             removed = await self._cull_subscriptions(
                 db_entry,
                 lambda sub: sub.subscriptionid == command.subscriptionid)
@@ -582,7 +665,7 @@ class VirtualCircuit:
                                   *self.circuit.address)
             to_send = []
         elif isinstance(command, ca.ClearChannelRequest):
-            chan, db_entry = get_db_entry()
+            chan, db_entry = self._get_db_entry_from_command(command)
             await self._cull_subscriptions(
                 db_entry,
                 lambda sub: sub.channel == command.sid)
@@ -696,11 +779,11 @@ class Context:
             try:
                 (rec_field, rec, field, mods) = ca.parse_record_field(pvname)
             except ValueError:
-                raise ex
+                raise ex from None
 
             if not field and not mods:
-                # No field or modifiers, so there's nothing left to check
-                raise
+                # No field or modifiers, but a trailing '.' is valid
+                return self.pvdb[rec]
 
         # Without the modifiers, try 'record[.field]'
         try:
@@ -719,8 +802,17 @@ class Context:
                 raise CaprotoKeyError(f'Neither record nor field exists: '
                                       f'{rec_field}')
 
-            # Cache record.FIELD for later usage
-            self.pvdb[rec_field] = inst
+        # Verify the modifiers are usable BEFORE caching rec_field in the pvdb:
+        if ca.RecordModifiers.long_string in (mods or {}):
+            if inst.data_type not in (ChannelType.STRING,
+                                      ChannelType.CHAR):
+                raise CaprotoKeyError(
+                    f'Long-string modifier not supported with types '
+                    f'other than string or char ({inst.data_type})'
+                )
+
+        # Cache record.FIELD for later usage
+        self.pvdb[rec_field] = inst
         return inst
 
     async def _broadcaster_queue_iteration(self, addr, commands):

@@ -9,6 +9,7 @@ from ..server.common import (VirtualCircuit as _VirtualCircuit,
                              Context as _Context, LoopExit,
                              DisconnectedCircuit)
 from .util import open_memory_channel
+from .._utils import safe_getsockname
 
 
 class ServerExit(Exception):
@@ -155,7 +156,8 @@ class Context(_Context):
     async def broadcaster_udp_server_loop(self, task_status):
         for interface in self.interfaces:
             udp_sock = ca.bcast_socket(socket)
-            self.broadcaster.server_addresses.append(udp_sock.getsockname()[:2])
+            self.broadcaster.server_addresses.append(
+                safe_getsockname(udp_sock))
             try:
                 await udp_sock.bind((interface, self.ca_server_port))
             except Exception:
@@ -218,7 +220,7 @@ class Context(_Context):
                 for address in ca.get_beacon_address_list():
                     sock = ca.bcast_socket(socket)
                     await sock.connect(address)
-                    interface, _ = sock.getsockname()
+                    interface, _ = safe_getsockname(sock)
                     self.beacon_socks[address] = (interface, sock)
 
                 async def make_socket(interface, port):

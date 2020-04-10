@@ -88,7 +88,7 @@ used.
 
 .. ipython:: python
     :suppress:
-    
+
     import sys
     import subprocess
     import time
@@ -326,18 +326,18 @@ Access clients and decomposing into flat PVs for Channel Access clients.
         subgroups:group3_prefix:random
         subgroups:group4:subgroup4:random
 
-.. _mocking_records_example:
+.. _records_example:
 
-Mocking Records
----------------
+Records
+-------
 
-See :doc:`mock-records`.
+See :doc:`records`.
 
-.. literalinclude:: ../../caproto/ioc_examples/mocking_records.py
+.. literalinclude:: ../../caproto/ioc_examples/records.py
 
 .. code-block:: bash
 
-    python -m caproto.ioc_examples.mocking_records --list-pvs
+    python -m caproto.ioc_examples.records --list-pvs
     PVs: ['mock:A', 'mock:B']
     Fields of B: ['ACKS', 'ACKT', 'ASG', 'DESC', 'DISA', 'DISP', 'DISS', 'DISV', 'DTYP', 'EVNT', 'FLNK', 'LCNT', 'NAME', 'NSEV', 'NSTA', 'PACT', 'PHAS', 'PINI', 'PRIO', 'PROC', 'PUTF', 'RPRO', 'SCAN', 'SDIS', 'SEVR', 'TPRO', 'TSE', 'TSEL', 'UDF', 'RTYP', 'STAT', 'RVAL', 'INIT', 'MLST', 'LALM', 'ALST', 'LBRK', 'ORAW', 'ROFF', 'SIMM', 'SVAL', 'HYST', 'HIGH', 'HSV', 'HIHI', 'HHSV', 'LOLO', 'LLSV', 'LOW', 'LSV', 'AOFF', 'ASLO', 'EGUF', 'EGUL', 'LINR', 'EOFF', 'ESLO', 'SMOO', 'ADEL', 'PREC', 'EGU', 'HOPR', 'LOPR', 'MDEL', 'INP', 'SIOL', 'SIML', 'SIMS']
     [I 11:07:48.635 server:132] Server starting up...

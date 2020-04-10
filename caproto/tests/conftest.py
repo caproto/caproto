@@ -18,6 +18,8 @@ from caproto.sync.client import read
 import caproto.threading  # noqa
 import caproto.asyncio  # noqa
 
+# DBD parsing-related fixtures:
+from .dbd import test_dbd_file, record_type_to_fields  # noqa
 
 _repeater_process = None
 
@@ -172,7 +174,7 @@ def _epics_base_ioc(prefix, request):
             dict(FTVL='LONG', NELM=4000),
         ('{}float'.format(prefix), 'ai'): dict(VAL=3.14),
         ('{}enum'.format(prefix), 'bi'):
-            dict(VAL=1, ZNAM="zero", ONAM="one"),
+            dict(VAL=1, ZNAM="a", ONAM="b"),
         ('{}str'.format(prefix), 'stringout'): dict(VAL='test'),
         ('{}int'.format(prefix), 'longout'): dict(VAL=1),
         ('{}int2'.format(prefix), 'longout'): dict(VAL=1),
@@ -751,3 +753,8 @@ def pytest_runtest_call(item):
 
     item.user_properties.append(('total_sockets', num_sockets))
     item.user_properties.append(('open_sockets', num_open))
+
+
+@pytest.fixture(scope='session', params=list(ca.server.records.records))
+def record_type_name(request):
+    return request.param

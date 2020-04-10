@@ -18,11 +18,11 @@ class EnumIOC(PVGroup):
     """
     bo = pvproperty(value='One Value',
                     enum_strings=['Zero Value', 'One Value'],
-                    mock_record='bo',
+                    record='bo',
                     dtype=ChannelType.ENUM)
     bi = pvproperty(value='a',
                     enum_strings=['a', 'b'],
-                    mock_record='bi',
+                    record='bi',
                     dtype=ChannelType.ENUM)
 
 

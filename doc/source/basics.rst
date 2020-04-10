@@ -81,7 +81,7 @@ handle broadcasts properly.) To register, we must send a *request* to the
 Repeater and receive a *response*.
 
 .. ipython:: python
-    
+
     bytes_to_send = b'\x00\x18\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
     udp_sock.sendto(bytes_to_send, ('127.0.0.1', 5065))
 
@@ -119,7 +119,7 @@ Instantiate a caproto :class:`Broadcaster` and a command to broadcast --- a
 :class:`RepeaterRegisterRequest`.`
 
 .. ipython:: python
-    
+
     b = caproto.Broadcaster(our_role=caproto.CLIENT)
     command = caproto.RepeaterRegisterRequest('0.0.0.0')
 
@@ -186,10 +186,10 @@ variables, checking the available network interfaces if necessary, and
 returning a list.
 
 .. ipython:: python
-    
+
     import caproto
     hosts = caproto.get_address_list()  # example: ['172.17.255.255']
-    
+
 We need to broadcast a search request to the servers on our network and receive
 a response. (In the event that multiple responses arrive, Channel Access
 specifies that all but the first response should be ignored.) We follow the
@@ -231,7 +231,7 @@ Creating a Channel
 Create a TCP connection with the server at the ``address`` we found above.
 
 .. ipython:: python
-    
+
     import socket
     sock = socket.create_connection(address)
 
@@ -242,7 +242,7 @@ received bytes as commands and to ensure that incoming and outgoing bytes abide
 by the protocol.
 
 .. ipython:: python
-    
+
     circuit = caproto.VirtualCircuit(our_role=caproto.CLIENT, address=address,
                                      priority=0)
 
@@ -332,7 +332,7 @@ asked for the "native" data type and count that the server reported in its
 Write:
 
 .. ipython:: python
-    
+
     send(caproto.WriteNotifyRequest(data=(4,),
                                     data_type=create_chan_response.data_type,
                                     data_count=create_chan_response.data_count,
@@ -377,7 +377,7 @@ If the value changes, additional responses will come in. If multiple
 subscriptions are in play at once over this circuit, we can use the
 ``subscriptionid`` to match them to the right channel. We also use it to end
 the subscription:
-    
+
 .. ipython:: python
 
     send(caproto.EventCancelRequest(data_type=req.data_type,
@@ -462,7 +462,7 @@ Here is the equivalent, a condensed copy of our work from previous sections:
     recv()
     send(caproto.WriteNotifyRequest(data=(4,), data_type=2, data_count=1, sid=sid, ioid=2))
     recv()
-    
+
     ### Subscribe and Unsubscribe
     req = caproto.EventAddRequest(data_type=create_chan_response.data_type,
                                   data_count=create_chan_response.data_count,

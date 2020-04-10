@@ -240,15 +240,23 @@ class Context(_Context):
         for address in ca.get_beacon_address_list():
             transport, _ = await self.loop.create_datagram_endpoint(
                 BcastLoop, remote_addr=address, allow_broadcast=True,
-                reuse_address=True, reuse_port=reuse_port)
+                reuse_port=reuse_port)
             wrapped_transport = ConnectedTransportWrapper(transport, address)
             self.beacon_socks[address] = (interface, wrapped_transport)
 
         for interface in self.interfaces:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+            # Python says this is unsafe, but we need it to have
+            # multiple servers live on the same host.
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            if reuse_port:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            sock.setblocking(False)
+            sock.bind((interface, self.ca_server_port))
+
             transport, self.p = await self.loop.create_datagram_endpoint(
-                BcastLoop, local_addr=(interface, self.ca_server_port),
-                allow_broadcast=True, reuse_address=True,
-                reuse_port=reuse_port)
+                BcastLoop, sock=sock)
             self.udp_socks[interface] = TransportWrapper(transport)
             self.log.debug('UDP socket bound on %s:%d', interface,
                            self.ca_server_port)

@@ -18,7 +18,7 @@ import trio
 from collections import OrderedDict, defaultdict
 from trio import socket
 from .._utils import (batch_requests, CaprotoError, ThreadsafeCounter,
-                      get_environment_variables)
+                      get_environment_variables, safe_getsockname)
 from .._constants import (STALE_SEARCH_EXPIRATION, SEARCH_MAX_DATAGRAM_BYTES)
 
 from .util import open_memory_channel
@@ -67,7 +67,7 @@ class VirtualCircuit:
         async with self._socket_lock:
             # This is a trio.SocketStream.
             self.socket = await trio.open_tcp_stream(*self.circuit.address)
-            self.circuit.our_address = self.socket.socket.getsockname()[:2]
+            self.circuit.our_address = self.socket.socket.getsockname()
         # Kick off background loops that read from the socket
         # and process the commands read from it.
         self.nursery.start_soon(self._receive_loop)
@@ -330,7 +330,7 @@ class SharedBroadcaster:
         # Must bind or getsocketname() will raise on Windows.
         # See https://github.com/caproto/caproto/issues/514.
         self.udp_sock.bind(('', 0))
-        self.broadcaster.our_address = self.udp_sock.getsockname()[:2]
+        self.broadcaster.our_address = safe_getsockname(self.udp_sock)
         command = self.broadcaster.register('127.0.0.1')
         await self.send(ca.EPICS_CA2_PORT, command)
         task_status.started()

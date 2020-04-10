@@ -1,13 +1,14 @@
 codecov
 coverage
-curio
+curio <1.0
 dpkt
+epics-pypdb
 flake8
 netifaces
 pyepics
 pytest
 numpy
-pytest_benchmark
+pytest-benchmark
 pytest-timeout
 pytest-rerunfailures
 pytest-xdist

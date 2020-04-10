@@ -12,6 +12,8 @@ from . import conftest
 from .conftest import default_setup_module as setup_module  # noqa
 from .conftest import default_teardown_module as teardown_module  # noqa
 
+from caproto.sync.client import read as sync_read
+
 
 @pytest.mark.skipif(os.environ.get("CAPROTO_SKIP_MOTORSIM_TESTS") is not None,
                     reason='No motorsim IOC')
@@ -401,7 +403,9 @@ def test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
 @pytest.mark.parametrize(
     'module_name, pvdb_class_name, class_kwargs',
     [('caproto.ioc_examples.caproto_to_ophyd', 'Group', {}),
-     ('caproto.ioc_examples.areadetector_image', 'DetectorGroup', {}),
+     pytest.param(
+         'caproto.ioc_examples.areadetector_image', 'DetectorGroup', {},
+         marks=pytest.mark.xfail),
      ])
 def test_special_ioc_examples(request, module_name, pvdb_class_name,
                               class_kwargs, prefix):
@@ -413,6 +417,7 @@ def test_special_ioc_examples(request, module_name, pvdb_class_name,
 # skip on windows - no areadetector ioc there just yet
 @pytest.mark.skipif(sys.platform == 'win32',
                     reason='win32 AD IOC')
+@pytest.mark.xfail
 def test_areadetector_generate():
     pytest.importorskip('numpy')
     from caproto.ioc_examples import areadetector_image
@@ -433,9 +438,9 @@ def test_typhon_example(request, prefix):
     caproto_to_typhon.run_typhon(prefix=prefix)
 
 
-def test_mocking_records(request, prefix):
+def test_records(request, prefix):
     from .conftest import run_example_ioc
-    run_example_ioc('caproto.ioc_examples.mocking_records', request=request,
+    run_example_ioc('caproto.ioc_examples.records', request=request,
                     args=['--prefix', prefix], pv_to_check=f'{prefix}A')
 
     from caproto.sync.client import read, write
@@ -470,9 +475,9 @@ def test_mocking_records(request, prefix):
     assert data.metadata.precision == 4
 
 
-def test_mocking_records_subclass(request, prefix):
+def test_records_subclass(request, prefix):
     from .conftest import run_example_ioc
-    run_example_ioc('caproto.ioc_examples.mocking_records_subclass',
+    run_example_ioc('caproto.ioc_examples.records_subclass',
                     request=request,
                     args=['--prefix', prefix], pv_to_check=f'{prefix}motor1')
 
@@ -547,3 +552,28 @@ def test_event_read_collision(request, prefix, async_lib):
     t1.disconnect()
 
     cntx.disconnect()
+
+
+def test_long_strings(request, prefix):
+    from .conftest import run_example_ioc
+    run_example_ioc('caproto.ioc_examples.records', request=request,
+                    args=['--prefix', prefix], pv_to_check=f'{prefix}E')
+
+    stringin = f'{prefix}E'
+    regular = sync_read(f'{stringin}.VAL', data_type='native')
+    assert regular.data_type == ca.ChannelType.STRING
+    data, = regular.data
+    length = len(data)
+    assert length > 1  # based on the default value in the test
+
+    for dtype in ('native', 'control', 'time', 'graphic'):
+        longstr = sync_read(f'{stringin}.VAL$', data_type=dtype)
+        longstr_data = b''.join(longstr.data)
+        expected_dtype = ca._dbr.field_types[dtype][ca.ChannelType.CHAR]
+        assert longstr.data_type == expected_dtype
+        assert len(longstr.data) == length
+        assert longstr_data == data
+
+    with pytest.raises(TimeoutError):
+        # an analog input .VAL has no long string option
+        sync_read(f'{prefix}A.VAL$', data_type='native')

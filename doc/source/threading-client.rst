@@ -6,7 +6,7 @@ Threading Client
 
 .. ipython:: python
     :suppress:
-    
+
     import sys
     import subprocess
     import time
@@ -92,6 +92,25 @@ Access particular fields in the response using attribute ("dot") access on ``res
 .. ipython:: python
 
     res.data
+
+By default, the client does not request any metadata
+
+.. ipython:: python
+
+   res.metadata
+
+Use the ``data_type`` parameter to request a richer data type.
+
+.. ipython:: python
+
+
+   richer_res = dt.read(data_type='time')
+   richer_res.metadata
+   richer_res.metadata.timestamp
+   richer_res.metadata.stamp.as_datetime()  # a convenience method
+
+See :meth:`PV.read` for more information on the values accepted by the
+``data_type`` parameter.
 
 .. note::
 
@@ -248,7 +267,7 @@ re-initiates updates. All of this is transparent to the user.
     The lambda function will be promptly garbage collected by Python and
     removed from ``sub`` by caproto. To avoid that, make a reference before
     passing the function to :meth:`Subscription.add_callback`.
-    
+
     .. code-block:: python
 
         cb = lambda sub, response: print(response.data)

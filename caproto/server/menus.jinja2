@@ -1,0 +1,80 @@
+'''
+Contains caproto-compatible enums representing all menus of EPICS base records
+'''
+# **NOTE**
+# This file is auto-generated.  Please edit the source Jinja templates instead.
+# **NOTE**
+
+import enum
+import inspect
+
+from .._constants import MAX_ENUM_STATES
+
+
+class Menu(enum.IntEnum):
+    @classmethod
+    def _set_strings(cls, value_to_string):
+        cls._string_dict = value_to_string
+        cls._string_tuple = tuple(value_to_string.values())
+
+    @classmethod
+    def get_string_dict(cls):
+        "Dict of menu_item to display_string"
+        return cls._string_dict
+
+    @classmethod
+    def get_string_tuple(cls):
+        """
+        Ordered tuple of menu display strings
+
+        Note that this limits the maximum number of enum states reported to
+        that which can be sent over Channel Access (MAX_ENUM_STATES).  While it
+        is still possible to use more than that limit internally, it is not
+        recommended to do so.
+        """
+        return cls._string_tuple[:MAX_ENUM_STATES]
+
+
+class NotImplementedMenu(Menu):
+    'These are placeholders for menus not yet converted.'
+    PLACEHOLDER = 0
+
+
+NotImplementedMenu._set_strings(
+    {
+        NotImplementedMenu.PLACEHOLDER: 'NOT_IMPLEMENTED',
+    }
+)
+
+
+def create_menu(name, _base=Menu, **options):
+    'Dynamically create a Menu'
+    option_to_value = {name: value for name, (value, _) in options.items()}
+    option_to_string = {name: string for name, (_, string) in options.items()}
+    cls = _base(name, option_to_value)
+    cls._set_strings(option_to_string)
+    return cls
+
+
+{% for menu_name, items in menus.items() | sort(0) %}
+{{ menu_name }} = create_menu(
+    "{{ menu_name }}",
+    {% for item_name, item_string in items %}
+    {{ item_name }}=({{ loop.index - 1 }}, "{{ item_string }}"){% if not loop.last %},{% endif %}{%-
+    if item_name|length == 1 %}  # noqa{% endif %}
+
+    {% endfor %}
+)
+
+{% endfor %}
+
+{% for menu_name in unsupported_menus | sort %}
+{{ menu_name }} = NotImplementedMenu
+{% endfor %}
+
+menus = {name: menu for name, menu in globals().items()
+         if menu is not Menu and
+         inspect.isclass(menu) and (issubclass(menu, Menu) or
+                                    menu is NotImplementedMenu)
+         }
+__all__ = ['menus'] + list(menus.keys())
