@@ -326,6 +326,9 @@ class SharedBroadcaster:
         self.ca_server_port = self.environ['EPICS_CA_SERVER_PORT']
 
         self.udp_sock = ca.bcast_socket()
+        # Must bind or getsocketname() will raise on Windows.
+        # See https://github.com/caproto/caproto/issues/514.
+        self.udp_sock.bind(('', 0))
 
         self._search_lock = threading.RLock()
         self._retry_unanswered_searches_thread = None
