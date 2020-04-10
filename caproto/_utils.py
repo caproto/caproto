@@ -254,18 +254,21 @@ def get_environment_variables():
     return result
 
 
-def get_cas_beacon_addr_list():
-    '''Get a list of addresses, as configured by EPICS_CA_ADDR_LIST'''
-    env = get_environment_variables()
-    return [addr for addr in env['EPICS_CAS_BEACON_ADDR_LIST'].split(' ')
-            if addr.strip()]
+def _split_address_list(addr_list):
+    '''Split an address list string into individual items'''
+    return [addr for addr in addr_list.split(' ') if addr.strip()]
 
 
-def get_epics_ca_addr_list():
+def get_manually_specified_beacon_addresses():
     '''Get a list of addresses, as configured by EPICS_CA_ADDR_LIST'''
-    env = get_environment_variables()
-    return [addr for addr in env['EPICS_CA_ADDR_LIST'].split(' ')
-            if addr.strip()]
+    return _split_address_list(
+        get_environment_variables()['EPICS_CAS_BEACON_ADDR_LIST'])
+
+
+def get_manually_specified_client_addresses():
+    '''Get a list of addresses, as configured by EPICS_CA_ADDR_LIST'''
+    return _split_address_list(
+        get_environment_variables()['EPICS_CA_ADDR_LIST'])
 
 
 def get_address_list():
@@ -275,7 +278,7 @@ def get_address_list():
     scanned and used to determine the broadcast addresses available.
     '''
     env = get_environment_variables()
-    addresses = get_epics_ca_addr_list()
+    addresses = get_manually_specified_client_addresses()
 
     if addresses and env['EPICS_CA_AUTO_ADDR_LIST'].lower() != 'yes':
         # Custom address list specified, and EPICS_CA_AUTO_ADDR_LIST=NO
@@ -323,7 +326,7 @@ def get_beacon_address_list():
     '''
     env = get_environment_variables()
     auto_addr_list = env['EPICS_CAS_AUTO_BEACON_ADDR_LIST']
-    addr_list = get_cas_beacon_addr_list()
+    addr_list = get_manually_specified_beacon_addresses()
     beacon_port = env['EPICS_CAS_BEACON_PORT']
 
     def get_addr_port(addr):
