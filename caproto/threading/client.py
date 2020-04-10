@@ -291,14 +291,19 @@ class SelectorThread:
                         self.remove_socket(sock)
                     continue
 
-                # Let objects handle disconnection by returning a failure here
-                if obj.received(bytes_recv, address) is ca.DISCONNECTED:
-                    obj.log.debug('Removing %s = %s due to receive failure',
-                                  sock, obj)
+                try:
+                    # Let objects handle disconnection by return value
+                    if obj.received(bytes_recv, address) is ca.DISCONNECTED:
+                        obj.log.debug('Removing %s = %s after DISCONNECTED '
+                                      'return value', sock, obj)
+                        self.remove_socket(sock)
+                        # TODO: consider adding specific DISCONNECTED instead of b''
+                        # sent to disconnected sockets
+                except Exception as ex:
+                    obj.log.exception(
+                        'Removing %s due to an internal error on receipt of '
+                        'new data: %s', obj, ex)
                     self.remove_socket(sock)
-
-                    # TODO: consider adding specific DISCONNECTED instead of b''
-                    # sent to disconnected sockets
 
 
 class SharedBroadcaster:
