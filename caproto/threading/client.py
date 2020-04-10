@@ -181,7 +181,7 @@ class SelectorThread:
         self.id_to_socket = {}
         self.socket_to_id = {}
 
-        self._register_sockets = set()
+        self._register_sockets = {}  # {socket: object_id}
         self._unregister_sockets = set()
         self._object_id = 0
 
@@ -219,7 +219,7 @@ class SelectorThread:
             weakref.finalize(target_obj,
                              lambda obj_id=self._object_id:
                              self._object_removed(obj_id))
-            self._register_sockets.add(sock)
+            self._register_sockets[sock] = self._object_id
             # self.log.debug('Socket %s was added (obj %s)', sock, target_obj)
 
     def remove_socket(self, sock):
@@ -232,12 +232,12 @@ class SelectorThread:
             if obj is not None:
                 obj.received(b'', None)
 
-            if sock in self._register_sockets:
+            try:
                 # removed before it was even added...
                 # self.log.debug('Socket %s was removed before it was added '
                 #              '(obj = %s)', sock, obj)
-                self._register_sockets.remove(sock)
-            else:
+                self._register_sockets.pop(sock)
+            except KeyError:
                 # self.log.debug('Socket %s was removed '
                 #              '(obj = %s)', sock, obj)
                 self._unregister_sockets.add(sock)
@@ -260,8 +260,9 @@ class SelectorThread:
                     self.selector.unregister(sock)
                 self._unregister_sockets.clear()
 
-                for sock in self._register_sockets:
-                    self.selector.register(sock, selectors.EVENT_READ)
+                for sock, obj_id in self._register_sockets.items():
+                    self.selector.register(sock, selectors.EVENT_READ,
+                                           data=obj_id)
                 self._register_sockets.clear()
 
             events = self.selector.select(timeout=0.1)
@@ -270,12 +271,10 @@ class SelectorThread:
                     # some sockets may be affected here; try again
                     continue
 
-                ready_ids = [self.socket_to_id[key.fileobj]
-                             for key, mask in events]
-                ready_objs = [(self.objects[obj_id], self.id_to_socket[obj_id])
-                              for obj_id in ready_ids]
+                object_and_socket = [(self.objects[key.data], key.fileobj)
+                                     for key, mask in events]
 
-            for obj, sock in ready_objs:
+            for obj, sock in object_and_socket:
                 if sock in self._unregister_sockets:
                     continue
 
@@ -292,14 +291,24 @@ class SelectorThread:
                         self.remove_socket(sock)
                     continue
 
-                # Let objects handle disconnection by returning a failure here
-                if obj.received(bytes_recv, address) is ca.DISCONNECTED:
-                    obj.log.debug('Removing %s = %s due to receive failure',
-                                  sock, obj)
-                    self.remove_socket(sock)
-
-                    # TODO: consider adding specific DISCONNECTED instead of b''
-                    # sent to disconnected sockets
+                try:
+                    # Let objects handle disconnection by return value
+                    if obj.received(bytes_recv, address) is ca.DISCONNECTED:
+                        obj.log.debug('Removing %s = %s after DISCONNECTED '
+                                      'return value', sock, obj)
+                        self.remove_socket(sock)
+                        # TODO: consider adding specific DISCONNECTED instead
+                        # of b'' sent to disconnected sockets
+                except Exception as ex:
+                    if sock.type == socket.SOCK_DGRAM:
+                        obj.log.exception(
+                            'UDP socket for %s failed on receipt of '
+                            'new data: %s', obj, ex)
+                    else:
+                        obj.log.exception(
+                            'Removing %s due to an internal error on receipt of '
+                            'new data: %s', obj, ex)
+                        self.remove_socket(sock)
 
 
 class SharedBroadcaster:
