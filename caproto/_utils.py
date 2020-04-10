@@ -218,26 +218,28 @@ class ErrorResponseReceived(CaprotoError):
     ...
 
 
+_ENVIRONMENT_DEFAULTS = dict(
+    EPICS_CA_ADDR_LIST='',
+    EPICS_CA_AUTO_ADDR_LIST='YES',
+    EPICS_CA_CONN_TMO=30.0,
+    EPICS_CA_BEACON_PERIOD=15.0,
+    EPICS_CA_REPEATER_PORT=5065,
+    EPICS_CA_SERVER_PORT=5064,
+    EPICS_CA_MAX_ARRAY_BYTES=16384,
+    EPICS_CA_MAX_SEARCH_PERIOD=300,
+    EPICS_TS_MIN_WEST=360,
+    EPICS_CAS_SERVER_PORT=5064,
+    EPICS_CAS_AUTO_BEACON_ADDR_LIST='YES',
+    EPICS_CAS_BEACON_ADDR_LIST='',
+    EPICS_CAS_BEACON_PERIOD=15.0,
+    EPICS_CAS_BEACON_PORT=5065,
+    EPICS_CAS_INTF_ADDR_LIST='',
+    EPICS_CAS_IGNORE_ADDR_LIST='',
+)
+
+
 def get_environment_variables():
     '''Get a dictionary of known EPICS environment variables'''
-    defaults = dict(EPICS_CA_ADDR_LIST='',
-                    EPICS_CA_AUTO_ADDR_LIST='YES',
-                    EPICS_CA_CONN_TMO=30.0,
-                    EPICS_CA_BEACON_PERIOD=15.0,
-                    EPICS_CA_REPEATER_PORT=5065,
-                    EPICS_CA_SERVER_PORT=5064,
-                    EPICS_CA_MAX_ARRAY_BYTES=16384,
-                    EPICS_CA_MAX_SEARCH_PERIOD=300,
-                    EPICS_TS_MIN_WEST=360,
-                    EPICS_CAS_SERVER_PORT=5064,
-                    EPICS_CAS_AUTO_BEACON_ADDR_LIST='YES',
-                    EPICS_CAS_BEACON_ADDR_LIST='',
-                    EPICS_CAS_BEACON_PERIOD=15.0,
-                    EPICS_CAS_BEACON_PORT=5065,
-                    EPICS_CAS_INTF_ADDR_LIST='',
-                    EPICS_CAS_IGNORE_ADDR_LIST='',
-                    )
-
     result = dict(os.environ)
     # Handled coupled items.
     if (result.get('EPICS_CA_ADDR_LIST') and
@@ -253,7 +255,7 @@ def get_environment_variables():
         warn("EPICS_CAS_BEACON_ADDR_LIST is set but will be ignored because "
              "EPICS_CAS_AUTO_BEACON_ADDR_LIST is not set to 'no'.")
 
-    for key, default_value in defaults.items():
+    for key, default_value in _ENVIRONMENT_DEFAULTS.items():
         type_of_env_var = type(default_value)
         try:
             result[key] = type_of_env_var(result[key])
