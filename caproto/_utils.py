@@ -241,12 +241,6 @@ _ENVIRONMENT_DEFAULTS = dict(
 def get_environment_variables():
     '''Get a dictionary of known EPICS environment variables'''
     result = dict(os.environ)
-    # Handled coupled items.
-    if (result.get('EPICS_CAS_BEACON_ADDR_LIST') and
-            result.get('EPICS_CAS_AUTO_BEACON_ADDR_LIST', '').upper() != 'NO'):
-        warn("EPICS_CAS_BEACON_ADDR_LIST is set but will be ignored because "
-             "EPICS_CAS_AUTO_BEACON_ADDR_LIST is not set to 'no'.")
-
     for key, default_value in _ENVIRONMENT_DEFAULTS.items():
         type_of_env_var = type(default_value)
         try:
@@ -258,6 +252,13 @@ def get_environment_variables():
                                                f'{ex.__class__.__name__} {ex}') from ex
 
     return result
+
+
+def get_cas_beacon_addr_list():
+    '''Get a list of addresses, as configured by EPICS_CA_ADDR_LIST'''
+    env = get_environment_variables()
+    return [addr for addr in env['EPICS_CAS_BEACON_ADDR_LIST'].split(' ')
+            if addr.strip()]
 
 
 def get_epics_ca_addr_list():
@@ -278,12 +279,15 @@ def get_address_list():
 
     if addresses and env['EPICS_CA_AUTO_ADDR_LIST'].lower() != 'yes':
         # Custom address list specified, and EPICS_CA_AUTO_ADDR_LIST=NO
-        return addresses
+        auto_addr_list = []
+    else:
+        # No addresses configured or EPICS_CA_AUTO_ADDR_LIST=YES
+        if netifaces is not None:
+            auto_addr_list = [bcast for _, bcast in get_netifaces_addresses()]
+        else:
+            auto_addr_list = ['255.255.255.255']
 
-    # No custom address list -or- EPICS_CA_AUTO_ADDR_LIST=YES
-    if netifaces is not None:
-        return addresses + [bcast for addr, bcast in get_netifaces_addresses()]
-    return addresses + ['255.255.255.255']
+    return addresses + auto_addr_list
 
 
 def get_server_address_list():
@@ -319,7 +323,7 @@ def get_beacon_address_list():
     '''
     env = get_environment_variables()
     auto_addr_list = env['EPICS_CAS_AUTO_BEACON_ADDR_LIST']
-    addr_list = env['EPICS_CAS_BEACON_ADDR_LIST']
+    addr_list = get_cas_beacon_addr_list()
     beacon_port = env['EPICS_CAS_BEACON_PORT']
 
     def get_addr_port(addr):
@@ -328,10 +332,14 @@ def get_beacon_address_list():
             return (addr, int(specified_port))
         return (addr, beacon_port)
 
-    if not addr_list or auto_addr_list.lower() == 'yes':
-        return [('255.255.255.255', beacon_port)]
+    if addr_list and auto_addr_list.lower() != 'yes':
+        # Custom address list and EPICS_CAS_AUTO_BEACON_ADDR_LIST=NO
+        auto_list = []
+    else:
+        auto_list = [('255.255.255.255', beacon_port)]
 
-    return [get_addr_port(addr) for addr in addr_list.split(' ')]
+    # Custom address list and EPICS_CAS_AUTO_BEACON_ADDR_LIST=YES
+    return addr_list + auto_list
 
 
 def get_netifaces_addresses():
