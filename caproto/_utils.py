@@ -311,7 +311,7 @@ def get_server_address_list():
             warn("Port specified in EPICS_CAS_INTF_ADDR_LIST was ignored.")
         return addr
 
-    return [strip_port(addr) for addr in intf_addrs.split(' ')]
+    return [strip_port(addr) for addr in _split_address_list(intf_addrs)]
 
 
 def get_beacon_address_list():
