@@ -218,42 +218,30 @@ class ErrorResponseReceived(CaprotoError):
     ...
 
 
+_ENVIRONMENT_DEFAULTS = dict(
+    EPICS_CA_ADDR_LIST='',
+    EPICS_CA_AUTO_ADDR_LIST='YES',
+    EPICS_CA_CONN_TMO=30.0,
+    EPICS_CA_BEACON_PERIOD=15.0,
+    EPICS_CA_REPEATER_PORT=5065,
+    EPICS_CA_SERVER_PORT=5064,
+    EPICS_CA_MAX_ARRAY_BYTES=16384,
+    EPICS_CA_MAX_SEARCH_PERIOD=300,
+    EPICS_TS_MIN_WEST=360,
+    EPICS_CAS_SERVER_PORT=5064,
+    EPICS_CAS_AUTO_BEACON_ADDR_LIST='YES',
+    EPICS_CAS_BEACON_ADDR_LIST='',
+    EPICS_CAS_BEACON_PERIOD=15.0,
+    EPICS_CAS_BEACON_PORT=5065,
+    EPICS_CAS_INTF_ADDR_LIST='',
+    EPICS_CAS_IGNORE_ADDR_LIST='',
+)
+
+
 def get_environment_variables():
     '''Get a dictionary of known EPICS environment variables'''
-    defaults = dict(EPICS_CA_ADDR_LIST='',
-                    EPICS_CA_AUTO_ADDR_LIST='YES',
-                    EPICS_CA_CONN_TMO=30.0,
-                    EPICS_CA_BEACON_PERIOD=15.0,
-                    EPICS_CA_REPEATER_PORT=5065,
-                    EPICS_CA_SERVER_PORT=5064,
-                    EPICS_CA_MAX_ARRAY_BYTES=16384,
-                    EPICS_CA_MAX_SEARCH_PERIOD=300,
-                    EPICS_TS_MIN_WEST=360,
-                    EPICS_CAS_SERVER_PORT=5064,
-                    EPICS_CAS_AUTO_BEACON_ADDR_LIST='YES',
-                    EPICS_CAS_BEACON_ADDR_LIST='',
-                    EPICS_CAS_BEACON_PERIOD=15.0,
-                    EPICS_CAS_BEACON_PORT=5065,
-                    EPICS_CAS_INTF_ADDR_LIST='',
-                    EPICS_CAS_IGNORE_ADDR_LIST='',
-                    )
-
     result = dict(os.environ)
-    # Handled coupled items.
-    if (result.get('EPICS_CA_ADDR_LIST') and
-            result.get('EPICS_CA_AUTO_ADDR_LIST', '').upper() != 'NO'):
-        warn("EPICS_CA_ADDR_LIST is set but will be ignored because "
-             "EPICS_CA_AUTO_ADDR_LIST is not set to 'no'. "
-             "EPICS_CA_ADDR_LIST={!r} EPICS_CA_AUTO_ADDR_LIST={!r}"
-             "".format(result.get('EPICS_CA_ADDR_LIST', ''),
-                       result.get('EPICS_CA_AUTO_ADDR_LIST', ''))
-             )
-    if (result.get('EPICS_CAS_BEACON_ADDR_LIST') and
-            result.get('EPICS_CAS_AUTO_BEACON_ADDR_LIST', '').upper() != 'NO'):
-        warn("EPICS_CAS_BEACON_ADDR_LIST is set but will be ignored because "
-             "EPICS_CAS_AUTO_BEACON_ADDR_LIST is not set to 'no'.")
-
-    for key, default_value in defaults.items():
+    for key, default_value in _ENVIRONMENT_DEFAULTS.items():
         type_of_env_var = type(default_value)
         try:
             result[key] = type_of_env_var(result[key])
@@ -266,6 +254,23 @@ def get_environment_variables():
     return result
 
 
+def _split_address_list(addr_list):
+    '''Split an address list string into individual items'''
+    return list(set(addr for addr in addr_list.split(' ') if addr.strip()))
+
+
+def get_manually_specified_beacon_addresses():
+    '''Get a list of addresses, as configured by EPICS_CA_ADDR_LIST'''
+    return _split_address_list(
+        get_environment_variables()['EPICS_CAS_BEACON_ADDR_LIST'])
+
+
+def get_manually_specified_client_addresses():
+    '''Get a list of addresses, as configured by EPICS_CA_ADDR_LIST'''
+    return _split_address_list(
+        get_environment_variables()['EPICS_CA_ADDR_LIST'])
+
+
 def get_address_list():
     '''Get channel access client address list based on environment variables
 
@@ -273,16 +278,19 @@ def get_address_list():
     scanned and used to determine the broadcast addresses available.
     '''
     env = get_environment_variables()
-    auto_addr_list = env['EPICS_CA_AUTO_ADDR_LIST']
-    addr_list = env['EPICS_CA_ADDR_LIST']
+    addresses = get_manually_specified_client_addresses()
 
-    if not addr_list or auto_addr_list.lower() == 'yes':
+    if addresses and env['EPICS_CA_AUTO_ADDR_LIST'].lower() != 'yes':
+        # Custom address list specified, and EPICS_CA_AUTO_ADDR_LIST=NO
+        auto_addr_list = []
+    else:
+        # No addresses configured or EPICS_CA_AUTO_ADDR_LIST=YES
         if netifaces is not None:
-            return [bcast for addr, bcast in get_netifaces_addresses()]
+            auto_addr_list = [bcast for _, bcast in get_netifaces_addresses()]
         else:
-            return ['255.255.255.255']
+            auto_addr_list = ['255.255.255.255']
 
-    return addr_list.split(' ')
+    return addresses + auto_addr_list
 
 
 def get_server_address_list():
@@ -303,7 +311,7 @@ def get_server_address_list():
             warn("Port specified in EPICS_CAS_INTF_ADDR_LIST was ignored.")
         return addr
 
-    return [strip_port(addr) for addr in intf_addrs.split(' ')]
+    return [strip_port(addr) for addr in _split_address_list(intf_addrs)]
 
 
 def get_beacon_address_list():
@@ -318,7 +326,7 @@ def get_beacon_address_list():
     '''
     env = get_environment_variables()
     auto_addr_list = env['EPICS_CAS_AUTO_BEACON_ADDR_LIST']
-    addr_list = env['EPICS_CAS_BEACON_ADDR_LIST']
+    addr_list = get_manually_specified_beacon_addresses()
     beacon_port = env['EPICS_CAS_BEACON_PORT']
 
     def get_addr_port(addr):
@@ -327,10 +335,14 @@ def get_beacon_address_list():
             return (addr, int(specified_port))
         return (addr, beacon_port)
 
-    if not addr_list or auto_addr_list.lower() == 'yes':
-        return [('255.255.255.255', beacon_port)]
+    if addr_list and auto_addr_list.lower() != 'yes':
+        # Custom address list and EPICS_CAS_AUTO_BEACON_ADDR_LIST=NO
+        auto_list = []
+    else:
+        auto_list = [('255.255.255.255', beacon_port)]
 
-    return [get_addr_port(addr) for addr in addr_list.split(' ')]
+    # Custom address list and EPICS_CAS_AUTO_BEACON_ADDR_LIST=YES
+    return addr_list + auto_list
 
 
 def get_netifaces_addresses():
