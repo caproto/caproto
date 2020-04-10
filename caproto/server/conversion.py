@@ -1,15 +1,16 @@
 import inspect
+import keyword
+import logging
+import re
 
 from .server import pvfunction, PVGroup
-from .._data import (ChannelDouble, ChannelEnum, ChannelChar,
+from .._data import (ChannelDouble, ChannelEnum, ChannelFloat, ChannelChar,
                      ChannelInteger, ChannelString, ChannelByte)
 from .menus import menus
+from . import records as records_mod
 
-try:
-    # optionally format Python code more nicely
-    import yapf
-except ImportError:
-    yapf = None
+
+logger = logging.getLogger(__name__)
 
 
 def underscore_to_camel_case(s):
@@ -119,7 +120,7 @@ def ophyd_component_to_caproto(attr, component, *, depth=0, dev=None):
         line = f"# {attr} = pvproperty({kw_str})"
 
     # single line, no new subclass defined
-    return {'': list(_format(line, indent=4 * depth))}
+    return {'': [' ' * (4 * depth) + line]}
 
 
 def ophyd_device_to_caproto_ioc(dev, *, depth=0):
@@ -158,7 +159,7 @@ def ophyd_device_to_caproto_ioc(dev, *, depth=0):
                                                dev=dev)
         if isinstance(cpt_lines, dict):
             # new device/sub-group, for now add it on
-            for new_dev, lines in cpt_lines.items():
+            for lines in cpt_lines.values():
                 dev_lines.extend(lines)
         else:
             dev_lines.extend(cpt_lines)
@@ -215,8 +216,8 @@ def group_to_device(group):
 
     for name, subgroup in group._subgroups_.items():
         doc = f', doc={subgroup.__doc__!r}' if subgroup.__doc__ else ''
-        yield from _format(f"{name.lower()} = Cpt({name}Device, "
-                           f"'{subgroup.prefix}'{doc})", indent=4)
+        yield (f"    {name.lower()} = Cpt({name}Device, '{subgroup.prefix}'"
+               f"{doc})")
 
     if not group._pvs_:
         yield f'    ...'
@@ -230,182 +231,486 @@ def group_to_device(group):
         doc = f', doc={pvspec.doc!r}' if pvspec.doc else ''
         string = f', string=True' if pvspec.dtype == str else ''
         cls = 'EpicsSignalRO' if pvspec.read_only else 'EpicsSignal'
-        yield from _format(f"{name.lower()} = Cpt({cls}, '{pvspec.name}'"
-                           f"{string}{doc})", indent=4)
+        yield (f"    {name.lower()} = Cpt({cls}, '{pvspec.name}'" f"{string}{doc})")
         # TODO will break when full/macro-ified PVs is specified
 
     # lower_name = group.__name__.lower()
     # yield f"# {lower_name} = {group.__name__}Device(my_prefix)"
 
 
-def record_to_field_info(record_type):
-    import recordwhat
+def get_base_fields(dbd_info, *, model_record='ai'):
+    'Get fields that are common to all record types'
+    common_fields = None
+    for record_type, fields in dbd_info.items():
+        fset = set((field, finfo['type'], finfo.get('size', 0))
+                   for field, finfo in fields.items())
+        if common_fields is None:
+            common_fields = fset
+        else:
+            common_fields = fset.intersection(common_fields)
 
-    base = recordwhat.RecordBase
+    return {field: dbd_info[model_record][field]
+            for field, ftype, fsize in common_fields}
 
-    if record_type == 'base':
-        cls = recordwhat.RecordBase
-    else:
-        cls = recordwhat.get_record_class(record_type)
 
-    base_metadata = dict(base.field_metadata())
-    field_dict = dict(cls.field_metadata())
+DBD_TYPE_INFO = {
+    'DBF_DEVICE': ChannelEnum,
+    'DBF_FLOAT': ChannelFloat,
+    'DBF_DOUBLE': ChannelDouble,
+    'DBF_FWDLINK': ChannelString,
+    'DBF_INLINK': ChannelString,
+    'DBF_INT64': ChannelInteger,
+    'DBF_LONG': ChannelInteger,
+    'DBF_MENU': ChannelEnum,
+    'DBF_ENUM': ChannelEnum,
+    'DBF_OUTLINK': ChannelString,
+    'DBF_SHORT': ChannelInteger,
+    'DBF_STRING': ChannelString,
+    'DBF_CHAR': ChannelChar,
 
-    type_info = {
-        'DBF_DEVICE': ChannelString,  # DTYP
-        'DBF_FLOAT': ChannelDouble,
-        'DBF_DOUBLE': ChannelDouble,
-        'DBF_FWDLINK': ChannelString,
-        'DBF_INLINK': ChannelString,
-        'DBF_LONG': ChannelInteger,
-        'DBF_MENU': ChannelEnum,
-        'DBF_ENUM': ChannelEnum,
-        'DBF_OUTLINK': ChannelString,
-        'DBF_SHORT': ChannelInteger,
-        'DBF_STRING': ChannelString,
-        'DBF_CHAR': ChannelChar,
+    # unsigned types which don't actually have ChannelType equivalents:
+    'DBF_UCHAR': ChannelByte,
+    'DBF_ULONG': ChannelInteger,
+    'DBF_USHORT': ChannelInteger,
+}
 
-        # unsigned types which don't actually have ChannelType equivalents:
-        'DBF_UCHAR': ChannelByte,
-        'DBF_ULONG': ChannelInteger,
-        'DBF_USHORT': ChannelInteger,
-    }
 
-    for name, field_info in field_dict.items():
-        if cls is not base and name in base_metadata:
-            if base_metadata[name] == field_info:
+DTYPE_OVERRIDES = {
+    # DBF_SHORT is ChannelInteger -> LONG; override with SHORT (=INT)
+    'DBF_SHORT': 'INT',
+    'DBF_USHORT': 'INT',
+}
+
+FIELD_OVERRIDE_OK = {'DTYP', }
+
+
+def record_to_field_info(record_type, dbd_info):
+    'Yield field information for a given record, removing base fields'
+    base_metadata = get_base_fields(dbd_info)
+    field_dict = (base_metadata if record_type == 'base'
+                  else dbd_info[record_type])
+
+    for field_name, field_info in field_dict.items():
+        type_ = field_info['type']
+        if type_ in {'DBF_NOACCESS', }:
+            continue
+        if record_type != 'base' and field_name in base_metadata:
+            if field_name in FIELD_OVERRIDE_OK:
+                # Allow this one through
+                ...
+            elif base_metadata[field_name] == field_info:
                 # Skip base attrs
                 continue
 
-        type_ = field_info.type
-        size = field_info.size
-        prompt = field_info.prompt
+        size = field_info.get('size', 0)
+        prompt = field_info['prompt']
 
         # alarm = parent.alarm
         kwargs = {}
 
+        if 'value' in field_info:
+            kwargs['value'] = field_info['value']
+
         if type_ == 'DBF_STRING' and size > 0:
             type_ = 'DBF_UCHAR'
             kwargs['max_length'] = size
+            kwargs['report_as_string'] = True
         elif size > 1:
             kwargs['max_length'] = size
 
         if type_ == 'DBF_MENU':
-            # note: ordered key assumption here (py3.6+)
-            kwargs['enum_strings'] = (f'menus.{field_info.menu}'
+            kwargs['enum_strings'] = (f'menus.{field_info["menu"]}'
+                                      '.get_string_tuple()')
+        elif type_ == 'DBF_DEVICE':
+            kwargs['enum_strings'] = (f'menus.dtyp_{record_type}'
                                       '.get_string_tuple()')
 
         if prompt:
             kwargs['doc'] = repr(prompt)
 
-        if field_info.special == 'SPC_NOMOD':
+        if field_info.get('special') == 'SPC_NOMOD':
             kwargs['read_only'] = True
 
-        type_class = type_info[type_]
-
-        yield name, type_class, kwargs, field_info
-
-
-def _format(line, *, indent=0):
-    '''Format Python code lines, with a specific indent
-
-    NOTE: Uses yapf if available
-    '''
-    prefix = ' ' * indent
-    if yapf is None:
-        yield prefix + line
-    else:
-        from yapf.yapflib.yapf_api import FormatCode
-        from yapf.yapflib.style import _style
-
-        # TODO study awkward yapf api more closely
-        _style['COLUMN_LIMIT'] = 79 - indent
-        for formatted_line in FormatCode(line)[0].split('\n'):
-            if formatted_line:
-                yield prefix + formatted_line.rstrip()
+        type_class = DBD_TYPE_INFO[type_]
+        attr_name = get_attr_name_from_dbd_prompt(
+            record_type, field_name, prompt)
+        yield attr_name, type_class, kwargs, field_info
 
 
-def record_to_field_dict_code(record_type, *, skip_fields=None):
-    'Record name -> yields code to create {field: ChannelData(), ...}'
-    if skip_fields is None:
-        skip_fields = ['VAL']
-    yield f"def create_{record_type}_dict(alarm_group, **kw):"
-    yield f"    kw['reported_record_type'] = '{record_type}'"
-    yield f"    kw['alarm_group'] = alarm_group"
-    yield '    return {'
-    for name, cls, kwargs, finfo in record_to_field_info(record_type):
-        kwarg_string = ', '.join(
-            list(f'{k}={v}' for k, v in kwargs.items()) + ['**kw'])
-        yield f"        '{finfo.field}': {cls.__name__}({kwarg_string}),"
-    yield '    }'
+def get_attr_name_from_dbd_prompt(record_type, field_name, prompt):
+    'Attribute name for fields: e.g., "Sim. Mode Scan" -> "sim_mode_scan"'
+    attr_name = prompt.lower()
+    # If there's a parenthesized part not at the beginning, remove it:
+    # e.g., "Velocity (EGU/s)" -> "Velocity"
+    if '(' in attr_name and not attr_name.startswith('('):
+        attr_name = attr_name.split('(')[0].strip()
+
+    # Replace bad characters with _
+    attr_name = re.sub('[^a-z_0-9]', '_', attr_name, flags=re.IGNORECASE)
+    # Replace multiple ___ -> single _
+    attr_name = re.sub('_+', '_', attr_name)
+    # Remove starting/ending _
+    attr_name = attr_name.strip('_') or field_name.lower()
+    if keyword.iskeyword(attr_name):
+        attr_name = f'{attr_name}_'
+    return _fix_attr_name(record_type, attr_name, field_name)
 
 
-dtype_overrides = {
-    # DBF_FLOAT is ChannelDouble -> DOUBLE; override with FLOAT
-    'DBF_FLOAT': 'FLOAT',
-    # DBF_SHORT is ChannelInteger -> LONG; override with SHORT
-    'DBF_SHORT': 'SHORT',
-    'DBF_USHORT': 'SHORT',
+def _fix_attr_name(record_type, attr_name, field_name):
+    'Apply any transformations specified in ATTR_RENAMES/REPLACES'
+    manual_fix = ATTR_FIXES.get(record_type, {}).get(field_name, None)
+    if manual_fix is not None:
+        return manual_fix
+
+    attr_name = ATTR_RENAMES.get(attr_name, attr_name)
+    for re_replace, repl_to in ATTR_REPLACES.items():
+        attr_name = re_replace.sub(repl_to, attr_name)
+    return attr_name
+
+
+# The following are "linkable" such that field information is already provided
+# in ChannelData. That is to say, a field named `display_precision` links to
+# `ChannelFloat.precision` in the case of an analog input record.
+LINKABLE = {
+    'display_precision': 'precision',
+    'hihi_alarm_limit': 'upper_alarm_limit',
+    'high_alarm_limit': 'upper_warning_limit',
+    'low_alarm_limit': 'lower_warning_limit',
+    'lolo_alarm_limit': 'lower_alarm_limit',
+    'high_operating_range': 'upper_ctrl_limit',
+    'low_operating_range': 'lower_ctrl_limit',
+    # 'alarm_deadband': '',
+    'archive_deadband': 'log_atol',
+    'monitor_deadband': 'value_atol',
+    'maximum_elements': 'length',
+    'number_of_elements': 'max_length',
+}
+
+# Some links are attributes, some are read-only, and some writable through the
+# ChannelData.write_metadata interface. Specify any custom kwargs here:
+LINK_KWARGS = {
+    'archive_deadband': dict(use_setattr=True),
+    'monitor_deadband': dict(use_setattr=True),
+    'maximum_elements': dict(use_setattr=True, read_only=True),
+    'number_of_elements': dict(use_setattr=True, read_only=True),
 }
 
 
-def record_to_high_level_group_code(record_type, *, skip_fields=None):
+# Rename some attributes (for backward-compatibility or otherwise)
+# maps "name generated from dbd" -> "correct attr name"
+ATTR_RENAMES = {
+    # back-compat
+    'scan_mechanism': 'scan_rate',
+    'descriptor': 'description',
+    'force_processing': 'process_record',
+    'forward_process_link': 'forward_link',
+    'alarm_severity': 'current_alarm_severity',
+}
+
+# Record-type specific fixes for attributes
+ATTR_FIXES = {
+    'aSub': {
+        # Typo in dbd leads
+        'ONVH': 'num_elements_in_ovlh',
+    },
+    'asyn': {
+        # Both attributes end up being the same otherwise
+        'BAUD': 'baud_rate',
+        'LBAUD': 'long_baud_rate',
+    },
+    'motor': {
+        # MMAP/NMAP end up being the same otherwise
+        'NMAP': 'monitor_mask_more',
+    },
+}
+
+# Regular expression replacements for attributes
+# maps 'compiled regular expression' to 'replace_with'
+ATTR_REPLACES = {
+    re.compile('^alarm_ack_'): 'alarm_acknowledge_',
+    re.compile('_sevrty$'): '_severity',
+}
+
+# Mixins available in the currently generated records module:
+MIXINS = (records_mod._Limits, records_mod._LimitsLong)
+
+# Keep track of the mixin fields to see if a record can use the mixin or not:
+MIXIN_SPECS = {
+    mixin: {pv.pvspec.name: pv.pvspec.dtype for pv in mixin._pvs_.values()}
+    for mixin in MIXINS
+}
+
+
+def get_initial_field_value(value, dtype):
+    'Get caproto pvproperty value from "initial(value)" portion of dbd file'
+    if isinstance(value, int) and dtype in ('CHAR', 'STRING'):
+        return f'chr({value})'
+    if dtype in ('ENUM', ):
+        if value == 65535:
+            # invalid enum setting -> valid enum setting
+            return 0
+        if value == 'UDF':
+            # TODO: sorry :( enum value outside of range not handled by
+            # caproto for now. And yes, I know this is a bad alternative
+            # default...
+            value = 'NO_ALARM'
+    return repr(value)
+
+
+def record_to_template_dict(record_type, dbd_info, *, skip_fields=None):
     'Record name -> yields code to create a PVGroup for all fields'
     if skip_fields is None:
         skip_fields = ['VAL']
 
-    if record_type == 'base':
-        name = 'RecordFieldGroup'
-        base_class = 'PVGroup'
-    else:
-        name = f'{record_type.capitalize()}Fields'
-        base_class = 'RecordFieldGroup'
-
-    yield f"class {name}({base_class}):"
-    if record_type != 'base':
-        yield f"    _record_type = '{record_type}'"
-
-    fields = {}
-
-    for name, cls, kwargs, finfo in record_to_field_info(record_type):
-        fields[name] = (cls, kwargs, finfo)
-        kwarg_string = ', '.join(f'{k}={v}' for k, v in kwargs.items())
-        dtype = dtype_overrides.get(cls.data_type.name, cls.data_type.name)
-        comment = False
-        if finfo.field in skip_fields:
-            comment = True
-        elif finfo.menu and finfo.menu not in menus:
-            comment = True
-
-        lines = _format(f"{name} = pvproperty(name="
-                        f"'{finfo.field}', "
-                        f"dtype=ChannelType.{dtype}, "
-                        f"{kwarg_string})", indent=4)
-
-        if comment:
-            for line in lines:
-                indent = len(line) - len(line.lstrip())
-                if indent >= 4:
-                    yield f'    # {line[4:]}'
-                else:
-                    yield f'# {line}'
-        else:
-            yield from lines
-
-    linkable = {
-        'display_precision': 'precision',
-        'hihi_alarm_limit': 'upper_alarm_limit',
-        'high_alarm_limit': 'upper_warning_limit',
-        'low_alarm_limit': 'lower_warning_limit',
-        'lolo_alarm_limit': 'lower_alarm_limit',
-        'high_operating_range': 'upper_ctrl_limit',
-        'low_operating_range': 'lower_ctrl_limit',
-        # 'alarm_deadband': '',
-        'archive_deadband': 'log_atol',
-        'monitor_deadband': 'value_atol',
+    result = {
+        'record_type': record_type,
+        'class_name': f'{record_type.capitalize()}Fields',
+        'dtype': None,
+        'base_class': 'RecordFieldGroup',
+        'mixin': '',
+        'fields': [],
+        'links': [],
     }
 
-    for field_attr, channeldata_attr in linkable.items():
-        if field_attr not in fields:
-            continue
-        yield f"    _link_parent_attribute({field_attr}, '{channeldata_attr}')"
+    if record_type == 'base':
+        result['class_name'] = 'RecordFieldGroup'
+        result['base_class'] = 'PVGroup'
+        result['record_type'] = None
+        existing_record = records_mod.RecordFieldGroup
+    else:
+        field_info = dbd_info[record_type]
+        val_type = field_info.get('VAL', {'type': 'DBF_NOACCESS'})['type']
+        if val_type != 'DBF_NOACCESS':
+            val_channeltype = DBD_TYPE_INFO[val_type].data_type.name
+            result['dtype'] = "ChannelType." + val_channeltype
+        existing_record = records_mod.records.get(record_type)
+
+    existing_field_list = []
+    if existing_record:
+        existing_field_list = [pvprop.pvspec.name
+                               for pvprop in existing_record._pvs_.values()]
+
+    fields_by_attr = {}
+    field_to_attr = {}
+
+    for item in record_to_field_info(record_type, dbd_info):
+        attr_name, cls, kwargs, finfo = item
+        # note to self: next line is e.g.,
+        #   ChannelDouble -> ChannelDouble(, ... dtype=ChannelType.FLOAT)
+        dtype = DTYPE_OVERRIDES.get(finfo['type'], cls.data_type.name)
+        comment = False
+        if finfo['field'] in skip_fields:
+            comment = True
+        elif finfo.get('menu') and finfo['menu'] not in menus:
+            comment = True
+
+        if 'initial' in finfo:
+            kwargs['value'] = get_initial_field_value(finfo['initial'], dtype)
+
+        field_name = finfo['field']  # as in EPICS
+        fields_by_attr[attr_name] = dict(
+            attr=attr_name,
+            field_name=field_name,
+            dtype=dtype,
+            kwargs=kwargs,
+            comment=comment,
+            sort_id=_get_sort_id(field_name, existing_field_list),
+        )
+        field_to_attr[field_name] = attr_name
+
+    if record_type != 'base':
+        for mixin, mixin_info in MIXIN_SPECS.items():
+            has_fields = all(field in field_info
+                             for field in mixin_info)
+            types_match = all(
+                DBD_TYPE_INFO[field_info[field]['type']].data_type == mixin_info[field]
+                for field in mixin_info
+                if field in field_info
+            )
+            if has_fields and types_match:
+                # Add the mixin
+                result['mixin'] = [mixin.__name__]
+                # And remove those attributes from the subclass
+                for field in mixin_info:
+                    fields_by_attr.pop(field_to_attr[field])
+
+    for field_attr, field in fields_by_attr.items():
+        result['fields'].append(field)
+        try:
+            channeldata_attr = LINKABLE[field_attr]
+        except KeyError:
+            ...
+        else:
+            link = dict(field_attr=field_attr,
+                        channeldata_attr=channeldata_attr,
+                        kwargs=LINK_KWARGS.get(field_attr, {}),
+                        )
+            result['links'].append(link)
+
+    result['field_to_attr'] = field_to_attr
+    return result
+
+
+def _get_sort_id(name, list_):
+    'Returns tuple of (index in list, name)'
+    key1 = (list_.index(name)
+            if name in list_
+            else len(list_) + 1
+            )
+    return (key1, name)
+
+
+def generate_all_records_jinja(dbd_file, *, jinja_env=None,
+                               template='records.jinja2'):
+    """
+    Generate the module `caproto.server.records` given an EPICS .dbd file, and
+    optionally a Jinja environment and template filename
+
+    By default, the jinja environment and template is the one provided with
+    caproto.
+
+    Parameters
+    ----------
+    dbd_file : str or pathlib.Path
+        Path to the EPICS dbd file
+    jinja_env : jinja2.Environment, optional
+        The jinja environment
+    template : str, optional
+        The template to use to generate the source
+    """
+    try:
+        from caproto.tests.dbd import DbdFile
+        import jinja2
+    except ImportError as ex:
+        raise ImportError(f'An optional/testing dependency is missing: {ex}')
+
+    if jinja_env is None:
+        jinja_env = jinja2.Environment(
+            loader=jinja2.PackageLoader("caproto", "server"),
+            trim_blocks=True,
+            lstrip_blocks=True,
+        )
+
+    dbd_file = DbdFile.parse_file(dbd_file)
+    existing_record_list = ['base'] + list(records_mod.records)
+    records = {}
+    for record in ('base', ) + tuple(sorted(dbd_file.field_metadata)):
+        d = record_to_template_dict(record, dbd_file.field_metadata)
+        d['sort_id'] = _get_sort_id(record, existing_record_list)
+        records[record] = d
+
+    record_template = jinja_env.get_template(template)
+    return record_template.render(records=records)
+
+
+# Custom fixes for specific menus
+# maps "name found in dbd" to "attribute name generated in enum class"
+MENU_FIXES = {
+    'menuScan10_second': 'scan_10_second',
+    'menuScan5_second': 'scan_5_second',
+    'menuScan2_second': 'scan_2_second',
+    'menuScan1_second': 'scan_1_second',
+    'menuScan_5_second': 'scan_point_5_second',
+    'menuScan_2_second': 'scan_point_2_second',
+    'menuScan_1_second': 'scan_point_1_second',
+}
+
+# Additional unsupported menus to be stubbed in caproto.server.menus
+MENU_UNSUPPORTED = {
+    'acalcoutDOPT', 'acalcoutINAV', 'acalcoutOOPT', 'acalcoutSIZE',
+    'acalcoutWAIT', 'digitelBAKS', 'digitelBKIN', 'digitelCMOR', 'digitelDSPL',
+    'digitelKLCK', 'digitelMODR', 'digitelMODS', 'digitelPTYP', 'digitelS1MS',
+    'digitelS1VS', 'digitelS3BS', 'digitelSET1', 'digitelTYPE',
+    'epidFeedbackMode', 'epidFeedbackState', 'genSubEFLG', 'genSubLFLG',
+    'mcaCHAS', 'mcaERAS', 'mcaMODE', 'mcaREAD', 'mcaSTRT', 'scalcoutDOPT',
+    'scalcoutINAV', 'scalcoutOOPT', 'scalcoutWAIT', 'scalerCNT', 'scalerCONT',
+    'scalerD1', 'scalerG1', 'sscanACQM', 'sscanACQT', 'sscanCMND',
+    'sscanDSTATE', 'sscanFAZE', 'sscanFFO', 'sscanFPTS', 'sscanLINKWAIT',
+    'sscanNOYES', 'sscanP1AR', 'sscanP1NV', 'sscanP1SM', 'sscanPASM',
+    'sscanPAUS', 'sseqLNKV', 'sseqSELM', 'sseqWAIT', 'swaitDOPT', 'swaitINAV',
+    'swaitOOPT', 'tableGEOM', 'tableSET', 'timestampTST', 'transformCOPT',
+    'transformIVLA', 'vmeAMOD', 'vmeDSIZ', 'vmeRDWT', 'vsOFFON', 'vsTYPE'}
+
+
+def generate_all_menus_jinja(dbd_file, *, jinja_env=None,
+                             template='menus.jinja2'):
+    """
+    Generate the module `caproto.server.menus` given an EPICS .dbd file,
+    and optionally a Jinja environment and template filename
+
+    By default, the jinja environment and template is the one provided with
+    caproto.
+
+    Parameters
+    ----------
+    dbd_file : str or pathlib.Path
+        Path to the EPICS dbd file
+    jinja_env : jinja2.Environment, optional
+        The jinja environment
+    template : str, optional
+        The template to use to generate the source
+    """
+
+    try:
+        from caproto.tests.dbd import DbdFile
+        import jinja2
+    except ImportError as ex:
+        raise ImportError(f'An optional/testing dependency is missing: {ex}')
+
+    if jinja_env is None:
+        jinja_env = jinja2.Environment(
+            loader=jinja2.PackageLoader("caproto", "server"),
+            trim_blocks=True,
+            lstrip_blocks=True,
+        )
+
+    dbd_file = DbdFile.parse_file(dbd_file)
+    record_template = jinja_env.get_template(template)
+    menus = dict(dbd_file.menus)
+
+    def fix_item_name(menu_name, name):
+        try:
+            return MENU_FIXES[name]
+        except KeyError:
+            ...
+
+        orig_name = name
+        if name.startswith(menu_name + '_'):
+            name = name[len(menu_name) + 1:]
+        elif name.startswith(menu_name):
+            name = name[len(menu_name):]
+
+        if name == 'None':
+            return 'none'
+
+        name = name.rstrip("_")
+        if name[0] in '0123456789':
+            name = f'choice_{name}'
+
+        if not name.isidentifier():
+            return orig_name
+        return name
+
+    all_dtypes = [('base', None)] + list(dbd_file.record_dtypes.items())
+    for record_type, dtypes in all_dtypes:
+        if not dtypes:
+            # TODO: caproto has issues with empty enums
+            dtypes = ('Soft Channel', )
+
+        menus[f'dtyp_{record_type}'] = [
+            (get_attr_name_from_dbd_prompt(record_type, None, dtype),
+             dtype)
+            for dtype in dtypes
+        ]
+
+    for menu_name, items in list(menus.items()):
+        menus[menu_name] = [
+            (fix_item_name(menu_name, item_name), string_value)
+            for item_name, string_value in items
+        ]
+
+    return record_template.render(
+        menus=menus,
+        unsupported_menus=[menu for menu in MENU_UNSUPPORTED
+                           if menu not in menus]
+    )

@@ -9,7 +9,7 @@ logger = logging.getLogger('caproto')
 
 class MyPVGroup(PVGroup):
     # This pvproperty mocks an analog input (ai) record.
-    scanned = pvproperty(value=[0.0], mock_record='ai')
+    scanned = pvproperty(value=[0.0], record='ai')
 
     # The mocked record also happens to have the standard fields normally
     # associated with an EPICS record.  This is used here to tie in the

@@ -66,6 +66,7 @@ class VirtualCircuit(_VirtualCircuit):
 
     def __init__(self, circuit, client, context):
         super().__init__(circuit, client, context)
+        self._raw_lock = curio.Lock()
         self.QueueFull = QueueFull
         self.command_queue = QueueWithFullError(ca.MAX_COMMAND_BACKLOG)
         self.new_command_condition = curio.Condition()
@@ -118,7 +119,7 @@ class Context(_Context):
     async def broadcaster_udp_server_loop(self):
         for interface in self.interfaces:
             udp_sock = ca.bcast_socket(socket)
-            self.broadcaster._our_addresses.append(udp_sock.getsockname()[:2])
+            self.broadcaster.server_addresses.append(udp_sock.getsockname())
             try:
                 udp_sock.bind((interface, self.ca_server_port))
             except Exception:
@@ -193,7 +194,7 @@ class Context(_Context):
                 await sock.close()
             for sock in self.udp_socks.values():
                 await sock.close()
-            for interface, sock in self.beacon_socks.values():
+            for _interface, sock in self.beacon_socks.values():
                 await sock.close()
             self._task_group = None
 

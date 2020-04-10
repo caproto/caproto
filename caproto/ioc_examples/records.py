@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
+import caproto
 from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
 
 
 class RecordMockingIOC(PVGroup):
     # Define three records, an analog input (ai) record:
-    A = pvproperty(value=1.0, mock_record='ai')
+    A = pvproperty(value=1.0, record='ai')
     # And an analog output (ao) record:
-    B = pvproperty(value=2.0, mock_record='ao',
+    B = pvproperty(value=2.0, record='ao',
                    precision=3)
     # and an ai with all the bells and whistles
     C = pvproperty(value=0.0,
-                   mock_record='ai',
+                   record='ai',
                    upper_alarm_limit=2.0,
                    lower_alarm_limit=-2.0,
                    upper_warning_limit=1.0,
@@ -49,8 +50,16 @@ class RecordMockingIOC(PVGroup):
         await ioc.A.write(value - 10)
 
     # Now that the field specification has been set on B, it can be reused:
-    D = pvproperty(value=2.0, mock_record='ao',
-                   precision=3, field_spec=B.field_spec)
+    D = pvproperty(value=2.0,
+                   precision=3,
+                   field_spec=B.field_spec)
+    # D will also be reported as an 'ao' record like B, as it uses the same
+    # field specification.
+
+    E = pvproperty(value='this is a test',
+                   record='stringin',
+                   dtype=caproto.ChannelType.STRING,
+                   )
 
 
 if __name__ == '__main__':

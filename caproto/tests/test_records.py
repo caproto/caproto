@@ -1,4 +1,6 @@
 import pytest
+import caproto
+
 from .conftest import run_example_ioc
 from caproto.threading.pyepics_compat import get_pv
 from caproto.sync.client import read, write
@@ -24,7 +26,7 @@ field_map = {
 
 def test_limit_fields_and_description(request, prefix, context):
     pv = f'{prefix}C'
-    run_example_ioc('caproto.ioc_examples.mocking_records',
+    run_example_ioc('caproto.ioc_examples.records',
                     request=request,
                     args=['--prefix', prefix],
                     pv_to_check=pv)
@@ -54,7 +56,7 @@ def test_limit_fields_and_description(request, prefix, context):
 @pytest.mark.parametrize('sevr_value', AlarmSeverity)
 def test_alarms(request, prefix, sevr_target, sevr_value, context):
     pv = f'{prefix}C'
-    run_example_ioc('caproto.ioc_examples.mocking_records',
+    run_example_ioc('caproto.ioc_examples.records',
                     request=request,
                     args=['--prefix', prefix],
                     pv_to_check=pv)
@@ -87,3 +89,25 @@ def test_alarms(request, prefix, sevr_target, sevr_value, context):
         ctrl_vars = PV.get_ctrlvars()
         assert ctrl_vars['status'] == a_status
         assert ctrl_vars['severity'] == a_sevr
+
+
+def test_mock_deprecation():
+    class TestIOC(caproto.server.PVGroup):
+        # Specify both `mock_record` and `record` -> ValueError
+        ai = caproto.server.pvproperty(value=0.0, mock_record='ai',
+                                       record='ai')
+
+    with pytest.raises(ValueError):
+        TestIOC(prefix='a')
+
+    class TestIOC(caproto.server.PVGroup):
+        ai = caproto.server.pvproperty(value=0.0, mock_record='ai')
+
+    ioc = TestIOC(prefix='a')
+    assert ioc.ai.record_type == 'ai'
+
+    class TestIOC(caproto.server.PVGroup):
+        ai = caproto.server.pvproperty(value=0.0, record='ai')
+
+    ioc = TestIOC(prefix='a')
+    assert ioc.ai.record_type == 'ai'

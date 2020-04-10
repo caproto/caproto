@@ -392,7 +392,7 @@ def test_ioid_exhaustion(circuit_pair):
     data_count = 1
 
     # if this is broken it will hang
-    for N in range(max_id + 10):
+    for _ in range(max_id + 10):
         # create a read request and serialize
         req = cli_channel.read()
         assert req.ioid < max_id
@@ -417,3 +417,13 @@ def test_ioid_exhaustion(circuit_pair):
         # but depends on an implementation detail.
         assert len(cli_circuit._ioids) == 0
         assert len(srv_circuit._ioids) == 0
+
+
+def test_enum_too_long():
+    with pytest.raises(ValueError, match='The maximum enum string length is'):
+        ca.ChannelEnum(enum_strings=('a' * 28,))
+
+
+def test_enum_too_many():
+    with pytest.raises(ValueError, match='The maximum number of enum states is'):
+        ca.ChannelEnum(enum_strings='a' * 17)

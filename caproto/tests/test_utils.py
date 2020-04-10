@@ -13,7 +13,8 @@ def test_broadcast_auto_address_list():
         expected = [bcast for addr, bcast in ca.get_netifaces_addresses()]
         assert ca.get_address_list() == expected
     finally:
-        os.environ = env
+        os.environ.clear()
+        os.environ.update(env)
 
 
 def test_ensure_bytes():
@@ -142,38 +143,3 @@ def test_parse_record_bad_filters(pvname, expected_tuple):
         ...
     else:
         raise ValueError(f'Expected failure, instead returned {filter_}')
-
-
-def test_auto_addr_list_warnings():
-    try:
-        orig = dict(os.environ)
-        os.environ.pop('EPICS_CA_AUTO_ADDR_LIST', None)
-        os.environ.pop('EPICS_CA_ADDR_LIST', None)
-        os.environ.pop('EPICS_CAS_AUTO_BEACON_ADDR_LIST', None)
-        os.environ.pop('EPICS_CAS_BEACON_ADDR_LIST', None)
-
-        with pytest.warns(None) as record:
-            ca.get_environment_variables()  # no warning
-            assert not record
-        os.environ['EPICS_CA_ADDR_LIST'] = '127.0.0.1'
-        with pytest.warns(UserWarning):
-            ca.get_environment_variables()
-        os.environ['EPICS_CA_AUTO_ADDR_LIST'] = 'no'
-        with pytest.warns(None) as record:
-            ca.get_environment_variables()  # no warning
-            assert not record
-        os.environ['EPICS_CAS_BEACON_ADDR_LIST'] = '127.0.0.1'
-        with pytest.warns(UserWarning):
-            ca.get_environment_variables()
-        os.environ['EPICS_CAS_AUTO_BEACON_ADDR_LIST'] = 'no'
-        with pytest.warns(None) as record:
-            ca.get_environment_variables()  # no warning
-            assert not record
-
-    finally:
-        # Restore env as it was.
-        os.environ.pop('EPICS_CA_AUTO_ADDR_LIST', None)
-        os.environ.pop('EPICS_CA_ADDR_LIST', None)
-        os.environ.pop('EPICS_CAS_AUTO_BEACON_ADDR_LIST', None)
-        os.environ.pop('EPICS_CAS_BEACON_ADDR_LIST', None)
-        os.environ.update(orig)

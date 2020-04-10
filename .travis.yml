@@ -13,6 +13,7 @@ python:
 
 env:
   matrix:
+    - ID=FLAKE8
     - ID=R314_ARRAY INSTALL_NUMPY=0 PACKAGED_DEPS=0.8.2/epics-ci-0.8.2_R3.14.12.6_pva_areadetector3-2_motor6-9.tar.bz2
     - ID=R314_NUMPY INSTALL_NUMPY=1 PACKAGED_DEPS=0.8.2/epics-ci-0.8.2_R3.14.12.6_pva_areadetector3-2_motor6-9.tar.bz2
     - ID=R7_NUMPY INSTALL_NUMPY=1 PUBLISH_DOCS=1 PACKAGED_DEPS=0.8.2/epics-ci-0.8.2_R7.0.1.1_pva_areadetector3-2_motor6-10.tar.bz2
@@ -47,6 +48,12 @@ cache:
     - $HOME/.ccache  # https://github.com/travis-ci/travis-ci/issues/5853
 
 before_install:
+  - if [ "$ID" == "FLAKE8" ]; then
+        pip install flake8;
+        flake8 .;
+        exit;
+    fi
+
   - export PATH=/usr/lib/ccache:$PATH
 
   - git fetch --unshallow
@@ -78,10 +85,9 @@ script:
     fi
 
   - pip install git+https://github.com/klauer/catvs.git@py3k
+  # Work around pip bug that fails to respect trio's pin of attrs.
+  - pip install -U attrs
 
-  # give us an early warning of flake8 failure
-  # the weird quating in to make searching in the results webpage easier
-  - flake8 . || echo "flake8 FAI""LED!"
   - caproto-repeater &
   - coverage run --parallel-mode run_tests.py -k 'not bench'  --benchmark-disable -v
   - coverage combine --append
@@ -104,7 +110,6 @@ script:
   - caproto-repeater &
   # Build the docs.
   - make -C doc html
-  - flake8
   # Upload the docs to gh-pages.
   - if [[ $PUBLISH_DOCS ]]; then
         doctr deploy --deploy-repo NSLS-II/NSLS-II.github.io --deploy-branch-name master caproto;

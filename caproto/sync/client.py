@@ -13,8 +13,9 @@ import weakref
 
 import caproto as ca
 from .._dbr import (field_types, ChannelType, native_type, SubscriptionType)
-from .._utils import (ErrorResponseReceived, CaprotoError, CaprotoTimeoutError,
-                      get_environment_variables)
+from .._utils import (adapt_old_callback_signature,
+                      ErrorResponseReceived, CaprotoError, CaprotoTimeoutError,
+                      get_environment_variables, safe_getsockname)
 from .repeater import spawn_repeater
 
 
@@ -32,8 +33,12 @@ _permission_to_block = []  # mutable state shared by block and interrupt
 
 
 # Convenience functions that do both transport and caproto validation/ingest.
-def send(circuit, command):
-    buffers_to_send = circuit.send(command)
+def send(circuit, command, pv_name=None):
+    if pv_name is not None:
+        tags = {'pv': pv_name}
+    else:
+        tags = None
+    buffers_to_send = circuit.send(command, extra=tags)
     sockets[circuit].sendmsg(buffers_to_send)
 
 
@@ -48,7 +53,7 @@ def recv(circuit):
 def search(pv_name, udp_sock, timeout, *, max_retries=2):
     # Set Broadcaster log level to match our logger.
     b = ca.Broadcaster(our_role=ca.CLIENT)
-    b.our_address = udp_sock.getsockname()[:2]
+    b.client_address = safe_getsockname(udp_sock)
 
     # Send registration request to the repeater
     logger.debug('Registering with the Channel Access repeater.')
@@ -61,10 +66,14 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
         except OSError as exc:
             raise ca.CaprotoNetworkError(f"Failed to send to {host}:{repeater_port}") from exc
 
-    logger.debug("Searching for '%s'....", pv_name)
-    bytes_to_send = b.send(
+    logger.debug("Searching for %r....", pv_name)
+    commands = (
         ca.VersionRequest(0, ca.DEFAULT_PROTOCOL_VERSION),
         ca.SearchRequest(pv_name, 0, ca.DEFAULT_PROTOCOL_VERSION))
+    bytes_to_send = b.send(*commands)
+    tags = {'role': 'CLIENT',
+            'our_address': b.client_address,
+            'direction': '--->>>'}
 
     def send_search():
         for host in ca.get_address_list():
@@ -73,12 +82,15 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
                 dest = (host, int(specified_port))
             else:
                 dest = (host, CA_SERVER_PORT)
+            tags['their_address'] = dest
+            b.log.debug(
+                '%d commands %dB',
+                len(commands), len(bytes_to_send), extra=tags)
             try:
                 udp_sock.sendto(bytes_to_send, dest)
             except OSError as exc:
                 host, port = dest
                 raise ca.CaprotoNetworkError(f"Failed to send to {host}:{port}") from exc
-            logger.debug('Search request sent to %r.', dest)
 
     def check_timeout():
         nonlocal retry_at
@@ -118,7 +130,7 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
             for command in commands:
                 if isinstance(command, ca.SearchResponse) and command.cid == 0:
                     address = ca.extract_address(command)
-                    logger.debug('Found %s at %s', pv_name, address)
+                    logger.debug('Found %r at %s:%d', pv_name, *address)
                     return address
             else:
                 # None of the commands we have seen are a reply to our request.
@@ -146,16 +158,17 @@ def make_channel(pv_name, udp_sock, priority, timeout):
         new = True
         sockets[chan.circuit] = socket.create_connection(chan.circuit.address,
                                                          timeout)
-        circuit.our_address = sockets[chan.circuit].getsockname()[:2]
+        circuit.our_address = sockets[chan.circuit].getsockname()
     try:
         if new:
             # Initialize our new TCP-based CA connection with a VersionRequest.
             send(chan.circuit, ca.VersionRequest(
                 priority=priority,
-                version=ca.DEFAULT_PROTOCOL_VERSION))
+                version=ca.DEFAULT_PROTOCOL_VERSION),
+                pv_name)
             send(chan.circuit, chan.host_name(socket.gethostname()))
             send(chan.circuit, chan.client_name(getpass.getuser()))
-        send(chan.circuit, chan.create())
+        send(chan.circuit, chan.create(), pv_name)
         t = time.monotonic()
         while True:
             try:
@@ -165,12 +178,18 @@ def make_channel(pv_name, udp_sock, priority, timeout):
             except socket.timeout:
                 raise CaprotoTimeoutError("Timeout while awaiting channel "
                                           "creation.")
-            if chan.states[ca.CLIENT] is ca.CONNECTED:
-                log.info('%s connected' % pv_name)
-                break
+            tags = {'direction': '<<<---',
+                    'our_address': chan.circuit.our_address,
+                    'their_address': chan.circuit.address}
             for command in commands:
-                if command is ca.DISCONNECTED:
+                if isinstance(command, ca.Message):
+                    tags['bytesize'] = len(command)
+                    logger.debug("%r", command, extra=tags)
+                elif command is ca.DISCONNECTED:
                     raise CaprotoError('Disconnected during initialization')
+            if chan.states[ca.CLIENT] is ca.CONNECTED:
+                log.info("Channel connected.")
+                break
 
     except BaseException:
         sockets[chan.circuit].close()
@@ -189,7 +208,7 @@ def _read(chan, timeout, data_type, notify, force_int_enums):
         logger.debug("Changing requested data_type to STRING.")
         data_type = ChannelType.STRING
     req = chan.read(data_type=data_type, notify=notify)
-    send(chan.circuit, req)
+    send(chan.circuit, req, chan.name)
     t = time.monotonic()
     while True:
         try:
@@ -200,7 +219,13 @@ def _read(chan, timeout, data_type, notify, force_int_enums):
         if time.monotonic() - t > timeout:
             raise CaprotoTimeoutError("Timeout while awaiting reading.")
 
+        tags = {'direction': '<<<---',
+                'our_address': chan.circuit.our_address,
+                'their_address': chan.circuit.address}
         for command in commands:
+            if isinstance(command, ca.Message):
+                tags['bytesize'] = len(command)
+                logger.debug("%r", command, extra=tags)
             if (isinstance(command, (ca.ReadResponse, ca.ReadNotifyResponse)) and
                     command.ioid == req.ioid):
                 return command
@@ -219,6 +244,7 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0, notify=True,
     Parameters
     ----------
     pv_name : str
+        The PV name to read from
     data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
         Request specific data type or a class of data types, matched to the
         channel's native data type. Default is Channel's native data type.
@@ -242,15 +268,67 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0, notify=True,
     Examples
     --------
 
-    Get the value of a Channel named 'cat'.
+    Get the value of a Channel named 'simple:A'.
 
-    >>> read('cat').data
+    >>> read('simple:A').data
+    array([1], dtype=int32)
+
+    Request a richer Channel Access data type that includes the timestamp, and
+    access the timestamp.
+
+    >>> read('cat', data_type='time').metadata.timestmap
+    1570622339.042392
+
+    A convenience method is provided for access the timestamp as a Python
+    datetime object.
+
+    >>> read('cat' data_type='time').metadata.stamp.as_datetime()
+    datetime.datetime(2019, 10, 9, 11, 58, 59, 42392)
+
+    The requested data type may also been given as a specific Channel Access
+    type
+
+    >>> from caproto import ChannelType
+    >>> read('cat', data_type=ChannelType.CTRL_FLOAT).metadata
+    DBR_CTRL_FLOAT(
+        status=<AlarmStatus.NO_ALARM: 0>,
+        severity=<AlarmSeverity.NO_ALARM: 0>,
+        upper_disp_limit=0.0,
+        lower_disp_limit=0.0,
+        upper_alarm_limit=0.0,
+        upper_warning_limit=0.0,
+        lower_warning_limit=0.0,
+        lower_alarm_limit=0.0,
+        upper_ctrl_limit=0.0,
+        lower_ctrl_limit=0.0,
+        precision=0,
+        units=b'')
+
+    or the corresponding integer identifer
+
+    >>> read('cat', data_type=30).metadata
+    DBR_CTRL_FLOAT(
+    status=<AlarmStatus.NO_ALARM: 0>,
+    severity=<AlarmSeverity.NO_ALARM: 0>,
+    upper_disp_limit=0.0,
+    lower_disp_limit=0.0,
+    upper_alarm_limit=0.0,
+    upper_warning_limit=0.0,
+    lower_warning_limit=0.0,
+    lower_alarm_limit=0.0,
+    upper_ctrl_limit=0.0,
+    lower_ctrl_limit=0.0,
+    precision=0,
+    units=b'')
     """
     if repeater:
         # As per the EPICS spec, a well-behaved client should start a
         # caproto-repeater that will continue running after it exits.
         spawn_repeater()
     udp_sock = ca.bcast_socket()
+    # Must bind or getsocketname() will raise on Windows.
+    # See https://github.com/caproto/caproto/issues/514.
+    udp_sock.bind(('', 0))
     try:
         udp_sock.settimeout(timeout)
         chan = make_channel(pv_name, udp_sock, priority, timeout)
@@ -262,7 +340,7 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0, notify=True,
     finally:
         try:
             if chan.states[ca.CLIENT] is ca.CONNECTED:
-                send(chan.circuit, chan.clear())
+                send(chan.circuit, chan.clear(), chan.name)
         finally:
             sockets[chan.circuit].close()
             del sockets[chan.circuit]
@@ -277,6 +355,7 @@ def subscribe(pv_name, priority=0, data_type=None, data_count=None,
     Parameters
     ----------
     pv_name : string
+        The PV name to subscribe to
     priority : integer, optional
         Used by the server to triage subscription responses when under high
         load. 0 is lowest; 99 is highest.
@@ -295,13 +374,13 @@ def subscribe(pv_name, priority=0, data_type=None, data_count=None,
     Examples
     --------
 
-    Define a subscription on the ``cat`` PV.
+    Define a subscription on the ``random_walk:x`` PV.
 
-    >>> sub = subscribe('cat')
+    >>> sub = subscribe('random_walk:x')
 
     Add one or more user-defined callbacks to process responses.
 
-    >>> def f(response):
+    >>> def f(sub, response):
     ...     print(repsonse.data)
     ...
     >>> sub.add_callback(f)
@@ -349,6 +428,7 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
     Parameters
     ----------
     *subscriptions : Subscriptions
+        The list of subscriptions.
     duration : float, optional
         How many seconds to run for. Run forever (None) by default.
     timeout : float, optional
@@ -384,6 +464,9 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
         loggers[sub.pv_name] = logging.LoggerAdapter(logging.getLogger('caproto.ch'),
                                                      {'pv': sub.pv_name})
     udp_sock = ca.bcast_socket()
+    # Must bind or getsocketname() will raise on Windows.
+    # See https://github.com/caproto/caproto/issues/514.
+    udp_sock.bind(('', 0))
     try:
         udp_sock.settimeout(timeout)
         channels = {}
@@ -410,7 +493,7 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
             loggers[chan.name].debug("Subscribing with data_type %r.",
                                      time_type)
             req = chan.subscribe(data_type=time_type, mask=sub.mask)
-            send(chan.circuit, req)
+            send(chan.circuit, req, chan.name)
             sub_ids[(chan.circuit, req.subscriptionid)] = sub
         logger.debug('Subscribed. Building socket selector.')
         try:
@@ -432,7 +515,7 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
                     logger.debug("Interrupted via "
                                  "caproto.sync.client.interrupt().")
                     break
-                for selector_key, mask in events:
+                for selector_key, _ in events:
                     circuit = sock_to_circuit[selector_key.fileobj]
                     commands = recv(circuit)
                     for response in commands:
@@ -452,7 +535,7 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
         try:
             for chan in channels.values():
                 if chan.states[ca.CLIENT] is ca.CONNECTED:
-                    send(chan.circuit, chan.clear())
+                    send(chan.circuit, chan.clear(), chan.name)
         finally:
             # Reinstate the timeout for channel cleanup.
             for chan in channels.values():
@@ -466,16 +549,24 @@ def _write(chan, data, metadata, timeout, data_type, notify):
     logger.debug("Detected native data_type %r.", chan.native_data_type)
     # abundance of caution
     ntype = field_types['native'][chan.native_data_type]
-    if data_type is None:
-        # Handle ENUM: If data is INT, carry on. If data is STRING,
-        # write it specifically as STRING data_Type.
-        if (ntype is ChannelType.ENUM) and isinstance(data[0], bytes):
+    if (data_type is None) and (ntype is ChannelType.ENUM):
+        # Change data_type to STRING if data contains string-like data, or
+        # iterable of string-like data
+        stringy_data = False
+        if isinstance(data, (str, bytes)):
+            stringy_data = True
+        if hasattr(data, '__getitem__') \
+                and len(data) > 0 \
+                and isinstance(data[0], (str, bytes)):
+            stringy_data = True
+
+        if stringy_data:
             logger.debug("Will write to ENUM as data_type STRING.")
             data_type = ChannelType.STRING
     logger.debug("Writing.")
     req = chan.write(data=data, notify=notify,
                      data_type=data_type, metadata=metadata)
-    send(chan.circuit, req)
+    send(chan.circuit, req, chan.name)
     t = time.monotonic()
     if notify:
         while True:
@@ -487,7 +578,13 @@ def _write(chan, data, metadata, timeout, data_type, notify):
             if time.monotonic() - t > timeout:
                 raise CaprotoTimeoutError("Timeout while awaiting write reply.")
 
+            tags = {'direction': '<<<---',
+                    'our_address': chan.circuit.our_address,
+                    'their_address': chan.circuit.address}
             for command in commands:
+                if isinstance(command, ca.Message):
+                    tags['bytesize'] = len(command)
+                    logger.debug("%r", command, extra=tags)
                 if (isinstance(command, ca.WriteNotifyResponse) and
                         command.ioid == req.ioid):
                     response = command
@@ -514,7 +611,8 @@ def write(pv_name, data, *, notify=False, data_type=None, metadata=None,
     Parameters
     ----------
     pv_name : str
-    data : str, int, or float or any Iterable of these
+        The PV name to write to
+    data : str, bytes, int, or float or any Iterable of these
         Value(s) to write.
     notify : boolean, optional
         Request notification of completion and wait for it. False by default.
@@ -537,12 +635,21 @@ def write(pv_name, data, *, notify=False, data_type=None, metadata=None,
 
     Examples
     --------
-    Write the value 5 to a Channel named 'cat'.
+    Write the value 5 to a Channel named 'simple:A'.
 
-    >>> write('cat', 5)  # returns None
+    >>> write('simple:A', 5)  # returns None
 
     Request notification of completion ("put completion") and wait for it.
-    >>> write('cat', 5, notify=True)  # returns a WriteNotifyResponse
+    >>> write('cat', 5, notify=True)  # blocks until complete, then returns:
+    WriteNotifyResponse(
+    data_type=<ChannelType.LONG: 5>,
+    data_count=1,
+    status=CAStatusCode(
+    name='ECA_NORMAL', code=0, code_with_severity=1,
+    severity=<CASeverity.SUCCESS: 1>,
+    success=1, defunct=False,
+    description='Normal successful completion'),
+    ioid=0)
     """
     if repeater:
         # As per the EPICS spec, a well-behaved client should start a
@@ -550,6 +657,9 @@ def write(pv_name, data, *, notify=False, data_type=None, metadata=None,
         spawn_repeater()
 
     udp_sock = ca.bcast_socket()
+    # Must bind or getsocketname() will raise on Windows.
+    # See https://github.com/caproto/caproto/issues/514.
+    udp_sock.bind(('', 0))
     try:
         udp_sock.settimeout(timeout)
         chan = make_channel(pv_name, udp_sock, priority, timeout)
@@ -560,7 +670,7 @@ def write(pv_name, data, *, notify=False, data_type=None, metadata=None,
     finally:
         try:
             if chan.states[ca.CLIENT] is ca.CONNECTED:
-                send(chan.circuit, chan.clear())
+                send(chan.circuit, chan.clear(), chan.name)
         finally:
             sockets[chan.circuit].close()
             del sockets[chan.circuit]
@@ -587,7 +697,8 @@ def read_write_read(pv_name, data, *, notify=False,
     Parameters
     ----------
     pv_name : str
-    data : str, int, or float or a list of these
+        The PV name to write/read/write
+    data : str, bytes, int, or float or any Iterable of these
         Value to write.
     notify : boolean, optional
         Request notification of completion and wait for it. False by default.
@@ -618,7 +729,7 @@ def read_write_read(pv_name, data, *, notify=False,
     Examples
     --------
 
-    Write the value 5 to a Channel named 'cat'.
+    Write the value 5 to a Channel named 'simple:A'.
 
     >>> read_write_read('cat', 5)  # returns initial, None, final
 
@@ -632,6 +743,9 @@ def read_write_read(pv_name, data, *, notify=False,
         spawn_repeater()
 
     udp_sock = ca.bcast_socket()
+    # Must bind or getsocketname() will raise on Windows.
+    # See https://github.com/caproto/caproto/issues/514.
+    udp_sock.bind(('', 0))
     try:
         udp_sock.settimeout(timeout)
         chan = make_channel(pv_name, udp_sock, priority, timeout)
@@ -646,7 +760,7 @@ def read_write_read(pv_name, data, *, notify=False,
     finally:
         try:
             if chan.states[ca.CLIENT] is ca.CONNECTED:
-                send(chan.circuit, chan.clear())
+                send(chan.circuit, chan.clear(), chan.name)
         finally:
             sockets[chan.circuit].close()
             del sockets[chan.circuit]
@@ -676,6 +790,10 @@ class Subscription:
         self.callbacks = {}
         self._callback_id = 0
         self._callback_lock = threading.RLock()
+
+        # This is related to back-compat for user callbacks that have the old
+        # signature, f(response).
+        self.__wrapper_weakrefs = set()
 
     def block(self, duration=None, timeout=1,
               force_int_enums=False,
@@ -726,13 +844,24 @@ class Subscription:
         Parameters
         ----------
         func : callable
-            Expected signature: ``func(response)``
+            Expected signature: ``func(sub, response)``.
+
+            The signature ``func(response)`` is also supported for
+            backward-compatibility but will issue warnings. Support will be
+            removed in a future release of caproto.
 
         Returns
         -------
         token : int
             Integer token that can be passed to :meth:`remove_callback`.
+
+        .. versionchanged:: 0.5.0
+
+           Changed the expected signature of ``func`` from ``func(response)``
+           to ``func(sub, response)``.
         """
+        func = adapt_old_callback_signature(func, self.__wrapper_weakrefs)
+
         def removed(_):
             self.remove_callback(cb_id)
 
@@ -772,7 +901,7 @@ class Subscription:
                 to_remove.append(cb_id)
                 continue
 
-            callback(response)
+            callback(self, response)
 
         with self._callback_lock:
             for remove_id in to_remove:

@@ -1,0 +1,20 @@
+{% for f in rec.fields | sort(attribute='sort_id') %}
+{% if f.dtype %}
+    {%+ if f.comment %}# {% endif %}{{ f.attr }} = pvproperty(name='{{ f.field_name }}',
+    {%+ if f.comment %}# {% endif %}     dtype=ChannelType.{{ f.dtype }},
+    {%+ if f.comment %}# {% endif %}     {% for kwarg, value in f.kwargs.items() -%}
+                                         {{ kwarg }}={{ value }}
+                                         {%- if not loop.last %},{% endif -%}
+                                         {%- endfor %})
+{% else %}
+    {{ f.attr }} = None  # no access to field {{ f.field_name }}
+{% endif %}
+{% endfor%}
+{% for link in rec.links %}
+    _link_parent_attribute({{ link.field_attr }}, '{{ link.channeldata_attr }}',
+    {%- for kwarg, value in link.kwargs.items() -%}
+    {{ kwarg }}={{ value }}
+    {%- if not loop.last %},{% endif -%}
+    {%- endfor %}
+    )
+{% endfor %}

@@ -47,7 +47,7 @@ def create_ioc(prefix, groups_a, groups_b, **ioc_options):
     for group_prefix in groups_b:
         groups[group_prefix] = GroupB(f'{prefix}{group_prefix}', ioc=ioc)
 
-    for prefix, group in groups.items():
+    for group in groups.values():
         ioc.pvdb.update(**group.pvdb)
 
     return ioc

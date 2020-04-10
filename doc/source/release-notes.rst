@@ -2,6 +2,82 @@
 Release History
 ***************
 
+Unreleased
+==========
+
+* In the threading client, the expected signature of Subscription callbacks has
+  changed from ``f(response)`` to ``f(sub, response)`` where ``sub`` is the
+  pertinent :class:`caproto.threading.client.Subscription`.
+  This change has been made in a backward-compatible way. Callbacks with the
+  old signature, ``f(response)``, will still work but caproto will issue a
+  warning. Support for the old signature may be removed in the future.
+  By giving the callback ``f`` access to ``sub``, we enable usages like
+
+  .. code-block:: python
+
+     def f(sub, response):
+         # Print the name of the pertinent PV.
+         print('Received response from', sub.pv.name)
+
+     def f(sub, response):
+         if ...:
+             sub.remove_callback(f)
+
+* The detail and formatting of the log messages has been improved.
+
+v0.4.4 (2020-03-26)
+===================
+
+Fixed
+-----
+
+* The fix for Python asyncio's servers released in 0.4.3 had the accidental
+  side-effect of preventing multiple servers from running on the same machine
+  (or, to be precise, on the same network interface). This release fixes that
+  regression.
+* Fix bug in ``caproto-put`` which made it impossible to set ENUM-type PVs.
+* Ensure that caproto servers respect the limits on the number of enum members
+  and the length of enum streams.
+
+v0.4.3 (2020-01-29)
+===================
+
+Python releases 3.6.10, 3.7.6, and 3.8.1 made a breaking change for security
+reasons that happens to break caproto's asyncio-based server (the default one)
+on all platforms. This release adjusts for that change. See
+:meth:`asyncio.loop.create_datagram_endpoint` for details about this change in
+Python.
+
+This release also fixes a bug introduced in v0.4.0 affecting Windows only that
+made caproto clients and servers unusuable on Windows.
+
+v0.4.2 (2019-11-13)
+===================
+
+This release contains some important bug fixes and some minor new features.
+
+Features
+--------
+* Make the default timeout for the threading client configurable via the
+  environment variable ``CAPROTO_DEFAULT_TIMEOUT``. It was previously
+  hard-coded to ``2`` (seconds).
+* Add ``--file`` argument to ``caproto-put``, which obtains the value to be put
+  from reading a file.
+* Link ZNAM and ONAM fields to the parent enum_strings.
+* Automatically populate ``pvproperty`` DESC using doc keyword argument.
+
+Bug Fixes
+---------
+* Fix a critical race condition wherein data could be written into a buffer as
+  it was being sent.
+* Propagate timeout specific to pyepics-compatible client to the next layer
+  down.
+* Correctly handle reconnection if the server dies.
+* Allow asyncio server to do cleanup in all cases. (Previously,
+  ``KeyboardInterrupt`` was erroneously exempted from cleanup.)
+* Let the server's ``write`` method provide the timestamp. This is significant
+  if the putter takes significant time to process or does any internal writes.
+
 v0.4.1 (2019-10-06)
 ===================
 

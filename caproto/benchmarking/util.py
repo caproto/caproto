@@ -1,4 +1,5 @@
 import os
+import pathlib
 import sys
 import subprocess
 import shutil
@@ -14,10 +15,14 @@ logger = logging.getLogger(__name__)
 def find_dbd_path():
     '''Find the path to database definitions, based on the environment'''
     if 'EPICS_BASE' in os.environ:
-        return os.path.join(os.environ['EPICS_BASE'], 'dbd')
+        epics_top = pathlib.Path(os.environ['EPICS_BASE'])
     else:
-        softioc_path = shutil.which('softIoc')
-        return os.path.abspath(os.path.join(softioc_path, '..', '..', 'dbd'))
+        # Path : epics_top / bin / host_arch / softIoc
+        # Index: 2           1     0
+        softioc_path = pathlib.Path(shutil.which('softIoc')).resolve()
+        epics_top = softioc_path.parents[2]
+
+    return epics_top.expanduser().resolve() / 'dbd'
 
 
 @contextmanager

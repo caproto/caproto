@@ -9,15 +9,16 @@ import copy
 import time
 import weakref
 
-from ._dbr import (DBR_TYPES, ChannelType, native_type, native_types,
-                   timestamp_to_epics, time_types, DBR_STSACK_STRING,
-                   AccessRights, GraphicControlBase, AlarmStatus,
-                   AlarmSeverity, SubscriptionType)
+from ._dbr import (DBR_TYPES, _LongStringChannelType, ChannelType, native_type,
+                   native_types, timestamp_to_epics, time_types,
+                   DBR_STSACK_STRING, AccessRights, GraphicControlBase,
+                   AlarmStatus, AlarmSeverity, SubscriptionType,
+                   _channel_type_by_name)
 
 from ._utils import CaprotoError, CaprotoValueError, ConversionDirection
 from ._commands import parse_metadata
 from ._backend import backend
-
+from ._constants import MAX_ENUM_STRING_SIZE, MAX_ENUM_STATES
 
 __all__ = ('Forbidden',
            'ChannelAlarm',
@@ -26,6 +27,7 @@ __all__ = ('Forbidden',
            'ChannelData',
            'ChannelDouble',
            'ChannelEnum',
+           'ChannelFloat',
            'ChannelInteger',
            'ChannelNumeric',
            'ChannelShort',
@@ -284,9 +286,8 @@ class ChannelData:
                 if len(value):
                     # scalar value in a list -> scalar value
                     return value[0]
-                else:
-                    raise CaprotoValueError(
-                        'Cannot set a scalar to an empty array')
+                raise CaprotoValueError(
+                    'Cannot set a scalar to an empty array')
         elif not is_array:
             # scalar value that should be in a list -> list
             return [value]
@@ -360,20 +361,23 @@ class ChannelData:
             alarm.connect(self)
 
     async def subscribe(self, queue, sub_spec, sub):
-        self._queues[queue][sub_spec.channel_filter.sync][sub_spec.data_type].add(sub_spec)
+        by_sync = self._queues[queue][sub_spec.channel_filter.sync]
+        by_sync[sub_spec.data_type_name].add(sub_spec)
+
         # Always send current reading immediately upon subscription.
-        data_type = sub_spec.data_type
         try:
-            metadata, values = self._content[data_type]
+            metadata, values = self._content[sub_spec.data_type_name]
         except KeyError:
             # Do the expensive data type conversion and cache it in case
             # a future subscription wants the same data type.
+            data_type = _channel_type_by_name[sub_spec.data_type_name]
             metadata, values = await self._read(data_type)
-            self._content[data_type] = metadata, values
+            self._content[sub_spec.data_type_name] = metadata, values
         await queue.put(SubscriptionUpdate((sub_spec,), metadata, values, 0, sub))
 
     async def unsubscribe(self, queue, sub_spec):
-        self._queues[queue][sub_spec.channel_filter.sync][sub_spec.data_type].discard(sub_spec)
+        by_sync = self._queues[queue][sub_spec.channel_filter.sync]
+        by_sync[sub_spec.data_type_name].discard(sub_spec)
 
     async def auth_read(self, hostname, username, data_type, *,
                         user_address=None):
@@ -385,8 +389,8 @@ class ChannelData:
         return (await self.read(data_type))
 
     async def read(self, data_type):
-        # Subclass might trigger a write here to update self._data
-        # before reading it out.
+        # Subclass might trigger a write here to update self._data before
+        # reading it out.
         return (await self._read(data_type))
 
     async def _read(self, data_type):
@@ -400,14 +404,20 @@ class ChannelData:
             class_name.value = rtyp
             return class_name, b''
 
-        native_to = native_type(data_type)
+        if data_type in _LongStringChannelType:
+            native_to = _LongStringChannelType.LONG_STRING
+            data_type = ChannelType(data_type)
+        else:
+            native_to = native_type(data_type)
+
         values = backend.convert_values(
             values=self._data['value'],
             from_dtype=self.data_type,
             to_dtype=native_to,
             string_encoding=self.string_encoding,
             enum_strings=self._data.get('enum_strings'),
-            direction=ConversionDirection.TO_WIRE)
+            direction=ConversionDirection.TO_WIRE,
+        )
 
         # for native types, there is no dbr metadata - just data
         if data_type in native_types:
@@ -462,7 +472,7 @@ class ChannelData:
             direction=ConversionDirection.FROM_WIRE)
 
         if metadata is None:
-            metadata_dict = {'timestamp': timestamp}
+            metadata_dict = {}
         else:
             # Convert `metadata` to bytes-like (or pass it through).
             md_payload = parse_metadata(metadata, data_type)
@@ -536,7 +546,7 @@ class ChannelData:
             # data_types is a dict grouping the sub_specs for this queue by
             # their data_type.
             for sync, data_types in syncs.items():
-                for data_type, sub_specs in data_types.items():
+                for data_type_name, sub_specs in data_types.items():
                     eligible = tuple(ss for ss in sub_specs
                                      if self._is_eligible(ss))
                     if not eligible:
@@ -549,11 +559,12 @@ class ChannelData:
                         except KeyError:
                             continue
                     try:
-                        metdata, values = self._content[data_type]
+                        metdata, values = self._content[data_type_name]
                     except KeyError:
                         # Do the expensive data type conversion and cache it in
                         # case another queue or a future subscription wants the
                         # same data type.
+                        data_type = _channel_type_by_name[data_type_name]
                         metadata, values = await channel_data._read(data_type)
                         channel_data._content[data_type] = metadata, values
 
@@ -711,12 +722,25 @@ class ChannelData:
 class ChannelEnum(ChannelData):
     data_type = ChannelType.ENUM
 
+    @staticmethod
+    def _validate_enum_strings(enum_strings):
+        if any(len(es) >= MAX_ENUM_STRING_SIZE for es in enum_strings):
+            over_length = tuple(f'{es}: {len(es)}' for es in enum_strings if
+                                len(es) >= MAX_ENUM_STRING_SIZE)
+            msg = (f"The maximum enum string length is {MAX_ENUM_STRING_SIZE} " +
+                   f"but the strings {over_length} are too long")
+            raise ValueError(msg)
+        if len(enum_strings) > MAX_ENUM_STATES:
+            raise ValueError(f"The maximum number of enum states is {MAX_ENUM_STATES} " +
+                             f"but you passed in {len(enum_strings)}")
+        return tuple(enum_strings)
+
     def __init__(self, *, enum_strings=None, **kwargs):
         super().__init__(**kwargs)
 
         if enum_strings is None:
             enum_strings = tuple()
-        self._data['enum_strings'] = tuple(enum_strings)
+        self._data['enum_strings'] = self._validate_enum_strings(enum_strings)
 
     enum_strings = _read_only_property('enum_strings')
 
@@ -750,7 +774,7 @@ class ChannelEnum(ChannelData):
 
     async def write_metadata(self, enum_strings=None, **kwargs):
         if enum_strings is not None:
-            self._data['enum_strings'] = tuple(enum_strings)
+            self._data['enum_strings'] = self._validate_enum_strings(enum_strings)
 
         return await super().write_metadata(**kwargs)
 
@@ -894,6 +918,21 @@ class ChannelInteger(ChannelNumeric):
     data_type = ChannelType.LONG
 
 
+class ChannelFloat(ChannelNumeric):
+    data_type = ChannelType.FLOAT
+
+    def __init__(self, *, precision=0, **kwargs):
+        super().__init__(**kwargs)
+        self._data['precision'] = precision
+
+    precision = _read_only_property('precision')
+
+    def __getnewargs_ex__(self):
+        args, kwargs = super().__getnewargs_ex__()
+        kwargs['precision'] = self.precision
+        return (args, kwargs)
+
+
 class ChannelDouble(ChannelNumeric):
     data_type = ChannelType.DOUBLE
 
@@ -949,12 +988,35 @@ class ChannelChar(ChannelData):
     'CHAR data which masquerades as a string'
     data_type = ChannelType.CHAR
 
+    def __init__(self, *, alarm=None, value=None, timestamp=None,
+                 max_length=None, string_encoding='latin-1',
+                 reported_record_type='caproto', report_as_string=False):
+        super().__init__(alarm=alarm, value=value, timestamp=timestamp,
+                         max_length=max_length,
+                         string_encoding=string_encoding,
+                         reported_record_type=reported_record_type)
+
+        if report_as_string:
+            self.data_type = ChannelType.STRING
+
+    @property
+    def long_string_max_length(self):
+        'The maximum number of elements (length) of the current value'
+        return super().max_length
+
+    @property
+    def max_length(self):
+        'The number of elements (length) of the current value'
+        if self.data_type == ChannelType.STRING:
+            return 1
+        return super().max_length
+
     def preprocess_value(self, value):
         value = super().preprocess_value(value)
 
         if isinstance(value, (list, tuple) + backend.array_types):
             if not len(value):
-                return b''
+                value = b''
             elif len(value) == 1:
                 value = value[0]
             else:
@@ -979,7 +1041,21 @@ class ChannelChar(ChannelData):
 
 class ChannelString(ChannelData):
     data_type = ChannelType.STRING
-    # There is no CTRL or GR variant of STRING.
+
+    def __init__(self, *, alarm=None, value=None, timestamp=None,
+                 max_length=None, string_encoding='latin-1',
+                 reported_record_type='caproto', long_string_max_length=81):
+        super().__init__(alarm=alarm, value=value, timestamp=timestamp,
+                         max_length=max_length,
+                         string_encoding=string_encoding,
+                         reported_record_type=reported_record_type)
+
+        self._long_string_max_length = long_string_max_length
+
+    @property
+    def long_string_max_length(self):
+        'The maximum number of elements (length) of the current value'
+        return self._long_string_max_length
 
     async def write(self, value, *, flags=0, **metadata):
         flags |= (SubscriptionType.DBE_LOG | SubscriptionType.DBE_VALUE)

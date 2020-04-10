@@ -45,7 +45,7 @@ This is a brief demonstration of caproto's pyepics-compat client.
 
 .. ipython:: python
     :suppress:
-    
+
     import sys
     import subprocess
     import time

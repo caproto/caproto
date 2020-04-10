@@ -55,7 +55,7 @@ Access particular fields in the response using attribute ("dot") access.
     None
 
 By default, the server sends no metadata. Obtain metadata by requesting a
-richer data type. 
+richer data type.
 
 .. code-block:: bash
 
@@ -66,7 +66,7 @@ richer data type.
     lower_warning_limit=0.0, lower_alarm_limit=0.0, upper_ctrl_limit=0.0,
     lower_ctrl_limit=0.0, precision=0, units=b'')
 
-To view the list of data types, use ``-list-types``.
+To view the list of data types, use ``--list-types``.
 
 .. code-block:: bash
 
@@ -182,7 +182,7 @@ The client issues three requests:
 2. Write ``1``.
 3. Read the value again.
 
-By default it does actually wait for confirmation that the write has been
+By default it does not actually wait for confirmation that the write has been
 processed by the server before moving on to the final read, so it is possible
 to receive a reading that isn't up to date. Use ``-c`` to ask the server to
 confirm the write's success and to wait on that confirmation before doing the
@@ -246,13 +246,13 @@ For additional options, type ``caproto-monitor -h`` or see below.
 Output Formatting Options
 -------------------------
 
-Output formatting options are changing the default format used in 
-``caproto-get`` and ``caproto-monitor`` for printing PV values. 
-The default formatting is used in the following cases: 
+Output formatting options are changing the default format used in
+``caproto-get`` and ``caproto-monitor`` for printing PV values.
+The default formatting is used in the following cases:
 
-* The format string (``--format`` argument) is not specified. 
+* The format string (``--format`` argument) is not specified.
 
-* The format string contains the field ``{response.data}``. In this case 
+* The format string contains the field ``{response.data}``. In this case
   formatting is applied only to the field ``{response.data}``.
 
 Formatting options applied to **floating point PV values**:
@@ -271,7 +271,7 @@ Formatting options applied to **integer PV values**:
 * ``-0o`` - print as octal number;
 * ``-0b`` - print as binary number.
 
-The argument ``-F <ofs>`` replaces the default field separator (spaces) with alternate 
+The argument ``-F <ofs>`` replaces the default field separator (spaces) with alternate
 separator ``<ofs>`` (e.g. ``-F*``, ``-F'*'``, ``-F '*'``, ``-F ' ** '``).
 
 Some examples of output formatting:
@@ -289,7 +289,7 @@ Some examples of output formatting:
     random_walk:x                             2019-04-11 20:12:52.173604 [-162.6590992]
     ^C
 
-    $ caproto-monitor random_walk:x -g10 -F"  ==  " 
+    $ caproto-monitor random_walk:x -g10 -F"  ==  "
     random_walk:x  ==  2019-04-11 20:14:41.297880  ==  [-3.811720948]
     random_walk:x  ==  2019-04-11 20:14:42.298818  ==  [-3.162919537]
     random_walk:x  ==  2019-04-11 20:14:43.301088  ==  [-3.432931988]

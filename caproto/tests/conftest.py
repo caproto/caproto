@@ -1,5 +1,4 @@
 import array
-import curio
 import functools
 import logging
 import os
@@ -10,18 +9,17 @@ import sys
 import threading
 import time
 import uuid
-import trio
 
 from types import SimpleNamespace
 
 import caproto as ca
 import caproto.benchmarking  # noqa
 from caproto.sync.client import read
-import caproto.curio  # noqa
 import caproto.threading  # noqa
-import caproto.trio  # noqa
 import caproto.asyncio  # noqa
 
+# DBD parsing-related fixtures:
+from .dbd import test_dbd_file, record_type_to_fields  # noqa
 
 _repeater_process = None
 
@@ -125,7 +123,7 @@ def run_example_ioc(module_name, *, request, pv_to_check, args=None,
 def poll_readiness(pv_to_check, attempts=5, timeout=1):
     logger.debug(f'Checking PV {pv_to_check}')
     start_repeater()
-    for attempt in range(attempts):
+    for _attempt in range(attempts):
         try:
             read(pv_to_check, timeout=timeout, repeater=False)
         except (TimeoutError, ConnectionRefusedError):
@@ -144,7 +142,7 @@ def run_softioc(request, db, additional_db=None, **kwargs):
         db_text = '\n'.join((db_text, additional_db))
 
     err = None
-    for attempt in range(3):
+    for _attempt in range(3):
         ioc_handler = ca.benchmarking.IocHandler()
         ioc_handler.setup_ioc(db_text=db_text, max_array_bytes='10000000',
                               **kwargs)
@@ -176,7 +174,7 @@ def _epics_base_ioc(prefix, request):
             dict(FTVL='LONG', NELM=4000),
         ('{}float'.format(prefix), 'ai'): dict(VAL=3.14),
         ('{}enum'.format(prefix), 'bi'):
-            dict(VAL=1, ZNAM="zero", ONAM="one"),
+            dict(VAL=1, ZNAM="a", ONAM="b"),
         ('{}str'.format(prefix), 'stringout'): dict(VAL='test'),
         ('{}int'.format(prefix), 'longout'): dict(VAL=1),
         ('{}int2'.format(prefix), 'longout'): dict(VAL=1),
@@ -432,6 +430,11 @@ def curio_server(prefix):
     caget_pvdb = {prefix + key: value
                   for key, value in caget_pvdb.items()}
 
+    # Hide these imports so that the other fixtures are usable by other
+    # libraries (e.g. ophyd) without the experimental dependencies.
+    import curio
+    import caproto.curio
+
     async def _server(pvdb):
         ctx = caproto.curio.server.Context(pvdb)
         try:
@@ -457,6 +460,9 @@ def curio_server(prefix):
 
 async def get_curio_context():
     logger.debug('New curio broadcaster')
+    # Hide this import so that the other fixtures are usable by other
+    # libraries (e.g. ophyd) without the experimental dependencies.
+    import caproto.curio
     broadcaster = caproto.curio.client.SharedBroadcaster()
     logger.debug('Registering...')
     await broadcaster.register()
@@ -465,6 +471,11 @@ async def get_curio_context():
 
 
 def run_with_trio_context(func, **kwargs):
+    # Hide these imports so that the other fixtures are usable by other
+    # libraries (e.g. ophyd) without the experimental dependencies.
+    import caproto.trio
+    import trio
+
     async def runner():
         async with trio.open_nursery() as nursery:
             logger.debug('New trio broadcaster')
@@ -492,6 +503,11 @@ def run_with_trio_context(func, **kwargs):
 def server(request):
 
     def curio_runner(pvdb, client, *, threaded_client=False):
+        # Hide these imports so that the other fixtures are usable by other
+        # libraries (e.g. ophyd) without the experimental dependencies.
+        import curio
+        import caproto.curio
+
         async def server_main():
             try:
                 ctx = caproto.curio.server.Context(pvdb)
@@ -525,6 +541,11 @@ def server(request):
             kernel.run(run_server_and_client)
 
     def trio_runner(pvdb, client, *, threaded_client=False):
+        # Hide these imports so that the other fixtures are usable by other
+        # libraries (e.g. ophyd) without the experimental dependencies.
+        import trio
+        import caproto.trio
+
         async def trio_server_main(task_status):
             try:
                 ctx = caproto.trio.server.Context(pvdb)
@@ -643,6 +664,9 @@ def threaded_in_curio_wrapper(fcn):
     using `curio.run_in_thread` and then await wrapped_function.wait() inside
     the test kernel.
     '''
+    # Hide this import so that the other fixtures are usable by other
+    # libraries (e.g. ophyd) without the experimental dependencies.
+    import curio
     uqueue = curio.UniversalQueue()
 
     def wrapped_threaded_func():
@@ -729,3 +753,8 @@ def pytest_runtest_call(item):
 
     item.user_properties.append(('total_sockets', num_sockets))
     item.user_properties.append(('open_sockets', num_open))
+
+
+@pytest.fixture(scope='session', params=list(ca.server.records.records))
+def record_type_name(request):
+    return request.param

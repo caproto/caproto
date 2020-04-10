@@ -3,5 +3,6 @@ graphviz
 ipython<7
 matplotlib
 numpydoc
-sphinx==1.8.1
+sphinx
 sphinx_rtd_theme
+tabulate
