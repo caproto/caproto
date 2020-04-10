@@ -178,7 +178,6 @@ class SelectorThread:
 
         self._socket_map_lock = threading.RLock()
         self.objects = weakref.WeakValueDictionary()
-        self.id_to_socket = {}
         self.socket_to_id = {}
 
         self._register_sockets = {}  # {socket: object_id}
@@ -214,12 +213,10 @@ class SelectorThread:
             # assumption: only one sock per object
             self._object_id += 1
             self.objects[self._object_id] = target_obj
-            self.id_to_socket[self._object_id] = sock
             self.socket_to_id[sock] = self._object_id
-            weakref.finalize(target_obj,
-                             lambda obj_id=self._object_id:
-                             self._object_removed(obj_id))
             self._register_sockets[sock] = self._object_id
+            weakref.finalize(target_obj,
+                             lambda sock=sock: self.remove_socket(sock))
             # self.log.debug('Socket %s was added (obj %s)', sock, target_obj)
 
     def remove_socket(self, sock):
@@ -227,7 +224,6 @@ class SelectorThread:
             if sock not in self.socket_to_id:
                 return
             obj_id = self.socket_to_id.pop(sock)
-            del self.id_to_socket[obj_id]
             obj = self.objects.pop(obj_id, None)
             if obj is not None:
                 obj.received(b'', None)
@@ -240,15 +236,6 @@ class SelectorThread:
             except KeyError:
                 # self.log.debug('Socket %s was removed '
                 #              '(obj = %s)', sock, obj)
-                self._unregister_sockets.add(sock)
-
-    def _object_removed(self, obj_id):
-        with self._socket_map_lock:
-            if obj_id in self.id_to_socket:
-                sock = self.id_to_socket.pop(obj_id)
-                # self.log.debug('Object ID %s was destroyed: removing %s', obj_id,
-                #              sock)
-                del self.socket_to_id[sock]
                 self._unregister_sockets.add(sock)
 
     def __call__(self):
