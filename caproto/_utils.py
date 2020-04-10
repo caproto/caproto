@@ -260,6 +260,13 @@ def get_environment_variables():
     return result
 
 
+def get_epics_ca_addr_list():
+    '''Get a list of addresses, as configured by EPICS_CA_ADDR_LIST'''
+    env = get_environment_variables()
+    return [addr for addr in env['EPICS_CA_ADDR_LIST'].split(' ')
+            if addr.strip()]
+
+
 def get_address_list():
     '''Get channel access client address list based on environment variables
 
@@ -267,16 +274,16 @@ def get_address_list():
     scanned and used to determine the broadcast addresses available.
     '''
     env = get_environment_variables()
-    auto_addr_list = env['EPICS_CA_AUTO_ADDR_LIST']
-    addr_list = env['EPICS_CA_ADDR_LIST']
+    addresses = get_epics_ca_addr_list()
 
-    if not addr_list or auto_addr_list.lower() == 'yes':
-        if netifaces is not None:
-            return [bcast for addr, bcast in get_netifaces_addresses()]
-        else:
-            return ['255.255.255.255']
+    if addresses and env['EPICS_CA_AUTO_ADDR_LIST'].lower() != 'yes':
+        # Custom address list specified, and EPICS_CA_AUTO_ADDR_LIST=NO
+        return addresses
 
-    return addr_list.split(' ')
+    # No custom address list -or- EPICS_CA_AUTO_ADDR_LIST=YES
+    if netifaces is not None:
+        return addresses + [bcast for addr, bcast in get_netifaces_addresses()]
+    return addresses + ['255.255.255.255']
 
 
 def get_server_address_list():
