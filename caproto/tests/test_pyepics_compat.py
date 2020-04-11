@@ -961,7 +961,7 @@ def access_security_softioc(request, prefix, context):
            }
     pvs['ao.DRVH'] = PV(prefix + ':ao.DRVH')
 
-    poll_readiness(pvs['ao'].pvname)
+    poll_readiness(pvs['ao'].pvname, process=process)
 
     for pv in pvs.values():
         pv.wait_for_connection()
