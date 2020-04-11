@@ -195,7 +195,7 @@ def simulator_main(prefix, ready_event, exit_event):
     import random
     epics = pytest.importorskip('epics')
 
-    _caput = epics.capet
+    _caput = epics.caput
     _PV = epics.PV
 
     class PV(_PV):
