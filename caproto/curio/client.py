@@ -42,18 +42,19 @@ class VirtualCircuit:
         async with self._socket_lock:
             self.socket = await socket.create_connection(self.circuit.address)
             self.circuit.our_address = self.socket.getsockname()
-            # Kick off background loops that read from the socket
-            # and process the commands read from it.
-            await curio.spawn(self._receive_loop, daemon=True)
-            await curio.spawn(self._command_queue_loop, daemon=True)
-            # Send commands that initialize the Circuit.
-            await self.send(ca.VersionRequest(
-                version=ca.DEFAULT_PROTOCOL_VERSION,
-                priority=self.circuit.priority))
-            host_name = await socket.gethostname()
-            await self.send(ca.HostNameRequest(name=host_name))
-            client_name = getpass.getuser()
-            await self.send(ca.ClientNameRequest(name=client_name))
+
+        # Kick off background loops that read from the socket
+        # and process the commands read from it.
+        await curio.spawn(self._receive_loop, daemon=True)
+        await curio.spawn(self._command_queue_loop, daemon=True)
+        # Send commands that initialize the Circuit.
+        await self.send(ca.VersionRequest(
+            version=ca.DEFAULT_PROTOCOL_VERSION,
+            priority=self.circuit.priority))
+        host_name = await socket.gethostname()
+        await self.send(ca.HostNameRequest(name=host_name))
+        client_name = getpass.getuser()
+        await self.send(ca.ClientNameRequest(name=client_name))
 
     async def _receive_loop(self):
         num_bytes_needed = 0
