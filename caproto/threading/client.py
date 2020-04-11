@@ -20,7 +20,6 @@ import os
 import random
 import selectors
 import socket
-import sys
 import threading
 import time
 import weakref
@@ -171,11 +170,7 @@ class SelectorThread:
         self._close_event = threading.Event()
         self.selector = selectors.DefaultSelector()
 
-        if sys.platform in {'win32', 'darwin'}:
-            # Empty select() list is problematic for windows and OSX
-            dummy_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self.selector.register(dummy_socket, selectors.EVENT_READ)
-
+        self._register_event = threading.Event()
         self._socket_map_lock = threading.RLock()
         self.objects = weakref.WeakValueDictionary()
         self.socket_to_id = {}
@@ -183,6 +178,7 @@ class SelectorThread:
         self._register_sockets = {}  # {socket: object_id}
         self._unregister_sockets = set()
         self._object_id = 0
+        self._socket_count = 0
 
         if parent is not None:
             # Stop the selector if the parent goes out of scope
@@ -195,6 +191,9 @@ class SelectorThread:
 
     def stop(self):
         self._close_event.set()
+
+        # In case we're waiting for the first socket to be added:
+        self._register_event.set()
 
     def start(self):
         if self._close_event.is_set():
@@ -241,16 +240,23 @@ class SelectorThread:
     def __call__(self):
         '''Selector poll loop'''
         avail_buf = array.array('i', [0])
-        while not self._close_event.is_set():
+        while self.running:
             with self._socket_map_lock:
                 for sock in self._unregister_sockets:
                     self.selector.unregister(sock)
+                self._socket_count -= len(self._unregister_sockets)
                 self._unregister_sockets.clear()
 
                 for sock, obj_id in self._register_sockets.items():
                     self.selector.register(sock, selectors.EVENT_READ,
                                            data=obj_id)
+                self._socket_count += len(self._register_sockets)
                 self._register_sockets.clear()
+
+            if self._socket_count == 0:
+                if self._register_event.wait(timeout=0.1):
+                    self._register_event.clear()
+                continue
 
             events = self.selector.select(timeout=0.1)
             with self._socket_map_lock:
