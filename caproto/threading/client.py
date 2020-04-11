@@ -20,7 +20,6 @@ import os
 import random
 import selectors
 import socket
-import sys
 import threading
 import time
 import weakref
@@ -171,19 +170,15 @@ class SelectorThread:
         self._close_event = threading.Event()
         self.selector = selectors.DefaultSelector()
 
-        if sys.platform in {'win32', 'darwin'}:
-            # Empty select() list is problematic for windows and OSX
-            dummy_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self.selector.register(dummy_socket, selectors.EVENT_READ)
-
+        self._register_event = threading.Event()
         self._socket_map_lock = threading.RLock()
         self.objects = weakref.WeakValueDictionary()
-        self.id_to_socket = {}
         self.socket_to_id = {}
 
         self._register_sockets = {}  # {socket: object_id}
         self._unregister_sockets = set()
         self._object_id = 0
+        self._socket_count = 0
 
         if parent is not None:
             # Stop the selector if the parent goes out of scope
@@ -196,6 +191,9 @@ class SelectorThread:
 
     def stop(self):
         self._close_event.set()
+
+        # In case we're waiting for the first socket to be added:
+        self._register_event.set()
 
     def start(self):
         if self._close_event.is_set():
@@ -214,12 +212,10 @@ class SelectorThread:
             # assumption: only one sock per object
             self._object_id += 1
             self.objects[self._object_id] = target_obj
-            self.id_to_socket[self._object_id] = sock
             self.socket_to_id[sock] = self._object_id
-            weakref.finalize(target_obj,
-                             lambda obj_id=self._object_id:
-                             self._object_removed(obj_id))
             self._register_sockets[sock] = self._object_id
+            weakref.finalize(target_obj,
+                             lambda sock=sock: self.remove_socket(sock))
             # self.log.debug('Socket %s was added (obj %s)', sock, target_obj)
 
     def remove_socket(self, sock):
@@ -227,7 +223,6 @@ class SelectorThread:
             if sock not in self.socket_to_id:
                 return
             obj_id = self.socket_to_id.pop(sock)
-            del self.id_to_socket[obj_id]
             obj = self.objects.pop(obj_id, None)
             if obj is not None:
                 obj.received(b'', None)
@@ -242,28 +237,26 @@ class SelectorThread:
                 #              '(obj = %s)', sock, obj)
                 self._unregister_sockets.add(sock)
 
-    def _object_removed(self, obj_id):
-        with self._socket_map_lock:
-            if obj_id in self.id_to_socket:
-                sock = self.id_to_socket.pop(obj_id)
-                # self.log.debug('Object ID %s was destroyed: removing %s', obj_id,
-                #              sock)
-                del self.socket_to_id[sock]
-                self._unregister_sockets.add(sock)
-
     def __call__(self):
         '''Selector poll loop'''
         avail_buf = array.array('i', [0])
-        while not self._close_event.is_set():
+        while self.running:
             with self._socket_map_lock:
                 for sock in self._unregister_sockets:
                     self.selector.unregister(sock)
+                self._socket_count -= len(self._unregister_sockets)
                 self._unregister_sockets.clear()
 
                 for sock, obj_id in self._register_sockets.items():
                     self.selector.register(sock, selectors.EVENT_READ,
                                            data=obj_id)
+                self._socket_count += len(self._register_sockets)
                 self._register_sockets.clear()
+
+            if self._socket_count == 0:
+                if self._register_event.wait(timeout=0.1):
+                    self._register_event.clear()
+                continue
 
             events = self.selector.select(timeout=0.1)
             with self._socket_map_lock:
