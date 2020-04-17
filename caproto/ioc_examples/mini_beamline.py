@@ -5,6 +5,24 @@ import numpy as np
 import time
 import functools
 import math
+import contextvars
+
+internal_process = contextvars.ContextVar('internal_process',
+                                          default=False)
+
+
+def no_reentry(func):
+    @functools.wraps(func)
+    async def inner(*args, **kwargs):
+        if internal_process.get():
+            return
+        try:
+            internal_process.set(True)
+            return (await func(*args, **kwargs))
+        finally:
+            internal_process.set(False)
+
+    return inner
 
 
 def _arrayify(func):
@@ -21,12 +39,30 @@ class _JitterDetector(PVGroup):
     async def det(self, instance):
         return (await self._read(instance))
 
-    mtr = pvproperty(value=0, dtype=float, precision=3)
+    mtr = pvproperty(value=0, dtype=float, precision=3, mock_record='ai')
     exp = pvproperty(value=1, dtype=float)
 
     @exp.putter
     async def exp(self, instance, value):
         value = np.clip(value, a_min=0, a_max=None)
+        return value
+
+    @mtr.startup
+    async def mtr(self, instance, async_lib):
+        instance.ev = async_lib.library.Event()
+        instance.async_lib = async_lib
+
+    @mtr.putter
+    @no_reentry
+    async def mtr(self, instance, value):
+        disp = (value - instance.value)
+        dwell = .1
+        step_size = .1
+        N = max(1, int(disp / step_size))
+        for j in range(N):
+            await instance.write(instance.value + step_size)
+            await instance.async_lib.library.sleep(dwell)
+
         return value
 
 
