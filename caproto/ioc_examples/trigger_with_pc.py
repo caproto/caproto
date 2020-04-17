@@ -94,7 +94,7 @@ class TriggeredIOC(PVGroup):
     async def acquire(self, instance, async_lib):
         # monkey patch the instance like whoa
         instance.async_lib = async_lib
-        instance.ev = async_lib.library.Event()
+        instance.ev = async_lib.Event()
         instance.ev.set()
 
     wait = pvproperty(value=2.0)
