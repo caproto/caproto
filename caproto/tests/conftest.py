@@ -201,7 +201,7 @@ def _epics_base_ioc(prefix, request):
                 f'***********************************',
                 f'********IOC process exited!********',
                 f'******* Returned: {process.returncode} ******',
-                f'***********************************''',
+                f'***********************************',
             ])
 
             stdout, stderr = process.communicate()
