@@ -205,6 +205,8 @@ Similarly, the sentinel :class:`DISCONNECTED` is re-used as a "Command"
 allowing for consistent handling of disconnection events through the command
 queues.
 
+.. data:: DISCONNECTED
+   :noindex:
 
 The VirtualCircuit object
 =========================
