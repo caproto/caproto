@@ -2,8 +2,11 @@
 Release History
 ***************
 
-Unreleased
-==========
+v0.5.0 (2020-05-01)
+===================
+
+Changed
+-------
 
 * In the threading client, the expected signature of Subscription callbacks has
   changed from ``f(response)`` to ``f(sub, response)`` where ``sub`` is the
@@ -23,7 +26,51 @@ Unreleased
          if ...:
              sub.remove_callback(f)
 
+* In the synchronous client, the expected signature of subscription callbacks
+  has changed from ``f(response)`` to ``f(pv_name, response)``. As with the
+  similar change to the threading client described above, this change was made
+  an a backward-compatible way: the old signature is still accepted but a
+  warning is issued.
 * The detail and formatting of the log messages has been improved.
+* The ``mock_record`` keyword argument to :class:`caproto.server.pvproperty`
+  has been deprecated, in favor of the simpler ``record``.
+* EPICS record field support has been regenerated with a new database
+  definition source.  This reference ``.dbd`` file can be found in a separate
+  repository `here <https://github.com/caproto/reference-dbd>`_. These fields
+  should now be more accurate than previous releases, including some initial
+  values and better enum values, and also with basic round-trip tests verifying
+  protocol compliance for each field.
+
+Added
+-----
+
+* Added IOC server support for long string PVs.
+    - Channel Access maximum string length is 40 characters
+    - However, appending ``$`` to ``DBF_STRING`` fields (e.g.,
+      ``MY:RECORD.DESC$``) changes the request to ``DBF_CHAR``, allowing for
+      effectively unlimited length of strings.
+    - This is supported for :class:`caproto.server.pvproperty` instances which
+      are initialized with a string value (or specify
+      ``caproto.ChannelType.STRING`` as the data type).
+    - This is supported internally by way of
+      :class:`caproto._data.ChannelString`, which adds an init keyword argument
+      ``long_string_max_length``.
+* Added documentation for fields of all supported record types.
+* Tools for automatically regenerating record fields and menus via a Jinja
+  template are now included. See
+  :func:`caproto.server.conversion.generate_all_records_jinja` and
+  :func:`caproto.server.conversion.generate_all_menus_jinja` and the related
+  jinja templates in ``caproto/server``.
+
+Fixed
+-----
+
+* On OSX, the creating a :class:`threading.client.Context` pinned a CPU due to
+  a busy socket selector loop.
+* When ``EPICS_CA_ADDR_LIST`` is set and nonempty and
+  ``EPICS_CA_AUTO_ADDR_LIST=YES``, the auto-detected addresses should be used
+  *in addition to* the manually specified one. They were being used *instead*
+  (with a warning issued).
 
 v0.4.4 (2020-03-26)
 ===================
