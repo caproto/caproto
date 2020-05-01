@@ -2,8 +2,11 @@
 Release History
 ***************
 
-Unreleased
-==========
+v0.5.0 (2020-05-01)
+===================
+
+Changed
+-------
 
 * In the threading client, the expected signature of Subscription callbacks has
   changed from ``f(response)`` to ``f(sub, response)`` where ``sub`` is the
@@ -23,7 +26,27 @@ Unreleased
          if ...:
              sub.remove_callback(f)
 
+* In the synchronous client, the expected signature of subscription callbacks
+  has changed from ``f(response)`` to ``f(pv_name, response)``. As with the
+  similar change to the threading client described above, this change was made
+  an a backward-compatible way: the old signature is still accepted but a
+  warning is issued.
 * The detail and formatting of the log messages has been improved.
+
+Added
+-----
+
+* Support for long strings
+
+Fixed
+-----
+
+* On OSX, the creating a :class:`threading.client.Context` pinned a CPU due to
+  a busy socket selector loop.
+* When ``EPICS_CA_ADDR_LIST`` is set and nonempty and
+  ``EPICS_CA_AUTO_ADDR_LIST=YES``, the auto-detected addresses should be used
+  *in addition to* the manually specified one. They were being used *instead*
+  (with a warning issued).
 
 v0.4.4 (2020-03-26)
 ===================
