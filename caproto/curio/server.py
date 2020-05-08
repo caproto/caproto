@@ -11,8 +11,12 @@ from ..server.common import (VirtualCircuit as _VirtualCircuit,
                              Context as _Context)
 
 
-class ServerExit(curio.KernelExit):
-    ...
+if hasattr(curio, 'KernelExit'):
+    class ServerExit(curio.KernelExit):
+        ...
+else:
+    class ServerExit(SystemExit):
+        ...
 
 
 class Event(curio.Event):
