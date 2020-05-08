@@ -1,5 +1,4 @@
 import functools
-import threading
 
 import caproto as ca
 import curio
@@ -116,7 +115,9 @@ class Context(_Context):
     def __init__(self, pvdb, interfaces=None):
         super().__init__(pvdb, interfaces)
         self._task_group = None
-        self._stop_event = threading.Event()
+        # _stop_queue is used like a threading.Event, allowing a thread to stop
+        # the Context in :meth:`.stop`.
+        self._stop_queue = curio.UniversalQueue()
         self.command_bundle_queue = curio.Queue()
         self.subscription_queue = curio.UniversalQueue()
 
@@ -203,11 +204,11 @@ class Context(_Context):
             self._task_group = None
 
     async def _await_stop(self):
-        await curio.abide(self._stop_event.wait)
+        await self._stop_queue.get()
         await self._task_group.cancel_remaining()
 
     def stop(self):
-        self._stop_event.set()
+        self._stop_queue.put(None)
 
 
 async def start_server(pvdb, *, interfaces=None, log_pv_names=False):
