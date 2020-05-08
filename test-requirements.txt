@@ -1,6 +1,6 @@
 codecov
 coverage
-curio <1.0
+curio
 dpkt
 epics-pypdb
 flake8
