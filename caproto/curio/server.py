@@ -90,7 +90,12 @@ class VirtualCircuit(_VirtualCircuit):
         # await self.pending_tasks.cancel_remaining()
 
     async def _start_write_task(self, handle_write):
-        await self.pending_tasks.spawn(handle_write, ignore_result=True)
+        async def handle_write_wrapper():
+            try:
+                await handle_write()
+            except Exception:
+                self.log.warning('Write failed', exc_info=True)
+        await self.pending_tasks.spawn(handle_write)
 
     async def _wake_new_command(self):
         async with self.new_command_condition:
