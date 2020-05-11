@@ -95,7 +95,7 @@ class VirtualCircuit(_VirtualCircuit):
                 await handle_write()
             except Exception:
                 self.log.warning('Write failed', exc_info=True)
-        await self.pending_tasks.spawn(handle_write)
+        await self.pending_tasks.spawn(handle_write_wrapper)
 
     async def _wake_new_command(self):
         async with self.new_command_condition:
