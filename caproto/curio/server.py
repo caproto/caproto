@@ -123,6 +123,7 @@ class Context(_Context):
         # _stop_queue is used like a threading.Event, allowing a thread to stop
         # the Context in :meth:`.stop`.
         self._stop_queue = curio.UniversalQueue()
+        self._stop_requested = False
         self.command_bundle_queue = curio.Queue()
         self.subscription_queue = curio.UniversalQueue()
 
@@ -145,6 +146,14 @@ class Context(_Context):
                 self.log.debug('Broadcasting on %s:%d', interface,
                                self.ca_server_port)
                 await g.spawn(self._core_broadcaster_loop, udp_sock)
+
+    def _log_task_group_exceptions(self, task_group):
+        """Log all exceptions raised in the given :class:`curio.TaskGroup`."""
+        for task in task_group.tasks:
+            if task.exception and not isinstance(task.exception,
+                                                 curio.TaskCancelled):
+                self.log.error('Exception in task %r', task.name,
+                               exc_info=task.exception)
 
     async def run(self, *, log_pv_names=False):
         'Start the server'
@@ -186,13 +195,10 @@ class Context(_Context):
                 self.log.info('Server startup complete.')
                 if log_pv_names:
                     self.log.info('PVs available:\n%s', '\n'.join(self.pvdb))
-        except curio.TaskGroupError as ex:
-            self.log.exception('Curio server failed')
-            for task in ex:
-                self.log.error('Task %s failed: %s', task, task.exception)
-        except curio.TaskCancelled as ex:
-            self.log.info('Server task cancelled. Must shut down.')
-            raise ServerExit() from ex
+            self._log_task_group_exceptions(self._task_group)
+            if self._stop_requested:
+                self.log.info('Server task cancelled. Must shut down.')
+                raise ServerExit()
         finally:
             self.log.info('Server exiting....')
             async_lib = CurioAsyncLayer()
@@ -200,6 +206,7 @@ class Context(_Context):
                 for name, method in self.shutdown_methods.items():
                     self.log.debug('Calling shutdown method %r', name)
                     await task_group.spawn(method, async_lib)
+            self._log_task_group_exceptions(task_group)
             for sock in self.tcp_sockets.values():
                 await sock.close()
             for sock in self.udp_socks.values():
@@ -210,6 +217,7 @@ class Context(_Context):
 
     async def _await_stop(self):
         await self._stop_queue.get()
+        self._stop_requested = True
         await self._task_group.cancel_remaining()
 
     def stop(self):
