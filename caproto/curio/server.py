@@ -123,7 +123,6 @@ class Context(_Context):
         # _stop_queue is used like a threading.Event, allowing a thread to stop
         # the Context in :meth:`.stop`.
         self._stop_queue = curio.UniversalQueue()
-        self._stop_requested = False
         self.command_bundle_queue = curio.Queue()
         self.subscription_queue = curio.UniversalQueue()
 
@@ -196,9 +195,9 @@ class Context(_Context):
                 if log_pv_names:
                     self.log.info('PVs available:\n%s', '\n'.join(self.pvdb))
             self._log_task_group_exceptions(self._task_group)
-            if self._stop_requested:
-                self.log.info('Server task cancelled. Must shut down.')
-                raise ServerExit()
+        except curio.TaskCancelled as ex:
+            self.log.info('Server task cancelled. Must shut down.')
+            raise ServerExit() from ex
         finally:
             self.log.info('Server exiting....')
             async_lib = CurioAsyncLayer()
@@ -217,7 +216,6 @@ class Context(_Context):
 
     async def _await_stop(self):
         await self._stop_queue.get()
-        self._stop_requested = True
         await self._task_group.cancel_remaining()
 
     def stop(self):
