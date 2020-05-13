@@ -41,6 +41,7 @@ class _JitterDetector(PVGroup):
 
     mtr = pvproperty(value=0, dtype=float, precision=3, mock_record='ai')
     exp = pvproperty(value=1, dtype=float)
+    vel = pvproperty(value=1, dtype=float)
 
     @exp.putter
     async def exp(self, instance, value):
@@ -56,8 +57,10 @@ class _JitterDetector(PVGroup):
     @no_reentry
     async def mtr(self, instance, value):
         disp = (value - instance.value)
+        total_time = disp / self.vel.value
         dwell = .1
-        step_size = .1
+        N = total_time // dwell
+        step_size = disp / N
         N = max(1, int(disp / step_size))
         for j in range(N):
             await instance.write(instance.value + step_size)
