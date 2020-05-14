@@ -39,8 +39,11 @@ class _JitterDetector(PVGroup):
     async def det(self, instance):
         return (await self._read(instance))
 
-    mtr = pvproperty(value=0, dtype=float, precision=3, mock_record='ai')
+    mtr = pvproperty(value=0, dtype=float, precision=3, record='ai')
     exp = pvproperty(value=1, dtype=float)
+    vel = pvproperty(value=1, dtype=float)
+
+    mtr_tick_rate = pvproperty(value=10, dtype=float, units='Hz')
 
     @exp.putter
     async def exp(self, instance, value):
@@ -55,11 +58,19 @@ class _JitterDetector(PVGroup):
     @mtr.putter
     @no_reentry
     async def mtr(self, instance, value):
+        # "tick" at 10Hz
+        dwell = 1 / self.mtr_tick_rate.value
+
         disp = (value - instance.value)
-        dwell = .1
-        step_size = .1
-        N = max(1, int(disp / step_size))
+        # compute the total movement time based an velocity
+        total_time = abs(disp / self.vel.value)
+        # compute how many steps, should come up short as there will
+        # be a final write of the return value outside of this call
+        N = int(total_time // dwell)
+
         for j in range(N):
+            # hide a possible divide by 0
+            step_size = disp / N
             await instance.write(instance.value + step_size)
             await instance.async_lib.library.sleep(dwell)
 
