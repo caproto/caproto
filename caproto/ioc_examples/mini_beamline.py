@@ -39,7 +39,7 @@ class _JitterDetector(PVGroup):
     async def det(self, instance):
         return (await self._read(instance))
 
-    mtr = pvproperty(value=0, dtype=float, precision=3, mock_record='ai')
+    mtr = pvproperty(value=0, dtype=float, precision=3, record='ai')
     exp = pvproperty(value=1, dtype=float)
     vel = pvproperty(value=1, dtype=float)
 
