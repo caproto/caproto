@@ -30,7 +30,7 @@ To build a minimal container (based on Fedora) use the following bash script ::
 
 
 Running containers with podman
------------------------------
+------------------------------
 
 By default ports are not forwarded out of the container, to do so run::
 
@@ -49,7 +49,7 @@ To generate a similar image, but for the bluesky collection stack::
 
   container=$(buildah from fedora)
   buildah run $container -- dnf -y install python3 ipython3 python3-pip g++ gcc python3-PyQt5 python3-matplotlib python3-devel python3-netifaces python3-h5py python3-scipy python3-numcodecs python3-pandas
-  buildah run $container -- pip3 install ophyd databroker bluesky caproto
+  buildah run $container -- pip3 install ophyd databroker bluesky caproto[standard]
   buildah run $container -- pip3 uninstall pyepics
 
   buildah commit $container bluesky
