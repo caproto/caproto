@@ -28,20 +28,19 @@ class Event(trio.Event):
             return True
 
 
-def _universal_queue(portal, max_len=1000):
+def _universal_queue(max_len=1000):
     class UniversalQueue:
         def __init__(self):
             self._send, self._recv = open_memory_channel(max_len)
-            self.portal = portal
 
         def put(self, value):
-            self.portal.run(self._send.send, value)
+            trio.from_thread.run(self._send.send, value)
 
         async def async_put(self, value):
             await self._send.send(value)
 
         def get(self):
-            return self.portal.run(self._recv.receive)
+            return trio.from_thread.run(self._recv.receive)
 
         async def async_get(self):
             return await self._recv.receive()
@@ -51,8 +50,7 @@ def _universal_queue(portal, max_len=1000):
 
 class TrioAsyncLayer(AsyncLibraryLayer):
     def __init__(self):
-        self.portal = trio.BlockingTrioPortal()
-        self.ThreadsafeQueue = _universal_queue(self.portal)
+        self.ThreadsafeQueue = _universal_queue()
 
     name = 'trio'
     ThreadsafeQueue = None
