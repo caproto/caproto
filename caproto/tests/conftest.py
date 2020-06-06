@@ -565,7 +565,7 @@ def server(request):
                 for _ in range(15):
                     try:
                         if threaded_client:
-                            await trio.run_sync_in_worker_thread(client)
+                            await trio.to_thread.run_sync(client)
                         else:
                             await client(test_nursery, server_context)
                     except TimeoutError:
