@@ -653,9 +653,9 @@ def test_multithreaded_many_subscribe(ioc, context, thread_count,
         results = _multithreaded_exec(_test, thread_count + 1)
     except threading.BrokenBarrierError:
         if init_barrier.broken:
-            print(f'Init barrier broken!')
+            print('Init barrier broken!')
         if sub_ended_barrier.broken:
-            print(f'Sub_ended barrier broken!')
+            print('Sub_ended barrier broken!')
         raise
 
     for value_list in results:

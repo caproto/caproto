@@ -203,11 +203,11 @@ def group_to_device(group):
         yield from group_to_device(subgroup.group_cls)
 
         if isinstance(subgroup, pvfunction):
-            yield f''
+            yield ''
             yield from pvfunction_to_device_function(name, subgroup)
 
-        yield f''
-        yield f''
+        yield ''
+        yield ''
 
     if isinstance(group, PVGroup):
         group = group.__class__
@@ -220,7 +220,7 @@ def group_to_device(group):
                f"{doc})")
 
     if not group._pvs_:
-        yield f'    ...'
+        yield '    ...'
 
     for name, prop in group._pvs_.items():
         if '.' in name:
@@ -229,7 +229,7 @@ def group_to_device(group):
 
         pvspec = prop.pvspec
         doc = f', doc={pvspec.doc!r}' if pvspec.doc else ''
-        string = f', string=True' if pvspec.dtype == str else ''
+        string = ', string=True' if pvspec.dtype == str else ''
         cls = 'EpicsSignalRO' if pvspec.read_only else 'EpicsSignal'
         yield (f"    {name.lower()} = Cpt({cls}, '{pvspec.name}'" f"{string}{doc})")
         # TODO will break when full/macro-ified PVs is specified

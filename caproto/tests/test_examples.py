@@ -294,7 +294,7 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
     pvs = list(pvdb.keys())
     pv_to_check = pvs[0]
 
-    print(f'PVs:', pvs)
+    print('PVs:', pvs)
     print(f'PV to check: {pv_to_check}')
 
     stdin = (subprocess.DEVNULL if 'io_interrupt' in module_name

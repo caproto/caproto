@@ -202,7 +202,7 @@ def test_with_caput(backends, prefix, pvdb_from_server_example, server, pv,
         # args are ignored for curio and trio servers.
         print('* client put test: {} put value: {} check value: {}'
               ''.format(pv, put_value, check_value))
-        print('(client args: %s)'.format(client_args))
+        print('(client args: {})'.format(client_args))
 
         db_entry = caget_pvdb[pv]
         db_old = db_entry.value
