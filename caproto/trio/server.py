@@ -16,32 +16,59 @@ class ServerExit(Exception):
     ...
 
 
-class Event(trio.Event):
+class Event:
+    """
+    The class wraps `trio.Event` and implements `Event.clear()`
+    method that is used in the code, but deprecated in `trio`.
+    The event is cleared by creating the new event that if the
+    event is set. If the event is not set, then old event is left.
+    The class is not intended to be thread safe.
+    """
+    def __init__(self):
+        self._create_event()
+
+    def _create_event(self):
+        self._event = trio.Event()
+
+    def set(self):
+        self._event.set()
+
+    def clear(self):
+        """
+        Clearing of the event is implemented by creating a new
+        event if the event is set. It is assumed that if the event
+        is set, then it is not waited on.
+        """
+        if self._event.is_set():
+            self._create_event()
+
+    def is_set(self):
+        return self._event.is_set()
+
     async def wait(self, timeout=None):
         if timeout is not None:
             with trio.move_on_after(timeout):
-                await super().wait()
+                await self._event.wait()
                 return True
             return False
         else:
-            await super().wait()
+            await self._event.wait()
             return True
 
 
-def _universal_queue(portal, max_len=1000):
+def _universal_queue(max_len=1000):
     class UniversalQueue:
         def __init__(self):
             self._send, self._recv = open_memory_channel(max_len)
-            self.portal = portal
 
         def put(self, value):
-            self.portal.run(self._send.send, value)
+            trio.from_thread.run(self._send.send, value)
 
         async def async_put(self, value):
             await self._send.send(value)
 
         def get(self):
-            return self.portal.run(self._recv.receive)
+            return trio.from_thread.run(self._recv.receive)
 
         async def async_get(self):
             return await self._recv.receive()
@@ -51,8 +78,7 @@ def _universal_queue(portal, max_len=1000):
 
 class TrioAsyncLayer(AsyncLibraryLayer):
     def __init__(self):
-        self.portal = trio.BlockingTrioPortal()
-        self.ThreadsafeQueue = _universal_queue(self.portal)
+        self.ThreadsafeQueue = _universal_queue()
 
     name = 'trio'
     ThreadsafeQueue = None

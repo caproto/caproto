@@ -55,7 +55,7 @@ async def run_epics_base_binary(backend, *args, max_attempts=3):
     if backend == 'curio':
         raw_stdout, raw_stderr = await curio.run_in_thread(runner)
     elif backend == 'trio':
-        raw_stdout, raw_stderr = await trio.run_sync_in_worker_thread(runner)
+        raw_stdout, raw_stderr = await trio.to_thread.run_sync(runner)
     elif backend == 'asyncio':
         loop = asyncio.get_event_loop()
         raw_stdout, raw_stderr = await loop.run_in_executor(None, runner)

@@ -75,7 +75,7 @@ __all__ = (  # noqa F822
     'RecordAndField',
     'ThreadsafeCounter',
     '__version__',
-     # sentinels dynamically defined and added to globals() below
+    # sentinels dynamically defined and added to globals() below
     'CLIENT', 'SERVER', 'RESPONSE', 'REQUEST', 'NEED_DATA',
     'SEND_SEARCH_REQUEST', 'AWAIT_SEARCH_RESPONSE',
     'SEND_SEARCH_RESPONSE', 'SEND_VERSION_REQUEST',

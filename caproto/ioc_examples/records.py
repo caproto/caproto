@@ -45,7 +45,7 @@ class RecordMockingIOC(PVGroup):
     @B.fields.RVAL.putter
     async def B(fields, instance, value):
         ioc = fields.parent.group
-        print(f'B.RVAL: Writing modified values to A, B')
+        print('B.RVAL: Writing modified values to A, B')
         await ioc.B.write(value + 10)
         await ioc.A.write(value - 10)
 

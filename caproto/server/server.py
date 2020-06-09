@@ -970,7 +970,7 @@ class pvfunction(SubGroup):
                           }
                 value = await self.func(group, **kwargs)
                 await group.retval.write(value)
-                await group.status.write(f'Success')
+                await group.status.write('Success')
             except Exception as ex:
                 await group.status.write(f'{ex.__class__.__name__}: {ex}')
                 raise

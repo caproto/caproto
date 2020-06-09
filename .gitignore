@@ -11,5 +11,7 @@ doc/build
 .asv/
 pytest_bench.json
 .pytest_cache/
+.idea/
+.vscode/
 build/
 dist/

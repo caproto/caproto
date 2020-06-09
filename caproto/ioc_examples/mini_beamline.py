@@ -84,8 +84,8 @@ class PinHole(_JitterDetector):
         c = - 1 / (2 * sigma * sigma)
 
         @_arrayify
-        def jitter_read(m, e, I):
-            N = (self.parent.N_per_I_per_s * I * e *
+        def jitter_read(m, e, intensity):
+            N = (self.parent.N_per_I_per_s * intensity * e *
                  np.exp(c * (m - center)**2))
             return np.random.poisson(N)
 
@@ -101,9 +101,9 @@ class Edge(_JitterDetector):
         c = 1 / sigma
 
         @_arrayify
-        def jitter_read(m, e, I):
+        def jitter_read(m, e, intensity):
             s = math.erfc(c * (-m + center)) / 2
-            N = (self.parent.N_per_I_per_s * I * e * s)
+            N = (self.parent.N_per_I_per_s * intensity * e * s)
             return np.random.poisson(N)
 
         return jitter_read(self.mtr.value,
@@ -118,11 +118,11 @@ class Slit(_JitterDetector):
         c = 1 / sigma
 
         @_arrayify
-        def jitter_read(m, e, I):
+        def jitter_read(m, e, intensity):
             s = (math.erfc(c * (m - center)) -
                  math.erfc(c * (m + center))) / 2
 
-            N = (self.parent.N_per_I_per_s * I * e * s)
+            N = (self.parent.N_per_I_per_s * intensity * e * s)
             return np.random.poisson(N)
 
         return jitter_read(self.mtr.value,

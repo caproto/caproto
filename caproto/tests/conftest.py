@@ -198,10 +198,10 @@ def _epics_base_ioc(prefix, request):
         process.wait()
         with exit_lock:
             monitor_output.extend([
-                f'***********************************',
-                f'********IOC process exited!********',
+                '***********************************',
+                '********IOC process exited!********',
                 f'******* Returned: {process.returncode} ******',
-                f'***********************************',
+                '***********************************',
             ])
 
             stdout, stderr = process.communicate()
@@ -536,7 +536,7 @@ def server(request):
                     else:
                         break
                 else:
-                    raise TimeoutError(f"ioc failed to start")
+                    raise TimeoutError("ioc failed to start")
             finally:
                 await server_task.cancel()
 
@@ -565,7 +565,7 @@ def server(request):
                 for _ in range(15):
                     try:
                         if threaded_client:
-                            await trio.run_sync_in_worker_thread(client)
+                            await trio.to_thread.run_sync(client)
                         else:
                             await client(test_nursery, server_context)
                     except TimeoutError:
