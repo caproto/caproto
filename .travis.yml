@@ -67,7 +67,10 @@ before_install:
   - pip install pyepics numpy
 
 install:
-  - pip install --upgrade .[test]
+  - pip install .[test]
+  # This is necesary to actually upgrade the test requirements from the
+  # Travis-CI defaults, which are old.
+  - pip install --upgrade -r test-requirements.txt
   - pip install --quiet --upgrade cython
   - |
     if [ ! $INSTALL_NUMPY ]
