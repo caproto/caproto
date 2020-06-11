@@ -45,7 +45,7 @@ extras_require = {
     'async': ['asks', 'curio', 'trio>=0.12.1'],
 }
 extras_require['complete'] = sorted(set(sum(extras_require.values(), [])))
-extras_require['test'] = sorted(set(sum(list(extras_require.values()) + test_requirements)))
+extras_require['test'] = sorted(set(sum(extras_require.values(), test_requirements)))
 
 
 setup(name='caproto',
