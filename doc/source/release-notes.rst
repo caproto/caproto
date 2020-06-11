@@ -2,6 +2,23 @@
 Release History
 ***************
 
+v0.5.1 (2020-06-11)
+===================
+
+Changed
+-------
+
+* Replaced usage of deprecated trio features with recommended approaches.
+
+Added
+-----
+
+* Added ``vel`` and ``mtr_tick_rate`` pvproperties to ``PinHole``, ``Edge``
+  and ``Slit`` motors on mini beamline example, to provide control over the
+  speed of the motors.
+* Added documentation on how to build and run caproto containers using
+  ``buildah`` and ``podman``.
+
 v0.5.0 (2020-05-01)
 ===================
 
