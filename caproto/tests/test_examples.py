@@ -268,7 +268,7 @@ def test_curio_server_example(prefix, run_client):
             try:
                 await server_task.cancel()
                 await server_task.join()
-            except curio.KernelExit:
+            except ServerExit:
                 print('Server exited normally')
 
     with curio.Kernel() as kernel:
