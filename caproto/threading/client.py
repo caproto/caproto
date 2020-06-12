@@ -2105,15 +2105,23 @@ class Subscription(CallbackHandler):
     def __repr__(self):
         return f"<Subscription to {self.pv.name!r}, id={self.subscriptionid}>"
 
-    @ensure_connected
     def _subscribe(self, timeout=PV_DEFAULT_TIMEOUT):
         """This is called automatically after the first callback is added.
         """
         cm = self.pv.circuit_manager
-        ctx = cm.context
-        with ctx.subscriptions_lock:
-            ctx.subscriptions_to_activate[cm].add(self)
-        ctx.activate_subscriptions_now.set()
+        if cm is None:
+            # We are currently disconnected (perhaps have not yet connected).
+            # When the PV connects, this subscription will be added.
+            with self.callback_lock:
+                self.needs_reactivation = True
+        else:
+            # We are (or very recently were) connected. In the rare event
+            # where cm goes dead in the interim, subscription will be retried
+            # by the activation loop.
+            ctx = cm.context
+            with ctx.subscriptions_lock:
+                ctx.subscriptions_to_activate[cm].add(self)
+            ctx.activate_subscriptions_now.set()
 
     @ensure_connected
     def compose_command(self, timeout=PV_DEFAULT_TIMEOUT):
