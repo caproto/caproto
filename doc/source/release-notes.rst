@@ -2,13 +2,15 @@
 Release History
 ***************
 
-v0.5.1 (2020-06-11)
+v0.5.1 (2020-06-12)
 ===================
 
 Changed
 -------
 
 * Replaced usage of deprecated trio features with recommended approaches.
+* Updated curio-based server for compatibility with recent versions of curio.
+  It is now incompatible with curio < 1.2.
 
 Added
 -----
@@ -18,6 +20,8 @@ Added
   speed of the motors.
 * Added documentation on how to build and run caproto containers using
   ``buildah`` and ``podman``.
+* Add a new ``test`` pip selector, as in ``pip install caproto[test]``, which
+  installs ``caproto[complete]`` plus the requirements for running the tests.
 
 v0.5.0 (2020-05-01)
 ===================

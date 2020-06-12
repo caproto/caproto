@@ -1,4 +1,5 @@
 from distutils.core import setup
+from os import path
 import setuptools  # noqa F401
 import sys
 import versioneer
@@ -32,12 +33,19 @@ classifiers = [
     'License :: OSI Approved :: BSD License'
 ]
 
+here = path.abspath(path.dirname(__file__))
+
+with open(path.join(here, 'test-requirements.txt')) as requirements_file:
+    test_requirements = [line for line in requirements_file.read().splitlines()
+                         if not line.startswith('#')]
+
 
 extras_require = {
     'standard': ['netifaces', 'numpy', 'dpkt'],
-    'async': ['asks', 'curio', 'trio>=0.12.1'],
+    'async': ['asks', 'curio>=1.2', 'trio>=0.12.1'],
 }
 extras_require['complete'] = sorted(set(sum(extras_require.values(), [])))
+extras_require['test'] = sorted(set(sum(extras_require.values(), test_requirements)))
 
 
 setup(name='caproto',
