@@ -1,5 +1,15 @@
-include generate_headers.py
-include headers.tpl
-include versioneer.py
+include CONTRIBUTING.rst
+include LICENSE
+include README.md
 include caproto/_version.py
 include caproto/server/*.jinja2
+include doc-requirements.txt
+include generate_headers.py
+include headers.tpl
+include test-requirements.txt
+include versioneer.py
+
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]
+
+recursive-include docs *.rst *.py Makefile make.bat
