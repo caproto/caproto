@@ -12,4 +12,4 @@ include versioneer.py
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]
 
-recursive-include docs *.rst *.py Makefile make.bat
+recursive-include doc *.rst *.py Makefile make.bat
