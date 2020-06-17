@@ -1,5 +1,6 @@
 include CONTRIBUTING.rst
 include LICENSE
+include MANIFEST.in
 include README.md
 include caproto/_version.py
 include caproto/server/*.jinja2
