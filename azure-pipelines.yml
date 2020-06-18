@@ -61,7 +61,7 @@ jobs:
 
   - bash: |
       python -m pip install --upgrade pip
-      pip install -r test-requirements.txt
+      pip install -r requirements-test.txt
       pip install git+https://github.com/klauer/catvs.git@py3k
       pip install pyepics numpy
       pip install --quiet --upgrade cython

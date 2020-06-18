@@ -35,7 +35,7 @@ classifiers = [
 
 here = path.abspath(path.dirname(__file__))
 
-with open(path.join(here, 'test-requirements.txt')) as requirements_file:
+with open(path.join(here, 'requirements-test.txt')) as requirements_file:
     test_requirements = [line for line in requirements_file.read().splitlines()
                          if not line.startswith('#')]
 

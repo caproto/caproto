@@ -57,7 +57,7 @@ build_script:
   - cmd: python --version"
   - cmd: python -c "import struct; print(struct.calcsize('P') * 8)"
   - cmd: pip install .
-  - cmd: pip install -Ur test-requirements.txt
+  - cmd: pip install -Ur requirements-test.txt
   - cmd: pip install codecov
   - cmd: ipconfig /all
 

@@ -43,7 +43,7 @@ bash .ci/run-epics-iocs.sh
 ```bash
 conda create -n caproto python=3 numpy
 source activate caproto
-pip install -r test-requirements.txt
+pip install -r requirements-test.txt
 ```
 
 7. Run the pyepics 'simulator' and continually updates some test PVs to be

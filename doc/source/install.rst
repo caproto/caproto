@@ -68,8 +68,8 @@ building the documentation:
 
 .. code-block:: bash
 
-    pip install -Ur test-requirements.txt
-    pip install -Ur docs-requirements.txt
+    pip install -Ur requirements-test.txt
+    pip install -Ur requirements-doc.txt
 
 You may also want to use `pre-commit <https://pre-commit.com/>`_. This is
 optional. It streamlines compliance with code style requirements. If you are a
