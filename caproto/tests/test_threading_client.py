@@ -777,8 +777,12 @@ def test_registration_of_connection_state_callback(context, ioc):
     def cb(pv, state):
         ...
 
-    pv, = context.get_pvs(ioc.pvs['str'], connection_state_callback=cb)
+    pv, = context.get_pvs(
+        ioc.pvs['str'],
+        connection_state_callback=cb,
+        access_rights_callback=cb)
     assert len(pv.connection_state_callback.callbacks) == 1
+    assert len(pv.access_rights_callback.callbacks) == 1
 
 
 def test_time_since_last_heard(context, ioc):
