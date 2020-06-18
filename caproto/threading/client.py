@@ -1036,8 +1036,7 @@ class Context:
                 try:
                     pv = self.pvs[(name, priority)]
                 except KeyError:
-                    pv = PV(name, priority, self, connection_state_callback,
-                            access_rights_callback, timeout)
+                    pv = PV(name, priority, self, None, None, timeout)
                     names_to_search.append(name)
                     self.pvs[(name, priority)] = pv
                     self.pvs_needing_circuits[name].add(pv)
