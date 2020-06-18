@@ -4,10 +4,10 @@ include MANIFEST.in
 include README.md
 include caproto/_version.py
 include caproto/server/*.jinja2
-include docs-requirements.txt
 include generate_headers.py
 include headers.tpl
-include test-requirements.txt
+include requirements-doc.txt
+include requirements-test.txt
 include versioneer.py
 
 recursive-exclude * __pycache__
