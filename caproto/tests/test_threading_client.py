@@ -770,6 +770,17 @@ def test_events_off_and_on(ioc, context):
     assert monitor_values[1:] == [1, 2, 3, 6, 7, 8, 9]
 
 
+def test_registration_of_connection_state_callback(context, ioc):
+    # Check for bug caught in https://github.com/caproto/caproto/issues/607
+    # wherein callback was registered twice.
+
+    def cb(pv, state):
+        ...
+
+    pv, = context.get_pvs(ioc.pvs['str'], connection_state_callback=cb)
+    assert len(pv.connection_state_callback.callbacks) == 1
+
+
 def test_time_since_last_heard(context, ioc):
     pv, = context.get_pvs(ioc.pvs['str'])
     pv.wait_for_connection(timeout=10)
