@@ -2,6 +2,19 @@
 Release History
 ***************
 
+v0.5.2 (2020-06-18)
+===================
+
+Fixed
+-----
+
+- Fixed a packaging issue introduced in 0.5.1 where some files were missing
+  in the ``sdist`` source distribution package.
+- Prevent an error from occurring when trying to subscribe, with a callback,
+  to a PV that is not yet connected. The subscription will now succeed and
+  become active once the PV is fully connected.
+- Avoid duplicate registration of callbacks in ``Context.get_pvs()``.
+
 v0.5.1 (2020-06-12)
 ===================
 
