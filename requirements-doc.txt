@@ -1,6 +1,6 @@
 doctr
 graphviz
-ipython<7
+ipython
 matplotlib
 numpydoc
 sphinx
