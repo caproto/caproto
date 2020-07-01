@@ -8,7 +8,6 @@
 # Context: has a caproto.Broadcaster, a UDP socket, a cache of
 #          search results and a cache of VirtualCircuits.
 #
-import getpass
 import logging
 import time
 
@@ -135,10 +134,11 @@ class VirtualCircuit:
 
     async def send(self, *commands):
         """
-        Process a command and tranport it over the TCP socket for this circuit.
+        Process a command and transport it over the TCP socket for this
+        circuit.
         """
         if self.connected:
-            buffers_to_send = self.circuit.send(*commands)
+            _ = self.circuit.send(*commands)
             async with self._socket_lock:
                 if self.socket is None:
                     raise RuntimeError('socket connection failed')
@@ -329,7 +329,7 @@ class SharedBroadcaster:
         self.udp_sock = ca.bcast_socket(socket_module=socket)
         # Must bind or getsocketname() will raise on Windows.
         # See https://github.com/caproto/caproto/issues/514.
-        self.udp_sock.bind(('', 0))
+        await self.udp_sock.bind(('', 0))
         self.broadcaster.our_address = safe_getsockname(self.udp_sock)
         command = self.broadcaster.register('127.0.0.1')
         await self.send(ca.EPICS_CA2_PORT, command)
