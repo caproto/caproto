@@ -32,6 +32,7 @@ class ChannelReadError(Exception):
 
 def _make_tcp_socket():
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+    # This is required because of `sock_sendall`
     s.setblocking(False)
     return s
 
@@ -336,9 +337,13 @@ class VirtualCircuit(_VirtualCircuit):
         loop = asyncio.get_running_loop()
         self.command_queue = _get_asyncio_queue(loop)
         self.new_command_condition = asyncio.Condition()
-        self._socket = _make_tcp_socket()
+        self.socket = None
         self._socket_lock = asyncio.Lock()
         self.tasks = {}
+
+    async def _get_host_name(self):
+        host, port = self.socket.getsockname()
+        return host
 
     async def send(self, *commands):
         if self.connected:
@@ -347,11 +352,12 @@ class VirtualCircuit(_VirtualCircuit):
             # to the socket while we are sending
             async with self._socket_lock:
                 await asyncio.get_running_loop().sock_sendall(
-                    self._socket, b''.join(buffers_to_send))
+                    self.socket, b''.join(buffers_to_send))
 
     async def _connect(self):
-        # very confused
-        ...
+        self.socket = _make_tcp_socket()
+        loop = asyncio.get_running_loop()
+        await loop.sock_connect(self.socket, self.circuit.address)
 
 
 class Context:
