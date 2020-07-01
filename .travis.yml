@@ -1,18 +1,13 @@
 language: python
-
+os: linux
 dist: xenial
-
-sudo:
-  - false
-  - true
-
 
 python:
   - 3.7
   - 3.8
 
 env:
-  matrix:
+  jobs:
     - ID=FLAKE8
     - ID=R314_ARRAY INSTALL_NUMPY=0 PACKAGED_DEPS=0.8.2/epics-ci-0.8.2_R3.14.12.6_pva_areadetector3-2_motor6-9.tar.bz2
     - ID=R314_NUMPY INSTALL_NUMPY=1 PACKAGED_DEPS=0.8.2/epics-ci-0.8.2_R3.14.12.6_pva_areadetector3-2_motor6-9.tar.bz2
@@ -28,13 +23,10 @@ env:
     # Doctr deploy key for caproto/caproto.github.io
     - secure: "j6XZWU6sRp74RxbwDRf0vgTyp38xnyVsX+Upsh4D9DrltQ9evSskgYl94XOTN9LVawmJTXvwy8A2Tjcy/+4SMD/snhSP3y0WpwyunA4FQoG+jmS40QB0FlamnQkNgxPv8LjP6o0nl2ZN7QdTf1/ANy813cH6ZR9Vc3JRyyHew+z6qs2u2hDqUiDhqdVq6m+FOZQGzHEdiexowJOe2w6SOS2FfqDYWtrG0IEmykctUYiMFuDxHXbqaPuu68/GNjSqTXW3bdXX//LOE2H68XRDHvbW+lnidU4G6T3SqDyvJSAiwZfxKdjYQzjvQhTCrNCwNe99ORFlHmVU4rr19+VtL68Ta5ADfHHvkmM78zCb+OPV4N6Pv2mqbtpM1Qn9h920x3lH+5i0qoK8kVocrlmRokd4nY7jyGOTX0SyYKGnBL+KXrKsPSabLO2kyW6+eHc4p4eCopZDhEg5GyXw3g1dA5w3MhfCeEY/0N/7tRBGlooFbIK4rVj7KRJxS5if6B1TKlTgilRhFvMMGMxJG2fTVjAaqrbQqtiy6GwKfCWyNYfUcB6TUpyu7jgStrGJ9lsm5VrrJR7/atlJN4E1GA0HjBWoCUn1NgH+5upjvG9Z1s9FUdp4Kqohw/0gr0CQQwvjRxyZLGKLYDNgL1gY/eBYzTjxb8t3r5+ZKFjQmldg2qk="
 
-matrix:
+jobs:
   exclude:
-    - python: 3.8
-      sudo: true
-
     - python: 3.7
-      sudo: false
+      env: ID=FLAKE8
 
 addons:
   apt:
