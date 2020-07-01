@@ -8,10 +8,10 @@ import versioneer
 # NOTE: This file must remain Python 2 compatible for the foreseeable future,
 # to ensure that we error out properly for people with outdated setuptools
 # and/or pip.
-if sys.version_info < (3, 6):
+if sys.version_info < (3, 7):
     error = """
 Caproto does not support Python 2.x, 3.0, 3.1, 3.2, 3.3, 3.4, or 3.5.
-Python 3.6 and above is required. Check your Python version like so:
+Python 3.7 and above is required. Check your Python version like so:
 
 python --version
 
