@@ -1,6 +1,5 @@
-import logging
-
 import asyncio
+import caproto as ca
 from caproto.asyncio.client import (SharedBroadcaster, Context)
 
 
@@ -60,6 +59,6 @@ async def main(pv1="simple:A", pv2="simple:B"):
 
 
 if __name__ == '__main__':
-    logging.getLogger('caproto').setLevel('DEBUG')
+    ca.config_caproto_logging(level='DEBUG')
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
