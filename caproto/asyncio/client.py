@@ -50,9 +50,7 @@ def create_datagram_protocol(parent, recv_func):
             if not data:
                 return
 
-            task = asyncio.create_task(recv_func(data, addr))
-            self._tasks = tuple(t for t in self._tasks + (task, )
-                                if not t.done())
+            recv_func(data, addr)
 
         def error_received(self, exc):
             parent.log.error('%s received error', self, exc_info=exc)
@@ -163,40 +161,21 @@ class SharedBroadcaster:
         # Must bind or getsocketname() will raise on Windows.
         # See https://github.com/caproto/caproto/issues/514.
         self.udp_sock.bind(('', 0))
-        self.broadcaster.our_address = safe_getsockname(self.udp_sock)
+        self.broadcaster.client_address = safe_getsockname(self.udp_sock)
+
         command = self.broadcaster.register('127.0.0.1')
         await self.send(ca.EPICS_CA2_PORT, command)
 
         self._tasks.append(asyncio.create_task(self._broadcaster_queue_loop()))
-        self._tasks.append(asyncio.create_task(self._broadcaster_recv_loop()))
 
-    async def _broadcaster_recv_datagram(self, bytes_received, address):
+    def _broadcaster_recv_datagram(self, bytes_received, address):
+        """create_datagram_protocol receive hook"""
         try:
             commands = self.broadcaster.recv(bytes_received, address)
         except ca.RemoteProtocolError:
             self.log.exception('Broadcaster received bad packet')
         else:
-            await self.command_queue.put((address, commands))
-
-    async def _broadcaster_recv_loop(self):
-        while True:
-            async with self._cleanup_condition:
-                if self._cleanup_event.is_set():
-                    self.udp_sock.close()
-                    self.log.debug('Exiting broadcaster recv loop')
-                    break
-
-            try:
-                bytes_received, address = await asyncio.wait_for(
-                    self.udp_sock.recvfrom(4096), timeout=0.5)
-            except asyncio.TimeoutError:
-                continue
-
-            if bytes_received:
-                if bytes_received is ca.DISCONNECTED:
-                    break
-                commands = self.broadcaster.recv(bytes_received, address)
-                await self.command_queue.send.send(commands)
+            self.command_queue.put_nowait((address, commands))
 
     async def _broadcaster_queue_loop(self):
         while True:
@@ -358,6 +337,7 @@ class VirtualCircuit(_VirtualCircuit):
         self.socket = _make_tcp_socket()
         loop = asyncio.get_running_loop()
         await loop.sock_connect(self.socket, self.circuit.address)
+        self.circuit.our_address = safe_getsockname(self.socket)
 
 
 class Context:
