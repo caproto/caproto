@@ -246,7 +246,7 @@ class SharedBroadcaster:
             await self.send(self.ca_server_port, ver_command, search_command)
             try:
                 await asyncio.wait_for(self.wait_on_new_command(), timeout=1)
-            except TimeoutError:
+            except asyncio.TimeoutError:
                 ...
         return name
 
@@ -314,14 +314,14 @@ class VirtualCircuit(_VirtualCircuit):
     def __init__(self, circuit):
         super().__init__(circuit)
         loop = asyncio.get_running_loop()
-        self.command_queue = _get_asyncio_queue(loop)
+        self.command_queue = _get_asyncio_queue(loop)()
         self.new_command_condition = asyncio.Condition()
         self.socket = None
         self._socket_lock = asyncio.Lock()
         self.tasks = {}
 
     async def _get_host_name(self):
-        host, port = self.socket.getsockname()
+        host, port = safe_getsockname(self.socket)
         return host
 
     async def send(self, *commands):
@@ -338,6 +338,86 @@ class VirtualCircuit(_VirtualCircuit):
         loop = asyncio.get_running_loop()
         await loop.sock_connect(self.socket, self.circuit.address)
         self.circuit.our_address = safe_getsockname(self.socket)
+
+        asyncio.create_task(self._receive_loop())
+        asyncio.create_task(self._command_queue_loop())
+
+    async def _receive_loop(self):
+        num_bytes_needed = 0
+        while True:
+            bytes_to_recv = max(32768, num_bytes_needed)
+
+            bytes_received = await asyncio.get_running_loop().sock_recv(
+                self.socket, bytes_to_recv)
+
+            if not len(bytes_received):
+                self.connected = False
+                break
+            commands, num_bytes_needed = self.circuit.recv(bytes_received)
+            for c in commands:
+                await self.command_queue.async_put(c)
+
+    async def _command_queue_loop(self):
+        command = None
+        while True:
+            try:
+                command = await self.command_queue.async_get()
+                self.circuit.process_command(command)
+                print('processing', command)
+            except Exception as ex:
+                self.log.error('Command queue evaluation failed: %r', command,
+                               exc_info=ex)
+                continue
+
+            if command is ca.DISCONNECTED:
+                self.log.debug('Command queue loop exiting')
+                break
+            elif isinstance(command, (ca.ReadNotifyResponse,
+                                      ca.ReadResponse,
+                                      ca.WriteNotifyResponse)):
+                user_event = self.ioids.pop(command.ioid)
+                self.ioid_data[command.ioid] = command
+                await user_event.set()
+            elif isinstance(command, ca.EventAddResponse):
+                if command.subscriptionid in self.circuit.event_add_commands:
+                    user_queue = self.subscriptionids[command.subscriptionid]
+                    await user_queue.put(command)
+                else:
+                    self.subscriptionids.pop(command.subscriptionid)
+            elif isinstance(command, ca.EventCancelResponse):
+                self.subscriptionids.pop(command.subscriptionid)
+            elif isinstance(command, ca.ErrorResponse):
+                original_req = command.original_request
+                cmd_class = ca.get_command_class(ca.CLIENT, original_req)
+                if cmd_class in (ca.ReadNotifyRequest, ca.ReadRequest,
+                                 ca.WriteNotifyRequest):
+                    ioid = original_req.parameter2
+                    user_event = self.ioids.pop(ioid)
+                    self.ioid_data[ioid] = command
+                    await user_event.set()
+            async with self.new_command_condition:
+                self.new_command_condition.notify_all()
+
+    async def send(self, *commands):
+        """
+        Process a command and transport it over the TCP socket for this
+        circuit.
+        """
+        if self.connected:
+            buffers_to_send = self.circuit.send(*commands)
+            async with self._socket_lock:
+                if self.socket is None:
+                    raise RuntimeError('socket connection failed')
+                # await ca.async_send_all(buffers_to_send, self.socket.send)
+                await asyncio.get_running_loop().sock_sendall(
+                    self.socket, b''.join(buffers_to_send))
+
+    async def _get_next_command(self):
+        return await self.command_chan.receive.receive()
+
+    async def _wake_new_command(self):
+        async with self.new_command_condition:
+            self.new_command_condition.notify_all()
 
 
 class Context:
