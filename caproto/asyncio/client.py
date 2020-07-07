@@ -132,7 +132,7 @@ class SharedBroadcaster:
         async with self._cleanup_condition:
             self._cleanup_event.set()
             self.log.debug('Broadcaster: Disconnecting the command queue loop')
-            await self.command_queue.send.send(ca.DISCONNECTED)
+            await self.command_queue.put((None, ca.DISCONNECTED))
             self.log.debug('Broadcaster: Closing the UDP socket')
             self.udp_sock = None
             self._cleanup_condition.notify_all()
@@ -184,6 +184,8 @@ class SharedBroadcaster:
                 if commands is ca.DISCONNECTED:
                     break
                 self.broadcaster.process_commands(commands)
+            except asyncio.CancelledError:
+                break
             except Exception as ex:
                 self.log.error('Broadcaster command queue evaluation failed',
                                exc_info=ex)
@@ -363,7 +365,6 @@ class VirtualCircuit(_VirtualCircuit):
             try:
                 command = await self.command_queue.async_get()
                 self.circuit.process_command(command)
-                print('processing', command)
             except Exception as ex:
                 self.log.error('Command queue evaluation failed: %r', command,
                                exc_info=ex)
@@ -377,11 +378,11 @@ class VirtualCircuit(_VirtualCircuit):
                                       ca.WriteNotifyResponse)):
                 user_event = self.ioids.pop(command.ioid)
                 self.ioid_data[command.ioid] = command
-                await user_event.set()
+                user_event.set()
             elif isinstance(command, ca.EventAddResponse):
                 if command.subscriptionid in self.circuit.event_add_commands:
                     user_queue = self.subscriptionids[command.subscriptionid]
-                    await user_queue.put(command)
+                    await user_queue.async_put(command)
                 else:
                     self.subscriptionids.pop(command.subscriptionid)
             elif isinstance(command, ca.EventCancelResponse):
@@ -394,7 +395,7 @@ class VirtualCircuit(_VirtualCircuit):
                     ioid = original_req.parameter2
                     user_event = self.ioids.pop(ioid)
                     self.ioid_data[ioid] = command
-                    await user_event.set()
+                    user_event.set()
             async with self.new_command_condition:
                 self.new_command_condition.notify_all()
 
@@ -516,3 +517,114 @@ class Context:
             await connect_outer()
 
         return channels
+
+
+class Channel:
+    """Wraps a VirtualCircuit and a caproto.ClientChannel."""
+    def __init__(self, circuit, channel):
+        self.circuit = circuit  # a VirtualCircuit
+        self.channel = channel  # a caproto.ClientChannel
+        self.last_reading = None
+        self.monitoring_queues = {}  # maps subscriptionid to Task
+        self._callback = None  # user func to call when subscriptions are run
+
+    def register_user_callback(self, func):
+        """
+        Func to be called when a subscription receives a new EventAdd command.
+
+        This function will be called by a Task in the main thread. If ``func``
+        needs to do CPU-intensive or I/O-related work, it should execute that
+        work in a separate thread of process.
+        """
+        self._callback = func
+
+    def process_subscription(self, event_add_command):
+        if self._callback is None:
+            return
+        else:
+            self._callback(event_add_command)
+
+    async def wait_for_connection(self):
+        """Wait for this Channel to be connected, ready to use.
+
+        The method ``Context.create_channel`` spawns an asynchronous task to
+        initialize the connection in the fist place. This method waits for it
+        to complete.
+        """
+        while not self.channel.states[ca.CLIENT] is ca.CONNECTED:
+            await self.wait_on_new_command()
+
+    async def disconnect(self):
+        "Disconnect this Channel."
+        if self.channel.states[ca.CLIENT] is ca.CONNECTED:
+            await self.circuit.send(self.channel.clear())
+        while self.channel.states[ca.CLIENT] is ca.MUST_CLOSE:
+            await self.wait_on_new_command()
+
+        for sub_id, queue in self.circuit.subscriptionids.items():
+            self.log.debug("Disconnecting subscription id %s", sub_id)
+            await queue.put(ca.DISCONNECTED)
+
+    async def read(self, *args, **kwargs):
+        """Request a fresh reading, wait for it, return it and stash it.
+
+        The most recent reading is always available in the ``last_reading``
+        attribute.
+        """
+        command = self.channel.read(*args, **kwargs)
+        # Stash the ioid to match the response to the request.
+        ioid = command.ioid
+        event = asyncio.Event()
+        self.circuit.ioids[ioid] = event
+        await self.circuit.send(command)
+        await event.wait()
+
+        reading = self.circuit.ioid_data.pop(ioid)
+        if isinstance(reading, (ca.ReadResponse, ca.ReadNotifyResponse)):
+            self.last_reading = reading
+            return self.last_reading
+        else:
+            raise ChannelReadError(str(reading))
+
+    async def write(self, *args, notify=False, **kwargs):
+        "Write a new value and await confirmation from the server."
+        command = self.channel.write(*args, notify=notify, **kwargs)
+        if notify:
+            # Stash the ioid to match the response to the request.
+            ioid = command.ioid
+            event = asyncio.Event()
+            self.circuit.ioids[ioid] = event
+        await self.circuit.send(command)
+        if notify:
+            await event.wait()
+            return self.circuit.ioid_data.pop(ioid)
+
+    async def subscribe(self, *args, **kwargs):
+        "Start a new subscription and spawn an async task to receive readings."
+        command = self.channel.subscribe(*args, **kwargs)
+        # Stash the subscriptionid to match the response to the request.
+        queue = _get_asyncio_queue()()
+        self.circuit.subscriptionids[command.subscriptionid] = queue
+        await self.circuit.send(command)
+
+        async def _queue_loop():
+            while True:
+                command = await queue.async_get()
+                if command is ca.DISCONNECTED:
+                    break
+                self.process_subscription(command)
+
+        # TODO: track this task
+        asyncio.create_task(_queue_loop())
+        return command.subscriptionid
+
+    async def unsubscribe(self, subscriptionid, *args, **kwargs):
+        "Cancel a subscription and await confirmation from the server."
+        await self.circuit.send(self.channel.unsubscribe(subscriptionid))
+        while subscriptionid in self.circuit.subscriptionids:
+            await self.wait_on_new_command()
+
+    async def wait_on_new_command(self):
+        '''Wait for a new command to come in'''
+        async with self.circuit.new_command_condition:
+            await self.circuit.new_command_condition.wait()

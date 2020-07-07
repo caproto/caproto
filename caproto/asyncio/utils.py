@@ -1,7 +1,10 @@
 import asyncio
 
 
-def _get_asyncio_queue(loop: asyncio.AbstractEventLoop):
+def _get_asyncio_queue(loop: asyncio.AbstractEventLoop = None):
+    if loop is None:
+        loop = asyncio.get_running_loop()
+
     class AsyncioQueue(asyncio.Queue):
         '''
         Asyncio queue modified for caproto server layer queue API compatibility

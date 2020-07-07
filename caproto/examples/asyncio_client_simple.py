@@ -17,11 +17,13 @@ async def main(pv1="simple:A", pv2="simple:B"):
     '''
 
     # Some user function to call when subscriptions receive data.
-    called = []
+    called_with = []
+    called = asyncio.Event()
 
     def user_callback(command):
         print("Subscription has received data: {}".format(command))
-        called.append(True)
+        called_with.append(command)
+        called.set()
 
     broadcaster = SharedBroadcaster()
     print('Registering with the repeater...')
@@ -40,16 +42,32 @@ async def main(pv1="simple:A", pv2="simple:B"):
     await chan1.wait_for_connection()
     await chan2.wait_for_connection()
     reading = await chan1.read()
-    print('reading:', reading)
+
+    print()
+    print('reading:', chan1.channel.name, reading)
     sub_id = await chan1.subscribe()
     await chan2.read()
+    await called.wait()
+
     await chan1.unsubscribe(sub_id)
+    print('--> writing the value 5 to', chan1.channel.name)
     await chan1.write((5,), notify=True)
     reading = await chan1.read()
-    print('reading:', reading)
+
+    print()
+    print('reading:', chan1.channel.name, reading)
+
+    print('--> writing the value 6 to', chan1.channel.name)
     await chan1.write((6,), notify=True)
+
     reading = await chan1.read()
-    print('reading:', reading)
+    print()
+    print('reading:', chan1.channel.name, reading)
+
+    reading = await chan2.read()
+    print()
+    print('reading:', chan2.channel.name, reading)
+
     await chan2.disconnect()
     await chan1.disconnect()
     assert called
@@ -59,6 +77,6 @@ async def main(pv1="simple:A", pv2="simple:B"):
 
 
 if __name__ == '__main__':
-    ca.config_caproto_logging(level='DEBUG')
+    # ca.config_caproto_logging(level='DEBUG')
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
