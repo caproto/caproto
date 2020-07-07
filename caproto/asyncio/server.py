@@ -7,7 +7,7 @@ import sys
 from ..server.common import (VirtualCircuit as _VirtualCircuit,
                              Context as _Context)
 
-from .utils import _get_asyncio_queue
+from .utils import AsyncioQueue
 
 
 class ServerExit(Exception):
@@ -29,14 +29,7 @@ class AsyncioAsyncLayer(AsyncLibraryLayer):
     ThreadsafeQueue = None
     Event = asyncio.Event
     library = asyncio
-
-    def __init__(self, loop=None):
-        super().__init__()
-
-        if loop is None:
-            loop = asyncio.get_event_loop()
-
-        self.ThreadsafeQueue = _get_asyncio_queue(loop)
+    ThreadsafeQueue = AsyncioQueue
 
 
 class VirtualCircuit(_VirtualCircuit):
@@ -124,7 +117,7 @@ class Context(_Context):
         if loop is None:
             loop = asyncio.get_event_loop()
         self.loop = loop
-        self.async_layer = AsyncioAsyncLayer(self.loop)
+        self.async_layer = AsyncioAsyncLayer()
         self._server_tasks = []
 
     async def server_accept_loop(self, sock):
@@ -241,7 +234,7 @@ class Context(_Context):
         tasks.append(self.loop.create_task(self.subscription_queue_loop()))
         tasks.append(self.loop.create_task(self.broadcast_beacon_loop()))
 
-        async_lib = AsyncioAsyncLayer(self.loop)
+        async_lib = AsyncioAsyncLayer()
         for name, method in self.startup_methods.items():
             self.log.debug('Calling startup method %r', name)
             tasks.append(self.loop.create_task(method(async_lib)))
@@ -268,7 +261,7 @@ class Context(_Context):
         finally:
             self.log.info('Server exiting....')
             shutdown_tasks = []
-            async_lib = AsyncioAsyncLayer(self.loop)
+            async_lib = AsyncioAsyncLayer()
             for name, method in self.shutdown_methods.items():
                 self.log.debug('Calling shutdown method %r', name)
                 task = self.loop.create_task(method(async_lib))
