@@ -9,21 +9,19 @@
 #          search results and a cache of VirtualCircuits.
 #
 import os
-import getpass
+# import getpass
+# import caproto as ca
 
-import caproto as ca
-
-
-class ChannelReadError(Exception):
-    ...
 
 # TODO rely on these with the threading client
+
 
 def _sentinel(name):
     class Sentinel:
         def __repr__(self):
             return name
     return Sentinel()
+
 
 CIRCUIT_DEATH_ATTEMPTS = 3
 
@@ -85,4 +83,8 @@ class DisconnectedError(ClientException):
 
 
 class ContextDisconnectedError(ClientException):
+    ...
+
+
+class DeadCircuitError(ClientException):
     ...

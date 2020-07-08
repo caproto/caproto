@@ -11,6 +11,7 @@
 import collections
 import functools
 import getpass
+import inspect
 import logging
 import threading
 import time
@@ -193,7 +194,6 @@ class SharedBroadcaster:
                 'our_address': self.broadcaster.client_address,
                 'direction': '--->>>'}
 
-        print('send', port, commands)
         for host in ca.get_address_list():
             if ':' in host:
                 host, _, port_as_str = host.partition(':')
@@ -309,7 +309,7 @@ class SharedBroadcaster:
 
                 accepted_address = ex.addresses[0]
                 other_addresses = ', '.join(
-                    '%s:%d'.format(addr) for addr in ex.addresses[1:]
+                    '%s:%d'.format(*addr) for addr in ex.addresses[1:]
                 )
 
                 search_logger.warning(
@@ -458,7 +458,7 @@ class SharedBroadcaster:
                     # distinction.
                     for circuit_manager in circuit_managers:
                         try:
-                            circuit_manager.send(ca.EchoRequest())
+                            await circuit_manager.send(ca.EchoRequest())
                         except Exception:
                             # Send failed. Server is likely dead, but we'll
                             # catch that shortly; no need to handle it
@@ -864,7 +864,7 @@ class Context:
                 for batch in batch_requests(requests(),
                                             common.EVENT_ADD_BATCH_MAX_BYTES):
                     try:
-                        cm.send(*batch)
+                        await cm.send(*batch)
                     except Exception:
                         if cm.dead.is_set():
                             self.log.debug("Circuit died while we were "
@@ -984,7 +984,9 @@ class VirtualCircuitManager:
         # keep track of all PV names that are successfully connected to within
         # this circuit. This is to be cleared upon disconnection:
         self.all_created_pvnames = []
+        self._send_on_connection = []
         self.dead = asyncio.Event()
+        self._raw_lock = asyncio.Lock()
         self._ioid_counter = ThreadsafeCounter()
         self._subscriptionid_counter = ThreadsafeCounter()
         self._ready = asyncio.Event()
@@ -1003,6 +1005,7 @@ class VirtualCircuitManager:
                                          "".format(self.circuit.states))
 
         self._tasks = _TaskHandler()
+        self._tasks.create(self._connection_ready_hook())
         self._tasks.create(self._connect(timeout=timeout))
 
     async def _connect(self, timeout):
@@ -1032,7 +1035,7 @@ class VirtualCircuitManager:
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
         # This is required because of `sock_sendall`
         self.socket.setblocking(False)
-        print('socket is', self.socket)
+
         self.circuit.our_address = safe_getsockname(self.socket)
 
         # This dict is passed to the loggers.
@@ -1068,7 +1071,6 @@ class VirtualCircuitManager:
                 f"{float(timeout):.3}-second timeout.")
 
     def _circuit_bytes_received(self, bytes_received):
-        print('received', bytes_received)
         self.last_tcp_receipt = time.monotonic()
 
         commands, num_bytes_needed = self.circuit.recv(bytes_received)
@@ -1100,24 +1102,40 @@ class VirtualCircuitManager:
     def connected(self):
         return self.circuit.states[ca.CLIENT] is ca.CONNECTED
 
-    def _socket_send(self, buffers_to_send):
-        'Send a list of buffers over the socket'
-        try:
-            return self.socket.sendmsg(buffers_to_send)
-        except BlockingIOError:
-            raise ca.SendAllRetry()
+    async def _connection_ready_hook(self):
+        await self._ready.wait()
+
+        to_send = list(self._send_on_connection)
+        self._send_on_connection.clear()
+
+        for commands, extra in to_send:
+            await self.send(*commands, extra=extra)
 
     async def send(self, *commands, extra=None):
-        # if not self.connected:
-        #     return
+        if self.dead.is_set():
+            raise common.DeadCircuitError()
+
+        if self.socket is None:
+            self._send_on_connection.append((commands, extra))
+            return
 
         # Turn the crank: inform the VirtualCircuit that these commands will be
         # send, and convert them to buffers.
         buffers_to_send = self.circuit.send(*commands, extra=extra)
+
         # lock to make sure a AddEvent does not write bytes to the socket while
         # we are sending
-        await asyncio.get_running_loop().sock_sendall(
-            self.socket, b''.join(buffers_to_send))
+        async def _socket_send(buffers_to_send):
+            'Send a list of buffers over the socket'
+            try:
+                return self.socket.sendmsg(buffers_to_send)
+            except BlockingIOError:
+                raise ca.SendAllRetry()
+
+        async with self._raw_lock:
+            await ca.async_send_all(buffers_to_send, _socket_send)
+        # await asyncio.get_running_loop().sock_sendall(
+        #     self.socket, b''.join(buffers_to_send))
 
     async def events_off(self):
         """
@@ -1244,12 +1262,10 @@ class VirtualCircuitManager:
         while True:
             try:
                 command = await self.command_queue.async_get()
-                self.circuit.process_command(command)
+                await self._process_command(command)
                 if command is ca.DISCONNECTED:
                     self.log.debug('Command queue loop exiting')
                     break
-                print('<-', command)
-                await self._process_command(command)
             except asyncio.CancelledError:
                 break
             except Exception as ex:
@@ -1360,13 +1376,15 @@ def ensure_connected(func):
                     raise ca.CaprotoTimeoutError(
                         f"{pv} could not connect within "
                         f"{float(raw_timeout):.3}-second timeout.") from None
+
                 with pv.component_lock:
                     cm = pv.circuit_manager
                     cid = cm.circuit.new_channel_id()
                     chan = ca.ClientChannel(pv.name, cm.circuit, cid=cid)
                     cm.channels[cid] = chan
                     cm.pvs[cid] = pv
-                    pv.circuit_manager.send(chan.create(), extra={'pv': pv.name})
+                    await pv.circuit_manager.send(chan.create(),
+                                                  extra={'pv': pv.name})
                     self._idle = False
             # increment the usage at the very end in case anything
             # goes wrong in the block of code above this.
@@ -1554,7 +1572,7 @@ class PV:
             return False
         return channel.states[ca.CLIENT] is ca.CONNECTED
 
-    def wait_for_search(self, *, timeout=common.PV_DEFAULT_TIMEOUT):
+    async def wait_for_search(self, *, timeout=common.PV_DEFAULT_TIMEOUT):
         """
         Wait for this PV to be found.
 
@@ -1570,14 +1588,17 @@ class PV:
         """
         if timeout is common.PV_DEFAULT_TIMEOUT:
             timeout = self.timeout
-        if not self.circuit_ready.wait(timeout=timeout):
+
+        try:
+            await asyncio.wait_for(self.circuit_ready.wait(), timeout=timeout)
+        except asyncio.TimeoutError:
             raise ca.CaprotoTimeoutError(
                 "No servers responded to a search for a channel named {!r} "
                 "within {:.3}-second timeout.".format(self.name,
                                                       float(timeout)))
 
     @ensure_connected
-    def wait_for_connection(self, *, timeout=common.PV_DEFAULT_TIMEOUT):
+    async def wait_for_connection(self, *, timeout=common.PV_DEFAULT_TIMEOUT):
         """
         Wait for this PV to be connected.
 
@@ -1588,204 +1609,209 @@ class PV:
             ``PV.timeout``, which falls back to ``PV.context.timeout`` if not
             set. If None, never timeout.
         """
-        pass
+        # NOTE: the logic happens in the wrapper.
 
-#    def go_idle(self):
-#        """Request to clear this Channel to reduce load on client and server.
-#
-#        A new Channel will be automatically, silently created the next time any
-#        method requiring a connection is called. Thus, this saves some memory
-#        in exchange for making the next request a bit slower, as it has to
-#        redo the handshake with the server first.
-#
-#        If there are any subscriptions with callbacks, this request will be
-#        ignored. If the PV is in the process of connecting, this request will
-#        be ignored.  If there are any actions in progress (read, write) this
-#        request will be processed when they are complete.
-#        """
-#        for sub in self.subscriptions.values():
-#            if sub.callbacks:
-#                return
-#        with self._in_use:
-#            if not self.channel_ready.is_set():
-#                return
-#            # Wait until no other methods that employ @self.ensure_connected
-#            # are in process.
-#            self._in_use.wait_for(lambda: self._usages == 0)
-#            # No other threads are using the connection, and we are holding the
-#            # self._in_use Condition's lock, so we can safely close the
-#            # connection. The next thread to acquire the lock will re-connect
-#            # after it acquires the lock.
-#            try:
-#                self.channel_ready.clear()
-#                self.circuit_manager.send(self.channel.clear(),
-#                                          extra={'pv': self.name})
-#            except OSError:
-#                # the socket is dead-dead, do nothing
-#                ...
-#            self._idle = True
-#
-#    @ensure_connected
-#    def read(self, *, wait=True, callback=None,
-#             timeout=PV_DEFAULT_TIMEOUT,
-#             data_type=None, data_count=None, notify=True):
-#        """Request a fresh reading.
-#
-#        Can do one or both of:
-#        - Block while waiting for the response, and return it.
-#        - Pass the response to callback, with or without blocking.
-#
-#        Parameters
-#        ----------
-#        wait : boolean
-#            If True (default) block until a matching response is
-#            received from the server. Raises CaprotoTimeoutError if that
-#            response is not received within the time specified by the `timeout`
-#            parameter.
-#        callback : callable or None
-#            Called with the response as its argument when received.
-#        timeout : number or None, optional
-#            Seconds to wait before a CaprotoTimeoutError is raised. Default is
-#            ``PV.timeout``, which falls back to ``PV.context.timeout`` if not
-#            set. If None, never timeout.
-#        data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
-#            Request specific data type or a class of data types, matched to the
-#            channel's native data type. Default is Channel's native data type.
-#        data_count : integer, optional
-#            Requested number of values. Default is the channel's native data
-#            count.
-#        notify: boolean, optional
-#            Send a ``ReadNotifyRequest`` instead of a ``ReadRequest``. True by
-#            default.
-#        """
-#        if timeout is PV_DEFAULT_TIMEOUT:
-#            timeout = self.timeout
-#        cm, chan = self._circuit_manager, self._channel
-#        ioid = cm._ioid_counter()
-#        command = chan.read(ioid=ioid, data_type=data_type,
-#                            data_count=data_count, notify=notify)
-#        # Stash the ioid to match the response to the request.
-#
-#        event = asyncio.Event()
-#        ioid_info = dict(event=event, pv=self, request=command)
-#        if callback is not None:
-#            ioid_info['callback'] = callback
-#
-#        cm.ioids[ioid] = ioid_info
-#
-#        deadline = time.monotonic() + timeout if timeout is not None else None
-#        ioid_info['deadline'] = deadline
-#        cm.send(command, extra={'pv': self.name})
-#        if not wait:
-#            return
-#
-#        # The circuit_manager will put a reference to the response into
-#        # ioid_info and then set event.
-#        if not event.wait(timeout=timeout):
-#            host, port = cm.circuit.address
-#            raise CaprotoTimeoutError(
-#                f"Server at {host}:{port} did "
-#                f"not respond to attempt to read channel named "
-#                f"{self.name!r} within {float(timeout):.3}-second timeout. "
-#                f"The ioid of the expected response is {ioid}."
-#            )
-#        if cm.dead.is_set():
-#            # This circuit has died sometime during this function call.
-#            # The exception raised here will be caught by
-#            # @ensure_connected, which will retry the function call a
-#            # in hopes of getting a working circuit until our `timeout` has
-#            # been used up.
-#            raise DeadCircuitError()
-#        return ioid_info['response']
-#
-#    @ensure_connected
-#    def write(self, data, *, wait=True, callback=None,
-#              timeout=PV_DEFAULT_TIMEOUT,
-#              notify=None, data_type=None, data_count=None):
-#        """
-#        Write a new value. Optionally, request confirmation from the server.
-#
-#        Can do one or both of:
-#        - Block while waiting for the response, and return it.
-#        - Pass the response to callback, with or without blocking.
-#
-#        Parameters
-#        ----------
-#        data : str, int, or float or any Iterable of these
-#            Value(s) to write.
-#        wait : boolean
-#            If True (default) block until a matching WriteNotifyResponse is
-#            received from the server. Raises CaprotoTimeoutError if that
-#            response is not received within the time specified by the `timeout`
-#            parameter.
-#        callback : callable or None
-#            Called with the WriteNotifyResponse as its argument when received.
-#        timeout : number or None, optional
-#            Seconds to wait before a CaprotoTimeoutError is raised. Default is
-#            ``PV.timeout``, which falls back to ``PV.context.timeout`` if not
-#            set. If None, never timeout.
-#        notify : boolean or None
-#            If None (default), set to True if wait=True or callback is set.
-#            Can be manually set to True or False. Will raise ValueError if set
-#            to False while wait=True or callback is set.
-#        data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
-#            Write specific data type or a class of data types, matched to the
-#            channel's native data type. Default is Channel's native data type.
-#        data_count : integer, optional
-#            Requested number of values. Default is the channel's native data
-#            count.
-#        """
-#        if timeout is PV_DEFAULT_TIMEOUT:
-#            timeout = self.timeout
-#        cm, chan = self._circuit_manager, self._channel
-#        if notify is None:
-#            notify = (wait or callback is not None)
-#        ioid = cm._ioid_counter()
-#        command = chan.write(data, ioid=ioid, notify=notify,
-#                             data_type=data_type, data_count=data_count)
-#        if notify:
-#            event = asyncio.Event()
-#            ioid_info = dict(event=event, pv=self, request=command)
-#            if callback is not None:
-#                ioid_info['callback'] = callback
-#
-#            cm.ioids[ioid] = ioid_info
-#
-#            deadline = time.monotonic() + timeout if timeout is not None else None
-#            ioid_info['deadline'] = deadline
-#            # do not need to lock this, locking happens in circuit command
-#        else:
-#            if wait or callback is not None:
-#                raise CaprotoValueError("Must set notify=True in order to use "
-#                                        "`wait` or `callback` because, without a "
-#                                        "notification of 'put-completion' from the "
-#                                        "server, there is nothing to wait on or to "
-#                                        "trigger a callback.")
-#        cm.send(command, extra={'pv': self.name})
-#
-#        if not wait:
-#            return
-#
-#        # The circuit_manager will put a reference to the response into
-#        # ioid_info and then set event.
-#        if not event.wait(timeout=timeout):
-#            if cm.dead.is_set():
-#                # This circuit has died sometime during this function call.
-#                # The exception raised here will be caught by
-#                # @ensure_connected, which will retry the function call a
-#                # in hopes of getting a working circuit until our `timeout` has
-#                # been used up.
-#                raise DeadCircuitError()
-#            host, port = cm.circuit.address
-#            raise CaprotoTimeoutError(
-#                f"Server at {host}:{port} did "
-#                f"not respond to attempt to write to channel named "
-#                f"{self.name!r} within {float(timeout):.3}-second timeout. "
-#                f"The ioid of the expected response is {ioid}."
-#            )
-#        return ioid_info['response']
-#
-#    def subscribe(self, data_type=None, data_count=None,
+    async def go_idle(self):
+        """Request to clear this Channel to reduce load on client and server.
+
+        A new Channel will be automatically, silently created the next time any
+        method requiring a connection is called. Thus, this saves some memory
+        in exchange for making the next request a bit slower, as it has to
+        redo the handshake with the server first.
+
+        If there are any subscriptions with callbacks, this request will be
+        ignored. If the PV is in the process of connecting, this request will
+        be ignored.  If there are any actions in progress (read, write) this
+        request will be processed when they are complete.
+        """
+        for sub in self.subscriptions.values():
+            if sub.callbacks:
+                return
+        async with self._in_use:
+            if not self.channel_ready.is_set():
+                return
+            # Wait until no other methods that employ @self.ensure_connected
+            # are in process.
+            await self._in_use.wait_for(lambda: self._usages == 0)
+            # No other threads are using the connection, and we are holding the
+            # self._in_use Condition's lock, so we can safely close the
+            # connection. The next thread to acquire the lock will re-connect
+            # after it acquires the lock.
+            try:
+                self.channel_ready.clear()
+                await self.circuit_manager.send(self.channel.clear(),
+                                                extra={'pv': self.name})
+            except OSError:
+                # the socket is dead-dead, do nothing
+                ...
+            self._idle = True
+
+    @ensure_connected
+    async def read(self, *, wait=True, callback=None,
+                   timeout=common.PV_DEFAULT_TIMEOUT, data_type=None,
+                   data_count=None, notify=True):
+        """Request a fresh reading.
+
+        Can do one or both of:
+        - Block while waiting for the response, and return it.
+        - Pass the response to callback, with or without blocking.
+
+        Parameters
+        ----------
+        wait : boolean
+            If True (default) block until a matching response is
+            received from the server. Raises CaprotoTimeoutError if that
+            response is not received within the time specified by the `timeout`
+            parameter.
+        callback : callable or None
+            Called with the response as its argument when received.
+        timeout : number or None, optional
+            Seconds to wait before a CaprotoTimeoutError is raised. Default is
+            ``PV.timeout``, which falls back to ``PV.context.timeout`` if not
+            set. If None, never timeout.
+        data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
+            Request specific data type or a class of data types, matched to the
+            channel's native data type. Default is Channel's native data type.
+        data_count : integer, optional
+            Requested number of values. Default is the channel's native data
+            count.
+        notify: boolean, optional
+            Send a ``ReadNotifyRequest`` instead of a ``ReadRequest``. True by
+            default.
+        """
+        if timeout is common.PV_DEFAULT_TIMEOUT:
+            timeout = self.timeout
+        cm, chan = self._circuit_manager, self._channel
+        ioid = cm._ioid_counter()
+        command = chan.read(ioid=ioid, data_type=data_type,
+                            data_count=data_count, notify=notify)
+        # Stash the ioid to match the response to the request.
+
+        event = asyncio.Event()
+        ioid_info = dict(event=event, pv=self, request=command)
+        if callback is not None:
+            ioid_info['callback'] = callback
+
+        cm.ioids[ioid] = ioid_info
+
+        deadline = time.monotonic() + timeout if timeout is not None else None
+        ioid_info['deadline'] = deadline
+        await cm.send(command, extra={'pv': self.name})
+        if not wait:
+            return
+
+        # The circuit_manager will put a reference to the response into
+        # ioid_info and then set event.
+        try:
+            await asyncio.wait_for(event.wait(), timeout=timeout)
+        except asyncio.TimeoutError:
+            host, port = cm.circuit.address
+            raise ca.CaprotoTimeoutError(
+                f"Server at {host}:{port} did "
+                f"not respond to attempt to read channel named "
+                f"{self.name!r} within {float(timeout):.3}-second timeout. "
+                f"The ioid of the expected response is {ioid}."
+            )
+
+        if cm.dead.is_set():
+            # This circuit has died sometime during this function call.
+            # The exception raised here will be caught by
+            # @ensure_connected, which will retry the function call a
+            # in hopes of getting a working circuit until our `timeout` has
+            # been used up.
+            raise common.DeadCircuitError()
+        return ioid_info['response']
+
+    @ensure_connected
+    async def write(self, data, *, wait=True, callback=None,
+                    timeout=common.PV_DEFAULT_TIMEOUT, notify=None,
+                    data_type=None, data_count=None):
+        """
+        Write a new value. Optionally, request confirmation from the server.
+
+        Can do one or both of:
+        - Block while waiting for the response, and return it.
+        - Pass the response to callback, with or without blocking.
+
+        Parameters
+        ----------
+        data : str, int, or float or any Iterable of these
+            Value(s) to write.
+        wait : boolean
+            If True (default) block until a matching WriteNotifyResponse is
+            received from the server. Raises CaprotoTimeoutError if that
+            response is not received within the time specified by the `timeout`
+            parameter.
+        callback : callable or None
+            Called with the WriteNotifyResponse as its argument when received.
+        timeout : number or None, optional
+            Seconds to wait before a CaprotoTimeoutError is raised. Default is
+            ``PV.timeout``, which falls back to ``PV.context.timeout`` if not
+            set. If None, never timeout.
+        notify : boolean or None
+            If None (default), set to True if wait=True or callback is set.
+            Can be manually set to True or False. Will raise ValueError if set
+            to False while wait=True or callback is set.
+        data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
+            Write specific data type or a class of data types, matched to the
+            channel's native data type. Default is Channel's native data type.
+        data_count : integer, optional
+            Requested number of values. Default is the channel's native data
+            count.
+        """
+        if timeout is common.PV_DEFAULT_TIMEOUT:
+            timeout = self.timeout
+        cm, chan = self._circuit_manager, self._channel
+        if notify is None:
+            notify = (wait or callback is not None)
+        ioid = cm._ioid_counter()
+        command = chan.write(data, ioid=ioid, notify=notify,
+                             data_type=data_type, data_count=data_count)
+        if notify:
+            event = asyncio.Event()
+            ioid_info = dict(event=event, pv=self, request=command)
+            if callback is not None:
+                ioid_info['callback'] = callback
+
+            cm.ioids[ioid] = ioid_info
+
+            deadline = time.monotonic() + timeout if timeout is not None else None
+            ioid_info['deadline'] = deadline
+            # do not need to lock this, locking happens in circuit command
+        else:
+            if wait or callback is not None:
+                raise ca.CaprotoValueError(
+                    "Must set notify=True in order to use `wait` or `callback`"
+                    " because, without a notification of 'put-completion' from"
+                    " the server, there is nothing to wait on or to trigger a"
+                    " callback.")
+        await cm.send(command, extra={'pv': self.name})
+
+        if not wait:
+            return
+
+        # The circuit_manager will put a reference to the response into
+        # ioid_info and then set event.
+        try:
+            await asyncio.wait_for(event.wait(), timeout=timeout)
+        except asyncio.TimeoutError:
+            if cm.dead.is_set():
+                # This circuit has died sometime during this function call.
+                # The exception raised here will be caught by
+                # @ensure_connected, which will retry the function call a
+                # in hopes of getting a working circuit until our `timeout` has
+                # been used up.
+                raise common.DeadCircuitError()
+            host, port = cm.circuit.address
+            raise ca.CaprotoTimeoutError(
+                f"Server at {host}:{port} did "
+                f"not respond to attempt to write to channel named "
+                f"{self.name!r} within {float(timeout):.3}-second timeout. "
+                f"The ioid of the expected response is {ioid}."
+            )
+        return ioid_info['response']
+
+#    async def subscribe(self, data_type=None, data_count=None,
 #                  low=0.0, high=0.0, to=0.0, mask=None):
 #        """
 #        Start a new subscription to which user callback may be added.
@@ -1847,7 +1873,7 @@ class PV:
 #            sub.clear()
 #
 #    @ensure_connected
-#    def time_since_last_heard(self, timeout=PV_DEFAULT_TIMEOUT):
+#    async def time_since_last_heard(self, timeout=common.PV_DEFAULT_TIMEOUT):
 #        """
 #        Seconds since last message from the server that provides this channel.
 #
@@ -1874,11 +1900,6 @@ class PV:
 #        """
 #        address = self.circuit_manager.circuit.address
 #        return self.context.broadcaster.time_since_last_heard()[address]
-#
-#    # def __hash__(self):
-#    #     return id((self.context, self.circuit_manager, self.name))
-#
-#
 
 
 class CallbackHandler:
@@ -1890,54 +1911,53 @@ class CallbackHandler:
         self.callback_lock = threading.RLock()
         self._last_call_values = None
 
-#     def add_callback(self, func, run=False):
-#
-#         def removed(_):
-#             self.remove_callback(cb_id)  # defined below inside the lock
-#
-#         if inspect.ismethod(func):
-#             ref = weakref.WeakMethod(func, removed)
-#         else:
-#             # TODO: strong reference to non-instance methods?
-#             ref = weakref.ref(func, removed)
-#
-#         with self.callback_lock:
-#             cb_id = self._callback_id
-#             self._callback_id += 1
-#             self.callbacks[cb_id] = ref
-#
-#         if run and self._last_call_values is not None:
-#             with self.callback_lock:
-#                 args, kwargs = self._last_call_values
-#             self.process(*args, **kwargs)
-#         return cb_id
-#
-#     def remove_callback(self, token):
-#         with self.callback_lock:
-#             self.callbacks.pop(token, None)
-#
-#     def process(self, *args, **kwargs):
-#         """
-#         This is a fast operation that submits jobs to the Context's
-#         ThreadPoolExecutor and then returns.
-#         """
-#         to_remove = []
-#         with self.callback_lock:
-#             callbacks = list(self.callbacks.items())
-#             self._last_call_values = (args, kwargs)
-#
-#         for cb_id, ref in callbacks:
-#             callback = ref()
-#             if callback is None:
-#                 to_remove.append(cb_id)
-#                 continue
-#
-#             self.pv.circuit_manager.user_callback_executor.submit(
-#                 callback, *args, **kwargs)
-#
-#         with self.callback_lock:
-#             for remove_id in to_remove:
-#                 self.callbacks.pop(remove_id, None)
+    def add_callback(self, func, run=False):
+        def removed(_):
+            self.remove_callback(cb_id)  # defined below inside the lock
+
+        if inspect.ismethod(func):
+            ref = weakref.WeakMethod(func, removed)
+        else:
+            # TODO: strong reference to non-instance methods?
+            ref = weakref.ref(func, removed)
+
+        with self.callback_lock:
+            cb_id = self._callback_id
+            self._callback_id += 1
+            self.callbacks[cb_id] = ref
+
+        if run and self._last_call_values is not None:
+            with self.callback_lock:
+                args, kwargs = self._last_call_values
+            self.process(*args, **kwargs)
+        return cb_id
+
+    def remove_callback(self, token):
+        with self.callback_lock:
+            self.callbacks.pop(token, None)
+
+    def process(self, *args, **kwargs):
+        """
+        This is a fast operation that submits jobs to the Context's
+        ThreadPoolExecutor and then returns.
+        """
+        to_remove = []
+        with self.callback_lock:
+            callbacks = list(self.callbacks.items())
+            self._last_call_values = (args, kwargs)
+
+        for cb_id, ref in callbacks:
+            callback = ref()
+            if callback is None:
+                to_remove.append(cb_id)
+                continue
+
+            self.pv.circuit_manager.user_callback_executor.submit(
+                callback, *args, **kwargs)
+
+        with self.callback_lock:
+            for remove_id in to_remove:
+                self.callbacks.pop(remove_id, None)
 
 
 class Subscription(CallbackHandler):
@@ -1974,7 +1994,7 @@ class Subscription(CallbackHandler):
 #     def __repr__(self):
 #         return f"<Subscription to {self.pv.name!r}, id={self.subscriptionid}>"
 #
-#     def _subscribe(self, timeout=PV_DEFAULT_TIMEOUT):
+#     def _subscribe(self, timeout=common.PV_DEFAULT_TIMEOUT):
 #         """This is called automatically after the first callback is added.
 #         """
 #         cm = self.pv.circuit_manager
@@ -1993,7 +2013,7 @@ class Subscription(CallbackHandler):
 #             ctx.activate_subscriptions_now.set()
 #
 #     @ensure_connected
-#     def compose_command(self, timeout=PV_DEFAULT_TIMEOUT):
+#     def compose_command(self, timeout=common.PV_DEFAULT_TIMEOUT):
 #         "This is used by the Context to re-subscribe in bulk after dropping."
 #         with self.callback_lock:
 #             if not self.callbacks:
@@ -2022,7 +2042,7 @@ class Subscription(CallbackHandler):
 #         # Once self.callbacks is empty, self.remove_callback calls
 #         # self._unsubscribe for us.
 #
-#     def _unsubscribe(self, timeout=PV_DEFAULT_TIMEOUT):
+#     def _unsubscribe(self, timeout=common.PV_DEFAULT_TIMEOUT):
 #         """
 #         This is automatically called if the number of callbacks goes to 0.
 #         """
@@ -2041,7 +2061,7 @@ class Subscription(CallbackHandler):
 #             except ca.CaprotoKeyError:
 #                 pass
 #             else:
-#                 self.pv.circuit_manager.send(command, extra={'pv': self.pv.name})
+#                 await self.pv.circuit_manager.send(command, extra={'pv': self.pv.name})
 #
 #     def process(self, command):
 #         # TODO here i think we can decouple PV update rates and callback

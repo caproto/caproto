@@ -226,14 +226,13 @@ class SearchResults:
                 return
 
             if interval < last_beacon['interval'] / 4:
-                # Beacons are arriving *faster*? The server at this
-                # address may have restarted.
+                # Beacons are arriving *faster*? The server at this address may
+                # have restarted.
                 self.beacon_log.info(
                     "Beacon anomaly: %s:%d may have restarted.", *address,
                     # extra=TODO
                 )
                 self.new_server_found(address)
-            self.last_beacon_interval[address] = interval
 
         self.last_beacon[address] = {
             'time': now,

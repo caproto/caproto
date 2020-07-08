@@ -46,7 +46,7 @@ async def main(pv1="simple:A", pv2="simple:B"):
     print('reading:', chan1.channel.name, reading)
     # sub_id = await chan1.subscribe()
     await chan2.read()
-    await called.wait()
+    # await called.wait()
 
     # await chan1.unsubscribe(sub_id)
     print('--> writing the value 5 to', chan1.channel.name)
@@ -67,8 +67,8 @@ async def main(pv1="simple:A", pv2="simple:B"):
     print()
     print('reading:', chan2.channel.name, reading)
 
-    await chan2.disconnect()
-    await chan1.disconnect()
+    await chan2.go_idle()
+    await chan1.go_idle()
     assert called
     print('Done')
     await broadcaster.disconnect()
