@@ -1235,6 +1235,7 @@ class Context:
 
             # disconnect the underlying state machine
             self.broadcaster.remove_listener(self)
+            # (TODO) double remove0
 
             self.log.debug("Stopping SelectorThread of the context")
             self.selector.stop()
