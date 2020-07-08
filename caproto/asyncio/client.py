@@ -667,6 +667,7 @@ class Context:
 
     async def disconnect(self):
         self._user_disconnected = True
+        # TODO
         # try:
         #     # self._close_event.set()
         #     # disconnect any circuits we have
@@ -795,7 +796,7 @@ class Context:
                                           *names_to_search)
         return pvs
 
-    def reconnect(self, keys):
+    async def reconnect(self, keys):
         # We will reuse the same PV object but use a new cid.
         names = []
         pvs = []
@@ -806,13 +807,15 @@ class Context:
             pvs.append(pv)
             name, _ = key
             names.append(name)
+
             # If there is a cached search result for this name, expire it.
-            with self.broadcaster._search_lock:
-                self.broadcaster.search_results.pop(name, None)
+            self.broadcaster.results.invalidate_by_name(name)
+
             with self.pv_cache_lock:
                 self.pvs_needing_circuits[name].add(pv)
 
-        self.broadcaster.search(self._search_results_queue, *names)
+        if names:
+            await self.broadcaster.search(self._search_results_queue, *names)
 
     async def _activate_subscriptions(self):
         with self.subscriptions_lock:
@@ -943,6 +946,9 @@ class _CallbackExecutor:
         self.tasks.create(self._callback_loop())
         self.log = log
 
+    async def shutdown(self):
+        await self.tasks.cancel_all()
+
     async def _callback_loop(self):
         loop = asyncio.get_running_loop()
         # self.user_callback_executor = concurrent.futures.ThreadPoolExecutor(
@@ -952,7 +958,6 @@ class _CallbackExecutor:
 
         while True:
             callback, args, kwargs = await self.callbacks.async_get()
-            print('running callback', callback, args, kwargs)
             if inspect.iscoroutinefunction(callback):
                 try:
                     await callback(*args, **kwargs)
@@ -979,7 +984,7 @@ class VirtualCircuitManager:
     # """
     # __slots__ = ('context', 'circuit', 'channels', 'ioids', '_ioid_counter',
     #              'subscriptions', '_ready', 'log',
-    #              'socket', 'selector', 'pvs', 'all_created_pvnames',
+    #              'socket', 'selector', 'pvs',
     #              'dead', 'process_queue', 'processing',
     #              '_subscriptionid_counter', 'user_callback_executor',
     #              'last_tcp_receipt', '__weakref__', '_tags')
@@ -993,26 +998,26 @@ class VirtualCircuitManager:
         self.ioids = {}  # map ioid to Channel and info dict
         self.subscriptions = {}  # map subscriptionid to Subscription
         self.socket = None
-        self.user_callback_executor = _CallbackExecutor(self.log)
-        self.last_tcp_receipt = 0.0
-        # keep track of all PV names that are successfully connected to within
-        # this circuit. This is to be cleared upon disconnection:
-        self.all_created_pvnames = []
-        self._send_on_connection = []
-        self.dead = asyncio.Event()
-        self._raw_lock = asyncio.Lock()
-        self._ioid_counter = ThreadsafeCounter()
-        self._subscriptionid_counter = ThreadsafeCounter()
-        self._ready = asyncio.Event()
-        self.command_queue = AsyncioQueue()
         self._connection_made = asyncio.Event()
+        self._ioid_counter = ThreadsafeCounter()
+        self._raw_lock = asyncio.Lock()
+        self._ready = asyncio.Event()
+        self._send_on_connection = []
+        self._subscriptionid_counter = ThreadsafeCounter()
+        self.command_queue = AsyncioQueue()
+        self.dead = asyncio.Event()
+        self.last_tcp_receipt = 0.0
+        self.user_callback_executor = _CallbackExecutor(self.log)
         self._transport_protocol_factory = create_stream_protocol(
             self, self._circuit_connection_change,
             self._circuit_bytes_received)
-        self._tags = {'their_address': self.circuit.address,
-                      'our_address': 'unset:0',
-                      'direction': '<<<---',
-                      'role': repr(self.circuit.our_role)}
+
+        self._tags = {
+            'their_address': self.circuit.address,
+            'our_address': 'unset:0',
+            'direction': '<<<---',
+            'role': repr(self.circuit.our_role)
+        }
 
         if self.circuit.states[ca.SERVER] is not ca.IDLE:
             raise ca.CaprotoRuntimeError("Cannot connect. States are {} "
@@ -1099,7 +1104,6 @@ class VirtualCircuitManager:
             self._connection_made.set()
         else:
             self.command_queue.put(ca.DISCONNECTED)
-            # self._disconnected()
 
     @property
     def server_protocol_version(self):
@@ -1187,7 +1191,7 @@ class VirtualCircuitManager:
 
         tags = self._tags
         if command is ca.DISCONNECTED:
-            self._disconnected()
+            await self._disconnected()
         elif isinstance(command, (ca.VersionResponse,)):
             assert self.connected  # double-check that the state machine agrees
             self._ready.set()
@@ -1244,7 +1248,9 @@ class VirtualCircuitManager:
         elif isinstance(command, ca.CreateChanResponse):
             pv = self.pvs[command.cid]
             chan = self.channels[command.cid]
-            self.all_created_pvnames.append(pv.name)
+            self._search_results.mark_channel_created(
+                pv.name, self.circuit.address)
+
             with pv.component_lock:
                 pv.channel = chan
                 pv.channel_ready.set()
@@ -1258,6 +1264,9 @@ class VirtualCircuitManager:
             tags = tags.copy()
             tags['pv'] = pv.name
             # NOTE: pv remains valid until server goes down
+            # TODO: or do we not assume the server will remove it?
+            # self._search_results.mark_channel_disconnected(
+            #     pv.name, self.circuit.address)
         elif isinstance(command, ca.EchoResponse):
             # The important effect here is that it will have updated
             # self.last_tcp_receipt when the bytes flowed through
@@ -1290,7 +1299,11 @@ class VirtualCircuitManager:
             # async with self.new_command_condition:
             #     self.new_command_condition.notify_all()
 
-    def _disconnected(self, *, reconnect=True):
+    @property
+    def _search_results(self):
+        return self.context.broadcaster.results
+
+    async def _disconnected(self, *, reconnect=True):
         # Ensure that this method is idempotent.
         if self.dead.is_set():
             return
@@ -1312,11 +1325,9 @@ class VirtualCircuitManager:
             if event is not None:
                 event.set()
 
-        with self.context.broadcaster._search_lock:
-            for n in self.all_created_pvnames:
-                self.context.broadcaster.results.pop(n, None)
+        # Remove server + channels marked as created from the search results:
+        self._search_results.mark_server_disconnected(self.circuit.address)
 
-        self.all_created_pvnames.clear()
         for pv in self.pvs.values():
             pv.connection_state_changed('disconnected', None)
         # Remove VirtualCircuitManager from Context.
@@ -1325,9 +1336,7 @@ class VirtualCircuitManager:
         self.context.circuit_managers.pop(self.circuit.address, None)
 
         # Clean up the socket if it has not yet been cleared:
-        sock, self.socket = self.socket, None
-        if sock is not None:
-            self.selector.remove_socket(sock)
+        async def shutdown_old_socket(sock):
             try:
                 sock.shutdown(socket.SHUT_WR)
             except OSError:
@@ -1335,22 +1344,31 @@ class VirtualCircuitManager:
 
             sock.close()
 
+        sock, self.socket = self.socket, None
+
+        if sock is not None:
+            self._tasks.create(shutdown_old_socket(sock))
+
         tags = {'their_address': self.circuit.address}
         if reconnect:
             # Kick off attempt to reconnect all PVs via fresh circuit(s).
-            self.log.debug('Kicking off reconnection attempts for %d PVs '
-                           'disconnected from %s:%d....',
-                           len(self.channels), *self.circuit.address, extra=tags)
-            self.context.reconnect(((chan.name, chan.circuit.priority)
-                                    for chan in self.channels.values()))
+            self.log.debug(
+                'Kicking off reconnection attempts for %d PVs disconnected '
+                'from %s:%d....',
+                len(self.channels), *self.circuit.address, extra=tags)
+            await self.context.reconnect(
+                ((chan.name, chan.circuit.priority)
+                 for chan in self.channels.values())
+            )
         else:
             self.log.debug('Not attempting reconnection', extra=tags)
 
-        self.log.debug("Shutting down ThreadPoolExecutor for user callbacks", extra=tags)
-        self.user_callback_executor.shutdown()
+        self.log.debug("Shutting down ThreadPoolExecutor for user callbacks",
+                       extra=tags)
+        await self.user_callback_executor.shutdown()
 
-    def disconnect(self):
-        self._disconnected()
+    async def disconnect(self):
+        await self._disconnected()
         if self.socket is None:
             return
 

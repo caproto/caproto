@@ -21,10 +21,10 @@ async def main(pv1="simple:A", pv2="simple:B"):
     called = asyncio.Event()
 
     def user_callback(pv, command):
-        print("Sync subscription has received data: {}".format(command))
+        print(f"Sync subscription has received data: {command.data}")
 
     async def user_async_callback(pv, command):
-        print("Subscription has received data: {}".format(command))
+        print(f"Subscription has received data: {command.data}")
         called_with.append(command)
         called.set()
 
@@ -42,8 +42,8 @@ async def main(pv1="simple:A", pv2="simple:B"):
 
         async for value in sub:
             print('* Subscription value from async for:')
-            print(value)
-            break
+            print(value.data)
+            break  # TODO: don't leave this commented while committing, ... ok?
 
         reading = await chan1.read()
 
@@ -70,7 +70,6 @@ async def main(pv1="simple:A", pv2="simple:B"):
     print()
     print('reading:', chan2.channel.name, reading)
 
-    # TODO
     print('last heard', chan1.time_since_last_heard())
     await chan2.go_idle()
     await chan1.go_idle()

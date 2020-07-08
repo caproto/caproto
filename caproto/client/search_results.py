@@ -109,9 +109,6 @@ class SearchResults:
             dont_clash_with=self._unanswered_searches,
         )
         self._search_id_counter.lock = self._lock  # use our lock
-        self._unresponsive_servers_to_check = collections.deque([])
-        self._unresponsive_servers_checking = {}
-        self._last_unresponsive_update = 0
 
     @_locked
     def get_last_beacon_times(self):
@@ -220,9 +217,15 @@ class SearchResults:
 
     @_locked
     def mark_server_disconnected(self, addr):
-        'Server disconnected; update all status'
+        'Server disconnected; update all associated channels'
         for name in self.addr_to_names.pop(addr, []):
             self.name_to_addrs[name].pop(addr, None)
+
+    @_locked
+    def invalidate_by_name(self, name):
+        'Invalidate all cached results associated with the given name'
+        for addr in self.name_to_addrs.get(name, []):
+            self.addr_to_names[addr].pop(name)
 
     @_locked
     def mark_name_found(self, name, addr):
