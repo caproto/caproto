@@ -8,9 +8,8 @@
 # Context: has a caproto.Broadcaster, a UDP socket, a cache of
 #          search results and a cache of VirtualCircuits.
 #
+import inspect
 import os
-# import getpass
-# import caproto as ca
 
 
 # TODO rely on these with the threading client
@@ -88,3 +87,16 @@ class ContextDisconnectedError(ClientException):
 
 class DeadCircuitError(ClientException):
     ...
+
+
+# The signature of caproto._circuit.ClientChannel.subscribe, which is used to
+# resolve the (args, kwargs) of a Subscription into a unique key.
+Parameter = inspect.Parameter
+SUBSCRIBE_SIG = inspect.Signature([
+    Parameter('data_type', Parameter.POSITIONAL_OR_KEYWORD, default=None),
+    Parameter('data_count', Parameter.POSITIONAL_OR_KEYWORD, default=None),
+    Parameter('low', Parameter.POSITIONAL_OR_KEYWORD, default=0),
+    Parameter('high', Parameter.POSITIONAL_OR_KEYWORD, default=0),
+    Parameter('to', Parameter.POSITIONAL_OR_KEYWORD, default=0),
+    Parameter('mask', Parameter.POSITIONAL_OR_KEYWORD, default=None)
+])

@@ -20,7 +20,7 @@ async def main(pv1="simple:A", pv2="simple:B"):
     called_with = []
     called = asyncio.Event()
 
-    def user_callback(command):
+    async def user_callback(pv, command):
         print("Subscription has received data: {}".format(command))
         called_with.append(command)
         called.set()
@@ -35,8 +35,11 @@ async def main(pv1="simple:A", pv2="simple:B"):
     await ctx.search(pv2)
     # Send out connection requests without waiting for responses...
     chan1, chan2 = await ctx.get_pvs(pv1, pv2)
+
     # Set up a function to call when subscriptions are received.
-    # chan1.register_user_callback(user_callback)
+    sub = await chan1.subscribe()
+    sub.add_callback(user_callback)
+
     # ...and then wait for all the responses.
     await chan1.wait_for_connection()
     await chan2.wait_for_connection()
@@ -44,11 +47,11 @@ async def main(pv1="simple:A", pv2="simple:B"):
 
     print()
     print('reading:', chan1.channel.name, reading)
-    # sub_id = await chan1.subscribe()
     await chan2.read()
-    # await called.wait()
+    await called.wait()
 
-    # await chan1.unsubscribe(sub_id)
+    await sub.clear()
+
     print('--> writing the value 5 to', chan1.channel.name)
     await chan1.write((5,), notify=True)
     reading = await chan1.read()
@@ -67,6 +70,8 @@ async def main(pv1="simple:A", pv2="simple:B"):
     print()
     print('reading:', chan2.channel.name, reading)
 
+    # TODO
+    # print('last heard', chan1.time_since_last_heard())
     await chan2.go_idle()
     await chan1.go_idle()
     assert called

@@ -639,8 +639,7 @@ class Context:
         self._tasks = _TaskHandler()
 
         self._tasks.create(self._process_search_results_loop())
-        # TODO
-        # self._tasks.create(self._activate_subscriptions())
+        self._tasks.create(self._activate_subscriptions_loop())
 
     def __repr__(self):
         return (f"<Context "
@@ -843,42 +842,53 @@ class Context:
         self.broadcaster.search(self._search_results_queue, *names)
 
     async def _activate_subscriptions(self):
-        while not self._close_event.is_set():
+        with self.subscriptions_lock:
+            items = list(self.subscriptions_to_activate.items())
+            self.subscriptions_to_activate.clear()
+
+        for cm, subs in items:
+            async def requests():
+                "Yield EventAddRequest commands."
+                requests = []
+                for sub in subs:
+                    command = await sub.compose_command()
+                    # compose_command() returns None if this Subscription
+                    # is inactive (meaning there are no user callbacks
+                    # attached). It will send an EventAddRequest on its own
+                    # if/when the user does add any callbacks, so we can
+                    # skip it here.
+                    if command is not None:
+                        requests.append(command)
+                return requests
+
+            for batch in batch_requests(await requests(),
+                                        common.EVENT_ADD_BATCH_MAX_BYTES):
+                try:
+                    await cm.send(*batch)
+                except Exception:
+                    if cm.dead.is_set():
+                        self.log.debug(
+                            "Circuit died while we were trying to activate"
+                            " subscriptions. We will keep attempting this"
+                            " until it works.")
+                    # When the Context creates a new circuit, we will
+                    # end up here again. No big deal.
+                    break
+
+    async def _activate_subscriptions_loop(self):
+        while True:
             t = time.monotonic()
-            with self.subscriptions_lock:
-                items = list(self.subscriptions_to_activate.items())
-                self.subscriptions_to_activate.clear()
-            for cm, subs in items:
-                def requests():
-                    "Yield EventAddRequest commands."
-                    for sub in subs:
-                        command = sub.compose_command()
-                        # compose_command() returns None if this
-                        # Subscription is inactive (meaning there are no
-                        # user callbacks attached). It will send an
-                        # EventAddRequest on its own if/when the user does
-                        # add any callbacks, so we can skip it here.
-                        if command is not None:
-                            yield command
+            await self._activate_subscriptions()
+            elapsed = time.monotonic() - t
 
-                for batch in batch_requests(requests(),
-                                            common.EVENT_ADD_BATCH_MAX_BYTES):
-                    try:
-                        await cm.send(*batch)
-                    except Exception:
-                        if cm.dead.is_set():
-                            self.log.debug("Circuit died while we were "
-                                           "trying to activate "
-                                           "subscriptions. We will "
-                                           "keep attempting this until it "
-                                           "works.")
-                        # When the Context creates a new circuit, we will
-                        # end up here again. No big deal.
-                        break
+            wait_time = max(0, (common.RESTART_SUBS_PERIOD - elapsed))
 
-            wait_time = max(0, (common.RESTART_SUBS_PERIOD -
-                                (time.monotonic() - t)))
-            self.activate_subscriptions_now.wait(wait_time)
+            try:
+                await asyncio.wait_for(self.activate_subscriptions_now.wait(),
+                                       timeout=wait_time)
+            except asyncio.TimeoutError:
+                ...
+
             self.activate_subscriptions_now.clear()
 
         self.log.debug('Context restart-subscriptions thread exiting')
@@ -953,6 +963,39 @@ class Context:
         self.log.debug('Context search-results processing thread has exited.')
 
 
+class _CallbackExecutor:
+    def __init__(self, log):
+        self.callbacks = AsyncioQueue()
+        self.tasks = _TaskHandler()
+        self.tasks.create(self._callback_loop())
+        self.log = log
+
+    async def _callback_loop(self):
+        loop = asyncio.get_running_loop()
+        # self.user_callback_executor = concurrent.futures.ThreadPoolExecutor(
+        #      max_workers=self.context.max_workers,
+        #      thread_name_prefix='user-callback-executor'
+        # )
+
+        while True:
+            callback, args, kwargs = await self.callbacks.async_get()
+            print('running callback', callback, args, kwargs)
+            if inspect.iscoroutinefunction(callback):
+                try:
+                    await callback(*args, **kwargs)
+                except Exception:
+                    self.log.exception('Callback failure')
+            else:
+                try:
+                    loop.run_in_executor(None, functools.partial(callback, *args,
+                                                                 **kwargs))
+                except Exception:
+                    self.log.exception('Callback failure')
+
+    def submit(self, callback, *args, **kwargs):
+        self.callbacks.put((callback, args, kwargs))
+
+
 class VirtualCircuitManager:
     """
     Encapsulates a VirtualCircuit, a TCP socket, and additional state
@@ -977,9 +1020,7 @@ class VirtualCircuitManager:
         self.ioids = {}  # map ioid to Channel and info dict
         self.subscriptions = {}  # map subscriptionid to Subscription
         self.socket = None
-        # self.user_callback_executor = concurrent.futures.ThreadPoolExecutor(
-        #     max_workers=self.context.max_workers,
-        #     thread_name_prefix='user-callback-executor')
+        self.user_callback_executor = _CallbackExecutor(self.log)
         self.last_tcp_receipt = None
         # keep track of all PV names that are successfully connected to within
         # this circuit. This is to be cleared upon disconnection:
@@ -1811,95 +1852,95 @@ class PV:
             )
         return ioid_info['response']
 
-#    async def subscribe(self, data_type=None, data_count=None,
-#                  low=0.0, high=0.0, to=0.0, mask=None):
-#        """
-#        Start a new subscription to which user callback may be added.
-#
-#        Parameters
-#        ----------
-#        data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
-#            Request specific data type or a class of data types, matched to the
-#            channel's native data type. Default is Channel's native data type.
-#        data_count : integer, optional
-#            Requested number of values. Default is the channel's native data
-#            count.
-#        low, high, to : float, optional
-#            deprecated by Channel Access, not yet implemented by caproto
-#        mask :  SubscriptionType, optional
-#            Subscribe to selective updates.
-#
-#        Returns
-#        -------
-#        subscription : Subscription
-#
-#        Examples
-#        --------
-#
-#        Define a subscription.
-#
-#        >>> sub = pv.subscribe()
-#
-#        Add a user callback. The subscription will be transparently activated
-#        (i.e. an ``EventAddRequest`` will be sent) when the first user callback
-#        is added.
-#
-#        >>> sub.add_callback(my_func)
-#
-#        Multiple callbacks may be added to the same subscription.
-#
-#        >>> sub.add_callback(another_func)
-#
-#        See the docstring for :class:`Subscription` for more.
-#        """
-#        # A Subscription is uniquely identified by the Signature created by its
-#        # args and kwargs.
-#        bound = SUBSCRIBE_SIG.bind(data_type, data_count, low, high, to, mask)
-#        key = tuple(bound.arguments.items())
-#        try:
-#            sub = self.subscriptions[key]
-#        except KeyError:
-#            sub = Subscription(self,
-#                               data_type, data_count,
-#                               low, high, to, mask)
-#            self.subscriptions[key] = sub
-#        # The actual EPICS messages will not be sent until the user adds
-#        # callbacks via sub.add_callback(user_func).
-#        return sub
-#
-#    def unsubscribe_all(self):
-#        "Clear all subscriptions. (Remove all user callbacks from them.)"
-#        for sub in self.subscriptions.values():
-#            sub.clear()
-#
-#    @ensure_connected
-#    async def time_since_last_heard(self, timeout=common.PV_DEFAULT_TIMEOUT):
-#        """
-#        Seconds since last message from the server that provides this channel.
-#
-#        The time is reset to 0 whenever we receive a TCP message related to
-#        user activity *or* a Beacon. Servers are expected to send Beacons at
-#        regular intervals. If we do not receive either a Beacon or TCP message,
-#        we initiate an Echo over TCP, to which the server is expected to
-#        promptly respond.
-#
-#        Therefore, the time reported here should not much exceed
-#        ``EPICS_CA_CONN_TMO`` (default 30 seconds unless overriden by that
-#        environment variable) if the server is healthy.
-#
-#        If the server fails to send a Beacon on schedule *and* fails to reply to
-#        an Echo, the server is assumed dead. A warning is issued, and all PVs
-#        are disconnected to initiate a reconnection attempt.
-#
-#        Parameters
-#        ----------
-#        timeout : number or None, optional
-#            Seconds to wait before a CaprotoTimeoutError is raised. Default is
-#            ``PV.timeout``, which falls back to ``PV.context.timeout`` if not
-#            set. If None, never timeout.
-#        """
-#        address = self.circuit_manager.circuit.address
-#        return self.context.broadcaster.time_since_last_heard()[address]
+    async def subscribe(self, data_type=None, data_count=None, low=0.0,
+                        high=0.0, to=0.0, mask=None):
+        """
+        Start a new subscription to which user callback may be added.
+
+        Parameters
+        ----------
+        data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
+            Request specific data type or a class of data types, matched to the
+            channel's native data type. Default is Channel's native data type.
+        data_count : integer, optional
+            Requested number of values. Default is the channel's native data
+            count.
+        low, high, to : float, optional
+            deprecated by Channel Access, not yet implemented by caproto
+        mask :  SubscriptionType, optional
+            Subscribe to selective updates.
+
+        Returns
+        -------
+        subscription : Subscription
+
+        Examples
+        --------
+
+        Define a subscription.
+
+        >>> sub = pv.subscribe()
+
+        Add a user callback. The subscription will be transparently activated
+        (i.e. an ``EventAddRequest`` will be sent) when the first user callback
+        is added.
+
+        >>> sub.add_callback(my_func)
+
+        Multiple callbacks may be added to the same subscription.
+
+        >>> sub.add_callback(another_func)
+
+        See the docstring for :class:`Subscription` for more.
+        """
+        # A Subscription is uniquely identified by the Signature created by its
+        # args and kwargs.
+        bound = common.SUBSCRIBE_SIG.bind(data_type, data_count, low, high, to, mask)
+        key = tuple(bound.arguments.items())
+        try:
+            sub = self.subscriptions[key]
+        except KeyError:
+            sub = Subscription(self,
+                               data_type, data_count,
+                               low, high, to, mask)
+            self.subscriptions[key] = sub
+        # The actual EPICS messages will not be sent until the user adds
+        # callbacks via sub.add_callback(user_func).
+        return sub
+
+    async def unsubscribe_all(self):
+        "Clear all subscriptions. (Remove all user callbacks from them.)"
+        for sub in self.subscriptions.values():
+            sub.clear()
+
+    # @ensure_connected
+    def time_since_last_heard(self, timeout=common.PV_DEFAULT_TIMEOUT):
+        """
+        Seconds since last message from the server that provides this channel.
+
+        The time is reset to 0 whenever we receive a TCP message related to
+        user activity *or* a Beacon. Servers are expected to send Beacons at
+        regular intervals. If we do not receive either a Beacon or TCP message,
+        we initiate an Echo over TCP, to which the server is expected to
+        promptly respond.
+
+        Therefore, the time reported here should not much exceed
+        ``EPICS_CA_CONN_TMO`` (default 30 seconds unless overriden by that
+        environment variable) if the server is healthy.
+
+        If the server fails to send a Beacon on schedule *and* fails to reply to
+        an Echo, the server is assumed dead. A warning is issued, and all PVs
+        are disconnected to initiate a reconnection attempt.
+
+        Parameters
+        ----------
+        timeout : number or None, optional
+            Seconds to wait before a CaprotoTimeoutError is raised. Default is
+            ``PV.timeout``, which falls back to ``PV.context.timeout`` if not
+            set. If None, never timeout.
+        """
+        address = self.circuit_manager.circuit.address
+        return self.context.broadcaster.time_since_last_heard()[address]
 
 
 class CallbackHandler:
@@ -1987,165 +2028,156 @@ class Subscription(CallbackHandler):
         # signature, f(response).
         self.__wrapper_weakrefs = set()
 
-#     @property
-#     def log(self):
-#         return self.pv.log
-#
-#     def __repr__(self):
-#         return f"<Subscription to {self.pv.name!r}, id={self.subscriptionid}>"
-#
-#     def _subscribe(self, timeout=common.PV_DEFAULT_TIMEOUT):
-#         """This is called automatically after the first callback is added.
-#         """
-#         cm = self.pv.circuit_manager
-#         if cm is None:
-#             # We are currently disconnected (perhaps have not yet connected).
-#             # When the PV connects, this subscription will be added.
-#             with self.callback_lock:
-#                 self.needs_reactivation = True
-#         else:
-#             # We are (or very recently were) connected. In the rare event
-#             # where cm goes dead in the interim, subscription will be retried
-#             # by the activation loop.
-#             ctx = cm.context
-#             with ctx.subscriptions_lock:
-#                 ctx.subscriptions_to_activate[cm].add(self)
-#             ctx.activate_subscriptions_now.set()
-#
-#     @ensure_connected
-#     def compose_command(self, timeout=common.PV_DEFAULT_TIMEOUT):
-#         "This is used by the Context to re-subscribe in bulk after dropping."
-#         with self.callback_lock:
-#             if not self.callbacks:
-#                 return None
-#             cm, chan = self.pv._circuit_manager, self.pv._channel
-#             subscriptionid = cm._subscriptionid_counter()
-#             command = chan.subscribe(data_type=self.data_type,
-#                                      data_count=self.data_count, low=self.low,
-#                                      high=self.high, to=self.to,
-#                                      mask=self.mask,
-#                                      subscriptionid=subscriptionid)
-#             subscriptionid = command.subscriptionid
-#             self.subscriptionid = subscriptionid
-#         # The circuit_manager needs to know the subscriptionid so that it can
-#         # route responses to this request.
-#         cm.subscriptions[subscriptionid] = self
-#         return command
-#
-#     def clear(self):
-#         """
-#         Remove all callbacks.
-#         """
-#         with self.callback_lock:
-#             for cb_id in list(self.callbacks):
-#                 self.remove_callback(cb_id)
-#         # Once self.callbacks is empty, self.remove_callback calls
-#         # self._unsubscribe for us.
-#
-#     def _unsubscribe(self, timeout=common.PV_DEFAULT_TIMEOUT):
-#         """
-#         This is automatically called if the number of callbacks goes to 0.
-#         """
-#         with self.callback_lock:
-#             if self.subscriptionid is None:
-#                 # Already unsubscribed.
-#                 return
-#             subscriptionid = self.subscriptionid
-#             self.subscriptionid = None
-#             self.most_recent_response = None
-#         self.pv.circuit_manager.subscriptions.pop(subscriptionid, None)
-#         chan = self.pv.channel
-#         if chan and chan.states[ca.CLIENT] is ca.CONNECTED:
-#             try:
-#                 command = self.pv.channel.unsubscribe(subscriptionid)
-#             except ca.CaprotoKeyError:
-#                 pass
-#             else:
-#                 await self.pv.circuit_manager.send(command, extra={'pv': self.pv.name})
-#
-#     def process(self, command):
-#         # TODO here i think we can decouple PV update rates and callback
-#         # handling rates, if desirable, to not bog down performance.
-#         # As implemented below, updates are blocking further messages from
-#         # the CA servers from processing. (-> ThreadPool, etc.)
-#         pv = self.pv
-#         super().process(self, command)
-#         self.log.debug("%r: %r", pv.name, command)
-#         self.most_recent_response = command
-#
-#     def add_callback(self, func):
-#         """
-#         Add a callback to receive responses.
-#
-#         Parameters
-#         ----------
-#         func : callable
-#             Expected signature: ``func(sub, response)``.
-#
-#             The signature ``func(response)`` is also supported for
-#             backward-compatibility but will issue warnings. Support will be
-#             removed in a future release of caproto.
-#
-#         Returns
-#         -------
-#         token : int
-#             Integer token that can be passed to :meth:`remove_callback`.
-#
-#         .. versionchanged:: 0.5.0
-#
-#            Changed the expected signature of ``func`` from ``func(response)``
-#            to ``func(sub, response)``.
-#         """
-#         # Handle func with signature func(response) for back-compat.
-#         func = adapt_old_callback_signature(func, self.__wrapper_weakrefs)
-#
-#         with self.callback_lock:
-#             was_empty = not self.callbacks
-#             cb_id = super().add_callback(func)
-#             most_recent_response = self.most_recent_response
-#         if was_empty:
-#             # This is the first callback. Set up a subscription, which
-#             # should elicit a response from the server soon giving the
-#             # current value to this func (and any other funcs added in the
-#             # mean time).
-#             self._subscribe()
-#         else:
-#             # This callback is piggy-backing onto an existing subscription.
-#             # Send it the most recent response, unless we are still waiting
-#             # for that first response from the server.
-#             if most_recent_response is not None:
-#                 try:
-#                     func(self, most_recent_response)
-#                 except Exception:
-#                     self.log.exception(
-#                         "Exception raised during processing most recent "
-#                         "response %r with new callback %r",
-#                         most_recent_response, func)
-#
-#         return cb_id
-#
-#     def remove_callback(self, token):
-#         """
-#         Remove callback using token that was returned by :meth:`add_callback`.
-#
-#         Parameters
-#         ----------
-#
-#         token : integer
-#             Token returned by :meth:`add_callback`.
-#         """
-#         with self.callback_lock:
-#             super().remove_callback(token)
-#             if not self.callbacks:
-#                 # Go dormant.
-#                 self._unsubscribe()
-#                 self.most_recent_response = None
-#                 self.needs_reactivation = False
-#
-#     def __del__(self):
-#         try:
-#             self.clear()
-#         except TimeoutError:
-#             pass
-#
-#
+    @property
+    def log(self):
+        return self.pv.log
+
+    def __repr__(self):
+        return f"<Subscription to {self.pv.name!r}, id={self.subscriptionid}>"
+
+    def _subscribe(self, timeout=common.PV_DEFAULT_TIMEOUT):
+        """This is called automatically after the first callback is added.
+        """
+        cm = self.pv.circuit_manager
+        if cm is None:
+            # We are currently disconnected (perhaps have not yet connected).
+            # When the PV connects, this subscription will be added.
+            with self.callback_lock:
+                self.needs_reactivation = True
+        else:
+            # We are (or very recently were) connected. In the rare event
+            # where cm goes dead in the interim, subscription will be retried
+            # by the activation loop.
+            ctx = cm.context
+            with ctx.subscriptions_lock:
+                ctx.subscriptions_to_activate[cm].add(self)
+            ctx.activate_subscriptions_now.set()
+
+    @ensure_connected
+    async def compose_command(self, timeout=common.PV_DEFAULT_TIMEOUT):
+        "This is used by the Context to re-subscribe in bulk after dropping."
+        # TODO: compose_command async due to ensure_connected?
+        with self.callback_lock:
+            if not self.callbacks:
+                return None
+            cm, chan = self.pv._circuit_manager, self.pv._channel
+            subscriptionid = cm._subscriptionid_counter()
+            command = chan.subscribe(data_type=self.data_type,
+                                     data_count=self.data_count, low=self.low,
+                                     high=self.high, to=self.to,
+                                     mask=self.mask,
+                                     subscriptionid=subscriptionid)
+            subscriptionid = command.subscriptionid
+            self.subscriptionid = subscriptionid
+        # The circuit_manager needs to know the subscriptionid so that it can
+        # route responses to this request.
+        cm.subscriptions[subscriptionid] = self
+        return command
+
+    async def clear(self):
+        """
+        Remove all callbacks.
+        """
+        with self.callback_lock:
+            for cb_id in list(self.callbacks):
+                await self.remove_callback(cb_id)
+        # Once self.callbacks is empty, self.remove_callback calls
+        # self._unsubscribe for us.
+
+    async def _unsubscribe(self, timeout=common.PV_DEFAULT_TIMEOUT):
+        """
+        This is automatically called if the number of callbacks goes to 0.
+        """
+        with self.callback_lock:
+            if self.subscriptionid is None:
+                # Already unsubscribed.
+                return
+            subscriptionid = self.subscriptionid
+            self.subscriptionid = None
+            self.most_recent_response = None
+        self.pv.circuit_manager.subscriptions.pop(subscriptionid, None)
+        chan = self.pv.channel
+        if chan and chan.states[ca.CLIENT] is ca.CONNECTED:
+            try:
+                command = self.pv.channel.unsubscribe(subscriptionid)
+            except ca.CaprotoKeyError:
+                pass
+            else:
+                await self.pv.circuit_manager.send(command, extra={'pv': self.pv.name})
+
+    def process(self, command):
+        # TODO here i think we can decouple PV update rates and callback
+        # handling rates, if desirable, to not bog down performance.
+        # As implemented below, updates are blocking further messages from
+        # the CA servers from processing. (-> ThreadPool, etc.)
+        pv = self.pv
+        super().process(self, command)
+        self.log.debug("%r: %r", pv.name, command)
+        self.most_recent_response = command
+
+    def add_callback(self, func):
+        """
+        Add a callback to receive responses.
+
+        Parameters
+        ----------
+        func : callable
+            Expected signature: ``func(sub, response)``.
+
+            The signature ``func(response)`` is also supported for
+            backward-compatibility but will issue warnings. Support will be
+            removed in a future release of caproto.
+
+        Returns
+        -------
+        token : int
+            Integer token that can be passed to :meth:`remove_callback`.
+
+        .. versionchanged:: 0.5.0
+
+           Changed the expected signature of ``func`` from ``func(response)``
+           to ``func(sub, response)``.
+        """
+        # Handle func with signature func(response) for back-compat.
+        with self.callback_lock:
+            was_empty = not self.callbacks
+            cb_id = super().add_callback(func)
+            most_recent_response = self.most_recent_response
+        if was_empty:
+            # This is the first callback. Set up a subscription, which
+            # should elicit a response from the server soon giving the
+            # current value to this func (and any other funcs added in the
+            # mean time).
+            self._subscribe()
+        else:
+            # This callback is piggy-backing onto an existing subscription.
+            # Send it the most recent response, unless we are still waiting
+            # for that first response from the server.
+            if most_recent_response is not None:
+                try:
+                    func(self, most_recent_response)
+                except Exception:
+                    self.log.exception(
+                        "Exception raised during processing most recent "
+                        "response %r with new callback %r",
+                        most_recent_response, func)
+
+        return cb_id
+
+    async def remove_callback(self, token):
+        """
+        Remove callback using token that was returned by :meth:`add_callback`.
+
+        Parameters
+        ----------
+
+        token : integer
+            Token returned by :meth:`add_callback`.
+        """
+        with self.callback_lock:
+            super().remove_callback(token)
+            if not self.callbacks:
+                # Go dormant.
+                await self._unsubscribe()
+                self.most_recent_response = None
+                self.needs_reactivation = False
