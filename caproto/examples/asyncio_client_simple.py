@@ -71,7 +71,7 @@ async def main(pv1="simple:A", pv2="simple:B"):
     print('reading:', chan2.channel.name, reading)
 
     # TODO
-    # print('last heard', chan1.time_since_last_heard())
+    print('last heard', chan1.time_since_last_heard())
     await chan2.go_idle()
     await chan1.go_idle()
     assert called
@@ -83,5 +83,4 @@ async def main(pv1="simple:A", pv2="simple:B"):
 if __name__ == '__main__':
     ca.config_caproto_logging(level='DEBUG')
     loop = asyncio.get_event_loop()
-    # loop.run_until_complete(main(), debug=True)
-    asyncio.run(main(), debug=True)
+    asyncio.run(main(), debug=False)

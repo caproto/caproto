@@ -172,7 +172,7 @@ class SharedBroadcaster:
 
         self._tasks.create(self._broadcaster_retry_loop())
         self._tasks.create(self._broadcaster_queue_loop())
-        # self._tasks.create(self._check_for_unresponsive_servers_loop())
+        self._tasks.create(self._check_for_unresponsive_servers_loop())
 
     def add_listener(self, listener):
         self.listeners.add(listener)
@@ -184,6 +184,18 @@ class SharedBroadcaster:
             pass
         if not self.listeners:
             await self.disconnect()
+
+    def _get_servers_from_listeners(self):
+        'Map of address to VirtualCircuitManagers'
+        servers = collections.defaultdict(weakref.WeakSet)
+
+        # Map each server address to VirtualCircuitManagers connected to that
+        # address, across all Contexts ("listeners").
+        for listener in self.listeners:
+            for (address, _), circuit_manager in listener.circuit_managers.items():
+                servers[address].add(circuit_manager)
+
+        return servers
 
     async def send(self, port, *commands):
         """
@@ -397,73 +409,81 @@ class SharedBroadcaster:
         """
         return {
             address: time.monotonic() - t
-            for address, t in self._last_heard.items()
+            for address, t in self._get_last_heard().items()
         }
+
+    def _get_last_heard(self):
+        """
+        When is the last time we heard from each server, either via a Beacon or
+        from TCP packets related to user activity or any circuit?
+
+        Returns
+        -------
+        dict
+            {addr: last_heard_time}
+        """
+        beacons = self.results.get_last_beacon_times()
+        last_heard = {}
+        for addr, circuit_managers in self._get_servers_from_listeners().items():
+            # Aggregate TCP results
+            last_tcp_receipt = (cm.last_tcp_receipt for cm in circuit_managers)
+            last_heard[addr] = max(beacons.get(addr, 0), *last_tcp_receipt)
+
+        return last_heard
 
     async def _check_for_unresponsive_servers_loop(self):
         self.log.debug('Broadcaster check for unresponsive servers loop is running.')
+        checking = {}
 
-        MARGIN = 1  # extra time (seconds) allowed between Beacons
-        checking = dict()  # map address to deadline for check to resolve
-        servers = collections.defaultdict(weakref.WeakSet)  # map address to VirtualCircuitManagers
-        last_heard = dict()  # map address to time of last response
-        self._last_heard = last_heard
-
-        # Make locals to save getattr lookups in the loop.
-        last_beacon = self.last_beacon
-        listeners = self.listeners
-
-        while not self._close_event.is_set():
-            servers.clear()
-            last_heard.clear()
+        while True:
             now = time.monotonic()
+            cutoff = now - (self.environ['EPICS_CA_CONN_TMO'] + common.BEACON_MARGIN)
 
-            # We are interested in identifying servers that we have not heard
-            # from since some time cutoff in the past.
-            cutoff = now - (self.environ['EPICS_CA_CONN_TMO'] + MARGIN)
+            last_heard = self._get_last_heard()
+            servers = self._get_servers_from_listeners()
 
-            # Map each server address to VirtualCircuitManagers connected to
-            # that address, across all Contexts ("listeners").
-            for listener in listeners:
-                for (address, _), circuit_manager in listener.circuit_managers.items():
-                    servers[address].add(circuit_manager)
+            newly_unresponsive = {
+                addr: circuit_managers
+                for addr, circuit_managers in servers.items()
+                if last_heard.get(addr, 0) < cutoff and addr not in checking
+            }
 
-            # When is the last time we heard from each server, either via a
-            # Beacon or from TCP packets related to user activity or any
-            # circuit?
-            for address, circuit_managers in servers.items():
-                last_tcp_receipt = (cm.last_tcp_receipt for cm in circuit_managers)
-                last_heard[address] = max((last_beacon.get(address, 0),
-                                           *last_tcp_receipt))
+            # self.log.debug(
+            #     'Unresponsive checks: \n'
+            #     '  servers: %s\n'
+            #     '  last heard: %s\n'
+            #     '  newly unresponsive: %s\n'
+            #     '  checking: %s',
+            #     servers, last_heard, newly_unresponsive, checking
+            # )
 
-                # If is has been too long --- and if we aren't already checking
-                # on this server --- try to prompt a response over TCP by
-                # sending an EchoRequest.
-                if last_heard[address] < cutoff and address not in checking:
-                    # Record that we are checking on this address and set a
-                    # deadline for a response.
-                    checking[address] = now + constants.RESPONSIVENESS_TIMEOUT
-                    tags = {'role': 'CLIENT',
-                            'their_address': address,
-                            'our_address': self.broadcaster.client_address,
-                            'direction': '--->>>'}
+            for address, circuit_managers in newly_unresponsive.items():
+                # Record that we are checking on this address and set a
+                # deadline for a response.
+                checking[address] = now + constants.RESPONSIVENESS_TIMEOUT
+                tags = {
+                    'role': 'CLIENT',
+                    'their_address': address,
+                    'our_address': self.broadcaster.client_address,
+                    'direction': '--->>>'
+                }
 
-                    self.log.debug(
-                        "Missed Beacons from %s:%d. Sending EchoRequest to "
-                        "check that server is responsive.", *address, extra=tags)
-                    # Send on all circuits. One might be less backlogged
-                    # with queued commands than the others and thus able to
-                    # respond faster. In the majority of cases there will only
-                    # be one circuit per server anyway, so this is a minor
-                    # distinction.
-                    for circuit_manager in circuit_managers:
-                        try:
-                            await circuit_manager.send(ca.EchoRequest())
-                        except Exception:
-                            # Send failed. Server is likely dead, but we'll
-                            # catch that shortly; no need to handle it
-                            # specially here.
-                            pass
+                self.broadcaster.log.debug(
+                    "Missed Beacons from %s:%d. Sending EchoRequest to "
+                    "check that server is responsive.", *address, extra=tags)
+
+                # Send on all circuits. One might be less backlogged with
+                # queued commands than the others and thus able to respond
+                # faster. In the majority of cases there will only be one
+                # circuit per server anyway, so this is a minor distinction.
+                for circuit_manager in circuit_managers:
+                    try:
+                        await circuit_manager.send(ca.EchoRequest())
+                    except Exception:
+                        # Send failed. Server is likely dead, but we'll
+                        # catch that shortly; no need to handle it
+                        # specially here.
+                        pass
 
             # Check to see if any of our ongoing checks have resolved or
             # failed to resolve within the allowed response window.
@@ -489,10 +509,8 @@ class SharedBroadcaster:
                                 *address, circuit_manager)
                             circuit_manager.disconnect()
                     checking.pop(address)
-                # else:
-                #     # We are still waiting to give the server time to respond
-                #     # to the EchoRequest.
-            time.sleep(0.5)
+
+            await asyncio.sleep(0.5)
 
         self.log.debug('Broadcaster check for unresponsive servers loop has exited.')
 
@@ -705,51 +723,6 @@ class Context:
         "Generate, process, transport a search request with the broadcaster"
         await self.broadcaster.search(self._search_results_queue, *names)
 
-#    async def create_many_channels(self, *names, priority=0,
-#                                   wait_for_connection=True,
-#                                   move_on_after=5):
-#        '''Create many channels in parallel through this context
-#
-#        Parameters
-#        ----------
-#        *names : str
-#            Channel / PV names
-#        priority : int, optional
-#            Set priority of circuits
-#        wait_for_connection : bool, optional
-#            Wait for connections
-#
-#        Returns
-#        -------
-#        channel_dict : OrderedDict
-#            Ordered dictionary of name to Channel
-#        '''
-#
-#        channels = collections.OrderedDict()
-#
-#        async def connect_outer(names):
-#            nonlocal channels
-#
-#            async for addr, names in self.broadcaster.search_many(*names):
-#                for name in names:
-#                    channels[name] = await self.create_channel(name,
-#                                                               priority=priority)
-#
-#            if wait_for_connection:
-#                for channel in channels.values():
-#                    await channel.wait_for_connection()
-#
-#        if move_on_after is not None:
-#            try:
-#                await asyncio.wait_for(
-#                    connect_outer(), timeout=move_on_after)
-#            except asyncio.TimeoutError:
-#                ...
-#        else:
-#            await connect_outer()
-#
-#        return channels
-#
     async def get_pvs(
             self, *names, priority=0, connection_state_callback=None,
             access_rights_callback=None,
@@ -1021,7 +994,7 @@ class VirtualCircuitManager:
         self.subscriptions = {}  # map subscriptionid to Subscription
         self.socket = None
         self.user_callback_executor = _CallbackExecutor(self.log)
-        self.last_tcp_receipt = None
+        self.last_tcp_receipt = 0.0
         # keep track of all PV names that are successfully connected to within
         # this circuit. This is to be cleared upon disconnection:
         self.all_created_pvnames = []

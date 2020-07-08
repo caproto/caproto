@@ -4,7 +4,6 @@ import logging
 import random
 import threading
 import time
-import weakref
 
 import caproto as ca
 
@@ -104,104 +103,30 @@ class SearchResults:
         self._searches = {}
         self._searches_by_name = {}
         self._unanswered_searches = {}
-        self.last_beacon = {}
+        self._last_beacon = {}
         self._search_id_counter = ca.ThreadsafeCounter(
             initial_value=random.randint(0, constants.MAX_ID),
             dont_clash_with=self._unanswered_searches,
         )
         self._search_id_counter.lock = self._lock  # use our lock
-        self._unresponsive_servers_to_check = []
+        self._unresponsive_servers_to_check = collections.deque([])
+        self._unresponsive_servers_checking = {}
         self._last_unresponsive_update = 0
 
-    def _update_unresponsive_server_list(self):
-        MARGIN = 1  # extra time (seconds) allowed between Beacons
-        checking = dict()  # map address to deadline for check to resolve
-        servers = collections.defaultdict(weakref.WeakSet)  # map address to VirtualCircuitManagers
-        last_heard = dict()  # map address to time of last response
-        servers.clear()
-        last_heard.clear()
-        now = time.monotonic()
+    @_locked
+    def get_last_beacon_times(self):
+        """
+        Last beacon times, according to `time.monotonic`.
 
-        # We are interested in identifying servers that we have not heard
-        # from since some time cutoff in the past.
-        cutoff = now - (self.environ['EPICS_CA_CONN_TMO'] + MARGIN)
-
-        # Map each server address to VirtualCircuitManagers connected to
-        # that address, across all Contexts ("listeners").
-        for listener in self.listeners:
-            for (address, _), circuit_manager in listener.circuit_managers.items():
-                servers[address].add(circuit_manager)
-
-        # When is the last time we heard from each server, either via a
-        # Beacon or from TCP packets related to user activity or any
-        # circuit?
-        for address, circuit_managers in servers.items():
-            last_tcp_receipt = (cm.last_tcp_receipt for cm in circuit_managers)
-            last_heard[address] = max((self.last_beacon.get(address, 0),  # TODO time
-                                       *last_tcp_receipt))
-
-            # If is has been too long --- and if we aren't already checking
-            # on this server --- try to prompt a response over TCP by
-            # sending an EchoRequest.
-            if last_heard[address] < cutoff and address not in checking:
-                # Record that we are checking on this address and set a
-                # deadline for a response.
-                checking[address] = now + constants.RESPONSIVENESS_TIMEOUT
-                tags = {'role': 'CLIENT',
-                        'their_address': address,
-                        'our_address': self.broadcaster.client_address,
-                        'direction': '--->>>'}
-
-                self.beacon_log.debug(
-                    "Missed Beacons from %s:%d. Sending EchoRequest to "
-                    "check that server is responsive.", *address, extra=tags)
-                # Send on all circuits. One might be less backlogged
-                # with queued commands than the others and thus able to
-                # respond faster. In the majority of cases there will only
-                # be one circuit per server anyway, so this is a minor
-                # distinction.
-                for circuit_manager in circuit_managers:
-                    try:
-                        circuit_manager.send(ca.EchoRequest())
-                    except Exception:
-                        # Send failed. Server is likely dead, but we'll
-                        # catch that shortly; no need to handle it
-                        # specially here.
-                        pass
-
-        # Check to see if any of our ongoing checks have resolved or
-        # failed to resolve within the allowed response window.
-        for address, deadline in list(checking.items()):
-            if last_heard[address] > cutoff:
-                # It's alive!
-                checking.pop(address)
-            elif deadline < now:
-                # No circuit connected to the server at this address has
-                # sent Beacons or responded to the EchoRequest. We assume
-                # it is unresponsive. The EPICS specification says the
-                # behavior is undefined at this point. We choose to
-                # disconnect all circuits from that server so that PVs can
-                # attempt to connect to a new server, such as a failover
-                # backup.
-                for circuit_manager in servers[address]:
-                    if circuit_manager.connected:
-                        circuit_manager.log.warning(
-                            "Server at %s:%d is unresponsive. "
-                            "Disconnecting circuit manager %r. PVs will "
-                            "automatically begin attempting to reconnect "
-                            "to a responsive server.",
-                            *address, circuit_manager)
-                        circuit_manager.disconnect()
-                checking.pop(address)
-            # else:
-            #     # We are still waiting to give the server time to respond
-            #     # to the EchoRequest.
-
-    def get_next_unresponsive_server(self):
-        if time.monotonic() - self._last_unresponsive_update > 0.5:
-            self._update_unresponsive_server_list()
-
-        return self._unresponsive_servers_to_check.pop(-1)
+        Returns
+        -------
+        dict
+            {address_tuple: monotonic_beacon_time}
+        """
+        return {
+            addr: info['time']
+            for addr, info in self._last_beacon.items()
+        }
 
     @_locked
     def mark_server_alive(self, address, identifier):
@@ -210,7 +135,7 @@ class SearchResults:
             self.name_to_addrs[name][address] = time.monotonic()
 
         now = time.monotonic()
-        if address not in self.last_beacon:
+        if address not in self._last_beacon:
             # We made a new friend!
             self.beacon_log.info("Watching Beacons from %s:%d", *address,
                                  # extra=tags TODO
@@ -218,7 +143,7 @@ class SearchResults:
             self.new_server_found(address)
             interval = 0
         else:
-            last_beacon = self.last_beacon[address]
+            last_beacon = self._last_beacon[address]
             last_identifier = last_beacon['identifier']
             interval = now - last_beacon['time']
             if last_identifier == identifier and interval < 0.1:
@@ -234,7 +159,7 @@ class SearchResults:
                 )
                 self.new_server_found(address)
 
-        self.last_beacon[address] = {
+        self._last_beacon[address] = {
             'time': now,
             'identifier': identifier,
             'interval': interval
