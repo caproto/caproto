@@ -1385,6 +1385,16 @@ class VirtualCircuitManager:
 
 
 def ensure_connected(func):
+    '''
+    Ensure connected decorator.
+
+    Parameters
+    ----------
+    func : coroutine
+    '''
+
+    assert inspect.iscoroutinefunction(func)
+
     @functools.wraps(func)
     async def inner(self, *args, **kwargs):
         if isinstance(self, PV):
@@ -1477,6 +1487,7 @@ def ensure_connected(func):
             async with pv._in_use:
                 pv._usages -= 1
                 pv._in_use.notify_all()
+
     return inner
 
 
@@ -1852,8 +1863,8 @@ class PV:
             )
         return ioid_info['response']
 
-    async def subscribe(self, data_type=None, data_count=None, low=0.0,
-                        high=0.0, to=0.0, mask=None):
+    def subscribe(self, data_type=None, data_count=None, low=0.0, high=0.0,
+                  to=0.0, mask=None):
         """
         Start a new subscription to which user callback may be added.
 
@@ -2034,6 +2045,26 @@ class Subscription(CallbackHandler):
 
     def __repr__(self):
         return f"<Subscription to {self.pv.name!r}, id={self.subscriptionid}>"
+
+    async def __aiter__(self):
+        queue = AsyncioQueue()
+
+        async def iter_callback(sub, value):
+            await queue.async_put(value)
+
+        sid = self.add_callback(iter_callback)
+        try:
+            while True:
+                item = await queue.async_get()
+                yield item
+        finally:
+            await self.remove_callback(sid)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_value, traceback):
+        await self.clear()
 
     def _subscribe(self, timeout=common.PV_DEFAULT_TIMEOUT):
         """This is called automatically after the first callback is added.

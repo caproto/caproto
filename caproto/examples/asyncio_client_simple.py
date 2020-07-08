@@ -31,26 +31,26 @@ async def main(pv1="simple:A", pv2="simple:B"):
     print('Registered.')
 
     ctx = Context(broadcaster)
-    await ctx.search(pv1)
-    await ctx.search(pv2)
-    # Send out connection requests without waiting for responses...
     chan1, chan2 = await ctx.get_pvs(pv1, pv2)
 
     # Set up a function to call when subscriptions are received.
-    sub = await chan1.subscribe()
-    sub.add_callback(user_callback)
+    async with chan1.subscribe() as sub:
+        sub.add_callback(user_callback)
 
-    # ...and then wait for all the responses.
-    await chan1.wait_for_connection()
-    await chan2.wait_for_connection()
-    reading = await chan1.read()
+        async for value in sub:
+            print('* Subscription value from async for:')
+            print(value)
+            break
 
-    print()
-    print('reading:', chan1.channel.name, reading)
-    await chan2.read()
-    await called.wait()
+        # ...and then wait for all the responses.
+        await chan1.wait_for_connection()
+        await chan2.wait_for_connection()
+        reading = await chan1.read()
 
-    await sub.clear()
+        print()
+        print('reading:', chan1.channel.name, reading)
+        await chan2.read()
+        await called.wait()
 
     print('--> writing the value 5 to', chan1.channel.name)
     await chan1.write((5,), notify=True)
