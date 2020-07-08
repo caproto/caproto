@@ -20,7 +20,10 @@ async def main(pv1="simple:A", pv2="simple:B"):
     called_with = []
     called = asyncio.Event()
 
-    async def user_callback(pv, command):
+    def user_callback(pv, command):
+        print("Sync subscription has received data: {}".format(command))
+
+    async def user_async_callback(pv, command):
         print("Subscription has received data: {}".format(command))
         called_with.append(command)
         called.set()
@@ -33,8 +36,8 @@ async def main(pv1="simple:A", pv2="simple:B"):
     ctx = Context(broadcaster)
     chan1, chan2 = await ctx.get_pvs(pv1, pv2)
 
-    # Set up a function to call when subscriptions are received.
     async with chan1.subscribe() as sub:
+        sub.add_callback(user_async_callback)
         sub.add_callback(user_callback)
 
         async for value in sub:
@@ -42,9 +45,6 @@ async def main(pv1="simple:A", pv2="simple:B"):
             print(value)
             break
 
-        # ...and then wait for all the responses.
-        await chan1.wait_for_connection()
-        await chan2.wait_for_connection()
         reading = await chan1.read()
 
         print()
