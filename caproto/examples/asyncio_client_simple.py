@@ -36,43 +36,46 @@ async def main(pv1="simple:A", pv2="simple:B"):
     ctx = Context(broadcaster)
     chan1, chan2 = await ctx.get_pvs(pv1, pv2)
 
-    async with chan1.subscribe() as sub:
-        sub.add_callback(user_async_callback)
-        sub.add_callback(user_callback)
+    # TODO debug subscriptions when num_iters > 1:
+    for _ in range(1):
+        async with chan1.subscribe() as sub:
+            sub.add_callback(user_async_callback)
+            sub.add_callback(user_callback)
 
-        async for value in sub:
-            print('* Subscription value from async for:')
-            print(value.data)
-            break  # TODO: don't leave this commented while committing, ... ok?
+            async for value in sub:
+                print('* Subscription value from async for:')
+                print(value.data)
+                break  # TODO: don't leave this commented while committing, ... ok?
 
+            reading = await chan1.read()
+
+            print()
+            print('reading:', chan1.channel.name, reading)
+            await chan2.read()
+            await called.wait()
+
+        print('--> writing the value 5 to', chan1.channel.name)
+        await chan1.write((5,), notify=True)
         reading = await chan1.read()
 
         print()
         print('reading:', chan1.channel.name, reading)
-        await chan2.read()
-        await called.wait()
 
-    print('--> writing the value 5 to', chan1.channel.name)
-    await chan1.write((5,), notify=True)
-    reading = await chan1.read()
+        print('--> writing the value 6 to', chan1.channel.name)
+        await chan1.write((6,), notify=True)
 
-    print()
-    print('reading:', chan1.channel.name, reading)
+        reading = await chan1.read()
+        print()
+        print('reading:', chan1.channel.name, reading)
 
-    print('--> writing the value 6 to', chan1.channel.name)
-    await chan1.write((6,), notify=True)
+        reading = await chan2.read()
+        print()
+        print('reading:', chan2.channel.name, reading)
 
-    reading = await chan1.read()
-    print()
-    print('reading:', chan1.channel.name, reading)
+        print('last heard', chan1.time_since_last_heard())
+        await chan2.go_idle()
+        await chan1.go_idle()
 
-    reading = await chan2.read()
-    print()
-    print('reading:', chan2.channel.name, reading)
-
-    print('last heard', chan1.time_since_last_heard())
-    await chan2.go_idle()
-    await chan1.go_idle()
     assert called
     print('Done')
     await broadcaster.disconnect()

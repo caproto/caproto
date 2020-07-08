@@ -182,6 +182,7 @@ class SharedBroadcaster:
             self.listeners.remove(listener)
         except KeyError:
             pass
+
         if not self.listeners:
             await self.disconnect()
 
@@ -648,7 +649,6 @@ class Context:
         self.pvs_needing_circuits = collections.defaultdict(set)
         self.broadcaster.add_listener(self)
         # an event to close and clean up the whole context
-        self._close_event = asyncio.Event()
         self.subscriptions_lock = threading.RLock()
         self.subscriptions_to_activate = collections.defaultdict(set)
         self.activate_subscriptions_now = asyncio.Event()
@@ -667,31 +667,28 @@ class Context:
 
     async def disconnect(self):
         self._user_disconnected = True
-        # TODO
-        # try:
-        #     # self._close_event.set()
-        #     # disconnect any circuits we have
-
-        #     circuits = list(self.circuit_managers.values())
-        #     total_circuits = len(circuits)
-        #     disconnected = False
-        #     for idx, circuit in enumerate(circuits, 1):
-        #         if circuit.connected:
-        #             self.log.debug('Disconnecting circuit %d/%d: %s',
-        #                            idx, total_circuits, circuit)
-        #             circuit._disconnected(reconnect=False)
-        #             disconnected = True
-        #     if disconnected:
-        #         self.log.debug('All circuits disconnected')
-        # finally:
-        # Remove from Broadcaster.
-        await self.broadcaster.remove_listener(self)
+        try:
+            # disconnect any circuits we have
+            circuits = list(self.circuit_managers.values())
+            total_circuits = len(circuits)
+            disconnected = False
+            for idx, circuit in enumerate(circuits, 1):
+                if circuit.connected:
+                    self.log.debug('Disconnecting circuit %d/%d: %s',
+                                   idx, total_circuits, circuit)
+                    await circuit._disconnected(reconnect=False)
+                    disconnected = True
+            if disconnected:
+                self.log.debug('All circuits disconnected')
+        finally:
+            # Remove from Broadcaster.
+            await self.broadcaster.remove_listener(self)
 
         # clear any state about circuits and search results
-        # self.log.debug('Clearing circuit managers')
-        # self.circuit_managers.clear()
-        # self.log.debug("Stopping SelectorThread of the context")
-        # self.selector.stop()
+        self.log.debug('Clearing circuit managers')
+        self.circuit_managers.clear()
+
+        await self._tasks.cancel_all()
 
         self.log.debug('Context disconnection complete')
 
@@ -2106,7 +2103,7 @@ class Subscription(CallbackHandler):
         # Once self.callbacks is empty, self.remove_callback calls
         # self._unsubscribe for us.
 
-    async def _unsubscribe(self, timeout=common.PV_DEFAULT_TIMEOUT):
+    async def _unsubscribe(self):
         """
         This is automatically called if the number of callbacks goes to 0.
         """
@@ -2117,6 +2114,7 @@ class Subscription(CallbackHandler):
             subscriptionid = self.subscriptionid
             self.subscriptionid = None
             self.most_recent_response = None
+
         self.pv.circuit_manager.subscriptions.pop(subscriptionid, None)
         chan = self.pv.channel
         if chan and chan.states[ca.CLIENT] is ca.CONNECTED:
@@ -2124,8 +2122,11 @@ class Subscription(CallbackHandler):
                 command = self.pv.channel.unsubscribe(subscriptionid)
             except ca.CaprotoKeyError:
                 pass
+            except ca.CaprotoValueError:
+                self.log.exception('TODO')
             else:
-                await self.pv.circuit_manager.send(command, extra={'pv': self.pv.name})
+                await self.pv.circuit_manager.send(command,
+                                                   extra={'pv': self.pv.name})
 
     def process(self, command):
         # TODO here i think we can decouple PV update rates and callback
