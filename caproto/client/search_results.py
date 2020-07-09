@@ -226,7 +226,7 @@ class SearchResults:
     def invalidate_by_name(self, name):
         'Invalidate all cached results associated with the given name'
         for addr in self.name_to_addrs.get(name, []):
-            self.addr_to_names[addr].pop(name)
+            self.addr_to_names[addr].remove(name)
 
     @_locked
     def mark_name_found(self, name, addr):
