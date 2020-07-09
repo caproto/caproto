@@ -40,16 +40,10 @@ def test_trio_client_example():
     trio.run(main_with_motorsim)
 
 
-def test_asyncio_client_example(curio_server):
+def test_asyncio_client_example(ioc):
     from caproto.examples.asyncio_client_simple import main as example_main
-    server_runner, prefix, caget_pvdb = curio_server
-
-    @conftest.threaded_in_curio_wrapper
-    def client():
-        example_main(pvname1=prefix + 'int',
-                     pvname2=prefix + 'str')
-
-    ca.asyncio.utils.run(example_main(), debug=True)
+    coro = example_main(pv1=ioc.pvs['str'], pv2=ioc.pvs['int'])
+    ca.asyncio.utils.run(coro, debug=True)
 
 
 def test_thread_client_example(curio_server):

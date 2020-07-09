@@ -1,6 +1,6 @@
 import asyncio
 import caproto as ca
-from caproto.asyncio.client import (SharedBroadcaster, Context)
+from caproto.asyncio.client import Context
 
 
 async def main(pv1="simple:A", pv2="simple:B"):
@@ -28,12 +28,7 @@ async def main(pv1="simple:A", pv2="simple:B"):
         called_with.append(command)
         called.set()
 
-    broadcaster = SharedBroadcaster()
-    print('Registering with the repeater...')
-    await broadcaster.register()
-    print('Registered.')
-
-    ctx = Context(broadcaster)
+    ctx = Context()
     chan1, chan2 = await ctx.get_pvs(pv1, pv2)
 
     # TODO debug subscriptions when num_iters > 1:
@@ -43,7 +38,7 @@ async def main(pv1="simple:A", pv2="simple:B"):
             sub.add_callback(user_callback)
 
             async for value in sub:
-                broadcaster.results.print_debug_information()
+                ctx.broadcaster.results.print_debug_information()
 
                 print('* Subscription value from async for:')
                 print(value.data)
@@ -80,9 +75,6 @@ async def main(pv1="simple:A", pv2="simple:B"):
 
     assert called
     print('Done')
-
-    await broadcaster.disconnect()
-    print('Broadcaster disconnected')
 
 
 if __name__ == '__main__':
