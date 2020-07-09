@@ -1,4 +1,3 @@
-import asyncio
 import curio
 import functools
 import os
@@ -50,7 +49,7 @@ def test_asyncio_client_example(curio_server):
         example_main(pvname1=prefix + 'int',
                      pvname2=prefix + 'str')
 
-    asyncio.run(example_main(), debug=True)
+    ca.asyncio.utils.run(example_main(), debug=True)
 
 
 def test_thread_client_example(curio_server):
