@@ -71,7 +71,14 @@ class SharedBroadcaster:
 
         # UDP socket broadcasting to CA servers
         self.udp_sock = None
+        self._essential_tasks_started = False
 
+    def _ensure_essential_tasks_running(self):
+        ""
+        if self._essential_tasks_started:
+            return
+
+        self._essential_tasks_started = True
         self._tasks.create(self._broadcaster_retry_loop())
         self._tasks.create(self._broadcaster_receive_loop())
         self._tasks.create(self._check_for_unresponsive_servers_loop())
@@ -265,6 +272,10 @@ class SharedBroadcaster:
 
     async def search(self, results_queue, *names):
         "Generate, process, and transport search request(s)"
+        # TODO: where else? is this sufficient?
+        # can't do it on add_listener...
+        self._ensure_essential_tasks_running()
+
         if self._should_attempt_registration():
             await self.register()
 
@@ -546,8 +557,7 @@ class Context:
         self._search_results_queue = AsyncioQueue()
         self._tasks = _TaskHandler()
 
-        self._tasks.create(self._process_search_results_loop())
-        self._tasks.create(self._activate_subscriptions_loop())
+        self._essential_tasks_started = False
 
     def __repr__(self):
         return (f"<Context "
@@ -611,6 +621,15 @@ class Context:
         "Generate, process, transport a search request with the broadcaster"
         await self.broadcaster.search(self._search_results_queue, *names)
 
+    def _ensure_essential_tasks_running(self):
+        ""
+        if self._essential_tasks_started:
+            return
+
+        self._essential_tasks_started = True
+        self._tasks.create(self._process_search_results_loop())
+        self._tasks.create(self._activate_subscriptions_loop())
+
     async def get_pvs(
             self, *names, priority=0, connection_state_callback=None,
             access_rights_callback=None,
@@ -653,6 +672,8 @@ class Context:
         if self._user_disconnected:
             raise common.ContextDisconnectedError(
                 "This Context is no longer usable.")
+
+        self._ensure_essential_tasks_running()
 
         pvs = []  # list of all PV objects to return
         names_to_search = []  # subset of names that we need to search for
