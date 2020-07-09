@@ -43,50 +43,49 @@ def _make_tcp_socket():
     return sock
 
 
-def create_datagram_protocol(parent, recv_func):
-    class Protocol(asyncio.Protocol):
-        def __init__(self, *args, **kwargs):
-            self.transport = None
+class _DatagramProtocol(asyncio.Protocol):
+    def __init__(self, parent, recv_func):
+        self.transport = None
+        self.parent = parent
+        self.recv_func = recv_func
 
-        def connection_made(self, transport):
-            self.transport = transport
+    def connection_made(self, transport):
+        self.transport = transport
 
-        def datagram_received(self, data, addr):
-            if not data:
-                return
+    def datagram_received(self, data, addr):
+        if not data:
+            return
 
-            recv_func(data, addr)
+        self.recv_func((data, addr))
 
-        def error_received(self, exc):
-            parent.log.error('%s received error', self, exc_info=exc)
-
-    return Protocol
+    def error_received(self, exc):
+        self.parent.log.error('%s received error', self, exc_info=exc)
 
 
-def create_stream_protocol(parent, connection_callback, recv_func):
-    class Protocol(asyncio.Protocol):
-        def __init__(self, *args, **kwargs):
-            self.transport = None
+class _StreamProtocol(asyncio.Protocol):
+    def __init__(self, parent, connection_callback, recv_func):
+        self.connection_callback = connection_callback
+        self.parent = parent
+        self.recv_func = recv_func
+        self.transport = None
 
-        def connection_made(self, transport):
-            self.transport = transport
-            connection_callback(True, transport)
+    def connection_made(self, transport):
+        self.transport = transport
+        self.connection_callback(True, transport)
 
-        def eof_received(self):
-            connection_callback(False, None)
-            return False
+    def eof_received(self):
+        self.connection_callback(False, None)
+        return False
 
-        def connection_lost(self, exc):
-            self.transport = None
-            connection_callback(False, exc)
+    def connection_lost(self, exc):
+        self.transport = None
+        self.connection_callback(False, exc)
 
-        def data_received(self, data):
-            recv_func(data)
+    def data_received(self, data):
+        self.recv_func(data)
 
-        def error_received(self, exc):
-            parent.log.error('%s received error', self, exc_info=exc)
-
-    return Protocol
+    def error_received(self, exc):
+        self.parent.log.error('%s received error', self, exc_info=exc)
 
 
 class TransportWrapper:
@@ -156,8 +155,7 @@ class SharedBroadcaster:
         self.log = self.broadcaster.log
 
         self.command_queue = AsyncioQueue()
-        self.broadcaster_command_condition = asyncio.Condition()
-        self._cleanup_condition = asyncio.Condition()
+        self.receive_queue = AsyncioQueue()
         self._cleanup_event = asyncio.Event()
         self._search_now = asyncio.Event()
         self._searching_enabled = asyncio.Event()
@@ -171,7 +169,7 @@ class SharedBroadcaster:
         self.udp_sock = None
 
         self._tasks.create(self._broadcaster_retry_loop())
-        self._tasks.create(self._broadcaster_queue_loop())
+        self._tasks.create(self._broadcaster_receive_loop())
         self._tasks.create(self._check_for_unresponsive_servers_loop())
 
     def add_listener(self, listener):
@@ -229,15 +227,10 @@ class SharedBroadcaster:
     async def disconnect(self):
         'Disconnect the broadcaster and stop listening'
         self._registration_last_sent = 0
-        async with self._cleanup_condition:
-            self._cleanup_event.set()
-            self.log.debug('Broadcaster: Disconnecting the command queue loop')
-            await self.command_queue.async_put((None, ca.DISCONNECTED))
-            self.log.debug('Broadcaster: Closing the UDP socket')
-            self.udp_sock = None
-            self._cleanup_condition.notify_all()
-
         await self._tasks.cancel_all(wait=True)
+        self.log.debug('Broadcaster: Closing the UDP socket')
+        self.udp_sock = None
+
         self.log.debug('Broadcaster disconnect complete')
 
     def _should_attempt_registration(self):
@@ -260,7 +253,8 @@ class SharedBroadcaster:
 
         loop = asyncio.get_running_loop()
         transport, self.protocol = await loop.create_datagram_endpoint(
-            create_datagram_protocol(self, self._broadcaster_recv_datagram),
+            functools.partial(_DatagramProtocol, parent=self,
+                              recv_func=self.receive_queue.put),
             sock=self.udp_sock)
         self.wrapped_transport = TransportWrapper(transport)
 
@@ -280,14 +274,39 @@ class SharedBroadcaster:
             ca.get_environment_variables()['EPICS_CA_REPEATER_PORT'], command)
         self._searching_enabled.set()
 
-    def _broadcaster_recv_datagram(self, bytes_received, address):
-        """create_datagram_protocol receive hook"""
-        try:
-            commands = self.broadcaster.recv(bytes_received, address)
-        except ca.RemoteProtocolError:
-            self.log.exception('Broadcaster received bad packet')
-        else:
-            self.command_queue.put((address, commands))
+    async def _broadcaster_receive_loop(self):
+        'Loop which consumes receive_queue datagrams from _DatagramProtocol.'
+        queues = collections.defaultdict(list)
+        while True:
+            bytes_received, address = await self.receive_queue.async_get()
+            try:
+                commands = self.broadcaster.recv(bytes_received, address)
+            except ca.RemoteProtocolError:
+                self.log.exception('Broadcaster received bad packet')
+                continue
+
+            if commands is ca.DISCONNECTED:
+                break
+
+            queues.clear()
+
+            try:
+                self.broadcaster.process_commands(commands)
+                for command in commands:
+                    self._process_command(address, command, queues)
+
+                # Receive commands in 'bundles' (corresponding to the contents
+                # of one UDP datagram). Match SearchResponses to their
+                # SearchRequests, and put (address, (name1, name2, name3, ...))
+                # into a queue. The receiving end of that queue is held by
+                # Context._process_search_results.  Send the search results to
+                # the Contexts that asked for them.
+                for (queue, address), names in queues.items():
+                    queue.put((address, names))
+            except Exception as ex:
+                self.log.error('Broadcaster command queue evaluation failed',
+                               exc_info=ex)
+                continue
 
     def _process_command(self, addr, command, queues):
         # if isinstance(command, ca.RepeaterConfirmResponse):
@@ -337,41 +356,6 @@ class SharedBroadcaster:
                 )
             else:
                 queues[(queue, address)].append(name)
-
-    async def _broadcaster_queue_loop(self):
-        queues = collections.defaultdict(list)
-        while True:
-            try:
-                addr, commands = await self.command_queue.async_get()
-            except asyncio.CancelledError:
-                break
-
-            try:
-                if commands is ca.DISCONNECTED:
-                    break
-
-                queues.clear()
-                self.broadcaster.process_commands(commands)
-                for command in commands:
-                    self._process_command(addr, command, queues)
-
-                if queues:
-                    # Receive commands in 'bundles' (corresponding to the
-                    # contents of one UDP datagram). Match SearchResponses to
-                    # their SearchRequests, and put (address, (name1, name2,
-                    # name3, ...)) into a queue. The receiving end of that
-                    # queue is held by Context._process_search_results.
-                    # Send the search results to the Contexts that asked for
-                    # them.
-                    for (queue, address), names in queues.items():
-                        queue.put((address, names))
-            except Exception as ex:
-                self.log.error('Broadcaster command queue evaluation failed',
-                               exc_info=ex)
-                continue
-
-            async with self.broadcaster_command_condition:
-                self.broadcaster_command_condition.notify_all()
 
     async def search(self, results_queue, *names):
         "Generate, process, and transport search request(s)"
@@ -1003,9 +987,6 @@ class VirtualCircuitManager:
         self.dead = asyncio.Event()
         self.last_tcp_receipt = 0.0
         self.user_callback_executor = _CallbackExecutor(self.log)
-        self._transport_protocol_factory = create_stream_protocol(
-            self, self._circuit_connection_change,
-            self._circuit_bytes_received)
 
         self._tags = {
             'their_address': self.circuit.address,
@@ -1025,7 +1006,9 @@ class VirtualCircuitManager:
     async def _connect(self, timeout):
         """Start the connection and spawn tasks."""
         self.transport, self.protocol = await asyncio.get_running_loop().create_connection(
-            self._transport_protocol_factory,
+            functools.partial(_StreamProtocol, parent=self,
+                              connection_callback=self._circuit_connection_change,
+                              recv_func=self._circuit_bytes_received),
             host=self.circuit.address[0],
             port=self.circuit.address[1],
         )
