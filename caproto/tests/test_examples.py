@@ -42,7 +42,7 @@ def test_trio_client_example():
 
 def test_asyncio_client_example(ioc):
     from caproto.examples.asyncio_client_simple import main as example_main
-    coro = example_main(pv1=ioc.pvs['str'], pv2=ioc.pvs['int'])
+    coro = example_main(pv1=ioc.pvs['int'], pv2=ioc.pvs['int2'])
     ca.asyncio.utils.run(coro, debug=True)
 
 
