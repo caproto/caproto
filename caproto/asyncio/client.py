@@ -179,6 +179,8 @@ class SharedBroadcaster:
 
     async def register(self):
         "Register this client with the CA Repeater."
+        self._ensure_essential_tasks_running()
+
         self._registration_last_sent = time.monotonic()
         if self.udp_sock is None:
             await self._create_socket()
