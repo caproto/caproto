@@ -8,6 +8,7 @@
 # Context: has a caproto.Broadcaster, a UDP socket, a cache of
 #          search results and a cache of VirtualCircuits.
 #
+import getpass
 import logging
 import time
 
@@ -138,7 +139,7 @@ class VirtualCircuit:
         circuit.
         """
         if self.connected:
-            _ = self.circuit.send(*commands)
+            buffers_to_send = self.circuit.send(*commands)
             async with self._socket_lock:
                 if self.socket is None:
                     raise RuntimeError('socket connection failed')
