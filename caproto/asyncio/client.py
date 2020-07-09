@@ -28,7 +28,8 @@ from ..client import common
 from ..client.search_results import (DuplicateSearchResponse, SearchResults,
                                      UnknownSearchResponse)
 from .utils import (AsyncioQueue, _CallbackExecutor, _DatagramProtocol,
-                    _StreamProtocol, _TaskHandler, _TransportWrapper)
+                    _StreamProtocol, _TaskHandler, _TransportWrapper,
+                    get_running_loop)
 
 ch_logger = logging.getLogger('caproto.ch')
 search_logger = logging.getLogger('caproto.bcast.search')
@@ -154,7 +155,7 @@ class SharedBroadcaster:
     async def _create_socket(self):
         self.udp_sock = ca.bcast_socket(socket_module=socket)
 
-        loop = asyncio.get_running_loop()
+        loop = get_running_loop()
         transport, self.protocol = await loop.create_datagram_endpoint(
             functools.partial(_DatagramProtocol, parent=self,
                               recv_func=self.receive_queue.put),
@@ -869,7 +870,7 @@ class VirtualCircuitManager:
 
     async def _connect(self, timeout):
         """Start the connection and spawn tasks."""
-        self.transport, self.protocol = await asyncio.get_running_loop().create_connection(
+        self.transport, self.protocol = await get_running_loop().create_connection(
             functools.partial(_StreamProtocol, parent=self,
                               connection_callback=self._circuit_connection_change,
                               recv_func=self._circuit_bytes_received),
@@ -994,7 +995,7 @@ class VirtualCircuitManager:
 
         async with self._raw_lock:
             await ca.async_send_all(buffers_to_send, _socket_send)
-        # await asyncio.get_running_loop().sock_sendall(
+        # await get_running_loop().sock_sendall(
         #     self.socket, b''.join(buffers_to_send))
 
     async def events_off(self):

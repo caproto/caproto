@@ -1,6 +1,7 @@
 import asyncio
 import functools
 import inspect
+import sys
 import threading
 
 import caproto as ca
@@ -25,7 +26,7 @@ class AsyncioQueue:
 
     def get(self):
         future = asyncio.run_coroutine_threadsafe(
-            self._queue.get(), asyncio.get_running_loop())
+            self._queue.get(), get_running_loop())
 
         return future.result()
 
@@ -106,7 +107,7 @@ class _TaskHandler:
 
     def create(self, coro):
         """Schedule the execution of a coroutine object in a spawn task."""
-        task = asyncio.create_task(coro)
+        task = create_task(coro)
         with self._lock:
             self.tasks.append(task)
         task.add_done_callback(self._remove_completed_task)
@@ -147,7 +148,7 @@ class _CallbackExecutor:
         await self.tasks.cancel_all()
 
     async def _callback_loop(self):
-        loop = asyncio.get_running_loop()
+        loop = get_running_loop()
         # self.user_callback_executor = concurrent.futures.ThreadPoolExecutor(
         #      max_workers=self.context.max_workers,
         #      thread_name_prefix='user-callback-executor'
@@ -169,3 +170,20 @@ class _CallbackExecutor:
 
     def submit(self, callback, *args, **kwargs):
         self.callbacks.put((callback, args, kwargs))
+
+
+if sys.version_info < (3, 7):
+    # python <= 3.6 compatibility
+    def get_running_loop():
+        return asyncio.get_event_loop()
+
+    def run(coro, debug=False):
+        return get_running_loop().run_until_complete(coro)
+
+    def create_task(coro):
+        return get_running_loop().create_task(coro)
+
+else:
+    get_running_loop = asyncio.get_running_loop
+    run = asyncio.run
+    create_task = asyncio.create_task

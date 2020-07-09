@@ -87,4 +87,4 @@ async def main(pv1="simple:A", pv2="simple:B"):
 
 if __name__ == '__main__':
     ca.config_caproto_logging(level='DEBUG')
-    asyncio.run(main(), debug=False)
+    ca.asyncio.utils.run(main(), debug=False)
