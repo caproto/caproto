@@ -254,6 +254,7 @@ class SharedBroadcaster:
                 if len(ex.addresses) <= 1:
                     return
 
+                name = ex.name
                 accepted_address = ex.addresses[0]
                 other_addresses = ', '.join(
                     '%s:%d'.format(*addr) for addr in ex.addresses[1:]
