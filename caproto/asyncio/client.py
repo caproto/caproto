@@ -901,7 +901,6 @@ class VirtualCircuitManager:
             host=self.circuit.address[0],
             port=self.circuit.address[1],
         )
-        self._tasks.create(self._command_queue_loop())
 
         try:
             await asyncio.wait_for(self._connection_made.wait(),
@@ -941,6 +940,10 @@ class VirtualCircuitManager:
             ca.ClientNameRequest(self.context.client_name),
             extra=self._tags)
 
+        # Ensure we don't get any commands back before sending the above, lest
+        # we confuse the state machine:
+        self._tasks.create(self._command_queue_loop())
+
         # Old versions of the protocol do not send a VersionResponse at TCP
         # connection time, so set this Event manually rather than waiting for
         # it to be set by receipt of a VersionResponse.
@@ -952,9 +955,8 @@ class VirtualCircuitManager:
         except asyncio.TimeoutError:
             host, port = self.circuit.address
             raise ca.CaprotoTimeoutError(
-                f"Circuit with server at {host}:{port} "
-                f"did not connect within "
-                f"{float(timeout):.3}-second timeout.")
+                f"Circuit with server at {host}:{port} did not connect within "
+                f"{float(timeout):.3}-second timeout.") from None
 
     def _circuit_bytes_received(self, bytes_received):
         self.last_tcp_receipt = time.monotonic()
