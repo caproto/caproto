@@ -2043,7 +2043,7 @@ class Subscription(CallbackHandler):
             if most_recent_response is not None:
                 circuit_manager = self.pv.circuit_manager
                 if circuit_manager is not None:
-                    circuit_manager.user_callback_executor.process(
+                    circuit_manager.user_callback_executor.submit(
                         func, self, most_recent_response)
 
         return cb_id
