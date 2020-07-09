@@ -961,12 +961,6 @@ class VirtualCircuitManager:
     # internally by the Context. Its methods may be touched by user code, but
     # this is rarely necessary.
     # """
-    # __slots__ = ('context', 'circuit', 'channels', 'ioids', '_ioid_counter',
-    #              'subscriptions', '_ready', 'log',
-    #              'socket', 'selector', 'pvs',
-    #              'dead', 'process_queue', 'processing',
-    #              '_subscriptionid_counter', 'user_callback_executor',
-    #              'last_tcp_receipt', '__weakref__', '_tags')
 
     def __init__(self, context, circuit, timeout=common.TIMEOUT):
         self.context = context
@@ -1471,13 +1465,6 @@ class PV:
     should be created by calling the ``get_pvs`` method on a ``Context``
     object.
     """
-    # __slots__ = ('name', 'priority', 'context', '_circuit_manager', '_channel',
-    #              'circuit_ready', 'channel_ready', 'access_rights',
-    #              'access_rights_callback', 'subscriptions',
-    #              'command_bundle_queue', 'component_lock', '_idle', '_in_use',
-    #              '_usages', 'connection_state_callback', 'log',
-    #              '_timeout',
-    #              '__weakref__')
 
     def __init__(self, name, priority, context, connection_state_callback,
                  access_rights_callback, timeout):
