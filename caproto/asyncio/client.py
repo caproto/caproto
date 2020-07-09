@@ -8,39 +8,29 @@
 # Context: has a caproto.Broadcaster, a UDP socket, a cache of
 #          search results and a cache of VirtualCircuits.
 #
+import asyncio
 import collections
 import functools
 import getpass
 import inspect
 import logging
+import socket
 import threading
 import time
 import weakref
 
 import caproto as ca
 
-import socket
-import asyncio
-
 from .. import _constants as constants
-from .._utils import (batch_requests, ThreadsafeCounter,
+from .._utils import (ThreadsafeCounter, batch_requests,
                       get_environment_variables, safe_getsockname)
 from ..client import common
-from ..client.search_results import (SearchResults, DuplicateSearchResponse,
+from ..client.search_results import (DuplicateSearchResponse, SearchResults,
                                      UnknownSearchResponse)
 from .utils import AsyncioQueue
 
-
 ch_logger = logging.getLogger('caproto.ch')
 search_logger = logging.getLogger('caproto.bcast.search')
-
-
-def _make_tcp_socket():
-    # sock = socket.create_connection(addr)
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    # TODO: this is default with loop.create_connection
-    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-    return sock
 
 
 class _DatagramProtocol(asyncio.Protocol):
@@ -58,8 +48,8 @@ class _DatagramProtocol(asyncio.Protocol):
 
         self.recv_func((data, addr))
 
-    def error_received(self, exc):
-        self.parent.log.error('%s received error', self, exc_info=exc)
+    def error_received(self, ex):
+        self.parent.log.error('%s receive error', self, exc_info=ex)
 
 
 class _StreamProtocol(asyncio.Protocol):
@@ -84,8 +74,8 @@ class _StreamProtocol(asyncio.Protocol):
     def data_received(self, data):
         self.recv_func(data)
 
-    def error_received(self, exc):
-        self.parent.log.error('%s received error', self, exc_info=exc)
+    def error_received(self, ex):
+        self.parent.log.error('%s receive error', self, exc_info=ex)
 
 
 class TransportWrapper:
@@ -153,6 +143,8 @@ class SharedBroadcaster:
 
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
         self.log = self.broadcaster.log
+        self.protocol = None
+        self.wrapped_transport = None
 
         self.command_queue = AsyncioQueue()
         self.receive_queue = AsyncioQueue()
@@ -256,6 +248,9 @@ class SharedBroadcaster:
             functools.partial(_DatagramProtocol, parent=self,
                               recv_func=self.receive_queue.put),
             sock=self.udp_sock)
+
+        # TODO: wrapped transport is a server concept for unifying
+        # trio/asyncio/curio
         self.wrapped_transport = TransportWrapper(transport)
 
         # Must bind or getsocketname() will raise on Windows.
@@ -303,9 +298,8 @@ class SharedBroadcaster:
                 # the Contexts that asked for them.
                 for (queue, address), names in queues.items():
                     queue.put((address, names))
-            except Exception as ex:
-                self.log.error('Broadcaster command queue evaluation failed',
-                               exc_info=ex)
+            except Exception:
+                self.log.exception('Broadcaster receive loop evaluation')
                 continue
 
     def _process_command(self, addr, command, queues):
@@ -804,7 +798,7 @@ class Context:
             self.subscriptions_to_activate.clear()
 
         for cm, subs in items:
-            async def requests():
+            async def requests(subs):
                 "Yield EventAddRequest commands."
                 requests = []
                 for sub in subs:
@@ -818,7 +812,7 @@ class Context:
                         requests.append(command)
                 return requests
 
-            for batch in batch_requests(await requests(),
+            for batch in batch_requests(await requests(subs),
                                         common.EVENT_ADD_BATCH_MAX_BYTES):
                 try:
                     await cm.send(*batch)
@@ -1064,7 +1058,7 @@ class VirtualCircuitManager:
     def _circuit_bytes_received(self, bytes_received):
         self.last_tcp_receipt = time.monotonic()
 
-        commands, num_bytes_needed = self.circuit.recv(bytes_received)
+        commands, _ = self.circuit.recv(bytes_received)
         for c in commands:
             self.command_queue.put(c)
 
@@ -1149,17 +1143,16 @@ class VirtualCircuitManager:
             if hasattr(ex, 'channel'):
                 channel = ex.channel
                 self.log.warning('Invalid command %s for Channel %s in state %s',
-                                 command, channel, channel.states,
-                                 exc_info=ex)
+                                 command, channel, channel.states, exc_info=ex)
                 # channel exceptions are not fatal
                 return
-            else:
-                self.log.error('Invalid command %s for VirtualCircuit %s in '
-                               'state %s', command, self, self.circuit.states,
-                               exc_info=ex)
-                # circuit exceptions are fatal; exit the loop
-                await self.disconnect()
-                return
+
+            self.log.exception(
+                'Invalid command %s for VirtualCircuit %s in state %s',
+                command, self, self.circuit.states)
+            # circuit exceptions are fatal; exit the loop
+            await self.disconnect()
+            return
 
         tags = self._tags
         if command is ca.DISCONNECTED:
@@ -1263,9 +1256,9 @@ class VirtualCircuitManager:
                     break
             except asyncio.CancelledError:
                 break
-            except Exception as ex:
-                self.log.error('Command queue evaluation failed: %r', command,
-                               exc_info=ex)
+            except Exception:
+                self.log.exception('Circuit command evaluation failed: %r',
+                                   command)
                 continue
 
             # async with self.new_command_condition:
@@ -1511,8 +1504,7 @@ class PV:
         """
         if self._timeout is common.CONTEXT_DEFAULT_TIMEOUT:
             return self.context.timeout
-        else:
-            return self._timeout
+        return self._timeout
 
     @timeout.setter
     def timeout(self, val):
@@ -1941,6 +1933,9 @@ class CallbackHandler:
         return cb_id
 
     def remove_callback(self, token):
+        # TODO: async confusion:
+        #       sync CallbackHandler.remove_callback
+        #       async Subscription.remove_callback
         with self.callback_lock:
             self.callbacks.pop(token, None)
 
