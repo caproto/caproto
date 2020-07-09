@@ -1,3 +1,4 @@
+import asyncio
 import curio
 import functools
 import os
@@ -38,6 +39,18 @@ def test_trio_client_example():
         pv1="XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL",
         pv2="XF:31IDA-OP{Tbl-Ax:X2}Mtr.VAL")
     trio.run(main_with_motorsim)
+
+
+def test_asyncio_client_example(curio_server):
+    from caproto.examples.asyncio_client_simple import main as example_main
+    server_runner, prefix, caget_pvdb = curio_server
+
+    @conftest.threaded_in_curio_wrapper
+    def client():
+        example_main(pvname1=prefix + 'int',
+                     pvname2=prefix + 'str')
+
+    asyncio.run(example_main(), debug=True)
 
 
 def test_thread_client_example(curio_server):
