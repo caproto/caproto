@@ -43,6 +43,8 @@ async def main(pv1="simple:A", pv2="simple:B"):
             sub.add_callback(user_callback)
 
             async for value in sub:
+                broadcaster.results.print_debug_information()
+
                 print('* Subscription value from async for:')
                 print(value.data)
                 break  # TODO: don't leave this commented while committing, ... ok?
@@ -78,6 +80,7 @@ async def main(pv1="simple:A", pv2="simple:B"):
 
     assert called
     print('Done')
+
     await broadcaster.disconnect()
     print('Broadcaster disconnected')
 

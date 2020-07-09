@@ -2,6 +2,7 @@ import collections
 import functools
 import logging
 import random
+import sys
 import threading
 import time
 
@@ -354,3 +355,36 @@ class SearchResults:
                 use_cached_search[address].append(name)
 
         return use_cached_search, needs_search
+
+    @_locked
+    def _debug_beacon_information(self):
+        'Yields individual lines of server information.'
+        # yield 'Host', 'Interval', 'Beacon ID'
+        for addr, info in self._last_beacon.items():
+            yield ('%s:%s' % addr, info['interval'], info['identifier'])
+
+    @_locked
+    def _debug_channel_information(self, specific_addresses=None):
+        'Yields individual lines of channel name information.'
+        specific_addresses = specific_addresses or list(self.addr_to_names)
+
+        # yield 'Host', 'Name'
+        for addr in specific_addresses:
+            try:
+                names = self.addr_to_names[addr]
+            except KeyError:
+                yield '(None)'
+            else:
+                for name in sorted(names):
+                    yield ('%s:%s' % addr, name)
+
+    def print_debug_information(self, file=sys.stdout):
+        'Print debug information about servers and channels to `file`.'
+        print('\t'.join(('Host', 'Interval', 'Beacon ID')), file=file)
+        for line in self._debug_beacon_information():
+            print('\t'.join(str(item) for item in line), file=file)
+
+        print(file=file)
+        print('\t'.join(('Host', 'Name')), file=file)
+        for line in self._debug_channel_information():
+            print('\t'.join(str(item) for item in line), file=file)

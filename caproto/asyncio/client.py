@@ -873,8 +873,6 @@ class Context:
         while True:
             address, names = await self._search_results_queue.async_get()
 
-            print('search results', address, names)  # TODO dupes
-
             channels_grouped_by_circuit = collections.defaultdict(list)
             # Assign each PV a VirtualCircuitManager for managing a socket
             # and tracking circuit state, as well as a ClientChannel for
