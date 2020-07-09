@@ -2041,13 +2041,10 @@ class Subscription(CallbackHandler):
             # Send it the most recent response, unless we are still waiting
             # for that first response from the server.
             if most_recent_response is not None:
-                try:
-                    func(self, most_recent_response)
-                except Exception:
-                    self.log.exception(
-                        "Exception raised during processing most recent "
-                        "response %r with new callback %r",
-                        most_recent_response, func)
+                circuit_manager = self.pv.circuit_manager
+                if circuit_manager is not None:
+                    circuit_manager.user_callback_executor.process(
+                        func, self, most_recent_response)
 
         return cb_id
 
