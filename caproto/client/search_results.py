@@ -81,16 +81,9 @@ class SearchResults:
         Holds search results.
         Maps address -> {name1, name2, ...}
 
-    _unanswered_searches : dict
+    unanswered_searches : dict
         Holds pending searches
         Maps search_id -> [name, results_queue, retirement_deadline]
-
-    _lock : threading.RLock
-        Lock for internal updates to SearchResults status
-
-    _search_id_counter : ThreadsafeCounter
-        Counter for new searches. This will be kept in sync with
-        _unanswered_searches such that there is no overlap in keys.
     '''
 
     def __init__(self):
