@@ -1773,7 +1773,7 @@ class PV:
     async def unsubscribe_all(self):
         "Clear all subscriptions. (Remove all user callbacks from them.)"
         for sub in self.subscriptions.values():
-            sub.clear()
+            await sub.clear()
 
     # @ensure_connected
     def time_since_last_heard(self, timeout=common.PV_DEFAULT_TIMEOUT):
