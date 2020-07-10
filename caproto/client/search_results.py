@@ -83,7 +83,7 @@ class SearchResults:
 
     unanswered_searches : dict
         Holds pending searches
-        Maps search_id -> [name, results_queue, retirement_deadline]
+        Maps search_id -> _UnansweredSearch
     '''
 
     def __init__(self):
