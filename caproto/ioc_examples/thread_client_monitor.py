@@ -44,7 +44,7 @@ def _monitor_pvs(*pv_names, context, queue, data_type='time'):
     """
 
     def add_to_queue(sub, event_add_response):
-        queue.put(('subscription', sub.pv, event_add_response))
+        queue.put(('subscription', sub, event_add_response))
 
     def connection_state_callback(pv, state):
         queue.put(('connection', pv, state))
@@ -56,7 +56,7 @@ def _monitor_pvs(*pv_names, context, queue, data_type='time'):
 
     subscriptions = []
     for pv in pvs:
-        sub = pv.subscribe(data_type='time')
+        sub = pv.subscribe(data_type=data_type)
         token = sub.add_callback(add_to_queue)
         subscriptions.append((sub, token, add_to_queue,
                               connection_state_callback))
@@ -87,8 +87,9 @@ async def monitor_pvs(*pv_names, async_lib, context=None, data_type='time'):
     event : {'subscription', 'connection'}
         The event type.
 
-    pv : str
-        The PV name.
+    context : str or Subscription
+        For a 'connection' event, this is the PV name.  For a 'subscription'
+        event, this is the `Subscription` instance.
 
     data : str or EventAddResponse
         For a 'subscription' event, the `EventAddResponse` holds the data and
@@ -104,8 +105,8 @@ async def monitor_pvs(*pv_names, async_lib, context=None, data_type='time'):
                                  data_type=data_type)
     try:
         while True:
-            info = await queue.async_get()
-            yield info
+            event, context, data = await queue.async_get()
+            yield event, context, data
     finally:
         for sub, token, *callbacks in subscriptions:
             sub.remove_callback(token)
@@ -138,20 +139,20 @@ class ThreadClientIOC(PVGroup):
         print('* `mirrored` startup hook called')
 
         # Loop and grab items from the queue one at a time
-        async for event, pv, info in monitor_pvs(self.pv_to_mirror,
-                                                 async_lib=async_lib):
+        async for event, context, data in monitor_pvs(self.pv_to_mirror,
+                                                      async_lib=async_lib):
             if event == 'subscription':
                 print('* Threading client pushed a new value in the queue')
-                print(f'\tValue={info.data} {info.metadata}')
+                print(f'\tValue={data.data} {data.metadata}')
 
                 # Mirror the value, status, severity, and timestamp:
-                await self.mirrored.write(info.data,
-                                          timestamp=info.metadata.timestamp,
-                                          status=info.metadata.status,
-                                          severity=info.metadata.severity)
+                await self.mirrored.write(data.data,
+                                          timestamp=data.metadata.timestamp,
+                                          status=data.metadata.status,
+                                          severity=data.metadata.severity)
             elif event == 'connection':
-                print(f'* Threading client connection state changed: {info}')
-                if info == 'disconnected':
+                print(f'* Threading client connection state changed: {data}')
+                if data == 'disconnected':
                     # Raise an alarm - our client PV is disconnected.
                     await self.mirrored.write(
                         self.mirrored.value,
