@@ -106,14 +106,22 @@ class PvpropertyData:
             from .records import records
             field_class = records[self.record_type]
             if self.pvspec.fields is not None:
-                new_dict = dict(field_class.__dict__)
-                for (field, field_attr), func in self.pvspec.fields:
-                    prop = new_dict[field]
-                    prop.pvspec = prop.pvspec._replace(**{field_attr: func})
+                clsdict = {}
+                # Update all fields with user-customized putters
+                for (prop_name, field_attr), func in self.pvspec.fields:
+                    try:
+                        prop = clsdict[prop_name]
+                    except KeyError:
+                        prop = copy.copy(getattr(field_class, prop_name))
 
+                    prop.pvspec = prop.pvspec._replace(**{field_attr: func})
+                    clsdict[prop_name] = prop
+
+                # Subclass the original record fields, patching in our new
+                # methods:
                 field_class = type(
                     field_class.__name__ + self.name.replace('.', '_'),
-                    (field_class, ), new_dict)
+                    (field_class, ), clsdict)
 
             self.field_inst = field_class(
                 prefix='', parent=self,
@@ -489,7 +497,7 @@ class pvproperty:
 
     def __get__(self, instance, owner):
         if instance is None:
-            return self.pvspec
+            return self
         return instance.attr_pvdb[self.attr_name]
 
     def __set__(self, instance, value):
