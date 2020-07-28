@@ -146,10 +146,6 @@ class PvpropertyData:
 
     async def verify_value(self, value):
         value = await super().verify_value(value)
-        if self.pvspec.put is None:
-            self.log.debug('group verify value for %s: %r', self.name, value)
-        else:
-            self.log.debug('verify value for %s: %r', self.name, value)
         return await self.putter(self, value)
 
     async def _server_startup(self, async_lib):
@@ -1293,11 +1289,10 @@ class PVGroup(metaclass=PVGroupMeta):
 
     async def group_read(self, instance):
         'Generic read called for channels without `get` defined'
-        self.log.debug('no-op group read of %s', instance.pvspec.attr)
 
     async def group_write(self, instance, value):
         'Generic write called for channels without `put` defined'
-        self.log.debug('group write of %s = %s', instance.pvspec.attr, value)
+        self.log.debug('group_write: %s = %s', instance.pvspec.attr, value)
         return value
 
 
