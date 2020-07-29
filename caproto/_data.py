@@ -976,6 +976,13 @@ class ChannelByte(ChannelNumeric):
             else:
                 value = b''.join(map(bytes, ([v] for v in value)))
 
+        if self.max_length == 1:
+            try:
+                len(value)
+            except TypeError:
+                # Allow a scalar byte value to be passed in
+                value = bytes([value])
+
         if isinstance(value, str):
             raise CaprotoValueError('ChannelByte does not accept decoded strings')
 
@@ -1024,6 +1031,13 @@ class ChannelChar(ChannelData):
                 value = value[0]
             else:
                 value = b''.join(map(bytes, ([v] for v in value)))
+
+        if self.max_length == 1:
+            try:
+                len(value)
+            except TypeError:
+                # Allow a scalar byte value to be passed in
+                value = str(bytes([value]), self.string_encoding)
 
         if isinstance(value, bytes):
             value = value.decode(self.string_encoding)

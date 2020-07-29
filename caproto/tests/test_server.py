@@ -362,3 +362,14 @@ def test_data_copy(cls, kwargs):
     patch_alarm(args1)
     patch_alarm(args2)
     assert args1 == args2
+
+
+@pytest.mark.parametrize('async_lib', ['asyncio', 'curio', 'trio'])
+def test_process_field(request, prefix, async_lib):
+    run_example_ioc('caproto.tests.ioc_process', request=request,
+                    args=['--prefix', prefix, '--async-lib', async_lib],
+                    pv_to_check=f'{prefix}record.PROC')
+
+    write(f'{prefix}record.PROC', [1], notify=True)
+    write(f'{prefix}record.PROC', [1], notify=True)
+    assert read(f'{prefix}count').data[0] == 2
