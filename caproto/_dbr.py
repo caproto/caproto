@@ -8,6 +8,7 @@
 import ctypes
 import datetime
 import collections
+import logging
 from enum import IntEnum, IntFlag
 from ._constants import (EPICS2UNIX_EPOCH, EPICS_EPOCH, MAX_STRING_SIZE,
                          MAX_UNITS_SIZE, MAX_ENUM_STRING_SIZE, MAX_ENUM_STATES)
@@ -21,6 +22,9 @@ __all__ = ('AccessRights', 'AlarmSeverity', 'AlarmStatus', 'ConnStatus',
            'char_types', 'string_types', 'int_types', 'float_types',
            'enum_types', 'char_types', 'native_float_types',
            'native_int_types')
+
+
+logger = logging.getLogger('caproto')
 
 
 class AccessRights(IntFlag):
@@ -237,10 +241,21 @@ class DbrTypeBase(ctypes.BigEndianStructure):
     def to_dict(self):
         d = {field: getattr(self, field)
              for field in self.info_fields}
+
         if 'status' in d:
-            d['status'] = AlarmStatus(d['status'])
+            try:
+                d['status'] = AlarmStatus(d['status'])
+            except ValueError:
+                logger.exception('Invalid alarm status: %s', d['status'])
+                d.pop('status')
+
         if 'severity' in d:
-            d['severity'] = AlarmSeverity(d['severity'])
+            try:
+                d['severity'] = AlarmSeverity(d['severity'])
+            except ValueError:
+                logger.exception('Invalid alarm severity: %s', d['severity'])
+                d.pop('severity')
+
         return d
 
     def __repr__(self):
