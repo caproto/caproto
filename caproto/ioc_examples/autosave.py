@@ -4,6 +4,12 @@ from caproto.server.autosave import autosaved, AutosaveHelper
 from textwrap import dedent
 
 
+class AutosavedSubgroup(PVGroup):
+    A = autosaved(pvproperty(value=1, record='ao'))
+    B = pvproperty(value=2.0)
+    C = autosaved(pvproperty(value=[1, 2, 3]))
+
+
 class AutosavedSimpleIOC(PVGroup):
     """
     An IOC with three uncoupled read/writable PVs
@@ -22,6 +28,8 @@ class AutosavedSimpleIOC(PVGroup):
     A = autosaved(pvproperty(value=1, record='ao'))
     B = pvproperty(value=2.0)
     C = autosaved(pvproperty(value=[1, 2, 3]))
+
+    subgroup = SubGroup(AutosavedSubgroup)
 
 
 if __name__ == '__main__':
