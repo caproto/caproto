@@ -716,7 +716,7 @@ class SubGroup:
             self.attr_separator = attr_separator
         self.base = (PVGroup, ) if base is None else base
         self.__doc__ = doc
-        self.init_kwargs = dict(init_kwargs) if init_kwargs else {}
+        self.init_kwargs = init_kwargs
         # Set last with setter
         self.group = group
 
