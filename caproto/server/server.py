@@ -106,14 +106,22 @@ class PvpropertyData:
             from .records import records
             field_class = records[self.record_type]
             if self.pvspec.fields is not None:
-                new_dict = dict(field_class.__dict__)
-                for (field, field_attr), func in self.pvspec.fields:
-                    prop = new_dict[field]
-                    prop.pvspec = prop.pvspec._replace(**{field_attr: func})
+                clsdict = {}
+                # Update all fields with user-customized putters
+                for (prop_name, field_attr), func in self.pvspec.fields:
+                    try:
+                        prop = clsdict[prop_name]
+                    except KeyError:
+                        prop = copy.copy(getattr(field_class, prop_name))
 
+                    prop.pvspec = prop.pvspec._replace(**{field_attr: func})
+                    clsdict[prop_name] = prop
+
+                # Subclass the original record fields, patching in our new
+                # methods:
                 field_class = type(
                     field_class.__name__ + self.name.replace('.', '_'),
-                    (field_class, ), new_dict)
+                    (field_class, ), clsdict)
 
             self.field_inst = field_class(
                 prefix='', parent=self,
@@ -138,10 +146,6 @@ class PvpropertyData:
 
     async def verify_value(self, value):
         value = await super().verify_value(value)
-        if self.pvspec.put is None:
-            self.log.debug('group verify value for %s: %r', self.name, value)
-        else:
-            self.log.debug('verify value for %s: %r', self.name, value)
         return await self.putter(self, value)
 
     async def _server_startup(self, async_lib):
@@ -489,7 +493,7 @@ class pvproperty:
 
     def __get__(self, instance, owner):
         if instance is None:
-            return self.pvspec
+            return self
         return instance.attr_pvdb[self.attr_name]
 
     def __set__(self, instance, value):
@@ -1285,11 +1289,10 @@ class PVGroup(metaclass=PVGroupMeta):
 
     async def group_read(self, instance):
         'Generic read called for channels without `get` defined'
-        self.log.debug('no-op group read of %s', instance.pvspec.attr)
 
     async def group_write(self, instance, value):
         'Generic write called for channels without `put` defined'
-        self.log.debug('group write of %s = %s', instance.pvspec.attr, value)
+        self.log.debug('group_write: %s = %s', instance.pvspec.attr, value)
         return value
 
 
