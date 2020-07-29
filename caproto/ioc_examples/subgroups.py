@@ -23,10 +23,16 @@ class RecordLike(PVGroup):
 
 class MySubGroup(PVGroup):
     'Example group of PVs, where the prefix is defined on instantiation'
+
+    def __init__(self, *args, max_value, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.max_value = max_value
+
     # PV: {prefix}random - defaults to dtype of int
     @pvproperty
     async def random(self, instance):
-        return random.randint(1, 100)
+        print('Picking a random value from 1 to', self.max_value)
+        return random.randint(1, self.max_value)
 
 
 class MyPVGroup(PVGroup):
@@ -44,9 +50,9 @@ class MyPVGroup(PVGroup):
     recordlike2 = SubGroup(RecordLike)
 
     # PV: {prefix}group1:random
-    group1 = SubGroup(MySubGroup)
+    group1 = SubGroup(MySubGroup, max_value=5)
     # PV: {prefix}group2-random
-    group2 = SubGroup(MySubGroup, prefix='group2-')
+    group2 = SubGroup(MySubGroup, prefix='group2-', max_value=20)
 
     # PV: {prefix}group3_prefix:random
     @SubGroup(prefix='group3_prefix:')

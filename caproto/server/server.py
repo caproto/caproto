@@ -734,20 +734,6 @@ class SubGroup:
             assert inspect.isclass(group), 'Group should be dict or SubGroup'
             assert issubclass(group, PVGroup)
             self.group_cls = group
-            valid_init_kw = {
-                key
-                for cls in inspect.getmro(self.group_cls)
-                for key in inspect.signature(cls).parameters.keys()
-            }
-            invalid_kwargs = [kw
-                              for kw in self.init_kwargs
-                              if kw not in valid_init_kw
-                              ]
-            if invalid_kwargs:
-                raise RuntimeError(
-                    f'Invalid kwargs used for class {group.__name__}: '
-                    f'{invalid_kwargs}'
-                )
         else:
             self.group_dict = None
             self.group_cls = None
