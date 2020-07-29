@@ -703,7 +703,7 @@ class SubGroup:
     _class_dict = None
 
     def __init__(self, group=None, *, prefix=None, macros=None,
-                 attr_separator=None, doc=None, base=None):
+                 attr_separator=None, doc=None, base=None, **init_kwargs):
         self.attr_name = None  # to be set later
 
         # group_dict is passed in -> generate class_dict -> generate group_cls
@@ -716,6 +716,7 @@ class SubGroup:
             self.attr_separator = attr_separator
         self.base = (PVGroup, ) if base is None else base
         self.__doc__ = doc
+        self.init_kwargs = init_kwargs
         # Set last with setter
         self.group = group
 
@@ -1251,7 +1252,8 @@ class PVGroup(metaclass=PVGroupMeta):
 
             # instantiate the subgroup
             inst = subgroup_cls(prefix=prefix, macros=macros, parent=self,
-                                name=f'{self.name}.{attr}')
+                                name=f'{self.name}.{attr}',
+                                **subgroup.init_kwargs)
             self.groups[attr] = inst
 
             # find all sub-subgroups, giving direct access to them
