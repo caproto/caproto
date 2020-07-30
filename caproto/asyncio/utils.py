@@ -17,6 +17,11 @@ class AsyncioQueue:
 
     def __init__(self, maxsize=0):
         self._queue = asyncio.Queue(maxsize)
+        try:
+            self._loop = get_running_loop()
+        except Exception as ex:
+            raise RuntimeError('AsyncioQueue must be instantiated in the '
+                               'event loop it is to be used in.') from ex
 
     async def async_get(self):
         return await self._queue.get()
@@ -26,12 +31,13 @@ class AsyncioQueue:
 
     def get(self):
         future = asyncio.run_coroutine_threadsafe(
-            self._queue.get(), get_running_loop())
+            self._queue.get(), self._loop)
 
         return future.result()
 
     def put(self, value):
-        self._queue.put_nowait(value)
+        asyncio.run_coroutine_threadsafe(
+            self._queue.put(value), self._loop)
 
 
 class _DatagramProtocol(asyncio.Protocol):
