@@ -41,9 +41,9 @@ class FakeMotor(PVGroup):
                 await async_lib.library.sleep(dwell)
                 continue
 
-            fields.done_moving_to_value.write(1)
-            fields.done_moving_to_value.write(0)
-            fields.motor_is_moving.write(1)
+            await fields.done_moving_to_value.write(1)
+            await fields.done_moving_to_value.write(0)
+            await fields.motor_is_moving.write(1)
 
             readback = fields.user_readback_value.value
             step_size = diff / num_steps if num_steps > 0 else 0.0
@@ -53,7 +53,7 @@ class FakeMotor(PVGroup):
                 await async_lib.library.sleep(dwell)
 
             await fields.user_readback_value.write(target_pos)
-            fields.done_moving_to_value.write(1)
+            await fields.done_moving_to_value.write(1)
 
 
 class FakeMotorIOC(PVGroup):
