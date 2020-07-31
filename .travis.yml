@@ -114,9 +114,10 @@ script:
   # Upload the docs to gh-pages.
   - |
     if [[ $PUBLISH_DOCS && ! -z "$DOCTR_DEPLOY_ENCRYPTION_KEY_NSLS_II_NSLS_II_GITHUB_IO" ]]; then
+       doctr deploy --deploy-repo NSLS-II/NSLS-II.github.io --deploy-branch-name master caproto
+
        # A fix for doctr-versions-menu:
        pip install pyparsing --upgrade
-       DEPLOY_DIR="${TRAVIS_TAG:=master}"
-       doctr deploy --command=doctr-versions-menu --build-tags --deploy-repo NSLS-II/NSLS-II.github.io --deploy-branch-name master ${DEPLOY_DIR}
+       DEPLOY_DIR="caproto/${TRAVIS_TAG:=master}"
        doctr deploy --command=doctr-versions-menu --build-tags --deploy-repo caproto/caproto.github.io --deploy-branch-name master ${DEPLOY_DIR}
     fi
