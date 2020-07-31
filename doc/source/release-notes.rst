@@ -26,6 +26,7 @@ Added
   threading client.
 - Allow :class:`caproto.server.SubGroup` instances to accept keyword arguments.
 - Added autosave-like tools and an example.
+- Now using ``doctr-versions-menu`` for documentation.
 
 Changed
 -------

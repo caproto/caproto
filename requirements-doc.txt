@@ -1,4 +1,5 @@
 doctr
+doctr-versions-menu
 graphviz
 ipython<7
 matplotlib
