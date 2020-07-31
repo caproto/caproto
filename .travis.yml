@@ -113,7 +113,7 @@ script:
   - make -C doc html
   # Upload the docs to gh-pages.
   - |
-    if [[ $PUBLISH_DOCS ]]; then
+    if [[ $PUBLISH_DOCS && ! -z "$DOCTR_DEPLOY_ENCRYPTION_KEY_NSLS_II_NSLS_II_GITHUB_IO" ]]; then
        # A fix for doctr-versions-menu:
        pip install pyparsing --upgrade
        DEPLOY_DIR="${TRAVIS_TAG:=master}"
