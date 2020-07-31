@@ -2,6 +2,44 @@
 Release History
 ***************
 
+v0.6.0 (2020-07-31)
+===================
+
+Fixed
+-----
+
+- Fixed server PVGroup logger names.  It was erroneously using the exact string
+  '{base}.{log_name}', and now will be correctly expanded to be based on either
+  the module name or the parent PVGroup's logger name.
+- Fields defined in the :class:`caproto.server.records.RecordFieldGroup` may
+  now be customized using, for example, ``@prop.fields.process_record.putter``.
+- :class:`caproto.ChannelByte` and :class:`caproto.ChannelChar` with
+  ``max_length=1`` now accept scalar integer values, whereas they were
+  previously failing due to expecting byte strings (or strings).  This arose
+  primarily in the case of record fields which attempt to reflect the actual
+  data types found in epics-base.
+
+Added
+-----
+
+- Added a new (experimental) asyncio client with features comparable to the
+  threading client.
+- Allow :class:`caproto.server.SubGroup` instances to accept keyword arguments.
+- Added autosave-like tools and an example.
+
+Changed
+-------
+
+- Significantly refactored task handling in the asyncio server.  This improves
+  the performance of write request handling and overall task cleanup.
+- Some asyncio server utilities were relocated such that the server and new
+  client can both utilize them.
+- Accessing a :class:`caproto.server.pvproperty` directly from the
+  :class:`caproto.server.PVGroup` class will no longer return a
+  :class:`caproto.server.PVSpec` instance, but the
+  :class:`caproto.server.pvproperty` itself.
+
+
 v0.5.2 (2020-06-18)
 ===================
 
