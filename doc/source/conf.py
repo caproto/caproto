@@ -45,9 +45,9 @@ extensions = [
     'doctr_versions_menu',
 ]
 
-# doctr_versions_menu_conf = {
-#     'json_file': '/versions.json'
-# }
+doctr_versions_menu_conf = {
+    'json_file': '/versions.json'
+}
 
 sys._caproto_hack_docs_source_path = os.path.dirname(__file__)
 autosummary_generate = True
