@@ -300,7 +300,9 @@ class AutosaveHelper(PVGroup):
             if data is None:
                 data = self.prepare_data()
 
-            with tempfile.NamedTemporaryFile(mode='wt', delete=False) as stream:
+            with tempfile.NamedTemporaryFile(mode='wt', delete=False,
+                                             dir=self.file_manager.directory,
+                                             ) as stream:
                 json.dump(data, stream)
                 filename = stream.name
         except Exception:
