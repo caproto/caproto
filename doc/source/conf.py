@@ -42,6 +42,7 @@ extensions = [
     'IPython.sphinxext.ipython_directive',
     'IPython.sphinxext.ipython_console_highlighting',
     'numpydoc',
+    'doctr_versions_menu',
 ]
 
 sys._caproto_hack_docs_source_path = os.path.dirname(__file__)
