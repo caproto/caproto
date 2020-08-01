@@ -13,6 +13,5 @@ pytest-timeout
 pytest-rerunfailures
 pytest-xdist
 asv
-asks
 ophyd
 trio
