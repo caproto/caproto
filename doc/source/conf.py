@@ -71,7 +71,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'caproto'
-copyright = '2017, Daniel Allan'
+copyright = '2020, Daniel Allan'
 author = 'Daniel Allan'
 
 # The version info for the project you're documenting, acts as replacement for
