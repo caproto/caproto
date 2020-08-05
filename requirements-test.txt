@@ -8,7 +8,6 @@ netifaces
 pyepics >=3.4.2
 pytest
 numpy
-pytest-benchmark
 pytest-timeout
 pytest-rerunfailures
 pytest-xdist
