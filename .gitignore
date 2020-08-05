@@ -8,7 +8,6 @@ doc/build
 .cache/
 .coverage
 .coverage.*
-.asv/
 pytest_bench.json
 .pytest_cache/
 .idea/

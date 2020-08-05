@@ -8,7 +8,6 @@ import curio
 import caproto as ca
 from .conftest import default_setup_module, default_teardown_module
 from .conftest import get_curio_context, run_with_trio_context
-from . import _asv_shim
 
 
 ioc_handler = None
@@ -21,7 +20,6 @@ def setup_module(module):
 
     logging.basicConfig()
     logger.setLevel('DEBUG')
-    _asv_shim.logger.setLevel('DEBUG')
     logging.getLogger('benchmarks.util').setLevel('DEBUG')
     logging.getLogger('caproto').setLevel('INFO')
 
