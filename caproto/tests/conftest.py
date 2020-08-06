@@ -647,17 +647,6 @@ def circuit_pair(request):
     return cli_circuit, srv_circuit
 
 
-# Import the pytest-benchmark -> asv shim if both are available
-try:
-    __import__('pytest_benchmark')
-    __import__('asv')
-except ImportError as ex:
-    print('{} is missing'.format(ex))
-else:
-    from ._asv_shim import get_conftest_globals
-    globals().update(**get_conftest_globals())
-
-
 def threaded_in_curio_wrapper(fcn):
     '''Run a threaded test with curio support
 

@@ -90,15 +90,9 @@ script:
   - pip install -U attrs
 
   - caproto-repeater &
-  - coverage run --parallel-mode run_tests.py -k 'not bench'  --benchmark-disable -v
+  - coverage run --parallel-mode run_tests.py -v
   - coverage combine --append
 
-  - export ASV_ENV_NAME=${TRAVIS_PYTHON_VERSION}_${BASE_VER}
-  - |
-    if [ $INSTALL_NUMPY ]
-    then
-      coverage run --parallel-mode run_tests.py -v --benchmark-only --benchmark-json=pytest_bench.json --benchmark-columns=mean,median,rounds,iterations -k bench --timeout=50 && coverage combine --append
-    fi
   - coverage report -m
   - codecov
   - set -e
