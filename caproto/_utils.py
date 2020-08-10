@@ -4,21 +4,22 @@
 import argparse
 import array
 import collections
+import enum
 import functools
 import inspect
+import json
 import os
 import random
 import socket
 import sys
-import enum
-import json
 import threading
+import weakref
 from collections import namedtuple
 from contextlib import contextmanager
 from warnings import warn
-import weakref
 
 from ._version import get_versions
+
 __version__ = get_versions()['version']
 
 try:
@@ -235,6 +236,26 @@ _ENVIRONMENT_DEFAULTS = dict(
     EPICS_CAS_BEACON_PORT=5065,
     EPICS_CAS_INTF_ADDR_LIST='',
     EPICS_CAS_IGNORE_ADDR_LIST='',
+
+    # pvAccess
+    EPICS_PVA_DEBUG=0,
+    EPICS_PVA_ADDR_LIST='',
+    EPICS_PVA_AUTO_ADDR_LIST='YES',
+    EPICS_PVA_CONN_TMO=30.0,
+    EPICS_PVA_BEACON_PERIOD=15.0,
+    EPICS_PVA_BROADCAST_PORT=5076,
+    EPICS_PVA_MAX_ARRAY_BYTES=16384,
+    EPICS_PVA_SERVER_PORT=5075,
+
+    # pvAccess server
+    EPICS_PVAS_BEACON_ADDR_LIST='',
+    EPICS_PVAS_AUTO_BEACON_ADDR_LIST='YES',
+    EPICS_PVAS_BEACON_PERIOD=15.0,
+    EPICS_PVAS_SERVER_PORT=5075,
+    EPICS_PVAS_BROADCAST_PORT=5076,
+    EPICS_PVAS_MAX_ARRAY_BYTES=16384,
+    EPICS_PVA_PROVIDER_NAMES='local',
+    EPICS_PVAS_PROVIDER_NAMES='local',
 )
 
 
@@ -259,26 +280,30 @@ def _split_address_list(addr_list):
     return list(set(addr for addr in addr_list.split(' ') if addr.strip()))
 
 
-def get_manually_specified_beacon_addresses():
+def get_manually_specified_beacon_addresses(*, protocol='CAS'):
     '''Get a list of addresses, as configured by EPICS_CA_ADDR_LIST'''
     return _split_address_list(
-        get_environment_variables()['EPICS_CAS_BEACON_ADDR_LIST'])
+        get_environment_variables()[f'EPICS_{protocol}_BEACON_ADDR_LIST'])
 
 
-def get_manually_specified_client_addresses():
+def get_manually_specified_client_addresses(*, protocol='CA'):
     '''Get a list of addresses, as configured by EPICS_CA_ADDR_LIST'''
     return _split_address_list(
-        get_environment_variables()['EPICS_CA_ADDR_LIST'])
+        get_environment_variables()[f'EPICS_{protocol}_ADDR_LIST'])
 
 
-def get_address_list():
-    '''Get channel access client address list based on environment variables
+def get_address_list(*, protocol='CA'):
+    '''
+    Get channel access client address list based on environment variables
 
     If the address list is set to be automatic, the network interfaces will be
     scanned and used to determine the broadcast addresses available.
     '''
     env = get_environment_variables()
-    addresses = get_manually_specified_client_addresses()
+    addresses = get_manually_specified_client_addresses(protocol=protocol)
+
+    auto_addr_list = env[f'EPICS_{protocol}_AUTO_ADDR_LIST']
+    addr_list = env[f'EPICS_{protocol}_ADDR_LIST']
 
     if addresses and env['EPICS_CA_AUTO_ADDR_LIST'].lower() != 'yes':
         # Custom address list specified, and EPICS_CA_AUTO_ADDR_LIST=NO
@@ -293,14 +318,15 @@ def get_address_list():
     return addresses + auto_addr_list
 
 
-def get_server_address_list():
-    '''Get the server interfaces based on environment variables
+def get_server_address_list(*, protocol='CAS'):
+    '''Get the server interface addresses based on environment variables
 
     Returns
     -------
     list of interfaces
     '''
-    intf_addrs = get_environment_variables()['EPICS_CAS_INTF_ADDR_LIST']
+    key = f'EPICS_{protocol}_INTF_ADDR_LIST'
+    intf_addrs = get_environment_variables()[key]
 
     if not intf_addrs:
         return ['0.0.0.0']
@@ -314,7 +340,7 @@ def get_server_address_list():
     return [strip_port(addr) for addr in _split_address_list(intf_addrs)]
 
 
-def get_beacon_address_list():
+def get_beacon_address_list(*, protocol='CAS'):
     '''Get channel access beacon address list based on environment variables
 
     If the address list is set to be automatic, the network interfaces will be
@@ -325,9 +351,9 @@ def get_beacon_address_list():
     addr_list : list of (addr, beacon_port)
     '''
     env = get_environment_variables()
-    auto_addr_list = env['EPICS_CAS_AUTO_BEACON_ADDR_LIST']
-    addr_list = get_manually_specified_beacon_addresses()
-    beacon_port = env['EPICS_CAS_BEACON_PORT']
+    auto_addr_list = env[f'EPICS_{protocol}_AUTO_BEACON_ADDR_LIST']
+    addr_list = get_manually_specified_beacon_addresses(protocol=protocol)
+    beacon_port = env[f'EPICS_{protocol}_BEACON_PORT']
 
     def get_addr_port(addr):
         if ':' in addr:
