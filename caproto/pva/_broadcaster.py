@@ -30,11 +30,20 @@ class Broadcaster:
     our_role : CLIENT or SERVER
         Our role.
 
+    response_addr : (addr, port)
+        The desired response address for search replies.  The address may be
+        '0.0.0.0' as an indicator to reply to the IP-layer defined source
+        address of the packet.
+
     port : int
         UDP socket port for responses
 
     endian : LITTLE_ENDIAN or BIG_ENDIAN
-        Default is SYS_ENDIAN
+        Default is SYS_ENDIAN.
+
+    guid : str, optional
+        The globally unique identifier for responses to search requests.  Must
+        be 12 characters long.
     """
     def __init__(self,
                  our_role: Role,
@@ -58,6 +67,11 @@ class Broadcaster:
 
         self.response_addr = response_addr
         self.guid = guid or utils.new_guid()
+
+        if len(self.guid) != 12:
+            raise ValueError(
+                f'GUID must be 12 characters long. Got: {self.guid}'
+            )
 
         if our_role is CLIENT:
             self.their_role = SERVER
