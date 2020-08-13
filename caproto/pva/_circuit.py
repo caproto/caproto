@@ -484,7 +484,7 @@ class _BaseChannel:
         self.cid = cid
         self.circuit.channels[self.cid] = self
         self.states = ChannelState(self.circuit.states)
-        # These will be set when the circuit processes CreateChanResponse.
+        # These will be set when the circuit processes CreateChannelResponse..
         self.interface = None
         self.sid = None
         self.access_rights = None
@@ -535,7 +535,7 @@ class ClientChannel(_BaseChannel):
     and optional cid. The server address is used to assign the ClientChannel to
     a VirtualCircuit. If no cid is given, a unique one is allocated by the
     VirtualCircuit.
-    (2) A VirtualCircuit processes a CreateChanRequest that refers to a cid
+    (2) A VirtualCircuit processes a CreateChannelRequest that refers to a cid
     that it has not yet seen. A ClientChannel will be automatically
     instantiated with the name and cid indicated that command and the address
     of that VirtualCircuit. It can be accessed in the circuit's
@@ -549,13 +549,13 @@ class ClientChannel(_BaseChannel):
     cid : integer, optional
     """
 
-    def create(self):
+    def create(self) -> CreateChannelRequest:
         """
-        Generate a valid :class:`CreateChanRequest`.
+        Generate a valid :class:`CreateChannelRequest`.
 
         Returns
         -------
-        CreateChanRequest
+        CreateChannelRequest
         """
         create_cls = self.circuit.messages[ApplicationCommands.CREATE_CHANNEL]
         return create_cls(
@@ -563,20 +563,21 @@ class ClientChannel(_BaseChannel):
             channels=[{'id': self.cid, 'channel_name': self.name}]
         )
 
-    def disconnect(self):
+    def disconnect(self) -> ChannelDestroyRequest:
         """
-        Generate a valid :class:`ClearChannelRequest`.
+        Generate a valid :class:`ChannelDestroyRequest`.
 
         Returns
         -------
-        ClearChannelRequest
+        ChannelDestroyRequest
         """
         if self.sid is None:
             return
         cls = self.circuit.messages[ApplicationCommands.DESTROY_CHANNEL]
         return cls(client_chid=self.cid, server_chid=self.sid)
 
-    def read_interface(self, *, ioid=None, sub_field_name=''):
+    def read_interface(self, *, ioid=None,
+                       sub_field_name='') -> ChannelFieldInfoRequest:
         """
         Generate a valid :class:`ChannelFieldInfoRequest`.
         """
@@ -589,7 +590,9 @@ class ClientChannel(_BaseChannel):
                    sub_field_name=sub_field_name,
                    )
 
-    def read_init(self, *, ioid=None, pvrequest: str = 'field()'):
+    def read_init(self, *, ioid=None,
+                  pvrequest: str = 'field()'
+                  ) -> ChannelGetRequest:
         """
         Generate a valid :class:`ChannelGetRequest`.
 
@@ -613,7 +616,7 @@ class ClientChannel(_BaseChannel):
                    pv_request=pvrequest,
                    )
 
-    def read(self, ioid, interface):
+    def read(self, ioid, interface) -> ChannelGetRequest:
         """
         Generate a valid :class:`ChannelGetRequest`.
 
@@ -636,7 +639,7 @@ class ClientChannel(_BaseChannel):
     def subscribe_init(self, *,
                        ioid=None,
                        pvrequest: str = 'field(value)',
-                       queue_size=None):
+                       queue_size=None) -> ChannelMonitorRequest:
         """
         Generate a valid :class:`...`.
 
@@ -660,7 +663,7 @@ class ClientChannel(_BaseChannel):
                    pv_request=pvrequest,
                    )
 
-    def subscribe_control(self, ioid, *, subcommand):
+    def subscribe_control(self, ioid, *, subcommand) -> ChannelMonitorRequest:
         """
         Generate a valid ...
 
