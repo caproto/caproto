@@ -18,7 +18,7 @@ from ._utils import CLIENT, SERVER, CaprotoValueError, Role
 
 class Broadcaster:
     """
-    An object encapsulating the state of one CA UDP connection.
+    An object encapsulating the state of one PVA UDP connection.
 
     It is a companion to a UDP socket managed by a client or server
     implementation. All data received over the socket should be passed to
