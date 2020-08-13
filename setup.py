@@ -41,16 +41,13 @@ with open(path.join(here, 'requirements-test.txt')) as requirements_file:
                          if not line.startswith('#')]
 
 extras_require = {
-    'standard': ['netifaces', 'numpy', 'dpkt'],
+    'standard': ['netifaces', 'numpy', 'dpkt', 'parsimonious'],
     'async': ['curio>=1.2', 'trio>=0.12.1'],
 }
 
 if sys.version_info == (3, 6):
     # For PVA support of dataclasses
     extras_require['standard'].append('dataclasses')
-
-# TODO this is hard requirement at the moment:
-extras_require['standard'].append('parsimonious')
 
 extras_require['complete'] = sorted(set(sum(extras_require.values(), [])))
 extras_require['test'] = sorted(set(sum(extras_require.values(), test_requirements)))
