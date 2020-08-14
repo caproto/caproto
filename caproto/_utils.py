@@ -57,6 +57,7 @@ __all__ = (  # noqa F822
     'parse_channel_filter',
     'batch_requests',
     'CaprotoError',
+    'Protocol',
     'ProtocolError',
     'LocalProtocolError',
     'RemoteProtocolError',
@@ -131,9 +132,22 @@ class ConversionDirection(_SimpleReprEnum):
     TO_WIRE = enum.auto()
 
 
+class Protocol(str, _SimpleReprEnum):
+    PVAccess = 'PVA'
+    ChannelAccess = 'CA'
+
+    @property
+    def server_env_key(self) -> str:
+        """The environment variable key used for server settings."""
+        return {
+            Protocol.ChannelAccess: 'CAS',
+            Protocol.PVAccess: 'PVAS',
+        }[self]
+
+
 globals().update(
     {token: getattr(_enum, token)
-     for _enum in [Role, Direction, States]
+     for _enum in [Role, Direction, States, Protocol]
      for token in dir(_enum)
      if not token.startswith('_')
      })
@@ -254,8 +268,9 @@ _ENVIRONMENT_DEFAULTS = dict(
     EPICS_PVAS_SERVER_PORT=5075,
     EPICS_PVAS_BROADCAST_PORT=5076,
     EPICS_PVAS_MAX_ARRAY_BYTES=16384,
-    EPICS_PVA_PROVIDER_NAMES='local',
     EPICS_PVAS_PROVIDER_NAMES='local',
+    EPICS_PVAS_INTF_ADDR_LIST='',
+    EPICS_PVA_PROVIDER_NAMES='local',
 )
 
 
@@ -280,35 +295,29 @@ def _split_address_list(addr_list):
     return list(set(addr for addr in addr_list.split(' ') if addr.strip()))
 
 
-def get_manually_specified_beacon_addresses(*, protocol='CA'):
+def get_manually_specified_beacon_addresses(
+        *, protocol=Protocol.ChannelAccess):
     '''Get a list of addresses, as configured by EPICS_CA_ADDR_LIST'''
-    try:
-        protocol_key = {
-            'CA': 'CAS',
-            'PVA': 'PVAS',
-        }[protocol]
-    except KeyError:
-        raise ValueError('Protocol should be in {"CA", "PVA"}')
-
+    protocol_key = Protocol(protocol).server_env_key
     return _split_address_list(
         get_environment_variables()[f'EPICS_{protocol_key}_BEACON_ADDR_LIST'])
 
 
-def get_manually_specified_client_addresses(*, protocol='CA'):
+def get_manually_specified_client_addresses(
+        *, protocol=Protocol.ChannelAccess):
     '''Get a list of addresses, as configured by EPICS_CA_ADDR_LIST'''
     return _split_address_list(
         get_environment_variables()[f'EPICS_{protocol}_ADDR_LIST'])
 
 
-def get_address_list(*, protocol='CA'):
+def get_address_list(*, protocol=Protocol.ChannelAccess):
     '''
     Get channel access client address list based on environment variables
 
     If the address list is set to be automatic, the network interfaces will be
     scanned and used to determine the broadcast addresses available.
     '''
-    if protocol not in ('CA', 'PVA'):
-        raise ValueError('Protocol should be in {"CA", "PVA"}')
+    protocol = Protocol(protocol)
 
     env = get_environment_variables()
     addresses = get_manually_specified_client_addresses(protocol=protocol)
@@ -327,20 +336,14 @@ def get_address_list(*, protocol='CA'):
     return addresses + auto_addr_list
 
 
-def get_server_address_list(*, protocol='CA'):
+def get_server_address_list(*, protocol=Protocol.ChannelAccess):
     '''Get the server interface addresses based on environment variables
 
     Returns
     -------
     list of interfaces
     '''
-    try:
-        protocol_key = {
-            'CA': 'CAS',
-            'PVA': 'PVAS',
-        }[protocol]
-    except KeyError:
-        raise ValueError('Protocol should be in {"CA", "PVA"}')
+    protocol_key = Protocol(protocol).server_env_key
 
     key = f'EPICS_{protocol_key}_INTF_ADDR_LIST'
     intf_addrs = get_environment_variables()[key]
@@ -357,7 +360,7 @@ def get_server_address_list(*, protocol='CA'):
     return [strip_port(addr) for addr in _split_address_list(intf_addrs)]
 
 
-def get_beacon_address_list(*, protocol='CA'):
+def get_beacon_address_list(*, protocol=Protocol.ChannelAccess):
     '''Get channel access beacon address list based on environment variables
 
     If the address list is set to be automatic, the network interfaces will be
@@ -367,21 +370,15 @@ def get_beacon_address_list(*, protocol='CA'):
     -------
     addr_list : list of (addr, beacon_port)
     '''
-    try:
-        protocol_key = {
-            'CA': 'CAS',
-            'PVA': 'PVAS',
-        }[protocol]
-    except KeyError:
-        raise ValueError('Protocol should be in {"CA", "PVA"}')
+    protocol_key = Protocol(protocol).server_env_key
 
     env = get_environment_variables()
     auto_addr_list = env[f'EPICS_{protocol_key}_AUTO_BEACON_ADDR_LIST']
     addr_list = get_manually_specified_beacon_addresses(protocol=protocol)
-    if protocol == 'CA':
-        beacon_port = env[f'EPICS_CAS_BEACON_PORT']
+    if protocol == Protocol.ChannelAccess:
+        beacon_port = env['EPICS_CAS_BEACON_PORT']
     else:
-        beacon_port = env[f'EPICS_PVAS_BROADCAST_PORT']
+        beacon_port = env['EPICS_PVAS_BROADCAST_PORT']
 
     def get_addr_port(addr):
         if ':' in addr:
