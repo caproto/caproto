@@ -58,12 +58,18 @@ def fabricate_channel(key):
         return ChannelEnum(value=0, enum_strings=['No', 'Yes'])
     elif 'ImageMode' in key:
         return ChannelEnum(value=0, enum_strings=['Single', 'Multiple', 'Continuous'])
+    elif 'WriteMode' in key:
+        return ChannelEnum(value=0, enum_strings=['Single', 'Capture', 'Stream'])
+    elif 'ArraySize' in key:
+        return ChannelData(value=10)
     elif 'TriggerMode' in key:
         return ChannelEnum(value=0, enum_strings=['Internal', 'External'])
     elif 'FileWriteMode' in key:
         return ChannelEnum(value=0, enum_strings=['Single'])
     elif 'FilePathExists' in key:
         return ChannelData(value=1)
+    elif 'WaitForPlugins' in key:
+        return ChannelEnum(value=0, enum_strings=['No', 'Yes'])
     elif ('file' in key.lower() and 'number' not in key.lower() and
           'mode' not in key.lower()):
         return ChannelChar(value='a' * 250)
