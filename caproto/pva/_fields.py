@@ -1,0 +1,592 @@
+"""
+Field description (and other primitives) serialization helpers.
+"""
+
+import dataclasses
+import logging
+import textwrap
+import typing  # noqa
+from dataclasses import field
+from struct import pack, unpack
+from typing import Dict, List, Optional, Tuple
+
+from . import _core as core
+from . import _repr_helper
+from ._core import (CacheContext, Deserialized, Endian, FieldArrayType,
+                    FieldDescByte, FieldType, Serializable,
+                    StatelessSerializable, TypeCode)
+
+serialization_logger = logging.getLogger('caproto.pva.serialization')
+
+
+@dataclasses.dataclass(frozen=True)
+class FieldDesc(Serializable):
+    """
+    A frozen dataclass which represents a single field - whether it be a struct
+    or a basic data type.
+    """
+
+    name: str
+    field_type: FieldType
+    array_type: FieldArrayType
+    size: Optional[int]
+
+    @property
+    def type_name(self) -> str:
+        return self.field_type.name
+
+    @staticmethod
+    def from_repr_line(line: str) -> 'FieldDesc':
+        'Interpret a line of format "[type_name][array_info] [name]"'
+        if ' ' not in line:
+            raise ValueError(
+                f'Type name and attribute name required: {line!r}'
+            )
+
+        parsed = _repr_helper.definition_line_visitor.parse(line.strip())
+        field_type = FieldType[parsed.type_name]
+        if field_type.is_complex:
+            return StructuredField(
+                name=parsed.name,
+                field_type=field_type,
+                struct_name=parsed.type_name,
+                size=parsed.array_info.size,
+                array_type=parsed.array_info.array_type,
+                children={},
+                descendents=(),
+            )
+
+        return SimpleField(
+            name=parsed.name,
+            field_type=field_type,
+            size=parsed.array_info.size,
+            array_type=parsed.array_info.array_type,
+        )
+
+    def serialize(self, endian: Endian, cache=None) -> List[bytes]:
+        """Implemented in SimpleField, StructuredField only."""
+        raise NotImplementedError()
+
+    @classmethod
+    def _deserialize(cls, data, *, endian, cache, name=None):
+        fd, _, _ = FieldDescByte.deserialize(data)
+        if fd.field_type.is_complex:
+            return StructuredField.deserialize(data, endian=endian,
+                                               cache=cache,
+                                               name=name)
+
+        return SimpleField.deserialize(data, endian=endian,
+                                       name=name)
+
+    @classmethod
+    def deserialize(cls, data: bytes, *,
+                    endian: Endian, cache, named=False,
+                    ) -> Deserialized:
+        """
+        Implemented generically here as the recipient may not know the
+        type of field description will be coming in - that is, a SimpleField or
+        StructuredField.
+
+        This contrasts with `serialize` which is only implemented specially for
+        subclasses of :class:`FieldDesc`.
+        """
+        data = memoryview(data)
+        interface_id = None
+        offset = 0
+
+        if named:
+            name, data, off = String.deserialize(data, endian=endian)
+            offset += off
+        else:
+            name = None
+
+        type_code = data[0]
+
+        if type_code == TypeCode.NULL_TYPE_CODE:
+            return Deserialized(data=None, buffer=data[1:], offset=1)
+
+        if type_code == TypeCode.FULL_TAGGED_ID_TYPE_CODE:
+            # TODO: type of tag is unclear?
+            raise NotImplementedError('FULL_TAGGED_ID_TYPE_CODE')
+
+        if type_code in {TypeCode.ONLY_ID_TYPE_CODE,
+                         TypeCode.FULL_WITH_ID_TYPE_CODE}:
+            # Consume the type code here:
+            data = data[1:]
+            offset += 1
+
+            interface_id, data, off = Identifier.deserialize(
+                data, endian=endian)
+            offset += off
+
+            if type_code == TypeCode.ONLY_ID_TYPE_CODE:
+                intf = cache.ours[interface_id]
+                return Deserialized(data=intf.as_new_name(name), buffer=data,
+                                    offset=offset)
+
+            # otherwise, fall through...
+
+        intf, data, off = cls._deserialize(data, endian=endian, cache=cache,
+                                           name=name)
+        offset += off
+
+        # if depth == 0 and 'struct_name' in intf:
+        #     # Summarize types defined inside the structure
+        #     intf['nested_types'] = nested_types
+
+        if interface_id is not None:
+            cache.ours[interface_id] = intf
+        return Deserialized(data=intf, buffer=data, offset=offset)
+
+    def summary(self) -> str:
+        return ''
+
+    def fields_by_bitset(self, bitset: 'BitSet'):
+        """Implemented in StructuredField only."""
+
+    def as_new_name(self, name):
+        if name == self.name:
+            return self
+        return dataclasses.replace(self, name=name)
+
+
+# class NullType(Serializable):
+#     def serialize(self, endian: Endian, cache=None) -> List[bytes]:
+#         return bytes([TypeCode.NULL_TYPE_CODE])
+
+
+@dataclasses.dataclass(frozen=True)
+class SimpleField(FieldDesc):
+    """
+    A non-structured field description, containing one or more primitive
+    values.
+    """
+
+    metadata: Optional[Dict] = field(default_factory=dict, hash=False,
+                                     repr=False)
+
+    def serialize(self, endian: Endian, cache=None) -> List[bytes]:
+        buf = [bytes(FieldDescByte.from_field(self))]
+        if self.array_type.has_field_desc_size:
+            buf.extend(Size.serialize(self.size, endian=endian))
+        return buf
+
+    @classmethod
+    def deserialize(cls, data: bytes, *, endian: Endian,
+                    name=None) -> Deserialized:
+        fd, data, offset = FieldDescByte.deserialize(data)
+        assert not fd.field_type.is_complex
+
+        if fd.array_type.has_field_desc_size:
+            size, data, off = Size.deserialize(data, endian=endian)
+            offset += off
+        else:
+            size = 1
+
+        inst = SimpleField(
+            name=name or '',
+            field_type=fd.field_type,
+            size=size,
+            array_type=fd.array_type,
+        )
+        return Deserialized(data=inst, buffer=data, offset=offset)
+
+    def summary(self, *, value='') -> str:
+        array_desc = self.array_type.summary_with_size(self.size)
+        return f'{self.field_type.name}{array_desc} {self.name}{value}'
+
+
+@dataclasses.dataclass(frozen=True)
+class StructuredField(FieldDesc):
+    """
+    A structured field description, containing one or more children, which in
+    turn may be structured or simple.
+    """
+
+    struct_name: str
+    children: Dict[str, 'FieldDesc'] = field(repr=False, hash=False)
+    descendents: Tuple['FieldDesc'] = field(repr=False, hash=True)
+    metadata: Optional[Dict] = field(default_factory=dict, hash=False,
+                                     repr=False)
+
+    def serialize_cache_update(self, endian: Endian, cache: CacheContext):
+        if cache is None or cache.theirs is None:
+            return True, []
+
+        hash_key = hash(self)
+        if hash_key in cache.theirs:
+            identifier = Identifier.serialize(
+                cache.theirs[hash_key], endian=endian)
+            return False, [bytes([TypeCode.ONLY_ID_TYPE_CODE])] + identifier
+
+        if cache.theirs:
+            # TODO: LRU cache with only 65k entries
+            id_ = max(cache.theirs.values()) + 1
+        else:
+            id_ = 1
+
+        cache.theirs[hash_key] = id_
+        identifier = Identifier.serialize(id_, endian=endian)
+        return True, [bytes([TypeCode.FULL_WITH_ID_TYPE_CODE])] + identifier
+
+    def serialize(self, endian: Endian, cache: CacheContext) -> List[bytes]:
+        '''Serialize field description introspection data.'''
+        include_all, buf = self.serialize_cache_update(
+            endian=endian, cache=cache)
+        if not include_all:
+            return buf
+
+        buf.extend(FieldDescByte.from_field(self).serialize(endian))
+        if self.field_type != FieldType.any:
+            buf.extend(String.serialize(self.struct_name, endian=endian))
+            buf.extend(Size.serialize(len(self.children), endian=endian))
+
+            for name, child in self.children.items():
+                buf.extend(String.serialize(name, endian=endian))
+                buf.extend(child.serialize(endian=endian, cache=cache))
+
+        return buf
+
+    @classmethod
+    def deserialize(cls, data: bytes, *, endian: Endian,
+                    cache: CacheContext,
+                    name=None) -> Deserialized:
+        fd, data, offset = FieldDescByte.deserialize(data)
+
+        field_type = fd.field_type
+        array_type = fd.array_type
+        assert field_type.is_complex
+
+        if array_type.has_field_desc_size:
+            size, data, off = Size.deserialize(data, endian=endian)
+            offset += off
+        else:
+            size = 1
+
+        if field_type == FieldType.any:
+            struct = cls(
+                field_type=field_type,
+                array_type=array_type,
+                size=size,
+                name=name,
+                struct_name='',
+                children={},
+                descendents=tuple(),
+            )
+            return Deserialized(data=struct, buffer=data, offset=offset)
+
+        if array_type == FieldArrayType.variable_array:
+            st, data, off = FieldDesc.deserialize(data, endian=endian, cache=cache)
+            offset += off
+            return Deserialized(dataclasses.replace(st, array_type=array_type,
+                                                    name=name),
+                                buffer=data, offset=offset)
+
+        struct_name, data, off = String.deserialize(data, endian=endian)
+        offset += off
+
+        num_fields, data, off = Size.deserialize(data, endian=endian)
+        offset += off
+
+        fields = []
+        for _ in range(num_fields):
+            st, data, off = FieldDesc.deserialize(
+                data, endian=endian, cache=cache, named=True)
+            offset += off
+            fields.append(st)
+
+        struct_name = struct_name or ''  # or field_type.name
+        struct = cls(
+            field_type=field_type,
+            array_type=array_type,
+            size=size,
+            name=name or struct_name,
+            struct_name=struct_name,
+            children=_children_from_field_list(fields),
+            descendents=_descendents_from_field_list(fields),
+        )
+
+        return Deserialized(data=struct, buffer=data, offset=offset)
+
+    def summary(self, *, value='') -> str:
+        array_desc = self.array_type.summary_with_size(self.size)
+        sname = self.struct_name
+        if sname and sname != self.name and sname != 'any':  # TODO
+            type_name = f'{self.field_type.name} {self.struct_name}'
+        else:
+            type_name = self.field_type.name
+        res = [f'{type_name}{array_desc} {self.name}{value}'.rstrip()]
+        for child in self.children.values():
+            res.append(textwrap.indent(child.summary(), prefix='    '))
+        return '\n'.join(res)
+
+    def to_dataclass(self) -> type:
+        """
+        Create a pva dataclass from this FieldDesc.
+
+        Returns
+        -------
+        cls : type
+            The new data class.
+        """
+        from ._dataclass import dataclass_from_field_desc  # noqa
+        return dataclass_from_field_desc(self)
+
+
+def _parse_repr_lines(text):
+    '''
+    Hierarchy of lists/tuples from indented lines
+
+    Used for generating a structure from a pvAccess documentation-like
+    representation.
+    '''
+    if not isinstance(text, str):
+        text = '\n'.join(text)
+
+    text = textwrap.dedent(text)
+    lines = text.split('\n')
+
+    indent = 0
+    root = []
+    stack = [(0, root)]
+    current = root
+
+    for line in lines:
+        if not line.strip():
+            continue
+
+        line_indent = len(line) - len(line.strip())
+        if line_indent > indent:
+            parent = current.pop(-1)
+            new = []
+            stack.append((line_indent, new))
+            current.append((parent, new))
+            current = new
+            indent = line_indent
+        elif line_indent < indent:
+            while line_indent < indent:
+                indent, current = stack.pop(-1)
+            stack.append((indent, current))
+        current.append(line.strip())
+
+    return root
+
+
+def _children_from_field_list(fields: List[FieldDesc]) -> typing.Dict:
+    """
+    Get the ``children`` parameter to be used with ``StructuredField()``.
+    """
+    return {child.name: child for child in fields}
+
+
+def _descendents_from_field_list(fields: List[FieldDesc]
+                                 ) -> Tuple[Tuple[str, FieldDesc], ...]:
+    """
+    Get the ``descendents`` parameter to be used with ``StructuredField()``.
+    """
+    descendents = []
+    for child in fields:
+        descendents.append((child.name, child))
+        if isinstance(child, StructuredField):
+            if child.field_type == FieldType.union:
+                ...
+            elif child.array_type == FieldArrayType.variable_array:
+                ...
+            else:
+                descendents.extend(
+                    [(f'{child.name}.{attr}', desc)
+                     for attr, desc in child.descendents]
+                )
+
+    return tuple(descendents)
+
+
+def structure_from_repr(hierarchy, *, namespace=None):
+    """
+    Generate a field description structure from its string representation
+    """
+    if isinstance(hierarchy, str):
+        hierarchy = _parse_repr_lines(hierarchy)
+
+    def get_entry_and_children(item):
+        if isinstance(item, (list, tuple)):
+            entry, children = item
+        else:
+            entry, children = item, None
+        return entry, children
+
+    entry, top_level_children = get_entry_and_children(hierarchy[0])
+
+    # TODO: why custom parsing here?
+    items = entry.split(' ')
+    field_type = FieldType[items[0]]
+
+    if len(items) == 3:
+        _, struct_name, top_name = items
+    elif len(items) == 2:
+        struct_name = top_name = items[-1]
+    else:
+        raise ValueError(
+            f'Unexpected identifier(s): {entry!r}'
+        )
+
+    def get_field(child):
+        entry, has_children = get_entry_and_children(child)
+        if has_children is not None:
+            return structure_from_repr(
+                [child], namespace=namespace)
+        return FieldDesc.from_repr_line(entry)
+
+    children = [get_field(child) for child in top_level_children]
+    struct = StructuredField(
+        name=top_name,
+        field_type=field_type,
+        struct_name=struct_name,
+        array_type=FieldArrayType.scalar,
+        size=1,
+        children=_children_from_field_list(children),
+        descendents=_descendents_from_field_list(children),
+    )
+
+    return struct
+
+
+# Look-up table for bitsets
+_BITSET_LUT = [1 << i for i in range(8)]
+
+
+class Identifier(StatelessSerializable):
+    """
+    Short (int16) identifier, used in multiple places.
+    """
+
+    @classmethod
+    def serialize(cls, id_: int, endian: Endian) -> List[bytes]:
+        return [pack(endian + 'h', id_)]
+
+    @classmethod
+    def deserialize(cls, data: bytes, *, endian: Endian) -> Deserialized:
+        # NOTE: IDs signed according to docs?
+        return Deserialized(data=unpack(endian + 'h', data[:2])[0],
+                            buffer=data[2:],
+                            offset=2)
+
+
+class Size(StatelessSerializable):
+    """
+    A compact representation of size (or ``None``), taking roughly only the
+    number of bytes required.
+
+    Supports up to 64-bit values.
+    """
+
+    @classmethod
+    def serialize(cls, size: int, endian: Endian) -> List[bytes]:
+        'Sizes/lengths are encoded in 3 ways, depending on the size'
+        if size is None:
+            # TODO_DOCS: this is misrepresented in the docs
+            # an empty size is represented as 255 (-1)
+            return [pack(endian + 'B', 255)]
+        if size < 254:
+            return [pack(endian + 'B', size)]
+        if size < core.MAX_INT32:
+            return [pack(endian + 'BI', 254, size)]
+
+        return [pack(endian + 'BIQ', 254, core.MAX_INT32, size)]
+
+    @classmethod
+    def deserialize(cls, data: bytes, *, endian: Endian) -> Deserialized:
+        # TODO_DOCS: this is misrepresented in the docs
+        b0 = data[0]
+        if b0 == 255:
+            # null size
+            return Deserialized(data=None, buffer=data[1:], offset=1)
+        if b0 < 254:
+            return Deserialized(data=b0, buffer=data[1:], offset=1)
+
+        int32, = unpack(endian + 'I', data[1:5])
+        if int32 != core.MAX_INT32:
+            return Deserialized(data=int32, buffer=data[5:], offset=5)
+
+        return Deserialized(
+            data=unpack(endian + 'Q', data[5:13])[0],
+            buffer=data[13:],
+            offset=13
+        )
+
+
+class String(StatelessSerializable):
+    """
+    A run-length encoded utf-8 string (i.e., ``[Size][utf-8 string]``).
+    """
+    encoding = 'utf-8'
+
+    @classmethod
+    def serialize(cls, value, endian: Endian) -> List[bytes]:
+        encoded = value.encode(cls.encoding)
+        return Size.serialize(len(encoded), endian) + [encoded]
+
+    @classmethod
+    def deserialize(cls, data: bytes, *, endian: Endian) -> Deserialized:
+        sz, data, consumed = Size.deserialize(data, endian=endian)
+        return Deserialized(
+            data=str(data[:sz], cls.encoding),
+            buffer=data[sz:],
+            offset=consumed + sz
+        )
+
+
+class BitSet(set, Serializable):
+    """
+    A "BitSet" for marking certain fields of a structure by index.
+
+    {0} is a special BitSet, indicating all fields are selected.
+    """
+
+    def offset_by(self, offset) -> 'BitSet':
+        """
+        Add the given offset to this bitset, returning a new bitset.
+        """
+        if 0 in self or offset in self:
+            return BitSet({0})
+
+        return BitSet({idx + offset for idx in self
+                       if idx + offset >= 0}
+                      )
+
+    def serialize(self, endian: Endian) -> List[bytes]:
+        if not len(self):
+            return Size.serialize(0, endian=endian)
+
+        start = 0
+        end = 7
+        current = 0
+        ret = bytearray()
+
+        for bit in sorted(self):
+            while bit > end:
+                ret.append(current)
+                current = 0
+                start, end = start + 8, end + 8
+            current |= _BITSET_LUT[bit - start]
+
+        if current:
+            ret.append(current)
+
+        return Size.serialize(len(ret), endian=endian) + [ret]
+
+    @classmethod
+    def deserialize(cls, data: bytes, *, endian: Endian) -> Deserialized:
+        sz, data, offset = Size.deserialize(data, endian=endian)
+
+        byte_start = 0
+        bitset = set()
+        for ch in data[:sz]:
+            for bit_num, mask in enumerate(_BITSET_LUT):
+                if ch & mask:
+                    bitset.add(byte_start + bit_num)
+            byte_start += 8
+
+        return Deserialized(data=BitSet(bitset),
+                            buffer=data[sz:],
+                            offset=offset + sz)

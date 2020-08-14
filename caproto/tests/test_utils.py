@@ -1,5 +1,7 @@
 import os
+
 import pytest
+
 import caproto as ca
 from caproto._headers import MessageHeader
 
@@ -143,3 +145,19 @@ def test_parse_record_bad_filters(pvname, expected_tuple):
         ...
     else:
         raise ValueError(f'Expected failure, instead returned {filter_}')
+
+
+@pytest.mark.parametrize('protocol', list(ca.Protocol))
+def test_env_util_smoke(protocol):
+    ca.get_environment_variables()
+    try:
+        ca.get_netifaces_addresses()
+    except RuntimeError:
+        # Netifaces may be unavailable
+        ...
+
+    ca.get_address_list(protocol=protocol)
+    ca.get_beacon_address_list(protocol=protocol)
+    ca._utils.get_manually_specified_beacon_addresses(protocol=protocol)
+    ca._utils.get_manually_specified_client_addresses(protocol=protocol)
+    ca.get_server_address_list(protocol=protocol)
