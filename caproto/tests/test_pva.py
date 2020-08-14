@@ -6,6 +6,8 @@ from array import array
 import pytest
 from numpy.testing import assert_array_almost_equal
 
+pytest.importorskip('caproto.pva')
+
 from caproto import pva
 from caproto.pva._fields import FieldArrayType, FieldType
 

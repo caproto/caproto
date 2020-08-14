@@ -88,6 +88,9 @@ script:
   - pip install git+https://github.com/klauer/catvs.git@py3k
   # Work around pip bug that fails to respect trio's pin of attrs.
   - pip install -U attrs
+  - if [[ "$TRAVIS_PYTHON_VERSION" == "3.6" ]]; then
+        pip install dataclasses;
+    fi
 
   - caproto-repeater &
   - coverage run --parallel-mode run_tests.py -v

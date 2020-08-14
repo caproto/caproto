@@ -8,6 +8,8 @@ import typing
 
 if sys.version_info >= (3, 8):
     from typing import get_args, get_origin
+elif sys.version_info <= (3, 6) or not hasattr(typing, '_GenericAlias'):
+    raise ImportError('Sorry, this is an unsupported version of Python :(')
 else:
     def get_origin(tp):
         """Get the unsubscripted version of a type.

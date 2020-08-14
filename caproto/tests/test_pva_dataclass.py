@@ -2,6 +2,10 @@ import logging
 import textwrap
 import typing
 
+import pytest
+
+pytest.importorskip('caproto.pva')
+
 from caproto import pva
 from caproto.pva._fields import FieldArrayType, FieldType  # noqa
 
