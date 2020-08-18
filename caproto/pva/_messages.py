@@ -4,18 +4,23 @@ import enum
 import functools
 import logging
 import typing
-from typing import Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Type, Union
 
+from . import _annotations as annotations
 from . import _core as core
 from ._core import (BIG_ENDIAN, LITTLE_ENDIAN, Deserialized, FieldArrayType,
-                    FieldType, SegmentDeserialized, UserFacingEndian)
-from ._data import Data, DataWithBitSet, FieldDescAndData, PVRequest
+                    FieldType, SegmentDeserialized, Serializable,
+                    StatelessSerializable, UserFacingEndian)
+from ._data import (Data, DataSerializer, DataWithBitSet, FieldDescAndData,
+                    PVRequest)
 from ._dataclass import array_of, pva_dataclass
 from ._fields import BitSet, CacheContext, FieldDesc, SimpleField
 from ._utils import (SERVER, ChannelLifeCycle, Role, ip_to_ubyte_array,
                      ubyte_array_to_ip)
 
 NullCache = CacheContext()
+CommandType = typing.Union['ControlCommand', 'ApplicationCommand']
+SubcommandType = typing.Union['Subcommand', 'MonitorSubcommand']
 
 
 @pva_dataclass
@@ -23,8 +28,8 @@ class ChannelWithID:
     """
     A channel and ID pair, used for searching and channel creation.
     """
-    id: FieldType.int32
-    channel_name: FieldType.string
+    id: annotations.Int32
+    channel_name: annotations.String
 
 
 serialization_logger = logging.getLogger('caproto.pva.serialization')
@@ -46,10 +51,25 @@ class _MessageField:
         # With the end result of `type` being a SimpleField or StructuredField
 
 
+class OptionalStopMarker(enum.IntEnum):
+    """
+    Marker for message fields.
+
+    Indicates whether to stop or continue processing messages when the
+    condition is not met.
+    """
+    stop = True
+    continue_ = False
+
+
+MessageFieldType = Union[FieldType, FieldDesc, type, Type[DataSerializer],
+                         Type[Serializable], Type[StatelessSerializable]]
+
+
 @dataclasses.dataclass
 class RequiredField(_MessageField):
     name: str
-    type: ...
+    type: MessageFieldType
 
 
 @dataclasses.dataclass
@@ -60,9 +80,23 @@ class NonstandardArrayField(RequiredField):
 @dataclasses.dataclass
 class OptionalField(_MessageField):
     name: str
-    type: ...
-    stop: ...
-    condition: typing.Optional[callable]
+    type: MessageFieldType
+    stop: OptionalStopMarker = OptionalStopMarker.stop
+    condition: Optional[typing.Callable] = None
+
+
+def _not_ok_condition(msg, buf):
+    return msg.status_type != StatusType.OK
+
+
+def _success_condition(msg, buf):
+    """Continuation condition: only if the status reported success."""
+    return msg.status_type in success_status_types
+
+
+@dataclasses.dataclass
+class SuccessField(OptionalField):
+    condition: Optional[typing.Callable] = _success_condition
 
 
 class QOSFlags(enum.IntFlag):
@@ -88,7 +122,7 @@ class QOSFlags(enum.IntFlag):
         return (priority, flags)
 
 
-class ApplicationCommands(enum.IntEnum):
+class ApplicationCommand(enum.IntEnum):
     """
     Application messages. These are the requests and their responses.
     """
@@ -119,12 +153,12 @@ class ApplicationCommands(enum.IntEnum):
     MULTIPLE_DATA = 19
 
 
-class ControlCommands(enum.Enum):
+class ControlCommand(enum.Enum):
     """
     Control messages. These include flow control and have no payload.
     """
     # NOTE: this is not set as an IntEnum to avoid clashing with
-    # ApplicationCommands in dictionaries.
+    # ApplicationCommand in dictionaries.
     SET_MARKER = 0
     ACK_MARKER = 1
     SET_ENDIANESS = 2
@@ -167,7 +201,7 @@ class MessageFlags(enum.IntFlag):
                    )
 
 
-class Subcommands(enum.IntEnum):
+class Subcommand(enum.IntEnum):
     # Default behavior
     DEFAULT = 0x00
     # Require reply (acknowledgment for reliable operation)
@@ -183,7 +217,7 @@ class Subcommands(enum.IntEnum):
     GET_PUT = 0x80
 
 
-class MonitorSubcommands(enum.IntFlag):
+class MonitorSubcommand(enum.IntFlag):
     INIT = 0x08
     DEFAULT = 0x00
     PIPELINE = 0x80
@@ -200,11 +234,6 @@ class StatusType(enum.IntEnum):
     FATAL = 3
 
 
-class OptionalStopMarker(enum.IntEnum):
-    stop = True
-    continue_ = False
-
-
 success_status_types = {
     StatusType.OK,
     StatusType.OK_VERBOSE,
@@ -215,41 +244,48 @@ default_pvrequest = 'record[]field()'
 
 
 class MessageBase:
-    """
-    Base class for all Messages.
-    """
+    """Base class for all Messages."""
     _pack_ = 1
-    _additional_fields_ = None
-    _subcommand_fields_ = None
+    _fields_: typing.Sequence[Tuple[str, object]]
+    _additional_fields_: Optional[List[_MessageField]] = None
+    _subcommand_fields_: Optional[Dict[SubcommandType, List[_MessageField]]] = None
+    # The following is set in endian subclasses for the varieties of messages:
+    _ENDIAN: UserFacingEndian
+
+    subcommand: Optional[SubcommandType] = None
 
     def __repr__(self):
-        info = ', '.join('{}={!r}'.format(field, getattr(self, field))
-                         for field, type_ in self._fields_)
-        return '{}({})'.format(type(self).__name__, info)
+        def name_and_value(name):
+            prop_name = name.lstrip('_')
+            if hasattr(self.__class__, prop_name):
+                name = prop_name
+            value = getattr(self, name, None)
+            return f'{name}={value!r}'
+
+        info = ', '.join(name_and_value(attr) for attr, *_ in self._fields_)
+        if self._additional_fields_:
+            if info:
+                info += ', '
+            info += ', '.join(name_and_value(field.name)
+                              for field in self._additional_fields_)
+        return f'{self.__class__.__name__}({info})'
 
     @classmethod
     def _get_additional_fields(cls, subcommand=None):
-        if (cls._additional_fields_ is None and
-                cls._subcommand_fields_ is None):
-            return []
+        fields = cls._additional_fields_ or []
+        if not cls._subcommand_fields_ or subcommand is None:
+            return fields
 
-        fields = cls._additional_fields_
-        if cls._subcommand_fields_ and subcommand is not None:
-            try:
-                return fields + cls._subcommand_fields_[subcommand]
-            except KeyError:
-                raise ValueError(f'Invalid (or currently unhandled) subcommand'
-                                 f' for class {cls}: {subcommand}') from None
-        return fields
-
-    @property
-    def has_subcommand(self):
-        return ('subcommand', ctypes.c_byte) in self._fields_
+        try:
+            return fields + cls._subcommand_fields_[subcommand]
+        except KeyError:
+            raise ValueError(f'Invalid (or currently unhandled) subcommand'
+                             f' for class {cls}: {subcommand}') from None
 
     def serialize(self, *, default_pvrequest=default_pvrequest,
                   cache=NullCache):
         additional_fields = self._get_additional_fields(
-            subcommand=self.subcommand if self.has_subcommand else None
+            subcommand=getattr(self, 'subcommand', None)
         )
         if not additional_fields:
             # Without additional fields, this is just a ctypes.Structure
@@ -298,9 +334,8 @@ class MessageBase:
         offset = base_size
         buf = buf[offset:]
 
-        additional_fields = cls._get_additional_fields(
-            subcommand=msg.subcommand if msg.has_subcommand else None
-        )
+        subcommand = getattr(msg, 'subcommand', None)
+        additional_fields = cls._get_additional_fields(subcommand=subcommand)
 
         if not additional_fields:
             # Without additional fields, this is just a ctypes.Structure
@@ -308,7 +343,7 @@ class MessageBase:
 
         serialization_logger.debug(
             'deserializing %s base_size=%s subcommand=%s payload=%s', cls,
-            base_size, getattr(msg, 'subcommand', None), bytes(buf))
+            base_size, subcommand, bytes(buf))
 
         for field_info in additional_fields:
             if isinstance(field_info, OptionalField):
@@ -370,78 +405,21 @@ class MessageBase:
         return Deserialized(data=msg, buffer=buf, offset=offset)
 
 
-class ExtendedMessageBase(MessageBase):
-    '''
-    Additional fields in _additional_fields_ with pva-specific types, and
-    optional entries based on certain conditions
-    '''
-    _fields_ = []
-
-    def __repr__(self):
-        def name_and_value(name):
-            if name.startswith('_'):
-                prop_name = name.lstrip('_')
-                if hasattr(type(self), prop_name):
-                    return (prop_name, getattr(self, prop_name))
-            return name, getattr(self, name)
-
-        info = ', '.join('{}={!r}'.format(*name_and_value(field))
-                         for field, type_ in self._fields_)
-        if not self._additional_fields_:
-            return '{}({})'.format(type(self).__name__, info)
-
-        if info:
-            info += ', '
-
-        info += ', '.join('{}={!r}'.format(*name_and_value(fi.name))
-                          for fi in self._additional_fields_)
-        return '{}({})'.format(type(self).__name__, info)
+class _LE(ctypes.LittleEndianStructure):
+    _ENDIAN = LITTLE_ENDIAN
 
 
-def _success_condition(msg, buf):
-    """
-    Continue if-and-only-if the status message indicates success.
-    """
-    return (msg.status_type in success_status_types)
-
-
-def SuccessField(name: str,
-                 type,
-                 stop=OptionalStopMarker.stop) -> OptionalField:
-    'Return an OptionalField which requires the message status be successful'
-    return OptionalField(name, type, stop, _success_condition)
-
-
-def _make_endian(cls: type, endian: core.UserFacingEndian) -> type:
-    '''Creates big- or little-endian versions of a Structure
-
-    Checks for _additional_fields from ExtendedMessageBase
-    Adds _ENDIAN attr for easy struct.unpacking = big (>) or little (<)
-    '''
-
-    if endian == LITTLE_ENDIAN:
-        endian_base = ctypes.LittleEndianStructure
-        suffix = 'LE'
-    else:
-        endian_base = ctypes.BigEndianStructure
-        suffix = 'BE'
-
-    name = cls.__name__.lstrip('_') + suffix
-    endian_cls = type(name, (cls, endian_base),
-                      {'_fields_': cls._fields_})
-
-    if endian_cls._additional_fields_:
-        for field_info in endian_cls._additional_fields_:
-            setattr(endian_cls, field_info.name, None)
-
-    cls._ENDIAN = None
-    endian_cls._ENDIAN = (LITTLE_ENDIAN
-                          if endian_base is ctypes.LittleEndianStructure
-                          else BIG_ENDIAN)
-    return endian_cls
+class _BE(ctypes.BigEndianStructure):
+    _ENDIAN = BIG_ENDIAN
 
 
 class MessageHeader(MessageBase):
+    magic: int
+    version: int
+    _flags: int
+    message_command: int
+    payload_size: int
+
     _fields_ = [
         ('magic', ctypes.c_ubyte),
         ('version', ctypes.c_ubyte),
@@ -451,7 +429,7 @@ class MessageHeader(MessageBase):
     ]
 
     def __init__(self, *, flags: MessageFlags,
-                 command: typing.Union[ApplicationCommands, ControlCommands],
+                 command: CommandType,
                  payload_size: int):
         self.magic = 0xca
         self.version = 1
@@ -482,9 +460,9 @@ class MessageHeader(MessageBase):
         flags = self.flags
 
         if MessageFlags.CONTROL_MESSAGE in flags:
-            command = ControlCommands(self.message_command)
+            command = ControlCommand(self.message_command)
         else:
-            command = ApplicationCommands(self.message_command)
+            command = ApplicationCommand(self.message_command)
 
         try:
             message_group = messages[(byte_order, direction)]
@@ -495,8 +473,10 @@ class MessageHeader(MessageBase):
             )
 
 
-MessageHeaderLE = _make_endian(MessageHeader, LITTLE_ENDIAN)
-MessageHeaderBE = _make_endian(MessageHeader, BIG_ENDIAN)
+class MessageHeaderLE(MessageHeader, _LE): _fields_ = MessageHeader._fields_  # noqa  E305
+class MessageHeaderBE(MessageHeader, _BE): _fields_ = MessageHeader._fields_  # noqa  E305
+
+
 _MessageHeaderSize = ctypes.sizeof(MessageHeaderLE)
 
 
@@ -510,13 +490,23 @@ class _StatusBase:
     It's up to the struct to place '_status_type' in its _fields_, as its exact
     location may change based on the message.
     """
-    _status_type: ctypes.c_byte
+    _status_type: int
+    message: Optional[str] = None
+    call_tree: Optional[str] = None
 
-    _additional_fields_ = [
-        OptionalField('message', FieldType.string, OptionalStopMarker.continue_,
-                      lambda msg, buf: msg.status_type != StatusType.OK),
-        OptionalField('call_tree', FieldType.string, OptionalStopMarker.continue_,
-                      lambda msg, buf: msg.status_type != StatusType.OK),
+    _additional_fields_: Optional[List[_MessageField]] = [
+        OptionalField(
+            name='message',
+            type=FieldType.string,
+            stop=OptionalStopMarker.continue_,
+            condition=_not_ok_condition,
+        ),
+        OptionalField(
+            name='call_tree',
+            type=FieldType.string,
+            stop=OptionalStopMarker.continue_,
+            condition=_not_ok_condition,
+        ),
     ]
 
     @property
@@ -532,11 +522,12 @@ class _StatusBase:
         return StatusType(self._status_type)
 
 
-class Status(_StatusBase, ExtendedMessageBase):
+class Status(_StatusBase, MessageBase):
+    _status_type: int
     _fields_ = [('_status_type', ctypes.c_byte)]
 
 
-class BeaconMessage(ExtendedMessageBase):
+class BeaconMessage(MessageBase):
     """
     A beacon message.
 
@@ -547,9 +538,16 @@ class BeaconMessage(ExtendedMessageBase):
     use Beacons to detect when new servers appear, and may use this information
     to more quickly retry unanswered CMD_SEARCH messages.
     """
-    ID = ApplicationCommands.BEACON
+    ID = ApplicationCommand.BEACON
     # FieldDesc serverStatusIF;
     # [if serverStatusIF != NULL_TYPE_CODE] PVField serverStatus;
+    guid: bytes
+    flags: int
+    beacon_sequence_id: int
+    change_count: int
+    server_address: bytes
+    server_port: int
+
     _fields_ = [
         ('guid', ctypes.c_ubyte * 12),
         ('flags', ctypes.c_ubyte),
@@ -581,7 +579,7 @@ class SetMarker(MessageHeaderLE):
     SHOULD respond with an acknowledgment control message (0x01) as soon as
     possible.
     """
-    ID = ControlCommands.SET_MARKER
+    ID = ControlCommand.SET_MARKER
 
 
 class AcknowledgeMarker(MessageHeaderLE):
@@ -596,7 +594,7 @@ class AcknowledgeMarker(MessageHeaderLE):
     The payload size field holds the acknowledge value of total bytes received.
     This must match the previously received marked value as described above.
     """
-    ID = ControlCommands.ACK_MARKER
+    ID = ControlCommand.ACK_MARKER
 
 
 class SetByteOrder(MessageHeaderLE):
@@ -609,7 +607,7 @@ class SetByteOrder(MessageHeaderLE):
     order for the connection on which this message was received. Client MUST
     encode all the messages sent via this connection using this byte order.
     """
-    ID = ControlCommands.SET_ENDIANESS
+    ID = ControlCommand.SET_ENDIANESS
     # uses EndianSetting in header payload size
 
     def __init__(self, endian_setting):
@@ -641,7 +639,8 @@ class EchoRequest(MessageHeaderLE):
     * v2 clients must send 'Echo' more often than $EPICS_PVA_CONN_TMO seconds.
     The recommended interval is half of $EPICS_PVA_CONN_TMO (default 15 sec.).
     """
-    ID = ControlCommands.ECHO_REQUEST
+    ID = ControlCommand.ECHO_REQUEST
+    _fields_ = []
 
 
 class EchoResponse(MessageHeaderLE):
@@ -657,10 +656,11 @@ class EchoResponse(MessageHeaderLE):
     * v2 peers must close TCP connections when no data has been received in
     $EPICS_PVA_CONN_TMO seconds (default 30 sec.).
     """
-    ID = ControlCommands.ECHO_REQUEST
+    ID = ControlCommand.ECHO_REQUEST
+    _fields_ = []
 
 
-class ConnectionValidationRequest(ExtendedMessageBase):
+class ConnectionValidationRequest(MessageBase):
     """
     A validation request from the server.
 
@@ -677,8 +677,10 @@ class ConnectionValidationRequest(ExtendedMessageBase):
     selects one of these. For "anonymous", no further detail is required. For
     "ca", a structure with string elements "user" and "host" needs to follow.
     """
-    ID = ApplicationCommands.CONNECTION_VALIDATION
+    ID = ApplicationCommand.CONNECTION_VALIDATION
 
+    server_buffer_size: int
+    server_registry_size: int
     _fields_ = [
         ('server_buffer_size', ctypes.c_int32),
         ('server_registry_size', ctypes.c_int16),
@@ -689,7 +691,7 @@ class ConnectionValidationRequest(ExtendedMessageBase):
     ]
 
 
-class ConnectionValidationResponse(ExtendedMessageBase):
+class ConnectionValidationResponse(MessageBase):
     """
     A client's connection validation response message.
 
@@ -705,7 +707,11 @@ class ConnectionValidationResponse(ExtendedMessageBase):
     future version of the specification should be whether a streaming mode
     algorithm should be specified.
     """
-    ID = ApplicationCommands.CONNECTION_VALIDATION
+    ID = ApplicationCommand.CONNECTION_VALIDATION
+
+    client_buffer_size: int
+    client_registry_size: int
+    connection_qos: int
 
     _fields_ = [
         ('client_buffer_size', ctypes.c_int32),
@@ -724,7 +730,7 @@ class ConnectionValidationResponse(ExtendedMessageBase):
     ]
 
 
-class Echo(ExtendedMessageBase):
+class Echo(MessageBase):
     """
     A TCP Echo request/response.
 
@@ -733,18 +739,19 @@ class Echo(ExtendedMessageBase):
     An Echo diagnostic message is usually sent to check if TCP/IP connection is
     still valid.
     """
-    ID = ApplicationCommands.ECHO
+    ID = ApplicationCommand.ECHO
+    _fields_ = []
     _additional_fields_ = [
-        RequiredField('payload', array_of(FieldType.byte)),
+        RequiredField('payload', array_of(FieldType.int8)),
     ]
 
 
 class ConnectionValidatedResponse(Status):
     """Validation results - success depends on the status."""
-    ID = ApplicationCommands.CONNECTION_VALIDATED
+    ID = ApplicationCommand.CONNECTION_VALIDATED
 
 
-class SearchRequest(ExtendedMessageBase):
+class SearchRequest(MessageBase):
     """
     A search request for PVs by name.
 
@@ -764,7 +771,13 @@ class SearchRequest(ExtendedMessageBase):
 
     In caproto-pva, this becomes the :class:`NonstandardArrayField`.
     """
-    ID = ApplicationCommands.SEARCH_REQUEST
+    ID = ApplicationCommand.SEARCH_REQUEST
+
+    sequence_id: int
+    flags: int
+    reserved: bytes
+    _response_address: bytes
+    response_port: int
 
     _fields_ = [
         ('sequence_id', ctypes.c_int32),
@@ -811,7 +824,7 @@ def _array_property(name, doc):
     return property(fget, fset, doc=doc)
 
 
-class SearchResponse(ExtendedMessageBase):
+class SearchResponse(MessageBase):
     """
     A response to a SearchRequest.
 
@@ -823,7 +836,12 @@ class SearchResponse(ExtendedMessageBase):
     The count for the number of searchInstanceIDs elements is always sent as an
     unsigned 16 bit integer, not using the default size encoding.
     """
-    ID = ApplicationCommands.SEARCH_RESPONSE
+    ID = ApplicationCommand.SEARCH_RESPONSE
+
+    _guid: bytes
+    sequence_id: int
+    _server_address: bytes
+    server_port: int
 
     _fields_ = [
         ('_guid', ctypes.c_ubyte * 12),
@@ -855,7 +873,7 @@ class SearchResponse(ExtendedMessageBase):
         self._server_address = ip_to_ubyte_array(value)
 
 
-class CreateChannelRequest(ExtendedMessageBase):
+class CreateChannelRequest(MessageBase):
     """
     A client's request to create a channel.
 
@@ -870,34 +888,43 @@ class CreateChannelRequest(ExtendedMessageBase):
     support requests for creating a single channel, i.e. the count must be 1.
 
     """
-    ID = ApplicationCommands.CREATE_CHANNEL
+    ID = ApplicationCommand.CREATE_CHANNEL
 
+    count: int
+    channels: List[Union[ChannelWithID, Dict]]  # TODO: consistent types
+
+    _fields_ = []
     _additional_fields_ = [
         RequiredField('count', FieldType.uint16),
         NonstandardArrayField('channels', ChannelWithID, count_attr='count'),
     ]
 
 
-class CreateChannelResponse(_StatusBase, ExtendedMessageBase):
+class CreateChannelResponse(_StatusBase, MessageBase):
     """
     A server's response to a CreateChannelRequest.
 
     Notes
     -----
     A server MUST store the client ChannelID and respond with its value in a
-    destroyChannelMessage when a channel destroy request is requested, see
-    below. A client uses the serverChannelID value for all subsequent requests
-    on the channel. Agents SHOULD NOT make any assumptions about how given IDs
-    are generated. IDs MUST be unique within a connection and MAY be recycled
-    after a channel is disconnected.
-    """
-    ID = ApplicationCommands.CREATE_CHANNEL
+    ChannelDestroyRequest, see below.
 
-    _fields_ = [('client_chid', ctypes.c_int32),
-                ('server_chid', ctypes.c_int32),
-                ('_status_type', ctypes.c_byte),
-                ]
-    _additional_fields_ = Status._additional_fields_ + [
+    A client uses the serverChannelID value for all subsequent requests on the
+    channel. Agents SHOULD NOT make any assumptions about how given IDs are
+    generated. IDs MUST be unique within a connection and MAY be recycled after
+    a channel is disconnected.
+    """
+    ID = ApplicationCommand.CREATE_CHANNEL
+
+    client_chid: int
+    server_chid: int
+
+    _fields_ = [
+        ('client_chid', ctypes.c_int32),
+        ('server_chid', ctypes.c_int32),
+        ('_status_type', ctypes.c_byte),
+    ]
+    _additional_fields_ = list(Status._additional_fields_) + [
         # TODO access rights aren't sent, even if status_type is OK
         SuccessField('access_rights', FieldType.int16),
     ]
@@ -917,13 +944,16 @@ class ChannelDestroyRequest(MessageBase):
     from its server side when it lost a channel on its client side.
     """
     # TODO: caproto-pva does not allow for a server to send this at the moment
-    ID = ApplicationCommands.DESTROY_CHANNEL
-    _fields_ = [('client_chid', ctypes.c_int32),
-                ('server_chid', ctypes.c_int32),
-                ]
+    ID = ApplicationCommand.DESTROY_CHANNEL
+    client_chid: int
+    server_chid: int
+    _fields_ = [
+        ('client_chid', ctypes.c_int32),
+        ('server_chid', ctypes.c_int32),
+    ]
 
 
-class ChannelDestroyResponse(_StatusBase, ExtendedMessageBase):
+class ChannelDestroyResponse(_StatusBase, MessageBase):
     """
     A response to a destroy request.
 
@@ -939,19 +969,27 @@ class ChannelDestroyResponse(_StatusBase, ExtendedMessageBase):
     variable continues, it MUST start sending search request messages for the
     channel.
     """
-    ID = ApplicationCommands.DESTROY_CHANNEL
+    ID = ApplicationCommand.DESTROY_CHANNEL
 
-    _fields_ = [('client_chid', ctypes.c_int32),
-                ('server_chid', ctypes.c_int32),
-                ('_status_type', ctypes.c_byte),
-                ]
+    client_chid: int
+    server_chid: int
+    _status_type: int
+
+    _fields_ = [
+        ('client_chid', ctypes.c_int32),
+        ('server_chid', ctypes.c_int32),
+        ('_status_type', ctypes.c_byte),
+    ]
 
 
-class ChannelGetRequest(ExtendedMessageBase):
+class ChannelGetRequest(MessageBase):
     """
     A "channel get" set of messages are used to retrieve (get) data from the channel.
     """
-    ID = ApplicationCommands.GET
+    ID = ApplicationCommand.GET
+
+    server_chid: int
+    ioid: int
 
     _fields_ = [
         ('server_chid', ctypes.c_int32),
@@ -959,21 +997,25 @@ class ChannelGetRequest(ExtendedMessageBase):
         ('subcommand', ctypes.c_byte),
     ]
 
-    _additional_fields_ = []
     _subcommand_fields_ = {
-        Subcommands.INIT: [
+        Subcommand.INIT: [
             RequiredField('pv_request', PVRequest),
         ],
-        Subcommands.GET: [],
-        Subcommands.DESTROY: [],
+        Subcommand.GET: [],
+        Subcommand.DESTROY: [],
     }
 
 
-class ChannelGetResponse(_StatusBase, ExtendedMessageBase):
+class ChannelGetResponse(_StatusBase, MessageBase):
     """
     A response to a ChannelGetRequest.
     """
-    ID = ApplicationCommands.GET
+    ID = ApplicationCommand.GET
+
+    ioid: int
+    _status_type: int
+    pv_structure_if: FieldDesc
+    pv_data: typing.Any
 
     _fields_ = [
         ('ioid', ctypes.c_int32),
@@ -981,47 +1023,55 @@ class ChannelGetResponse(_StatusBase, ExtendedMessageBase):
         ('_status_type', ctypes.c_byte),
     ]
     _subcommand_fields_ = {
-        Subcommands.INIT: [
+        Subcommand.INIT: [
             SuccessField('pv_structure_if', FieldDesc),
         ],
-        Subcommands.GET: [
+        Subcommand.GET: [
             SuccessField('pv_data', DataWithBitSet,
                          # `pv_structure_if` is tracked by ioid
                          ),
         ],
-        Subcommands.DESTROY: [],
+        Subcommand.DESTROY: [],
     }
 
 
-class ChannelFieldInfoRequest(ExtendedMessageBase):
+class ChannelFieldInfoRequest(MessageBase):
     """
     Used to retrieve a channel's type introspection data, i.e., a :class:`FieldDesc`.
     """
-    ID = ApplicationCommands.GET_FIELD
+    ID = ApplicationCommand.GET_FIELD
 
-    _fields_ = [('server_chid', ctypes.c_int32),
-                ('ioid', ctypes.c_int32),
-                ]
+    server_chid: int
+    ioid: int
+
+    _fields_ = [
+        ('server_chid', ctypes.c_int32),
+        ('ioid', ctypes.c_int32),
+    ]
+
     _additional_fields_ = [
         RequiredField('sub_field_name', FieldType.string),
     ]
 
 
-class ChannelFieldInfoResponse(_StatusBase, ExtendedMessageBase):
+class ChannelFieldInfoResponse(_StatusBase, MessageBase):
     """
     A response to a :class:`ChannelFieldInfoRequest`.
     """
-    ID = ApplicationCommands.GET_FIELD
+    ID = ApplicationCommand.GET_FIELD
 
-    _fields_ = [('ioid', ctypes.c_int32),
-                ('_status_type', ctypes.c_byte),
-                ]
-    _additional_fields_ = Status._additional_fields_ + [
+    ioid: int
+
+    _fields_ = [
+        ('ioid', ctypes.c_int32),
+        ('_status_type', ctypes.c_byte),
+    ]
+    _additional_fields_ = list(Status._additional_fields_) + [
         SuccessField('field_if', FieldDesc),
     ]
 
 
-class ChannelPutRequest(ExtendedMessageBase):
+class ChannelPutRequest(MessageBase):
     """
     A "channel put" message is used to set (put) data to the channel.
 
@@ -1034,54 +1084,61 @@ class ChannelPutRequest(ExtendedMessageBase):
     used by user applications to show data that was set the last time by the
     application.
     """
-    ID = ApplicationCommands.PUT
+    ID = ApplicationCommand.PUT
 
-    _fields_ = [('server_chid', ctypes.c_int32),
-                ('ioid', ctypes.c_int32),
-                ('subcommand', ctypes.c_byte),
-                ]
-    _additional_fields_ = []
+    server_chid: int
+    ioid: int
+
+    _fields_ = [
+        ('server_chid', ctypes.c_int32),
+        ('ioid', ctypes.c_int32),
+        ('subcommand', ctypes.c_byte),
+    ]
     _subcommand_fields_ = {
-        Subcommands.INIT: [
+        Subcommand.INIT: [
             RequiredField('pv_request', PVRequest),
         ],
-        Subcommands.GET: [
+        Subcommand.GET: [
             # Query what the last put request was
             RequiredField('pv_put_data', Data),
         ],
-        Subcommands.DEFAULT: [
+        Subcommand.DEFAULT: [
             # Perform the put
             RequiredField('put_data', DataWithBitSet),
         ],
         # TODO mask DESTROY | DEFAULT
-        Subcommands.DESTROY: [],
+        Subcommand.DESTROY: [],
     }
 
 
-class ChannelPutResponse(_StatusBase, ExtendedMessageBase):
+class ChannelPutResponse(_StatusBase, MessageBase):
     """
     A response to a :class:`ChannelPutRequest`.
     """
-    ID = ApplicationCommands.PUT
+    ID = ApplicationCommand.PUT
 
-    _fields_ = [('ioid', ctypes.c_int32),
-                ('subcommand', ctypes.c_byte),
-                ('_status_type', ctypes.c_byte),
-                ]
+    ioid: int
+    put_structure_if: Optional[FieldDesc] = None
+
+    _fields_ = [
+        ('ioid', ctypes.c_int32),
+        ('subcommand', ctypes.c_byte),
+        ('_status_type', ctypes.c_byte),
+    ]
 
     _subcommand_fields_ = {
-        Subcommands.INIT: [
+        Subcommand.INIT: [
             SuccessField('put_structure_if', FieldDesc),
         ],
-        Subcommands.DEFAULT: [
+        Subcommand.DEFAULT: [
             # The actual put
         ],
-        Subcommands.DESTROY: [
+        Subcommand.DESTROY: [
         ],
     }
 
 
-class ChannelPutGetRequest(ExtendedMessageBase):
+class ChannelPutGetRequest(MessageBase):
     """
     A "channel put-get" set of messages are used to set (put) data to the
     channel and then immediately retrieve data from the channel. Channels are
@@ -1096,60 +1153,71 @@ class ChannelPutGetRequest(ExtendedMessageBase):
     A "GET_PUT" request retrieves the remote put structure. This MAY be used by
     user applications to show data that was set the last time by the application.
     """
-    ID = ApplicationCommands.PUT_GET
+    ID = ApplicationCommand.PUT_GET
 
-    _fields_ = [('server_chid', ctypes.c_int32),
-                ('ioid', ctypes.c_int32),
-                ('subcommand', ctypes.c_byte),
-                ]
-    _additional_fields_ = []
+    server_chid: int
+    ioid: int
+
+    _fields_ = [
+        ('server_chid', ctypes.c_int32),
+        ('ioid', ctypes.c_int32),
+        ('subcommand', ctypes.c_byte),
+    ]
     _subcommand_fields_ = {
-        Subcommands.INIT: [
+        Subcommand.INIT: [
             RequiredField('pv_request', PVRequest),
         ],
-        Subcommands.DEFAULT: [
+        Subcommand.DEFAULT: [
             RequiredField('put_data', DataWithBitSet)
         ],
-        Subcommands.GET: [
+        Subcommand.GET: [
             # Get the remote "put request"
         ],
-        Subcommands.GET_PUT: [
+        Subcommand.GET_PUT: [
             # Get the remote "get request"
         ],
-        Subcommands.DESTROY: [],
+        Subcommand.DESTROY: [],
     }
 
 
-class ChannelPutGetResponse(_StatusBase, ExtendedMessageBase):
+class ChannelPutGetResponse(_StatusBase, MessageBase):
     """
     A response to a :class:`ChannelPutGetRequest`.
     """
-    ID = ApplicationCommands.PUT_GET
+    ID = ApplicationCommand.PUT_GET
 
-    _fields_ = [('ioid', ctypes.c_int32),
-                ('subcommand', ctypes.c_byte),
-                ('_status_type', ctypes.c_byte),
-                ]
+    ioid: int
+    get_structure_if: Optional[FieldDesc]
+    put_structure_if: Optional[FieldDesc]
+    get_data: Optional[typing.Any]
+    put_data: Optional[typing.Any]
+    pv_data: Optional[typing.Any]
+
+    _fields_ = [
+        ('ioid', ctypes.c_int32),
+        ('subcommand', ctypes.c_byte),
+        ('_status_type', ctypes.c_byte),
+    ]
 
     _subcommand_fields_ = {
-        Subcommands.INIT: [
+        Subcommand.INIT: [
             SuccessField('put_structure_if', FieldDesc),
             SuccessField('get_structure_if', FieldDesc),
         ],
-        Subcommands.DEFAULT: [
+        Subcommand.DEFAULT: [
             SuccessField('pv_data', Data),
         ],
-        Subcommands.GET: [
+        Subcommand.GET: [
             SuccessField('get_data', Data),
         ],
-        Subcommands.GET_PUT: [
+        Subcommand.GET_PUT: [
             SuccessField('put_data', Data),
         ],
-        Subcommands.DESTROY: [],
+        Subcommand.DESTROY: [],
     }
 
 
-class ChannelArrayRequest(ExtendedMessageBase):
+class ChannelArrayRequest(MessageBase):
     """
     A "channel array" set of messages are used to handle remote array values.
     Requests allow a client agent to: retrieve (get) and set (put) data from/to
@@ -1160,11 +1228,11 @@ class ChannelArrayRequest(ExtendedMessageBase):
     -----
     This is not yet implemented in caproto-pva.
     """
-    ID = ApplicationCommands.ARRAY
+    ID = ApplicationCommand.ARRAY
     # TODO
 
 
-class ChannelArrayResponse(ExtendedMessageBase):
+class ChannelArrayResponse(MessageBase):
     """
     A response to a :class:`ChannelArrayRequest`.
 
@@ -1172,11 +1240,11 @@ class ChannelArrayResponse(ExtendedMessageBase):
     -----
     This is not yet implemented in caproto-pva.
     """
-    ID = ApplicationCommands.ARRAY
+    ID = ApplicationCommand.ARRAY
     # TODO
 
 
-class ChannelRequestDestroyRequest(ExtendedMessageBase):
+class ChannelRequestDestroyRequest(MessageBase):
     """
     A "destroy request" messages is used destroy any request instance, i.e. an
     instance with requestID.
@@ -1185,11 +1253,11 @@ class ChannelRequestDestroyRequest(ExtendedMessageBase):
     -----
     This is not yet implemented in caproto-pva.
     """
-    ID = ApplicationCommands.DESTROY_REQUEST
+    ID = ApplicationCommand.DESTROY_REQUEST
     # TODO
 
 
-class ChannelRequestDestroyResponse(ExtendedMessageBase):
+class ChannelRequestDestroyResponse(MessageBase):
     """
     A response to a :class:`ChannelRequestDestroyRequest`.
 
@@ -1197,11 +1265,11 @@ class ChannelRequestDestroyResponse(ExtendedMessageBase):
     -----
     This is not yet implemented in caproto-pva.
     """
-    ID = ApplicationCommands.DESTROY_REQUEST
+    ID = ApplicationCommand.DESTROY_REQUEST
     # TODO
 
 
-class ChannelRequestCancelRequest(ExtendedMessageBase):
+class ChannelRequestCancelRequest(MessageBase):
     """
     A "cancel request" messages is used cancel any pending request, i.e. an
     instance with a requestID.
@@ -1210,11 +1278,11 @@ class ChannelRequestCancelRequest(ExtendedMessageBase):
     -----
     This is not yet implemented in caproto-pva.
     """
-    ID = ApplicationCommands.CANCEL_REQUEST
+    ID = ApplicationCommand.CANCEL_REQUEST
     # TODO
 
 
-class ChannelRequestCancelResponse(ExtendedMessageBase):
+class ChannelRequestCancelResponse(MessageBase):
     """
     A response to a :class:`ChannelRequestCancelRequest`.
 
@@ -1222,11 +1290,11 @@ class ChannelRequestCancelResponse(ExtendedMessageBase):
     -----
     This is not yet implemented in caproto-pva.
     """
-    ID = ApplicationCommands.CANCEL_REQUEST
+    ID = ApplicationCommand.CANCEL_REQUEST
     # TODO
 
 
-class ChannelMonitorRequest(ExtendedMessageBase):
+class ChannelMonitorRequest(MessageBase):
     """
     The "channel monitor" set of messages are used by client agents to indicate
     that they wish to be asynchronously informed of changes in the state or
@@ -1238,38 +1306,49 @@ class ChannelMonitorRequest(ExtendedMessageBase):
 
     More details on the `wiki <https://github.com/epics-base/pvAccessCPP/wiki/Protocol-Operation-Monitor>`_.
     """
-    ID = ApplicationCommands.MONITOR
+    ID = ApplicationCommand.MONITOR
+    subcommand: Optional[MonitorSubcommand] = None
 
-    _fields_ = [('server_chid', ctypes.c_int32),
-                ('ioid', ctypes.c_int32),
-                ('subcommand', ctypes.c_byte),
-                ]
-    _additional_fields_ = []
+    server_chid: int
+    ioid: int
+
+    _fields_ = [
+        ('server_chid', ctypes.c_int32),
+        ('ioid', ctypes.c_int32),
+        ('subcommand', ctypes.c_byte),
+    ]
     _subcommand_fields_ = {
-        Subcommands.INIT: [
+        Subcommand.INIT: [
             RequiredField('pv_request', PVRequest),
             OptionalField('queue_size', 'int',
                           OptionalStopMarker.stop,
                           lambda msg, buf: bool(msg.subcommand &
-                                                MonitorSubcommands.PIPELINE)),
+                                                MonitorSubcommand.PIPELINE)),
         ],
-        Subcommands.DEFAULT: [],
-        MonitorSubcommands.START: [],
-        MonitorSubcommands.STOP: [],
-        # Subcommands.PIPELINE: [],
-        Subcommands.DESTROY: [],
+        Subcommand.DEFAULT: [],
+        MonitorSubcommand.START: [],
+        MonitorSubcommand.STOP: [],
+        # Subcommand.PIPELINE: [],
+        Subcommand.DESTROY: [],
     }
 
 
-class ChannelMonitorResponse(ExtendedMessageBase):
+class ChannelMonitorResponse(MessageBase):
     """
     A response to a :class:`ChannelMonitorRequest`.
     """
-    ID = ApplicationCommands.MONITOR
+    ID = ApplicationCommand.MONITOR
 
-    _fields_ = [('ioid', ctypes.c_int32),
-                ('subcommand', ctypes.c_byte),
-                ]
+    ioid: int
+    subcommand: Optional[MonitorSubcommand] = None
+    pv_structure_if: FieldDesc
+    pv_data: typing.Any
+    overrun_bitset: BitSet
+
+    _fields_ = [
+        ('ioid', ctypes.c_int32),
+        ('subcommand', ctypes.c_byte),
+    ]
 
     @property
     def is_successful(self) -> bool:
@@ -1277,28 +1356,27 @@ class ChannelMonitorResponse(ExtendedMessageBase):
         status_type = getattr(self, '_status_type', StatusType.OK)
         return status_type in success_status_types
 
-    _additional_fields_ = []
     _subcommand_fields_ = {
-        MonitorSubcommands.INIT: [
-            RequiredField('status_type', FieldType.byte),
-        ] + Status._additional_fields_ + [
+        MonitorSubcommand.INIT: [
+            RequiredField('status_type', FieldType.int8),
+        ] + list(Status._additional_fields_) + [
             SuccessField('pv_structure_if', FieldDesc),
         ],
-        MonitorSubcommands.DEFAULT: [
+        MonitorSubcommand.DEFAULT: [
             # `pv_structure_if` is tracked by ioid
             RequiredField('pv_data', DataWithBitSet),
             RequiredField('overrun_bitset', BitSet),
         ],
-        # MonitorSubcommands.START: [],
-        # MonitorSubcommands.STOP: [],
-        MonitorSubcommands.PIPELINE: [
+        # MonitorSubcommand.START: [],
+        # MonitorSubcommand.STOP: [],
+        MonitorSubcommand.PIPELINE: [
             RequiredField('nfree', FieldType.int32),
         ],
-        Subcommands.DESTROY: [],
+        Subcommand.DESTROY: [],
     }
 
 
-class ChannelProcessRequest(ExtendedMessageBase):
+class ChannelProcessRequest(MessageBase):
     """
     A "channel process" set of messages are used to indicate to the server that
     the computation actions associated with a channel should be executed.
@@ -1310,42 +1388,48 @@ class ChannelProcessRequest(ExtendedMessageBase):
     After a process request is successfully initialized, the client can issue
     the actual process request(s).
     """
-    ID = ApplicationCommands.PROCESS
+    ID = ApplicationCommand.PROCESS
 
-    _fields_ = [('server_chid', ctypes.c_int32),
-                ('ioid', ctypes.c_int32),
-                ('subcommand', ctypes.c_byte),
-                ]
-    _additional_fields_ = []
+    server_chid: int
+    ioid: int
+
+    _fields_ = [
+        ('server_chid', ctypes.c_int32),
+        ('ioid', ctypes.c_int32),
+        ('subcommand', ctypes.c_byte),
+    ]
     _subcommand_fields_ = {
-        Subcommands.INIT: [
+        Subcommand.INIT: [
             RequiredField('pv_request', PVRequest),
             # TODO_DOCS typo serverStatusIF -> PVRequestIF
         ],
-        Subcommands.DEFAULT: [],  # TODO: not PROCESS?
-        Subcommands.DESTROY: [],
+        Subcommand.DEFAULT: [],  # TODO: not PROCESS?
+        Subcommand.DESTROY: [],
     }
 
 
-class ChannelProcessResponse(_StatusBase, ExtendedMessageBase):
+class ChannelProcessResponse(_StatusBase, MessageBase):
     """
     A response to a :class:`ChannelProcessRequest`.
     """
-    ID = ApplicationCommands.PROCESS
+    ID = ApplicationCommand.PROCESS
 
-    _fields_ = [('ioid', ctypes.c_int32),
-                ('subcommand', ctypes.c_byte),
-                ('_status_type', ctypes.c_byte),
-                ]
+    ioid: int
+
+    _fields_ = [
+        ('ioid', ctypes.c_int32),
+        ('subcommand', ctypes.c_byte),
+        ('_status_type', ctypes.c_byte),
+    ]
 
     _subcommand_fields_ = {
-        Subcommands.INIT: [],
-        Subcommands.DEFAULT: [],  # TODO: not PROCESS?
-        Subcommands.DESTROY: [],
+        Subcommand.INIT: [],
+        Subcommand.DEFAULT: [],  # TODO: not PROCESS?
+        Subcommand.DESTROY: [],
     }
 
 
-class ChannelRpcRequest(ExtendedMessageBase):
+class ChannelRpcRequest(MessageBase):
     """
     A remote procedure call request.
 
@@ -1356,42 +1440,49 @@ class ChannelRpcRequest(ExtendedMessageBase):
     initialized, the client can issue actual RPC request(s).
 
     """
-    ID = ApplicationCommands.RPC
+    ID = ApplicationCommand.RPC
 
-    _fields_ = [('server_chid', ctypes.c_int32),
-                ('ioid', ctypes.c_int32),
-                ('subcommand', ctypes.c_byte),
-                ]
-    _additional_fields_ = []
+    server_chid: int
+    ioid: int
+
+    _fields_ = [
+        ('server_chid', ctypes.c_int32),
+        ('ioid', ctypes.c_int32),
+        ('subcommand', ctypes.c_byte),
+    ]
     _subcommand_fields_ = {
-        Subcommands.INIT: [
+        Subcommand.INIT: [
             RequiredField('pv_request', PVRequest),
         ],
-        Subcommands.DEFAULT: [
+        Subcommand.DEFAULT: [
             RequiredField('pv_data', FieldDescAndData),
         ],
-        Subcommands.DESTROY: [],
+        Subcommand.DESTROY: [],
     }
 
 
-class ChannelRpcResponse(_StatusBase, ExtendedMessageBase):
-    ID = ApplicationCommands.PROCESS
+class ChannelRpcResponse(_StatusBase, MessageBase):
+    ID = ApplicationCommand.PROCESS
 
-    _fields_ = [('ioid', ctypes.c_int32),
-                ('subcommand', ctypes.c_byte),
-                ('_status_type', ctypes.c_byte),
-                ]
+    ioid: int
+    _status_type: int
+
+    _fields_ = [
+        ('ioid', ctypes.c_int32),
+        ('subcommand', ctypes.c_byte),
+        ('_status_type', ctypes.c_byte),
+    ]
 
     _subcommand_fields_ = {
-        Subcommands.INIT: [],
-        Subcommands.DEFAULT: [
+        Subcommand.INIT: [],
+        Subcommand.DEFAULT: [
             SuccessField('pv_response', FieldDescAndData),
         ],
-        Subcommands.DESTROY: [],
+        Subcommand.DESTROY: [],
     }
 
 
-class OriginTagRequest(_StatusBase, ExtendedMessageBase):
+class OriginTagRequest(_StatusBase, MessageBase):
     """
     When a client or server receives a packet containing a Search message with
     flagged "sent as unicast" it may resend this as a multicast to
@@ -1404,137 +1495,139 @@ class OriginTagRequest(_StatusBase, ExtendedMessageBase):
     More details on the `wiki
     <https://github.com/epics-base/pvAccessCPP/wiki/Protocol-Messages#cmd_origin_tag-0x16>`_.
     """
-    ID = ApplicationCommands.ORIGIN_TAG
+    ID = ApplicationCommand.ORIGIN_TAG
 
 
 BIG_ENDIAN, LITTLE_ENDIAN = BIG_ENDIAN, LITTLE_ENDIAN  # removed below
-BeaconMessageBE = _make_endian(BeaconMessage, BIG_ENDIAN)
-BeaconMessageLE = _make_endian(BeaconMessage, LITTLE_ENDIAN)
-EchoBE = _make_endian(Echo, BIG_ENDIAN)
-EchoLE = _make_endian(Echo, LITTLE_ENDIAN)
-StatusBE = _make_endian(Status, BIG_ENDIAN)
-StatusLE = _make_endian(Status, LITTLE_ENDIAN)
 
-ChannelDestroyRequestBE = _make_endian(ChannelDestroyRequest, BIG_ENDIAN)
-ChannelDestroyRequestLE = _make_endian(ChannelDestroyRequest, LITTLE_ENDIAN)
-ChannelDestroyResponseBE = _make_endian(ChannelDestroyResponse, BIG_ENDIAN)
-ChannelDestroyResponseLE = _make_endian(ChannelDestroyResponse, LITTLE_ENDIAN)
-ChannelFieldInfoRequestBE = _make_endian(ChannelFieldInfoRequest, BIG_ENDIAN)
-ChannelFieldInfoRequestLE = _make_endian(ChannelFieldInfoRequest, LITTLE_ENDIAN)
-ChannelFieldInfoResponseBE = _make_endian(ChannelFieldInfoResponse, BIG_ENDIAN)
-ChannelFieldInfoResponseLE = _make_endian(ChannelFieldInfoResponse, LITTLE_ENDIAN)
-ChannelGetRequestBE = _make_endian(ChannelGetRequest, BIG_ENDIAN)
-ChannelGetRequestLE = _make_endian(ChannelGetRequest, LITTLE_ENDIAN)
-ChannelGetResponseBE = _make_endian(ChannelGetResponse, BIG_ENDIAN)
-ChannelGetResponseLE = _make_endian(ChannelGetResponse, LITTLE_ENDIAN)
-ChannelMonitorRequestBE = _make_endian(ChannelMonitorRequest, BIG_ENDIAN)
-ChannelMonitorRequestLE = _make_endian(ChannelMonitorRequest, LITTLE_ENDIAN)
-ChannelMonitorResponseBE = _make_endian(ChannelMonitorResponse, BIG_ENDIAN)
-ChannelMonitorResponseLE = _make_endian(ChannelMonitorResponse, LITTLE_ENDIAN)
-ChannelProcessRequestBE = _make_endian(ChannelProcessRequest, BIG_ENDIAN)
-ChannelProcessRequestLE = _make_endian(ChannelProcessRequest, LITTLE_ENDIAN)
-ChannelProcessResponseBE = _make_endian(ChannelProcessResponse, BIG_ENDIAN)
-ChannelProcessResponseLE = _make_endian(ChannelProcessResponse, LITTLE_ENDIAN)
-ChannelPutGetRequestBE = _make_endian(ChannelPutGetRequest, BIG_ENDIAN)
-ChannelPutGetRequestLE = _make_endian(ChannelPutGetRequest, LITTLE_ENDIAN)
-ChannelPutGetResponseBE = _make_endian(ChannelPutGetResponse, BIG_ENDIAN)
-ChannelPutGetResponseLE = _make_endian(ChannelPutGetResponse, LITTLE_ENDIAN)
-ChannelPutRequestBE = _make_endian(ChannelPutRequest, BIG_ENDIAN)
-ChannelPutRequestLE = _make_endian(ChannelPutRequest, LITTLE_ENDIAN)
-ChannelPutResponseBE = _make_endian(ChannelPutResponse, BIG_ENDIAN)
-ChannelPutResponseLE = _make_endian(ChannelPutResponse, LITTLE_ENDIAN)
-ChannelRpcRequestBE = _make_endian(ChannelRpcRequest, BIG_ENDIAN)
-ChannelRpcRequestLE = _make_endian(ChannelRpcRequest, LITTLE_ENDIAN)
-ChannelRpcResponseBE = _make_endian(ChannelRpcResponse, BIG_ENDIAN)
-ChannelRpcResponseLE = _make_endian(ChannelRpcResponse, LITTLE_ENDIAN)
-ConnectionValidatedResponseBE = _make_endian(ConnectionValidatedResponse, BIG_ENDIAN)
-ConnectionValidatedResponseLE = _make_endian(ConnectionValidatedResponse, LITTLE_ENDIAN)
-ConnectionValidationRequestBE = _make_endian(ConnectionValidationRequest, BIG_ENDIAN)
-ConnectionValidationRequestLE = _make_endian(ConnectionValidationRequest, LITTLE_ENDIAN)
-ConnectionValidationResponseBE = _make_endian(ConnectionValidationResponse, BIG_ENDIAN)
-ConnectionValidationResponseLE = _make_endian(ConnectionValidationResponse, LITTLE_ENDIAN)
-CreateChannelRequestBE = _make_endian(CreateChannelRequest, BIG_ENDIAN)
-CreateChannelRequestLE = _make_endian(CreateChannelRequest, LITTLE_ENDIAN)
-CreateChannelResponseBE = _make_endian(CreateChannelResponse, BIG_ENDIAN)
-CreateChannelResponseLE = _make_endian(CreateChannelResponse, LITTLE_ENDIAN)
-SearchRequestBE = _make_endian(SearchRequest, BIG_ENDIAN)
-SearchRequestLE = _make_endian(SearchRequest, LITTLE_ENDIAN)
-SearchResponseBE = _make_endian(SearchResponse, BIG_ENDIAN)
-SearchResponseLE = _make_endian(SearchResponse, LITTLE_ENDIAN)
+class BeaconMessageBE(BeaconMessage, _BE): _fields_ = BeaconMessage._fields_  # noqa
+class BeaconMessageLE(BeaconMessage, _LE): _fields_ = BeaconMessage._fields_  # noqa
+class EchoBE(Echo, _BE): _fields_ = Echo._fields_  # noqa
+class EchoLE(Echo, _LE): _fields_ = Echo._fields_  # noqa
+class StatusBE(Status, _BE): _fields_ = Status._fields_  # noqa
+class StatusLE(Status, _LE): _fields_ = Status._fields_  # noqa
+
+class ChannelDestroyRequestBE(ChannelDestroyRequest, _BE): _fields_ = ChannelDestroyRequest._fields_  # noqa
+class ChannelDestroyRequestLE(ChannelDestroyRequest, _LE): _fields_ = ChannelDestroyRequest._fields_  # noqa
+class ChannelDestroyResponseBE(ChannelDestroyResponse, _BE): _fields_ = ChannelDestroyResponse._fields_  # noqa
+class ChannelDestroyResponseLE(ChannelDestroyResponse, _LE): _fields_ = ChannelDestroyResponse._fields_  # noqa
+class ChannelFieldInfoRequestBE(ChannelFieldInfoRequest, _BE): _fields_ = ChannelFieldInfoRequest._fields_  # noqa
+class ChannelFieldInfoRequestLE(ChannelFieldInfoRequest, _LE): _fields_ = ChannelFieldInfoRequest._fields_  # noqa
+class ChannelFieldInfoResponseBE(ChannelFieldInfoResponse, _BE): _fields_ = ChannelFieldInfoResponse._fields_  # noqa
+class ChannelFieldInfoResponseLE(ChannelFieldInfoResponse, _LE): _fields_ = ChannelFieldInfoResponse._fields_  # noqa
+class ChannelGetRequestBE(ChannelGetRequest, _BE): _fields_ = ChannelGetRequest._fields_  # noqa
+class ChannelGetRequestLE(ChannelGetRequest, _LE): _fields_ = ChannelGetRequest._fields_  # noqa
+class ChannelGetResponseBE(ChannelGetResponse, _BE): _fields_ = ChannelGetResponse._fields_  # noqa
+class ChannelGetResponseLE(ChannelGetResponse, _LE): _fields_ = ChannelGetResponse._fields_  # noqa
+class ChannelMonitorRequestBE(ChannelMonitorRequest, _BE): _fields_ = ChannelMonitorRequest._fields_  # noqa
+class ChannelMonitorRequestLE(ChannelMonitorRequest, _LE): _fields_ = ChannelMonitorRequest._fields_  # noqa
+class ChannelMonitorResponseBE(ChannelMonitorResponse, _BE): _fields_ = ChannelMonitorResponse._fields_  # noqa
+class ChannelMonitorResponseLE(ChannelMonitorResponse, _LE): _fields_ = ChannelMonitorResponse._fields_  # noqa
+class ChannelProcessRequestBE(ChannelProcessRequest, _BE): _fields_ = ChannelProcessRequest._fields_  # noqa
+class ChannelProcessRequestLE(ChannelProcessRequest, _LE): _fields_ = ChannelProcessRequest._fields_  # noqa
+class ChannelProcessResponseBE(ChannelProcessResponse, _BE): _fields_ = ChannelProcessResponse._fields_  # noqa
+class ChannelProcessResponseLE(ChannelProcessResponse, _LE): _fields_ = ChannelProcessResponse._fields_  # noqa
+class ChannelPutGetRequestBE(ChannelPutGetRequest, _BE): _fields_ = ChannelPutGetRequest._fields_  # noqa
+class ChannelPutGetRequestLE(ChannelPutGetRequest, _LE): _fields_ = ChannelPutGetRequest._fields_  # noqa
+class ChannelPutGetResponseBE(ChannelPutGetResponse, _BE): _fields_ = ChannelPutGetResponse._fields_  # noqa
+class ChannelPutGetResponseLE(ChannelPutGetResponse, _LE): _fields_ = ChannelPutGetResponse._fields_  # noqa
+class ChannelPutRequestBE(ChannelPutRequest, _BE): _fields_ = ChannelPutRequest._fields_  # noqa
+class ChannelPutRequestLE(ChannelPutRequest, _LE): _fields_ = ChannelPutRequest._fields_  # noqa
+class ChannelPutResponseBE(ChannelPutResponse, _BE): _fields_ = ChannelPutResponse._fields_  # noqa
+class ChannelPutResponseLE(ChannelPutResponse, _LE): _fields_ = ChannelPutResponse._fields_  # noqa
+class ChannelRpcRequestBE(ChannelRpcRequest, _BE): _fields_ = ChannelRpcRequest._fields_  # noqa
+class ChannelRpcRequestLE(ChannelRpcRequest, _LE): _fields_ = ChannelRpcRequest._fields_  # noqa
+class ChannelRpcResponseBE(ChannelRpcResponse, _BE): _fields_ = ChannelRpcResponse._fields_  # noqa
+class ChannelRpcResponseLE(ChannelRpcResponse, _LE): _fields_ = ChannelRpcResponse._fields_  # noqa
+class ConnectionValidatedResponseBE(ConnectionValidatedResponse, _BE): _fields_ = ConnectionValidatedResponse._fields_  # noqa
+class ConnectionValidatedResponseLE(ConnectionValidatedResponse, _LE): _fields_ = ConnectionValidatedResponse._fields_  # noqa
+class ConnectionValidationRequestBE(ConnectionValidationRequest, _BE): _fields_ = ConnectionValidationRequest._fields_  # noqa
+class ConnectionValidationRequestLE(ConnectionValidationRequest, _LE): _fields_ = ConnectionValidationRequest._fields_  # noqa
+class ConnectionValidationResponseBE(ConnectionValidationResponse, _BE): _fields_ = ConnectionValidationResponse._fields_  # noqa
+class ConnectionValidationResponseLE(ConnectionValidationResponse, _LE): _fields_ = ConnectionValidationResponse._fields_  # noqa
+class CreateChannelRequestBE(CreateChannelRequest, _BE): _fields_ = CreateChannelRequest._fields_  # noqa
+class CreateChannelRequestLE(CreateChannelRequest, _LE): _fields_ = CreateChannelRequest._fields_  # noqa
+class CreateChannelResponseBE(CreateChannelResponse, _BE): _fields_ = CreateChannelResponse._fields_  # noqa
+class CreateChannelResponseLE(CreateChannelResponse, _LE): _fields_ = CreateChannelResponse._fields_  # noqa
+class SearchRequestBE(SearchRequest, _BE): _fields_ = SearchRequest._fields_  # noqa
+class SearchRequestLE(SearchRequest, _LE): _fields_ = SearchRequest._fields_  # noqa
+class SearchResponseBE(SearchResponse, _BE): _fields_ = SearchResponse._fields_  # noqa
+class SearchResponseLE(SearchResponse, _LE): _fields_ = SearchResponse._fields_  # noqa
+
 
 FROM_CLIENT, FROM_SERVER = MessageFlags.FROM_CLIENT, MessageFlags.FROM_SERVER
 
 messages = {
     # LITTLE ENDIAN, CLIENT -> SERVER
     (LITTLE_ENDIAN, FROM_CLIENT): {
-        ApplicationCommands.BEACON: BeaconMessageLE,
-        ApplicationCommands.CONNECTION_VALIDATION: ConnectionValidationResponseLE,
-        ApplicationCommands.ECHO: EchoLE,
-        ApplicationCommands.SEARCH_REQUEST: SearchRequestLE,
-        ApplicationCommands.CREATE_CHANNEL: CreateChannelRequestLE,
-        ApplicationCommands.GET: ChannelGetRequestLE,
-        ApplicationCommands.GET_FIELD: ChannelFieldInfoRequestLE,
-        ApplicationCommands.DESTROY_CHANNEL: ChannelDestroyRequestLE,
-        ApplicationCommands.PUT: ChannelPutRequestLE,
-        ApplicationCommands.PUT_GET: ChannelPutGetRequestLE,
-        ApplicationCommands.MONITOR: ChannelMonitorRequestLE,
-        ApplicationCommands.PROCESS: ChannelProcessRequestLE,
-        ApplicationCommands.RPC: ChannelRpcRequestLE,
+        ApplicationCommand.BEACON: BeaconMessageLE,
+        ApplicationCommand.CONNECTION_VALIDATION: ConnectionValidationResponseLE,
+        ApplicationCommand.ECHO: EchoLE,
+        ApplicationCommand.SEARCH_REQUEST: SearchRequestLE,
+        ApplicationCommand.CREATE_CHANNEL: CreateChannelRequestLE,
+        ApplicationCommand.GET: ChannelGetRequestLE,
+        ApplicationCommand.GET_FIELD: ChannelFieldInfoRequestLE,
+        ApplicationCommand.DESTROY_CHANNEL: ChannelDestroyRequestLE,
+        ApplicationCommand.PUT: ChannelPutRequestLE,
+        ApplicationCommand.PUT_GET: ChannelPutGetRequestLE,
+        ApplicationCommand.MONITOR: ChannelMonitorRequestLE,
+        ApplicationCommand.PROCESS: ChannelProcessRequestLE,
+        ApplicationCommand.RPC: ChannelRpcRequestLE,
     },
 
     # BIG ENDIAN, CLIENT -> SERVER
     (BIG_ENDIAN, FROM_CLIENT): {
-        ApplicationCommands.BEACON: BeaconMessageBE,
-        ApplicationCommands.CONNECTION_VALIDATION: ConnectionValidationResponseBE,
-        ApplicationCommands.ECHO: EchoBE,
-        ApplicationCommands.SEARCH_REQUEST: SearchRequestBE,
-        ApplicationCommands.CREATE_CHANNEL: CreateChannelRequestBE,
-        ApplicationCommands.GET: ChannelGetRequestBE,
-        ApplicationCommands.GET_FIELD: ChannelFieldInfoRequestBE,
-        ApplicationCommands.DESTROY_CHANNEL: ChannelDestroyRequestBE,
-        ApplicationCommands.PUT: ChannelPutRequestBE,
-        ApplicationCommands.PUT_GET: ChannelPutGetRequestBE,
-        ApplicationCommands.MONITOR: ChannelMonitorRequestBE,
-        ApplicationCommands.PROCESS: ChannelProcessRequestBE,
-        ApplicationCommands.RPC: ChannelRpcRequestBE,
+        ApplicationCommand.BEACON: BeaconMessageBE,
+        ApplicationCommand.CONNECTION_VALIDATION: ConnectionValidationResponseBE,
+        ApplicationCommand.ECHO: EchoBE,
+        ApplicationCommand.SEARCH_REQUEST: SearchRequestBE,
+        ApplicationCommand.CREATE_CHANNEL: CreateChannelRequestBE,
+        ApplicationCommand.GET: ChannelGetRequestBE,
+        ApplicationCommand.GET_FIELD: ChannelFieldInfoRequestBE,
+        ApplicationCommand.DESTROY_CHANNEL: ChannelDestroyRequestBE,
+        ApplicationCommand.PUT: ChannelPutRequestBE,
+        ApplicationCommand.PUT_GET: ChannelPutGetRequestBE,
+        ApplicationCommand.MONITOR: ChannelMonitorRequestBE,
+        ApplicationCommand.PROCESS: ChannelProcessRequestBE,
+        ApplicationCommand.RPC: ChannelRpcRequestBE,
     },
 
     # LITTLE ENDIAN, SERVER -> CLIENT
     (LITTLE_ENDIAN, FROM_SERVER): {
-        ControlCommands.SET_ENDIANESS: SetByteOrder,
-        ApplicationCommands.BEACON: BeaconMessageLE,
-        ApplicationCommands.CONNECTION_VALIDATION: ConnectionValidationRequestLE,
-        ApplicationCommands.ECHO: EchoLE,
-        ApplicationCommands.CONNECTION_VALIDATED: ConnectionValidatedResponseLE,
-        ApplicationCommands.SEARCH_RESPONSE: SearchResponseLE,
-        ApplicationCommands.CREATE_CHANNEL: CreateChannelResponseLE,
-        ApplicationCommands.GET: ChannelGetResponseLE,
-        ApplicationCommands.GET_FIELD: ChannelFieldInfoResponseLE,
-        ApplicationCommands.DESTROY_CHANNEL: ChannelDestroyResponseLE,
-        ApplicationCommands.PUT: ChannelPutResponseLE,
-        ApplicationCommands.PUT_GET: ChannelPutGetResponseLE,
-        ApplicationCommands.MONITOR: ChannelMonitorResponseLE,
-        ApplicationCommands.PROCESS: ChannelProcessResponseLE,
-        ApplicationCommands.RPC: ChannelRpcResponseLE,
+        ControlCommand.SET_ENDIANESS: SetByteOrder,
+        ApplicationCommand.BEACON: BeaconMessageLE,
+        ApplicationCommand.CONNECTION_VALIDATION: ConnectionValidationRequestLE,
+        ApplicationCommand.ECHO: EchoLE,
+        ApplicationCommand.CONNECTION_VALIDATED: ConnectionValidatedResponseLE,
+        ApplicationCommand.SEARCH_RESPONSE: SearchResponseLE,
+        ApplicationCommand.CREATE_CHANNEL: CreateChannelResponseLE,
+        ApplicationCommand.GET: ChannelGetResponseLE,
+        ApplicationCommand.GET_FIELD: ChannelFieldInfoResponseLE,
+        ApplicationCommand.DESTROY_CHANNEL: ChannelDestroyResponseLE,
+        ApplicationCommand.PUT: ChannelPutResponseLE,
+        ApplicationCommand.PUT_GET: ChannelPutGetResponseLE,
+        ApplicationCommand.MONITOR: ChannelMonitorResponseLE,
+        ApplicationCommand.PROCESS: ChannelProcessResponseLE,
+        ApplicationCommand.RPC: ChannelRpcResponseLE,
     },
 
     # BIG ENDIAN, SERVER -> CLIENT
     (BIG_ENDIAN, FROM_SERVER): {
-        ControlCommands.SET_ENDIANESS: SetByteOrder,
-        ApplicationCommands.BEACON: BeaconMessageBE,
-        ApplicationCommands.CONNECTION_VALIDATION: ConnectionValidationRequestBE,
-        ApplicationCommands.ECHO: EchoBE,
-        ApplicationCommands.CONNECTION_VALIDATED: ConnectionValidatedResponseBE,
-        ApplicationCommands.SEARCH_RESPONSE: SearchResponseBE,
-        ApplicationCommands.CREATE_CHANNEL: CreateChannelResponseBE,
-        ApplicationCommands.GET: ChannelGetResponseBE,
-        ApplicationCommands.GET_FIELD: ChannelFieldInfoResponseBE,
-        ApplicationCommands.DESTROY_CHANNEL: ChannelDestroyResponseBE,
-        ApplicationCommands.PUT: ChannelPutResponseBE,
-        ApplicationCommands.PUT_GET: ChannelPutGetResponseBE,
-        ApplicationCommands.MONITOR: ChannelMonitorResponseBE,
-        ApplicationCommands.PROCESS: ChannelProcessResponseBE,
-        ApplicationCommands.RPC: ChannelRpcResponseBE,
+        ControlCommand.SET_ENDIANESS: SetByteOrder,
+        ApplicationCommand.BEACON: BeaconMessageBE,
+        ApplicationCommand.CONNECTION_VALIDATION: ConnectionValidationRequestBE,
+        ApplicationCommand.ECHO: EchoBE,
+        ApplicationCommand.CONNECTION_VALIDATED: ConnectionValidatedResponseBE,
+        ApplicationCommand.SEARCH_RESPONSE: SearchResponseBE,
+        ApplicationCommand.CREATE_CHANNEL: CreateChannelResponseBE,
+        ApplicationCommand.GET: ChannelGetResponseBE,
+        ApplicationCommand.GET_FIELD: ChannelFieldInfoResponseBE,
+        ApplicationCommand.DESTROY_CHANNEL: ChannelDestroyResponseBE,
+        ApplicationCommand.PUT: ChannelPutResponseBE,
+        ApplicationCommand.PUT_GET: ChannelPutGetResponseBE,
+        ApplicationCommand.MONITOR: ChannelMonitorResponseBE,
+        ApplicationCommand.PROCESS: ChannelProcessResponseBE,
+        ApplicationCommand.RPC: ChannelRpcResponseBE,
     },
 }
 
@@ -1736,10 +1829,11 @@ def read_from_bytestream(
         data, direction, cache=cache, byte_order=byte_order)
 
     if num_bytes_needed > 0:
-        data = Deserialized(data=ChannelLifeCycle.NEED_DATA, buffer=data, offset=0)
-        return SegmentDeserialized(data,
-                                   bytes_needed=num_bytes_needed,
-                                   segment_state=None)
+        return SegmentDeserialized(
+            data=Deserialized(data=ChannelLifeCycle.NEED_DATA, buffer=data,
+                              offset=0),
+            bytes_needed=num_bytes_needed,
+            segment_state=None)
 
     msg_class = header.get_message(direction=direction,
                                    use_fixed_byte_order=byte_order)

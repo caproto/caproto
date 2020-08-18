@@ -5,7 +5,7 @@ Field description (and other primitives) serialization helpers.
 import dataclasses
 import logging
 import textwrap
-import typing  # noqa
+import typing
 from dataclasses import field
 from struct import pack, unpack
 from typing import Dict, List, Optional, Tuple
@@ -30,6 +30,7 @@ class FieldDesc(Serializable):
     field_type: FieldType
     array_type: FieldArrayType
     size: Optional[int]
+    metadata: Dict = field(default_factory=dict, hash=False, repr=False)
 
     @property
     def type_name(self) -> str:
@@ -162,9 +163,6 @@ class SimpleField(FieldDesc):
     values.
     """
 
-    metadata: Optional[Dict] = field(default_factory=dict, hash=False,
-                                     repr=False)
-
     def serialize(self, endian: Endian, cache=None) -> List[bytes]:
         buf = [bytes(FieldDescByte.from_field(self))]
         if self.array_type.has_field_desc_size:
@@ -196,6 +194,9 @@ class SimpleField(FieldDesc):
         return f'{self.field_type.name}{array_desc} {self.name}{value}'
 
 
+Descendent = Tuple[str, 'FieldDesc']
+
+
 @dataclasses.dataclass(frozen=True)
 class StructuredField(FieldDesc):
     """
@@ -203,11 +204,11 @@ class StructuredField(FieldDesc):
     turn may be structured or simple.
     """
 
-    struct_name: str
-    children: Dict[str, 'FieldDesc'] = field(repr=False, hash=False)
-    descendents: Tuple['FieldDesc'] = field(repr=False, hash=True)
-    metadata: Optional[Dict] = field(default_factory=dict, hash=False,
-                                     repr=False)
+    struct_name: str = ''
+    children: Dict[str, FieldDesc] = field(repr=False, hash=False,
+                                           default_factory=dict)
+    descendents: Tuple[Descendent, ...] = field(repr=False, hash=True,
+                                                default_factory=tuple)
 
     def serialize_cache_update(self, endian: Endian, cache: CacheContext):
         if cache is None or cache.theirs is None:
@@ -221,7 +222,7 @@ class StructuredField(FieldDesc):
 
         if cache.theirs:
             # TODO: LRU cache with only 65k entries
-            id_ = max(cache.theirs.values()) + 1
+            id_ = max(cache.theirs) + 1
         else:
             id_ = 1
 
@@ -372,14 +373,15 @@ def _parse_repr_lines(text):
     return root
 
 
-def _children_from_field_list(fields: List[FieldDesc]) -> typing.Dict:
+def _children_from_field_list(fields: typing.Iterable[FieldDesc]
+                              ) -> Dict[str, 'FieldDesc']:
     """
     Get the ``children`` parameter to be used with ``StructuredField()``.
     """
     return {child.name: child for child in fields}
 
 
-def _descendents_from_field_list(fields: List[FieldDesc]
+def _descendents_from_field_list(fields: typing.Iterable[FieldDesc]
                                  ) -> Tuple[Tuple[str, FieldDesc], ...]:
     """
     Get the ``descendents`` parameter to be used with ``StructuredField()``.
@@ -388,6 +390,7 @@ def _descendents_from_field_list(fields: List[FieldDesc]
     for child in fields:
         descendents.append((child.name, child))
         if isinstance(child, StructuredField):
+            child = typing.cast(StructuredField, child)
             if child.field_type == FieldType.union:
                 ...
             elif child.array_type == FieldArrayType.variable_array:
