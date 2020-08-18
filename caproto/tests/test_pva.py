@@ -134,20 +134,20 @@ repr_with_data = [
     pytest.param(
         textwrap.dedent('''\
         struct my_struct
-            byte[] value
-            byte<16> boundedSizeArray
-            byte[4] fixedSizeArray
+            int8[] value
+            int8<16> boundedSizeArray
+            int8[4] fixedSizeArray
             struct timeStamp_t timeStamp
-                long secondsPastEpoch
-                uint nanoSeconds
-                uint userTag
+                int64 secondsPastEpoch
+                uint32 nanoSeconds
+                uint32 userTag
             struct alarm_t alarm
-                int severity
-                int status
+                int32 severity
+                int32 status
                 string message
             union valueUnion
                 string not_selected
-                uint selected
+                uint32 selected
             any variantUnion
         '''.strip()),
         {
@@ -213,13 +213,13 @@ def test_serialize_from_repr(struct_repr, structured_data, expected_serialized, 
 
 @pytest.mark.parametrize(
     "field_type, value, array_type",
-    [(FieldType.long, 1, FieldArrayType.scalar),
-     (FieldType.long, [1, 2, 3], FieldArrayType.variable_array),
+    [(FieldType.int64, 1, FieldArrayType.scalar),
+     (FieldType.int64, [1, 2, 3], FieldArrayType.variable_array),
      (FieldType.boolean, True, FieldArrayType.scalar),
      (FieldType.boolean, [True, True, False], FieldArrayType.variable_array),
-     (FieldType.double, 1.0, FieldArrayType.scalar),
-     (FieldType.double, [2.0, 2.0, 3.0], FieldArrayType.variable_array),
-     (FieldType.double, array('d', [2.0, 2.0, 3.0]), FieldArrayType.variable_array),
+     (FieldType.float64, 1.0, FieldArrayType.scalar),
+     (FieldType.float64, [2.0, 2.0, 3.0], FieldArrayType.variable_array),
+     (FieldType.float64, array('d', [2.0, 2.0, 3.0]), FieldArrayType.variable_array),
      (FieldType.string, 'abcdefghi', FieldArrayType.scalar),
      (FieldType.string, ['abc', 'def'], FieldArrayType.variable_array),
      ]

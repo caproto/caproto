@@ -17,7 +17,6 @@ from ._fields import (BitSet, FieldDesc, SimpleField, StructuredField,
 
 def new_struct(fields: dict,
                struct_name: str = '',
-               parent: typing.Optional[StructuredField] = None,
                name: str = '',
                array_type: FieldArrayType = FieldArrayType.scalar,
                size: typing.Optional[int] = None,
@@ -28,7 +27,7 @@ def new_struct(fields: dict,
         array_type=array_type,
         name=name,
         struct_name=struct_name,
-        metadata={'parent': parent},
+        metadata={},
         children=_children_from_field_list(fields.values()),
         descendents=_descendents_from_field_list(fields.values()),
         size=size,
@@ -37,7 +36,7 @@ def new_struct(fields: dict,
 
 def _field_from_annotation(attr, annotation,
                            array_type=FieldArrayType.scalar,
-                           parent=None):
+                           ):
     annotation = annotation_type_map.get(annotation, annotation)
     if isinstance(annotation, FieldType):
         return SimpleField(
@@ -54,7 +53,6 @@ def _field_from_annotation(attr, annotation,
             struct_name=struct.struct_name,
             name=attr,
             array_type=array_type,
-            parent=parent,
         )
 
 
@@ -233,7 +231,12 @@ def array_of(item: typing.Union[SimpleField, StructuredField, FieldType, type],
     if isinstance(item, StructuredField):
         struct = item
     else:
-        struct = item._pva_struct_
+        struct = getattr(item, '_pva_struct_', None)
+        if struct is None:
+            raise ValueError(
+                f'Unable to determine the FieldDesc from the given item: '
+                f'{item}'
+            )
 
     return new_struct(
         struct.children,
@@ -251,11 +254,13 @@ class PvaStruct(type):
     Preliminary API; may be removed.
     """
 
+    _pva_struct_: StructuredField
+
     def __new__(cls, name, bases, classdict):
         return pva_dataclass(type.__new__(cls, name, bases, dict(classdict)))
 
 
-def dataclass_from_field_desc(field: FieldDesc) -> type:
+def dataclass_from_field_desc(field: StructuredField) -> type:
     """
     Take a field description, and make a pva_dataclass out of it.
 
@@ -273,17 +278,19 @@ def dataclass_from_field_desc(field: FieldDesc) -> type:
     # use `pva_dataclass` machinery to do the heavy lifting.
     cls = type(field.struct_name or field.name, (), {})
 
-    annotations = {}
+    annotations: typing.Dict[str, typing.Any] = {}
     cls.__annotations__ = annotations
 
     for attr, child in field.children.items():
         if child.field_type in {FieldType.struct, FieldType.union}:
-            annotation_type = dataclass_from_field_desc(child)
+            annotation_type = dataclass_from_field_desc(
+                typing.cast(StructuredField, child)
+            )
         else:
             annotation_type = type_to_annotation[child.field_type]
 
         if child.array_type == FieldArrayType.variable_array:
-            annotation_type = typing.List[annotation_type]
+            annotation_type = typing.List[annotation_type]  # type: ignore
 
         annotations[attr] = annotation_type
 
@@ -304,7 +311,7 @@ def is_pva_dataclass_instance(obj) -> bool:
     return not inspect.isclass(obj) and hasattr(obj, '_pva_struct_')
 
 
-def fill_dataclass(instance: object, value: dict) -> BitSet:
+def fill_dataclass(instance: PvaStruct, value: dict) -> BitSet:
     """
     Fill a dataclass instance given a dictionary.
 

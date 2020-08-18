@@ -1,7 +1,7 @@
 from .._state import ChannelState as _ChannelState
 from .._state import CircuitState as _CircuitState
 from .._state import _BaseState
-from ._messages import (ApplicationCommands, ChannelDestroyRequest,
+from ._messages import (ApplicationCommand, ChannelDestroyRequest,
                         ChannelDestroyResponse, ChannelFieldInfoRequest,
                         ChannelFieldInfoResponse, ChannelGetRequest,
                         ChannelGetResponse, ChannelMonitorRequest,
@@ -12,8 +12,8 @@ from ._messages import (ApplicationCommands, ChannelDestroyRequest,
                         ChannelRpcResponse, ConnectionValidatedResponse,
                         ConnectionValidationRequest,
                         ConnectionValidationResponse, CreateChannelRequest,
-                        CreateChannelResponse, MessageFlags,
-                        MonitorSubcommands, SetByteOrder, Subcommands)
+                        CreateChannelResponse, MessageFlags, MonitorSubcommand,
+                        SetByteOrder, Subcommand)
 from ._utils import (CLIENT, CONNECTED, DISCONNECTED, INIT, NEVER_CONNECTED,
                      RESPONSIVE, SERVER, UNRESPONSIVE, LocalProtocolError,
                      RemoteProtocolError)
@@ -158,15 +158,15 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
 SUBCOMMAND_TRANSITIONS = {
     CLIENT: {
         NEVER_CONNECTED: {
-            Subcommands.INIT: CONNECTED,
+            Subcommand.INIT: CONNECTED,
         },
         CONNECTED: {
-            Subcommands.INIT: CONNECTED,
-            Subcommands.DEFAULT: CONNECTED,
-            Subcommands.GET: CONNECTED,
-            Subcommands.GET_PUT: CONNECTED,
-            Subcommands.PROCESS: CONNECTED,
-            Subcommands.DESTROY: DISCONNECTED,
+            Subcommand.INIT: CONNECTED,
+            Subcommand.DEFAULT: CONNECTED,
+            Subcommand.GET: CONNECTED,
+            Subcommand.GET_PUT: CONNECTED,
+            Subcommand.PROCESS: CONNECTED,
+            Subcommand.DESTROY: DISCONNECTED,
         },
         DISCONNECTED: {
         },
@@ -178,15 +178,15 @@ SUBCOMMAND_TRANSITIONS[SERVER] = SUBCOMMAND_TRANSITIONS[CLIENT]
 MONITOR_TRANSITIONS = {
     CLIENT: {
         NEVER_CONNECTED: {
-            MonitorSubcommands.INIT: CONNECTED,
+            MonitorSubcommand.INIT: CONNECTED,
         },
         CONNECTED: {
-            MonitorSubcommands.INIT: CONNECTED,
-            MonitorSubcommands.DEFAULT: CONNECTED,
-            MonitorSubcommands.PIPELINE: CONNECTED,
-            MonitorSubcommands.START: CONNECTED,
-            MonitorSubcommands.STOP: CONNECTED,
-            MonitorSubcommands.DESTROY: DISCONNECTED,
+            MonitorSubcommand.INIT: CONNECTED,
+            MonitorSubcommand.DEFAULT: CONNECTED,
+            MonitorSubcommand.PIPELINE: CONNECTED,
+            MonitorSubcommand.START: CONNECTED,
+            MonitorSubcommand.STOP: CONNECTED,
+            MonitorSubcommand.DESTROY: DISCONNECTED,
         },
         DISCONNECTED: {
         },
@@ -220,7 +220,7 @@ class ChannelState(_ChannelState):
     def _fire_command_triggered_transitions(self, role, command):
         command_type = type(command)
         if command_type._ENDIAN is not None:
-            if command_type.ID in ApplicationCommands:
+            if command_type.ID in ApplicationCommand:
                 command_type = command_type.__bases__[0]
                 # TODO: HACK! Horrible, horrible hack...
                 # This side-steps putting big- and little-endian messages in
@@ -250,7 +250,7 @@ class CircuitState(_CircuitState):
     def _fire_command_triggered_transitions(self, role, command):
         command_type = type(command)
         if command_type._ENDIAN is not None:
-            if command_type.ID in ApplicationCommands:
+            if command_type.ID in ApplicationCommand:
                 command_type = command_type.__bases__[0]
                 # TODO: HACK! Horrible, horrible hack...
                 # This side-steps putting big- and little-endian messages in
@@ -285,9 +285,9 @@ class RequestState(_BaseState):
         current_state = self.states[role]
         allowed_transitions = self.TRANSITIONS[role][current_state]
         if self.monitor:
-            subcommand = MonitorSubcommands(subcommand)
+            subcommand = MonitorSubcommand(subcommand)
         else:
-            subcommand = Subcommands(subcommand)
+            subcommand = Subcommand(subcommand)
 
         try:
             new_state = allowed_transitions[subcommand]

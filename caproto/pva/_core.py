@@ -26,10 +26,10 @@ SYS_ENDIAN = (LITTLE_ENDIAN if sys.byteorder == 'little' else BIG_ENDIAN)
 QOS_PRIORITY_MASK = 0x7f
 
 
-if hasattr(typing, 'Literal'):  # 3.8
+if sys.version_info >= (3, 8):
     Endian = typing.Literal['<', '>']
 else:
-    Endian = str
+    Endian = typing.NewType('Endian', str)
 
 
 class TypeCode(enum.IntEnum):
@@ -163,31 +163,17 @@ class FieldType(enum.IntEnum):
     float64 = 0b01100010
     float128 = 0b10000010
 
-    float = float32
-    double = float64
-
     uint64 = 0b11100001
     int64 = 0b01100001
-    ulong = uint64
-    long = int64
 
     uint32 = 0b11000001
     int32 = 0b01000001
 
-    uint = uint32
-    int = int32
-
     uint16 = 0b10100001
     int16 = 0b00100001
 
-    ushort = uint16
-    short = int16
-
     uint8 = 0b10000001
     int8 = 0b00000001
-
-    ubyte = uint8
-    byte = int8
 
     boolean = 0b00000000
 
@@ -197,7 +183,7 @@ class FieldType(enum.IntEnum):
 
     @property
     def _type(self) -> int:
-        return (0b111 & self.value)
+        return 0b111 & self.value
 
     @property
     def is_complex(self) -> bool:
@@ -226,8 +212,7 @@ class CacheContext:
             dct.clear()
 
 
-@dataclasses.dataclass
-class Deserialized:
+class Deserialized(typing.Iterable):
     """
     Deserialization result container.
 
@@ -244,26 +229,50 @@ class Deserialized:
         to the buffer passed in to ``deserialize()``.
     """
     data: object
-    buffer: bytearray
+    buffer: Union[bytes, memoryview]
     offset: int
 
     SUPER_DEBUG = False
-    if SUPER_DEBUG:
-        def __post_init__(self):
+
+    if not SUPER_DEBUG:
+        def __init__(self,
+                     data: object,
+                     buffer: bytes,
+                     offset: int):
+            self.data = data
+            self.buffer = buffer
+            self.offset = offset
+
+    else:
+        def __init__(self,
+                     data: object,
+                     buffer: bytes,
+                     offset: int):
+            self.data = data
+            self.buffer = buffer
+            self.offset = offset
+
             import inspect
             import textwrap
             for idx in (3, 4):
                 caller = inspect.stack()[idx]
                 print(caller.filename, caller.lineno)
-                print(textwrap.dedent('\n'.join(caller.code_context)).rstrip())
-            print('------> deserialized', repr(self.data), 'next is', bytes(self.buffer)[:10], self.offset)
+                print(textwrap.dedent('\n'.join(caller.code_context or [])).rstrip())
+            print('------> deserialized', repr(self.data), 'next is',
+                  bytes(self.buffer)[:10], self.offset)
+
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}(data={self.data!r}, "
+            f"buffer={self.buffer!r}, "
+            f"offset={self.offset})"
+        )
 
     def __iter__(self):
         return iter((self.data, self.buffer, self.offset))
 
 
-@dataclasses.dataclass
-class SegmentDeserialized:
+class SegmentDeserialized(typing.Iterable):
     """
     Serialized messages may be segmented when sent over TCP with pvAccess.
     This class contains additional deserialization information necessary to
@@ -287,8 +296,23 @@ class SegmentDeserialized:
     bytes_needed: int
     segment_state: Optional[Union[ChannelLifeCycle, bytes]]
 
+    def __init__(self,
+                 data: Deserialized,
+                 bytes_needed: int,
+                 segment_state: Optional[Union[ChannelLifeCycle, bytes]]):
+        self.data = data
+        self.bytes_needed = bytes_needed
+        self.segment_state = segment_state
+
     def __iter__(self):
         return iter((self.data, self.bytes_needed, self.segment_state))
+
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}(data={self.data!r}, "
+            f"bytes_needed={self.bytes_needed!r}, "
+            f"segment_state={self.segment_state})"
+        )
 
 
 class Serializable(abc.ABC):
@@ -321,7 +345,7 @@ class StatelessSerializable(abc.ABC):
 
 
 class _DataSerializer(abc.ABC):
-    """ABC for DataSerializer below."""
+    """ABC for DataSerializer in caproto.pva._data."""
     @abc.abstractclassmethod
     def serialize(cls,
                   field: 'FieldDesc',

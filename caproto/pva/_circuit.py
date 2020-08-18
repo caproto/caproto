@@ -3,12 +3,13 @@
 import dataclasses
 import logging
 import typing
+from typing import List, Optional, Tuple, Union
 
 from .. import pva
 from .._log import ComposableLogAdapter
 from .._utils import ThreadsafeCounter
 from ._core import SYS_ENDIAN
-from ._messages import (AcknowledgeMarker, ApplicationCommands,
+from ._messages import (AcknowledgeMarker, ApplicationCommand,
                         ChannelDestroyRequest, ChannelDestroyResponse,
                         ChannelFieldInfoRequest, ChannelFieldInfoResponse,
                         ChannelGetRequest, ChannelGetResponse,
@@ -21,13 +22,23 @@ from ._messages import (AcknowledgeMarker, ApplicationCommands,
                         ConnectionValidationResponse, CreateChannelRequest,
                         CreateChannelResponse, EndianSetting, MessageBase,
                         MessageFlags, MessageHeaderBE, MessageHeaderLE,
-                        MonitorSubcommands, SetByteOrder, SetMarker,
-                        Subcommands, _StatusBase, messages,
-                        read_from_bytestream)
+                        MonitorSubcommand, SetByteOrder, SetMarker, Subcommand,
+                        _StatusBase, messages, read_from_bytestream)
 # from ._pvrequest import PVRequestStruct
 from ._state import ChannelState, CircuitState, RequestState, get_exception
 from ._utils import (CLEAR_SEGMENTS, CLIENT, DISCONNECTED, NEED_DATA, SERVER,
-                     CaprotoError, CaprotoRuntimeError, Role)
+                     CaprotoError, CaprotoRuntimeError, ConnectionState, Role)
+
+ChannelMessage = Union[
+    CreateChannelRequest, CreateChannelResponse, ChannelFieldInfoRequest,
+    ChannelFieldInfoResponse, ChannelDestroyRequest, ChannelDestroyResponse,
+    ChannelGetRequest, ChannelGetResponse, ChannelMonitorRequest,
+    ChannelMonitorResponse, ChannelPutRequest, ChannelPutResponse,
+    ChannelProcessRequest, ChannelProcessResponse, ChannelPutGetRequest,
+    ChannelPutGetResponse
+]
+
+Channel = typing.TypeVar('Channel', 'ServerChannel', 'ClientChannel')
 
 
 class VirtualCircuit:
@@ -139,7 +150,7 @@ class VirtualCircuit:
         -------
         ConnectionValidationResponse
         """
-        cls = self.messages[ApplicationCommands.CONNECTION_VALIDATION]
+        cls = self.messages[ApplicationCommand.CONNECTION_VALIDATION]
 
         return cls(client_buffer_size=client_buffer_size,
                    client_registry_size=client_registry_size,
@@ -168,7 +179,8 @@ class VirtualCircuit:
     def __hash__(self):
         return hash((self.address, self.our_role))
 
-    def send(self, *commands, extra: typing.Dict) -> typing.List[bytes]:
+    def send(self, *commands,
+             extra: typing.Dict) -> List[Union[bytes, memoryview]]:
         """
         Convert one or more high-level Commands into buffers of bytes that may
         be broadcast together in one TCP packet. Update our internal
@@ -189,7 +201,7 @@ class VirtualCircuit:
         buffers_to_send : list
             list of buffers to send over a socket
         """
-        buffers_to_send = []
+        buffers_to_send: List[Union[bytes, memoryview]] = []
         tags = {'their_address': self.address,
                 'our_address': self.our_address,
                 'direction': '--->>>',
@@ -225,7 +237,8 @@ class VirtualCircuit:
         return buffers_to_send
 
     def recv(self, *buffers
-             ) -> typing.Generator[typing.Tuple[typing.List, int],
+             ) -> typing.Generator[Tuple[Union[MessageBase, ConnectionState],
+                                         Optional[int]],
                                    None, None]:
         """
         Parse commands from buffers received over TCP.
@@ -290,6 +303,115 @@ class VirtualCircuit:
         """
         self._process_command(self.their_role, command)
 
+    def _get_channel_from_command(self, command: ChannelMessage) -> Channel:
+        """
+        Get the :class:`Channel` instance associated with the given command.
+
+        Parameters
+        ----------
+        command : Message
+        """
+        cid = getattr(command, 'client_chid', None)
+        if cid is not None:
+            return self.channels[cid]
+
+        sid = getattr(command, 'server_chid', None)
+        if sid is not None:
+            return self.channels_sid[sid]
+
+        ioid = getattr(command, 'ioid', None)
+        if ioid is None:
+            err = get_exception(self.our_role, command)
+            raise err('Unable to determine channel information')
+
+        return self._ioids[ioid]['channel']
+
+    def _process_channel_command(self, role: Role, command: ChannelMessage):
+        """
+        Process a command related to a channel.
+
+        Parameters
+        ----------
+        role : ``CLIENT`` or ``SERVER``
+        command : Message
+        """
+        if isinstance(command, CreateChannelRequest):
+            for info in command.channels:
+                cid = info['id']
+                chan = self.channels[cid]
+                # TODO: only one supported now - also by C++ server, AFAIR
+                break
+        else:
+            try:
+                chan = self._get_channel_from_command(command)
+            except KeyError:
+                err = get_exception(self.our_role, command)
+                raise err("Unknown ID")
+
+        # Update the state machine of the pertinent Channel.  If this is
+        # not a valid command, the state machine will raise here. Stash the
+        # state transitions in a local var, run the callbacks at the end.
+        transitions = chan.process_command(command)
+        ioid_info = None
+
+        ioid = getattr(command, 'ioid', None)
+        if ioid is not None:
+            try:
+                ioid_info = self._ioids[ioid]
+            except KeyError:
+                monitor = isinstance(command, (ChannelMonitorRequest,
+                                               ChannelMonitorResponse))
+                ioid_info = dict(
+                    channel=chan,
+                    state=RequestState(monitor)
+                )
+                self._ioids[ioid] = ioid_info
+
+        subcommand = getattr(command, 'subcommand', None)
+
+        if subcommand is not None:
+            ioid_state = ioid_info['state']
+            ioid_state.process_subcommand(subcommand)
+
+        if isinstance(command, CreateChannelResponse):
+            self.channels_sid[command.server_chid] = chan
+        elif isinstance(command, ChannelFieldInfoRequest):
+            ...
+        elif isinstance(command, ChannelFieldInfoResponse):
+            self._ioids.pop(ioid)
+        elif isinstance(command, (ChannelGetRequest,
+                                  ChannelMonitorRequest)):
+            ...
+        elif isinstance(command, ChannelPutResponse):
+            if command.is_successful:
+                if command.subcommand == Subcommand.INIT:
+                    interface = command.put_structure_if
+                    self.cache.ioid_interfaces[ioid] = interface
+                elif command.subcommand == Subcommand.DEFAULT:
+                    ...
+        elif isinstance(command, ChannelGetResponse):
+            if command.is_successful:
+                if command.subcommand == Subcommand.INIT:
+                    interface = command.pv_structure_if
+                    self.cache.ioid_interfaces[ioid] = interface
+                elif command.subcommand == Subcommand.GET:
+                    ...
+        elif isinstance(command, ChannelMonitorResponse):
+            if command.subcommand == Subcommand.INIT:
+                if command.is_successful:
+                    interface = command.pv_structure_if
+                    self.cache.ioid_interfaces[ioid] = interface
+            elif command.subcommand == Subcommand.DEFAULT:
+                ...
+
+        if subcommand == Subcommand.DESTROY:
+            self._ioids.pop(ioid)
+            self.cache.ioid_interfaces.pop(ioid)
+
+        # We are done. Run the Channel state change callbacks.
+        for transition in transitions:
+            chan.state_changed(*transition)
+
     def _process_command(self, role: Role, command: MessageBase):
         """
         All commands go through here.
@@ -312,130 +434,45 @@ class VirtualCircuit:
                                 ChannelMonitorResponse, ChannelPutRequest, ChannelPutResponse,
                                 ChannelProcessRequest, ChannelProcessResponse,
                                 ChannelPutGetRequest, ChannelPutGetResponse)):
-            if isinstance(command, CreateChannelRequest):
-                for info in command.channels:
-                    cid = info['id']
-                    chan = self.channels[cid]
-                    # TODO: only one supported now - also by C++ server, AFAIR
-                    break
+            return self._process_channel_command(role, command)
+
+        # Otherwise, this Command affects the state of this circuit, not a
+        # specific Channel.
+        if isinstance(command, SetByteOrder):
+            fixed = (command.byte_order_setting == EndianSetting.use_server_byte_order)
+            if self.our_role == SERVER:
+                self.our_order = command.byte_order
+                self.their_order = None
+                self.fixed_recv_order = None
+                self.messages = messages[(self.our_order,
+                                          MessageFlags.FROM_SERVER)]
             else:
-                try:
-                    if hasattr(command, 'client_chid'):
-                        cid = command.client_chid
-                        chan = self.channels[cid]
-                    elif hasattr(command, 'server_chid'):
-                        chan = self.channels_sid[command.server_chid]
-                    else:
-                        ioid = command.ioid
-                        chan = self._ioids[ioid]['channel']
-                except KeyError:
-                    err = get_exception(self.our_role, command)
-                    raise err("Unknown ID")
-
-            # Update the state machine of the pertinent Channel.  If this is
-            # not a valid command, the state machine will raise here. Stash the
-            # state transitions in a local var, run the callbacks at the end.
-            transitions = chan.process_command(command)
-            ioid_info = None
-
-            try:
-                ioid = command.ioid
-            except AttributeError:
-                ioid = None
-            else:
-                try:
-                    ioid_info = self._ioids[ioid]
-                except KeyError:
-                    monitor = isinstance(command, (ChannelMonitorRequest,
-                                                   ChannelMonitorResponse))
-                    ioid_info = dict(
-                        channel=chan,
-                        state=RequestState(monitor)
-                    )
-                    self._ioids[ioid] = ioid_info
-
-            subcommand = getattr(command, 'subcommand', None)
-
-            if subcommand is not None:
-                ioid_state = ioid_info['state']
-                ioid_state.process_subcommand(command.subcommand)
-
-            if isinstance(command, CreateChannelResponse):
-                self.channels_sid[command.server_chid] = chan
-            elif isinstance(command, ChannelFieldInfoRequest):
-                ...
-            elif isinstance(command, ChannelFieldInfoResponse):
-                self._ioids.pop(ioid)
-            elif isinstance(command, (ChannelGetRequest,
-                                      ChannelMonitorRequest)):
-                ...
-            elif isinstance(command, ChannelPutResponse):
-                if command.is_successful:
-                    if command.subcommand == Subcommands.INIT:
-                        interface = command.put_structure_if
-                        self.cache.ioid_interfaces[ioid] = interface
-                    elif command.subcommand == Subcommands.DEFAULT:
-                        ...
-            elif isinstance(command, ChannelGetResponse):
-                if command.is_successful:
-                    if command.subcommand == Subcommands.INIT:
-                        interface = command.pv_structure_if
-                        self.cache.ioid_interfaces[ioid] = interface
-                    elif command.subcommand == Subcommands.GET:
-                        ...
-            elif isinstance(command, ChannelMonitorResponse):
-                if command.subcommand == Subcommands.INIT:
-                    if command.is_successful:
-                        interface = command.pv_structure_if
-                        self.cache.ioid_interfaces[ioid] = interface
-                elif command.subcommand == Subcommands.DEFAULT:
-                    ...
-
-            if subcommand == Subcommands.DESTROY:
-                self._ioids.pop(ioid)
-                self.cache.ioid_interfaces.pop(ioid)
-
-            # We are done. Run the Channel state change callbacks.
-            for transition in transitions:
-                chan.state_changed(*transition)
-        else:
-            # Otherwise, this Command affects the state of this circuit, not a
-            # specific Channel.
-            if isinstance(command, SetByteOrder):
-                fixed = (command.byte_order_setting == EndianSetting.use_server_byte_order)
-                if self.our_role == SERVER:
-                    self.our_order = command.byte_order
-                    self.their_order = None
-                    self.fixed_recv_order = None
-                    self.messages = messages[(self.our_order,
-                                              MessageFlags.FROM_SERVER)]
+                self.our_order = command.byte_order
+                self.their_order = command.byte_order
+                self.fixed_recv_order = (self.their_order if fixed else None)
+                if fixed:
+                    self.log.debug('Using fixed byte order for server messages'
+                                   ': %s', self.fixed_recv_order.name)
                 else:
-                    self.our_order = command.byte_order
-                    self.their_order = command.byte_order
-                    self.fixed_recv_order = (self.their_order if fixed else None)
-                    if fixed:
-                        self.log.debug('Using fixed byte order for server messages'
-                                       ': %s', self.fixed_recv_order.name)
-                    else:
-                        self.log.debug('Using byte order from individual messages.')
-                    self.messages = messages[(self.our_order,
-                                              MessageFlags.FROM_CLIENT)]
-            elif isinstance(command, ConnectionValidationRequest):
-                ...
-            elif isinstance(command, ConnectionValidationResponse):
-                ...
-            elif isinstance(command, ConnectionValidatedResponse):
-                ...
+                    self.log.debug('Using byte order from individual messages.')
+                self.messages = messages[(self.our_order,
+                                          MessageFlags.FROM_CLIENT)]
+        elif isinstance(command, ConnectionValidationRequest):
+            ...
+        elif isinstance(command, ConnectionValidationResponse):
+            ...
+        elif isinstance(command, ConnectionValidatedResponse):
+            ...
 
-            if isinstance(command, _StatusBase) and command.has_message:
-                self.log.debug(
-                    'Command status returned %s (message=%s) (call tree=%s)',
-                    command.name, command.message, command.call_tree
-                )
+        if isinstance(command, _StatusBase) and command.has_message:
+            self.log.debug(
+                'Command %s status returned message=%s (call tree=%s)',
+                type(command).__name__, command.message, command.call_tree
+            )
 
-            # Run the circuit's state machine.
-            self.states.process_command_type(self.our_role, command)
-            self.states.process_command_type(self.their_role, command)
+        # Run the circuit's state machine.
+        self.states.process_command_type(self.our_role, command)
+        self.states.process_command_type(self.their_role, command)
 
     def disconnect(self):
         """
@@ -557,7 +594,7 @@ class ClientChannel(_BaseChannel):
         -------
         CreateChannelRequest
         """
-        create_cls = self.circuit.messages[ApplicationCommands.CREATE_CHANNEL]
+        create_cls = self.circuit.messages[ApplicationCommand.CREATE_CHANNEL]
         return create_cls(
             count=1,
             channels=[{'id': self.cid, 'channel_name': self.name}]
@@ -572,8 +609,9 @@ class ClientChannel(_BaseChannel):
         ChannelDestroyRequest
         """
         if self.sid is None:
-            return
-        cls = self.circuit.messages[ApplicationCommands.DESTROY_CHANNEL]
+            raise ValueError('Server ID unavailable')
+
+        cls = self.circuit.messages[ApplicationCommand.DESTROY_CHANNEL]
         return cls(client_chid=self.cid, server_chid=self.sid)
 
     def read_interface(self, *, ioid=None,
@@ -584,7 +622,7 @@ class ClientChannel(_BaseChannel):
 
         if ioid is None:
             ioid = self.circuit.new_ioid()
-        cls = self.circuit.messages[ApplicationCommands.GET_FIELD]
+        cls = self.circuit.messages[ApplicationCommand.GET_FIELD]
         return cls(server_chid=self.sid,
                    ioid=ioid,
                    sub_field_name=sub_field_name,
@@ -609,10 +647,10 @@ class ClientChannel(_BaseChannel):
         if ioid is None:
             ioid = self.circuit.new_ioid()
 
-        cls = self.circuit.messages[ApplicationCommands.GET]
+        cls = self.circuit.messages[ApplicationCommand.GET]
         return cls(server_chid=self.sid,
                    ioid=ioid,
-                   subcommand=Subcommands.INIT,
+                   subcommand=Subcommand.INIT,
                    pv_request=pvrequest,
                    )
 
@@ -629,10 +667,10 @@ class ClientChannel(_BaseChannel):
         ChannelGetRequest
         """
         # TODO state machine for get requests?
-        cls = self.circuit.messages[ApplicationCommands.GET]
+        cls = self.circuit.messages[ApplicationCommand.GET]
         return cls(server_chid=self.sid,
                    ioid=ioid,
-                   subcommand=Subcommands.GET,
+                   subcommand=Subcommand.GET,
                    interface=dict(pv_data=interface),
                    )
 
@@ -656,10 +694,10 @@ class ClientChannel(_BaseChannel):
         if ioid is None:
             ioid = self.circuit.new_ioid()
 
-        cls = self.circuit.messages[ApplicationCommands.MONITOR]
+        cls = self.circuit.messages[ApplicationCommand.MONITOR]
         return cls(server_chid=self.sid,
                    ioid=ioid,
-                   subcommand=Subcommands.INIT,
+                   subcommand=Subcommand.INIT,
                    pv_request=pvrequest,
                    )
 
@@ -670,15 +708,15 @@ class ClientChannel(_BaseChannel):
         Parameters
         ----------
         ioid
-        subcommand : MonitorSubcommands
+        subcommand : MonitorSubcommand
             PIPELINE, START, STOP, DESTROY
 
         Returns
         -------
         ChannelMonitorRequest
         """
-        assert subcommand in MonitorSubcommands
-        cls = self.circuit.messages[ApplicationCommands.MONITOR]
+        assert subcommand in MonitorSubcommand
+        cls = self.circuit.messages[ApplicationCommand.MONITOR]
         return cls(server_chid=self.sid,
                    ioid=ioid,
                    subcommand=subcommand,
@@ -699,10 +737,10 @@ class ClientChannel(_BaseChannel):
         if ioid is None:
             ioid = self.circuit.new_ioid()
 
-        cls = self.circuit.messages[ApplicationCommands.PUT]
+        cls = self.circuit.messages[ApplicationCommand.PUT]
         return cls(server_chid=self.sid,
                    ioid=ioid,
-                   subcommand=Subcommands.INIT,
+                   subcommand=Subcommand.INIT,
                    pv_request=pvrequest,
                    )
 
@@ -710,7 +748,7 @@ class ClientChannel(_BaseChannel):
         """
         Generate a valid :class:`ChannelPutRequest`.
         """
-        cls = self.circuit.messages[ApplicationCommands.PUT]
+        cls = self.circuit.messages[ApplicationCommand.PUT]
         if not isinstance(dataclass, dict):
             value = dataclasses.asdict(dataclass)
 
@@ -727,7 +765,7 @@ class ClientChannel(_BaseChannel):
         }
         ret = cls(server_chid=self.sid,
                   ioid=ioid,
-                  subcommand=Subcommands.DEFAULT,
+                  subcommand=Subcommand.DEFAULT,
                   put_data=put_data,
                   )
         return ret

@@ -3,7 +3,7 @@
 
 import logging
 
-from ._core import FieldType
+from ._annotations import Float64, Int32, Int64
 from ._dataclass import PvaStruct, pva_dataclass
 
 logger = logging.getLogger(__name__)
@@ -11,32 +11,32 @@ logger = logging.getLogger(__name__)
 
 @pva_dataclass
 class time_t:
-    secondsPastEpoch: FieldType.long = 0
-    nanoseconds: FieldType.int32 = 0
-    userTag: FieldType.int32 = 0
+    secondsPastEpoch: Int64
+    nanoseconds: Int32
+    userTag: Int32
 
 
 @pva_dataclass
 class alarm_t:
-    severity: FieldType.int32 = 0
-    status: FieldType.int32 = 0
-    message: FieldType.string = ''
+    severity: Int32 = Int32(0)
+    status: Int32
+    message: str
 
 
 @pva_dataclass
 class display_t:
-    limitLow: FieldType.double = 0.0  # TODO: type depends on value (isnumeric)
-    limitHigh: FieldType.double = 0.0  # TODO: type depends on value
-    description: FieldType.string = ''
-    format: FieldType.string = ''
-    units: FieldType.string = ''
+    limitLow: Float64  # TODO: type depends on value (isnumeric)
+    limitHigh: Float64  # TODO: type depends on value
+    description: str
+    format: str
+    units: str
 
 
 @pva_dataclass
 class control_t:
-    limitLow: FieldType.double = 0.0
-    limitHigh: FieldType.double = 0.0
-    minStep: FieldType.double = 0.0
+    limitLow: Float64
+    limitHigh: Float64
+    minStep: Float64
 
 
 class combined(metaclass=PvaStruct):

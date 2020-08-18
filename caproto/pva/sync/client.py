@@ -5,6 +5,7 @@ import logging
 import socket
 import time
 import typing
+from typing import Dict, Tuple
 
 # REBASE TODO this will go away - need to rebase
 from caproto import (MAX_UDP_RECV, bcast_socket, get_address_list,
@@ -15,15 +16,18 @@ from caproto.pva import (CLIENT, CONNECTED, DISCONNECTED, NEED_DATA,
                          ChannelPutResponse, ClientChannel,
                          ConnectionValidatedResponse,
                          ConnectionValidationRequest, CreateChannelResponse,
-                         ErrorResponseReceived, MonitorSubcommands, QOSFlags,
-                         SearchResponse, Subcommands, VirtualCircuit)
+                         ErrorResponseReceived, MonitorSubcommand, QOSFlags,
+                         SearchResponse, Subcommand, VirtualCircuit)
 
 from .._dataclass import (dataclass_from_field_desc, fill_dataclass,
                           is_pva_dataclass_instance)
 
 # Make a dict to hold our tcp sockets.
-sockets = {}
-global_circuits = {}
+AddressTuple = Tuple[str, int]
+
+sockets: Dict[VirtualCircuit, socket.socket] = {}
+global_circuits: Dict[AddressTuple, VirtualCircuit] = {}
+
 env = get_environment_variables()
 broadcast_port = env['EPICS_PVA_BROADCAST_PORT']
 
@@ -245,11 +249,11 @@ def _read(chan, timeout, pvrequest):
             if command.has_message:
                 logger.info('Message from server: %s', command.message)
 
-            if command.subcommand == Subcommands.INIT:
+            if command.subcommand == Subcommand.INIT:
                 interface = command.pv_structure_if
                 read_req = chan.read(ioid, interface=interface)
                 send(chan.circuit, read_req)
-            elif command.subcommand == Subcommands.GET:
+            elif command.subcommand == Subcommand.GET:
                 interface = command.pv_data['field']
                 value = command.pv_data['value']
                 dataclass = dataclass_from_field_desc(interface)
@@ -318,9 +322,9 @@ def _monitor(chan, timeout, pvrequest, maximum_events):
     event_count = 0
     for command in _receive_commands(chan.circuit, timeout=None):
         if isinstance(command, ChannelMonitorResponse):
-            if command.subcommand == Subcommands.INIT:
+            if command.subcommand == Subcommand.INIT:
                 monitor_start_req = chan.subscribe_control(
-                    ioid=ioid, subcommand=MonitorSubcommands.START)
+                    ioid=ioid, subcommand=MonitorSubcommand.START)
                 send(chan.circuit, monitor_start_req)
 
                 field_desc = command.pv_structure_if
@@ -403,14 +407,14 @@ def _write(chan, timeout, value):
                 raise ErrorResponseReceived(command.message)
             if command.has_message:
                 logger.info('Message from server: %s', command.message)
-            if command.subcommand == Subcommands.INIT:
+            if command.subcommand == Subcommand.INIT:
                 interface = command.put_structure_if
                 instance = dataclass_from_field_desc(interface)()
                 # TODO logic can move up to the circuit
                 bitset = fill_dataclass(instance, value)
                 write_req = chan.write(ioid, interface, instance, bitset)
                 send(chan.circuit, write_req)
-            elif command.subcommand == Subcommands.DEFAULT:
+            elif command.subcommand == Subcommand.DEFAULT:
                 return command
 
 

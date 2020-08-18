@@ -159,13 +159,13 @@ class PVRequestToStructureVisitor(NodeVisitor):
 # )
 
 
-def _new_struct(fields, struct_name='', parent=None, name=''):
+def _new_struct(fields, struct_name='', name=''):
     struct = PVRequestStruct(
         field_type=FieldType.struct,
         array_type=FieldArrayType.scalar,
         name=name,
         struct_name=struct_name,
-        metadata={'parent': parent},
+        metadata={},
         children=_children_from_field_list(fields.values()),
         descendents=_descendents_from_field_list(fields.values()),
         size=None,

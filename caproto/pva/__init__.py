@@ -1,3 +1,5 @@
+import typing
+
 from ._broadcaster import Broadcaster  # noqa
 from ._circuit import *  # noqa
 from ._core import *  # noqa
@@ -10,7 +12,7 @@ from ._pvrequest import *  # noqa
 from ._utils import *  # noqa
 
 annotation_types = {type_.__name__: type_ for type_ in annotation_type_map
-                    if type_ not in {int, float, str, bytes}}
+                    if type_ not in {int, float, str, bytes, bool, typing.Any}}
 globals().update(annotation_types)
 
 __all__ = [

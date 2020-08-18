@@ -2,12 +2,13 @@ import array
 import ctypes
 import functools
 import typing
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from . import _core as core
 from ._core import (Deserialized, Endian, FieldArrayType, FieldType, TypeCode,
                     _DataSerializer)
-from ._fields import BitSet, CacheContext, FieldDesc, SimpleField, Size, String
+from ._fields import (BitSet, CacheContext, FieldDesc, SimpleField, Size,
+                      String, StructuredField)
 from ._pvrequest import PVRequestStruct
 
 
@@ -39,8 +40,8 @@ class ArrayBasedDataSerializer(DataSerializer, handles={}):
                     field: 'FieldDesc',
                     data: bytes, *,
                     endian: Endian,
-                    bitset: 'BitSet' = None,
-                    cache: CacheContext = None,
+                    bitset: Optional[BitSet] = None,
+                    cache: Optional[CacheContext] = None,
                     count: int = 1,
                     ) -> Deserialized:
         ...
@@ -59,8 +60,8 @@ class StringFieldData(DataSerializer,
                   field: FieldDesc,
                   value: typing.Union[str, List[str]],
                   endian: Endian,
-                  bitset: BitSet = None,
-                  cache: CacheContext = None,
+                  bitset: Optional[BitSet] = None,
+                  cache: Optional[CacheContext] = None,
                   ) -> List[bytes]:
         return String.serialize(value, endian=endian)
 
@@ -69,8 +70,8 @@ class StringFieldData(DataSerializer,
                     field: FieldDesc,
                     data: bytes, *,
                     endian: Endian,
-                    bitset: BitSet = None,
-                    cache: CacheContext = None,
+                    bitset: Optional[BitSet] = None,
+                    cache: Optional[CacheContext] = None,
                     count: int = 1,
                     ) -> Deserialized:
         return String.deserialize(data, endian=endian)
@@ -91,7 +92,7 @@ class NumericFieldData(ArrayBasedDataSerializer, handles=_numeric_types):
     Handles integer and floating point type variations.
     """
 
-    type_to_ctypes = {
+    type_to_ctypes: Dict[FieldType, typing.Type[ctypes._SimpleCData]] = {
         # FieldType.float16 ?
         FieldType.float32: ctypes.c_float,
         FieldType.float64: ctypes.c_double,
@@ -106,18 +107,13 @@ class NumericFieldData(ArrayBasedDataSerializer, handles=_numeric_types):
         FieldType.boolean: ctypes.c_ubyte,
     }
 
-    type_to_array_code = {
-        name: ctypes_type._type_
-        for name, ctypes_type in type_to_ctypes.items()
-    }
-
     @classmethod
     def serialize(cls,
                   field: FieldDesc,
                   value: typing.Union[str, List[str]],
                   endian: Endian,
-                  bitset: BitSet = None,
-                  cache: CacheContext = None,
+                  bitset: Optional[BitSet] = None,
+                  cache: Optional[CacheContext] = None,
                   ) -> List[bytes]:
         try:
             len(value)
@@ -127,7 +123,7 @@ class NumericFieldData(ArrayBasedDataSerializer, handles=_numeric_types):
         if field.array_type == FieldArrayType.scalar and len(value) > 1:
             raise ValueError('Too many values for FieldArrayType.scalar')
 
-        arr = array.array(cls.type_to_array_code[field.field_type], value)
+        arr = array.array(cls.type_to_ctypes[field.field_type]._type_, value)
         if endian != core.SYS_ENDIAN:
             arr.byteswap()
         return [arr]
@@ -137,8 +133,8 @@ class NumericFieldData(ArrayBasedDataSerializer, handles=_numeric_types):
                     field: FieldDesc,
                     data: bytes, *,
                     endian: Endian,
-                    bitset: BitSet = None,
-                    cache: CacheContext = None,
+                    bitset: Optional[BitSet] = None,
+                    cache: Optional[CacheContext] = None,
                     count: int = 1,
                     ) -> Deserialized:
         ctypes_type = cls.type_to_ctypes[field.field_type]
@@ -173,7 +169,7 @@ class VariantFieldData(DataSerializer, handles={FieldType.any}):
         bytes: FieldType.string,
         int: FieldType.int64,
         bool: FieldType.boolean,
-        float: FieldType.double,
+        float: FieldType.float64,
     }
 
     @classmethod
@@ -210,8 +206,8 @@ class VariantFieldData(DataSerializer, handles={FieldType.any}):
                   field: FieldDesc,
                   value: typing.Any,
                   endian: Endian,
-                  bitset: BitSet = None,
-                  cache: CacheContext = None,
+                  bitset: Optional[BitSet] = None,
+                  cache: Optional[CacheContext] = None,
                   ) -> List[bytes]:
         if value is None:
             return [bytes([TypeCode.NULL_TYPE_CODE])]
@@ -227,8 +223,8 @@ class VariantFieldData(DataSerializer, handles={FieldType.any}):
                     field: FieldDesc,
                     data: bytes, *,
                     endian: Endian,
-                    bitset: BitSet = None,
-                    cache: CacheContext = None,
+                    bitset: Optional[BitSet] = None,
+                    cache: Optional[CacheContext] = None,
                     count: int = 1,
                     ) -> Deserialized:
 
@@ -257,9 +253,10 @@ class UnionFieldData(DataSerializer, handles={FieldType.union}):
                   field: FieldDesc,
                   value: typing.Any,
                   endian: Endian,
-                  bitset: BitSet = None,
-                  cache: CacheContext = None,
+                  bitset: Optional[BitSet] = None,
+                  cache: Optional[CacheContext] = None,
                   ) -> List[bytes]:
+        field = typing.cast(StructuredField, field)
         possible_keys = set(field.children)
         found_keys = set(value).intersection(possible_keys)
         if len(found_keys) == 0:
@@ -286,10 +283,11 @@ class UnionFieldData(DataSerializer, handles={FieldType.union}):
                     field: FieldDesc,
                     data: bytes, *,
                     endian: Endian,
-                    bitset: BitSet = None,
-                    cache: CacheContext = None,
+                    bitset: Optional[BitSet] = None,
+                    cache: Optional[CacheContext] = None,
                     count: int = 1,
                     ) -> Deserialized:
+        field = typing.cast(StructuredField, field)
         index, data, offset = Size.deserialize(data, endian=endian)
         if index is None:
             return Deserialized(data=None, buffer=data, offset=offset)
@@ -315,9 +313,10 @@ class StructFieldData(DataSerializer, handles={FieldType.struct}):
                   field: FieldDesc,
                   value: typing.Any,
                   endian: Endian,
-                  bitset: BitSet = None,
-                  cache: CacheContext = None,
+                  bitset: Optional[BitSet] = None,
+                  cache: Optional[CacheContext] = None,
                   ) -> List[bytes]:
+        field = typing.cast(StructuredField, field)
         if bitset is None:
             bitset = BitSet({0})
 
@@ -327,6 +326,8 @@ class StructFieldData(DataSerializer, handles={FieldType.struct}):
         ]
 
         serialized = []
+        child_bitset: Optional[BitSet]
+
         for index, child in bitset_index_to_child:
             if child.field_type in {FieldType.struct, FieldType.union}:
                 # Child may have bits selected
@@ -348,10 +349,11 @@ class StructFieldData(DataSerializer, handles={FieldType.struct}):
                     field: FieldDesc,
                     data: bytes, *,
                     endian: Endian,
-                    bitset: BitSet = None,
-                    cache: CacheContext = None,
+                    bitset: Optional[BitSet] = None,
+                    cache: Optional[CacheContext] = None,
                     count: int = 1,
                     ) -> Deserialized:
+        field = typing.cast(StructuredField, field)
         if bitset is None:
             bitset = BitSet({0})
 
@@ -409,8 +411,8 @@ class DataWithBitSet(DataSerializer, handles={'bitset_and_data'}):
                   field: FieldDesc,
                   value: typing.Any,
                   endian: Endian,
-                  bitset: BitSet = None,
-                  cache: CacheContext = None,
+                  bitset: Optional[BitSet] = None,
+                  cache: Optional[CacheContext] = None,
                   ) -> List[bytes]:
         serialized = []
         # TODO especially awkward handling
@@ -426,8 +428,8 @@ class DataWithBitSet(DataSerializer, handles={'bitset_and_data'}):
                     field: str,
                     data: bytes, *,
                     endian: Endian,
-                    bitset: BitSet = None,
-                    cache: CacheContext = None,
+                    bitset: Optional[BitSet] = None,
+                    cache: Optional[CacheContext] = None,
                     count: int = 1,
                     ) -> Deserialized:
         bitset, data, offset = BitSet.deserialize(data, endian=endian)
@@ -455,8 +457,8 @@ class FieldDescAndData(DataSerializer, handles={'field_and_data'}):
                   field: FieldDesc,
                   value: typing.Any,
                   endian: Endian,
-                  bitset: BitSet = None,
-                  cache: CacheContext = None,
+                  bitset: Optional[BitSet] = None,
+                  cache: Optional[CacheContext] = None,
                   ) -> List[bytes]:
         field = value['field']
         value = value['value']
@@ -471,8 +473,8 @@ class FieldDescAndData(DataSerializer, handles={'field_and_data'}):
                     field: str,
                     data: bytes, *,
                     endian: Endian,
-                    bitset: BitSet = None,
-                    cache: CacheContext = None,
+                    bitset: Optional[BitSet] = None,
+                    cache: Optional[CacheContext] = None,
                     count: int = 1,
                     ) -> Deserialized:
         field, data, offset = cls.field_class.deserialize(
@@ -504,8 +506,8 @@ class PVRequest(FieldDescAndData, handles={'PVRequest'}):
                   field: FieldDesc,
                   value: typing.Any,
                   endian: Endian,
-                  bitset: BitSet = None,
-                  cache: CacheContext = None,
+                  bitset: Optional[BitSet] = None,
+                  cache: Optional[CacheContext] = None,
                   ) -> List[bytes]:
         if isinstance(value, str):
             st = PVRequestStruct.from_string(value)
@@ -528,8 +530,8 @@ class Data(DataSerializer, handles={}):
                   field: FieldDesc,
                   value: typing.Any,
                   endian: Endian,
-                  bitset: BitSet = None,
-                  cache: CacheContext = None,
+                  bitset: Optional[BitSet] = None,
+                  cache: Optional[CacheContext] = None,
                   ) -> List[bytes]:
 
         if field is FieldDesc:
@@ -562,8 +564,8 @@ class Data(DataSerializer, handles={}):
                     field: FieldDesc,
                     data: bytes, *,
                     endian: Endian,
-                    bitset: BitSet = None,
-                    cache: CacheContext = None,
+                    bitset: Optional[BitSet] = None,
+                    cache: Optional[CacheContext] = None,
                     count: int = 1,
                     ) -> Deserialized:
 
