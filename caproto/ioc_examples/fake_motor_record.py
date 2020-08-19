@@ -5,12 +5,13 @@ from textwrap import dedent
 from caproto.server.records import MotorFields
 
 
-def broadcast_precision_to_fields(record):
+async def broadcast_precision_to_fields(record):
+    """Update precision of all fields to that of the given record."""
+
     precision = record.precision
     for field, prop in record.field_inst.pvdb.items():
-        # HACK: this shouldn't be done normally
-        if 'precision' in prop._data:
-            prop._data['precision'] = precision
+        if hasattr(prop, 'precision'):
+            await prop.write_metadata(precision=precision)
 
 
 class FakeMotor(PVGroup):
@@ -38,7 +39,7 @@ class FakeMotor(PVGroup):
         self.async_lib = async_lib
 
         await self.motor.write_metadata(precision=self.defaults['precision'])
-        broadcast_precision_to_fields(self.motor)
+        await broadcast_precision_to_fields(self.motor)
 
         fields = self.motor.field_inst  # type: MotorFields
         await fields.velocity.write(self.defaults['velocity'])
