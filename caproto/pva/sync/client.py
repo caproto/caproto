@@ -19,6 +19,7 @@ from caproto.pva import (CLIENT, CONNECTED, DISCONNECTED, NEED_DATA,
                          ErrorResponseReceived, MonitorSubcommand, QOSFlags,
                          SearchResponse, Subcommand, VirtualCircuit)
 
+from ..._utils import safe_getsockname
 from .._dataclass import (dataclass_from_field_desc, fill_dataclass,
                           is_pva_dataclass_instance)
 
@@ -61,8 +62,18 @@ def recv(circuit):
     return commands
 
 
-def make_broadcaster_socket():
-    'Returns (udp_sock, port)'
+def make_broadcaster_socket() -> Tuple[socket.socket, int]:
+    """
+    Make and bind a broadcaster socket.
+
+    Returns
+    -------
+    udp_sock : socket.socket
+        The UDP socket.
+
+    port : int
+        The bound port.
+    """
     udp_sock = bcast_socket()
     udp_sock.bind(('', 0))
     port = udp_sock.getsockname()[1]
@@ -71,11 +82,13 @@ def make_broadcaster_socket():
 
 
 def search(pv, udp_sock, udp_port, timeout, max_retries=2):
-    '''Search for a PV over the network by broadcasting over UDP
+    """
+    Search for a PV over the network by broadcasting over UDP
 
     Returns: (host, port)
-    '''
-    b = Broadcaster(our_role=CLIENT, response_addr=('0.0.0.0', udp_port))
+    """
+    broadcaster = Broadcaster(our_role=CLIENT, broadcast_port=udp_port)
+    broadcaster.client_address = safe_getsockname(udp_sock)
     cache = pva.CacheContext()
 
     def send_search(message):
@@ -107,7 +120,7 @@ def search(pv, udp_sock, udp_port, timeout, max_retries=2):
             )
 
     # Initial search attempt
-    pv_to_cid, search_req = b.search(pv)
+    pv_to_cid, search_req = broadcaster.search(pv)
     cid_to_pv = dict((v, k) for k, v in pv_to_cid.items())
     send_search(search_req)
 
@@ -128,8 +141,8 @@ def search(pv, udp_sock, udp_port, timeout, max_retries=2):
 
             check_timeout()
 
-            commands = b.recv(bytes_received, address)
-            b.process_commands(commands)
+            commands = broadcaster.recv(bytes_received, address)
+            broadcaster.process_commands(commands)
             response_commands = [command for command in commands
                                  if isinstance(command, SearchResponse)]
             for command in response_commands:

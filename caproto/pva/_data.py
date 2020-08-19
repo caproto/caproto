@@ -123,7 +123,8 @@ class NumericFieldData(ArrayBasedDataSerializer, handles=_numeric_types):
         if field.array_type == FieldArrayType.scalar and len(value) > 1:
             raise ValueError('Too many values for FieldArrayType.scalar')
 
-        arr = array.array(cls.type_to_ctypes[field.field_type]._type_, value)
+        type_code = cls.type_to_ctypes[field.field_type]._type_  # type: ignore
+        arr = array.array(type_code, value)
         if endian != core.SYS_ENDIAN:
             arr.byteswap()
         return [arr]
@@ -140,12 +141,14 @@ class NumericFieldData(ArrayBasedDataSerializer, handles=_numeric_types):
         ctypes_type = cls.type_to_ctypes[field.field_type]
         byte_size = count * ctypes.sizeof(ctypes_type)
 
-        value = array.array(ctypes_type._type_)
+        type_code = ctypes_type._type_  # type: ignore
+        value = array.array(type_code)
+
         if len(data) < byte_size:
             raise SerializationFailure(
                 f'Deserialization buffer does not hold all values. Expected '
                 f'byte length {byte_size}, actual length {len(data)}. '
-                f'Value of type {field.field_type}[{count}]'
+                f'Value of type {field}[{count}]'
             )
 
         value.frombytes(data[:byte_size])
@@ -451,6 +454,7 @@ class FieldDescAndData(DataSerializer, handles={'field_and_data'}):
     field_type = 'field_and_data'  # hack
     array_type = FieldArrayType.scalar  # hack
     field_class = FieldDesc
+    size = 1
 
     @classmethod
     def serialize(cls,
@@ -460,6 +464,9 @@ class FieldDescAndData(DataSerializer, handles={'field_and_data'}):
                   bitset: Optional[BitSet] = None,
                   cache: Optional[CacheContext] = None,
                   ) -> List[bytes]:
+        if value is None:
+            return [bytes([TypeCode.NULL_TYPE_CODE])]
+
         field = value['field']
         value = value['value']
         serialized = []

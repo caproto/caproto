@@ -151,11 +151,6 @@ class FieldDesc(Serializable):
         return dataclasses.replace(self, name=name)
 
 
-# class NullType(Serializable):
-#     def serialize(self, endian: Endian, cache=None) -> List[bytes]:
-#         return bytes([TypeCode.NULL_TYPE_CODE])
-
-
 @dataclasses.dataclass(frozen=True)
 class SimpleField(FieldDesc):
     """

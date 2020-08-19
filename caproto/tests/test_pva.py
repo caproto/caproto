@@ -608,8 +608,7 @@ def test_bitset_fill(bitset, expected, message):
 
 
 def test_broadcaster_messages_smoke():
-    bcast = pva.Broadcaster(our_role=pva.Role.SERVER,
-                            response_addr=('0.0.0.0', 5))
+    bcast = pva.Broadcaster(our_role=pva.Role.SERVER, port=5)
     pv_to_cid, request = bcast.search(['abc', 'def'])
     request.serialize()
     response = bcast.search_response({'abc': 5, 'def': 6})

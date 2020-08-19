@@ -45,6 +45,10 @@ def main():
                                          logger_name=name)
         else:
             set_handler(color=not args.no_color, level='DEBUG')
+            if args.verbose >= 4:
+                _set_handler_with_logger(color=not args.no_color,
+                                         level='DEBUG',
+                                         logger_name=serialization_logger.name)
 
     try:
         for pv_name in args.pv_names:

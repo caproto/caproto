@@ -20,7 +20,7 @@ from ._messages import (AcknowledgeMarker, ApplicationCommand,
                         ConnectionValidatedResponse,
                         ConnectionValidationRequest,
                         ConnectionValidationResponse, CreateChannelRequest,
-                        CreateChannelResponse, EndianSetting, MessageBase,
+                        CreateChannelResponse, EndianSetting, Message,
                         MessageFlags, MessageHeaderBE, MessageHeaderLE,
                         MonitorSubcommand, SetByteOrder, SetMarker, Subcommand,
                         _StatusBase, messages, read_from_bytestream)
@@ -118,7 +118,11 @@ class VirtualCircuit:
         -------
         AcknowledgeMarker
         """
-        return AcknowledgeMarker()
+        return AcknowledgeMarker(
+            flags=pva.MessageFlags.APP_MESSAGE | pva.MessageFlags.FROM_CLIENT,
+            command=AcknowledgeMarker.ID,
+            payload_size=0,
+        )
 
     def validate_connection(self,
                             client_buffer_size: int,
@@ -237,7 +241,7 @@ class VirtualCircuit:
         return buffers_to_send
 
     def recv(self, *buffers
-             ) -> typing.Generator[Tuple[Union[MessageBase, ConnectionState],
+             ) -> typing.Generator[Tuple[Union[Message, ConnectionState],
                                          Optional[int]],
                                    None, None]:
         """
@@ -294,7 +298,7 @@ class VirtualCircuit:
                                "next command.", len_data)
                 yield command, num_bytes_needed
 
-    def process_command(self, command: MessageBase):
+    def process_command(self, command: Message):
         """
         Update internal state machine and raise if protocol is violated.
 
@@ -412,7 +416,7 @@ class VirtualCircuit:
         for transition in transitions:
             chan.state_changed(*transition)
 
-    def _process_command(self, role: Role, command: MessageBase):
+    def _process_command(self, role: Role, command: Message):
         """
         All commands go through here.
 
