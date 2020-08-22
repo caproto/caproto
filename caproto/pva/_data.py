@@ -161,6 +161,17 @@ class NumericFieldData(ArrayBasedDataSerializer, handles=_numeric_types):
                             offset=byte_size)
 
 
+def _is_string_or_single_valued_string_list(item) -> bool:
+    """Is ``item`` like: ['str'] or 'str'?"""
+    # While this is simple enough in concept, it's confusing enough to
+    # call for its own super-verbose utility function
+    if not isinstance(item, typing.Iterable):
+        return False
+    if not isinstance(item[0], (str, bytes)):
+        return False
+    return len(item) == 1 or isinstance(item, (str, bytes))
+
+
 class VariantFieldData(DataSerializer, handles={FieldType.any}):
     """
     Variant (i.e., "any") data type.
@@ -179,7 +190,7 @@ class VariantFieldData(DataSerializer, handles={FieldType.any}):
     @classmethod
     def field_from_value(cls, value: typing.Any, *, name: str = '') -> FieldDesc:
         'Name and native Python value -> field description dictionary'
-        if isinstance(value, (str, bytes)):
+        if _is_string_or_single_valued_string_list(value):
             return SimpleField(
                 name=name,
                 field_type=FieldType.string,
