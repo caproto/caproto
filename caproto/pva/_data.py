@@ -1,6 +1,5 @@
 import array
 import ctypes
-import enum
 import functools
 import inspect
 import typing
@@ -22,32 +21,19 @@ class SerializationFailure(Exception):
     ...
 
 
-class _ClassMarker(enum.Enum):
-    CLASS_MARKER = 0   # recommended by PEP-0484
-
-
-_CLASS_MARKER = _ClassMarker.CLASS_MARKER
-# _ClassMarkerType = typing.NewType('_ClassMarkerType', _CLASS_MARKER)
-
-
 class DataSerializer(_DataSerializer):
     """
     Tracks subclasses which handle certain data types for serialization.
 
-    Classes may specify either a ``set`` of ``FieldType``s or the special
-    ``_CLASS_MARKER``. The latter indicates the class is not for any FieldType,
-    but stands on its own.
+    Classes specify either a ``set`` of ``FieldType``s.
     """
 
     handlers: Dict[Union[FieldType, type], Type[_DataSerializer]] = {}
 
-    def __init_subclass__(cls, handles: Set[Union[FieldType, _ClassMarker]]):
+    def __init_subclass__(cls, handles: Set[FieldType]):
         super().__init_subclass__()
         for handle in handles:
-            if handle is _CLASS_MARKER:
-                DataSerializer.handlers[cls] = cls
-            else:
-                DataSerializer.handlers[handle] = cls
+            DataSerializer.handlers[handle] = cls
 
 
 class StringFieldData(DataSerializer,
@@ -86,13 +72,10 @@ class ArrayBasedDataSerializer(_ArrayBasedDataSerializer):
     rather with an array of elements.  Used for arrays of basic data types.
     """
 
-    def __init_subclass__(cls, handles: Set[Union[FieldType, _ClassMarker]]):
+    def __init_subclass__(cls, handles: Set[FieldType]):
         super().__init_subclass__()
         for handle in handles:
-            if handle is _CLASS_MARKER:
-                DataSerializer.handlers[cls] = cls
-            else:
-                DataSerializer.handlers[handle] = cls
+            DataSerializer.handlers[handle] = cls
 
 
 _numeric_types = {
