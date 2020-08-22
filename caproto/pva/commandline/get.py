@@ -4,12 +4,11 @@ import logging
 import pprint
 
 from ... import __version__
-from ..._log import _set_handler_with_logger, set_handler
 from ..._utils import ShowVersionAction
 from ..sync.client import read
+from ._shared import configure_logging
 
 logger = logging.getLogger('caproto.pva.ctx')
-serialization_logger = logging.getLogger('caproto.pva.serialization')
 
 
 def main():
@@ -38,17 +37,8 @@ def main():
                         help="Show caproto version and exit.")
 
     args = parser.parse_args()
-    if args.verbose:
-        if args.verbose <= 2:
-            for name in ('caproto.pva.ch', 'caproto.pva.ctx'):
-                _set_handler_with_logger(color=not args.no_color, level='DEBUG',
-                                         logger_name=name)
-        else:
-            set_handler(color=not args.no_color, level='DEBUG')
-            if args.verbose >= 4:
-                _set_handler_with_logger(color=not args.no_color,
-                                         level='DEBUG',
-                                         logger_name=serialization_logger.name)
+
+    configure_logging(verbose=args.verbose, color=not args.no_color)
 
     try:
         for pv_name in args.pv_names:

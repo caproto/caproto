@@ -4,12 +4,11 @@ import json
 import logging
 
 from ... import __version__
-from ..._log import _set_handler_with_logger, set_handler
 from ..._utils import ShowVersionAction
 from ..sync.client import read_write_read
+from ._shared import configure_logging
 
 logger = logging.getLogger('caproto.pva.ctx')
-serialization_logger = logging.getLogger('caproto.pva.serialization')
 
 
 def main():
@@ -50,14 +49,9 @@ def main():
                         default=argparse.SUPPRESS,
                         help="Show caproto version and exit.")
     args = parser.parse_args()
-    if args.verbose:
-        if args.verbose <= 2:
-            _set_handler_with_logger(color=not args.no_color, level='DEBUG',
-                                     logger_name='caproto.pva.ch')
-            _set_handler_with_logger(color=not args.no_color, level='DEBUG',
-                                     logger_name='caproto.pva.ctx')
-        else:
-            set_handler(color=not args.no_color, level='DEBUG')
+
+    configure_logging(verbose=args.verbose, color=not args.no_color)
+
     logger = logging.LoggerAdapter(logging.getLogger('caproto.pva.ch'), {'pv': args.pv_name})
 
     if args.file:
