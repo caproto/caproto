@@ -475,6 +475,12 @@ class DataWithBitSet(CoreSerializableWithCache):
         self.interface = interface
         self.data = data
 
+    def __repr__(self):
+        return (
+            f'{self.__class__.__name__}(data={self.data}, '
+            f'interface={self.interface}, bitset={self.bitset})'
+        )
+
     def serialize(self, endian: Endian,
                   cache: Optional[CacheContext] = None) -> List[bytes]:
         serialized = []
@@ -531,6 +537,12 @@ class FieldDescAndData(CoreSerializableWithCache):
 
         self.interface = interface
         self.data = data
+
+    def __repr__(self):
+        return (
+            f'{self.__class__.__name__}(data={self.data}, '
+            f'interface={self.interface})'
+        )
 
     def serialize(self,
                   endian: Endian,

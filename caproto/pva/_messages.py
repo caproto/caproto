@@ -351,8 +351,8 @@ class Message:
             return Deserialized(data=msg, buffer=buf, offset=offset)
 
         serialization_logger.debug(
-            'deserializing %s base_size=%s subcommand=%s payload=%s', cls,
-            base_size, subcommand, bytes(buf))
+            'from_wire: %s base_size=%s subcommand=%s payload=%s',
+            cls.__name__, base_size, subcommand, bytes(buf))
 
         for field_info in additional_fields:
             if isinstance(field_info, OptionalField):
@@ -400,15 +400,17 @@ class Message:
                     values.append(value)
 
                 setattr(msg, field_info.name, values)
-                serialization_logger.debug('%s (%s) = %s', field_info.name,
-                                           field_info.type, values)
+                serialization_logger.debug(
+                    '\t> Field %r (%s) = %s', field_info.name, field_info.type,
+                    values)
             else:
                 value, buf, off = deserialize(data=buf)
                 offset += off
                 buflen -= off
                 setattr(msg, field_info.name, value)
-                serialization_logger.debug('%s (%s) = %s', field_info.name,
-                                           field_info.type, value)
+                serialization_logger.debug(
+                    '\t> Field %r (%s) = %s', field_info.name, field_info.type,
+                    value)
 
         return Deserialized(data=msg, buffer=buf, offset=offset)
 
