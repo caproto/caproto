@@ -3,7 +3,7 @@ import ctypes
 import functools
 import inspect
 import typing
-from typing import Dict, List, Optional, Sequence, Set, Type, Union
+from typing import Dict, Iterable, List, Optional, Sequence, Set, Type, Union
 
 from . import _core as core
 from ._core import (CoreSerializable, CoreSerializableWithCache,
@@ -116,7 +116,7 @@ class NumericFieldData(ArrayBasedDataSerializer, handles=_numeric_types):
                   bitset: Optional[BitSet] = None,
                   cache: Optional[CacheContext] = None,
                   ) -> List[Union[bytes, array.array]]:
-        if not isinstance(value, typing.Iterable):
+        if not isinstance(value, Iterable):
             value = typing.cast(Sequence[Union[float, int, bool]],
                                 (value, ))
 
@@ -165,8 +165,9 @@ def _is_string_or_single_valued_string_list(item) -> bool:
     """Is ``item`` like: ['str'] or 'str'?"""
     # While this is simple enough in concept, it's confusing enough to
     # call for its own super-verbose utility function
-    if not isinstance(item, typing.Iterable):
+    if not isinstance(item, Iterable):
         return False
+
     if not isinstance(item[0], (str, bytes)):
         return False
     return len(item) == 1 or isinstance(item, (str, bytes))
@@ -198,7 +199,7 @@ class VariantFieldData(DataSerializer, handles={FieldType.any}):
                 array_type=FieldArrayType.scalar,
             )
 
-        if isinstance(value, typing.Iterable):
+        if isinstance(value, Iterable):
             if len(value) > 1:
                 return SimpleField(
                     name=name,
@@ -600,12 +601,39 @@ class PVRequest(FieldDescAndData):
         super().__init__(interface=interface, data=data)
 
 
-def _to_wire_field(field: FieldDesc,
-                   value: typing.Any,
-                   endian: Endian,
-                   bitset: Optional[BitSet] = None,
-                   cache: Optional[CacheContext] = None,
-                   ) -> List[bytes]:
+def to_wire_field(field: FieldDesc,
+                  value: typing.Any,
+                  endian: Endian,
+                  bitset: Optional[BitSet] = None,
+                  cache: Optional[CacheContext] = None,
+                  ) -> List[bytes]:
+    """
+    Serialize ``value`` for sending over the wire, according to the given
+    ``FieldDesc`` in ``field``.
+
+    Parameters
+    ----------
+    field : FieldDesc
+        Determines how to serialize ``value``.
+
+    value: any
+        To be serialized according to ``FieldDesc``.
+
+    endian : Endian
+        The target endianness; ``value`` assumed to be stored according to
+        the system endian.
+
+    bitset : BitSet, optional
+        The associated bitset, if applicable.
+
+    cache : CacheContext, optional
+        The associated cache context, if applicable.
+
+    Returns
+    -------
+    list of bytes
+        The serialized data.
+    """
     serialized = []
     handler = DataSerializer.handlers[field.field_type]
 
@@ -642,8 +670,28 @@ def to_wire(category,
 
     Parameters
     ----------
-    category :
-        If ``value`` is not a
+    category : FieldDesc, CoreSerializable, or similar
+        Required for disambiguation when not obvious based on the type.
+
+    value: any
+        Special handling for CoreSerializable, CoreStatelessSerializable,
+        CoreSerializableWithCache.
+        Or serialized according to ``FieldDesc`` from ``category``.
+
+    bitset : BitSet, optional
+        The associated bitset, if applicable.
+
+    cache : CacheContext, optional
+        The associated cache context, if applicable.
+
+    Returns
+    -------
+    list of bytes
+        The serialized data.
+
+    See Also
+    --------
+    :func:`to_wire_field`
     """
     if isinstance(value, CoreSerializable):
         return value.serialize(endian=endian)
@@ -656,7 +704,8 @@ def to_wire(category,
             value = typing.cast(PvaStruct, value)._pva_struct_
         return value.serialize(endian=endian, cache=cache)
 
-    return _to_wire_field(
+    assert isinstance(category, FieldDesc), type(category)
+    return to_wire_field(
         typing.cast(FieldDesc, category),
         value=value, endian=endian, bitset=bitset, cache=cache,
     )
@@ -669,6 +718,33 @@ def _from_wire_by_class(cls: Union[Type[CoreSerializable],
                         endian: Endian,
                         cache: Optional[CacheContext],
                         ) -> Deserialized:
+    """
+    Deserialization (from the wire) of a specific class type.
+
+    This includes serializable classes of type :class:`CoreSerializable`,
+    :class:`CoreStatelessSerializable`, and :class:`CoreSerializableWithCache`.
+
+    Appropriately passes the required subset of keyword arguments to the given
+    deserializer.
+
+    Parameters
+    ----------
+    cls : CoreSerializable, CoreStatelessSerializable, or CoreSerializableWithCache
+        The class to deserialize with.
+
+    data : bytes
+        The data buffer to read from.
+
+    endian : Endian
+        The endianness of the data to be read.
+
+    cache : CacheContext, optional
+        The associated cache context, if applicable.
+
+    Returns
+    -------
+    Deserialized
+    """
     if issubclass(cls, CoreSerializableWithCache):
         cls = typing.cast(Type[CoreSerializableWithCache], cls)
         return cls.deserialize(data=data, endian=endian, cache=cache)
@@ -680,12 +756,40 @@ def _from_wire_by_class(cls: Union[Type[CoreSerializable],
     raise ValueError('Unhandled deserialization class: {cls}')
 
 
-def _from_wire_field_desc(field: FieldDesc,
-                          data: bytes, *,
-                          endian: Endian,
-                          bitset: Optional[BitSet] = None,
-                          cache: Optional[CacheContext] = None,
-                          ) -> Deserialized:
+def from_wire_field_desc(field: FieldDesc,
+                         data: bytes,
+                         *,
+                         endian: Endian,
+                         bitset: Optional[BitSet] = None,
+                         cache: Optional[CacheContext] = None,
+                         ) -> Deserialized:
+    """
+    Deserialization (from the wire) of FieldDesc data.
+
+    Includes data from all field types, such as ``FieldType.int32``.
+
+    Parameters
+    ----------
+    field : FieldDesc
+        The field description information.  Indicates the type of data to be
+        read, along with size information, if applicable.
+
+    data : bytes
+        The data buffer to read from.
+
+    endian : Endian
+        The endianness of the data to be read.
+
+    bitset : BitSet, optional
+        The associated bitset, if applicable.
+
+    cache : CacheContext, optional
+        The associated cache context, if applicable.
+
+    Returns
+    -------
+    Deserialized
+    """
     offset = 0
     handler = DataSerializer.handlers[field.field_type]
 
@@ -743,14 +847,42 @@ def from_wire(category: Union[FieldDesc,
               bitset: Optional[BitSet] = None,
               cache: Optional[CacheContext] = None,
               ) -> Deserialized:
+    """
+    Top-level, generic deserialization from the wire.
 
+    Parameters
+    ----------
+    category : FieldDesc, CoreSerializable or similar
+        The field category.  Indicates the type of data to be read, along with
+        size information, if applicable.
+
+    data : bytes
+        The data buffer to read from.
+
+    endian : Endian
+        The endianness of the data to be read.
+
+    bitset : BitSet, optional
+        The associated bitset, if applicable.
+
+    cache : CacheContext, optional
+        The associated cache context, if applicable.
+
+    Returns
+    -------
+    Deserialized
+
+    See Also
+    --------
+    :func:`from_wire_field_desc`
+    """
     if inspect.isclass(category):
         return _from_wire_by_class(
             typing.cast(type, category), data=data, endian=endian,
             cache=cache)
 
     if isinstance(category, FieldDesc):
-        return _from_wire_field_desc(
+        return from_wire_field_desc(
             field=typing.cast(FieldDesc, category), data=data, endian=endian,
             bitset=bitset, cache=cache
         )

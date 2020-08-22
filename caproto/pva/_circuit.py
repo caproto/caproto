@@ -289,7 +289,6 @@ class VirtualCircuit:
         Separately process channel creation, as it may possibly work on more
         than one channel at a time.
         """
-        assert isinstance(command, CreateChannelRequest)
         channels = []
 
         for request in command.channels:

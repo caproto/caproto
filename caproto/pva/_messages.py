@@ -1201,6 +1201,7 @@ class ChannelPutResponse(SubcommandMessage):
 
     ioid: int
     put_structure_if: Optional[FieldDesc] = None
+    status: Status
 
     _fields_ = [
         ('ioid', ctypes.c_int32),
@@ -1424,6 +1425,7 @@ class ChannelMonitorResponse(SubcommandMessage):
     pv_structure_if: FieldDesc
     pv_data: typing.Any
     overrun_bitset: BitSet
+    status: Status
 
     _fields_ = [
         ('ioid', ctypes.c_int32),
