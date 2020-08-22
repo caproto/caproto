@@ -684,22 +684,19 @@ def from_wire(category: Union[FieldDesc,
             # item = typing.cast(Type[CoreSerializable], item)
             return item.deserialize(data=data, endian=endian)
 
-        if not issubclass(item, DataSerializer):
-            raise ValueError('Unhandled deserialization class: {item}')
+        raise ValueError('Unhandled deserialization class: {item}')
 
-        handler = DataSerializer.handlers[item]
-        count = 1
-    elif (isinstance(category, CoreSerializableWithCache) and not isinstance(category, FieldDesc)):  # TODO
+    if (isinstance(category, CoreSerializableWithCache) and not isinstance(category, FieldDesc)):  # TODO
         return category.deserialize(data=data, endian=endian, cache=cache)
-    else:
-        field = typing.cast(FieldDesc, category)
-        handler = DataSerializer.handlers[field.field_type]
 
-        if field.array_type.has_serialization_size:
-            count, data, off = Size.deserialize(data, endian=endian)
-            offset += off
-        else:
-            count = field.size or 1
+    field = typing.cast(FieldDesc, category)
+    handler = DataSerializer.handlers[field.field_type]
+
+    if field.array_type.has_serialization_size:
+        count, data, off = Size.deserialize(data, endian=endian)
+        offset += off
+    else:
+        count = field.size or 1
 
     # print('\n\n', ' '.join(hex(c)[2:].zfill(2) for c in data[:20]))
 
