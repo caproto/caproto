@@ -271,6 +271,9 @@ class _Struct09:
         pytest.param(_Struct09, (_Struct01(1, 2, 3), 909),
                      id='Struct09_struct',
                      ),
+        pytest.param(_Struct09, (None, 909),
+                     id='Struct09_none',
+                     ),
 
         pytest.param(_Struct09, (array.array('i', [5, 6, 7]), 909),
                      id='Struct09_array_int'),

@@ -217,6 +217,9 @@ class VariantFieldData(DataSerializer, handles={FieldType.any}):
                 f'Must use an instantiated dataclass, got {value}'
             )
 
+        if value is None:
+            return None
+
         return SimpleField(
             name=name,
             field_type=cls.type_map[type(value)],
@@ -232,7 +235,7 @@ class VariantFieldData(DataSerializer, handles={FieldType.any}):
                   bitset: Optional[BitSet] = None,
                   cache: Optional[CacheContext] = None,
                   ) -> List[bytes]:
-        if value is None:
+        if value is None or value == (None, ):  # hmm
             return [bytes([TypeCode.NULL_TYPE_CODE])]
 
         new_field = cls.field_from_value(value)
