@@ -485,6 +485,9 @@ class Size(CoreStatelessSerializable):
             # TODO_DOCS: this is misrepresented in the docs
             # an empty size is represented as 255 (-1)
             return [pack(endian + 'B', 255)]
+
+        assert size >= 0, 'Negative sizes cannot be serialized'
+
         if size < 254:
             return [pack(endian + 'B', size)]
         if size < core.MAX_INT32:

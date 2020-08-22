@@ -20,6 +20,32 @@ def _fromhex(s):
     return binascii.unhexlify(s)
 
 
+@pytest.mark.parametrize(
+    'endian', [pytest.param(pva.LITTLE_ENDIAN, id='LE'),
+               pytest.param(pva.BIG_ENDIAN, id='BE')]
+)
+@pytest.mark.parametrize(
+    'value, expected_length',
+    [(None, 1),
+     (0, 1),
+     (255, 1 + 4),
+     (256, 1 + 4),
+     (int(2 ** 31 - 2), 1 + 4),
+     (int(2 ** 32), 1 + 4 + 8),
+     (int(2 ** 63), 1 + 4 + 8),
+     (pva.MAX_INT32, 1 + 4 + 8)
+     ]
+)
+def test_size_roundtrip(endian, value, expected_length):
+    serialized = b''.join(pva.Size.serialize(value, endian=endian))
+    roundtrip_value, _, consumed = pva.Size.deserialize(serialized,
+                                                        endian=endian)
+    assert len(serialized) == consumed
+    assert len(serialized) == expected_length
+    assert value == roundtrip_value
+    print(serialized, value)
+
+
 def test_status_example():
     status_example = _fromhex(
         "FF010A4C6F77206D656D6F727900022A4661696C656420746F20"
