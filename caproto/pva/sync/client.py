@@ -14,7 +14,7 @@ from caproto.pva import (CLIENT, CONNECTED, DISCONNECTED, NEED_DATA,
                          Broadcaster, CaprotoError, ChannelFieldInfoResponse,
                          ChannelGetResponse, ChannelMonitorResponse,
                          ChannelPutResponse, ClientChannel,
-                         ConnectionValidatedResponse,
+                         ClientVirtualCircuit, ConnectionValidatedResponse,
                          ConnectionValidationRequest, CreateChannelResponse,
                          ErrorResponseReceived, MonitorSubcommand, QOSFlags,
                          SearchResponse, Subcommand, VirtualCircuit)
@@ -171,7 +171,7 @@ def make_channel(pv_name, udp_sock, udp_port, timeout):
     try:
         circuit = global_circuits[address]
     except KeyError:
-        circuit = VirtualCircuit(
+        circuit = ClientVirtualCircuit(
             our_role=CLIENT, address=address,
             priority=QOSFlags.encode(priority=0, flags=0)
         )
@@ -189,22 +189,23 @@ def make_channel(pv_name, udp_sock, udp_port, timeout):
             if isinstance(command, ConnectionValidationRequest):
                 if command.auth_nz and 'ca' in command.auth_nz:
                     auth_method = 'ca'
-                    host_name = socket.gethostname()
-                    client_name = getpass.getuser()
-                    auth_args = dict(user=client_name, host=host_name)
+                    auth_data = pva.ChannelAccessAuthentication(
+                        user=getpass.getuser(),
+                        host=socket.gethostname(),
+                    )
                 elif command.auth_nz and 'anonymous' in command.auth_nz:
                     auth_method = 'anonymous'
-                    auth_args = {}
+                    auth_data = None
                 else:
                     auth_method = ''
-                    auth_args = {}
+                    auth_data = None
 
                 response = circuit.validate_connection(
-                    client_buffer_size=command.server_buffer_size,
-                    client_registry_size=command.server_registry_size,
+                    buffer_size=command.server_buffer_size,
+                    registry_size=command.server_registry_size,
                     connection_qos=0,
                     auth_nz=auth_method,
-                    auth_args=auth_args,
+                    data=auth_data,
                 )
                 send(circuit, response)
             elif isinstance(command, ConnectionValidatedResponse):
@@ -257,18 +258,18 @@ def _read(chan, timeout, pvrequest):
             # interface = command.field_if
             ...
         elif isinstance(command, ChannelGetResponse):
-            if not command.is_successful:
-                raise ErrorResponseReceived(command.message)
-            if command.has_message:
-                logger.info('Message from server: %s', command.message)
+            if not command.status.is_successful:
+                raise ErrorResponseReceived(str(command.status))
+            if command.status.message:
+                logger.info('Message from server: %s', command.status)
 
             if command.subcommand == Subcommand.INIT:
                 interface = command.pv_structure_if
                 read_req = chan.read(ioid, interface=interface)
                 send(chan.circuit, read_req)
             elif command.subcommand == Subcommand.GET:
-                interface = command.pv_data['field']
-                value = command.pv_data['value']
+                interface = command.pv_data.interface
+                value = command.pv_data.data
                 dataclass = dataclass_from_field_desc(interface)
                 instance = dataclass()
                 fill_dataclass(instance, value)
@@ -336,6 +337,11 @@ def _monitor(chan, timeout, pvrequest, maximum_events):
     for command in _receive_commands(chan.circuit, timeout=None):
         if isinstance(command, ChannelMonitorResponse):
             if command.subcommand == Subcommand.INIT:
+                if not command.status.is_successful:
+                    raise ErrorResponseReceived(str(command.status))
+                if command.status.message:
+                    logger.info('Message from server: %s', command.status)
+
                 monitor_start_req = chan.subscribe_control(
                     ioid=ioid, subcommand=MonitorSubcommand.START)
                 send(chan.circuit, monitor_start_req)
@@ -347,7 +353,7 @@ def _monitor(chan, timeout, pvrequest, maximum_events):
                 yield command
             else:
                 event_count += 1
-                # fill_dataclass(instance, command.pv_data['value'])
+                # fill_dataclass(instance, command.pv_data.data)
                 command.dataclass_instance = instance
                 yield command
                 if maximum_events is not None:
@@ -410,22 +416,24 @@ def _write(chan, timeout, value):
     send(chan.circuit, init_req)
     if is_pva_dataclass_instance(value):
         value = dataclasses.asdict(value)
+    if not isinstance(value, dict):
+        value = {'value': value}
 
     for command in _receive_commands(chan.circuit, timeout):
         if isinstance(command, ChannelFieldInfoResponse):
             # interface = command.field_if
             ...
         elif isinstance(command, ChannelPutResponse):
-            if not command.is_successful:
-                raise ErrorResponseReceived(command.message)
-            if command.has_message:
-                logger.info('Message from server: %s', command.message)
+            if not command.status.is_successful:
+                raise ErrorResponseReceived(str(command.status))
+            if command.status.message:
+                logger.info('Message from server: %s', command.status)
             if command.subcommand == Subcommand.INIT:
                 interface = command.put_structure_if
                 instance = dataclass_from_field_desc(interface)()
                 # TODO logic can move up to the circuit
                 bitset = fill_dataclass(instance, value)
-                write_req = chan.write(ioid, interface, instance, bitset)
+                write_req = chan.write(ioid, instance, bitset)
                 send(chan.circuit, write_req)
             elif command.subcommand == Subcommand.DEFAULT:
                 return command

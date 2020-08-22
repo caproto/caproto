@@ -1,12 +1,18 @@
 import array
 import ctypes
+import enum
 import functools
+import inspect
 import typing
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Sequence, Set, Type, Union
 
 from . import _core as core
-from ._core import (Deserialized, Endian, FieldArrayType, FieldType, TypeCode,
-                    _DataSerializer)
+from ._core import (CoreSerializable, CoreSerializableWithCache,
+                    CoreStatelessSerializable, Deserialized, Endian,
+                    FieldArrayType, FieldType, TypeCode,
+                    _ArrayBasedDataSerializer, _DataSerializer)
+from ._dataclass import (PvaStruct, dataclass_from_field_desc, fill_dataclass,
+                         is_pva_dataclass, is_pva_dataclass_instance)
 from ._fields import (BitSet, CacheContext, FieldDesc, SimpleField, Size,
                       String, StructuredField)
 from ._pvrequest import PVRequestStruct
@@ -16,35 +22,32 @@ class SerializationFailure(Exception):
     ...
 
 
+class _ClassMarker(enum.Enum):
+    CLASS_MARKER = 0   # recommended by PEP-0484
+
+
+_CLASS_MARKER = _ClassMarker.CLASS_MARKER
+# _ClassMarkerType = typing.NewType('_ClassMarkerType', _CLASS_MARKER)
+
+
 class DataSerializer(_DataSerializer):
     """
     Tracks subclasses which handle certain data types for serialization.
+
+    Classes may specify either a ``set`` of ``FieldType``s or the special
+    ``_CLASS_MARKER``. The latter indicates the class is not for any FieldType,
+    but stands on its own.
     """
 
-    handlers: Dict['FieldType', _DataSerializer] = {}
+    handlers: Dict[Union[FieldType, type], Type[_DataSerializer]] = {}
 
-    def __init_subclass__(cls, handles):
+    def __init_subclass__(cls, handles: Set[Union[FieldType, _ClassMarker]]):
         super().__init_subclass__()
         for handle in handles:
-            DataSerializer.handlers[handle] = cls
-
-
-class ArrayBasedDataSerializer(DataSerializer, handles={}):
-    """
-    A data serializer which works not on an element-by-element basis, but
-    rather with an array of elements.  Used for arrays of basic data types.
-    """
-
-    @classmethod
-    def deserialize(cls,
-                    field: 'FieldDesc',
-                    data: bytes, *,
-                    endian: Endian,
-                    bitset: Optional[BitSet] = None,
-                    cache: Optional[CacheContext] = None,
-                    count: int = 1,
-                    ) -> Deserialized:
-        ...
+            if handle is _CLASS_MARKER:
+                DataSerializer.handlers[cls] = cls
+            else:
+                DataSerializer.handlers[handle] = cls
 
 
 class StringFieldData(DataSerializer,
@@ -58,7 +61,7 @@ class StringFieldData(DataSerializer,
     @classmethod
     def serialize(cls,
                   field: FieldDesc,
-                  value: typing.Union[str, List[str]],
+                  value: Union[str, List[str]],
                   endian: Endian,
                   bitset: Optional[BitSet] = None,
                   cache: Optional[CacheContext] = None,
@@ -68,13 +71,28 @@ class StringFieldData(DataSerializer,
     @classmethod
     def deserialize(cls,
                     field: FieldDesc,
-                    data: bytes, *,
+                    data: bytes,
+                    *,
                     endian: Endian,
                     bitset: Optional[BitSet] = None,
                     cache: Optional[CacheContext] = None,
-                    count: int = 1,
                     ) -> Deserialized:
         return String.deserialize(data, endian=endian)
+
+
+class ArrayBasedDataSerializer(_ArrayBasedDataSerializer):
+    """
+    A data serializer which works not on an element-by-element basis, but
+    rather with an array of elements.  Used for arrays of basic data types.
+    """
+
+    def __init_subclass__(cls, handles: Set[Union[FieldType, _ClassMarker]]):
+        super().__init_subclass__()
+        for handle in handles:
+            if handle is _CLASS_MARKER:
+                DataSerializer.handlers[cls] = cls
+            else:
+                DataSerializer.handlers[handle] = cls
 
 
 _numeric_types = {
@@ -110,15 +128,14 @@ class NumericFieldData(ArrayBasedDataSerializer, handles=_numeric_types):
     @classmethod
     def serialize(cls,
                   field: FieldDesc,
-                  value: typing.Union[str, List[str]],
+                  value: Union[float, int, bool, Sequence[Union[float, int, bool]]],
                   endian: Endian,
                   bitset: Optional[BitSet] = None,
                   cache: Optional[CacheContext] = None,
-                  ) -> List[bytes]:
-        try:
-            len(value)
-        except TypeError:
-            value = (value, )
+                  ) -> List[Union[bytes, array.array]]:
+        if not isinstance(value, typing.Iterable):
+            value = typing.cast(Sequence[Union[float, int, bool]],
+                                (value, ))
 
         if field.array_type == FieldArrayType.scalar and len(value) > 1:
             raise ValueError('Too many values for FieldArrayType.scalar')
@@ -132,11 +149,12 @@ class NumericFieldData(ArrayBasedDataSerializer, handles=_numeric_types):
     @classmethod
     def deserialize(cls,
                     field: FieldDesc,
-                    data: bytes, *,
+                    data: bytes,
+                    count: int,
+                    *,
                     endian: Endian,
                     bitset: Optional[BitSet] = None,
                     cache: Optional[CacheContext] = None,
-                    count: int = 1,
                     ) -> Deserialized:
         ctypes_type = cls.type_to_ctypes[field.field_type]
         byte_size = count * ctypes.sizeof(ctypes_type)
@@ -186,7 +204,7 @@ class VariantFieldData(DataSerializer, handles={FieldType.any}):
                 array_type=FieldArrayType.scalar,
             )
 
-        if isinstance(value, (tuple, list, array.array)):
+        if isinstance(value, typing.Iterable):
             if len(value) > 1:
                 return SimpleField(
                     name=name,
@@ -196,6 +214,14 @@ class VariantFieldData(DataSerializer, handles={FieldType.any}):
                 )
 
             value = value[0]
+
+        if is_pva_dataclass_instance(value):
+            return value._pva_struct_.as_new_name(name)
+
+        if is_pva_dataclass(value):
+            raise ValueError(
+                f'Must use an instantiated dataclass, got {value}'
+            )
 
         return SimpleField(
             name=name,
@@ -216,9 +242,13 @@ class VariantFieldData(DataSerializer, handles={FieldType.any}):
             return [bytes([TypeCode.NULL_TYPE_CODE])]
 
         new_field = cls.field_from_value(value)
-        serialized = new_field.serialize(endian=endian)
-        serialized += Data.serialize(new_field, value=value, endian=endian,
-                                     bitset=None, cache=cache)
+        if isinstance(new_field, StructuredField):
+            serialized = new_field.serialize(endian=endian, cache=None)
+        else:
+            serialized = new_field.serialize(endian=endian)
+
+        serialized += to_wire(new_field, value=value, endian=endian,
+                              bitset=None, cache=cache)
         return serialized
 
     @classmethod
@@ -228,18 +258,23 @@ class VariantFieldData(DataSerializer, handles={FieldType.any}):
                     endian: Endian,
                     bitset: Optional[BitSet] = None,
                     cache: Optional[CacheContext] = None,
-                    count: int = 1,
                     ) -> Deserialized:
 
         any_field, data, offset = FieldDesc.deserialize(
-            data, endian=endian, cache=cache, named=False)
+            data, endian=endian, cache=cache)
         if any_field is None:
             return Deserialized(data=None, buffer=data, offset=offset)
 
-        value, data, off = Data.deserialize(any_field, data=data,
-                                            endian=endian, bitset=None,
-                                            cache=cache)
+        value, data, off = from_wire(any_field, data=data, endian=endian,
+                                     bitset=None, cache=cache)
         offset += off
+
+        if any_field.field_type.is_complex:
+            dataclass_instance = dataclass_from_field_desc(any_field)()
+            fill_dataclass(dataclass_instance, value)
+            return Deserialized(data=dataclass_instance, buffer=data,
+                                offset=offset)
+
         return Deserialized(data=value, buffer=data, offset=offset)
 
 
@@ -261,7 +296,8 @@ class UnionFieldData(DataSerializer, handles={FieldType.union}):
                   ) -> List[bytes]:
         field = typing.cast(StructuredField, field)
         possible_keys = set(field.children)
-        found_keys = set(value).intersection(possible_keys)
+        found_keys = [key for key in set(value).intersection(possible_keys)
+                      if value.get(key, None) is not None]
         if len(found_keys) == 0:
             return Size.serialize(None, endian=endian)
 
@@ -276,8 +312,8 @@ class UnionFieldData(DataSerializer, handles={FieldType.union}):
         index = list(field.children).index(key)
         serialized = Size.serialize(index, endian=endian)
         serialized.extend(
-            Data.serialize(field=child, value=value[key], endian=endian,
-                           bitset=None, cache=cache)
+            to_wire(child, value=value[key], endian=endian, bitset=None,
+                    cache=cache)
         )
         return serialized
 
@@ -288,7 +324,6 @@ class UnionFieldData(DataSerializer, handles={FieldType.union}):
                     endian: Endian,
                     bitset: Optional[BitSet] = None,
                     cache: Optional[CacheContext] = None,
-                    count: int = 1,
                     ) -> Deserialized:
         field = typing.cast(StructuredField, field)
         index, data, offset = Size.deserialize(data, endian=endian)
@@ -296,16 +331,18 @@ class UnionFieldData(DataSerializer, handles={FieldType.union}):
             return Deserialized(data=None, buffer=data, offset=offset)
 
         selected_key, selected_field = list(field.children.items())[index]
-        value, data, off = Data.deserialize(
+        value = {}.fromkeys(field.children)
+        value[selected_key], data, off = from_wire(
             selected_field, data=data, endian=endian, bitset=None, cache=cache)
 
         offset += off
-        return Deserialized(data={selected_key: value}, buffer=data, offset=offset)
+        return Deserialized(data=value, buffer=data, offset=offset)
 
 
 class StructFieldData(DataSerializer, handles={FieldType.struct}):
     """
-    Struct field data.
+    Struct field data - not to be confused with introspection/structure
+    definition information.
 
     Handles serialization of the children of the struct, respecting the
     provided BitSet.
@@ -340,10 +377,14 @@ class StructFieldData(DataSerializer, handles={FieldType.struct}):
             else:
                 child_bitset = None
 
-            child_value = value[child.name]
+            if isinstance(value, typing.Mapping):
+                child_value = value[child.name]
+            else:
+                child_value = getattr(value, child.name)
+
             serialized.extend(
-                Data.serialize(field=child, value=child_value, endian=endian,
-                               cache=cache, bitset=child_bitset)
+                to_wire(child, value=child_value, endian=endian,
+                        cache=cache, bitset=child_bitset)
             )
         return serialized
 
@@ -354,7 +395,6 @@ class StructFieldData(DataSerializer, handles={FieldType.struct}):
                     endian: Endian,
                     bitset: Optional[BitSet] = None,
                     cache: Optional[CacheContext] = None,
-                    count: int = 1,
                     ) -> Deserialized:
         field = typing.cast(StructuredField, field)
         if bitset is None:
@@ -362,11 +402,13 @@ class StructFieldData(DataSerializer, handles={FieldType.struct}):
 
         offset = 0
         if field.array_type == FieldArrayType.variable_array:
-            # TODO: haven't been able to confirm where this comes from
-            # always appears to be 1
-            count, data, off = Size.deserialize(data, endian=endian)
+            present, data, off = Size.deserialize(data, endian=endian)
             offset += off
-            assert count == 1
+            if present == 0:
+                # Not present
+                return Deserialized(data=None, buffer=data, offset=offset)
+            if present != 1:
+                raise ValueError(f'Unexpected presence byte: {present}')
 
         bitset_index_to_child = [
             (field.descendents.index((name, child)) + 1, child)
@@ -389,8 +431,8 @@ class StructFieldData(DataSerializer, handles={FieldType.struct}):
             else:
                 child_bitset = None
 
-            value[child.name], data, off = Data.deserialize(
-                field=child, data=data, endian=endian,
+            value[child.name], data, off = from_wire(
+                child, data=data, endian=endian,
                 cache=cache, bitset=child_bitset
             )
             offset += off
@@ -398,236 +440,290 @@ class StructFieldData(DataSerializer, handles={FieldType.struct}):
         return Deserialized(data=value, buffer=data, offset=offset)
 
 
-class DataWithBitSet(DataSerializer, handles={'bitset_and_data'}):
+class DataWithBitSet(CoreSerializableWithCache):
     """
     Pair of Data, described by ``field`` (FieldDesc), and BitSet.
 
     Serializes the BitSet first, and then the Data that goes along with it.
+
+    Parameters
+    ----------
+    bitset : BitSet
+    interface : FieldDesc
+    data :
+
+    Note
+    ----
+    To serialize, ``[bitset, interface, data]`` are all required.
+    To deserialize, ``interface`` must be specified, and ``[bitset, data]``
+    will be filled in.
     """
 
-    field_type = 'bitset_and_data'  # hack
-    array_type = FieldArrayType.scalar  # hack
-    size = 1
+    def __init__(self,
+                 bitset: BitSet = None,
+                 interface: FieldDesc = None,
+                 data=None,
+                 ):
+        if is_pva_dataclass_instance(data):
+            data = typing.cast(PvaStruct, data)
+            interface = data._pva_struct_
 
-    @classmethod
-    def serialize(cls,
-                  field: FieldDesc,
-                  value: typing.Any,
-                  endian: Endian,
-                  bitset: Optional[BitSet] = None,
-                  cache: Optional[CacheContext] = None,
-                  ) -> List[bytes]:
+        if bitset is None:
+            bitset = BitSet({0})
+
+        self.bitset = bitset
+        self.interface = interface
+        self.data = data
+
+    def serialize(self, endian: Endian,
+                  cache: Optional[CacheContext] = None) -> List[bytes]:
         serialized = []
-        # TODO especially awkward handling
-        serialized.extend(value['bitset'].serialize(endian=endian))
-        serialized.extend(Data.serialize(value['interface'],
-                                         value=value['data'],
-                                         endian=endian, bitset=bitset,
-                                         cache=cache))
+        assert self.bitset is not None
+        assert self.interface is not None
+        assert self.data is not None
+        serialized.extend(self.bitset.serialize(endian=endian))
+        serialized.extend(to_wire(self.interface, value=self.data,
+                                  endian=endian, bitset=self.bitset,
+                                  cache=cache))
         return serialized
 
-    @classmethod
-    def deserialize(cls,
-                    field: str,
+    def deserialize(self,
                     data: bytes, *,
                     endian: Endian,
-                    bitset: Optional[BitSet] = None,
                     cache: Optional[CacheContext] = None,
-                    count: int = 1,
                     ) -> Deserialized:
-        bitset, data, offset = BitSet.deserialize(data, endian=endian)
-        value, data, off = Data.deserialize(field, data=data, endian=endian,
-                                            bitset=bitset, cache=cache)
+        assert self.interface is not None
+        self.bitset, data, offset = BitSet.deserialize(data, endian=endian)
+        self.data, data, off = from_wire(self.interface, data=data,
+                                         endian=endian, bitset=self.bitset,
+                                         cache=cache)
         offset += off
-        return Deserialized(data=dict(field=field, value=value),
-                            buffer=data,
-                            offset=offset)
+
+        # TODO: dataclass instance return here doesn't make sense; a
+        # nested dictionary for updating the structure does.
+        return Deserialized(data=self, buffer=data, offset=offset)
 
 
-class FieldDescAndData(DataSerializer, handles={'field_and_data'}):
+class FieldDescAndData(CoreSerializableWithCache):
     """
     A field description and associated data.
 
-    Serializes the field description first, and then the associated data.
+    Parameters
+    ----------
+    interface : FieldDesc
+    data :
+
+    Note
+    ----
+    To serialize, ``[interface, data]`` are both required.
+    To deserialize, no arguments are required.
     """
 
-    field_type = 'field_and_data'  # hack
-    array_type = FieldArrayType.scalar  # hack
-    field_class = FieldDesc
-    size = 1
+    _field_class = FieldDesc
 
-    @classmethod
-    def serialize(cls,
-                  field: FieldDesc,
-                  value: typing.Any,
+    def __init__(self, interface: FieldDesc = None,
+                 data=None):
+        if is_pva_dataclass_instance(data):
+            data = typing.cast(PvaStruct, data)
+            interface = data._pva_struct_
+        elif is_pva_dataclass(interface):
+            interface = interface._pva_struct_
+
+        self.interface = interface
+        self.data = data
+
+    def serialize(self,
                   endian: Endian,
-                  bitset: Optional[BitSet] = None,
                   cache: Optional[CacheContext] = None,
                   ) -> List[bytes]:
-        if value is None:
+        if self.interface is None:
             return [bytes([TypeCode.NULL_TYPE_CODE])]
 
-        field = value['field']
-        value = value['value']
+        assert self.data is not None
+
         serialized = []
-        serialized.extend(field.serialize(endian=endian, cache=cache))
-        serialized.extend(Data.serialize(field, value=value, endian=endian,
-                                         bitset=bitset, cache=cache))
+        serialized = self.interface.serialize(endian=endian, cache=cache)
+        serialized.extend(to_wire(self.interface, value=self.data,
+                                  endian=endian, bitset=None, cache=cache))
         return serialized
 
     @classmethod
     def deserialize(cls,
-                    field: str,
-                    data: bytes, *,
+                    data: bytes,
+                    *,
                     endian: Endian,
-                    bitset: Optional[BitSet] = None,
                     cache: Optional[CacheContext] = None,
-                    count: int = 1,
                     ) -> Deserialized:
-        field, data, offset = cls.field_class.deserialize(
+        field, data, offset = cls._field_class.deserialize(
             data, endian=endian, cache=cache)
         if field is None:
             value = None
+            dataclass_instance = None
         else:
-            value, data, off = Data.deserialize(field, data=data, endian=endian,
-                                                bitset=bitset, cache=cache)
+            value, data, off = from_wire(field, data=data, endian=endian,
+                                         bitset=None, cache=cache)
             offset += off
-        return Deserialized(data=dict(field=field, value=value),
+
+            # TODO: caching dataclass instances? should be in CacheContext,
+            # right?
+            dataclass_instance = dataclass_from_field_desc(field)()
+            fill_dataclass(dataclass_instance, value)
+
+        return Deserialized(data=cls(data=dataclass_instance),
                             buffer=data,
                             offset=offset)
 
 
-class PVRequest(FieldDescAndData, handles={'PVRequest'}):
+class PVRequest(FieldDescAndData):
     """
     A special form of FieldDescAndData, representing a PVRequest.
 
     Handles string to PVRequest structure translation, if required.
     """
+    # _field_class = PVRequestStruct
 
-    field_type = 'PVRequest'  # hack
-    array_type = FieldArrayType.scalar  # hack
-    field_class = FieldDesc  # PVRequestStruct
+    def __init__(self, interface: FieldDesc = None,
+                 data=None):
+        if isinstance(data, str):
+            interface = PVRequestStruct.from_string(data)
+            data = interface.values
 
-    @classmethod
-    def serialize(cls,
-                  field: FieldDesc,
-                  value: typing.Any,
-                  endian: Endian,
-                  bitset: Optional[BitSet] = None,
-                  cache: Optional[CacheContext] = None,
-                  ) -> List[bytes]:
-        if isinstance(value, str):
-            st = PVRequestStruct.from_string(value)
-            value = {'field': st, 'value': st.values}
-        else:
-            assert 'field' in value
-            assert 'value' in value
-
-        return super().serialize(field=None, value=value, endian=endian,
-                                 bitset=bitset, cache=cache)
+        super().__init__(interface=interface, data=data)
 
 
-class Data(DataSerializer, handles={}):
+def _to_wire_field(field: FieldDesc,
+                   value: typing.Any,
+                   endian: Endian,
+                   bitset: Optional[BitSet] = None,
+                   cache: Optional[CacheContext] = None,
+                   ) -> List[bytes]:
+    serialized = []
+    handler = DataSerializer.handlers[field.field_type]
+
+    if field.array_type.has_serialization_size:
+        serialized.extend(Size.serialize(len(value), endian=endian))
+
+    if (not isinstance(value, typing.Iterable) or
+            isinstance(value, (bytes, str, typing.Mapping))):
+        value = (value, )
+
+    if issubclass(handler, VariantFieldData):
+        # TODO: expectation of how the user should put these values?
+        value = (value, )
+
+    serialize = functools.partial(
+        handler.serialize, endian=endian, field=field, bitset=bitset,
+        cache=cache
+    )
+
+    for single_value in value:
+        serialized.extend(serialize(value=single_value))
+
+    return serialized
+
+
+def to_wire(category,
+            value: typing.Any,
+            endian: Endian,
+            bitset: Optional[BitSet] = None,
+            cache: Optional[CacheContext] = None,
+            ) -> List[bytes]:
     """
-    Top-level data serializer.  Dispatches serialization to the handlers.
+    Serialize ``value`` for sending over the wire.
+
+    Parameters
+    ----------
+    category :
+        If ``value`` is not a
     """
+    if isinstance(value, CoreSerializable):
+        return value.serialize(endian=endian)
 
-    @classmethod
-    def serialize(cls,
-                  field: FieldDesc,
-                  value: typing.Any,
-                  endian: Endian,
-                  bitset: Optional[BitSet] = None,
-                  cache: Optional[CacheContext] = None,
-                  ) -> List[bytes]:
+    if isinstance(value, CoreStatelessSerializable):
+        return value.serialize(value, endian=endian)
 
-        if field is FieldDesc:
-            # For deserialization consistency (TODO annotation / refactor)
-            return FieldDesc.serialize(value=value, endian=endian, cache=cache)
+    if category is FieldDesc or isinstance(value, (FieldDesc, CoreSerializableWithCache)):
+        if is_pva_dataclass(value) or is_pva_dataclass_instance(value):
+            value = typing.cast(PvaStruct, value)._pva_struct_
+        return value.serialize(endian=endian, cache=cache)
 
+    return _to_wire_field(
+        typing.cast(FieldDesc, category),
+        value=value, endian=endian, bitset=bitset, cache=cache,
+    )
+
+
+def from_wire(category: Union[FieldDesc,
+                              Type[CoreSerializable],
+                              Type[CoreStatelessSerializable],
+                              Type[CoreSerializableWithCache],
+                              ],
+              data: bytes, *,
+              endian: Endian,
+              bitset: Optional[BitSet] = None,
+              cache: Optional[CacheContext] = None,
+              ) -> Deserialized:
+
+    offset = 0
+    if inspect.isclass(category):
+        item = typing.cast(type, category)
+        if issubclass(item, CoreSerializableWithCache):
+            # item = typing.cast(Type[CoreSerializableWithCache], item)
+            return item.deserialize(data=data, endian=endian, cache=cache)
+
+        if issubclass(item, (CoreSerializable, CoreStatelessSerializable)):
+            # item = typing.cast(Type[CoreSerializable], item)
+            return item.deserialize(data=data, endian=endian)
+
+        if not issubclass(item, DataSerializer):
+            raise ValueError('Unhandled deserialization class: {item}')
+
+        handler = DataSerializer.handlers[item]
+        count = 1
+    elif (isinstance(category, CoreSerializableWithCache) and not isinstance(category, FieldDesc)):  # TODO
+        return category.deserialize(data=data, endian=endian, cache=cache)
+    else:
+        field = typing.cast(FieldDesc, category)
         handler = DataSerializer.handlers[field.field_type]
-        try:
-            len(value)
-        except TypeError:
-            value = (value, )
-
-        if isinstance(value, (str, bytes, typing.Mapping)):
-            value = (value, )
-
-        serialized = []
-        if field.array_type.has_serialization_size:
-            serialized.extend(Size.serialize(len(value), endian=endian))
-
-        for single_value in value:
-            serialized.extend(
-                handler.serialize(field=field, value=single_value,
-                                  endian=endian, bitset=bitset, cache=cache)
-            )
-
-        return serialized
-
-    @classmethod
-    def deserialize(cls,
-                    field: FieldDesc,
-                    data: bytes, *,
-                    endian: Endian,
-                    bitset: Optional[BitSet] = None,
-                    cache: Optional[CacheContext] = None,
-                    count: int = 1,
-                    ) -> Deserialized:
-
-        if field is FieldDesc:
-            # For deserialization consistency (TODO annotation / refactor)
-            return FieldDesc.deserialize(data=data, endian=endian, cache=cache,
-                                         named=False)
-        if field is BitSet:
-            # For deserialization consistency (TODO annotation / refactor)
-            return BitSet.deserialize(data=data, endian=endian)
-
-        # print('\n\n', ' '.join(hex(c)[2:].zfill(2) for c in data[:20]))
-        offset = 0
 
         if field.array_type.has_serialization_size:
             count, data, off = Size.deserialize(data, endian=endian)
             offset += off
         else:
-            count = field.size if field.size is not None else 1
+            count = field.size or 1
 
-        handler = DataSerializer.handlers[field.field_type]
-        array_based = issubclass(handler, ArrayBasedDataSerializer)
+    # print('\n\n', ' '.join(hex(c)[2:].zfill(2) for c in data[:20]))
 
-        # Minimal set here:
-        deserialize = functools.partial(handler.deserialize, endian=endian)
-        if array_based:
-            loops = 1
-            deserialize = functools.partial(deserialize, field=field,
-                                            bitset=bitset, cache=cache,
-                                            count=count)
+    array_based = issubclass(handler, ArrayBasedDataSerializer)
+
+    deserialize = functools.partial(
+        handler.deserialize, endian=endian, field=field, bitset=bitset,
+        cache=cache
+    )
+    if array_based:
+        loops = 1
+        deserialize = functools.partial(deserialize, count=count)
+    else:
+        loops = count
+
+    value = []
+    for _ in range(loops):
+        # print('\n\n', ' '.join(hex(c)[2:].zfill(2) for c in data[:20]))
+        # print('reading', _, field, handler)
+        item, data, off = deserialize(data=data)
+        # print('reading', _, item, 'took', off, 'bytes')
+        offset += off
+        value.append(item)
+
+    if array_based:
+        if field.array_type == FieldArrayType.scalar:
+            # [array([0, 1, 2])] -> array([0, 1, 2])
+            value = value[0][0]
         else:
-            loops = count
-            deserialize = functools.partial(
-                handler.deserialize, field=field, endian=endian, bitset=bitset,
-                cache=cache,
-            )
-
-        value = []
-        for _ in range(loops):
-            # print('\n\n', ' '.join(hex(c)[2:].zfill(2) for c in data[:20]))
-            # print('reading', _, field, handler)
-            item, data, off = deserialize(data=data)
-            # print('reading', _, item, 'took', off, 'bytes')
-            offset += off
-            value.append(item)
-
-        if array_based:
-            if field.array_type == FieldArrayType.scalar:
-                # [array([0, 1, 2])] -> array([0, 1, 2])
-                value = value[0][0]
-            else:
-                # [array([0])] -> 0
-                value = value[0]
-        elif field.array_type == FieldArrayType.scalar:
-            # if not isinstance(value, (dict, str, bytes)):
+            # [array([0])] -> 0
             value = value[0]
+    elif field.array_type == FieldArrayType.scalar:
+        # if not isinstance(value, (dict, str, bytes)):
+        value = value[0]
 
-        return Deserialized(data=value, buffer=data, offset=offset)
+    return Deserialized(data=value, buffer=data, offset=offset)

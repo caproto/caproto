@@ -101,6 +101,8 @@ class Broadcaster:
             dont_clash_with=self.unanswered_searches
         )
         self._beacon_counter = utils.ThreadsafeCounter()
+        self._beacon_counter.MAX_ID = 255  # 8-bit, not the usual 16-bit
+
         self.log = logging.getLogger("caproto.pva.bcast")
         self.beacon_log = logging.getLogger('caproto.pva.bcast.beacon')
         self.search_log = logging.getLogger('caproto.pva.bcast.search')
@@ -296,9 +298,9 @@ class Broadcaster:
         )
 
     def beacon(self,
-               flags: int,
                server_status: FieldDescAndData,
                *,
+               flags: int = 0,
                protocol: str = 'tcp',
                guid: Optional[str] = None,
                ) -> BeaconMessage:
@@ -307,8 +309,12 @@ class Broadcaster:
 
         Parameters
         ----------
-        flags : int
         server_status : FieldDescAndData
+            Server-defined status information.
+
+        flags : int, optional
+            Currently unused / reserved.
+
         protocol : str, optional
             Defaults to 'tcp'.
 
@@ -319,6 +325,12 @@ class Broadcaster:
         -------
         BeaconMessage
         """
+        if self.server_port is None:
+            raise RuntimeError('Server port was not set.')
+
+        if not isinstance(server_status, FieldDescAndData):
+            server_status = FieldDescAndData(data=server_status)
+
         return self.BeaconMessage(
             guid=[ord(c) for c in (guid or self.guid)],
             flags=SearchFlags.broadcast,

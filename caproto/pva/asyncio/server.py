@@ -6,14 +6,13 @@ import sys
 import caproto as ca
 
 from ...asyncio.server import AsyncioAsyncLayer, Event, ServerExit
-from ...asyncio.utils import (AsyncioQueue, _DatagramProtocol, _TaskHandler,
-                              _TransportWrapper)
+from ...asyncio.utils import _DatagramProtocol, _TaskHandler, _TransportWrapper
 from ..server.common import Context as _Context
 from ..server.common import VirtualCircuit as _VirtualCircuit
 
 
 class VirtualCircuit(_VirtualCircuit):
-    "Wraps a caproto.VirtualCircuit with a curio client."
+    """Wraps a caproto.pva.VirtualCircuit with an asyncio server."""
     TaskCancelled = asyncio.CancelledError
 
     def __init__(self, circuit, client, context, *, loop=None):
@@ -36,9 +35,9 @@ class VirtualCircuit(_VirtualCircuit):
         self._raw_client = client
         super().__init__(circuit, SockWrapper(loop, client), context)
         self.QueueFull = asyncio.QueueFull
-        self.command_queue = asyncio.Queue(ca.MAX_COMMAND_BACKLOG,
+        self.message_queue = asyncio.Queue(ca.MAX_COMMAND_BACKLOG,
                                            loop=self.loop)
-        self.new_command_condition = asyncio.Condition(loop=self.loop)
+        self.new_message_condition = asyncio.Condition(loop=self.loop)
         self.events_on = asyncio.Event(loop=self.loop)
         self.subscription_queue = asyncio.Queue(
             ca.MAX_TOTAL_SUBSCRIPTION_BACKLOG, loop=self.loop)
@@ -46,18 +45,18 @@ class VirtualCircuit(_VirtualCircuit):
         self.tasks = _TaskHandler()
         self._sub_task = None
 
-    async def get_from_sub_queue(self, timeout=None):
-        # Timeouts work very differently between our server implementations,
-        # so we do this little stub in its own method.
-        fut = asyncio.ensure_future(self.subscription_queue.get())
-        try:
-            return await asyncio.wait_for(fut, timeout, loop=self.loop)
-        except asyncio.TimeoutError:
-            return None
+    # async def get_from_sub_queue(self, timeout=None):
+    #     # Timeouts work very differently between our server implementations,
+    #     # so we do this little stub in its own method.
+    #     fut = asyncio.ensure_future(self.subscription_queue.get())
+    #     try:
+    #         return await asyncio.wait_for(fut, timeout, loop=self.loop)
+    #     except asyncio.TimeoutError:
+    #         return None
 
-    async def send(self, *commands):
+    async def send(self, *messages):
         if self.connected:
-            buffers_to_send = self.circuit.send(*commands)
+            buffers_to_send = self.circuit.send(*messages, extra=self._tags)
             # lock to make sure a AddEvent does not write bytes
             # to the socket while we are sending
             async with self._raw_lock:
@@ -65,15 +64,15 @@ class VirtualCircuit(_VirtualCircuit):
                                              b''.join(buffers_to_send))
 
     async def run(self):
-        self.tasks.create(self.command_queue_loop())
-        self._sub_task = self.tasks.create(self.subscription_queue_loop())
+        self.tasks.create(self.message_queue_loop())
+        # self._sub_task = self.tasks.create(self.subscription_queue_loop())
 
     async def _start_write_task(self, handle_write):
         self.tasks.create(handle_write())
 
-    async def _wake_new_command(self):
-        async with self.new_command_condition:
-            self.new_command_condition.notify_all()
+    async def _wake_new_message(self):
+        async with self.new_message_condition:
+            self.new_message_condition.notify_all()
 
     async def _on_disconnect(self):
         await super()._on_disconnect()
@@ -91,7 +90,7 @@ class Context(_Context):
 
     def __init__(self, pvdb, interfaces=None, *, loop=None):
         super().__init__(pvdb, interfaces)
-        self.command_bundle_queue = asyncio.Queue()
+        self.message_bundle_queue = asyncio.Queue()
         self.subscription_queue = asyncio.Queue()
         if loop is None:
             loop = asyncio.get_event_loop()
@@ -144,7 +143,7 @@ class Context(_Context):
                 return self.transport.close()
 
         reuse_port = sys.platform not in ('win32', ) and hasattr(socket, 'SO_REUSEPORT')
-        for address in ca.get_beacon_address_list():
+        for address in ca.get_beacon_address_list(protocol=ca.Protocol.PVAccess):
             transport, _ = await self.loop.create_datagram_endpoint(
                 functools.partial(_DatagramProtocol, parent=self,
                                   recv_func=self._datagram_received),
@@ -178,11 +177,11 @@ class Context(_Context):
         # tasks.create(self.subscription_queue_loop())
         tasks.create(self.broadcast_beacon_loop())
 
-        async_lib = AsyncioAsyncLayer()
-        for name, method in self.startup_methods.items():
-            self.log.debug('Calling startup method %r', name)
-            tasks.create(method(async_lib))
-        self.log.info('Server startup complete.')
+        # async_lib = AsyncioAsyncLayer()
+        # for name, method in self.startup_methods.items():
+        #     self.log.debug('Calling startup method %r', name)
+        #     tasks.create(method(async_lib))
+        # self.log.info('Server startup complete.')
         if log_pv_names:
             self.log.info('PVs available:\n%s', '\n'.join(self.pvdb))
 
@@ -201,11 +200,10 @@ class Context(_Context):
         finally:
             self.log.info('Server exiting....')
             shutdown_tasks = []
-            async_lib = AsyncioAsyncLayer()
-            for name, method in self.shutdown_methods.items():
-                self.log.debug('Calling shutdown method %r', name)
-                task = self.loop.create_task(method(async_lib))
-                shutdown_tasks.append(task)
+            # for name, method in self.shutdown_methods.items():
+            #     self.log.debug('Calling shutdown method %r', name)
+            #     task = self.loop.create_task(method(async_lib))
+            #     shutdown_tasks.append(task)
             await asyncio.gather(*shutdown_tasks)
             for sock in self.tcp_sockets.values():
                 sock.close()
@@ -217,11 +215,11 @@ class Context(_Context):
     def _datagram_received(self, pair):
         bytes_received, address = pair
         try:
-            commands = self.broadcaster.recv(bytes_received, address)
+            messages = self.broadcaster.recv(bytes_received, address)
         except ca.RemoteProtocolError:
             self.log.exception('Broadcaster received bad packet')
         else:
-            self.command_bundle_queue.put_nowait((address, commands))
+            self.message_bundle_queue.put_nowait((address, messages))
 
 
 async def start_server(pvdb, *, interfaces=None, log_pv_names=False):

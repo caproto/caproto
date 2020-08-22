@@ -12,15 +12,16 @@ from typing import Dict, List, Optional, Tuple
 
 from . import _core as core
 from . import _repr_helper
-from ._core import (CacheContext, Deserialized, Endian, FieldArrayType,
-                    FieldDescByte, FieldType, Serializable,
-                    StatelessSerializable, TypeCode)
+from ._core import (CacheContext, CoreSerializable, CoreSerializableWithCache,
+                    CoreStatelessSerializable, Deserialized, Endian,
+                    FieldArrayType, FieldDescByte, FieldType, StatusType,
+                    TypeCode)
 
 serialization_logger = logging.getLogger('caproto.pva.serialization')
 
 
 @dataclasses.dataclass(frozen=True)
-class FieldDesc(Serializable):
+class FieldDesc(CoreSerializableWithCache):
     """
     A frozen dataclass which represents a single field - whether it be a struct
     or a basic data type.
@@ -65,8 +66,9 @@ class FieldDesc(Serializable):
         )
 
     def serialize(self, endian: Endian, cache=None) -> List[bytes]:
-        """Implemented in SimpleField, StructuredField only."""
-        raise NotImplementedError()
+        raise NotImplementedError(
+            "Implemented in SimpleField, StructuredField only."
+        )
 
     @classmethod
     def _deserialize(cls, data, *, endian, cache, name=None):
@@ -80,8 +82,12 @@ class FieldDesc(Serializable):
                                        name=name)
 
     @classmethod
-    def deserialize(cls, data: bytes, *,
-                    endian: Endian, cache, named=False,
+    def deserialize(cls,
+                    data: bytes,
+                    *,
+                    endian: Endian,
+                    cache: CacheContext,
+                    name: Optional[str] = None,
                     ) -> Deserialized:
         """
         Implemented generically here as the recipient may not know the
@@ -94,12 +100,6 @@ class FieldDesc(Serializable):
         data = memoryview(data)
         interface_id = None
         offset = 0
-
-        if named:
-            name, data, off = String.deserialize(data, endian=endian)
-            offset += off
-        else:
-            name = None
 
         type_code = data[0]
 
@@ -130,10 +130,6 @@ class FieldDesc(Serializable):
         intf, data, off = cls._deserialize(data, endian=endian, cache=cache,
                                            name=name)
         offset += off
-
-        # if depth == 0 and 'struct_name' in intf:
-        #     # Summarize types defined inside the structure
-        #     intf['nested_types'] = nested_types
 
         if interface_id is not None:
             cache.ours[interface_id] = intf
@@ -217,7 +213,7 @@ class StructuredField(FieldDesc):
 
         if cache.theirs:
             # TODO: LRU cache with only 65k entries
-            id_ = max(cache.theirs) + 1
+            id_ = max(cache.theirs.values()) + 1
         else:
             id_ = 1
 
@@ -286,8 +282,11 @@ class StructuredField(FieldDesc):
 
         fields = []
         for _ in range(num_fields):
-            st, data, off = FieldDesc.deserialize(
-                data, endian=endian, cache=cache, named=True)
+            child_name, data, off = String.deserialize(data, endian=endian)
+            offset += off
+
+            st, data, off = FieldDesc.deserialize(data, endian=endian,
+                                                  cache=cache, name=child_name)
             offset += off
             fields.append(st)
 
@@ -453,7 +452,7 @@ def structure_from_repr(hierarchy, *, namespace=None):
 _BITSET_LUT = [1 << i for i in range(8)]
 
 
-class Identifier(StatelessSerializable):
+class Identifier(CoreStatelessSerializable):
     """
     Short (int16) identifier, used in multiple places.
     """
@@ -470,7 +469,7 @@ class Identifier(StatelessSerializable):
                             offset=2)
 
 
-class Size(StatelessSerializable):
+class Size(CoreStatelessSerializable):
     """
     A compact representation of size (or ``None``), taking roughly only the
     number of bytes required.
@@ -513,7 +512,7 @@ class Size(StatelessSerializable):
         )
 
 
-class String(StatelessSerializable):
+class String(CoreStatelessSerializable):
     """
     A run-length encoded utf-8 string (i.e., ``[Size][utf-8 string]``).
     """
@@ -534,7 +533,7 @@ class String(StatelessSerializable):
         )
 
 
-class BitSet(set, Serializable):
+class BitSet(set, CoreSerializable):
     """
     A "BitSet" for marking certain fields of a structure by index.
 
@@ -588,3 +587,85 @@ class BitSet(set, Serializable):
         return Deserialized(data=BitSet(bitset),
                             buffer=data[sz:],
                             offset=offset + sz)
+
+
+class Status(CoreSerializable):
+    """A status structure, with a type and optional message and context."""
+
+    status: StatusType
+    message: Optional[str]
+    call_tree: Optional[str]
+
+    def __init__(self, status: StatusType,
+                 message: Optional[str] = None,
+                 call_tree: Optional[str] = None):
+        try:
+            self.status = StatusType(status)
+        except Exception:
+            self.status = StatusType.FATAL
+            serialization_logger.error('Unexpected status type: %s', status)
+
+        if status == StatusType.OK:
+            if message is not None or call_tree is not None:
+                raise ValueError(
+                    'Cannot specify message or call_tree with StatusType.OK'
+                )
+            self.message = None
+            self.call_tree = None
+        else:
+            self.message = message or ''
+            self.call_tree = call_tree or ''
+
+    @property
+    def is_successful(self) -> bool:
+        return self.status in {StatusType.OK, StatusType.OK_VERBOSE,
+                               StatusType.WARNING}
+
+    @classmethod
+    def create_success(cls):
+        """Convenience method to create a new StatusType.OK status object."""
+        return cls(status=StatusType.OK)
+
+    @classmethod
+    def create_error(cls, message: str, call_tree: Optional[str] = None):
+        """Convenience method to create a new StatusType.ERROR status."""
+        return cls(status=StatusType.ERROR, message=message,
+                   call_tree=call_tree)
+
+    def __repr__(self):
+        if self.message or self.call_tree:
+            return (
+                f'{self.__class__.__name__}({self.status.name},'
+                f'message={self.message}, call_tree={self.call_tree})'
+            )
+        return f'{self.__class__.__name__}({self.status.name})'
+
+    def serialize(self, endian: Endian) -> List[bytes]:
+        serialized = [pack('b', int(self.status))]
+        if self.status != StatusType.OK:
+            serialized.extend(String.serialize(value=self.message or '',
+                                               endian=endian))
+            serialized.extend(String.serialize(value=self.call_tree or '',
+                                               endian=endian))
+        return serialized
+
+    @classmethod
+    def deserialize(cls, data: bytes, *, endian: Endian) -> Deserialized:
+        status = StatusType(unpack('b', data[:1])[0])
+        data = data[1:]
+        offset = 1
+
+        if status == StatusType.OK:
+            message = None
+            call_tree = None
+        else:
+            message, data, off = String.deserialize(data=data, endian=endian)
+            offset += off
+            call_tree, data, off = String.deserialize(data=data, endian=endian)
+            offset += off
+
+        return Deserialized(
+            data=cls(status=status, message=message, call_tree=call_tree),
+            buffer=data,
+            offset=offset
+        )

@@ -76,7 +76,7 @@ def main():
                 print(event.dataclass_instance._pva_struct_.summary())
             else:
                 data = event.dataclass_instance
-                event_data = event.pv_data['value']  # and 'field'
+                event_data = event.pv_data.data  # and 'field'
                 fill_dataclass(data, event_data)
 
                 try:

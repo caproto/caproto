@@ -8,17 +8,17 @@ from typing import Dict, List, Optional, Sequence, Tuple, Type, Union
 
 from . import _annotations as annotations
 from . import _core as core
-from ._core import (BIG_ENDIAN, LITTLE_ENDIAN, Deserialized, FieldArrayType,
-                    FieldType, SegmentDeserialized, Serializable,
-                    StatelessSerializable, UserFacingEndian)
-from ._data import (Data, DataSerializer, DataWithBitSet, FieldDescAndData,
-                    PVRequest)
+from ._core import (BIG_ENDIAN, LITTLE_ENDIAN, CoreSerializable,
+                    CoreStatelessSerializable, Deserialized, Endian,
+                    FieldArrayType, FieldType, SegmentDeserialized, StatusType,
+                    UserFacingEndian)
+from ._data import (DataSerializer, DataWithBitSet, FieldDescAndData,
+                    PVRequest, from_wire, to_wire)
 from ._dataclass import array_of, pva_dataclass
-from ._fields import BitSet, CacheContext, FieldDesc, SimpleField
+from ._fields import BitSet, CacheContext, FieldDesc, SimpleField, Status
 from ._utils import (SERVER, ChannelLifeCycle, Role, ip_to_ubyte_array,
                      ubyte_array_to_ip)
 
-NullCache = CacheContext()
 CommandType = typing.Union['ControlCommand', 'ApplicationCommand']
 SubcommandType = typing.Union['Subcommand', 'MonitorSubcommand']
 CtypesFields = Sequence[Tuple[str, object]]
@@ -39,6 +39,15 @@ class ChannelWithID:
     """
     id: annotations.Int32
     channel_name: annotations.String
+
+
+@pva_dataclass
+class ChannelAccessAuthentication:
+    """
+    A channel and ID pair, used for searching and channel creation.
+    """
+    user: annotations.String
+    host: annotations.String
 
 
 serialization_logger = logging.getLogger('caproto.pva.serialization')
@@ -72,7 +81,7 @@ class OptionalStopMarker(enum.IntEnum):
 
 
 MessageFieldType = Union[FieldType, FieldDesc, type, Type[DataSerializer],
-                         Type[Serializable], Type[StatelessSerializable]]
+                         Type[CoreSerializable], Type[CoreStatelessSerializable]]
 
 
 @dataclasses.dataclass
@@ -95,12 +104,12 @@ class OptionalField(_MessageField):
 
 
 def _not_ok_condition(msg, buf):
-    return msg.status_type != StatusType.OK
+    return msg.status.status != StatusType.OK
 
 
 def _success_condition(msg, buf):
     """Continuation condition: only if the status reported success."""
-    return msg.status_type in success_status_types
+    return msg.status.is_successful
 
 
 @dataclasses.dataclass
@@ -235,21 +244,6 @@ class MonitorSubcommand(enum.IntFlag):
     DESTROY = 0x10
 
 
-class StatusType(enum.IntEnum):
-    OK = -1
-    OK_VERBOSE = 0
-    WARNING = 1
-    ERROR = 2
-    FATAL = 3
-
-
-success_status_types = {
-    StatusType.OK,
-    StatusType.OK_VERBOSE,
-    StatusType.WARNING,
-}
-
-
 def _array_property(name, doc):
     'Array property to make handling ctypes arrays a bit easier'
     def fget(self):
@@ -260,6 +254,9 @@ def _array_property(name, doc):
         item[:] = value
 
     return property(fget, fset, doc=doc)
+
+
+_StatusOK = Status(StatusType.OK)
 
 
 class Message:
@@ -288,18 +285,23 @@ class Message:
     def _get_additional_fields(cls, subcommand=None):
         return []
 
-    def serialize(self, *, cache=NullCache):
+    def serialize(self, *, cache=None,
+                  endian: Endian = None,  # ignored, here for consistency
+                  ) -> bytes:
         additional_fields = self._get_additional_fields(
             subcommand=getattr(self, 'subcommand', None)
         )
+
+        ctypes_struct_serialized = bytes(typing.cast(ctypes.Structure, self))
+
         if not additional_fields:
             # Without additional fields, this is just a ctypes.Structure
-            return bytes(self)
+            return ctypes_struct_serialized
 
         endian = self._ENDIAN
 
         # (1) serialize the ctypes.Structure _fields_ first
-        buf = [bytes(self)]
+        buf = [ctypes_struct_serialized]
 
         # (2) move onto the "additional fields" which are not as easily
         # serializable:
@@ -319,7 +321,7 @@ class Message:
             assert len(value) == count
 
             serialize = functools.partial(
-                Data.serialize, field=field_info.type, endian=endian, cache=cache,
+                to_wire, field_info.type, endian=endian, cache=cache,
                 bitset=None
             )
 
@@ -330,7 +332,9 @@ class Message:
         return b''.join(buf)
 
     @classmethod
-    def deserialize(cls, buf, *, cache=NullCache, header=None):
+    def deserialize(cls, buf: bytes, *,
+                    endian: Endian = None,  # ignored, here for consistency
+                    cache: CacheContext = None):
         base_size = ctypes.sizeof(cls)
         buflen = len(buf) - base_size
         buf = memoryview(buf)
@@ -365,24 +369,25 @@ class Message:
 
             field_interface = field_info.type
 
-            if field_interface in (Data, DataWithBitSet):
+            if field_interface in {DataWithBitSet}:  # , FieldDescAndData}:
                 try:
-                    field_interface = cache.ioid_interfaces[msg.ioid]
+                    if cache is None:
+                        raise ValueError(f'hmm {field_interface} {field_info} {cls}')
+                    field_interface = field_interface(
+                        interface=cache.ioid_interfaces[msg.ioid],
+                    )
                 except KeyError:
                     raise RuntimeError(
                         f'Field description unavailable for Data in '
                         f'{field_info.name!r} (ioid={msg.ioid})'
                     ) from None
-                data_cls = field_info.type
-            else:
-                data_cls = Data
 
             is_nonstandard_array = isinstance(field_info,
                                               NonstandardArrayField)
 
             deserialize = functools.partial(
-                data_cls.deserialize, field=field_interface,
-                endian=cls._ENDIAN, cache=cache, bitset=None,
+                from_wire, field_interface, endian=cls._ENDIAN, cache=cache,
+                bitset=None,
             )
 
             if is_nonstandard_array:
@@ -405,8 +410,6 @@ class Message:
                 serialization_logger.debug('%s (%s) = %s', field_info.name,
                                            field_info.type, value)
 
-        # Attach the header for future reference
-        msg.header = header
         return Deserialized(data=msg, buffer=buf, offset=offset)
 
 
@@ -493,6 +496,10 @@ class MessageHeader(Message):
     def flags(self):
         return MessageFlags(self._flags)
 
+    @flags.setter
+    def flags(self, value):
+        self._flags = int(value)
+
     @property
     def valid(self):
         return self.magic == 0xca
@@ -532,56 +539,39 @@ class MessageHeaderBE(MessageHeader, _BE): _fields_ = MessageHeader._fields_  # 
 _MessageHeaderSize = ctypes.sizeof(MessageHeaderLE)
 
 
-class _StatusBase:
-    """
-    Mixin class that can be used to provide a common interface for messages
-    with status responses.
-
-    NOTE
-    ----
-    It's up to the struct to place '_status_type' in its _fields_, as its exact
-    location may change based on the message.
-    """
-    _status_type: int
-    message: Optional[str] = None
-    call_tree: Optional[str] = None
-
-    _additional_fields_: AdditionalFields = [
-        OptionalField(
-            name='message',
-            type=FieldType.string,
-            stop=OptionalStopMarker.continue_,
-            condition=_not_ok_condition,
-        ),
-        OptionalField(
-            name='call_tree',
-            type=FieldType.string,
-            stop=OptionalStopMarker.continue_,
-            condition=_not_ok_condition,
-        ),
-    ]
-
-    @property
-    def is_successful(self) -> bool:
-        return self.status_type in success_status_types
-
-    @property
-    def has_message(self) -> bool:
-        return self.status_type != StatusType.OK
-
-    @property
-    def status_type(self):
-        return StatusType(self._status_type)
-
-
-class Status(_StatusBase, AdditionalFieldsMessage):
-    _status_type: int
-    _fields_ = [('_status_type', ctypes.c_byte)]
-
-
 class BeaconMessage(AdditionalFieldsMessage):
     """
     A beacon message.
+
+    Attributes
+    ----------
+    guid : 12 bytes
+        Server GUID (Globally Unique Identifier). MUST change every restart.
+
+    flags :
+        Reserved (unused).
+
+    sequence_id :
+        Beacon sequence ID (counter with rollover). Can be used to detect UDP
+        routing problems.
+
+    change_count :
+        Count (with rollover) that changes every time server's list of channels
+        changes.
+
+    server_address :
+        Server address. For IP transports IPv6 or IPv6 encoded IPv4 address.
+
+    server_port : int
+        Server port. For IP transport socket port where server is listening.
+
+    protocol : str
+        Protocol/transport name. "tcp" for standard pvAccess TCP/IP
+        communication.
+
+    server_status : FieldDescAndData
+        Optional server status Field description, ``NULL_TYPE_CODE`` MUST be used
+        indicate absence of data.
 
     Notes
     -----
@@ -591,8 +581,6 @@ class BeaconMessage(AdditionalFieldsMessage):
     to more quickly retry unanswered CMD_SEARCH messages.
     """
     ID = ApplicationCommand.BEACON
-    # FieldDesc serverStatusIF;
-    # [if serverStatusIF != NULL_TYPE_CODE] PVField serverStatus;
     guid: bytes
     flags: int
     sequence_id: int
@@ -672,11 +660,12 @@ class SetByteOrder(MessageHeaderLE):
     ID = ControlCommand.SET_ENDIANESS
     # uses EndianSetting in header payload size
 
-    def __init__(self, endian_setting):
+    def __init__(self, endian_setting: EndianSetting, *,
+                 flags: MessageFlags):
         assert endian_setting in (EndianSetting.use_message_byte_order,
                                   EndianSetting.use_server_byte_order)
-        self.message_type = 0
-        self.payload_size = endian_setting
+        super().__init__(flags=flags, command=self.ID.value,
+                         payload_size=endian_setting)
 
     @property
     def byte_order_setting(self):
@@ -781,12 +770,7 @@ class ConnectionValidationResponse(AdditionalFieldsMessage):
 
     _additional_fields_: AdditionalFields = [
         RequiredField('auth_nz', FieldType.string),
-        OptionalField('user', FieldType.string,
-                      condition=lambda msg, buf: msg.auth_nz == 'ca',
-                      stop=OptionalStopMarker.stop),
-        OptionalField('host', FieldType.string,
-                      condition=lambda msg, buf: msg.auth_nz == 'ca',
-                      stop=OptionalStopMarker.stop),
+        RequiredField('data', FieldDescAndData),
     ]
 
 
@@ -806,9 +790,16 @@ class Echo(AdditionalFieldsMessage):
     ]
 
 
-class ConnectionValidatedResponse(Status):
+class ConnectionValidatedResponse(AdditionalFieldsMessage):
     """Validation results - success depends on the status."""
     ID = ApplicationCommand.CONNECTION_VALIDATED
+    _fields_: CtypesFields = []
+    _additional_fields_: AdditionalFields = [
+        RequiredField('status', Status),
+    ]
+
+    def __init__(self, status=_StatusOK):
+        self.status = status
 
 
 class SearchRequest(AdditionalFieldsMessage):
@@ -942,7 +933,7 @@ class CreateChannelRequest(AdditionalFieldsMessage):
     ]
 
 
-class CreateChannelResponse(_StatusBase, AdditionalFieldsMessage):
+class CreateChannelResponse(AdditionalFieldsMessage):
     """
     A server's response to a CreateChannelRequest.
 
@@ -964,12 +955,19 @@ class CreateChannelResponse(_StatusBase, AdditionalFieldsMessage):
     _fields_ = [
         ('client_chid', ctypes.c_int32),
         ('server_chid', ctypes.c_int32),
-        ('_status_type', ctypes.c_byte),
     ]
-    _additional_fields_: AdditionalFields = list(Status._additional_fields_) + [
-        # TODO access rights aren't sent, even if status_type is OK
+    _additional_fields_: AdditionalFields = [
+        RequiredField('status', Status),
+        # TODO access rights aren't sent, even if status is OK
         SuccessField('access_rights', FieldType.int16),
     ]
+
+    def __init__(self, client_chid: int, server_chid: int,
+                 access_rights: int = 0, status=_StatusOK):
+        self.status = status
+        self.client_chid = client_chid
+        self.server_chid = server_chid
+        self.access_rights = access_rights
 
 
 class ChannelDestroyRequest(Message):
@@ -995,7 +993,7 @@ class ChannelDestroyRequest(Message):
     ]
 
 
-class ChannelDestroyResponse(_StatusBase, SubcommandMessage):
+class ChannelDestroyResponse(AdditionalFieldsMessage):
     """
     A response to a destroy request.
 
@@ -1015,12 +1013,14 @@ class ChannelDestroyResponse(_StatusBase, SubcommandMessage):
 
     client_chid: int
     server_chid: int
-    _status_type: int
 
     _fields_ = [
         ('client_chid', ctypes.c_int32),
         ('server_chid', ctypes.c_int32),
-        ('_status_type', ctypes.c_byte),
+    ]
+
+    _additional_fields_ = [
+        RequiredField('status', Status),
     ]
 
 
@@ -1044,27 +1044,30 @@ class ChannelGetRequest(SubcommandMessage):
             RequiredField('pv_request', PVRequest),
         ],
         Subcommand.GET: [],
+        Subcommand.DEFAULT: [
+            # Alias for GET
+        ],
         Subcommand.DESTROY: [],
     }
 
 
-class ChannelGetResponse(_StatusBase, SubcommandMessage):
+class ChannelGetResponse(SubcommandMessage):
     """
     A response to a ChannelGetRequest.
     """
     ID = ApplicationCommand.GET
 
     ioid: int
-    _status_type: int
     pv_structure_if: FieldDesc
     pv_data: typing.Any
 
     _fields_ = [
         ('ioid', ctypes.c_int32),
         ('subcommand', ctypes.c_byte),
-        ('_status_type', ctypes.c_byte),
     ]
-    _additional_fields_: AdditionalFields = []
+    _additional_fields_: AdditionalFields = [
+        RequiredField('status', Status),
+    ]
     _subcommand_fields_: SubcommandFields = {
         Subcommand.INIT: [
             SuccessField('pv_structure_if', FieldDesc),
@@ -1074,8 +1077,26 @@ class ChannelGetResponse(_StatusBase, SubcommandMessage):
                          # `pv_structure_if` is tracked by ioid
                          ),
         ],
+        Subcommand.DEFAULT: [
+            # Alias for GET
+            SuccessField('pv_data', DataWithBitSet),
+        ],
         Subcommand.DESTROY: [],
     }
+
+    def __init__(self, ioid, subcommand, status=_StatusOK,
+                 pv_structure_if=None, pv_data=None):
+        super().__init__(ioid=ioid, subcommand=int(subcommand))
+        self.status = status
+        if subcommand == Subcommand.INIT:
+            self.pv_structure_if = pv_structure_if
+            if pv_data is not None:
+                raise ValueError('pv_data specified but unused')
+            # TODO: generically set these?
+        elif subcommand == Subcommand.GET or subcommand == Subcommand.DEFAULT:
+            self.pv_data = pv_data
+            if pv_structure_if is not None:
+                raise ValueError('pv_structure_if specified but unused')
 
 
 class ChannelFieldInfoRequest(AdditionalFieldsMessage):
@@ -1097,7 +1118,7 @@ class ChannelFieldInfoRequest(AdditionalFieldsMessage):
     ]
 
 
-class ChannelFieldInfoResponse(_StatusBase, AdditionalFieldsMessage):
+class ChannelFieldInfoResponse(AdditionalFieldsMessage):
     """
     A response to a :class:`ChannelFieldInfoRequest`.
     """
@@ -1107,9 +1128,9 @@ class ChannelFieldInfoResponse(_StatusBase, AdditionalFieldsMessage):
 
     _fields_ = [
         ('ioid', ctypes.c_int32),
-        ('_status_type', ctypes.c_byte),
     ]
-    _additional_fields_: AdditionalFields = Status._additional_fields_ + [
+    _additional_fields_: AdditionalFields = [
+        RequiredField('status', Status),
         SuccessField('field_if', FieldDesc),
     ]
 
@@ -1144,7 +1165,7 @@ class ChannelPutRequest(SubcommandMessage):
         ],
         Subcommand.GET: [
             # Query what the last put request was
-            RequiredField('pv_put_data', Data),
+            # RequiredField('pv_put_data', Data),  # TODO
         ],
         Subcommand.DEFAULT: [
             # Perform the put
@@ -1155,7 +1176,7 @@ class ChannelPutRequest(SubcommandMessage):
     }
 
 
-class ChannelPutResponse(_StatusBase, SubcommandMessage):
+class ChannelPutResponse(SubcommandMessage):
     """
     A response to a :class:`ChannelPutRequest`.
     """
@@ -1167,10 +1188,10 @@ class ChannelPutResponse(_StatusBase, SubcommandMessage):
     _fields_ = [
         ('ioid', ctypes.c_int32),
         ('subcommand', ctypes.c_byte),
-        ('_status_type', ctypes.c_byte),
     ]
-
-    _additional_fields_: AdditionalFields = []
+    _additional_fields_: AdditionalFields = [
+        RequiredField('status', Status),
+    ]
     _subcommand_fields_: SubcommandFields = {
         Subcommand.INIT: [
             SuccessField('put_structure_if', FieldDesc),
@@ -1226,7 +1247,7 @@ class ChannelPutGetRequest(SubcommandMessage):
     }
 
 
-class ChannelPutGetResponse(_StatusBase, SubcommandMessage):
+class ChannelPutGetResponse(SubcommandMessage):
     """
     A response to a :class:`ChannelPutGetRequest`.
     """
@@ -1242,23 +1263,23 @@ class ChannelPutGetResponse(_StatusBase, SubcommandMessage):
     _fields_ = [
         ('ioid', ctypes.c_int32),
         ('subcommand', ctypes.c_byte),
-        ('_status_type', ctypes.c_byte),
     ]
-
-    _additional_fields_: AdditionalFields = []
+    _additional_fields_: AdditionalFields = [
+        RequiredField('status', Status),
+    ]
     _subcommand_fields_: SubcommandFields = {
         Subcommand.INIT: [
             SuccessField('put_structure_if', FieldDesc),
             SuccessField('get_structure_if', FieldDesc),
         ],
         Subcommand.DEFAULT: [
-            SuccessField('pv_data', Data),
+            # SuccessField('pv_data', Data),  # TODO
         ],
         Subcommand.GET: [
-            SuccessField('get_data', Data),
+            # SuccessField('get_data', Data),  # TODO
         ],
         Subcommand.GET_PUT: [
-            SuccessField('put_data', Data),
+            # SuccessField('put_data', Data),  # TODO
         ],
         Subcommand.DESTROY: [],
     }
@@ -1295,36 +1316,27 @@ class ChannelArrayResponse(SubcommandMessage):
     _subcommand_fields_: SubcommandFields = {}
 
 
-class ChannelRequestDestroyRequest(SubcommandMessage):
+class ChannelRequestDestroy(Message):
     """
     A "destroy request" messages is used destroy any request instance, i.e. an
     instance with requestID.
 
     Notes
     -----
-    This is not yet implemented in caproto-pva.
+    There is no ChannelRequestDestroyResponse.
     """
     ID = ApplicationCommand.DESTROY_REQUEST
-    # TODO
-    _additional_fields_: AdditionalFields = []
-    _subcommand_fields_: SubcommandFields = {}
+
+    server_chid: int
+    ioid: int
+
+    _fields_ = [
+        ('server_chid', ctypes.c_int32),
+        ('ioid', ctypes.c_int32),
+    ]
 
 
-class ChannelRequestDestroyResponse(SubcommandMessage):
-    """
-    A response to a :class:`ChannelRequestDestroyRequest`.
-
-    Notes
-    -----
-    This is not yet implemented in caproto-pva.
-    """
-    ID = ApplicationCommand.DESTROY_REQUEST
-    # TODO
-    _additional_fields_: AdditionalFields = []
-    _subcommand_fields_: SubcommandFields = {}
-
-
-class ChannelRequestCancelRequest(SubcommandMessage):
+class ChannelRequestCancel(Message):
     """
     A "cancel request" messages is used cancel any pending request, i.e. an
     instance with a requestID.
@@ -1332,25 +1344,15 @@ class ChannelRequestCancelRequest(SubcommandMessage):
     Notes
     -----
     This is not yet implemented in caproto-pva.
+
+    There is no ChannelRequestCancelResponse.
     """
     ID = ApplicationCommand.CANCEL_REQUEST
-    # TODO
-    _additional_fields_: AdditionalFields = []
-    _subcommand_fields_: SubcommandFields = {}
 
-
-class ChannelRequestCancelResponse(SubcommandMessage):
-    """
-    A response to a :class:`ChannelRequestCancelRequest`.
-
-    Notes
-    -----
-    This is not yet implemented in caproto-pva.
-    """
-    ID = ApplicationCommand.CANCEL_REQUEST
-    # TODO
-    _additional_fields_: AdditionalFields = []
-    _subcommand_fields_: SubcommandFields = {}
+    _fields_ = [
+        ('server_chid', ctypes.c_int32),
+        ('ioid', ctypes.c_int32),
+    ]
 
 
 class ChannelMonitorRequest(SubcommandMessage):
@@ -1363,7 +1365,8 @@ class ChannelMonitorRequest(SubcommandMessage):
     -----
     This is currently partially supported by caproto-pva.
 
-    More details on the `wiki <https://github.com/epics-base/pvAccessCPP/wiki/Protocol-Operation-Monitor>`_.
+    More details on the
+    `wiki <https://github.com/epics-base/pvAccessCPP/wiki/Protocol-Operation-Monitor>`_.
     """
     ID = ApplicationCommand.MONITOR
     subcommand: Optional[MonitorSubcommand] = None
@@ -1381,9 +1384,9 @@ class ChannelMonitorRequest(SubcommandMessage):
         Subcommand.INIT: [
             RequiredField('pv_request', PVRequest),
             OptionalField('queue_size', FieldType.int32,
-                          OptionalStopMarker.stop,
-                          lambda msg, buf: bool(msg.subcommand &
-                                                MonitorSubcommand.PIPELINE)),
+                          stop=OptionalStopMarker.stop,
+                          condition=lambda msg, buf: bool(msg.subcommand &
+                                                          MonitorSubcommand.PIPELINE)),
         ],
         Subcommand.DEFAULT: [],
         MonitorSubcommand.START: [],
@@ -1410,17 +1413,10 @@ class ChannelMonitorResponse(SubcommandMessage):
         ('subcommand', ctypes.c_byte),
     ]
 
-    @property
-    def is_successful(self) -> bool:
-        # status_type only on INIT!  Do not mix in _StatusBase.
-        status_type = getattr(self, '_status_type', StatusType.OK)
-        return status_type in success_status_types
-
     _additional_fields_: AdditionalFields = []
     _subcommand_fields_: SubcommandFields = {
         MonitorSubcommand.INIT: [
-            RequiredField('status_type', FieldType.int8),
-        ] + Status._additional_fields_ + [
+            RequiredField('status', Status),
             SuccessField('pv_structure_if', FieldDesc),
         ],
         MonitorSubcommand.DEFAULT: [
@@ -1470,7 +1466,7 @@ class ChannelProcessRequest(SubcommandMessage):
     }
 
 
-class ChannelProcessResponse(_StatusBase, SubcommandMessage):
+class ChannelProcessResponse(SubcommandMessage):
     """
     A response to a :class:`ChannelProcessRequest`.
     """
@@ -1481,10 +1477,10 @@ class ChannelProcessResponse(_StatusBase, SubcommandMessage):
     _fields_ = [
         ('ioid', ctypes.c_int32),
         ('subcommand', ctypes.c_byte),
-        ('_status_type', ctypes.c_byte),
     ]
-
-    _additional_fields_: AdditionalFields = []
+    _additional_fields_: AdditionalFields = [
+        RequiredField('status', Status),
+    ]
     _subcommand_fields_: SubcommandFields = {
         Subcommand.INIT: [],
         Subcommand.DEFAULT: [],  # TODO: not PROCESS?
@@ -1525,19 +1521,18 @@ class ChannelRpcRequest(SubcommandMessage):
     }
 
 
-class ChannelRpcResponse(_StatusBase, SubcommandMessage):
+class ChannelRpcResponse(SubcommandMessage):
     ID = ApplicationCommand.PROCESS
 
     ioid: int
-    _status_type: int
 
     _fields_ = [
         ('ioid', ctypes.c_int32),
         ('subcommand', ctypes.c_byte),
-        ('_status_type', ctypes.c_byte),
     ]
-
-    _additional_fields_: AdditionalFields = []
+    _additional_fields_: AdditionalFields = [
+        RequiredField('status', Status),
+    ]
     _subcommand_fields_: SubcommandFields = {
         Subcommand.INIT: [],
         Subcommand.DEFAULT: [
@@ -1547,7 +1542,7 @@ class ChannelRpcResponse(_StatusBase, SubcommandMessage):
     }
 
 
-class OriginTagRequest(_StatusBase, SubcommandMessage):
+class OriginTagRequest(SubcommandMessage):
     """
     When a client or server receives a packet containing a Search message with
     flagged "sent as unicast" it may resend this as a multicast to
@@ -1569,8 +1564,6 @@ class BeaconMessageBE(BeaconMessage, _BE): _fields_ = BeaconMessage._fields_  # 
 class BeaconMessageLE(BeaconMessage, _LE): _fields_ = BeaconMessage._fields_  # noqa
 class EchoBE(Echo, _BE): _fields_ = Echo._fields_  # noqa
 class EchoLE(Echo, _LE): _fields_ = Echo._fields_  # noqa
-class StatusBE(Status, _BE): _fields_ = Status._fields_  # noqa
-class StatusLE(Status, _LE): _fields_ = Status._fields_  # noqa
 
 class ChannelDestroyRequestBE(ChannelDestroyRequest, _BE): _fields_ = ChannelDestroyRequest._fields_  # noqa
 class ChannelDestroyRequestLE(ChannelDestroyRequest, _LE): _fields_ = ChannelDestroyRequest._fields_  # noqa
@@ -1600,6 +1593,10 @@ class ChannelPutRequestBE(ChannelPutRequest, _BE): _fields_ = ChannelPutRequest.
 class ChannelPutRequestLE(ChannelPutRequest, _LE): _fields_ = ChannelPutRequest._fields_  # noqa
 class ChannelPutResponseBE(ChannelPutResponse, _BE): _fields_ = ChannelPutResponse._fields_  # noqa
 class ChannelPutResponseLE(ChannelPutResponse, _LE): _fields_ = ChannelPutResponse._fields_  # noqa
+class ChannelRequestDestroyBE(ChannelRequestDestroy, _BE): _fields_ = ChannelRequestDestroy._fields_  # noqa
+class ChannelRequestDestroyLE(ChannelRequestDestroy, _LE): _fields_ = ChannelRequestDestroy._fields_  # noqa
+class ChannelRequestCancelBE(ChannelRequestCancel, _BE): _fields_ = ChannelRequestCancel._fields_  # noqa
+class ChannelRequestCancelLE(ChannelRequestCancel, _LE): _fields_ = ChannelRequestCancel._fields_  # noqa
 class ChannelRpcRequestBE(ChannelRpcRequest, _BE): _fields_ = ChannelRpcRequest._fields_  # noqa
 class ChannelRpcRequestLE(ChannelRpcRequest, _LE): _fields_ = ChannelRpcRequest._fields_  # noqa
 class ChannelRpcResponseBE(ChannelRpcResponse, _BE): _fields_ = ChannelRpcResponse._fields_  # noqa
@@ -1631,6 +1628,7 @@ messages: _MessagesDict = {
         ApplicationCommand.GET: ChannelGetRequestLE,
         ApplicationCommand.GET_FIELD: ChannelFieldInfoRequestLE,
         ApplicationCommand.DESTROY_CHANNEL: ChannelDestroyRequestLE,
+        ApplicationCommand.DESTROY_REQUEST: ChannelRequestDestroyLE,
         ApplicationCommand.PUT: ChannelPutRequestLE,
         ApplicationCommand.PUT_GET: ChannelPutGetRequestLE,
         ApplicationCommand.MONITOR: ChannelMonitorRequestLE,
@@ -1648,6 +1646,7 @@ messages: _MessagesDict = {
         ApplicationCommand.GET: ChannelGetRequestBE,
         ApplicationCommand.GET_FIELD: ChannelFieldInfoRequestBE,
         ApplicationCommand.DESTROY_CHANNEL: ChannelDestroyRequestBE,
+        ApplicationCommand.DESTROY_REQUEST: ChannelRequestDestroyBE,
         ApplicationCommand.PUT: ChannelPutRequestBE,
         ApplicationCommand.PUT_GET: ChannelPutGetRequestBE,
         ApplicationCommand.MONITOR: ChannelMonitorRequestBE,
@@ -1667,6 +1666,7 @@ messages: _MessagesDict = {
         ApplicationCommand.GET: ChannelGetResponseLE,
         ApplicationCommand.GET_FIELD: ChannelFieldInfoResponseLE,
         ApplicationCommand.DESTROY_CHANNEL: ChannelDestroyResponseLE,
+        # ApplicationCommand.DESTROY_REQUEST: ChannelRequestDestroyResponseLE,
         ApplicationCommand.PUT: ChannelPutResponseLE,
         ApplicationCommand.PUT_GET: ChannelPutGetResponseLE,
         ApplicationCommand.MONITOR: ChannelMonitorResponseLE,
@@ -1686,6 +1686,7 @@ messages: _MessagesDict = {
         ApplicationCommand.GET: ChannelGetResponseBE,
         ApplicationCommand.GET_FIELD: ChannelFieldInfoResponseBE,
         ApplicationCommand.DESTROY_CHANNEL: ChannelDestroyResponseBE,
+        # ApplicationCommand.DESTROY_REQUEST: ChannelRequestDestroyResponseBE,
         ApplicationCommand.PUT: ChannelPutResponseBE,
         ApplicationCommand.PUT_GET: ChannelPutGetResponseBE,
         ApplicationCommand.MONITOR: ChannelMonitorResponseBE,
@@ -1700,7 +1701,7 @@ def read_datagram(data: bytes,
                   role: Role,
                   *,
                   fixed_byte_order: Optional[UserFacingEndian] = None,
-                  cache: CacheContext = NullCache
+                  cache: CacheContext = None
                   ) -> Deserialized:
     """
     Parse bytes from one datagram into one or more commands.
@@ -1864,7 +1865,10 @@ def _deserialize_unsegmented_message(
     if payload_size is None:
         payload_size = header.payload_size
 
-    cmd, _, off = msg_class.deserialize(data, cache=cache, header=header)
+    cmd, _, off = msg_class.deserialize(data, cache=cache)
+
+    # Attach the header for later reference
+    cmd.header = header
 
     if off != payload_size:
         raise RuntimeError(

@@ -8,12 +8,14 @@ from ._messages import (ApplicationCommand, ChannelDestroyRequest,
                         ChannelMonitorResponse, ChannelProcessRequest,
                         ChannelProcessResponse, ChannelPutGetRequest,
                         ChannelPutGetResponse, ChannelPutRequest,
-                        ChannelPutResponse, ChannelRpcRequest,
+                        ChannelPutResponse, ChannelRequestCancel,
+                        ChannelRequestDestroy, ChannelRpcRequest,
                         ChannelRpcResponse, ConnectionValidatedResponse,
                         ConnectionValidationRequest,
-                        ConnectionValidationResponse, CreateChannelRequest,
-                        CreateChannelResponse, MessageFlags, MonitorSubcommand,
-                        SetByteOrder, Subcommand)
+                        ConnectionValidationResponse, ControlCommand,
+                        CreateChannelRequest, CreateChannelResponse,
+                        MessageFlags, MonitorSubcommand, SetByteOrder,
+                        Subcommand)
 from ._utils import (CLIENT, CONNECTED, DISCONNECTED, INIT, NEVER_CONNECTED,
                      RESPONSIVE, SERVER, UNRESPONSIVE, LocalProtocolError,
                      RemoteProtocolError)
@@ -49,6 +51,8 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
             ChannelMonitorResponse: RESPONSIVE,
             ChannelPutGetRequest: RESPONSIVE,
             ChannelPutGetResponse: RESPONSIVE,
+            ChannelRequestCancel: RESPONSIVE,
+            ChannelRequestDestroy: RESPONSIVE,
             ChannelRpcRequest: RESPONSIVE,
             ChannelRpcResponse: RESPONSIVE,
             ChannelProcessRequest: RESPONSIVE,
@@ -84,6 +88,8 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
             ChannelPutResponse: RESPONSIVE,
             ChannelPutGetRequest: RESPONSIVE,
             ChannelPutGetResponse: RESPONSIVE,
+            ChannelRequestCancel: RESPONSIVE,
+            ChannelRequestDestroy: RESPONSIVE,
             ChannelRpcRequest: RESPONSIVE,
             ChannelRpcResponse: RESPONSIVE,
             ChannelProcessRequest: RESPONSIVE,
@@ -119,6 +125,8 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
             ChannelMonitorResponse: CONNECTED,
             ChannelPutGetRequest: CONNECTED,
             ChannelPutGetResponse: CONNECTED,
+            ChannelRequestCancel: CONNECTED,
+            ChannelRequestDestroy: CONNECTED,
             ChannelRpcRequest: CONNECTED,
             ChannelRpcResponse: CONNECTED,
             ChannelProcessRequest: CONNECTED,
@@ -143,6 +151,8 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
             ChannelDestroyResponse: DISCONNECTED,
             ChannelMonitorRequest: CONNECTED,
             ChannelMonitorResponse: CONNECTED,
+            ChannelRequestCancel: CONNECTED,
+            ChannelRequestDestroy: CONNECTED,
             ChannelPutGetRequest: CONNECTED,
             ChannelPutGetResponse: CONNECTED,
             ChannelRpcRequest: CONNECTED,
@@ -249,8 +259,10 @@ class CircuitState(_CircuitState):
     # MERGE
     def _fire_command_triggered_transitions(self, role, command):
         command_type = type(command)
-        if command_type._ENDIAN is not None:
-            if command_type.ID in ApplicationCommand:
+        if command.ID in ControlCommand:
+            ...
+        elif command.ID in ApplicationCommand:
+            if command._ENDIAN is not None:
                 command_type = command_type.__bases__[0]
                 # TODO: HACK! Horrible, horrible hack...
                 # This side-steps putting big- and little-endian messages in
@@ -314,20 +326,12 @@ def get_exception(our_role, command):
     command : Message instance or class
         We will test whether it is a ``REQUEST`` or ``RESPONSE``.
     """
-    if not hasattr(command, 'direction') and hasattr(command, 'header'):
-        # TODO
-        direction = command.header.direction
-    else:
-        try:
-            direction = command.direction
-        except AttributeError:
-            print('TODO missing in transition dict', type(command), command)
-            direction = MessageFlags.FROM_CLIENT
+    header = getattr(command, 'header', command)
 
-    if direction == MessageFlags.FROM_CLIENT:
-        party_at_fault = CLIENT
-    elif direction == MessageFlags.FROM_SERVER:
+    if MessageFlags.FROM_SERVER in header.flags:
         party_at_fault = SERVER
+    else:
+        party_at_fault = CLIENT
 
     if our_role is party_at_fault:
         _class = LocalProtocolError

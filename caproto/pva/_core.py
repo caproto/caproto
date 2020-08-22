@@ -1,4 +1,5 @@
 import abc
+import array
 import ctypes
 import dataclasses
 import enum
@@ -16,6 +17,14 @@ if typing.TYPE_CHECKING:
 class UserFacingEndian(str, _SimpleReprEnum):
     LITTLE_ENDIAN = '<'
     BIG_ENDIAN = '>'
+
+
+class StatusType(enum.IntEnum):
+    OK = -1
+    OK_VERBOSE = 0
+    WARNING = 1
+    ERROR = 2
+    FATAL = 3
 
 
 MAX_INT32 = 2 ** 31 - 1
@@ -228,7 +237,7 @@ class Deserialized(typing.Iterable):
         The number of bytes consumed in deserializing `data`, i.e., the offset
         to the buffer passed in to ``deserialize()``.
     """
-    data: object
+    data: typing.Any
     buffer: Union[bytes, memoryview]
     offset: int
 
@@ -236,7 +245,7 @@ class Deserialized(typing.Iterable):
 
     if not SUPER_DEBUG:
         def __init__(self,
-                     data: object,
+                     data: typing.Any,
                      buffer: bytes,
                      offset: int):
             self.data = data
@@ -315,7 +324,7 @@ class SegmentDeserialized(typing.Iterable):
         )
 
 
-class Serializable(abc.ABC):
+class CoreSerializable(abc.ABC):
     """
     A serializable item. May be instantiated (and hold state).
     """
@@ -329,7 +338,7 @@ class Serializable(abc.ABC):
         ...
 
 
-class StatelessSerializable(abc.ABC):
+class CoreStatelessSerializable(abc.ABC):
     """
     A stateless, serializable item. Instance-level data may not be used as
     serialize and deserialize are class methods.
@@ -341,6 +350,24 @@ class StatelessSerializable(abc.ABC):
 
     @abc.abstractclassmethod
     def deserialize(cls, data: bytes, *, endian: Endian) -> Deserialized:  # noqa
+        ...
+
+
+class CoreSerializableWithCache(abc.ABC):
+    """
+    A serializable item which uses the serialization cache context. May be
+    instantiated (and hold state).
+
+    If additional state is necessary for deserialization, ``deserialize`` may
+    be an instance method.
+    """
+
+    def serialize(self, endian: Endian, cache: CacheContext) -> List[bytes]:
+        ...
+
+    @abc.abstractclassmethod
+    def deserialize(cls, data: bytes, *, endian: Endian,
+                    cache: CacheContext) -> Deserialized:  # noqa
         ...
 
 
@@ -363,5 +390,34 @@ class _DataSerializer(abc.ABC):
                     endian: Endian,
                     bitset: 'BitSet' = None,
                     cache: CacheContext = None,
+                    ) -> Deserialized:
+        ...
+
+
+class _ArrayBasedDataSerializer:
+    """
+    A data serializer which works not on an element-by-element basis, but
+    rather with an array of elements.  Used for arrays of basic data types.
+    """
+
+    @abc.abstractclassmethod
+    def serialize(cls,
+                  field: 'FieldDesc',
+                  value: typing.Any,
+                  endian: Endian,
+                  bitset: 'BitSet' = None,
+                  cache: CacheContext = None,
+                  ) -> List[Union[bytes, array.array]]:
+        ...
+
+    @abc.abstractclassmethod
+    def deserialize(cls,
+                    field: 'FieldDesc',
+                    data: bytes,
+                    count: int,  # <-- note the count here
+                    *,
+                    endian: Endian,
+                    bitset: Optional['BitSet'] = None,
+                    cache: Optional[CacheContext] = None,
                     ) -> Deserialized:
         ...

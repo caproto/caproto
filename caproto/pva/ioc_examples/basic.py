@@ -11,10 +11,7 @@ import warnings
 import caproto.pva as pva
 from caproto.pva.server import ioc_arg_parser, run
 
-# import numpy as np
-
-
-pvdb = {'caproto': 'foobar'}
+pvdb = {'caproto': pva.ChannelWithID(id=5, channel_name='test')}
 
 
 def main():
