@@ -662,34 +662,31 @@ def to_wire(category,
     )
 
 
-def from_wire(category: Union[FieldDesc,
-                              Type[CoreSerializable],
-                              Type[CoreStatelessSerializable],
-                              Type[CoreSerializableWithCache],
-                              ],
-              data: bytes, *,
-              endian: Endian,
-              bitset: Optional[BitSet] = None,
-              cache: Optional[CacheContext] = None,
-              ) -> Deserialized:
+def _from_wire_by_class(cls: Union[Type[CoreSerializable],
+                                   Type[CoreStatelessSerializable],
+                                   Type[CoreSerializableWithCache]],
+                        data: bytes, *,
+                        endian: Endian,
+                        cache: Optional[CacheContext],
+                        ) -> Deserialized:
+    if issubclass(cls, CoreSerializableWithCache):
+        cls = typing.cast(Type[CoreSerializableWithCache], cls)
+        return cls.deserialize(data=data, endian=endian, cache=cache)
 
+    if issubclass(cls, (CoreSerializable, CoreStatelessSerializable)):
+        cls = typing.cast(Type[CoreSerializable], cls)
+        return cls.deserialize(data=data, endian=endian)
+
+    raise ValueError('Unhandled deserialization class: {cls}')
+
+
+def _from_wire_field_desc(field: FieldDesc,
+                          data: bytes, *,
+                          endian: Endian,
+                          bitset: Optional[BitSet] = None,
+                          cache: Optional[CacheContext] = None,
+                          ) -> Deserialized:
     offset = 0
-    if inspect.isclass(category):
-        item = typing.cast(type, category)
-        if issubclass(item, CoreSerializableWithCache):
-            # item = typing.cast(Type[CoreSerializableWithCache], item)
-            return item.deserialize(data=data, endian=endian, cache=cache)
-
-        if issubclass(item, (CoreSerializable, CoreStatelessSerializable)):
-            # item = typing.cast(Type[CoreSerializable], item)
-            return item.deserialize(data=data, endian=endian)
-
-        raise ValueError('Unhandled deserialization class: {item}')
-
-    if (isinstance(category, CoreSerializableWithCache) and not isinstance(category, FieldDesc)):  # TODO
-        return category.deserialize(data=data, endian=endian, cache=cache)
-
-    field = typing.cast(FieldDesc, category)
     handler = DataSerializer.handlers[field.field_type]
 
     if field.array_type.has_serialization_size:
@@ -733,3 +730,30 @@ def from_wire(category: Union[FieldDesc,
         value = value[0]
 
     return Deserialized(data=value, buffer=data, offset=offset)
+
+
+def from_wire(category: Union[FieldDesc,
+                              Type[CoreSerializable],
+                              Type[CoreStatelessSerializable],
+                              Type[CoreSerializableWithCache],
+                              CoreSerializableWithCache,
+                              ],
+              data: bytes, *,
+              endian: Endian,
+              bitset: Optional[BitSet] = None,
+              cache: Optional[CacheContext] = None,
+              ) -> Deserialized:
+
+    if inspect.isclass(category):
+        return _from_wire_by_class(
+            typing.cast(type, category), data=data, endian=endian,
+            cache=cache)
+
+    if isinstance(category, FieldDesc):
+        return _from_wire_field_desc(
+            field=typing.cast(FieldDesc, category), data=data, endian=endian,
+            bitset=bitset, cache=cache
+        )
+
+    assert isinstance(category, CoreSerializableWithCache)  # TODO
+    return category.deserialize(data=data, endian=endian, cache=cache)
