@@ -2,7 +2,7 @@
 # copy that nomenclature for now.
 import logging
 import typing
-from typing import List, Optional, Sequence, Tuple, Union
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 from .. import pva
 from .._log import ComposableLogAdapter
@@ -129,7 +129,7 @@ class VirtualCircuit:
         return hash((self.address, self.our_role))
 
     def send(self, *commands,
-             extra: typing.Dict) -> List[Union[bytes, memoryview]]:
+             extra: Optional[Dict] = None) -> List[Union[bytes, memoryview]]:
         """
         Convert one or more high-level Commands into buffers of bytes that may
         be broadcast together in one TCP packet. Update our internal
@@ -297,9 +297,7 @@ class VirtualCircuit:
             try:
                 chan = self.channels[cid]
             except KeyError:
-                _class = {CLIENT: ClientChannel,
-                          SERVER: ServerChannel}[self.our_role]
-                chan = _class(request['channel_name'], self, cid)
+                chan = self.create_channel(request['channel_name'], cid=cid)
                 channels.append((request, chan))
 
         for request, chan in channels:
@@ -518,6 +516,22 @@ class VirtualCircuit:
             payload_size=0,
         )
 
+    def create_channel(self, name: str, cid: int = None) -> Channel:
+        """
+        Create a ClientChannel or ServerChannel, depending on the role.
+
+        Parameters
+        ----------
+        name : str
+            The channel name.
+
+        cid : int
+            The client channel ID.
+        """
+        cls = {CLIENT: ClientChannel,
+               SERVER: ServerChannel}[self.our_role]
+        return cls(name, self, cid=cid)
+
 
 class ClientVirtualCircuit(VirtualCircuit):
     def validate_connection(self,
@@ -642,8 +656,9 @@ class _BaseChannel:
         if isinstance(command, CreateChannelResponse):
             self.sid = command.server_chid
         elif isinstance(command, ChannelFieldInfoResponse):
-            self.field_info = command.field_if
-            for line in self.field_info.summary().splitlines():
+            field_info = getattr(command.field_if, '_pva_struct_',
+                                 command.field_if)
+            for line in field_info.summary().splitlines():
                 self.circuit.log.debug('[%s] %s', self.name, line)
 
         transitions = []
@@ -896,6 +911,18 @@ class ServerChannel(_BaseChannel):
             server_chid=sid,
             status=status,
         )
+
+    def read_interface(self, ioid, interface, *,
+                       status=_StatusOK
+                       ) -> ChannelFieldInfoResponse:
+        """
+        Generate a valid :class:`ChannelFieldInfoResponse`.
+        """
+        cls = self.circuit.messages[ApplicationCommand.GET_FIELD]
+        return cls(ioid=ioid,
+                   status=status,
+                   interface=interface,
+                   )
 
     def read_init(self, ioid, interface, *,
                   status: Status = _StatusOK,

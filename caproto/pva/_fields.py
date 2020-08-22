@@ -30,7 +30,7 @@ class FieldDesc(CoreSerializableWithCache):
     name: str
     field_type: FieldType
     array_type: FieldArrayType
-    size: Optional[int]
+    size: Optional[int] = 1
     metadata: Dict = field(default_factory=dict, hash=False, repr=False)
 
     @property

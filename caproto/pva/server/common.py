@@ -305,12 +305,17 @@ class VirtualCircuit:
                         chan.create(sid=self.circuit.new_channel_id())
                     )
 
+        elif isinstance(message, pva.ChannelFieldInfoRequest):
+            chan, db_entry = self._get_db_entry_from_message(message)
+            ioid_info = self.circuit._ioids[message.ioid]
+            chan = ioid_info['channel']
+            to_send = [
+                chan.read_interface(ioid=message.ioid, interface=db_entry)
+            ]
         elif isinstance(message, pva.ChannelGetRequest):
             chan, db_entry = self._get_db_entry_from_message(message)
             ioid_info = self.circuit._ioids[message.ioid]
             chan = ioid_info['channel']
-            # print('ioid info', message.ioid, ioid_info)
-            # print('db entry', db_entry)
             subcommand = message.subcommand
             if subcommand == Subcommand.INIT:
                 to_send = [

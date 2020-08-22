@@ -1146,6 +1146,11 @@ class ChannelFieldInfoResponse(AdditionalFieldsMessage):
         SuccessField('field_if', FieldDesc),
     ]
 
+    def __init__(self, ioid, interface, status=_StatusOK):
+        super().__init__(ioid=ioid)
+        self.status = status
+        self.field_if = interface
+
 
 class ChannelPutRequest(SubcommandMessage):
     """

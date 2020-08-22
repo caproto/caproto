@@ -14,15 +14,6 @@ from caproto.pva._fields import FieldArrayType, FieldType
 logger = logging.getLogger(__name__)
 
 
-def setup_module():
-    logger.setLevel('DEBUG')
-    for name in ('caproto.pva.serialization',
-                 'caproto.pva.introspection',
-                 ):
-        logging.getLogger(name).setLevel('DEBUG')
-    # logging.basicConfig()
-
-
 def _fromhex(s):
     s = ''.join(s.strip().split('\n'))
     s = s.replace(' ', '')

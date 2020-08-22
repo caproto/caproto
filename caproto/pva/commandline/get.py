@@ -1,12 +1,14 @@
 import argparse
-import dataclasses
+# import dataclasses
 import logging
-import pprint
 
 from ... import __version__
 from ..._utils import ShowVersionAction
 from ..sync.client import read
 from ._shared import configure_logging
+
+# import pprint
+
 
 logger = logging.getLogger('caproto.pva.ctx')
 
@@ -50,8 +52,9 @@ def main():
                 dcls = getattr(dcls, 'value', dcls)
                 print(dcls)
             else:
-                # TODO: make an option, somehow
-                pprint.pprint(dataclasses.asdict(dcls))
+                print(dcls)
+                # TODO: make an option, somehow?
+                # pprint.pprint(dataclasses.asdict(dcls))
 
     except BaseException as exc:
         if args.verbose:

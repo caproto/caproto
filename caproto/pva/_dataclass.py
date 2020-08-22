@@ -19,14 +19,14 @@ def new_struct(fields: dict,
                struct_name: str = '',
                name: str = '',
                array_type: FieldArrayType = FieldArrayType.scalar,
-               size: typing.Optional[int] = None,
+               size: typing.Optional[int] = 1,
                field_type=FieldType.struct,
                metadata: typing.Optional[dict] = None,
                ) -> StructuredField:
     return StructuredField(
         field_type=field_type,
         array_type=array_type,
-        name=name,
+        name=name or struct_name,
         struct_name=struct_name,
         metadata=metadata or {},
         children=_children_from_field_list(fields.values()),
@@ -44,7 +44,7 @@ def _field_from_annotation(attr, annotation,
             field_type=annotation,
             array_type=array_type,
             name=attr,
-            size=None,
+            size=1 if array_type == FieldArrayType.scalar else None,
         )
 
     if hasattr(annotation, '_pva_struct_'):
