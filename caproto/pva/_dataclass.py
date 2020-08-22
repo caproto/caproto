@@ -143,6 +143,7 @@ def _get_default_by_field(attr: str,
             dcls_field.default_factory = lambda item=annotation: item()
         elif field.field_type == FieldType.union:
             # TODO this isn't quite right
+            field = typing.cast(StructuredField, field)
             union_dcls = field.metadata['union_dataclass']
             choices = list(field.children.items())
 

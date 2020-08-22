@@ -159,7 +159,7 @@ class PVRequestToStructureVisitor(NodeVisitor):
 # )
 
 
-def _new_struct(fields, struct_name='', name=''):
+def _new_struct(fields, struct_name='', name='') -> 'PVRequestStruct':
     struct = PVRequestStruct(
         field_type=FieldType.struct,
         array_type=FieldArrayType.scalar,
@@ -236,8 +236,8 @@ class PVRequestStruct(StructuredField):
     values: typing.Dict[str, typing.Union[typing.Dict, str]]
 
     @classmethod
-    def from_string(cls, req):
-        req = cls._pv_request_to_structure.parse(req.replace(' ', ''))
+    def from_string(cls, request: str) -> 'PVRequestStruct':
+        req = cls._pv_request_to_structure.parse(request.replace(' ', ''))
         return cls._from_parsed(req)
 
     @classmethod
@@ -286,7 +286,7 @@ class PVRequestStruct(StructuredField):
         return _new_struct(fields=fields, name=outer_name)
 
     @classmethod
-    def _from_parsed(cls, req, outer_name=''):
+    def _from_parsed(cls, req, outer_name='') -> 'PVRequestStruct':
         'PVRequest namedtuple -> PVStructure description'
         if isinstance(req, _FieldDef):
             return cls._from_field_def(req, outer_name=outer_name)

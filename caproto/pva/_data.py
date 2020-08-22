@@ -531,6 +531,7 @@ class FieldDescAndData(CoreSerializableWithCache):
             data = typing.cast(PvaStruct, data)
             interface = data._pva_struct_
         elif is_pva_dataclass(interface):
+            interface = typing.cast(PvaStruct, interface)
             interface = interface._pva_struct_
 
         self.interface = interface
