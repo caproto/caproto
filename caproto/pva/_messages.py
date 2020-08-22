@@ -288,9 +288,8 @@ class Message:
     def serialize(self, *, cache=None,
                   endian: Endian = None,  # ignored, here for consistency
                   ) -> bytes:
-        additional_fields = self._get_additional_fields(
-            subcommand=getattr(self, 'subcommand', None)
-        )
+        subcommand = getattr(self, 'subcommand', None)
+        additional_fields = self._get_additional_fields(subcommand=subcommand)
 
         ctypes_struct_serialized = bytes(typing.cast(ctypes.Structure, self))
 
@@ -303,17 +302,20 @@ class Message:
         # (1) serialize the ctypes.Structure _fields_ first
         buf = [ctypes_struct_serialized]
 
+        serialization_logger.debug('to_wire: %s subcommand=%s',
+                                   self.__class__.__name__, subcommand)
+
         # (2) move onto the "additional fields" which are not as easily
         # serializable:
-        for field_info in additional_fields:
-            if isinstance(field_info, OptionalField):
-                if field_info.condition is not None:
-                    if not field_info.condition(self, buf):
+        for field in additional_fields:
+            if isinstance(field, OptionalField):
+                if field.condition is not None:
+                    if not field.condition(self, buf):
                         break
 
-            value = getattr(self, field_info.name)
-            if isinstance(field_info, NonstandardArrayField):
-                count = getattr(self, field_info.count_attr)
+            value = getattr(self, field.name)
+            if isinstance(field, NonstandardArrayField):
+                count = getattr(self, field.count_attr)
             else:
                 value = [value]
                 count = 1
@@ -321,15 +323,23 @@ class Message:
             assert len(value) == count
 
             serialize = functools.partial(
-                to_wire, field_info.type, endian=endian, cache=cache,
+                to_wire, field.type, endian=endian, cache=cache,
                 bitset=None
             )
+
+            serialization_logger.debug(
+                '\t> Field %r (%s) = %s', field.name, field.type, value)
 
             for v in value:
                 buf.extend(serialize(value=v))
 
         # (3) end result is the sum of all buffers
-        return b''.join(buf)
+        serialized = b''.join(buf)
+
+        serialization_logger.debug(
+            '(to_wire done: %s subcommand=%s -> %s)',
+            self.__class__.__name__, subcommand, serialized)
+        return serialized
 
     @classmethod
     def deserialize(cls, buf: bytes, *,
@@ -354,35 +364,33 @@ class Message:
             'from_wire: %s base_size=%s subcommand=%s payload=%s',
             cls.__name__, base_size, subcommand, bytes(buf))
 
-        for field_info in additional_fields:
-            if isinstance(field_info, OptionalField):
+        for field in additional_fields:
+            if isinstance(field, OptionalField):
                 if not buflen:
                     # No bytes remaining, and any additional fields are
                     # optional.
                     break
-                if field_info.condition is not None:
-                    if not field_info.condition(msg, buf):
-                        if field_info.stop == OptionalStopMarker.stop:
+                if field.condition is not None:
+                    if not field.condition(msg, buf):
+                        if field.stop == OptionalStopMarker.stop:
                             break
                         else:
                             continue
 
-            field_interface = field_info.type
+            field_interface = field.type
 
-            if field_interface in {DataWithBitSet}:  # , FieldDescAndData}:
+            if field_interface in {DataWithBitSet}:
                 try:
-                    if cache is None:
-                        raise ValueError(f'hmm {field_interface} {field_info} {cls}')
                     field_interface = field_interface(
                         interface=cache.ioid_interfaces[msg.ioid],
                     )
                 except KeyError:
                     raise RuntimeError(
                         f'Field description unavailable for Data in '
-                        f'{field_info.name!r} (ioid={msg.ioid})'
+                        f'{field.name!r} (ioid={msg.ioid})'
                     ) from None
 
-            is_nonstandard_array = isinstance(field_info,
+            is_nonstandard_array = isinstance(field,
                                               NonstandardArrayField)
 
             deserialize = functools.partial(
@@ -391,7 +399,7 @@ class Message:
             )
 
             if is_nonstandard_array:
-                count = getattr(msg, field_info.count_attr)
+                count = getattr(msg, field.count_attr)
                 values = []
                 for i in range(count):
                     value, buf, off = deserialize(data=buf)
@@ -399,18 +407,20 @@ class Message:
                     buflen -= off
                     values.append(value)
 
-                setattr(msg, field_info.name, values)
+                setattr(msg, field.name, values)
                 serialization_logger.debug(
-                    '\t> Field %r (%s) = %s', field_info.name, field_info.type,
-                    values)
+                    '\t> Field %r (%s) = %s', field.name, field.type, values)
             else:
                 value, buf, off = deserialize(data=buf)
                 offset += off
                 buflen -= off
-                setattr(msg, field_info.name, value)
+                setattr(msg, field.name, value)
                 serialization_logger.debug(
-                    '\t> Field %r (%s) = %s', field_info.name, field_info.type,
-                    value)
+                    '\t> Field %r (%s) = %s', field.name, field.type, value)
+
+        serialization_logger.debug(
+            '(from_wire done: %d B -> %s)',
+            offset, cls.__name__)
 
         return Deserialized(data=msg, buffer=buf, offset=offset)
 
