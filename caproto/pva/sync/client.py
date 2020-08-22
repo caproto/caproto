@@ -89,22 +89,12 @@ def search(pv, udp_sock, udp_port, timeout, max_retries=2):
     """
     broadcaster = Broadcaster(our_role=CLIENT, broadcast_port=udp_port)
     broadcaster.client_address = safe_getsockname(udp_sock)
-    cache = pva.CacheContext()
 
     def send_search(message):
-        payload = message.serialize(cache=cache)
-        header = pva.MessageHeaderLE(
-            flags=(pva.MessageFlags.APP_MESSAGE |
-                   pva.MessageFlags.FROM_CLIENT |
-                   pva.MessageFlags.LITTLE_ENDIAN),
-            command=message.ID,
-            payload_size=len(payload)
-        )
-        bytes_to_send = bytes(header) + payload
-        port = broadcast_port
+        bytes_to_send = broadcaster.send(message)
         for host in get_address_list(protocol='PVA'):
-            udp_sock.sendto(bytes_to_send, (host, port))
-            logger.debug('Search request sent to %r.', (host, port))
+            udp_sock.sendto(bytes_to_send, (host, broadcast_port))
+            logger.debug('Search request sent to %r.', (host, broadcast_port))
             logger.debug('%s', bytes_to_send)
 
     def check_timeout():
