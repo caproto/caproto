@@ -71,17 +71,6 @@ class FieldDesc(CoreSerializableWithCache):
         )
 
     @classmethod
-    def _deserialize(cls, data, *, endian, cache, name=None):
-        fd, _, _ = FieldDescByte.deserialize(data)
-        if fd.field_type.is_complex:
-            return StructuredField.deserialize(data, endian=endian,
-                                               cache=cache,
-                                               name=name)
-
-        return SimpleField.deserialize(data, endian=endian,
-                                       name=name)
-
-    @classmethod
     def deserialize(cls,
                     data: bytes,
                     *,
@@ -127,8 +116,11 @@ class FieldDesc(CoreSerializableWithCache):
 
             # otherwise, fall through...
 
-        intf, data, off = cls._deserialize(data, endian=endian, cache=cache,
-                                           name=name)
+        fd, _, _ = FieldDescByte.deserialize(data)
+        cls = StructuredField if fd.field_type.is_complex else SimpleField
+
+        intf, data, off = cls.deserialize(data, endian=endian, cache=cache,
+                                          name=name)
         offset += off
 
         if interface_id is not None:
@@ -161,8 +153,17 @@ class SimpleField(FieldDesc):
         return buf
 
     @classmethod
-    def deserialize(cls, data: bytes, *, endian: Endian,
-                    name=None) -> Deserialized:
+    def deserialize(cls,
+                    data: bytes,
+                    *,
+                    endian: Endian,
+                    cache: CacheContext,
+                    name: Optional[str] = None,
+                    ) -> Deserialized:
+        """
+        Deserialize a simple field (i.e., not structured field).
+        """
+
         fd, data, offset = FieldDescByte.deserialize(data)
         assert not fd.field_type.is_complex
 
