@@ -20,6 +20,22 @@ def _fromhex(s):
     return binascii.unhexlify(s)
 
 
+def round_trip(obj, endian, **kwargs):
+    serialized = b''.join(obj.serialize(endian=endian, **kwargs))
+    round_tripped, _, consumed = type(obj).deserialize(serialized,
+                                                       endian=endian, **kwargs)
+    assert consumed == len(serialized)
+    return round_tripped, serialized
+
+
+def round_trip_value(cls, value, endian, **kwargs):
+    serialized = b''.join(cls.serialize(value, endian=endian, **kwargs))
+    round_tripped, _, consumed = cls.deserialize(serialized, endian=endian,
+                                                 **kwargs)
+    assert consumed == len(serialized)
+    return round_tripped, serialized
+
+
 @pytest.mark.parametrize(
     'endian', [pytest.param(pva.LITTLE_ENDIAN, id='LE'),
                pytest.param(pva.BIG_ENDIAN, id='BE')]
@@ -37,13 +53,27 @@ def _fromhex(s):
      ]
 )
 def test_size_roundtrip(endian, value, expected_length):
-    serialized = b''.join(pva.Size.serialize(value, endian=endian))
-    roundtrip_value, _, consumed = pva.Size.deserialize(serialized,
-                                                        endian=endian)
-    assert len(serialized) == consumed
+    roundtrip_value, serialized = round_trip_value(pva.Size, value, endian=endian)
     assert len(serialized) == expected_length
     assert value == roundtrip_value
     print(serialized, value)
+
+
+@pytest.mark.parametrize(
+    'endian', [pytest.param(pva.LITTLE_ENDIAN, id='LE'),
+               pytest.param(pva.BIG_ENDIAN, id='BE')]
+)
+def test_status_utilities(endian):
+    assert pva.Status.create_success().status == pva.StatusType.OK
+    err = pva.Status.create_error(message='test', call_tree='test2')
+    assert err.status == pva.StatusType.ERROR
+    assert err.message == 'test'
+    assert err.call_tree == 'test2'
+
+    rt_err, _ = round_trip(err)
+    assert err.message == rt_err.message
+    assert err.call_tree == rt_err.call_tree
+    assert err.status == rt_err.status
 
 
 def test_status_example():
