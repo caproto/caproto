@@ -14,11 +14,12 @@ from caproto.pva import (CLIENT, CONNECTED, DISCONNECTED, NEED_DATA,
                          Broadcaster, CaprotoError, ChannelFieldInfoResponse,
                          ChannelGetResponse, ChannelMonitorResponse,
                          ChannelPutResponse, ClientChannel,
-                         ConnectionValidatedResponse,
+                         ClientVirtualCircuit, ConnectionValidatedResponse,
                          ConnectionValidationRequest, CreateChannelResponse,
                          ErrorResponseReceived, MonitorSubcommand, QOSFlags,
                          SearchResponse, Subcommand, VirtualCircuit)
 
+from ..._utils import safe_getsockname
 from .._dataclass import (dataclass_from_field_desc, fill_dataclass,
                           is_pva_dataclass_instance)
 
@@ -61,8 +62,18 @@ def recv(circuit):
     return commands
 
 
-def make_broadcaster_socket():
-    'Returns (udp_sock, port)'
+def make_broadcaster_socket() -> Tuple[socket.socket, int]:
+    """
+    Make and bind a broadcaster socket.
+
+    Returns
+    -------
+    udp_sock : socket.socket
+        The UDP socket.
+
+    port : int
+        The bound port.
+    """
     udp_sock = bcast_socket()
     udp_sock.bind(('', 0))
     port = udp_sock.getsockname()[1]
@@ -71,27 +82,19 @@ def make_broadcaster_socket():
 
 
 def search(pv, udp_sock, udp_port, timeout, max_retries=2):
-    '''Search for a PV over the network by broadcasting over UDP
+    """
+    Search for a PV over the network by broadcasting over UDP
 
     Returns: (host, port)
-    '''
-    b = Broadcaster(our_role=CLIENT, response_addr=('0.0.0.0', udp_port))
-    cache = pva.CacheContext()
+    """
+    broadcaster = Broadcaster(our_role=CLIENT, broadcast_port=udp_port)
+    broadcaster.client_address = safe_getsockname(udp_sock)
 
     def send_search(message):
-        payload = message.serialize(cache=cache)
-        header = pva.MessageHeaderLE(
-            flags=(pva.MessageFlags.APP_MESSAGE |
-                   pva.MessageFlags.FROM_CLIENT |
-                   pva.MessageFlags.LITTLE_ENDIAN),
-            command=message.ID,
-            payload_size=len(payload)
-        )
-        bytes_to_send = bytes(header) + payload
-        port = broadcast_port
+        bytes_to_send = broadcaster.send(message)
         for host in get_address_list(protocol='PVA'):
-            udp_sock.sendto(bytes_to_send, (host, port))
-            logger.debug('Search request sent to %r.', (host, port))
+            udp_sock.sendto(bytes_to_send, (host, broadcast_port))
+            logger.debug('Search request sent to %r.', (host, broadcast_port))
             logger.debug('%s', bytes_to_send)
 
     def check_timeout():
@@ -107,7 +110,7 @@ def search(pv, udp_sock, udp_port, timeout, max_retries=2):
             )
 
     # Initial search attempt
-    pv_to_cid, search_req = b.search(pv)
+    pv_to_cid, search_req = broadcaster.search(pv)
     cid_to_pv = dict((v, k) for k, v in pv_to_cid.items())
     send_search(search_req)
 
@@ -128,8 +131,8 @@ def search(pv, udp_sock, udp_port, timeout, max_retries=2):
 
             check_timeout()
 
-            commands = b.recv(bytes_received, address)
-            b.process_commands(commands)
+            commands = broadcaster.recv(bytes_received, address)
+            broadcaster.process_commands(commands)
             response_commands = [command for command in commands
                                  if isinstance(command, SearchResponse)]
             for command in response_commands:
@@ -158,7 +161,7 @@ def make_channel(pv_name, udp_sock, udp_port, timeout):
     try:
         circuit = global_circuits[address]
     except KeyError:
-        circuit = VirtualCircuit(
+        circuit = ClientVirtualCircuit(
             our_role=CLIENT, address=address,
             priority=QOSFlags.encode(priority=0, flags=0)
         )
@@ -176,22 +179,23 @@ def make_channel(pv_name, udp_sock, udp_port, timeout):
             if isinstance(command, ConnectionValidationRequest):
                 if command.auth_nz and 'ca' in command.auth_nz:
                     auth_method = 'ca'
-                    host_name = socket.gethostname()
-                    client_name = getpass.getuser()
-                    auth_args = dict(user=client_name, host=host_name)
+                    auth_data = pva.ChannelAccessAuthentication(
+                        user=getpass.getuser(),
+                        host=socket.gethostname(),
+                    )
                 elif command.auth_nz and 'anonymous' in command.auth_nz:
                     auth_method = 'anonymous'
-                    auth_args = {}
+                    auth_data = None
                 else:
                     auth_method = ''
-                    auth_args = {}
+                    auth_data = None
 
                 response = circuit.validate_connection(
-                    client_buffer_size=command.server_buffer_size,
-                    client_registry_size=command.server_registry_size,
+                    buffer_size=command.server_buffer_size,
+                    registry_size=command.server_registry_size,
                     connection_qos=0,
                     auth_nz=auth_method,
-                    auth_args=auth_args,
+                    data=auth_data,
                 )
                 send(circuit, response)
             elif isinstance(command, ConnectionValidatedResponse):
@@ -244,18 +248,18 @@ def _read(chan, timeout, pvrequest):
             # interface = command.field_if
             ...
         elif isinstance(command, ChannelGetResponse):
-            if not command.is_successful:
-                raise ErrorResponseReceived(command.message)
-            if command.has_message:
-                logger.info('Message from server: %s', command.message)
+            if not command.status.is_successful:
+                raise ErrorResponseReceived(str(command.status))
+            if command.status.message:
+                logger.info('Message from server: %s', command.status)
 
             if command.subcommand == Subcommand.INIT:
                 interface = command.pv_structure_if
                 read_req = chan.read(ioid, interface=interface)
                 send(chan.circuit, read_req)
             elif command.subcommand == Subcommand.GET:
-                interface = command.pv_data['field']
-                value = command.pv_data['value']
+                interface = command.pv_data.interface
+                value = command.pv_data.data
                 dataclass = dataclass_from_field_desc(interface)
                 instance = dataclass()
                 fill_dataclass(instance, value)
@@ -263,7 +267,7 @@ def _read(chan, timeout, pvrequest):
                 return command
 
 
-def read(pv_name, *, pvrequest, verbose=False, timeout=1):
+def read(pv_name, *, pvrequest='field()', verbose=False, timeout=1):
     """
     Read a Channel.
 
@@ -272,8 +276,9 @@ def read(pv_name, *, pvrequest, verbose=False, timeout=1):
     pv_name : str
         The PV name.
 
-    pvrequest : str
-        The PVRequest, such as 'field(value)'.
+    pvrequest : str, optional
+        The PVRequest, such as 'field(value)'.  Defaults to 'field()' for
+        retrieving all data.
 
     verbose : boolean, optional
         Verbose logging. Default is False.
@@ -323,6 +328,11 @@ def _monitor(chan, timeout, pvrequest, maximum_events):
     for command in _receive_commands(chan.circuit, timeout=None):
         if isinstance(command, ChannelMonitorResponse):
             if command.subcommand == Subcommand.INIT:
+                if not command.status.is_successful:
+                    raise ErrorResponseReceived(str(command.status))
+                if command.status.message:
+                    logger.info('Message from server: %s', command.status)
+
                 monitor_start_req = chan.subscribe_control(
                     ioid=ioid, subcommand=MonitorSubcommand.START)
                 send(chan.circuit, monitor_start_req)
@@ -334,7 +344,7 @@ def _monitor(chan, timeout, pvrequest, maximum_events):
                 yield command
             else:
                 event_count += 1
-                # fill_dataclass(instance, command.pv_data['value'])
+                # fill_dataclass(instance, command.pv_data.data)
                 command.dataclass_instance = instance
                 yield command
                 if maximum_events is not None:
@@ -397,22 +407,24 @@ def _write(chan, timeout, value):
     send(chan.circuit, init_req)
     if is_pva_dataclass_instance(value):
         value = dataclasses.asdict(value)
+    if not isinstance(value, dict):
+        value = {'value': value}
 
     for command in _receive_commands(chan.circuit, timeout):
         if isinstance(command, ChannelFieldInfoResponse):
             # interface = command.field_if
             ...
         elif isinstance(command, ChannelPutResponse):
-            if not command.is_successful:
-                raise ErrorResponseReceived(command.message)
-            if command.has_message:
-                logger.info('Message from server: %s', command.message)
+            if not command.status.is_successful:
+                raise ErrorResponseReceived(str(command.status))
+            if command.status.message:
+                logger.info('Message from server: %s', command.status)
             if command.subcommand == Subcommand.INIT:
                 interface = command.put_structure_if
                 instance = dataclass_from_field_desc(interface)()
                 # TODO logic can move up to the circuit
                 bitset = fill_dataclass(instance, value)
-                write_req = chan.write(ioid, interface, instance, bitset)
+                write_req = chan.write(ioid, instance, bitset)
                 send(chan.circuit, write_req)
             elif command.subcommand == Subcommand.DEFAULT:
                 return command

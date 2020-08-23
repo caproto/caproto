@@ -19,15 +19,16 @@ def new_struct(fields: dict,
                struct_name: str = '',
                name: str = '',
                array_type: FieldArrayType = FieldArrayType.scalar,
-               size: typing.Optional[int] = None,
+               size: typing.Optional[int] = 1,
                field_type=FieldType.struct,
+               metadata: typing.Optional[dict] = None,
                ) -> StructuredField:
     return StructuredField(
         field_type=field_type,
         array_type=array_type,
-        name=name,
+        name=name or struct_name,
         struct_name=struct_name,
-        metadata={},
+        metadata=metadata or {},
         children=_children_from_field_list(fields.values()),
         descendents=_descendents_from_field_list(fields.values()),
         size=size,
@@ -43,16 +44,22 @@ def _field_from_annotation(attr, annotation,
             field_type=annotation,
             array_type=array_type,
             name=attr,
-            size=None,
+            size=1 if array_type == FieldArrayType.scalar else None,
         )
 
     if hasattr(annotation, '_pva_struct_'):
         struct = annotation._pva_struct_
+        metadata = dict(struct.metadata)
+        if struct.field_type == FieldType.union:
+            metadata['union_dataclass'] = annotation
+
         return new_struct(
             struct.children,
             struct_name=struct.struct_name,
             name=attr,
             array_type=array_type,
+            field_type=struct.field_type,  # may be a union
+            metadata=metadata,
         )
 
 
@@ -114,7 +121,7 @@ def _get_pva_fields_from_annotations(cls: type) -> dict:
                 ) from None
         elif origin is typing.Union:
             union_cls = _get_union_from_annotation(attr, annotation)
-            pva_fields[attr] = union_cls._pva_struct_
+            pva_fields[attr] = union_cls._pva_struct_.as_new_name(attr)
             continue
         else:
             array_type = FieldArrayType.scalar
@@ -136,14 +143,17 @@ def _get_default_by_field(attr: str,
             dcls_field.default_factory = lambda item=annotation: item()
         elif field.field_type == FieldType.union:
             # TODO this isn't quite right
+            field = typing.cast(StructuredField, field)
             union_dcls = field.metadata['union_dataclass']
+            choices = list(field.children.items())
 
-            def union_init(*, dcls=union_dcls):
+            def union_init(*, choices=choices, union_dcls=union_dcls):
                 kwargs = {}
-                items = enumerate(typing.get_type_hints(dcls).items())
-                for idx, (attr, annotation) in items:
-                    print(idx, attr, annotation)
-                    kwargs[attr] = None
+                for idx, (attr, field) in enumerate(choices):
+                    if idx == 0:
+                        kwargs[attr] = annotation_default_values[field.field_type]
+                    else:
+                        kwargs[attr] = None
                 return union_dcls(**kwargs)
 
             dcls_field.default_factory = union_init
@@ -174,7 +184,9 @@ def _get_defaults_to_add(cls: type, pva_fields: typing.Dict[str, FieldDesc]):
 
 def pva_dataclass(_cls: typing.Optional[type] = None, *,
                   add_defaults: bool = True,
-                  union: bool = False):
+                  union: bool = False,
+                  name: str = None,
+                  ):
     """
     Create a new PVAccess-compatible dataclass given a type-annotated class.
 
@@ -186,6 +198,12 @@ def pva_dataclass(_cls: typing.Optional[type] = None, *,
     add_defaults : bool, optional
         Add default values for easy instantiation of the data class. Supports
         sub-structures as well.
+
+    union : bool, optional
+        Mark the structure as a union type.
+
+    name : str, optional
+        Optional custom name for the structure.  Defaults to the class name.
     """
 
     def wrap(cls: type) -> type:
@@ -196,7 +214,7 @@ def pva_dataclass(_cls: typing.Optional[type] = None, *,
         dcls = dataclasses.dataclass(cls)
         dcls._pva_struct_ = new_struct(
             pva_fields,
-            struct_name=cls.__name__,
+            struct_name=name or cls.__name__,
             field_type=FieldType.union if union else FieldType.struct,
         )
         return dcls
@@ -244,6 +262,8 @@ def array_of(item: typing.Union[SimpleField, StructuredField, FieldType, type],
         name=name or struct.name,
         array_type=array_type,
         size=size,
+        field_type=struct.field_type,
+        metadata=dict(struct.metadata),
     )
 
 
@@ -294,7 +314,8 @@ def dataclass_from_field_desc(field: StructuredField) -> type:
 
         annotations[attr] = annotation_type
 
-    return pva_dataclass(cls)
+    is_union = field.field_type == FieldType.union
+    return pva_dataclass(cls, union=is_union)
 
 
 def is_pva_dataclass(obj) -> bool:
@@ -318,7 +339,6 @@ def fill_dataclass(instance: PvaStruct, value: dict) -> BitSet:
     Returns a BitSet indicating the fields that were set.
     """
     if not is_pva_dataclass_instance(instance):
-        print(instance, hasattr(instance, '_pva_struct_'))
         raise ValueError(f'{instance} is not a pva dataclass')
 
     bitset = BitSet({})
