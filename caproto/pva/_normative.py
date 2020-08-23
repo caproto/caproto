@@ -4,7 +4,7 @@
 import logging
 
 from ._annotations import Float64, Int32, Int64
-from ._dataclass import PvaStruct, pva_dataclass
+from ._dataclass import pva_dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -39,11 +39,11 @@ class control_t:
     minStep: Float64
 
 
-class combined(metaclass=PvaStruct):
-    time: time_t
-    alarm: alarm_t
-    display: display_t
-    control: control_t
+# class combined(metaclass=PvaStruct):
+#     time: time_t
+#     alarm: alarm_t
+#     display: display_t
+#     control: control_t
 
 
 # ? epics:nt/NTScalar:1.0

@@ -184,7 +184,9 @@ def _get_defaults_to_add(cls: type, pva_fields: typing.Dict[str, FieldDesc]):
 
 def pva_dataclass(_cls: typing.Optional[type] = None, *,
                   add_defaults: bool = True,
-                  union: bool = False):
+                  union: bool = False,
+                  name: str = None,
+                  ):
     """
     Create a new PVAccess-compatible dataclass given a type-annotated class.
 
@@ -196,6 +198,12 @@ def pva_dataclass(_cls: typing.Optional[type] = None, *,
     add_defaults : bool, optional
         Add default values for easy instantiation of the data class. Supports
         sub-structures as well.
+
+    union : bool, optional
+        Mark the structure as a union type.
+
+    name : str, optional
+        Optional custom name for the structure.  Defaults to the class name.
     """
 
     def wrap(cls: type) -> type:
@@ -206,7 +214,7 @@ def pva_dataclass(_cls: typing.Optional[type] = None, *,
         dcls = dataclasses.dataclass(cls)
         dcls._pva_struct_ = new_struct(
             pva_fields,
-            struct_name=cls.__name__,
+            struct_name=name or cls.__name__,
             field_type=FieldType.union if union else FieldType.struct,
         )
         return dcls

@@ -424,9 +424,7 @@ def structure_from_repr(hierarchy, *, namespace=None):
     elif len(items) == 2:
         struct_name = top_name = items[-1]
     else:
-        raise ValueError(
-            f'Unexpected identifier(s): {entry!r}'
-        )
+        raise ValueError(f'Unexpected identifier(s): {entry!r}')
 
     def get_field(child):
         entry, has_children = get_entry_and_children(child)
@@ -603,11 +601,7 @@ class Status(CoreSerializable):
     def __init__(self, status: StatusType,
                  message: Optional[str] = None,
                  call_tree: Optional[str] = None):
-        try:
-            self.status = StatusType(status)
-        except Exception:
-            self.status = StatusType.FATAL
-            serialization_logger.error('Unexpected status type: %s', status)
+        self.status = StatusType(status)
 
         if status == StatusType.OK:
             if message is not None or call_tree is not None:

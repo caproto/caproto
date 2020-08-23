@@ -70,7 +70,7 @@ def test_status_utilities(endian):
     assert err.message == 'test'
     assert err.call_tree == 'test2'
 
-    rt_err, _ = round_trip(err)
+    rt_err, _ = round_trip(err, endian=endian)
     assert err.message == rt_err.message
     assert err.call_tree == rt_err.call_tree
     assert err.status == rt_err.status
