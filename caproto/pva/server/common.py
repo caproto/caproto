@@ -1,5 +1,5 @@
 import logging
-import typing  # noqa
+import typing
 from collections import defaultdict, deque
 from typing import Dict, Tuple
 
@@ -347,7 +347,7 @@ class VirtualCircuit:
         return to_send
 
 
-class Context:
+class Context(typing.Mapping):
     def __init__(self, pvdb, interfaces=None):
         if interfaces is None:
             interfaces = ca.get_server_address_list(
@@ -376,7 +376,7 @@ class Context:
         self.broadcaster = pva.Broadcaster(
             our_role=ca.SERVER,
             broadcast_port=self.pva_broadcast_port,
-            server_port=self.pva_server_port
+            server_port=None,  # TBD
         )
         # the specific tcp port in use by this server
         self.port = None
@@ -406,7 +406,8 @@ class Context:
             await self.message_bundle_queue.put((address, messages))
 
     async def broadcaster_queue_loop(self):
-        '''Reference broadcaster queue loop implementation
+        '''
+        Reference broadcaster queue loop implementation
 
         Note
         ----
@@ -432,6 +433,9 @@ class Context:
 
     def __getitem__(self, pvname):
         return self.pvdb[pvname]
+
+    def __len__(self):
+        return len(self.pvdb)
 
     async def _broadcaster_queue_iteration(self, addr, messages):
         self.broadcaster.process_commands(messages)

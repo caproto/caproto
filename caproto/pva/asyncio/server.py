@@ -119,6 +119,8 @@ class Context(_Context):
 
         self.port, self.tcp_sockets = await self._bind_tcp_sockets_with_consistent_port_number(
             make_socket)
+        self.broadcaster.server_port = self.port
+
         tasks = _TaskHandler()
         for interface, sock in self.tcp_sockets.items():
             self.log.info("Listening on %s:%d", interface, self.port)

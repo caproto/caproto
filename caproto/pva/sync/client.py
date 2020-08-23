@@ -267,7 +267,7 @@ def _read(chan, timeout, pvrequest):
                 return command
 
 
-def read(pv_name, *, pvrequest, verbose=False, timeout=1):
+def read(pv_name, *, pvrequest='field()', verbose=False, timeout=1):
     """
     Read a Channel.
 
@@ -276,8 +276,9 @@ def read(pv_name, *, pvrequest, verbose=False, timeout=1):
     pv_name : str
         The PV name.
 
-    pvrequest : str
-        The PVRequest, such as 'field(value)'.
+    pvrequest : str, optional
+        The PVRequest, such as 'field(value)'.  Defaults to 'field()' for
+        retrieving all data.
 
     verbose : boolean, optional
         Verbose logging. Default is False.
