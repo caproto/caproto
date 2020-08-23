@@ -2,13 +2,13 @@ import array
 import logging
 import textwrap
 import typing
-from dataclasses import asdict
 from typing import List
 
 import pytest
 
 pytest.importorskip('caproto.pva')
 
+from dataclasses import asdict  # isort: skip
 from caproto import pva
 
 logger = logging.getLogger(__name__)
