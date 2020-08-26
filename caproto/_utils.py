@@ -13,6 +13,7 @@ import random
 import socket
 import sys
 import threading
+import typing
 import weakref
 from collections import namedtuple
 from contextlib import contextmanager
@@ -42,9 +43,11 @@ __all__ = (  # noqa F822
     'apply_arr_filter',
     'ChannelFilter',
     'get_environment_variables',
+    'get_address_and_port_from_string',
     'get_address_list',
-    'get_server_address_list',
     'get_beacon_address_list',
+    'get_client_address_list',
+    'get_server_address_list',
     'get_netifaces_addresses',
     'ensure_bytes',
     'random_ports',
@@ -323,7 +326,7 @@ def get_address_list(*, protocol=Protocol.ChannelAccess):
     addresses = get_manually_specified_client_addresses(protocol=protocol)
     auto_addr_list = env[f'EPICS_{protocol}_AUTO_ADDR_LIST']
 
-    if addresses and env['EPICS_CA_AUTO_ADDR_LIST'].lower() != 'yes':
+    if addresses and auto_addr_list.lower() != 'yes':
         # Custom address list specified, and EPICS_CA_AUTO_ADDR_LIST=NO
         auto_addr_list = []
     else:
@@ -333,7 +336,62 @@ def get_address_list(*, protocol=Protocol.ChannelAccess):
         else:
             auto_addr_list = ['255.255.255.255']
 
-    return addresses + auto_addr_list
+    return list(set(addresses + auto_addr_list))
+
+
+def get_client_address_list(port=None, *, protocol=Protocol.ChannelAccess):
+    '''
+    Get channel access client address list in the form of (host, port) based on
+    environment variables.
+
+    See Also
+    --------
+    :func:`get_address_list`
+    '''
+    protocol = Protocol(protocol)
+
+    if port is None:
+        port = get_environment_variables()[f'EPICS_{protocol}_SERVER_PORT']
+
+    return list(set(
+        get_address_and_port_from_string(addr, port)
+        for addr in get_address_list(protocol=protocol)
+    ))
+
+
+def get_address_and_port_from_string(
+        address: str, default_port: int) -> typing.Tuple[str, int]:
+    '''
+    Return (address, port) tuple given an IP address of the form ``ip:port``
+    or ``ip``.
+
+    If no port is specified, the default port is used.
+
+    Parameters
+    ----------
+    address : str
+        The address.
+
+    default_port : int
+        The port to return if none is specified.
+
+    Returns
+    -------
+    host : str
+        The host IP address.
+
+    port : int
+        The specified or default port.
+    '''
+    if address.count(':') > 1:
+        # May support [IPv6]:[port] in the future?
+        raise ValueError(f'IPv6 or invalid address specified: {address}')
+
+    if ':' in address:
+        address, specified_port = address.split(':')
+        return (address, int(specified_port))
+
+    return (address, default_port)
 
 
 def get_server_address_list(*, protocol=Protocol.ChannelAccess):
@@ -357,7 +415,8 @@ def get_server_address_list(*, protocol=Protocol.ChannelAccess):
             warn("Port specified in EPICS_CAS_INTF_ADDR_LIST was ignored.")
         return addr
 
-    return [strip_port(addr) for addr in _split_address_list(intf_addrs)]
+    return list(set(strip_port(addr)
+                    for addr in _split_address_list(intf_addrs)))
 
 
 def get_beacon_address_list(*, protocol=Protocol.ChannelAccess):
@@ -380,20 +439,16 @@ def get_beacon_address_list(*, protocol=Protocol.ChannelAccess):
     else:
         beacon_port = env['EPICS_PVAS_BROADCAST_PORT']
 
-    def get_addr_port(addr):
-        if ':' in addr:
-            addr, _, specified_port = addr.partition(':')
-            return (addr, int(specified_port))
-        return (addr, beacon_port)
-
     if addr_list and auto_addr_list.lower() != 'yes':
         # Custom address list and EPICS_CAS_AUTO_BEACON_ADDR_LIST=NO
         auto_list = []
     else:
-        auto_list = [('255.255.255.255', beacon_port)]
+        auto_list = ['255.255.255.255']
 
-    # Custom address list and EPICS_CAS_AUTO_BEACON_ADDR_LIST=YES
-    return addr_list + auto_list
+    return [
+        get_address_and_port_from_string(addr, beacon_port)
+        for addr in addr_list + auto_list
+    ]
 
 
 def get_netifaces_addresses():

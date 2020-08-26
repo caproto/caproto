@@ -116,21 +116,15 @@ class SharedBroadcaster:
                 'our_address': self.broadcaster.client_address,
                 'direction': '--->>>'}
 
-        for host in ca.get_address_list():
-            if ':' in host:
-                host, _, port_as_str = host.partition(':')
-                specified_port = int(port_as_str)
-            else:
-                specified_port = port
-
-            tags['their_address'] = (host, specified_port)
+        for host_tuple in ca.get_client_address_list(port):
+            tags['their_address'] = host_tuple
             self.log.debug(
                 '%d commands %dB',
                 len(commands), len(bytes_to_send), extra=tags)
             try:
-                await self.wrapped_transport.sendto(bytes_to_send,
-                                                    (host, specified_port))
+                await self.wrapped_transport.sendto(bytes_to_send, host_tuple)
             except OSError as ex:
+                host, specified_port = host_tuple
                 raise ca.CaprotoNetworkError(
                     f'{ex} while sending {len(bytes_to_send)} bytes to '
                     f'{host}:{specified_port}') from ex
