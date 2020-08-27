@@ -306,7 +306,7 @@ def dataclass_from_field_desc(field: StructuredField) -> type:
     """
     # Use a roundabout approach - create a class, add annotations, and
     # use `pva_dataclass` machinery to do the heavy lifting.
-    cls = type(field.struct_name or field.name, (), {})
+    cls = type(field.struct_name or field.name or '', (), {})
 
     annotations: typing.Dict[str, typing.Any] = {}
     cls.__annotations__ = annotations

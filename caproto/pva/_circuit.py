@@ -2,7 +2,7 @@
 # copy that nomenclature for now.
 import logging
 import typing
-from typing import Dict, List, Optional, Sequence, Tuple, Union
+from typing import Dict, List, Optional, Sequence, Tuple, Type, Union
 
 from .. import pva
 from .._log import ComposableLogAdapter
@@ -344,6 +344,7 @@ class VirtualCircuit:
 
         subcommand = getattr(command, 'subcommand', None)
 
+        # TODO: singledispatchmethod_ only 3.8?
         if subcommand is not None:
             ioid_state = ioid_info['state']
             ioid_state.process_subcommand(subcommand)
@@ -382,7 +383,8 @@ class VirtualCircuit:
         if (isinstance(command, ChannelRequestDestroy) or
                 subcommand == Subcommand.DESTROY):
             self._ioids.pop(ioid)
-            self.cache.ioid_interfaces.pop(ioid)
+            # May not have been successful:
+            self.cache.ioid_interfaces.pop(ioid, None)
 
         # We are done. Run the Channel state change callbacks.
         for transition in transitions:
@@ -636,8 +638,7 @@ class _BaseChannel:
         # These will be set when the circuit processes CreateChannelResponse..
         self.interface = None
         self.sid = None
-        self.access_rights = None
-        self.ioid_interfaces = {}
+        # self.access_rights = None
 
     @property
     def subscriptions(self):
@@ -741,9 +742,7 @@ class ClientChannel(_BaseChannel):
                    sub_field_name=sub_field_name,
                    )
 
-    def read_init(self, *, ioid=None,
-                  pvrequest: str = 'field()'
-                  ) -> ChannelGetRequest:
+    def read(self, *, ioid=None, pvrequest: str = 'field()') -> ChannelGetRequest:
         """
         Generate a valid :class:`ChannelGetRequest`.
 
@@ -759,35 +758,13 @@ class ClientChannel(_BaseChannel):
         if ioid is None:
             ioid = self.circuit.new_ioid()
 
-        cls = self.circuit.messages[ApplicationCommand.GET]
+        cls = typing.cast(Type[ChannelGetRequest],
+                          self.circuit.messages[ApplicationCommand.GET])
         if not isinstance(pvrequest, PVRequest):
             pvrequest = PVRequest(data=pvrequest)
 
-        return cls(server_chid=self.sid,
-                   ioid=ioid,
-                   subcommand=Subcommand.INIT,
-                   pv_request=pvrequest,
-                   )
-
-    def read(self, ioid, interface) -> ChannelGetRequest:
-        """
-        Generate a valid :class:`ChannelGetRequest`.
-
-        Parameters
-        ----------
-        ioid
-
-        Returns
-        -------
-        ChannelGetRequest
-        """
-        # TODO state machine for get requests?
-        cls = self.circuit.messages[ApplicationCommand.GET]
-        return cls(server_chid=self.sid,
-                   ioid=ioid,
-                   subcommand=Subcommand.GET,  # DEFAULT is acceptable too
-                   interface=dict(pv_data=interface),
-                   )
+        instance = cls(server_chid=self.sid, ioid=ioid)
+        return instance.as_init(pv_request=pvrequest)
 
     def subscribe_init(self, *,
                        ioid=None,
@@ -855,13 +832,25 @@ class ClientChannel(_BaseChannel):
             ioid = self.circuit.new_ioid()
 
         if not isinstance(pvrequest, PVRequest):
+            print('pvreq is\n', pvrequest)
             pvrequest = PVRequest(data=pvrequest)
+            print('pvreq is\n', pvrequest.interface.summary())
 
         cls = self.circuit.messages[ApplicationCommand.PUT]
         return cls(server_chid=self.sid,
                    ioid=ioid,
                    subcommand=Subcommand.INIT,
                    pv_request=pvrequest,
+                   )
+
+    def write_get(self, ioid) -> ChannelPutRequest:
+        """
+        Generate a valid :class:`ChannelPutRequest`.
+        """
+        cls = self.circuit.messages[ApplicationCommand.PUT]
+        return cls(server_chid=self.sid,
+                   ioid=ioid,
+                   subcommand=Subcommand.GET,
                    )
 
     def write(self, ioid, data, bitset, *, interface=None) -> ChannelPutRequest:
@@ -923,28 +912,7 @@ class ServerChannel(_BaseChannel):
                    interface=interface,
                    )
 
-    def read_init(self, ioid, interface, *,
-                  status: Status = _StatusOK,
-                  ) -> ChannelGetResponse:
-        """
-        Generate a valid :class:`ChannelGetResponse`.
-
-        Parameters
-        ----------
-        ioid
-
-        Returns
-        -------
-        ChannelGetResponse
-        """
-        cls = self.circuit.messages[ApplicationCommand.GET]
-        return cls(ioid=ioid,
-                   subcommand=Subcommand.INIT,
-                   pv_structure_if=interface,
-                   status=status,
-                   )
-
-    def read(self, ioid, data,
+    def read(self, ioid, interface, *,
              status: Status = _StatusOK,
              ) -> ChannelGetResponse:
         """
@@ -958,10 +926,71 @@ class ServerChannel(_BaseChannel):
         -------
         ChannelGetResponse
         """
-        # TODO state machine for subcommand requests?
         cls = self.circuit.messages[ApplicationCommand.GET]
+        instance = cls(ioid=ioid, status=status)
+        return instance.as_init(pv_structure_if=interface)
+
+    def write_init(self, ioid, interface, *,
+                   status: Status = _StatusOK,
+                   ) -> ChannelPutResponse:
+        """
+        Generate a valid :class:`ChannelPutResponse`.
+
+        Parameters
+        ----------
+        ioid
+
+        Returns
+        -------
+        ChannelPutResponse
+        """
+        cls = typing.cast(Type[ChannelPutResponse],
+                          self.circuit.messages[ApplicationCommand.PUT])
         return cls(ioid=ioid,
-                   subcommand=Subcommand.GET,  # DEFAULT is acceptable too
-                   pv_data=data,
+                   subcommand=Subcommand.INIT,
+                   put_structure_if=interface,
+                   status=status,
+                   )
+
+    def write_get(self, ioid, data,
+                  status: Status = _StatusOK,
+                  ) -> ChannelPutResponse:
+        """
+        Generate a valid :class:`ChannelPutResponse`.
+
+        Parameters
+        ----------
+        ioid
+
+        Returns
+        -------
+        ChannelPutResponse
+        """
+        cls = typing.cast(Type[ChannelPutResponse],
+                          self.circuit.messages[ApplicationCommand.PUT])
+        return cls(ioid=ioid,
+                   subcommand=Subcommand.GET,
+                   put_data=data,
+                   status=status,
+                   )
+
+    def write(self, ioid,
+              status: Status = _StatusOK
+              ) -> ChannelPutResponse:
+        """
+        Generate a valid :class:`ChannelPutResponse`.
+
+        Parameters
+        ----------
+        ioid
+
+        Returns
+        -------
+        ChannelPutResponse
+        """
+        cls = typing.cast(Type[ChannelPutResponse],
+                          self.circuit.messages[ApplicationCommand.PUT])
+        return cls(ioid=ioid,
+                   subcommand=Subcommand.DEFAULT,
                    status=status,
                    )

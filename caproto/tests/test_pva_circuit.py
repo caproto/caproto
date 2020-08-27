@@ -113,17 +113,17 @@ def test_channel_get(client: pva.ClientVirtualCircuit,
     #      server_chan.read_interface(ioid=interface_req.ioid,
     #                                 interface=server_value))
 
-    client_init = client_chan.read_init()
-    send(client, server, client_init)
-    send(server, client, server_chan.read_init(ioid=client_init.ioid,
-                                               interface=server_value))
+    client_req = client_chan.read()
+    server_resp = server_chan.read(ioid=client_req.ioid,
+                                   interface=server_value)
+    send(client, server, client_req)
+    send(server, client, server_resp)
 
-    send(client, server, client_chan.read(ioid=client_init.ioid,
-                                          interface=server_value))
+    send(client, server, client_req.as_get())
 
     data_bs = pva.DataWithBitSet(data=server_value, bitset=pva.BitSet({0}))
     roundtrip = send(server, client,
-                     server_chan.read(ioid=client_init.ioid, data=data_bs))
+                     server_resp.as_get(pv_data=data_bs))
 
     assert hash(roundtrip[0].pv_data.interface) == hash(Data._pva_struct_)
     assert roundtrip[0].pv_data.data == {'a': 4, 'b': 'string'}

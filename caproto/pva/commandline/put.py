@@ -78,7 +78,6 @@ def main():
             pv_name=args.pv_name, data=data, timeout=args.timeout,
         )
 
-        initial = initial.dataclass_instance
         if args.terse:
             initial = getattr(initial, 'value', initial)
 

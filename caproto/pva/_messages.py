@@ -2,6 +2,7 @@ import ctypes
 import dataclasses
 import enum
 import functools
+import inspect
 import logging
 import typing
 from typing import Dict, List, Optional, Sequence, Tuple, Type, Union
@@ -259,6 +260,35 @@ def _array_property(name, doc):
 _StatusOK = Status(StatusType.OK)
 
 
+def _handles(subcommand: SubcommandType, fields: AdditionalFields):
+    """
+    A decorator that marks a handler method for initializing a Subcommand.
+
+    Parameters
+    ----------
+    subcommand : SubcommandType
+        The subcommand.
+
+    fields : list of RequiredField, OptionalField, etc.
+        The fields associated with the subcommand.
+    """
+
+    def wrapper(handler: callable) -> callable:
+        handler._subcommand_handler_ = True
+        if not hasattr(handler, 'subcommands'):
+            handler.subcommands = []
+
+        if isinstance(subcommand, typing.Iterable):
+            handler.subcommands.extend(list(subcommand))
+        else:
+            handler.subcommands.append(subcommand)
+
+        handler.fields = fields
+        return handler
+
+    return wrapper
+
+
 class Message:
     """Base class for all Messages."""
     _pack_ = 1
@@ -379,10 +409,10 @@ class Message:
 
             field_interface = field.type
 
-            if field_interface in {DataWithBitSet}:
+            if field_interface is DataWithBitSet:
                 try:
-                    field_interface = field_interface(
-                        interface=cache.ioid_interfaces[msg.ioid],
+                    field_interface = DataWithBitSet(
+                        data=cache.ioid_interfaces[msg.ioid],
                     )
                 except KeyError:
                     raise RuntimeError(
@@ -470,6 +500,79 @@ class SubcommandMessage(AdditionalFieldsMessage):
         except KeyError:
             raise ValueError(f'Invalid (or currently unhandled) subcommand'
                              f' for class {cls}: {subcommand}') from None
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if issubclass(cls, (_LE, _BE)):
+            # Don't do this for the mixins
+            return
+
+        if not hasattr(cls, '_additional_fields_'):
+            cls._additional_fields_ = []
+
+        if not hasattr(cls, '_subcommand_fields_'):
+            cls._subcommand_fields_ = {
+                subcommand: []
+                for subcommand in Subcommand
+            }
+
+        for attr, obj in inspect.getmembers(cls):
+            if getattr(obj, '_subcommand_handler_', None):
+                for cmd in obj.subcommands:
+                    old = cls._subcommand_fields_.get(cmd, [])
+                    if len(old):
+                        raise RuntimeError(
+                            f'Specified subcommand twice: {old}')
+
+                    cls._subcommand_fields_[cmd] = obj.fields
+
+    def as_subcommand(self, subcommand: SubcommandType, **kwargs):
+        """
+        Update in-place to the specified subcommand.
+
+        Parameters
+        ----------
+        subcommand : Subcommand
+            The subcommand type.
+
+        **kwargs :
+            Keyword arguments required for the subcommand.
+
+        Returns
+        -------
+        self
+        """
+        self.subcommand = subcommand
+
+        missing = set()
+        extra = set()
+
+        fields = self._subcommand_fields_[subcommand]
+        for field in fields:
+            try:
+                value = kwargs[field.name]
+            except KeyError:
+                if not isinstance(field, OptionalField):
+                    missing.add(field.name)
+            else:
+                setattr(self, field.name, value)
+
+        required = set(field.name for field in fields)
+        extra = set(kwargs) - required
+
+        if missing or extra:
+            required = ''.join(('Required=', ', '.join(required)))
+            missing = ''.join(('Missing=', ', '.join(missing))) if missing else ''
+            extra = ''.join(('Extra=', ', '.join(extra))) if extra else ''
+            raise ValueError(
+                f'Argument mismatch for {self.__class__.__name__} subcommand '
+                f'{subcommand}: {required} {missing} {extra}'
+            )
+
+        return self
+
+    def as_init(self, **kwargs):
+        return self.as_subcommand(Subcommand.INIT, **kwargs)
 
 
 class _LE(ctypes.LittleEndianStructure):
@@ -773,6 +876,8 @@ class ConnectionValidationResponse(AdditionalFieldsMessage):
     client_buffer_size: int
     client_registry_size: int
     connection_qos: int
+    auth_nz: str
+    data: FieldDescAndData
 
     _fields_ = [
         ('client_buffer_size', ctypes.c_int32),
@@ -1044,23 +1149,22 @@ class ChannelGetRequest(SubcommandMessage):
 
     server_chid: int
     ioid: int
+    pv_request: PVRequest
 
     _fields_ = [
         ('server_chid', ctypes.c_int32),
         ('ioid', ctypes.c_int32),
         ('subcommand', ctypes.c_byte),
     ]
-    _additional_fields_: AdditionalFields = []
-    _subcommand_fields_: SubcommandFields = {
-        Subcommand.INIT: [
-            RequiredField('pv_request', PVRequest),
-        ],
-        Subcommand.GET: [],
-        Subcommand.DEFAULT: [
-            # Alias for GET
-        ],
-        Subcommand.DESTROY: [],
-    }
+
+    @_handles(Subcommand.INIT,
+              [RequiredField('pv_request', PVRequest)])
+    def as_init(self, pv_request: PVRequest) -> 'ChannelGetRequest':
+        return self.as_subcommand(Subcommand.INIT, pv_request=pv_request)
+
+    @_handles(Subcommand.GET, [])
+    def as_get(self) -> 'ChannelGetRequest':
+        return self.as_subcommand(Subcommand.GET)
 
 
 class ChannelGetResponse(SubcommandMessage):
@@ -1080,35 +1184,22 @@ class ChannelGetResponse(SubcommandMessage):
     _additional_fields_: AdditionalFields = [
         RequiredField('status', Status),
     ]
-    _subcommand_fields_: SubcommandFields = {
-        Subcommand.INIT: [
-            SuccessField('pv_structure_if', FieldDesc),
-        ],
-        Subcommand.GET: [
-            SuccessField('pv_data', DataWithBitSet,
-                         # `pv_structure_if` is tracked by ioid
-                         ),
-        ],
-        Subcommand.DEFAULT: [
-            # Alias for GET
-            SuccessField('pv_data', DataWithBitSet),
-        ],
-        Subcommand.DESTROY: [],
-    }
 
-    def __init__(self, ioid, subcommand, status=_StatusOK,
-                 pv_structure_if=None, pv_data=None):
-        super().__init__(ioid=ioid, subcommand=int(subcommand))
+    def __init__(self, ioid, status=_StatusOK, subcommand=Subcommand.INIT):
+        super().__init__(ioid=ioid, subcommand=subcommand)
         self.status = status
-        if subcommand == Subcommand.INIT:
-            self.pv_structure_if = pv_structure_if
-            if pv_data is not None:
-                raise ValueError('pv_data specified but unused')
-            # TODO: generically set these?
-        elif subcommand == Subcommand.GET or subcommand == Subcommand.DEFAULT:
-            self.pv_data = pv_data
-            if pv_structure_if is not None:
-                raise ValueError('pv_structure_if specified but unused')
+
+    @_handles(Subcommand.INIT,
+              [SuccessField('pv_structure_if', FieldDesc)])
+    def as_init(self, pv_structure_if: FieldDesc) -> 'ChannelGetResponse':
+        return self.as_subcommand(Subcommand.INIT,
+                                  pv_structure_if=pv_structure_if)
+
+    @_handles([Subcommand.GET, Subcommand.DEFAULT],
+              [SuccessField('pv_data', DataWithBitSet)]
+              )
+    def as_get(self, pv_data: DataWithBitSet) -> 'ChannelGetResponse':
+        return self.as_subcommand(Subcommand.GET, pv_data=pv_data)
 
 
 class ChannelFieldInfoRequest(AdditionalFieldsMessage):
@@ -1182,7 +1273,6 @@ class ChannelPutRequest(SubcommandMessage):
         ],
         Subcommand.GET: [
             # Query what the last put request was
-            # RequiredField('pv_put_data', Data),  # TODO
         ],
         Subcommand.DEFAULT: [
             # Perform the put
@@ -1217,9 +1307,32 @@ class ChannelPutResponse(SubcommandMessage):
         Subcommand.DEFAULT: [
             # The actual put
         ],
+        Subcommand.GET: [
+            SuccessField('put_data', DataWithBitSet),
+        ],
         Subcommand.DESTROY: [
         ],
     }
+
+    def __init__(self, ioid, subcommand, status=_StatusOK, *,
+                 put_structure_if=None, put_data=None):
+        super().__init__(ioid=ioid, subcommand=int(subcommand))
+        self.status = status
+        # TODO: needs refactoring / generalizing
+        if subcommand == Subcommand.INIT:
+            self.put_structure_if = put_structure_if
+            assert put_structure_if is not None
+            if put_data is not None:
+                raise ValueError('put_data specified but unused')
+        elif subcommand == Subcommand.DEFAULT:
+            if put_structure_if is not None:
+                raise ValueError('put_structure_if specified but unused')
+            if put_data is not None:
+                raise ValueError('put_data specified but unused')
+        elif subcommand == Subcommand.GET:
+            if put_structure_if is not None:
+                raise ValueError('put_structure_if specified but unused')
+            self.put_data = put_data
 
 
 class ChannelPutGetRequest(SubcommandMessage):
@@ -1363,7 +1476,7 @@ class ChannelRequestCancel(Message):
     -----
     This is not yet implemented in caproto-pva.
 
-    There is no ChannelRequestCancelResponse.
+    ** There is no response message defined in the protocol. **
     """
     ID = ApplicationCommand.CANCEL_REQUEST
 
@@ -1653,6 +1766,7 @@ messages: _MessagesDict = {
         ApplicationCommand.MONITOR: ChannelMonitorRequestLE,
         ApplicationCommand.PROCESS: ChannelProcessRequestLE,
         ApplicationCommand.RPC: ChannelRpcRequestLE,
+        ApplicationCommand.CANCEL_REQUEST: ChannelRequestCancelLE,
     },
 
     # BIG ENDIAN, CLIENT -> SERVER
@@ -1671,6 +1785,7 @@ messages: _MessagesDict = {
         ApplicationCommand.MONITOR: ChannelMonitorRequestBE,
         ApplicationCommand.PROCESS: ChannelProcessRequestBE,
         ApplicationCommand.RPC: ChannelRpcRequestBE,
+        ApplicationCommand.CANCEL_REQUEST: ChannelRequestCancelBE,
     },
 
     # LITTLE ENDIAN, SERVER -> CLIENT

@@ -300,45 +300,6 @@ class StructuredField(FieldDesc):
         return dataclass_from_field_desc(self)
 
 
-def _parse_repr_lines(text):
-    '''
-    Hierarchy of lists/tuples from indented lines
-
-    Used for generating a structure from a pvAccess documentation-like
-    representation.
-    '''
-    if not isinstance(text, str):
-        text = '\n'.join(text)
-
-    text = textwrap.dedent(text)
-    lines = text.split('\n')
-
-    indent = 0
-    root = []
-    stack = [(0, root)]
-    current = root
-
-    for line in lines:
-        if not line.strip():
-            continue
-
-        line_indent = len(line) - len(line.strip())
-        if line_indent > indent:
-            parent = current.pop(-1)
-            new = []
-            stack.append((line_indent, new))
-            current.append((parent, new))
-            current = new
-            indent = line_indent
-        elif line_indent < indent:
-            while line_indent < indent:
-                indent, current = stack.pop(-1)
-            stack.append((indent, current))
-        current.append(line.strip())
-
-    return root
-
-
 def _children_from_field_list(fields: typing.Iterable[FieldDesc]
                               ) -> Dict[str, 'FieldDesc']:
     """

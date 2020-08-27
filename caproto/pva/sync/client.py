@@ -236,33 +236,29 @@ def _read(chan, timeout, pvrequest):
     interface_req = chan.read_interface()
     send(chan.circuit, interface_req)
 
-    init_req = chan.read_init(pvrequest=pvrequest)
-    ioid = init_req.ioid
+    read_request = chan.read(pvrequest=pvrequest)
+    send(chan.circuit, read_request)
 
-    send(chan.circuit, init_req)
-
-    for command in _receive_commands(chan.circuit, timeout):
-        if isinstance(command, ChannelFieldInfoResponse):
-            # interface = command.field_if
+    for response in _receive_commands(chan.circuit, timeout):
+        if isinstance(response, ChannelFieldInfoResponse):
+            # interface = response.field_if
             ...
-        elif isinstance(command, ChannelGetResponse):
-            if not command.status.is_successful:
-                raise ErrorResponseReceived(str(command.status))
-            if command.status.message:
-                logger.info('Message from server: %s', command.status)
+        elif isinstance(response, ChannelGetResponse):
+            if not response.status.is_successful:
+                raise ErrorResponseReceived(str(response.status))
+            if response.status.message:
+                logger.info('Message from server: %s', response.status)
 
-            if command.subcommand == Subcommand.INIT:
-                interface = command.pv_structure_if
-                read_req = chan.read(ioid, interface=interface)
-                send(chan.circuit, read_req)
-            elif command.subcommand == Subcommand.GET:
-                interface = command.pv_data.interface
-                value = command.pv_data.data
+            if response.subcommand == Subcommand.INIT:
+                send(chan.circuit, read_request.as_get())
+            elif response.subcommand == Subcommand.GET:
+                interface = response.pv_data.interface
+                value = response.pv_data.data
                 dataclass = dataclass_from_field_desc(interface)
                 instance = dataclass()
                 fill_dataclass(instance, value)
-                command.dataclass_instance = instance
-                return command
+                response.dataclass_instance = instance
+                return response
 
 
 def read(pv_name, *, pvrequest='field()', verbose=False, timeout=1):
@@ -395,12 +391,12 @@ def monitor(pv_name, *, pvrequest, verbose=False, timeout=1,
             del global_circuits[chan.circuit.address]
 
 
-def _write(chan, timeout, value):
+def _read_and_write(chan, timeout, value, pvrequest='field()'):
     """
-    Write structured data to channel.
+    Read then write structured data to the given channel.
     """
     # TODO: validate dictionary keys against the interface.
-    init_req = chan.write_init(pvrequest='field()')
+    init_req = chan.write_init(pvrequest=pvrequest)
     ioid = init_req.ioid
     send(chan.circuit, init_req)
     if is_pva_dataclass_instance(value):
@@ -408,24 +404,36 @@ def _write(chan, timeout, value):
     if not isinstance(value, dict):
         value = {'value': value}
 
+    dataclass = None
+    old_value = None
+
     for command in _receive_commands(chan.circuit, timeout):
-        if isinstance(command, ChannelFieldInfoResponse):
-            # interface = command.field_if
-            ...
-        elif isinstance(command, ChannelPutResponse):
-            if not command.status.is_successful:
-                raise ErrorResponseReceived(str(command.status))
-            if command.status.message:
-                logger.info('Message from server: %s', command.status)
-            if command.subcommand == Subcommand.INIT:
-                interface = command.put_structure_if
-                instance = dataclass_from_field_desc(interface)()
-                # TODO logic can move up to the circuit
-                bitset = fill_dataclass(instance, value)
-                write_req = chan.write(ioid, instance, bitset)
-                send(chan.circuit, write_req)
-            elif command.subcommand == Subcommand.DEFAULT:
-                return command
+        if not isinstance(command, ChannelPutResponse):
+            continue
+
+        command = typing.cast(ChannelPutResponse, command)
+        if not command.status.is_successful:
+            raise ErrorResponseReceived(str(command.status))
+        if command.status.message:
+            logger.info('Message from server: %s', command.status)
+        if command.subcommand == Subcommand.INIT:
+            # Get the latest value with this request
+            write_req = chan.write_get(ioid)
+            send(chan.circuit, write_req)
+
+            # Then perform the write request
+            dataclass = dataclass_from_field_desc(command.put_structure_if)
+            instance = dataclass()
+
+            # TODO logic can move up to the circuit?
+            bitset = fill_dataclass(instance, value)
+            write_req = chan.write(ioid, instance, bitset)
+            send(chan.circuit, write_req)
+        elif command.subcommand == Subcommand.GET:
+            old_value = dataclass()
+            bitset = fill_dataclass(old_value, command.put_data.data)
+        elif command.subcommand == Subcommand.DEFAULT:
+            return old_value, command
 
 
 def read_write_read(pv_name: str, data: dict, *,
@@ -454,8 +462,8 @@ def read_write_read(pv_name: str, data: dict, *,
         udp_sock.close()
 
     try:
-        initial = _read(chan, timeout, pvrequest=pvrequest)
-        res = _write(chan, timeout, data)
+        initial, res = _read_and_write(chan, timeout, data,
+                                       pvrequest=pvrequest)
         final = _read(chan, timeout, pvrequest=pvrequest)
     finally:
         try:
