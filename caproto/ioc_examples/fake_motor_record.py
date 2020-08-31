@@ -34,6 +34,11 @@ class FakeMotor(PVGroup):
             'resolution': resolution,
         }
 
+    @motor.putter
+    async def motor(self, instance, value):
+        self.stale = True
+        return value
+
     @motor.startup
     async def motor(self, instance, async_lib):
         self.async_lib = async_lib
@@ -55,18 +60,23 @@ class FakeMotor(PVGroup):
             # compute how many steps, should come up short as there will
             # be a final write of the return value outside of this call
             num_steps = int(total_time // dwell)
-
-            if abs(diff) < 1e-9:
+            if abs(diff) < 1e-9 and not self.stale:
+                if fields.stop.value != 0:
+                    await fields.stop.write(0)
                 await async_lib.library.sleep(dwell)
                 continue
 
-            await fields.done_moving_to_value.write(1)
+            # make sure we win the race
+            if fields.stop.value != 0:
+                await fields.stop.write(0)
+
             await fields.done_moving_to_value.write(0)
             await fields.motor_is_moving.write(1)
 
             readback = fields.user_readback_value.value
             step_size = diff / num_steps if num_steps > 0 else 0.0
             resolution = max((fields.motor_step_size.value, 1e-10))
+
             for _ in range(num_steps):
                 if fields.stop.value != 0:
                     await fields.stop.write(0)
@@ -88,6 +98,7 @@ class FakeMotor(PVGroup):
 
             await fields.motor_is_moving.write(0)
             await fields.done_moving_to_value.write(1)
+            self.stale = False
 
 
 class FakeMotorIOC(PVGroup):
