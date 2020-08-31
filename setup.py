@@ -45,13 +45,8 @@ extras_require = {
     'async': ['curio>=1.2', 'trio>=0.12.1'],
 }
 
-if sys.version_info == (3, 6):
-    # For PVA support of dataclasses
-    extras_require['standard'].append('dataclasses')
-
 extras_require['complete'] = sorted(set(sum(extras_require.values(), [])))
 extras_require['test'] = sorted(set(sum(extras_require.values(), test_requirements)))
-
 
 setup(name='caproto',
       version=versioneer.get_version(),
@@ -83,9 +78,6 @@ setup(name='caproto',
               'caproto-shark = caproto.commandline.shark:main',
               'caproto-defaultdict-server = caproto.ioc_examples.defaultdict_server:main',
               'caproto-spoof-beamline = caproto.ioc_examples.spoof_beamline:main',
-              'caproto-pva-get = caproto.pva.commandline.get:main',
-              'caproto-pva-monitor = caproto.pva.commandline.monitor:main',
-              'caproto-pva-put = caproto.pva.commandline.put:main',
           ],
       },
       include_package_data=True,
