@@ -46,7 +46,6 @@ __all__ = (  # noqa F822
     'apply_arr_filter',
     'ChannelFilter',
     'get_environment_variables',
-    'get_address_and_port_from_string',
     'get_address_list',
     'get_local_address',
     'get_beacon_address_list',

@@ -173,10 +173,10 @@ def test_env_util_smoke(protocol):
 def test_split_address(addr, default_port, expected):
     if expected in {ValueError, }:
         with pytest.raises(expected):
-            ca.get_address_and_port_from_string(addr, default_port)
+            ca._utils.get_address_and_port_from_string(addr, default_port)
         return
 
-    assert ca.get_address_and_port_from_string(addr, default_port) == expected
+    assert ca._utils.get_address_and_port_from_string(addr, default_port) == expected
 
 
 def patch_env(monkeypatch, env_vars):
