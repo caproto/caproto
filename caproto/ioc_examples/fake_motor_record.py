@@ -26,6 +26,7 @@ class FakeMotor(PVGroup):
                  tick_rate_hz=10.,
                  **kwargs):
         super().__init__(*args, **kwargs)
+        self._have_new_position = False
         self.tick_rate_hz = tick_rate_hz
         self.defaults = {
             'velocity': velocity,
@@ -36,7 +37,7 @@ class FakeMotor(PVGroup):
 
     @motor.putter
     async def motor(self, instance, value):
-        self.stale = True
+        self._have_new_position = True
         return value
 
     @motor.startup
@@ -60,13 +61,12 @@ class FakeMotor(PVGroup):
             # compute how many steps, should come up short as there will
             # be a final write of the return value outside of this call
             num_steps = int(total_time // dwell)
-            if abs(diff) < 1e-9 and not self.stale:
+            if abs(diff) < 1e-9 and not self._have_new_position:
                 if fields.stop.value != 0:
                     await fields.stop.write(0)
                 await async_lib.library.sleep(dwell)
                 continue
 
-            # make sure we win the race
             if fields.stop.value != 0:
                 await fields.stop.write(0)
 
@@ -98,7 +98,7 @@ class FakeMotor(PVGroup):
 
             await fields.motor_is_moving.write(0)
             await fields.done_moving_to_value.write(1)
-            self.stale = False
+            self._have_new_position = False
 
 
 class FakeMotorIOC(PVGroup):
