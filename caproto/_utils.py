@@ -346,7 +346,7 @@ def get_address_list(*, protocol=Protocol.ChannelAccess):
     return list(set(addresses + auto_addr_list))
 
 
-def get_client_address_list(port=None, *, protocol=Protocol.ChannelAccess):
+def get_client_address_list(*, protocol=Protocol.ChannelAccess):
     '''
     Get channel access client address list in the form of (host, port) based on
     environment variables.
@@ -356,12 +356,9 @@ def get_client_address_list(port=None, *, protocol=Protocol.ChannelAccess):
     :func:`get_address_list`
     '''
     protocol = Protocol(protocol)
-
-    if port is None:
-        port = get_environment_variables()[f'EPICS_{protocol}_SERVER_PORT']
-
+    default_port = get_environment_variables()[f'EPICS_{protocol}_SERVER_PORT']
     return list(set(
-        get_address_and_port_from_string(addr, port)
+        get_address_and_port_from_string(addr, default_port)
         for addr in get_address_list(protocol=protocol)
     ))
 

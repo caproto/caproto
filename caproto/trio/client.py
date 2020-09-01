@@ -292,7 +292,7 @@ class SharedBroadcaster:
         tags = {'role': 'CLIENT',
                 'our_address': self.broadcaster.client_address,
                 'direction': '--->>>'}
-        for host_tuple in ca.get_client_address_list(port):
+        for host_tuple in ca.get_client_address_list():
             tags['their_address'] = host_tuple
             self.broadcaster.log.debug(
                 '%d commands %dB',
@@ -322,14 +322,33 @@ class SharedBroadcaster:
         self.nursery.start_soon(self._broadcaster_queue_loop)
         await self.nursery.start(self._broadcaster_recv_loop)
 
+    async def _register(self):
+        commands = [self.broadcaster.register('127.0.0.1')]
+        bytes_to_send = self.broadcaster.send(*commands)
+        addr = (ca.get_local_address(), self.environ['EPICS_CA_REPEATER_PORT'])
+        tags = {
+            'role': 'CLIENT',
+            'our_address': self.broadcaster.client_address,
+            'direction': '--->>>',
+            'their_address': addr,
+        }
+        tags['their_address'] = addr
+        self.broadcaster.log.debug(
+            '%d commands %dB', len(commands), len(bytes_to_send), extra=tags)
+        try:
+            await self.udp_sock.sendto(bytes_to_send, addr)
+        except OSError as ex:
+            host, specified_port = addr
+            self.log.exception('%s while sending %d bytes to %s:%d',
+                               ex, len(bytes_to_send), host, specified_port)
+
     async def _broadcaster_recv_loop(self, task_status):
         self.udp_sock = ca.bcast_socket(socket_module=socket)
         # Must bind or getsocketname() will raise on Windows.
         # See https://github.com/caproto/caproto/issues/514.
         await self.udp_sock.bind(('', 0))
         self.broadcaster.our_address = safe_getsockname(self.udp_sock)
-        command = self.broadcaster.register('127.0.0.1')
-        await self.send(self.environ['EPICS_CA_REPEATER_PORT'], command)
+        await self._register()
         task_status.started()
 
         while True:

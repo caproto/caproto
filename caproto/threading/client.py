@@ -397,9 +397,24 @@ class SharedBroadcaster:
     def _register(self):
         'Send a registration request to the repeater'
         self._registration_last_sent = time.monotonic()
-        command = self.broadcaster.register()
+        commands = [self.broadcaster.register()]
+        bytes_to_send = self.broadcaster.send(*commands)
+        addr = (ca.get_local_address(), self.environ['EPICS_CA_REPEATER_PORT'])
+        tags = {
+            'role': 'CLIENT',
+            'our_address': self.broadcaster.client_address,
+            'direction': '--->>>',
+            'their_address': addr,
+        }
+        self.broadcaster.log.debug(
+            '%d commands %dB', len(commands), len(bytes_to_send), extra=tags)
 
-        self.send(self.environ['EPICS_CA_REPEATER_PORT'], command)
+        try:
+            self.udp_sock.sendto(bytes_to_send, addr)
+        except OSError as ex:
+            host, specified_port = addr
+            self.log.exception('%s while sending %d bytes to %s:%d',
+                               ex, len(bytes_to_send), host, specified_port)
         self._searching_enabled.set()
 
     def new_id(self):
@@ -441,7 +456,7 @@ class SharedBroadcaster:
             self.selector.thread.join()
             self._retry_unanswered_searches_thread.join()
 
-    def send(self, port, *commands):
+    def send(self, *commands):
         """
         Process a command and transport it over the UDP socket.
         """
@@ -449,7 +464,7 @@ class SharedBroadcaster:
         tags = {'role': 'CLIENT',
                 'our_address': self.broadcaster.client_address,
                 'direction': '--->>>'}
-        for host_tuple in ca.get_client_address_list(port):
+        for host_tuple in ca.get_client_address_list():
             tags['their_address'] = host_tuple
             self.broadcaster.log.debug(
                 '%d commands %dB',
@@ -878,9 +893,7 @@ class SharedBroadcaster:
             version_req = ca.VersionRequest(0, ca.DEFAULT_PROTOCOL_VERSION)
             for batch in batch_requests(requests,
                                         SEARCH_MAX_DATAGRAM_BYTES - len(version_req)):
-                self.send(self.ca_server_port,
-                          version_req,
-                          *batch)
+                self.send(version_req, *batch)
 
             wait_time = max(0, interval - (time.monotonic() - t))
             # Double the interval for the next loop.

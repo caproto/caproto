@@ -257,7 +257,7 @@ class SharedBroadcaster:
         self.udp_sock = None
         self.log.debug('Broadcaster disconnect complete')
 
-    async def send(self, port, *commands):
+    async def send(self, *commands):
         """
         Process a command and tranport it over the UDP socket.
         """
@@ -265,7 +265,7 @@ class SharedBroadcaster:
         tags = {'role': 'CLIENT',
                 'our_address': self.broadcaster.client_address,
                 'direction': '--->>>'}
-        for host_tuple in ca.get_client_address_list(port):
+        for host_tuple in ca.get_client_address_list():
             tags['their_address'] = host_tuple
             self.broadcaster.log.debug(
                 '%d commands %dB',
@@ -284,9 +284,28 @@ class SharedBroadcaster:
         await curio.spawn(self._broadcaster_queue_loop, daemon=True)
         await self.loop_ready_event.wait()
 
+    async def _register(self):
+        commands = [self.broadcaster.register('127.0.0.1')]
+        bytes_to_send = self.broadcaster.send(*commands)
+        addr = (ca.get_local_address(), self.environ['EPICS_CA_REPEATER_PORT'])
+        tags = {
+            'role': 'CLIENT',
+            'our_address': self.broadcaster.client_address,
+            'direction': '--->>>',
+            'their_address': addr,
+        }
+        tags['their_address'] = addr
+        self.broadcaster.log.debug(
+            '%d commands %dB', len(commands), len(bytes_to_send), extra=tags)
+        try:
+            await self.udp_sock.sendto(bytes_to_send, addr)
+        except OSError as ex:
+            host, specified_port = addr
+            self.log.exception('%s while sending %d bytes to %s:%d',
+                               ex, len(bytes_to_send), host, specified_port)
+
     async def _broadcaster_recv_loop(self):
-        command = self.broadcaster.register('127.0.0.1')
-        await self.send(self.environ['EPICS_CA_REPEATER_PORT'], command)
+        await self._register()
         await self.loop_ready_event.set()
 
         while True:
@@ -349,7 +368,7 @@ class SharedBroadcaster:
         self.unanswered_searches[search_command.cid] = name
         # Wait for the SearchResponse.
         while search_command.cid in self.unanswered_searches:
-            await self.send(self.ca_server_port, ver_command, search_command)
+            await self.send(ver_command, search_command)
             await curio.ignore_after(1, self.wait_on_new_command)
         return name
 

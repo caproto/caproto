@@ -3,19 +3,20 @@
 
 import collections
 import functools
+import getpass
+import socket
+import threading
+import time
+
+import pytest
+
 import caproto
+import caproto as ca
 import caproto._utils
 import caproto.threading.client
-import time
-import socket
-import getpass
-import threading
-
-from caproto.threading.client import (Context, SharedBroadcaster, Batch,
-                                      ContextDisconnectedError)
 from caproto import ChannelType
-import caproto as ca
-import pytest
+from caproto.threading.client import (Batch, Context, ContextDisconnectedError,
+                                      SharedBroadcaster)
 
 from .conftest import default_setup_module as setup_module  # noqa
 from .conftest import default_teardown_module as teardown_module  # noqa
@@ -94,7 +95,7 @@ def test_specified_port(monkeypatch, context, ioc):
     address_list = list(caproto.get_address_list())
     address_list.append('{}:{}'.format(circuit.host, circuit.port))
 
-    def get_address_list():
+    def get_address_list(*, protocol='CA'):
         return address_list
 
     for module in (caproto._utils, caproto, caproto.threading.client):
