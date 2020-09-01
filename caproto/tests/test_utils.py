@@ -252,7 +252,10 @@ def test_client_addresses(monkeypatch, protocol, default_port, env_auto,
 
     env[f'EPICS_{protocol}_ADDR_LIST'] = env_addr
     env[f'EPICS_{protocol}_AUTO_ADDR_LIST'] = env_auto
-    env[f'EPICS_{protocol}_SERVER_PORT'] = int(default_port)
+    if protocol == 'CA':
+        env['EPICS_CA_SERVER_PORT'] = int(default_port)
+    elif protocol == 'PVA':
+        env['EPICS_PVA_BROADCAST_PORT'] = int(default_port)
 
     patch_env(monkeypatch, env)
     assert set(ca.get_client_address_list(protocol=protocol)) == set(expected)
