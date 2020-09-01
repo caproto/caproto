@@ -61,12 +61,13 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
     repeater_port = env['EPICS_CA_REPEATER_PORT']
 
     client_address_list = ca.get_client_address_list()
-    for host, _ in client_address_list:
-        # Ignore the client address port and use the repeater port here.
-        try:
-            udp_sock.sendto(bytes_to_send, (host, repeater_port))
-        except OSError as exc:
-            raise ca.CaprotoNetworkError(f"Failed to send to {host}:{repeater_port}") from exc
+    local_address = ca.get_local_address()
+
+    try:
+        udp_sock.sendto(bytes_to_send, (local_address, repeater_port))
+    except OSError as exc:
+        raise ca.CaprotoNetworkError(
+            f"Failed to send to {local_address}:{repeater_port}") from exc
 
     logger.debug("Searching for %r....", pv_name)
     commands = (
