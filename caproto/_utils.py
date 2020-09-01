@@ -351,12 +351,20 @@ def get_client_address_list(*, protocol=Protocol.ChannelAccess):
     Get channel access client address list in the form of (host, port) based on
     environment variables.
 
+    For CA, the default port is ``EPICS_CA_SERVER_PORT``.
+    For PVA, the default port is ``EPICS_PVA_BROADCAST_PORT``.
+
     See Also
     --------
     :func:`get_address_list`
     '''
     protocol = Protocol(protocol)
-    default_port = get_environment_variables()[f'EPICS_{protocol}_SERVER_PORT']
+    env = get_environment_variables()
+    if protocol == Protocol.ChannelAccess:
+        default_port = env['EPICS_CA_SERVER_PORT']
+    else:
+        default_port = env['EPICS_PVA_BROADCAST_PORT']
+
     return list(set(
         get_address_and_port_from_string(addr, default_port)
         for addr in get_address_list(protocol=protocol)
