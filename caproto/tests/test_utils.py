@@ -12,8 +12,8 @@ def test_broadcast_auto_address_list():
     try:
         os.environ['EPICS_CA_ADDR_LIST'] = ''
         os.environ['EPICS_CA_AUTO_ADDR_LIST'] = 'YES'
-        expected = [bcast for addr, bcast in ca.get_netifaces_addresses()]
-        assert ca.get_address_list() == expected
+        expected = set(bcast for addr, bcast in ca.get_netifaces_addresses())
+        assert set(ca.get_address_list()) == expected
     finally:
         os.environ.clear()
         os.environ.update(env)
@@ -161,3 +161,125 @@ def test_env_util_smoke(protocol):
     ca._utils.get_manually_specified_beacon_addresses(protocol=protocol)
     ca._utils.get_manually_specified_client_addresses(protocol=protocol)
     ca.get_server_address_list(protocol=protocol)
+
+
+@pytest.mark.parametrize(
+    'addr, default_port, expected',
+    [pytest.param('1.2.3.4:56', 8, ('1.2.3.4', 56)),
+     pytest.param('1.2.3.4', 8, ('1.2.3.4', 8)),
+     pytest.param('[::]:34', 8, ValueError),
+     ]
+)
+def test_split_address(addr, default_port, expected):
+    if expected in {ValueError, }:
+        with pytest.raises(expected):
+            ca._utils.get_address_and_port_from_string(addr, default_port)
+        return
+
+    assert ca._utils.get_address_and_port_from_string(addr, default_port) == expected
+
+
+def patch_env(monkeypatch, env_vars):
+    """Patch `get_environment_variables` for testing below."""
+    def get_env():
+        return env_vars
+
+    monkeypatch.setattr(ca._utils, 'get_environment_variables', get_env)
+
+
+@pytest.mark.parametrize('protocol', list(ca.Protocol))
+@pytest.mark.parametrize(
+    'default_port, env_auto, env_addr, expected',
+    [
+        pytest.param(
+            8088, 'YES', '1.2.3.4 1.2.3.4:556',
+            [('1.2.3.4', 8088),
+             ('1.2.3.4', 556),
+             ('255.255.255.255', 8088),
+             ]
+        ),
+
+        pytest.param(
+            8088, 'NO', '1.2.3.4 1.2.3.4:556',
+            [('1.2.3.4', 8088),
+             ('1.2.3.4', 556),
+             ]
+        ),
+    ],
+)
+def test_beacon_addresses(monkeypatch, protocol, default_port, env_auto,
+                          env_addr, expected):
+    env = ca.get_environment_variables()
+
+    key = ca.Protocol(protocol).server_env_key
+    env[f'EPICS_{key}_BEACON_ADDR_LIST'] = env_addr
+    env[f'EPICS_{key}_AUTO_BEACON_ADDR_LIST'] = env_auto
+    if protocol == ca.Protocol.ChannelAccess:
+        env['EPICS_CAS_BEACON_PORT'] = int(default_port)
+    else:
+        env['EPICS_PVAS_BROADCAST_PORT'] = int(default_port)
+
+    patch_env(monkeypatch, env)
+    assert set(ca.get_beacon_address_list(protocol=protocol)) == set(expected)
+
+
+@pytest.mark.parametrize('protocol', list(ca.Protocol))
+@pytest.mark.parametrize(
+    'default_port, env_auto, env_addr, expected',
+    [
+        pytest.param(
+            8088, 'YES', '1.2.3.4 1.2.3.4:556',
+            [('1.2.3.4', 8088),
+             ('1.2.3.4', 556),
+             ('255.255.255.255', 8088),
+             ]
+        ),
+
+        pytest.param(
+            8088, 'NO', '1.2.3.4 1.2.3.4:556',
+            [('1.2.3.4', 8088),
+             ('1.2.3.4', 556),
+             ]
+        ),
+    ],
+)
+def test_client_addresses(monkeypatch, protocol, default_port, env_auto,
+                          env_addr, expected):
+    env = ca.get_environment_variables()
+
+    # Easier to test without netifaces
+    monkeypatch.setattr(ca._utils, 'netifaces', None)
+
+    env[f'EPICS_{protocol}_ADDR_LIST'] = env_addr
+    env[f'EPICS_{protocol}_AUTO_ADDR_LIST'] = env_auto
+    if protocol == 'CA':
+        env['EPICS_CA_SERVER_PORT'] = int(default_port)
+    elif protocol == 'PVA':
+        env['EPICS_PVA_BROADCAST_PORT'] = int(default_port)
+
+    patch_env(monkeypatch, env)
+    assert set(ca.get_client_address_list(protocol=protocol)) == set(expected)
+
+
+@pytest.mark.parametrize('protocol', list(ca.Protocol))
+@pytest.mark.parametrize(
+    'env_addr, expected',
+    [
+        pytest.param('1.2.3.4', {'1.2.3.4'}, id='normal'),
+        pytest.param('1.2.3.4 1.2.3.4:556', {'1.2.3.4'}, id='ignore-port',
+                     marks=pytest.mark.filterwarnings("ignore:Port specified"),
+                     ),
+        pytest.param('1.2.3.4 5.6.7.8:556', {'1.2.3.4', '5.6.7.8'},
+                     id='ignore-port-1',
+                     marks=pytest.mark.filterwarnings("ignore:Port specified"),
+                     ),
+        pytest.param('', ['0.0.0.0'], id='empty-list'),
+    ],
+)
+def test_server_addresses(monkeypatch, protocol, env_addr, expected):
+    env = ca.get_environment_variables()
+    key = ca.Protocol(protocol).server_env_key
+    env[f'EPICS_{key}_INTF_ADDR_LIST'] = env_addr
+
+    patch_env(monkeypatch, env)
+    assert set(ca.get_server_address_list(protocol=protocol)) == set(expected)

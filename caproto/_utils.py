@@ -7,12 +7,16 @@ import collections
 import enum
 import functools
 import inspect
+import ipaddress
 import json
+import logging
 import os
 import random
 import socket
+import struct
 import sys
 import threading
+import typing
 import weakref
 from collections import namedtuple
 from contextlib import contextmanager
@@ -43,8 +47,10 @@ __all__ = (  # noqa F822
     'ChannelFilter',
     'get_environment_variables',
     'get_address_list',
-    'get_server_address_list',
+    'get_local_address',
     'get_beacon_address_list',
+    'get_client_address_list',
+    'get_server_address_list',
     'get_netifaces_addresses',
     'ensure_bytes',
     'random_ports',
@@ -85,6 +91,9 @@ __all__ = (  # noqa F822
     'SEND_CREATE_CHAN_REQUEST', 'AWAIT_CREATE_CHAN_RESPONSE',
     'SEND_CREATE_CHAN_RESPONSE', 'CONNECTED', 'MUST_CLOSE',
     'CLOSED', 'IDLE', 'FAILED', 'DISCONNECTED')
+
+
+logger = logging.getLogger(__name__)
 
 
 # This module defines sentinels used in the state machine and elsewhere, such
@@ -323,7 +332,7 @@ def get_address_list(*, protocol=Protocol.ChannelAccess):
     addresses = get_manually_specified_client_addresses(protocol=protocol)
     auto_addr_list = env[f'EPICS_{protocol}_AUTO_ADDR_LIST']
 
-    if addresses and env['EPICS_CA_AUTO_ADDR_LIST'].lower() != 'yes':
+    if addresses and auto_addr_list.lower() != 'yes':
         # Custom address list specified, and EPICS_CA_AUTO_ADDR_LIST=NO
         auto_addr_list = []
     else:
@@ -333,7 +342,67 @@ def get_address_list(*, protocol=Protocol.ChannelAccess):
         else:
             auto_addr_list = ['255.255.255.255']
 
-    return addresses + auto_addr_list
+    return list(set(addresses + auto_addr_list))
+
+
+def get_client_address_list(*, protocol=Protocol.ChannelAccess):
+    '''
+    Get channel access client address list in the form of (host, port) based on
+    environment variables.
+
+    For CA, the default port is ``EPICS_CA_SERVER_PORT``.
+    For PVA, the default port is ``EPICS_PVA_BROADCAST_PORT``.
+
+    See Also
+    --------
+    :func:`get_address_list`
+    '''
+    protocol = Protocol(protocol)
+    env = get_environment_variables()
+    if protocol == Protocol.ChannelAccess:
+        default_port = env['EPICS_CA_SERVER_PORT']
+    else:
+        default_port = env['EPICS_PVA_BROADCAST_PORT']
+
+    return list(set(
+        get_address_and_port_from_string(addr, default_port)
+        for addr in get_address_list(protocol=protocol)
+    ))
+
+
+def get_address_and_port_from_string(
+        address: str, default_port: int) -> typing.Tuple[str, int]:
+    '''
+    Return (address, port) tuple given an IP address of the form ``ip:port``
+    or ``ip``.
+
+    If no port is specified, the default port is used.
+
+    Parameters
+    ----------
+    address : str
+        The address.
+
+    default_port : int
+        The port to return if none is specified.
+
+    Returns
+    -------
+    host : str
+        The host IP address.
+
+    port : int
+        The specified or default port.
+    '''
+    if address.count(':') > 1:
+        # May support [IPv6]:[port] in the future?
+        raise ValueError(f'IPv6 or invalid address specified: {address}')
+
+    if ':' in address:
+        address, specified_port = address.split(':')
+        return (address, int(specified_port))
+
+    return (address, default_port)
 
 
 def get_server_address_list(*, protocol=Protocol.ChannelAccess):
@@ -357,7 +426,8 @@ def get_server_address_list(*, protocol=Protocol.ChannelAccess):
             warn("Port specified in EPICS_CAS_INTF_ADDR_LIST was ignored.")
         return addr
 
-    return [strip_port(addr) for addr in _split_address_list(intf_addrs)]
+    return list(set(strip_port(addr)
+                    for addr in _split_address_list(intf_addrs)))
 
 
 def get_beacon_address_list(*, protocol=Protocol.ChannelAccess):
@@ -380,20 +450,16 @@ def get_beacon_address_list(*, protocol=Protocol.ChannelAccess):
     else:
         beacon_port = env['EPICS_PVAS_BROADCAST_PORT']
 
-    def get_addr_port(addr):
-        if ':' in addr:
-            addr, _, specified_port = addr.partition(':')
-            return (addr, int(specified_port))
-        return (addr, beacon_port)
-
     if addr_list and auto_addr_list.lower() != 'yes':
         # Custom address list and EPICS_CAS_AUTO_BEACON_ADDR_LIST=NO
         auto_list = []
     else:
-        auto_list = [('255.255.255.255', beacon_port)]
+        auto_list = ['255.255.255.255']
 
-    # Custom address list and EPICS_CAS_AUTO_BEACON_ADDR_LIST=YES
-    return addr_list + auto_list
+    return [
+        get_address_and_port_from_string(addr, beacon_port)
+        for addr in addr_list + auto_list
+    ]
 
 
 def get_netifaces_addresses():
@@ -420,6 +486,64 @@ def get_netifaces_addresses():
                     yield (addr, addr)
                 elif peer is not None:
                     yield (peer, peer)
+
+
+@functools.lru_cache(maxsize=1)
+def get_local_address() -> str:
+    """
+    Get the local IPv4 address.
+
+    Falls back to 127.0.0.1 if netifaces is unavailable.
+
+    Returns
+    -------
+    local_addr : str
+        The local address.
+
+    Notes
+    -----
+    The result from this function is cached by way of ``functools.lru_cache``
+    such that it is only checked once.  Changes to network topology will not be
+    accounted for after the first call.
+    """
+    fallback_address = socket.inet_ntoa(
+        struct.pack("!I", socket.INADDR_LOOPBACK)
+    )
+
+    if netifaces is None:
+        logger.debug('Netifaces unavailable; using %s as local address',
+                     fallback_address)
+        return fallback_address
+
+    loopback_address = None
+
+    for interface in netifaces.interfaces():
+        for addr in netifaces.ifaddresses(interface).get(netifaces.AF_INET, []):
+            try:
+                ipv4 = ipaddress.IPv4Address(addr['addr'])
+            except KeyError:
+                continue
+
+            if not ipv4.is_loopback:
+                logger.debug('Found the first local address %s', ipv4)
+                return str(ipv4)
+
+            if loopback_address is None:
+                loopback_address = str(ipv4)
+
+    if loopback_address is not None:
+        logger.debug(
+            'Netifaces failed to find any local address, falling back to '
+            'the loopback address %s', loopback_address
+        )
+        return loopback_address
+
+    logger.warning(
+        'Netifaces failed to find any local address, including a loopback '
+        'address.  This is probably a caproto bug.  Falling back to: %s',
+        fallback_address
+    )
+    return fallback_address
 
 
 def ensure_bytes(s):

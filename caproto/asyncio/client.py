@@ -107,7 +107,7 @@ class SharedBroadcaster:
 
         return servers
 
-    async def send(self, port, *commands):
+    async def send(self, *commands):
         """
         Process a command and tranport it over the UDP socket.
         """
@@ -116,21 +116,15 @@ class SharedBroadcaster:
                 'our_address': self.broadcaster.client_address,
                 'direction': '--->>>'}
 
-        for host in ca.get_address_list():
-            if ':' in host:
-                host, _, port_as_str = host.partition(':')
-                specified_port = int(port_as_str)
-            else:
-                specified_port = port
-
-            tags['their_address'] = (host, specified_port)
+        for host_tuple in ca.get_client_address_list():
+            tags['their_address'] = host_tuple
             self.log.debug(
                 '%d commands %dB',
                 len(commands), len(bytes_to_send), extra=tags)
             try:
-                await self.wrapped_transport.sendto(bytes_to_send,
-                                                    (host, specified_port))
+                await self.wrapped_transport.sendto(bytes_to_send, host_tuple)
             except OSError as ex:
+                host, specified_port = host_tuple
                 raise ca.CaprotoNetworkError(
                     f'{ex} while sending {len(bytes_to_send)} bytes to '
                     f'{host}:{specified_port}') from ex
@@ -185,10 +179,29 @@ class SharedBroadcaster:
         if self.udp_sock is None:
             await self._create_socket()
 
-        command = self.broadcaster.register()
-        await self.send(
-            ca.get_environment_variables()['EPICS_CA_REPEATER_PORT'], command)
+        await self._register()
         self._searching_enabled.set()
+
+    async def _register(self):
+        commands = [self.broadcaster.register('127.0.0.1')]
+        bytes_to_send = self.broadcaster.send(*commands)
+        addr = (ca.get_local_address(), self.environ['EPICS_CA_REPEATER_PORT'])
+        tags = {
+            'role': 'CLIENT',
+            'our_address': self.broadcaster.client_address,
+            'direction': '--->>>',
+            'their_address': addr,
+        }
+        tags['their_address'] = addr
+        self.broadcaster.log.debug(
+            '%d commands %dB', len(commands), len(bytes_to_send), extra=tags)
+
+        try:
+            await self.wrapped_transport.sendto(bytes_to_send, addr)
+        except OSError as ex:
+            host, specified_port = addr
+            self.log.exception('%s while sending %d bytes to %s:%d',
+                               ex, len(bytes_to_send), host, specified_port)
 
     async def _broadcaster_receive_loop(self):
         'Loop which consumes receive_queue datagrams from _DatagramProtocol.'
@@ -497,7 +510,7 @@ class SharedBroadcaster:
         ver = ca.VersionRequest(0, ca.DEFAULT_PROTOCOL_VERSION)
         for batch in batch_requests(
                 requests, constants.SEARCH_MAX_DATAGRAM_BYTES - len(ver)):
-            await self.send(self.ca_server_port, ver, *batch)
+            await self.send(ver, *batch)
 
 
 class Context:

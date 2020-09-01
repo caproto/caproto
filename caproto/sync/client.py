@@ -2,8 +2,8 @@
 # as three top-level functions: read, write, subscribe. They are comparatively
 # simple and naive, with no caching or concurrency, and therefore less
 # performant but more robust.
-import inspect
 import getpass
+import inspect
 import logging
 import selectors
 import socket
@@ -12,18 +12,16 @@ import time
 import weakref
 
 import caproto as ca
-from .._dbr import (field_types, ChannelType, native_type, SubscriptionType)
-from .._utils import (adapt_old_callback_signature,
-                      ErrorResponseReceived, CaprotoError, CaprotoTimeoutError,
-                      get_environment_variables, safe_getsockname)
-from .repeater import spawn_repeater
 
+from .._dbr import ChannelType, SubscriptionType, field_types, native_type
+from .._utils import (CaprotoError, CaprotoTimeoutError, ErrorResponseReceived,
+                      adapt_old_callback_signature, get_environment_variables,
+                      safe_getsockname)
+from .repeater import spawn_repeater
 
 __all__ = ('read', 'write', 'subscribe', 'block', 'interrupt',
            'read_write_read')
 logger = logging.getLogger('caproto.ctx')
-
-CA_SERVER_PORT = 5064  # just a default
 
 # Make a dict to hold our tcp sockets.
 sockets = {}
@@ -59,12 +57,17 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
     logger.debug('Registering with the Channel Access repeater.')
     bytes_to_send = b.send(ca.RepeaterRegisterRequest())
 
-    repeater_port = get_environment_variables()['EPICS_CA_REPEATER_PORT']
-    for host in ca.get_address_list():
-        try:
-            udp_sock.sendto(bytes_to_send, (host, repeater_port))
-        except OSError as exc:
-            raise ca.CaprotoNetworkError(f"Failed to send to {host}:{repeater_port}") from exc
+    env = get_environment_variables()
+    repeater_port = env['EPICS_CA_REPEATER_PORT']
+
+    client_address_list = ca.get_client_address_list()
+    local_address = ca.get_local_address()
+
+    try:
+        udp_sock.sendto(bytes_to_send, (local_address, repeater_port))
+    except OSError as exc:
+        raise ca.CaprotoNetworkError(
+            f"Failed to send to {local_address}:{repeater_port}") from exc
 
     logger.debug("Searching for %r....", pv_name)
     commands = (
@@ -76,12 +79,7 @@ def search(pv_name, udp_sock, timeout, *, max_retries=2):
             'direction': '--->>>'}
 
     def send_search():
-        for host in ca.get_address_list():
-            if ':' in host:
-                host, _, specified_port = host.partition(':')
-                dest = (host, int(specified_port))
-            else:
-                dest = (host, CA_SERVER_PORT)
+        for dest in client_address_list:
             tags['their_address'] = dest
             b.log.debug(
                 '%d commands %dB',

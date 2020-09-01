@@ -8,7 +8,7 @@ import typing
 from typing import Dict, Tuple
 
 # REBASE TODO this will go away - need to rebase
-from caproto import (MAX_UDP_RECV, bcast_socket, get_address_list,
+from caproto import (MAX_UDP_RECV, bcast_socket, get_client_address_list,
                      get_environment_variables, pva)
 from caproto.pva import (CLIENT, CONNECTED, DISCONNECTED, NEED_DATA,
                          Broadcaster, CaprotoError, ChannelFieldInfoResponse,
@@ -30,8 +30,6 @@ sockets: Dict[VirtualCircuit, socket.socket] = {}
 global_circuits: Dict[AddressTuple, VirtualCircuit] = {}
 
 env = get_environment_variables()
-broadcast_port = env['EPICS_PVA_BROADCAST_PORT']
-
 logger = logging.getLogger('caproto.pva.ctx')
 serialization_logger = logging.getLogger('caproto.pva.serialization_debug')
 
@@ -92,9 +90,9 @@ def search(pv, udp_sock, udp_port, timeout, max_retries=2):
 
     def send_search(message):
         bytes_to_send = broadcaster.send(message)
-        for host in get_address_list(protocol='PVA'):
-            udp_sock.sendto(bytes_to_send, (host, broadcast_port))
-            logger.debug('Search request sent to %r.', (host, broadcast_port))
+        for host, port in get_client_address_list(protocol='PVA'):
+            udp_sock.sendto(bytes_to_send, (host, port))
+            logger.debug('Search request sent to %r.', (host, port))
             logger.debug('%s', bytes_to_send)
 
     def check_timeout():

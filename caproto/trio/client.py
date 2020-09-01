@@ -11,16 +11,16 @@
 import getpass
 import logging
 import time
+from collections import OrderedDict, defaultdict
+
+import trio
+from trio import socket
 
 import caproto as ca
-import trio
 
-from collections import OrderedDict, defaultdict
-from trio import socket
-from .._utils import (batch_requests, CaprotoError, ThreadsafeCounter,
+from .._constants import SEARCH_MAX_DATAGRAM_BYTES, STALE_SEARCH_EXPIRATION
+from .._utils import (CaprotoError, ThreadsafeCounter, batch_requests,
                       get_environment_variables, safe_getsockname)
-from .._constants import (STALE_SEARCH_EXPIRATION, SEARCH_MAX_DATAGRAM_BYTES)
-
 from .util import open_memory_channel
 
 
@@ -35,7 +35,8 @@ class ChannelReadError(TrioClientError):
 if not hasattr(trio.SocketStream, 'sendmsg'):
     # monkey-patch in sendmsg in trio
     async def sendmsg(self, buffers):
-        from trio._highlevel_socket import _translate_socket_errors_to_stream_errors  # noqa
+        from trio._highlevel_socket import \
+            _translate_socket_errors_to_stream_errors  # noqa
         if self.socket.did_shutdown_SHUT_WR:
             await trio._core.checkpoint()
             raise trio.ClosedStreamError("can't send data after sending EOF")
@@ -291,20 +292,15 @@ class SharedBroadcaster:
         tags = {'role': 'CLIENT',
                 'our_address': self.broadcaster.client_address,
                 'direction': '--->>>'}
-        for host in ca.get_address_list():
-            if ':' in host:
-                host, _, port_as_str = host.partition(':')
-                specified_port = int(port_as_str)
-            else:
-                specified_port = port
-            tags['their_address'] = (host, specified_port)
+        for host_tuple in ca.get_client_address_list():
+            tags['their_address'] = host_tuple
             self.broadcaster.log.debug(
                 '%d commands %dB',
                 len(commands), len(bytes_to_send), extra=tags)
             try:
-                await self.udp_sock.sendto(bytes_to_send,
-                                           (host, specified_port))
+                await self.udp_sock.sendto(bytes_to_send, host_tuple)
             except OSError as ex:
+                host, specified_port = host_tuple
                 raise ca.CaprotoNetworkError(
                     f'{ex} while sending {len(bytes_to_send)} bytes to '
                     f'{host}:{specified_port}') from ex
@@ -326,14 +322,33 @@ class SharedBroadcaster:
         self.nursery.start_soon(self._broadcaster_queue_loop)
         await self.nursery.start(self._broadcaster_recv_loop)
 
+    async def _register(self):
+        commands = [self.broadcaster.register('127.0.0.1')]
+        bytes_to_send = self.broadcaster.send(*commands)
+        addr = (ca.get_local_address(), self.environ['EPICS_CA_REPEATER_PORT'])
+        tags = {
+            'role': 'CLIENT',
+            'our_address': self.broadcaster.client_address,
+            'direction': '--->>>',
+            'their_address': addr,
+        }
+        tags['their_address'] = addr
+        self.broadcaster.log.debug(
+            '%d commands %dB', len(commands), len(bytes_to_send), extra=tags)
+        try:
+            await self.udp_sock.sendto(bytes_to_send, addr)
+        except OSError as ex:
+            host, specified_port = addr
+            self.log.exception('%s while sending %d bytes to %s:%d',
+                               ex, len(bytes_to_send), host, specified_port)
+
     async def _broadcaster_recv_loop(self, task_status):
         self.udp_sock = ca.bcast_socket(socket_module=socket)
         # Must bind or getsocketname() will raise on Windows.
         # See https://github.com/caproto/caproto/issues/514.
         await self.udp_sock.bind(('', 0))
         self.broadcaster.our_address = safe_getsockname(self.udp_sock)
-        command = self.broadcaster.register('127.0.0.1')
-        await self.send(ca.EPICS_CA2_PORT, command)
+        await self._register()
         task_status.started()
 
         while True:
