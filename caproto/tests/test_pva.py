@@ -1,7 +1,9 @@
 import binascii
 import logging
 import textwrap
+import typing
 from array import array
+from typing import List, Union
 
 import pytest
 from numpy.testing import assert_array_almost_equal
@@ -177,26 +179,56 @@ def test_fielddesc_examples(data, expected):
     print(info.summary() == expected)
 
 
+@pva.pva_dataclass
+class my_struct:
+    value: List[pva.Int8]
+    boundedSizeArray: pva.array_of(pva.Int8,
+                                   array_type=FieldArrayType.bounded_array,
+                                   size=16)
+    fixedSizeArray: pva.array_of(pva.Int8,
+                                 array_type=FieldArrayType.fixed_array,
+                                 size=4)
+
+    @pva.pva_dataclass
+    class timeStamp_t:
+        secondsPastEpoch: pva.Int64
+        nanoSeconds: pva.UInt32
+        userTag: pva.UInt32
+
+    timeStamp: timeStamp_t
+
+    @pva.pva_dataclass
+    class alarm_t:
+        severity: pva.Int32
+        status: pva.Int32
+        message: str
+
+    alarm: alarm_t
+    valueUnion: Union[str, pva.UInt32]
+    variantUnion: typing.Any
+
+
 repr_with_data = [
     pytest.param(
-        textwrap.dedent('''\
-        struct my_struct
-            int8[] value
-            int8<16> boundedSizeArray
-            int8[4] fixedSizeArray
-            struct timeStamp_t timeStamp
-                int64 secondsPastEpoch
-                uint32 nanoSeconds
-                uint32 userTag
-            struct alarm_t alarm
-                int32 severity
-                int32 status
-                string message
-            union valueUnion
-                string not_selected
-                uint32 selected
-            any variantUnion
-        '''.strip()),
+        # textwrap.dedent('''\
+        # struct my_struct
+        #     int8[] value
+        #     int8<16> boundedSizeArray
+        #     int8[4] fixedSizeArray
+        #     struct timeStamp_t timeStamp
+        #         int64 secondsPastEpoch
+        #         uint32 nanoSeconds
+        #         uint32 userTag
+        #     struct alarm_t alarm
+        #         int32 severity
+        #         int32 status
+        #         string message
+        #     union valueUnion
+        #         string String
+        #         uint32 Uint32
+        #     any variantUnion
+        # '''.strip()),
+        my_struct,
         {
             'value': [1, 2, 3],
             'boundedSizeArray': [4, 5, 6, 7, 8],
@@ -212,8 +244,8 @@ repr_with_data = [
                 'message': "Allo, Allo!",
             },
             'valueUnion': {
-                'not_selected': None,
-                'selected': 0x33333333,
+                'str': None,
+                'UInt32': 0x33333333,
             },
             'variantUnion': "String inside variant union.",
         },
@@ -235,11 +267,10 @@ repr_with_data = [
 ]
 
 
-@pytest.mark.parametrize("struct_repr, structured_data, expected_serialized, endian",
+@pytest.mark.parametrize("struct, structured_data, expected_serialized, endian",
                          repr_with_data)
-def test_serialize_from_repr(struct_repr, structured_data, expected_serialized, endian):
-    field = pva.structure_from_repr(struct_repr)
-
+def test_serialize(struct, structured_data, expected_serialized, endian):
+    field = struct._pva_struct_
     print(field.summary())
 
     cache = pva.CacheContext()
@@ -588,72 +619,6 @@ def test_search():
     assert consumed == len(serialized)
     assert deserialized.channel_count == 2
     assert deserialized.channels == [channel1, channel2]
-
-
-@pytest.mark.skip(reason='refactored this out; redo test')
-@pytest.mark.parametrize(
-    "bitset, expected, message",
-    [[{0}, {i for i in range(1, 18)}, 'full'],
-     [{12}, {12, 13, 14, 15}, 'alarm'],
-     [{4}, {4, 5, 6, 7, 8, 9, 10, 11}, 'timestamp+below'],
-     [{4, 7}, {4, 5, 6, 7, 8, 9, 10, 11}, 'timestamp+below'],
-     [{4, 7, 12}, {4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}, 'timestamp+alarm'],
-     ]
-    # TODO unions explicitly not tested here
-)
-def test_bitset_fill(bitset, expected, message):
-    struct_repr = '''\
-    struct testStruct
-        uint8[] value
-        uint8<16> boundedSizeArray
-        uint8[4] fixedSizeArray
-        struct timeStamp_t timeStamp
-            int64 secondsPastEpoch
-            uint32 nanoSeconds
-            uint32 userTag
-            struct test_t test
-                int32 severity
-                int32 status
-                string message
-        struct alarm_t alarm
-            int32 severity
-            int32 status
-            string message
-        any variantUnion
-        int32 replacement_for_alarms
-    '''
-    # TODO referring to struct-defined types
-    # alarm_t[] alarms
-
-    '''
-        # Bitset for reference:
-        [  0]  struct testStruct
-        [  1]   byte value
-        [  2]   byte boundedSizeArray
-        [  3]   byte fixedSizeArray
-        [  4]   struct timeStamp
-        [  5]    long secondsPastEpoch
-        [  6]    uint nanoSeconds
-        [  7]    uint userTag
-        [  8]    struct alarm
-        [  9]     int severity
-        [ 10]     int status
-        [ 11]     string message
-        [ 12]   struct alarm
-        [ 13]    int severity
-        [ 14]    int status
-        [ 15]    string message
-        [ 16]   any variantUnion
-        [ 17]   int replacement_for_alarms
-    '''
-    fd = pva.structure_from_repr(struct_repr)
-
-    print(fd.summary())
-    assert fd.summary() == textwrap.dedent(struct_repr.rstrip())
-    # lines = fd.summary().splitlines()
-
-    # filled_bitset = {idx for idx, attr, field in
-    #                  fd.fields_by_bitset(pva.BitSet(bitset))}
 
 
 def test_broadcaster_messages_smoke():

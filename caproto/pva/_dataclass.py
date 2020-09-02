@@ -39,6 +39,10 @@ def _field_from_annotation(attr, annotation,
                            array_type=FieldArrayType.scalar,
                            ):
     annotation = annotation_type_map.get(annotation, annotation)
+    if isinstance(annotation, SimpleField):
+        annotation = typing.cast(SimpleField, annotation)
+        return annotation.as_new_name(attr)
+
     if isinstance(annotation, FieldType):
         return SimpleField(
             field_type=annotation,
@@ -47,8 +51,13 @@ def _field_from_annotation(attr, annotation,
             size=1 if array_type == FieldArrayType.scalar else None,
         )
 
-    if hasattr(annotation, '_pva_struct_'):
-        struct = annotation._pva_struct_
+    if (hasattr(annotation, '_pva_struct_') or
+            isinstance(annotation, StructuredField)):
+        if hasattr(annotation, '_pva_struct_'):
+            struct = annotation._pva_struct_
+        else:
+            struct = annotation
+
         metadata = dict(struct.metadata)
         if struct.field_type == FieldType.union:
             metadata['union_dataclass'] = annotation
@@ -231,7 +240,8 @@ def array_of(item: typing.Union[SimpleField, StructuredField, FieldType, type],
              size=None,
              name=None,
              ) -> FieldDesc:
-    # Obsolete due to List[] annotation?
+    item = annotation_type_map.get(item, item)
+
     if isinstance(item, FieldType):
         return SimpleField(
             field_type=item,
