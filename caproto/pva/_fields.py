@@ -11,7 +11,6 @@ from struct import pack, unpack
 from typing import Dict, List, Optional, Tuple
 
 from . import _core as core
-from . import _repr_helper
 from ._core import (CacheContext, CoreSerializable, CoreSerializableWithCache,
                     CoreStatelessSerializable, Deserialized, Endian,
                     FieldArrayType, FieldDescByte, FieldType, StatusType,
@@ -36,34 +35,6 @@ class FieldDesc(CoreSerializableWithCache):
     @property
     def type_name(self) -> str:
         return self.field_type.name
-
-    @staticmethod
-    def from_repr_line(line: str) -> 'FieldDesc':
-        'Interpret a line of format "[type_name][array_info] [name]"'
-        if ' ' not in line:
-            raise ValueError(
-                f'Type name and attribute name required: {line!r}'
-            )
-
-        parsed = _repr_helper.definition_line_visitor.parse(line.strip())
-        field_type = FieldType[parsed.type_name]
-        if field_type.is_complex:
-            return StructuredField(
-                name=parsed.name,
-                field_type=field_type,
-                struct_name=parsed.type_name,
-                size=parsed.array_info.size,
-                array_type=parsed.array_info.array_type,
-                children={},
-                descendents=(),
-            )
-
-        return SimpleField(
-            name=parsed.name,
-            field_type=field_type,
-            size=parsed.array_info.size,
-            array_type=parsed.array_info.array_type,
-        )
 
     def serialize(self, endian: Endian, cache=None) -> List[bytes]:
         raise NotImplementedError(
@@ -397,54 +368,6 @@ def _descendents_from_field_list(fields: typing.Iterable[FieldDesc]
                 )
 
     return tuple(descendents)
-
-
-def structure_from_repr(hierarchy, *, namespace=None):
-    """
-    Generate a field description structure from its string representation
-    """
-    if isinstance(hierarchy, str):
-        hierarchy = _parse_repr_lines(hierarchy)
-
-    def get_entry_and_children(item):
-        if isinstance(item, (list, tuple)):
-            entry, children = item
-        else:
-            entry, children = item, None
-        return entry, children
-
-    entry, top_level_children = get_entry_and_children(hierarchy[0])
-
-    # TODO: why custom parsing here?
-    items = entry.split(' ')
-    field_type = FieldType[items[0]]
-
-    if len(items) == 3:
-        _, struct_name, top_name = items
-    elif len(items) == 2:
-        struct_name = top_name = items[-1]
-    else:
-        raise ValueError(f'Unexpected identifier(s): {entry!r}')
-
-    def get_field(child):
-        entry, has_children = get_entry_and_children(child)
-        if has_children is not None:
-            return structure_from_repr(
-                [child], namespace=namespace)
-        return FieldDesc.from_repr_line(entry)
-
-    children = [get_field(child) for child in top_level_children]
-    struct = StructuredField(
-        name=top_name,
-        field_type=field_type,
-        struct_name=struct_name,
-        array_type=FieldArrayType.scalar,
-        size=1,
-        children=_children_from_field_list(children),
-        descendents=_descendents_from_field_list(children),
-    )
-
-    return struct
 
 
 # Look-up table for bitsets

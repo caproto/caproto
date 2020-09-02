@@ -1,7 +1,9 @@
 import binascii
 import logging
 import textwrap
+import typing
 from array import array
+from typing import List, Union
 
 import pytest
 from numpy.testing import assert_array_almost_equal
@@ -177,26 +179,56 @@ def test_fielddesc_examples(data, expected):
     print(info.summary() == expected)
 
 
+@pva.pva_dataclass
+class my_struct:
+    value: List[pva.Int8]
+    boundedSizeArray: pva.array_of(pva.Int8,
+                                   array_type=FieldArrayType.bounded_array,
+                                   size=16)
+    fixedSizeArray: pva.array_of(pva.Int8,
+                                 array_type=FieldArrayType.fixed_array,
+                                 size=4)
+
+    @pva.pva_dataclass
+    class timeStamp_t:
+        secondsPastEpoch: pva.Int64
+        nanoSeconds: pva.UInt32
+        userTag: pva.UInt32
+
+    timeStamp: timeStamp_t
+
+    @pva.pva_dataclass
+    class alarm_t:
+        severity: pva.Int32
+        status: pva.Int32
+        message: str
+
+    alarm: alarm_t
+    valueUnion: Union[str, pva.UInt32]
+    variantUnion: typing.Any
+
+
 repr_with_data = [
     pytest.param(
-        textwrap.dedent('''\
-        struct my_struct
-            int8[] value
-            int8<16> boundedSizeArray
-            int8[4] fixedSizeArray
-            struct timeStamp_t timeStamp
-                int64 secondsPastEpoch
-                uint32 nanoSeconds
-                uint32 userTag
-            struct alarm_t alarm
-                int32 severity
-                int32 status
-                string message
-            union valueUnion
-                string not_selected
-                uint32 selected
-            any variantUnion
-        '''.strip()),
+        # textwrap.dedent('''\
+        # struct my_struct
+        #     int8[] value
+        #     int8<16> boundedSizeArray
+        #     int8[4] fixedSizeArray
+        #     struct timeStamp_t timeStamp
+        #         int64 secondsPastEpoch
+        #         uint32 nanoSeconds
+        #         uint32 userTag
+        #     struct alarm_t alarm
+        #         int32 severity
+        #         int32 status
+        #         string message
+        #     union valueUnion
+        #         string String
+        #         uint32 Uint32
+        #     any variantUnion
+        # '''.strip()),
+        my_struct,
         {
             'value': [1, 2, 3],
             'boundedSizeArray': [4, 5, 6, 7, 8],
@@ -212,8 +244,8 @@ repr_with_data = [
                 'message': "Allo, Allo!",
             },
             'valueUnion': {
-                'not_selected': None,
-                'selected': 0x33333333,
+                'str': None,
+                'UInt32': 0x33333333,
             },
             'variantUnion': "String inside variant union.",
         },
@@ -235,11 +267,10 @@ repr_with_data = [
 ]
 
 
-@pytest.mark.parametrize("struct_repr, structured_data, expected_serialized, endian",
+@pytest.mark.parametrize("struct, structured_data, expected_serialized, endian",
                          repr_with_data)
-def test_serialize_from_repr(struct_repr, structured_data, expected_serialized, endian):
-    field = pva.structure_from_repr(struct_repr)
-
+def test_serialize(struct, structured_data, expected_serialized, endian):
+    field = struct._pva_struct_
     print(field.summary())
 
     cache = pva.CacheContext()
@@ -289,193 +320,6 @@ def test_variant_types_and_serialization(field_type, value, array_type):
             assert deserialized == value
         else:
             assert_array_almost_equal(deserialized, value)
-
-
-@pytest.mark.xfail(reason='look into details')
-def test_pvrequest_test_two():
-    expected_serialized = _fromhex(
-        '''
-        80 00 02 05 66 69 65 6c 64 80 00 01 05 76 61 6c
-        75 65 80 00 00 06 72 65 63 6f 72 64 80 00 01 08
-        5f 6f 70 74 69 6f 6e 73 80 00 00
-        '''
-    )
-
-    # TODO: hmm, this is what we're getting instead
-    # expected_serialized = b'\x80\x06record\x02\x05field\x80\x05field\x01\x05value\x80\x05value\x00\x06record\x80\x06record\x01\x08_options\x80\x08_options\x00'   # noqa
-
-    res, _, _ = pva.PVRequest.deserialize(data=expected_serialized,
-                                          endian=pva.LITTLE_ENDIAN)
-    print('field desc')
-    print('----------')
-    print(res.interface.summary())
-    print('value')
-    print('-----')
-    print(res.data)
-
-    serialized = b''.join(res.serialize(endian=pva.LITTLE_ENDIAN))
-    print('serialized')
-    print(serialized)
-    print('expected')
-    print(expected_serialized)
-
-    assert expected_serialized == serialized
-
-
-pvrequests = [
-    ["field(value)",
-     _fromhex(
-         'fd010080000105'
-         '6669656c64fd02008000010576616c75'  # field.......valu
-         '65fd0300800000'                    # e......
-     ),
-     # TODO: looks like we have to be smart about caching even empty
-     #       structs
-     ],
-
-    "record[]field()getField()putField()",
-    "record[a=b,x=y]field(a) getField(a)putField(a)",
-    "field(a.b[x=y])",
-    "field(a.b{c.d})",
-    "field(a.b[x=y]{c.d})",
-    "field(a.b[x=y]{c.d[x=y]})",
-
-    pytest.param([
-        "record[a=b,c=d] field(a.a[a=b]{C.D[a=b]},b.a[a=b]{E,F})",
-        _fromhex(
-            'fd 01 00 80 00 02 06'
-            '72 65 63 6f 72 64 fd 02 00 80 00 01 08 5f 6f 70'  # record......._op
-            '74 69 6f 6e 73 fd 03 00 80 00 02 01 61 60 01 63'  # tions.......a`.c
-            '60 05 66 69 65 6c 64 fd 04 00 80 00 02 01 61 fd'  # `.field.......a.
-            '05 00 80 00 01 01 61 fd 06 00 80 00 02 08 5f 6f'  # ......a......._o
-            '70 74 69 6f 6e 73 fd 07 00 80 00 01 01 61 60 01'  # ptions.......a`.
-            '43 fd 08 00 80 00 01 01 44 fd 09 00 80 00 01 08'  # C.......D.......
-            '5f 6f 70 74 69 6f 6e 73 fe 07 00 01 62 fd 0a 00'  # _options....b...
-            '80 00 01 01 61 fd 0b 00 80 00 03 08 5f 6f 70 74'  # ....a......._opt
-            '69 6f 6e 73 fe 07 00 01 45 fd 0c 00 80 00 00 01'  # ions....E.......
-            '46 fe 0c 00                                    '  # F....
-
-            # TODO check serialized data (values):
-            # 01 62 01 64 01 62 01 62 01 62
-        ),
-    ]),
-    "alarm,timeStamp,power.value",
-    "record[process=true]field(alarm,timeStamp,power.value)",
-    ("record[process=true]"
-     "field(alarm,timeStamp[algorithm=onChange,causeMonitor=false],"
-     "power{value,alarm})"),
-    ("record[int=2,float=3.14159]"
-     "field(alarm,timeStamp[shareData=true],power.value)"),
-    ("record[process=true,xxx=yyy]"
-     "getField(alarm,timeStamp,power{value,alarm},"
-     "current{value,alarm},voltage{value,alarm})"
-     "putField(power.value)"
-     ),
-    ("field(alarm,timeStamp,supply{"
-     "zero{voltage.value,current.value,power.value},"
-     "one{voltage.value,current.value,power.value}"
-     "})"),
-    ("record[process=true,xxx=yyy]"
-     "getField(alarm,timeStamp,power{value,alarm},"
-     "current{value,alarm},voltage{value,alarm},"
-     "ps0{alarm,timeStamp,power{value,alarm},current{value,alarm},voltage{value,alarm}},"
-     "ps1{alarm,timeStamp,power{value,alarm},current{value,alarm},voltage{value,alarm}})"
-     "putField(power.value)"
-     ),
-    "a{b{c{d}}}",
-    "field(alarm.status,alarm.severity)",
-
-]
-
-
-pvrequests_with_bad_syntax = [
-    "a{b[c}d]",
-
-    ("record[process=true,xxx=yyy]"
-     "putField(power.value)"
-     "getField(alarm,timeStamp,power{value,alarm},"
-     "current{value,alarm},voltage{value,alarm},"
-     "ps0{alarm,timeStamp,power{value,alarm},current{value,alarm},voltage{value,alarm}},"
-     "ps1{alarm,timeStamp,power{value,alarm},current{value,alarm},voltage{value,alarm}"
-     ")"),
-
-    "record[process=true,power.value",
-
-    # TODO: i don't know why this is supposed to be an expected failure
-    # "field(alarm.status,alarm.severity)",
-    ":field(record[process=false]power.value)",
-]
-
-
-@pytest.mark.parametrize("req", pvrequests_with_bad_syntax)
-@pytest.mark.xfail(strict=True)
-def test_pvrequests_bad_syntax(req):
-    pva.PVRequestStruct.from_string(req)
-
-
-@pytest.mark.parametrize("req", pvrequests)
-def test_pvrequests(req):
-    # from caproto.pva.serialization import serialize_pvrequest
-
-    if isinstance(req, list):
-        req, expected_serialized = req
-    else:
-        expected_serialized = None
-
-    parsed = pva.PVRequestStruct.from_string(req)
-
-    print()
-    print('PVRequest is', req)
-
-    print()
-    print('parsed:')
-    print(parsed.summary())
-    print('expected', expected_serialized)
-    return  # TODO
-
-    # # pprint.pprint(line, indent=4)
-    # print()
-    # print('Comparing original vs stringified:')
-    # print(req)
-    # print(pva.pvrequest_to_string(parsed))
-
-    # req = req.replace(' ', '')
-    # stringified = pva.pvrequest_to_string(parsed)
-    # if 'field({})'.format(stringified) == req:
-    #     ...
-    # elif req == 'record[]field()getField()putField()':
-    #     ...
-    #     # allowed failure, this isn't useful
-    # else:
-    #     assert req == stringified
-
-    # print()
-    # print('as a structure:')
-    # struct = pva.pvrequest_to_structure(parsed)
-
-    # pva.print_field_info(struct, user_types={})
-
-    # if expected_serialized is not None:
-    #     cache = SerializeCache({}, {}, {}, {})
-    #     info, buf, consumed = deserialize_introspection_data(
-    #         expected_serialized, endian='<', cache=cache,
-    #         nested_types=dict(getField={},
-    #                           putField={},
-    #                           )
-    #     )
-
-    #     print('expected deserialized:')
-    #     pva.print_field_info(info, user_types={})
-
-    #     assert consumed == len(expected_serialized)
-
-    #     serialized = serialize_pvrequest(req, endian='<', cache=cache)
-    #     serialized = b''.join(serialized)
-    #     print('serialized:')
-    #     print(serialized)
-    #     print('expected serialized:')
-    #     print(expected_serialized)
-    #     assert serialized == expected_serialized
 
 
 bitsets = [
@@ -588,72 +432,6 @@ def test_search():
     assert consumed == len(serialized)
     assert deserialized.channel_count == 2
     assert deserialized.channels == [channel1, channel2]
-
-
-@pytest.mark.skip(reason='refactored this out; redo test')
-@pytest.mark.parametrize(
-    "bitset, expected, message",
-    [[{0}, {i for i in range(1, 18)}, 'full'],
-     [{12}, {12, 13, 14, 15}, 'alarm'],
-     [{4}, {4, 5, 6, 7, 8, 9, 10, 11}, 'timestamp+below'],
-     [{4, 7}, {4, 5, 6, 7, 8, 9, 10, 11}, 'timestamp+below'],
-     [{4, 7, 12}, {4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}, 'timestamp+alarm'],
-     ]
-    # TODO unions explicitly not tested here
-)
-def test_bitset_fill(bitset, expected, message):
-    struct_repr = '''\
-    struct testStruct
-        uint8[] value
-        uint8<16> boundedSizeArray
-        uint8[4] fixedSizeArray
-        struct timeStamp_t timeStamp
-            int64 secondsPastEpoch
-            uint32 nanoSeconds
-            uint32 userTag
-            struct test_t test
-                int32 severity
-                int32 status
-                string message
-        struct alarm_t alarm
-            int32 severity
-            int32 status
-            string message
-        any variantUnion
-        int32 replacement_for_alarms
-    '''
-    # TODO referring to struct-defined types
-    # alarm_t[] alarms
-
-    '''
-        # Bitset for reference:
-        [  0]  struct testStruct
-        [  1]   byte value
-        [  2]   byte boundedSizeArray
-        [  3]   byte fixedSizeArray
-        [  4]   struct timeStamp
-        [  5]    long secondsPastEpoch
-        [  6]    uint nanoSeconds
-        [  7]    uint userTag
-        [  8]    struct alarm
-        [  9]     int severity
-        [ 10]     int status
-        [ 11]     string message
-        [ 12]   struct alarm
-        [ 13]    int severity
-        [ 14]    int status
-        [ 15]    string message
-        [ 16]   any variantUnion
-        [ 17]   int replacement_for_alarms
-    '''
-    fd = pva.structure_from_repr(struct_repr)
-
-    print(fd.summary())
-    assert fd.summary() == textwrap.dedent(struct_repr.rstrip())
-    # lines = fd.summary().splitlines()
-
-    # filled_bitset = {idx for idx, attr, field in
-    #                  fd.fields_by_bitset(pva.BitSet(bitset))}
 
 
 def test_broadcaster_messages_smoke():
