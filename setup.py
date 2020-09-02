@@ -41,7 +41,7 @@ with open(path.join(here, 'requirements-test.txt')) as requirements_file:
                          if not line.startswith('#')]
 
 extras_require = {
-    'standard': ['netifaces', 'numpy', 'dpkt', 'parsimonious'],
+    'standard': ['netifaces', 'numpy', 'dpkt'],
     'async': ['curio>=1.2', 'trio>=0.12.1'],
 }
 

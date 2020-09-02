@@ -1,4 +1,5 @@
-'''PVRequest parsing
+'''
+PVRequest parsing, optionally with a full grammar-based specification.
 
 Reference: http://epics-pvdata.sourceforge.net/informative/pvRequest.html
 
@@ -19,17 +20,32 @@ where FieldDefs are of the form:
     2. 'fullFieldName[option,...]'
     3. 'fullFieldName{request}' - a recursive definition.
 
-This had a full
+Notes
+-----
+The simple parsing regular expression is incomplete and does not make any
+guarantees about reliably parsing complex PVRequests.
 '''
 
+import re
 import typing
 from collections import namedtuple
-
-from parsimonious.grammar import Grammar, NodeVisitor
 
 from ._core import FieldArrayType, FieldType
 from ._fields import (SimpleField, StructuredField, _children_from_field_list,
                       _descendents_from_field_list)
+
+try:
+    raise ImportError
+    import parsimonious
+except ImportError:
+    parsimonious = None
+    Grammar = None
+
+    class NodeVisitor:
+        ...
+else:
+    from parsimonious.grammar import Grammar, NodeVisitor  # noqa
+
 
 _Record = namedtuple('Record', 'options')
 _FieldCategory = namedtuple('FieldCategory', 'name fields')
@@ -37,8 +53,7 @@ _FieldDef = namedtuple('FieldDef', 'field_name options request')
 _Option = namedtuple('Option', 'name value')
 _ParsedPVRequest = namedtuple('PVRequest', 'record field getField putField')
 
-
-pvrequest_grammar = Grammar(r"""
+_grammar = r"""
     PVRequest       = (record / field_category / field_def)*
 
     category_name   = ("field" / "getField" / "putField")
@@ -52,11 +67,17 @@ pvrequest_grammar = Grammar(r"""
 
     identifier      = ~"[a-z_][a-z_0-9]*"i ("." identifier+)?
     value           = ( identifier / ~"[0-9\.]+" )
-    """)
+"""
+
+_field_re = re.compile(
+    r'(field|getField|putField)\(([A-Za-z0-9\.,]+)*\)',
+    flags=re.IGNORECASE
+)
 
 
-class PVRequestToStructureVisitor(NodeVisitor):
-    grammar = pvrequest_grammar
+class _PVRequestToStructureVisitor(NodeVisitor):
+    if Grammar is not None:
+        grammar = Grammar(_grammar)
 
     def visit_PVRequest(self, node, visited_children):
         req_kw = dict(record=None,
@@ -159,6 +180,45 @@ class PVRequestToStructureVisitor(NodeVisitor):
 # )
 
 
+def _parse_by_regex(request: str) -> _ParsedPVRequest:
+    """
+    A basic pvrequest parser.  Does not yet implement most of the grammar.
+
+    Parameters
+    ----------
+    request : str
+        The PVRequest string.
+
+    Returns
+    -------
+    parsed : _ParsedPVRequest
+        The parsed PVRequest and nested namedtuples.
+    """
+    if '(' not in request:
+        request = f'field({request})'
+
+    match = _field_re.findall(request)
+    if not match or '{' in request:
+        raise ValueError(
+            'Invalid PVRequest (or it is too complicated for the simple '
+            'regular expression-based parser).  You can try installing '
+            '`parsimonious` for now.'
+        )
+
+    # TODO: many things
+    items = dict(record=None, field=[], getField=None, putField=None)
+
+    def parse_field_def(value) -> typing.List[_FieldDef]:
+        return [_FieldDef(field_name=field, options=None, request=None)
+                for field in value.split(',')
+                if field
+                ]
+
+    items.update({k: parse_field_def(v)
+                  for k, v in dict(match).items()})
+    return _ParsedPVRequest(**items)
+
+
 def _new_struct(fields, struct_name='', name='') -> 'PVRequestStruct':
     struct = PVRequestStruct(
         field_type=FieldType.struct,
@@ -232,12 +292,16 @@ class _PVRequestNode:
 
 
 class PVRequestStruct(StructuredField):
-    _pv_request_to_structure = PVRequestToStructureVisitor()
+    _pv_request_to_structure = _PVRequestToStructureVisitor()
     values: typing.Dict[str, typing.Union[typing.Dict, str]]
 
     @classmethod
     def from_string(cls, request: str) -> 'PVRequestStruct':
-        req = cls._pv_request_to_structure.parse(request.replace(' ', ''))
+        if parsimonious is not None:
+            req = cls._pv_request_to_structure.parse(request.replace(' ', ''))
+        else:
+            req = _parse_by_regex(request)
+
         return cls._from_parsed(req)
 
     @classmethod

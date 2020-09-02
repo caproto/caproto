@@ -9,6 +9,7 @@ parsimonious
 pyepics >=3.4.2
 pytest
 numpy
+parsimonious
 pytest-timeout
 pytest-rerunfailures
 pytest-xdist
