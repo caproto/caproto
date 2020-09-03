@@ -5,8 +5,8 @@ This module contains functions for formatting data output for CLI utilities
 '''
 
 import numbers
-import sys
 import re
+import sys
 
 
 class _DataPrintFormat:
@@ -132,6 +132,10 @@ def gen_data_format(args=None, data=None):
     if(isinstance(data[0], str) or isinstance(data[0], bytes)):
         df.format = "s"
 
+    if args.float_s and isinstance(data[0], numbers.Integral):
+        df.format = 's'
+        return df
+
     # 'data' contains an array of floats
     if(isinstance(data[0], float)):
         # Check if any of the format specification arguments were passed
@@ -238,6 +242,9 @@ def format_response_data(data=None, data_fmt=None):
     # Round floating point numbers and convert to nearest integers (if required)
     if(isinstance(data[0], float) and data_fmt.float_round):
         data = [int(round(v)) for v in data]
+    if isinstance(data[0], numbers.Integral) and data_fmt.format == 's':
+        return ''.join(chr(c) for c in data)
+
     # Convert to strings by printing values using selected format and prefix (0x, 0o or 0b)
     data_str = [("{}{:" + data_fmt.format + "}").format(data_fmt.prefix, v) for v in data]
     s = sep.join(data_str)
