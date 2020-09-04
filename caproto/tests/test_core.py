@@ -21,50 +21,6 @@ def make_channels(cli_circuit, srv_circuit, data_type, data_count, name='a'):
     return cli_channel, srv_channel
 
 
-def test_counter_wraparound(circuit_pair):
-    circuit, _ = circuit_pair
-    broadcaster = ca.Broadcaster(ca.CLIENT)
-
-    # Force the initial value of search IDs to make this test work
-    broadcaster._search_id_counter.value = -1
-
-    MAX = 2**16
-    for i in range(MAX + 2):
-        assert i % MAX == circuit.new_channel_id()
-        assert i % MAX == circuit.new_subscriptionid()
-        assert i % MAX == circuit.new_ioid()
-        assert i % MAX == broadcaster.new_search_id()
-
-
-def test_counter_skipping(circuit_pair):
-    circuit, _ = circuit_pair
-    broadcaster = ca.Broadcaster(ca.CLIENT)
-
-    # Force the initial value of search IDs to make this test work
-    broadcaster._search_id_counter.value = -1
-    circuit._channel_id_counter.value = -1
-
-    broadcaster.unanswered_searches[0] = 'placeholder'
-    broadcaster.unanswered_searches[2] = 'placeholder'
-    assert broadcaster.new_search_id() == 1
-    assert list(broadcaster.unanswered_searches) == [0, 2]
-    assert broadcaster.new_search_id() == 3
-
-    circuit.channels[2] = 'placeholder'
-    assert circuit.new_channel_id() == 0
-    assert circuit.new_channel_id() == 1
-    # should skip 2
-    assert circuit.new_channel_id() == 3
-
-    circuit._ioids[0] = 'placeholder'
-    # should skip 0
-    circuit.new_ioid() == 1
-
-    circuit.event_add_commands[0] = 'placeholder'
-    # should skip 0
-    circuit.new_subscriptionid() == 1
-
-
 def test_circuit_properties():
     host = '127.0.0.1'
     port = 5555
