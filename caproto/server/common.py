@@ -1,16 +1,17 @@
-from collections import defaultdict, deque, namedtuple, ChainMap
-from collections.abc import Iterable
 import copy
 import logging
 import sys
 import time
 import weakref
-import caproto as ca
-from caproto import (apply_arr_filter, get_environment_variables,
-                     RemoteProtocolError, CaprotoKeyError, CaprotoRuntimeError,
-                     CaprotoNetworkError, ChannelType)
-from .._dbr import SubscriptionType, _LongStringChannelType
+from collections import ChainMap, defaultdict, deque, namedtuple
+from collections.abc import Iterable
 
+import caproto as ca
+from caproto import (CaprotoKeyError, CaprotoNetworkError, CaprotoRuntimeError,
+                     ChannelType, RemoteProtocolError, apply_arr_filter,
+                     get_environment_variables)
+
+from .._dbr import SubscriptionType, _LongStringChannelType
 
 # ** Tuning this parameters will affect the servers' performance **
 # ** under high load. **
@@ -712,7 +713,7 @@ class Context:
                        ' to be tried.', self.ca_server_port)
 
         ignore_addresses = self.environ['EPICS_CAS_IGNORE_ADDR_LIST']
-        self.ignore_addresses = ignore_addresses.split(' ')
+        self.ignore_addresses = tuple(ignore_addresses.split(' '))
 
     @property
     def pvdb_with_fields(self):
@@ -766,6 +767,50 @@ class Context:
             except Exception as ex:
                 self.log.exception('Broadcaster command queue evaluation failed',
                                    exc_info=ex)
+                continue
+
+    async def telemetry_loop(self):
+        BIG = 2**16
+        while True:
+            danger = False
+            try:
+                telemetry = {
+                    "context": {
+                        "cache_sizes": {
+                            "udp_socks": len(self.udp_socks),
+                            "beacon_socks": len(self.beacon_socks),
+                            "pvdb": len(self.pvdb),
+                            "addresses": len(self.addresses),
+                            "circuits": len(self.circuits),
+                            "subscriptions": len(self.subscriptions),
+                            "last_sync_edge_update": len(self.last_sync_edge_update),
+                            "last_dead_band": len(self.last_dead_band),
+                        },
+                    },
+                    "circuits": {}
+                }
+                if any(item > BIG for item in telemetry["context"]["cache_sizes"].values()):
+                    danger = True
+                for key, circuit in self.circuits.items():
+                    cache_sizes = {
+                        "subscriptions": sum(len(sub) for sub in circuit.subscriptions.values()),
+                        "unexpired_updates": len(len(sub) for sub in circuit.unexpired_updates.values()),
+                        "most_recent_updates": len(circuit.most_recent_updates),
+                        "command_queue": circuit.command_queue.qsize(),
+                        "subscription_queue": circuit.subscription_queue.qsize(),
+                    }
+                    telemetry["circuits"][key] = {"cache_sizes": cache_sizes}
+                    if any(item > BIG for item in cache_sizes.values()):
+                        danger = True
+                msg = str(telemetry)
+                if danger:
+                    self.log.warning(msg)
+                else:
+                    self.log.debug(msg)
+            except self.TaskCancelled:
+                break
+            except Exception:
+                self.log.exception('Exception while gathering telemetry')
                 continue
 
     def __iter__(self):
