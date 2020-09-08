@@ -128,14 +128,6 @@ def gen_data_format(args=None, data=None):
     # If no format was specified, the default is "g" (as in EPICS caget)
     df.format = "g"
 
-    # 'data' contains a list (or array) of strings
-    if(isinstance(data[0], str) or isinstance(data[0], bytes)):
-        df.format = "s"
-
-    if args.float_s and isinstance(data[0], numbers.Integral):
-        df.format = 's'
-        return df
-
     # 'data' contains an array of floats
     if(isinstance(data[0], float)):
         # Check if any of the format specification arguments were passed
@@ -164,17 +156,24 @@ def gen_data_format(args=None, data=None):
             df.prefix = "0b"
             df.float_round = True
 
+    # 'data' contains a list (or array) of strings
+    if(isinstance(data[0], str) or isinstance(data[0], bytes)):
+        df.format = "s"
+
     # 'data' contains an array of integers
     if(isinstance(data[0], numbers.Integral)):
-        if args.int_0x:
-            df.format = "X"   # Hexadecimal
-            df.prefix = "0x"
-        elif args.int_0o:
-            df.format = "o"   # Octal
-            df.prefix = "0o"
-        elif args.int_0b:
-            df.format = "b"   # Binary
-            df.prefix = "0b"
+        if args.array_as_str:  # Format array as string
+            df.format = 's'
+        else:  # Print as array
+            if args.int_0x:
+                df.format = "X"   # Hexadecimal
+                df.prefix = "0x"
+            elif args.int_0o:
+                df.format = "o"   # Octal
+                df.prefix = "0o"
+            elif args.int_0b:
+                df.format = "b"   # Binary
+                df.prefix = "0b"
 
     # Separator: may be a single character (quoted or not quoted) or quoted multiple characters
     #          including spaces. EPICS caget allows only single character separators.

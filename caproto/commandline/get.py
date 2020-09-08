@@ -79,6 +79,8 @@ def main():
     parser.add_argument('-n', action='store_true',
                         help=("Retrieve enums as integers (default is "
                               "strings)."))
+    parser.add_argument('-S', dest="array_as_str", action='store_true',
+                        help=("Print array of char as a string (long string)"))
     parser.add_argument('--no-color', action='store_true',
                         help="Suppress ANSI color codes in log messages.")
     parser.add_argument('--no-repeater', action='store_true',
