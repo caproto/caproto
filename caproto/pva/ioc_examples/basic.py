@@ -55,9 +55,9 @@ class DataWrapper:
 
     def authenticate(self, authorization):
         if authorization['method'] == 'ca':
-            user = authorization['data'].user
-            if user != 'klauer':
-                raise AuthenticationError(f'No, {user}.')
+            # user = authorization['data'].user
+            # if user != 'klauer':
+            #     raise AuthenticationError(f'No, {user}.')
             return
 
         if authorization['method'] in {'anonymous', ''}:
