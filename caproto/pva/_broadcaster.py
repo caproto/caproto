@@ -61,14 +61,15 @@ class Broadcaster:
     endian: UserFacingEndian
     our_role: Role
     broadcast_port: int
-    server_port: int
+    server_port: Optional[int]
     response_addr: str
     guid: str
+    unanswered_searches: Dict[int, str]
 
     def __init__(self,
                  our_role: Role,
                  broadcast_port: int,
-                 server_port: int = None,
+                 server_port: Optional[int] = None,
                  endian: UserFacingEndian = SYS_ENDIAN,
                  guid: str = None,
                  response_addr: str = '0.0.0.0',
@@ -303,7 +304,7 @@ class Broadcaster:
             server_address=(self.response_addr, self.server_port),
             protocol=protocol,
             search_instance_ids=list(pv_to_cid.values()),
-            found=len(pv_to_cid),  # hmm
+            found=True,
         )
 
     def beacon(self,
