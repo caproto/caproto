@@ -6,12 +6,14 @@ import enum
 import sys
 import typing
 from dataclasses import field
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 from ._utils import ChannelLifeCycle, _SimpleReprEnum
 
 if typing.TYPE_CHECKING:
     from ._fields import BitSet, FieldDesc
+
+AddressTuple = Tuple[str, int]
 
 
 class UserFacingEndian(str, _SimpleReprEnum):
@@ -211,9 +213,17 @@ class CacheContext:
 
     Tracks Field Description information between clients and servers, and also
     those associated with specific I/O identifiers (ioids)
+
+    Notes
+    -----
+    ``ours[fd_hash] = FieldDesc(..)``
+    ``theirs[identifier] = fd_hash``
+    ``ioid_interfaces[ioid] = FieldDesc(...)``
     """
     ours: Dict[int, 'FieldDesc'] = field(default_factory=dict)
-    theirs: Dict[int, 'FieldDesc'] = field(default_factory=dict)
+    theirs: Dict[int, int] = field(default_factory=dict)
+
+    # TODO: it may be possible to factor this out (I hope...)
     ioid_interfaces: Dict[int, 'FieldDesc'] = field(default_factory=dict)
 
     def clear(self):
@@ -254,7 +264,7 @@ class Deserialized(typing.Iterable):
 
     else:
         def __init__(self,
-                     data: object,
+                     data: typing.Any,
                      buffer: bytes,
                      offset: int):
             self.data = data
@@ -333,8 +343,8 @@ class CoreSerializable(abc.ABC):
     def serialize(self, endian: Endian) -> List[bytes]:
         ...
 
-    @abc.abstractclassmethod
-    def deserialize(cls, data: bytes, *, endian: Endian) -> Deserialized:  # noqa
+    @abc.abstractmethod
+    def deserialize(cls, data: bytes, *, endian: Endian) -> Deserialized:
         ...
 
 
@@ -344,12 +354,12 @@ class CoreStatelessSerializable(abc.ABC):
     serialize and deserialize are class methods.
     """
 
-    @abc.abstractclassmethod
+    @abc.abstractmethod
     def serialize(self, value, endian: Endian) -> List[bytes]:
         ...
 
-    @abc.abstractclassmethod
-    def deserialize(cls, data: bytes, *, endian: Endian) -> Deserialized:  # noqa
+    @abc.abstractmethod
+    def deserialize(cls, data: bytes, *, endian: Endian) -> Deserialized:
         ...
 
 
@@ -362,18 +372,19 @@ class CoreSerializableWithCache(abc.ABC):
     be an instance method.
     """
 
+    @abc.abstractmethod
     def serialize(self, endian: Endian, cache: CacheContext) -> List[bytes]:
         ...
 
-    @abc.abstractclassmethod
+    @abc.abstractmethod
     def deserialize(cls, data: bytes, *, endian: Endian,
-                    cache: CacheContext) -> Deserialized:  # noqa
+                    cache: CacheContext) -> Deserialized:
         ...
 
 
 class _DataSerializer(abc.ABC):
     """ABC for DataSerializer in caproto.pva._data."""
-    @abc.abstractclassmethod
+    @abc.abstractmethod
     def serialize(cls,
                   field: 'FieldDesc',
                   value: typing.Any,
@@ -383,7 +394,7 @@ class _DataSerializer(abc.ABC):
                   ) -> List[bytes]:
         ...
 
-    @abc.abstractclassmethod
+    @abc.abstractmethod
     def deserialize(cls,
                     field: 'FieldDesc',
                     data: bytes, *,
@@ -400,7 +411,7 @@ class _ArrayBasedDataSerializer:
     rather with an array of elements.  Used for arrays of basic data types.
     """
 
-    @abc.abstractclassmethod
+    @abc.abstractmethod
     def serialize(cls,
                   field: 'FieldDesc',
                   value: typing.Any,
@@ -410,7 +421,7 @@ class _ArrayBasedDataSerializer:
                   ) -> List[Union[bytes, array.array]]:
         ...
 
-    @abc.abstractclassmethod
+    @abc.abstractmethod
     def deserialize(cls,
                     field: 'FieldDesc',
                     data: bytes,

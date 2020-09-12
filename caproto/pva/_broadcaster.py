@@ -5,10 +5,11 @@ socket provided by a client or server implementation.
 """
 import ctypes
 import logging
-from typing import Dict, Optional
+from typing import Dict, List, Optional, Type
 
 from . import _utils as utils
-from ._core import BIG_ENDIAN, LITTLE_ENDIAN, SYS_ENDIAN, UserFacingEndian
+from ._core import (BIG_ENDIAN, LITTLE_ENDIAN, SYS_ENDIAN, AddressTuple,
+                    UserFacingEndian)
 from ._data import FieldDescAndData
 from ._messages import (BeaconMessage, BeaconMessageBE, BeaconMessageLE,
                         MessageFlags, MessageHeaderBE, MessageHeaderLE,
@@ -51,6 +52,19 @@ class Broadcaster:
          '0.0.0.0' as an indicator to reply to the IP-layer defined source
          address of the packet.
     """
+
+    _SearchRequest: Type[SearchRequest]
+    _SearchResponse: Type[SearchResponse]
+    _BeaconMessage: Type[BeaconMessage]
+    server_addresses: List[AddressTuple]
+    client_address: AddressTuple
+    endian: UserFacingEndian
+    our_role: Role
+    broadcast_port: int
+    server_port: int
+    response_addr: str
+    guid: str
+
     def __init__(self,
                  our_role: Role,
                  broadcast_port: int,
@@ -65,13 +79,13 @@ class Broadcaster:
         self.our_role = our_role
         self.endian = endian
         if endian == LITTLE_ENDIAN:
-            self.SearchRequest = SearchRequestLE
-            self.SearchResponse = SearchResponseLE
-            self.BeaconMessage = BeaconMessageLE
+            self._SearchRequest = SearchRequestLE
+            self._SearchResponse = SearchResponseLE
+            self._BeaconMessage = BeaconMessageLE
         elif endian == BIG_ENDIAN:
-            self.SearchRequest = SearchRequestBE
-            self.SearchResponse = SearchResponseBE
-            self.BeaconMessage = BeaconMessageBE
+            self._SearchRequest = SearchRequestBE
+            self._SearchResponse = SearchResponseBE
+            self._BeaconMessage = BeaconMessageBE
         else:
             raise ValueError('Invalid endian setting')
 
@@ -249,15 +263,12 @@ class Broadcaster:
         pv_to_cid, SearchRequest
         """
         pv_to_cid = {pv: self._search_id_counter() for pv in pvs}
-        req = self.SearchRequest(
+        req = self._SearchRequest(
             sequence_id=self._sequence_id_counter(),
-            flags=SearchFlags.broadcast,
-            # (SearchFlags.reply_required | SearchFlags.broadcast),
-            response_address=self.response_addr,
-            response_port=self.broadcast_port,
-            protocols=['tcp'],
+            response_address=(self.response_addr, self.broadcast_port),
             channels=[{'id': search_id, 'channel_name': pv}
                       for pv, search_id in pv_to_cid.items()]
+            # flags=(SearchFlags.reply_required | SearchFlags.broadcast),
         )
 
         return pv_to_cid, req
@@ -286,13 +297,11 @@ class Broadcaster:
         -------
         SearchResponse
         """
-        return self.SearchResponse(
-            guid=[ord(c) for c in (guid or self.guid)],
+        return self._SearchResponse(
+            guid=guid or self.guid,
             sequence_id=self._sequence_id_counter(),
-            server_address=self.response_addr,
-            server_port=self.server_port,
+            server_address=(self.response_addr, self.server_port),
             protocol=protocol,
-            search_count=len(pv_to_cid),
             search_instance_ids=list(pv_to_cid.values()),
             found=len(pv_to_cid),  # hmm
         )
@@ -331,13 +340,12 @@ class Broadcaster:
         if not isinstance(server_status, FieldDescAndData):
             server_status = FieldDescAndData(data=server_status)
 
-        return self.BeaconMessage(
-            guid=[ord(c) for c in (guid or self.guid)],
+        return self._BeaconMessage(
+            guid=guid or self.guid,
             flags=SearchFlags.broadcast,
             sequence_id=self._beacon_counter(),
             change_count=0,
-            server_address=self.response_addr,
-            server_port=self.server_port,
+            server_address=(self.response_addr, self.server_port),
             protocol=protocol,
             server_status=server_status,
         )

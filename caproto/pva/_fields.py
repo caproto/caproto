@@ -8,7 +8,7 @@ import textwrap
 import typing
 from dataclasses import field
 from struct import pack, unpack
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Type, Union
 
 from . import _core as core
 from ._core import (CacheContext, CoreSerializable, CoreSerializableWithCache,
@@ -46,7 +46,7 @@ class FieldDesc(CoreSerializableWithCache):
                     data: bytes,
                     *,
                     endian: Endian,
-                    cache: CacheContext,
+                    cache: Optional[CacheContext] = None,
                     name: Optional[str] = None,
                     ) -> Deserialized:
         """
@@ -81,6 +81,12 @@ class FieldDesc(CoreSerializableWithCache):
             offset += off
 
             if type_code == TypeCode.ONLY_ID_TYPE_CODE:
+                if cache is None:
+                    raise RuntimeError(
+                        f'Cache not specified; cannot determine type code '
+                        f'{interface_id}'
+                    )
+
                 intf = cache.ours[interface_id]
                 return Deserialized(data=intf.as_new_name(name), buffer=data,
                                     offset=offset)
@@ -88,14 +94,18 @@ class FieldDesc(CoreSerializableWithCache):
             # otherwise, fall through...
 
         fd, _, _ = FieldDescByte.deserialize(data)
-        cls = StructuredField if fd.field_type.is_complex else SimpleField
+        field_cls = typing.cast(
+            Type[FieldDesc],
+            StructuredField if fd.field_type.is_complex else SimpleField
+        )
 
-        intf, data, off = cls.deserialize(data, endian=endian, cache=cache,
-                                          name=name)
+        intf, data, off = field_cls.deserialize(
+            data, endian=endian, cache=cache, name=name)
         offset += off
 
-        if interface_id is not None:
+        if interface_id is not None and cache is not None:
             cache.ours[interface_id] = intf
+
         return Deserialized(data=intf, buffer=data, offset=offset)
 
     def summary(self) -> str:
@@ -173,7 +183,7 @@ class StructuredField(FieldDesc):
     descendents: Tuple[Descendent, ...] = field(repr=False, hash=True,
                                                 default_factory=tuple)
 
-    def serialize_cache_update(self, endian: Endian, cache: CacheContext):
+    def serialize_cache_update(self, endian: Endian, cache: Optional[CacheContext]):
         if cache is None or cache.theirs is None:
             return True, []
 
@@ -193,7 +203,7 @@ class StructuredField(FieldDesc):
         identifier = Identifier.serialize(id_, endian=endian)
         return True, [bytes([TypeCode.FULL_WITH_ID_TYPE_CODE])] + identifier
 
-    def serialize(self, endian: Endian, cache: CacheContext) -> List[bytes]:
+    def serialize(self, endian: Endian, cache: Optional[CacheContext]) -> List[bytes]:
         '''Serialize field description introspection data.'''
         include_all, buf = self.serialize_cache_update(
             endian=endian, cache=cache)
@@ -361,7 +371,7 @@ class Size(CoreStatelessSerializable):
     """
 
     @classmethod
-    def serialize(cls, size: int, endian: Endian) -> List[bytes]:
+    def serialize(cls, size: Union[int, None], endian: Endian) -> List[bytes]:
         'Sizes/lengths are encoded in 3 ways, depending on the size'
         if size is None:
             # TODO_DOCS: this is misrepresented in the docs

@@ -187,6 +187,8 @@ class VariantFieldData(DataSerializer, handles={FieldType.any}):
         float: FieldType.float64,
     }
 
+    _NULL_TYPE = [bytes([TypeCode.NULL_TYPE_CODE])]
+
     @classmethod
     def field_from_value(cls, value: typing.Any, *, name: str = '') -> FieldDesc:
         'Name and native Python value -> field description dictionary'
@@ -209,6 +211,8 @@ class VariantFieldData(DataSerializer, handles={FieldType.any}):
 
             value = value[0]
 
+        assert value is not None
+
         if is_pva_dataclass_instance(value):
             return value._pva_struct_.as_new_name(name)
 
@@ -216,9 +220,6 @@ class VariantFieldData(DataSerializer, handles={FieldType.any}):
             raise ValueError(
                 f'Must use an instantiated dataclass, got {value}'
             )
-
-        if value is None:
-            return None
 
         return SimpleField(
             name=name,
@@ -236,7 +237,7 @@ class VariantFieldData(DataSerializer, handles={FieldType.any}):
                   cache: Optional[CacheContext] = None,
                   ) -> List[bytes]:
         if value is None or value == (None, ):  # hmm
-            return [bytes([TypeCode.NULL_TYPE_CODE])]
+            return cls._NULL_TYPE
 
         new_field = cls.field_from_value(value)
         if isinstance(new_field, StructuredField):
@@ -363,7 +364,7 @@ class StructFieldData(DataSerializer, handles={FieldType.struct}):
         ]
 
         serialized = []
-        child_bitset: Optional[BitSet]
+        child_bitset: Optional[BitSet] = None
 
         for index, child in bitset_index_to_child:
             if child.field_type in {FieldType.struct, FieldType.union}:
@@ -412,6 +413,7 @@ class StructFieldData(DataSerializer, handles={FieldType.struct}):
             for name, child in field.children.items()
         ]
         value = {}
+        child_bitset: Optional[BitSet] = None
         for index, child in bitset_index_to_child:
             if child.field_type == FieldType.struct:
                 if child.array_type == FieldArrayType.variable_array:
@@ -530,8 +532,10 @@ class FieldDescAndData(CoreSerializableWithCache):
     """
 
     _field_class = FieldDesc
+    interface: Optional[FieldDesc]
+    data: Optional[PvaStruct]
 
-    def __init__(self, interface: FieldDesc = None,
+    def __init__(self, interface: Union[FieldDesc, PvaStruct, None] = None,
                  data=None):
         if is_pva_dataclass_instance(data):
             data = typing.cast(PvaStruct, data)
@@ -558,7 +562,6 @@ class FieldDescAndData(CoreSerializableWithCache):
 
         assert self.data is not None
 
-        serialized = []
         serialized = self.interface.serialize(endian=endian, cache=cache)
         serialized.extend(to_wire(self.interface, value=self.data,
                                   endian=endian, bitset=None, cache=cache))
@@ -804,7 +807,9 @@ def from_wire_class(cls: Union[Type[CoreSerializable],
     """
     if issubclass(cls, CoreSerializableWithCache):
         cls = typing.cast(Type[CoreSerializableWithCache], cls)
-        return cls.deserialize(data=data, endian=endian, cache=cache)
+        # assert cache is not None
+        return cls.deserialize(data=data, endian=endian,
+                               cache=typing.cast(CacheContext, cache))
 
     if issubclass(cls, (CoreSerializable, CoreStatelessSerializable)):
         cls = typing.cast(Type[CoreSerializable], cls)

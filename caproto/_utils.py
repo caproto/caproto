@@ -154,12 +154,33 @@ class Protocol(str, _SimpleReprEnum):
         }[self]
 
 
-globals().update(
-    {token: getattr(_enum, token)
-     for _enum in [Role, Direction, States, Protocol]
-     for token in dir(_enum)
-     if not token.startswith('_')
-     })
+CLIENT = Role.CLIENT
+SERVER = Role.SERVER
+RESPONSE = Direction.RESPONSE
+REQUEST = Direction.REQUEST
+
+SEND_SEARCH_REQUEST = States.SEND_SEARCH_REQUEST
+AWAIT_SEARCH_RESPONSE = States.AWAIT_SEARCH_RESPONSE
+SEND_SEARCH_RESPONSE = States.SEND_SEARCH_RESPONSE
+SEND_VERSION_REQUEST = States.SEND_VERSION_REQUEST
+AWAIT_VERSION_RESPONSE = States.AWAIT_VERSION_RESPONSE
+SEND_VERSION_RESPONSE = States.SEND_VERSION_RESPONSE
+SEND_CREATE_CHAN_REQUEST = States.SEND_CREATE_CHAN_REQUEST
+AWAIT_CREATE_CHAN_RESPONSE = States.AWAIT_CREATE_CHAN_RESPONSE
+SEND_CREATE_CHAN_RESPONSE = States.SEND_CREATE_CHAN_RESPONSE
+CONNECTED = States.CONNECTED
+MUST_CLOSE = States.MUST_CLOSE
+CLOSED = States.CLOSED
+IDLE = States.IDLE
+FAILED = States.FAILED
+DISCONNECTED = States.DISCONNECTED
+NEED_DATA = States.NEED_DATA
+
+FROM_WIRE = ConversionDirection.FROM_WIRE
+TO_WIRE = ConversionDirection.TO_WIRE
+
+PVAccess = Protocol.PVAccess
+ChannelAccess = Protocol.ChannelAccess
 
 
 class CaprotoError(Exception):

@@ -10,6 +10,7 @@ from caproto import (CaprotoNetworkError, CaprotoRuntimeError,
 
 from .._data import DataWithBitSet
 from .._dataclass import pva_dataclass
+from .._functools_compat import singledispatchmethod
 from .._messages import Message, Subcommand
 
 # If a Read[Notify]Request or EventAddRequest is received, wait for up to this
@@ -153,8 +154,9 @@ class VirtualCircuit:
         2. Update Channel state if applicable.
         """
         try:
+            self.log.debug("%r", message, extra=self._tags)
             self.circuit.process_command(message)
-        except ca.RemoteProtocolError:
+        except RemoteProtocolError:
             client_chid, server_chid = self._get_ids_from_message(message)
 
             if client_chid is not None:
@@ -185,8 +187,8 @@ class VirtualCircuit:
             # Internal error - ignore for now
             return
 
-        if message is ca.DISCONNECTED:
-            raise DisconnectedCircuit
+        if message is pva.DISCONNECTED:
+            raise DisconnectedCircuit()
 
         try:
             response = await self._process_message(message)
@@ -267,194 +269,202 @@ class VirtualCircuit:
 
     def _get_db_entry_from_message(self, message):
         """Return a database entry from message, determined by the server id"""
-        chan = self.circuit._get_channel_from_command(message)
+        chan = self.circuit._get_channel_from_message(message)
         db_entry = self.context[chan.name]
         return chan, db_entry
 
+    @singledispatchmethod
     async def _process_message(self, message):
-        '''Process a message from a client, and return the server response'''
-        tags = self._tags
-        if message is ca.DISCONNECTED:
+        # Fall-through for non-registered items
+        if message is pva.DISCONNECTED:
             raise DisconnectedCircuit()
 
+        self.log.error("Unhandled %r", message, extra=self._tags)
+        return []
+
+    @_process_message.register
+    async def _(self, message: pva.ConnectionValidationResponse):
+        self.authorization_info.update(**{
+            'method': message.auth_nz,
+            'data': message.data.data,
+        })
+        return [self.circuit.validated_connection()]
+
+    @_process_message.register
+    async def _(self, message: pva.SearchRequest):
+        ...
+        # TODO message.channels -> searchreply
+        return []
+
+    @_process_message.register
+    async def _(self, message: pva.CreateChannelRequest):
         to_send = []
-        if isinstance(message, pva.ConnectionValidationResponse):
-            message = typing.cast(pva.ConnectionValidationResponse, message)
-            message: pva.ConnectionValidationResponse  # TODO: cast insufficient?
-            self.authorization_info.update(**{
-                'method': message.auth_nz,
-                'data': message.data.data,
-            })
-            to_send = [
-                self.circuit.validated_connection()
-            ]
-        elif isinstance(message, pva.SearchRequest):
-            ...
-            # TODO message.channels -> searchreply
-        elif isinstance(message, pva.CreateChannelRequest):
-            to_send = []
-            for info in message.channels:
-                try:
-                    cid = info['id']
-                    name = info['channel_name']
-                    chan = self.circuit.channels[cid]
-                except KeyError:
-                    self.log.debug('Client requested invalid channel name: %s',
-                                   name)
-                    to_send.append(
-                        chan.create(
-                            sid=0,
-                            status=pva.Status.create_error(
-                                message=f'Invalid channel name {name}',
-                            ),
-                        )
-                    )
-                else:
-                    to_send.append(
-                        chan.create(sid=self.circuit.new_channel_id())
-                    )
-
-        elif isinstance(message, pva.ChannelFieldInfoRequest):
-            chan, db_entry = self._get_db_entry_from_message(message)
-            ioid_info = self.circuit._ioids[message.ioid]
-            chan = ioid_info['channel']
-
-            data = await db_entry.auth_read_interface(
-                authorization=self.authorization_info)
-
-            data = await db_entry.read(None)
-            to_send = [
-                chan.read_interface(ioid=message.ioid, interface=data)
-            ]
-        elif isinstance(message, pva.ChannelGetRequest):
-            message = typing.cast(pva.ChannelGetRequest, message)
-            message: pva.ChannelGetRequest
-            chan, db_entry = self._get_db_entry_from_message(message)
-            ioid_info = self.circuit._ioids[message.ioid]
-            chan = ioid_info['channel']
-            subcommand = message.subcommand
-            if subcommand == Subcommand.INIT:
-                try:
-                    data = await db_entry.auth_read(
-                        message.pv_request, authorization=self.authorization_info)
-                except Exception as ex:
-                    to_send = [
-                        chan.read(
-                            ioid=message.ioid, interface=None,
-                            status=pva.Status.create_error(
-                                message=f'{ex.__class__.__name__}: {ex}',
-                            ),
-                        )
-                    ]
-                else:
-                    ioid_info['pv_request'] = message.pv_request
-                    ioid_info['interface'] = data
-
-                    response = chan.read(ioid=message.ioid, interface=data)
-                    ioid_info['init_request'] = message
-                    # Reusable response message for this ioid:
-                    ioid_info['response'] = response
-                    to_send = [response]
-            elif (subcommand == Subcommand.GET or subcommand == Subcommand.DEFAULT):
-                # NOTE: we'll only get here if INIT succeeded, where the
-                # authentication happens
-
-                # TODO: check if interface has changed
-                response = ioid_info['response']
-
-                data = await db_entry.read(
-                    ioid_info['init_request'].pv_request
-                )
-
-                to_send = [
-                    response.as_subcommand(
-                        message.subcommand,
-                        pv_data=DataWithBitSet(
-                            data=data,
-                            bitset=pva.BitSet({0}),  # TODO
+        for info in message.channels:
+            try:
+                cid = info['id']
+                name = info['channel_name']
+                chan = self.circuit.channels[cid]
+            except KeyError:
+                self.log.debug('Client requested invalid channel name: %s',
+                               name)
+                to_send.append(
+                    chan.create(
+                        sid=0,
+                        status=pva.Status.create_error(
+                            message=f'Invalid channel name {name}',
                         ),
                     )
-                ]
-        elif isinstance(message, pva.ChannelPutRequest):
-            message = typing.cast(pva.ChannelPutRequest, message)
-            message: pva.ChannelPutRequest
-
-            chan, db_entry = self._get_db_entry_from_message(message)
-            ioid_info = self.circuit._ioids[message.ioid]
-            chan = ioid_info['channel']
-            subcommand = message.subcommand
-
-            if subcommand == Subcommand.INIT:
-                try:
-                    interface = await db_entry.auth_write(
-                        message.pv_request,
-                        authorization=self.authorization_info
-                    )
-                except Exception as ex:
-                    interface = None
-                    status = pva.Status.create_error(
-                        message=f'{ex.__class__.__name__}: {ex}',
-                    )
-                else:
-                    status = pva.Status.create_success()
-
-                ioid_info['pv_request'] = message.pv_request
-                ioid_info['interface'] = interface
-
-                to_send = [
-                    chan.write_init(
-                        ioid=message.ioid,
-                        interface=interface,
-                        status=status
-                    )
-                ]
-            elif subcommand == Subcommand.GET:
-                # This is pretty much a pva-get, using the pvrequest from the
-                # put_init
-                try:
-                    pv_request = ioid_info['pv_request']
-                    read_data = await db_entry.read(pv_request)
-                    data = DataWithBitSet(
-                        data=read_data,
-                        bitset=pva.BitSet({0}),  # TODO
-                    )
-                except Exception as ex:
-                    status = pva.Status.create_error(
-                        message=f'{ex.__class__.__name__}: {ex}',
-                    )
-                    data = None
-                else:
-                    status = pva.Status.create_success()
-
-                to_send = [chan.write_get(ioid=message.ioid, data=data,
-                                          status=status)]
-            elif subcommand == Subcommand.DEFAULT:
-                # TODO: check if interface has changed
-                data = message.put_data
-                # ioid_info['interface']
-                try:
-                    await db_entry.write(data)
-                except Exception as ex:
-                    status = pva.Status.create_error(
-                        message=f'{ex.__class__.__name__}: {ex}',
-                    )
-                else:
-                    status = pva.Status.create_success()
-                to_send = [chan.write(ioid=message.ioid, status=status)]
-                to_send[0].subcommand = Subcommand(subcommand)
-        elif isinstance(message, pva.ChannelRequestDestroy):
-            # Handled by the circuit
-            ...
-        elif isinstance(message, pva.ChannelRequestCancel):
-            # TODO: this layer should handle canceling the operation
-            ...
-        elif isinstance(message, pva.EchoRequest):
-            to_send = [pva.EchoResponse()]
-
-        if isinstance(message, pva.Message):
-            self.log.debug("%r", message, extra=tags)
-
+                )
+            else:
+                to_send.append(
+                    chan.create(sid=self.circuit.new_channel_id())
+                )
         return to_send
+
+    @_process_message.register
+    async def _(self, message: pva.ChannelFieldInfoRequest):
+        chan, db_entry = self._get_db_entry_from_message(message)
+        data = await db_entry.auth_read_interface(
+            authorization=self.authorization_info)
+
+        data = await db_entry.read(None)
+        return [chan.read_interface(ioid=message.ioid, interface=data)]
+
+    @_process_message.register
+    async def _(self, message: pva.ChannelGetRequest):
+        chan, db_entry = self._get_db_entry_from_message(message)
+        ioid_info = self.circuit.ioids[message.ioid]
+
+        response: pva.ChannelGetResponse
+
+        if message.subcommand == Subcommand.INIT:
+            try:
+                data = await db_entry.auth_read(
+                    message.pv_request, authorization=self.authorization_info)
+            except Exception as ex:
+                response = chan.read(
+                    ioid=message.ioid, interface=None,
+                    status=pva.Status.create_error(
+                        message=f'{ex.__class__.__name__}: {ex}',
+                    ),
+                )
+            else:
+                ioid_info['pv_request'] = message.pv_request
+                ioid_info['interface'] = data
+
+                response = chan.read(ioid=message.ioid, interface=data)
+                ioid_info['init_request'] = message
+                # Reusable response message for this ioid:
+                ioid_info['response'] = response
+            return [response]
+
+        if (message.subcommand == Subcommand.GET or
+                message.subcommand == Subcommand.DEFAULT):
+            # NOTE: we'll only get here if INIT succeeded, where the
+            # authentication happens
+
+            data = await db_entry.read(
+                ioid_info['init_request'].pv_request
+            )
+
+            pv_data = DataWithBitSet(data=data,
+                                     bitset=pva.BitSet({0}),  # TODO
+                                     )
+
+            # TODO: check if interface has changed
+            response = ioid_info['response']
+            if message.subcommand == Subcommand.GET:
+                response.to_get(pv_data=pv_data)
+            else:
+                response.to_default(pv_data=pv_data)
+            return [response]
+
+    @_process_message.register
+    async def _(self, message: pva.ChannelPutRequest):
+        chan, db_entry = self._get_db_entry_from_message(message)
+        ioid_info = self.circuit.ioids[message.ioid]
+        response: pva.ChannelPutResponse
+
+        if message.subcommand == Subcommand.INIT:
+            try:
+                interface = await db_entry.auth_write(
+                    message.pv_request,
+                    authorization=self.authorization_info
+                )
+            except Exception as ex:
+                interface = None
+                status = pva.Status.create_error(
+                    message=f'{ex.__class__.__name__}: {ex}',
+                )
+            else:
+                status = pva.Status.create_success()
+
+            response = chan.write(
+                ioid=message.ioid,
+                status=status,
+                put_structure_if=interface,
+            )
+
+            ioid_info['pv_request'] = message.pv_request
+            ioid_info['interface'] = interface
+            ioid_info['response'] = response
+            return [response.to_init(put_structure_if=interface)]
+
+        if message.subcommand == Subcommand.GET:
+            # This is pretty much a pva-get, using the pvrequest from the
+            # put_init
+            response = ioid_info['response']
+            try:
+                pv_request = ioid_info['pv_request']
+                read_data = await db_entry.read(pv_request)
+                data = DataWithBitSet(
+                    data=read_data,
+                    bitset=pva.BitSet({0}),  # TODO
+                )
+            except Exception as ex:
+                response.status = pva.Status.create_error(
+                    message=f'{ex.__class__.__name__}: {ex}',
+                )
+                data = None
+            else:
+                response.status = pva.Status.create_success()
+
+            return [response.to_get(data=data)]
+
+        if message.subcommand == Subcommand.DEFAULT:
+            # TODO: check if interface has changed
+            response = ioid_info['response']
+            try:
+                await db_entry.write(message.put_data)
+            except Exception as ex:
+                response.status = pva.Status.create_error(
+                    message=f'{ex.__class__.__name__}: {ex}',
+                )
+            else:
+                response.status = pva.Status.create_success()
+
+            return [response.to_default()]
+
+    @_process_message.register
+    async def _(self, message: pva.ChannelDestroyRequest):
+        """This is a request to destroy a **channel**."""
+        # TODO: cleanup
+        chan, db_entry = self._get_db_entry_from_message(message)
+        return [chan.disconnect()]
+
+    @_process_message.register
+    async def _(self, message: pva.ChannelRequestDestroy):
+        """This is a request to destroy a **request**."""
+        return []
+
+    @_process_message.register
+    async def _(self, message: pva.ChannelRequestCancel):
+        # TODO: this layer should handle canceling the operation
+        return []
+
+    @_process_message.register
+    async def _(self, message: pva.EchoRequest):
+        return [pva.EchoResponse()]
 
 
 class Context(typing.Mapping):
@@ -578,12 +588,16 @@ class Context(typing.Mapping):
                     raise CaprotoNetworkError(f"Failed to send to {host}:{port}") from exc
 
     async def broadcast_beacon_loop(self):
-        return
+        if self.environ.get('CAPROTO_PVA_BEACON_DISABLE', '') == '1':
+            self.log.warning('Beacons disabled for debugging purposes')
+            return
 
         self.log.debug('Will send beacons to %r',
                        [f'{h}:{p}' for h, p in self.beacon_socks.keys()])
-        MIN_BEACON_PERIOD = 0.02  # "RECOMMENDED" by the CA spec
-        BEACON_BACKOFF = 2  # "RECOMMENDED" by the CA spec
+
+        # "RECOMMENDED" by the PVA spec (~15Hz at startup)
+        MIN_BEACON_PERIOD = 0.07
+        BEACON_BACKOFF = 2
         max_beacon_period = self.environ['EPICS_PVAS_BEACON_PERIOD']
         beacon_period = MIN_BEACON_PERIOD
         server_status = ServerStatus()
