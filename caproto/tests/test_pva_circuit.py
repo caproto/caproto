@@ -113,17 +113,56 @@ def test_channel_get(client: pva.ClientVirtualCircuit,
     #      server_chan.read_interface(ioid=interface_req.ioid,
     #                                 interface=server_value))
 
-    client_init = client_chan.read_init()
-    send(client, server, client_init)
-    send(server, client, server_chan.read_init(ioid=client_init.ioid,
-                                               interface=server_value))
-
-    send(client, server, client_chan.read(ioid=client_init.ioid,
-                                          interface=server_value))
+    request = client_chan.read()
+    response = server_chan.read(ioid=request.ioid,
+                                interface=server_value)
+    send(client, server, request)
+    send(server, client, response)
 
     data_bs = pva.DataWithBitSet(data=server_value, bitset=pva.BitSet({0}))
-    roundtrip = send(server, client,
-                     server_chan.read(ioid=client_init.ioid, data=data_bs))
+
+    send(client, server, request.to_get())
+    roundtrip = send(server, client, response.to_get(pv_data=data_bs))
 
     assert hash(roundtrip[0].pv_data.interface) == hash(Data._pva_struct_)
     assert roundtrip[0].pv_data.data == {'a': 4, 'b': 'string'}
+
+
+def test_channel_put(client: pva.ClientVirtualCircuit,
+                     server: pva.ServerVirtualCircuit,
+                     ):
+    connect(client, server)
+
+    client_chan: pva.ClientChannel = client.create_channel('pvname')
+    send(client, server, client_chan.create())
+
+    server_chan: pva.ServerChannel = server.create_channel('pvname')
+    send(server, client, server_chan.create(sid=1))
+
+    @pva.pva_dataclass
+    class Data:
+        a: int
+        b: str
+
+    server_value = Data(a=4, b='string')
+    client_value = Data(a=5, b='string')
+    server_data_bs = pva.DataWithBitSet(data=server_value, bitset=pva.BitSet({0}))
+    client_data_bs = pva.DataWithBitSet(data=client_value, bitset=pva.BitSet({0}))
+
+    request = client_chan.write(pvrequest='field()')
+    response = server_chan.write(ioid=request.ioid,
+                                 put_structure_if=server_value)
+    send(client, server, request)
+    send(server, client, response)
+
+    send(client, server, request.to_get())
+    roundtrip = send(server, client, response.to_get(data=server_data_bs))
+
+    assert hash(roundtrip[0].put_data.interface) == hash(Data._pva_struct_)
+    assert roundtrip[0].put_data.data == {'a': 4, 'b': 'string'}
+
+    roundtrip = send(client, server, request.to_default(put_data=client_data_bs))
+    send(server, client, response.to_default())
+
+    assert hash(roundtrip[0].put_data.interface) == hash(Data._pva_struct_)
+    assert roundtrip[0].put_data.data == {'a': 5, 'b': 'string'}

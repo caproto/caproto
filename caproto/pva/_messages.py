@@ -2,13 +2,14 @@ import ctypes
 import dataclasses
 import enum
 import functools
+import inspect
 import logging
 import typing
 from typing import Dict, List, Optional, Sequence, Tuple, Type, Union
 
 from . import _annotations as annotations
 from . import _core as core
-from ._core import (BIG_ENDIAN, LITTLE_ENDIAN, CoreSerializable,
+from ._core import (BIG_ENDIAN, LITTLE_ENDIAN, AddressTuple, CoreSerializable,
                     CoreStatelessSerializable, Deserialized, Endian,
                     FieldArrayType, FieldType, SegmentDeserialized, StatusType,
                     UserFacingEndian)
@@ -236,11 +237,13 @@ class Subcommand(enum.IntEnum):
 
 
 class MonitorSubcommand(enum.IntFlag):
-    INIT = 0x08
-    DEFAULT = 0x00
-    PIPELINE = 0x80
+    PIPELINE = 0x80  # (GET_PUT)
     START = 0x44
     STOP = 0x04
+
+    # Duplicated from :class:`Subcommand`:
+    DEFAULT = 0x00
+    INIT = 0x08
     DESTROY = 0x10
 
 
@@ -257,6 +260,32 @@ def _array_property(name, doc):
 
 
 _StatusOK = Status(StatusType.OK)
+
+
+def _handles(subcommand: SubcommandType,
+             fields: Optional[AdditionalFields] = None):
+    """
+    A decorator that marks a handler method for initializing a Subcommand.
+
+    Parameters
+    ----------
+    subcommand : SubcommandType
+        The subcommand.
+
+    fields : list of RequiredField, OptionalField, etc.
+        The fields associated with the subcommand.
+    """
+
+    def wrapper(handler):
+        handler._subcommand_handler_ = True
+        if not hasattr(handler, 'subcommands'):
+            handler.subcommands = []
+
+        handler.subcommands.append(subcommand)
+        handler.fields = fields or getattr(handler, 'fields', [])
+        return handler
+
+    return wrapper
 
 
 class Message:
@@ -379,10 +408,10 @@ class Message:
 
             field_interface = field.type
 
-            if field_interface in {DataWithBitSet}:
+            if field_interface is DataWithBitSet:
                 try:
-                    field_interface = field_interface(
-                        interface=cache.ioid_interfaces[msg.ioid],
+                    field_interface = DataWithBitSet(
+                        data=cache.ioid_interfaces[msg.ioid],
                     )
                 except KeyError:
                     raise RuntimeError(
@@ -451,7 +480,7 @@ class SubcommandMessage(AdditionalFieldsMessage):
     These are listed in ``_subcommand_fields_``, keyed on ``Subcommand``.
     """
     _subcommand_fields_: SubcommandFields
-    subcommand: Optional[SubcommandType] = None
+    subcommand: SubcommandType
 
     def _get_repr_items(self):
         yield from super()._get_repr_items()
@@ -470,6 +499,36 @@ class SubcommandMessage(AdditionalFieldsMessage):
         except KeyError:
             raise ValueError(f'Invalid (or currently unhandled) subcommand'
                              f' for class {cls}: {subcommand}') from None
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if issubclass(cls, (_LE, _BE)):
+            # Don't do this for the mixins
+            return
+
+        if not hasattr(cls, '_additional_fields_'):
+            cls._additional_fields_ = []
+
+        if not hasattr(cls, '_subcommand_fields_'):
+            cls._subcommand_fields_ = {
+                subcommand: []
+                for subcommand in Subcommand
+            }
+
+        for attr, obj in inspect.getmembers(cls):
+            if getattr(obj, '_subcommand_handler_', None):
+                for cmd in obj.subcommands:
+                    old = cls._subcommand_fields_.get(cmd, [])
+                    if len(old):
+                        raise RuntimeError(
+                            f'Specified subcommand {cmd} twice: {old}')
+
+                    cls._subcommand_fields_[cmd] = obj.fields
+
+    @_handles(Subcommand.DESTROY)
+    def to_destroy(self):
+        self.subcommand = Subcommand.DESTROY
+        return self
 
 
 class _LE(ctypes.LittleEndianStructure):
@@ -544,13 +603,6 @@ class MessageHeader(Message):
             )
 
 
-class MessageHeaderLE(MessageHeader, _LE): _fields_ = MessageHeader._fields_  # noqa  E305
-class MessageHeaderBE(MessageHeader, _BE): _fields_ = MessageHeader._fields_  # noqa  E305
-
-
-_MessageHeaderSize = ctypes.sizeof(MessageHeaderLE)
-
-
 class BeaconMessage(AdditionalFieldsMessage):
     """
     A beacon message.
@@ -621,8 +673,35 @@ class BeaconMessage(AdditionalFieldsMessage):
         return ubyte_array_to_ip(self._server_address)
 
     @server_address.setter
-    def server_address(self, value):
+    def server_address(self, value: str):
         self._server_address = ip_to_ubyte_array(value)
+
+    def __init__(self,
+                 guid: str,
+                 sequence_id: int,
+                 server_address: AddressTuple,
+                 server_status: FieldDescAndData,
+                 *,
+                 change_count: int = 0,
+                 flags: int = 0,
+                 protocol: str = 'tcp',
+                 ):
+        super().__init__(flags=flags,
+                         sequence_id=sequence_id,
+                         change_count=change_count)
+        self.guid = [ord(c) for c in guid]
+        self.server_address = server_address[0]
+        self.server_port = server_address[1]
+        self.protocol = protocol
+        self.server_status = server_status
+
+
+
+class MessageHeaderLE(MessageHeader, _LE): _fields_ = MessageHeader._fields_  # noqa  E305
+class MessageHeaderBE(MessageHeader, _BE): _fields_ = MessageHeader._fields_  # noqa  E305
+
+
+_MessageHeaderSize = ctypes.sizeof(MessageHeaderLE)
 
 
 # NOTE: the following control messages do not have any elements which require
@@ -773,6 +852,8 @@ class ConnectionValidationResponse(AdditionalFieldsMessage):
     client_buffer_size: int
     client_registry_size: int
     connection_qos: int
+    auth_nz: str
+    data: FieldDescAndData
 
     _fields_ = [
         ('client_buffer_size', ctypes.c_int32),
@@ -871,10 +952,49 @@ class SearchRequest(AdditionalFieldsMessage):
         self.channel_count = len(self.channels)
         return super().serialize(*args, **kwargs)
 
+    def __init__(self,
+                 sequence_id: int,
+                 response_address: AddressTuple,
+                 channels: List[ChannelWithID],
+                 *,
+                 protocols=None,
+                 flags: SearchFlags = SearchFlags.broadcast,
+                 ):
+        super().__init__(sequence_id=sequence_id,
+                         response_address=response_address[0],
+                         response_port=response_address[1],
+                         flags=flags,
+                         )
+        self.channels = channels
+        self.protocols = protocols if protocols is not None else ['tcp']
+        self.flags = flags
+
 
 class SearchResponse(AdditionalFieldsMessage):
     """
     A response to a SearchRequest.
+
+    Parameters
+    ----------
+    guid : str
+        The server's globally unique identifier.
+
+    sequence_id : int
+        The sequence id, which should correspond to the request.
+
+    server_address : AddressTuple
+        The server that hosts the data.
+
+    search_instance_ids : list of integers
+        The search IDs that have been found (or not).
+
+    found : bool, optional
+        Whether the given IDs were found on the server or not.  Defaults to
+        `True`.
+
+    protocol : str = 'tcp'
+        The protocol where the search results can be retrieved from. ``tcp``
+        is the only supported option here.
 
     Notes
     -----
@@ -900,8 +1020,7 @@ class SearchResponse(AdditionalFieldsMessage):
 
     _additional_fields_: AdditionalFields = [
         RequiredField('protocol', FieldType.string),
-        # TODO_DOCS found is not 'int' but 'byte' (uint8 or int8?)
-        RequiredField('found', FieldType.uint8),
+        RequiredField('found', FieldType.boolean),
         RequiredField('search_count', FieldType.int16),
         NonstandardArrayField('search_instance_ids', FieldType.int32,
                               count_attr='search_count'),
@@ -916,6 +1035,24 @@ class SearchResponse(AdditionalFieldsMessage):
     @server_address.setter
     def server_address(self, value):
         self._server_address = ip_to_ubyte_array(value)
+
+    def __init__(self,
+                 guid: str,
+                 sequence_id: int,
+                 server_address: AddressTuple,
+                 search_instance_ids: List[int],
+                 *,
+                 found: bool = True,
+                 protocol: str = 'tcp',
+                 ):
+        self.guid = [ord(c) for c in guid]
+        self.sequence_id = sequence_id
+        self.server_address = server_address[0]
+        self.server_port = server_address[1]
+        self.search_count = len(search_instance_ids)
+        self.search_instance_ids = search_instance_ids
+        self.found = found
+        self.protocol = protocol
 
 
 class CreateChannelRequest(AdditionalFieldsMessage):
@@ -1035,6 +1172,10 @@ class ChannelDestroyResponse(AdditionalFieldsMessage):
         RequiredField('status', Status),
     ]
 
+    def __init__(self, client_chid: int, server_chid: int, status=_StatusOK):
+        super().__init__(client_chid=client_chid, server_chid=server_chid)
+        self.status = status
+
 
 class ChannelGetRequest(SubcommandMessage):
     """
@@ -1044,23 +1185,25 @@ class ChannelGetRequest(SubcommandMessage):
 
     server_chid: int
     ioid: int
+    pv_request: PVRequest
 
     _fields_ = [
         ('server_chid', ctypes.c_int32),
         ('ioid', ctypes.c_int32),
         ('subcommand', ctypes.c_byte),
     ]
-    _additional_fields_: AdditionalFields = []
-    _subcommand_fields_: SubcommandFields = {
-        Subcommand.INIT: [
-            RequiredField('pv_request', PVRequest),
-        ],
-        Subcommand.GET: [],
-        Subcommand.DEFAULT: [
-            # Alias for GET
-        ],
-        Subcommand.DESTROY: [],
-    }
+
+    @_handles(Subcommand.INIT,
+              [RequiredField('pv_request', PVRequest)])
+    def to_init(self, pv_request: PVRequest) -> 'ChannelGetRequest':
+        self.subcommand = Subcommand.INIT
+        self.pv_request = pv_request
+        return self
+
+    @_handles(Subcommand.GET, [])
+    def to_get(self) -> 'ChannelGetRequest':
+        self.subcommand = Subcommand.GET
+        return self
 
 
 class ChannelGetResponse(SubcommandMessage):
@@ -1080,35 +1223,70 @@ class ChannelGetResponse(SubcommandMessage):
     _additional_fields_: AdditionalFields = [
         RequiredField('status', Status),
     ]
-    _subcommand_fields_: SubcommandFields = {
-        Subcommand.INIT: [
-            SuccessField('pv_structure_if', FieldDesc),
-        ],
-        Subcommand.GET: [
-            SuccessField('pv_data', DataWithBitSet,
-                         # `pv_structure_if` is tracked by ioid
-                         ),
-        ],
-        Subcommand.DEFAULT: [
-            # Alias for GET
-            SuccessField('pv_data', DataWithBitSet),
-        ],
-        Subcommand.DESTROY: [],
-    }
 
-    def __init__(self, ioid, subcommand, status=_StatusOK,
-                 pv_structure_if=None, pv_data=None):
-        super().__init__(ioid=ioid, subcommand=int(subcommand))
+    def __init__(self, ioid, status=_StatusOK, subcommand=Subcommand.INIT):
+        super().__init__(ioid=ioid, subcommand=subcommand)
         self.status = status
-        if subcommand == Subcommand.INIT:
-            self.pv_structure_if = pv_structure_if
-            if pv_data is not None:
-                raise ValueError('pv_data specified but unused')
-            # TODO: generically set these?
-        elif subcommand == Subcommand.GET or subcommand == Subcommand.DEFAULT:
-            self.pv_data = pv_data
-            if pv_structure_if is not None:
-                raise ValueError('pv_structure_if specified but unused')
+
+    @_handles(
+        Subcommand.INIT,
+        [SuccessField('pv_structure_if', FieldDesc)]
+    )
+    def to_init(self, pv_structure_if: FieldDesc) -> 'ChannelGetResponse':
+        """
+        Initialize the get response.
+
+        Parameters
+        ----------
+        pv_structure_if : FieldDesc
+            The field description of the data that can be retrieved with a
+            GET/DEFAULT subcommand.
+        """
+        self.subcommand = Subcommand.INIT
+        self.pv_structure_if = pv_structure_if
+        return self
+
+    @_handles(
+        Subcommand.GET,
+        [SuccessField('pv_data', DataWithBitSet)]
+    )
+    def to_get(self, pv_data: DataWithBitSet) -> 'ChannelGetResponse':
+        """
+        Initialize the get response, including data.
+
+        Parameters
+        ----------
+        pv_data : DataWithBitSet
+            The data to respond with.
+
+        See Also
+        --------
+        :meth:`to_default`
+        """
+        self.subcommand = Subcommand.GET
+        self.pv_data = pv_data
+        return self
+
+    @_handles(
+        Subcommand.DEFAULT,
+        [SuccessField('pv_data', DataWithBitSet)]
+    )
+    def to_default(self, pv_data: DataWithBitSet) -> 'ChannelGetResponse':
+        """
+        Initialize the get response, including data.  A synonym for "get".
+
+        Parameters
+        ----------
+        pv_data : DataWithBitSet
+            The data to respond with.
+
+        See Also
+        --------
+        :meth:`to_get`
+        """
+        self.subcommand = Subcommand.DEFAULT
+        self.pv_data = pv_data
+        return self
 
 
 class ChannelFieldInfoRequest(AdditionalFieldsMessage):
@@ -1175,22 +1353,49 @@ class ChannelPutRequest(SubcommandMessage):
         ('ioid', ctypes.c_int32),
         ('subcommand', ctypes.c_byte),
     ]
-    _additional_fields_: AdditionalFields = []
-    _subcommand_fields_: SubcommandFields = {
-        Subcommand.INIT: [
-            RequiredField('pv_request', PVRequest),
-        ],
-        Subcommand.GET: [
-            # Query what the last put request was
-            # RequiredField('pv_put_data', Data),  # TODO
-        ],
-        Subcommand.DEFAULT: [
-            # Perform the put
+
+    @_handles(
+        Subcommand.INIT,
+        [RequiredField('pv_request', PVRequest)],
+    )
+    def to_init(self, pv_request: PVRequest) -> 'ChannelPutRequest':
+        """
+        Initialize the request.
+
+        Parameters
+        ----------
+        pv_request : PVRequest
+            The PVRequest for used when requesting to read back the data (not
+            the data to write).
+        """
+        self.subcommand = Subcommand.INIT
+        self.pv_request = pv_request
+        return self
+
+    @_handles(
+        Subcommand.DEFAULT,
+        [
             RequiredField('put_data', DataWithBitSet),
         ],
-        # TODO mask DESTROY | DEFAULT
-        Subcommand.DESTROY: [],
-    }
+    )
+    def to_default(self, put_data: DataWithBitSet) -> 'ChannelPutRequest':
+        """
+        Perform the put.
+
+        Parameters
+        ----------
+        put_data : DataWithBitSet
+            The data to write.
+        """
+        self.subcommand = Subcommand.DEFAULT
+        self.put_data = put_data
+        return self
+
+    @_handles(Subcommand.GET)
+    def to_get(self) -> 'ChannelPutRequest':
+        """Query the data, according to the INIT PVRequest."""
+        self.subcommand = Subcommand.GET
+        return self
 
 
 class ChannelPutResponse(SubcommandMessage):
@@ -1210,16 +1415,46 @@ class ChannelPutResponse(SubcommandMessage):
     _additional_fields_: AdditionalFields = [
         RequiredField('status', Status),
     ]
-    _subcommand_fields_: SubcommandFields = {
-        Subcommand.INIT: [
-            SuccessField('put_structure_if', FieldDesc),
-        ],
-        Subcommand.DEFAULT: [
-            # The actual put
-        ],
-        Subcommand.DESTROY: [
-        ],
-    }
+
+    def __init__(self, ioid, status=_StatusOK, subcommand=Subcommand.INIT):
+        super().__init__(ioid=ioid, subcommand=int(subcommand))
+        self.status = status
+
+    @_handles(
+        Subcommand.INIT,
+        [SuccessField('put_structure_if', FieldDesc)],
+    )
+    def to_init(self, put_structure_if: FieldDesc) -> 'ChannelPutResponse':
+        """
+        Initialize the request.
+
+        Parameters
+        ----------
+        put_structure_if : FieldDesc
+            The structure of the data, so the client knows how to write it
+            appropriately.
+        """
+        self.subcommand = Subcommand.INIT
+        self.put_structure_if = put_structure_if
+        return self
+
+    @_handles(Subcommand.DEFAULT)
+    def to_default(self) -> 'ChannelPutResponse':
+        """Respond to the put request."""
+        self.subcommand = Subcommand.DEFAULT
+        return self
+
+    @_handles(
+        Subcommand.GET,
+        [
+            SuccessField('put_data', DataWithBitSet),
+        ]
+    )
+    def to_get(self, data: DataWithBitSet) -> 'ChannelPutResponse':
+        """Query the data, according to the client's INIT PVRequest."""
+        self.subcommand = Subcommand.GET
+        self.put_data = data
+        return self
 
 
 class ChannelPutGetRequest(SubcommandMessage):
@@ -1363,7 +1598,7 @@ class ChannelRequestCancel(Message):
     -----
     This is not yet implemented in caproto-pva.
 
-    There is no ChannelRequestCancelResponse.
+    ** There is no response message defined in the protocol. **
     """
     ID = ApplicationCommand.CANCEL_REQUEST
 
@@ -1387,8 +1622,6 @@ class ChannelMonitorRequest(SubcommandMessage):
     `wiki <https://github.com/epics-base/pvAccessCPP/wiki/Protocol-Operation-Monitor>`_.
     """
     ID = ApplicationCommand.MONITOR
-    subcommand: Optional[MonitorSubcommand] = None
-
     server_chid: int
     ioid: int
 
@@ -1397,21 +1630,38 @@ class ChannelMonitorRequest(SubcommandMessage):
         ('ioid', ctypes.c_int32),
         ('subcommand', ctypes.c_byte),
     ]
-    _additional_fields_: AdditionalFields = []
-    _subcommand_fields_: SubcommandFields = {
-        Subcommand.INIT: [
+
+    @_handles(
+        MonitorSubcommand.INIT,
+        [
             RequiredField('pv_request', PVRequest),
             OptionalField('queue_size', FieldType.int32,
                           stop=OptionalStopMarker.stop,
                           condition=lambda msg, buf: bool(msg.subcommand &
                                                           MonitorSubcommand.PIPELINE)),
-        ],
-        Subcommand.DEFAULT: [],
-        MonitorSubcommand.START: [],
-        MonitorSubcommand.STOP: [],
-        # Subcommand.PIPELINE: [],
-        Subcommand.DESTROY: [],
-    }
+        ]
+    )
+    def to_init(self, pv_request: PVRequest,
+                queue_size: int = 0) -> 'ChannelMonitorRequest':
+        self.subcommand = MonitorSubcommand.INIT
+        self.pv_request = pv_request
+        self.queue_size = queue_size
+        return self
+
+    @_handles(MonitorSubcommand.START)
+    def to_start(self):
+        self.subcommand = MonitorSubcommand.START
+        return self
+
+    @_handles(MonitorSubcommand.STOP)
+    def to_stop(self):
+        self.subcommand = MonitorSubcommand.STOP
+        return self
+
+    @_handles(MonitorSubcommand.PIPELINE)
+    def to_pipeline(self):
+        self.subcommand = MonitorSubcommand.PIPELINE
+        return self
 
 
 class ChannelMonitorResponse(SubcommandMessage):
@@ -1421,7 +1671,6 @@ class ChannelMonitorResponse(SubcommandMessage):
     ID = ApplicationCommand.MONITOR
 
     ioid: int
-    subcommand: Optional[MonitorSubcommand] = None
     pv_structure_if: FieldDesc
     pv_data: typing.Any
     overrun_bitset: BitSet
@@ -1432,24 +1681,44 @@ class ChannelMonitorResponse(SubcommandMessage):
         ('subcommand', ctypes.c_byte),
     ]
 
-    _additional_fields_: AdditionalFields = []
-    _subcommand_fields_: SubcommandFields = {
-        MonitorSubcommand.INIT: [
+    @_handles(
+        MonitorSubcommand.INIT,
+        [
             RequiredField('status', Status),
             SuccessField('pv_structure_if', FieldDesc),
-        ],
-        MonitorSubcommand.DEFAULT: [
-            # `pv_structure_if` is tracked by ioid
+        ]
+    )
+    def to_init(self, status: Status,
+                pv_structure_if: FieldDesc) -> 'ChannelMonitorResponse':
+        self.subcommand = Subcommand.INIT
+        self.status = status
+        self.pv_structure_if = pv_structure_if
+        return self
+
+    @_handles(
+        MonitorSubcommand.DEFAULT,
+        [
             RequiredField('pv_data', DataWithBitSet),
             RequiredField('overrun_bitset', BitSet),
-        ],
-        # MonitorSubcommand.START: [],
-        # MonitorSubcommand.STOP: [],
-        MonitorSubcommand.PIPELINE: [
+        ]
+    )
+    def to_default(self, pv_data: DataWithBitSet,
+                   overrun_bitset: BitSet) -> 'ChannelMonitorResponse':
+        self.subcommand = Subcommand.DEFAULT
+        self.pv_data = pv_data
+        self.overrun_bitset = overrun_bitset
+        return self
+
+    @_handles(
+        MonitorSubcommand.PIPELINE,
+        [
             RequiredField('nfree', FieldType.int32),
-        ],
-        Subcommand.DESTROY: [],
-    }
+        ]
+    )
+    def to_pipeline(self, nfree: int) -> 'ChannelMonitorResponse':
+        self.subcommand = MonitorSubcommand.PIPELINE
+        self.nfree = nfree
+        return self
 
 
 class ChannelProcessRequest(SubcommandMessage):
@@ -1653,6 +1922,7 @@ messages: _MessagesDict = {
         ApplicationCommand.MONITOR: ChannelMonitorRequestLE,
         ApplicationCommand.PROCESS: ChannelProcessRequestLE,
         ApplicationCommand.RPC: ChannelRpcRequestLE,
+        ApplicationCommand.CANCEL_REQUEST: ChannelRequestCancelLE,
     },
 
     # BIG ENDIAN, CLIENT -> SERVER
@@ -1671,6 +1941,7 @@ messages: _MessagesDict = {
         ApplicationCommand.MONITOR: ChannelMonitorRequestBE,
         ApplicationCommand.PROCESS: ChannelProcessRequestBE,
         ApplicationCommand.RPC: ChannelRpcRequestBE,
+        ApplicationCommand.CANCEL_REQUEST: ChannelRequestCancelBE,
     },
 
     # LITTLE ENDIAN, SERVER -> CLIENT
@@ -1890,9 +2161,14 @@ def _deserialize_unsegmented_message(
     cmd.header = header
 
     if off != payload_size:
+        try:
+            received_repr = repr(cmd)
+        except Exception as ex:
+            received_repr = f'({header} repr failed: {ex})'
+
         raise RuntimeError(
             f'Number of bytes used in deserialization ({off}) did not match '
-            f'full payload size: {payload_size}'
+            f'full payload size: {payload_size}.  Message: {received_repr}'
         )
 
     return cmd, off

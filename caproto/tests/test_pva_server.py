@@ -139,10 +139,8 @@ def test_basic(request, prefix):
 
     value = pva.sync.client.read(f'{prefix}test')
     inst = value.dataclass_instance
-    assert inst.value == 5
-    assert inst.info == 'a string'
+    assert (inst.value, inst.info) == (5, 'a string')
 
     value = pva.sync.client.read(f'{prefix}test2')
     inst = value.dataclass_instance
-    assert inst.value == 6
-    assert inst.info == 'a different string'
+    assert (inst.value, inst.info) == (6, 'a different string')

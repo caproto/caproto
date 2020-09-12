@@ -35,7 +35,6 @@ from ._fields import (SimpleField, StructuredField, _children_from_field_list,
                       _descendents_from_field_list)
 
 try:
-    raise ImportError
     import parsimonious
 except ImportError:
     parsimonious = None
@@ -338,7 +337,7 @@ class PVRequestStruct(StructuredField):
 
         for category in ('field', 'getField', 'putField'):
             cat_fields = getattr(req, category, None)
-            if cat_fields is None or not len(cat_fields):
+            if cat_fields is None:
                 continue
 
             root = _PVRequestNode(name=category, root=True)
