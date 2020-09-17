@@ -1,8 +1,9 @@
-import sys
-import pytest
 import subprocess
+import sys
 
-from caproto.sync.client import read, write, subscribe, block
+import pytest
+
+from caproto.sync.client import block, read, subscribe, write
 
 from .conftest import dump_process_output
 
@@ -147,6 +148,8 @@ fmt3 = '{response.data}'
                           ('caproto-get', ('waveform', '-F', "'-'")),
                           # Test separator (multiple characters, not supported by EPICS caget)
                           ('caproto-get', ('float', '--wide', '-F', "' = '")),
+                          # Test data_count limiter.
+                          ('caproto-get', ('waveform', '-#', '1')),
                           ])
 def test_cli(command, args, ioc, ):
     args = fix_arg_prefixes(ioc, args)
@@ -199,6 +202,8 @@ def test_cli(command, args, ioc, ):
                           ('waveform', '-F', "'-'"),
                           # Test separator (multiple characters, not supported by EPICS monitor)
                           ('float', '-F', "' = '"),
+                          # Test data_count limiter.
+                          ('waveform', '-#', '1'),
                           ])
 def test_monitor(args, ioc):
     args = fix_arg_prefixes(ioc, args)
