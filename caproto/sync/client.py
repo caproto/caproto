@@ -197,7 +197,7 @@ def make_channel(pv_name, udp_sock, priority, timeout):
     return chan
 
 
-def _read(chan, timeout, data_type, notify, force_int_enums):
+def _read(chan, timeout, data_type, data_count, notify, force_int_enums):
     logger = chan.log
     logger.debug("Detected native data_type %r.", chan.native_data_type)
     ntype = native_type(chan.native_data_type)  # abundance of caution
@@ -205,7 +205,7 @@ def _read(chan, timeout, data_type, notify, force_int_enums):
             (data_type is None) and (not force_int_enums)):
         logger.debug("Changing requested data_type to STRING.")
         data_type = ChannelType.STRING
-    req = chan.read(data_type=data_type, notify=notify)
+    req = chan.read(data_type=data_type, data_count=data_count, notify=notify)
     send(chan.circuit, req, chan.name)
     t = time.monotonic()
     while True:
@@ -234,8 +234,8 @@ def _read(chan, timeout, data_type, notify, force_int_enums):
                                    'read response')
 
 
-def read(pv_name, *, data_type=None, timeout=1, priority=0, notify=True,
-         force_int_enums=False, repeater=True):
+def read(pv_name, *, data_type=None, data_count=None, timeout=1, priority=0,
+         notify=True, force_int_enums=False, repeater=True):
     """
     Read a Channel.
 
@@ -246,6 +246,9 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0, notify=True,
     data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
         Request specific data type or a class of data types, matched to the
         channel's native data type. Default is Channel's native data type.
+    data_count : integer, optional
+        Requested number of values. Default is the channel's native data
+        count.
     timeout : float, optional
         Default is 1 second.
     priority : 0, optional
@@ -333,8 +336,8 @@ def read(pv_name, *, data_type=None, timeout=1, priority=0, notify=True,
     finally:
         udp_sock.close()
     try:
-        return _read(chan, timeout, data_type=data_type, notify=notify,
-                     force_int_enums=force_int_enums)
+        return _read(chan, timeout, data_type=data_type, data_count=data_count,
+                     notify=notify, force_int_enums=force_int_enums)
     finally:
         try:
             if chan.states[ca.CLIENT] is ca.CONNECTED:
@@ -490,7 +493,8 @@ def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
             sockets[chan.circuit].settimeout(None)
             loggers[chan.name].debug("Subscribing with data_type %r.",
                                      time_type)
-            req = chan.subscribe(data_type=time_type, mask=sub.mask)
+            req = chan.subscribe(
+                data_type=time_type, data_count=sub.data_count, mask=sub.mask)
             send(chan.circuit, req, chan.name)
             sub_ids[(chan.circuit, req.subscriptionid)] = sub
         logger.debug('Subscribed. Building socket selector.')
@@ -750,10 +754,10 @@ def read_write_read(pv_name, data, *, notify=False,
     finally:
         udp_sock.close()
     try:
-        initial = _read(chan, timeout, read_data_type, notify=True,
+        initial = _read(chan, timeout, read_data_type, None, notify=True,
                         force_int_enums=force_int_enums)
         res = _write(chan, data, metadata, timeout, write_data_type, notify)
-        final = _read(chan, timeout, read_data_type, notify=True,
+        final = _read(chan, timeout, read_data_type, None, notify=True,
                       force_int_enums=force_int_enums)
     finally:
         try:
