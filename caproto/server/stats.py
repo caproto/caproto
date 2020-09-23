@@ -3,6 +3,7 @@ import inspect
 import linecache
 import logging
 import os
+import pathlib
 import platform
 import sys
 import tracemalloc
@@ -27,6 +28,11 @@ def _find_top_level_pvgroup(group: PVGroup) -> PVGroup:
     while ancestor.parent is not None:
         ancestor = ancestor.parent
     return ancestor
+
+
+def get_source_file(obj: typing.Any) -> pathlib.Path:
+    """Get the source filename of `obj` as a :class:`~pathlib.Path`."""
+    return pathlib.Path(inspect.getsourcefile(obj)).resolve()
 
 
 class BasicStatusHelper(PVGroup):
@@ -59,7 +65,7 @@ class BasicStatusHelper(PVGroup):
     )
 
     kernel_version = pvproperty(
-        value='',
+        value=str(platform.uname().version),
         name='KERNEL_VERS',
         record='stringin',
         doc='OS/Kernel Version',
@@ -76,13 +82,16 @@ class BasicStatusHelper(PVGroup):
 
     engineer = pvproperty(
         value='',
+        max_length=40,
         name='ENGINEER',
         record='stringin',
         read_only=True,
+        doc='Who is responsible this abomination',
     )
 
     location = pvproperty(
         value='',
+        max_length=40,
         name='LOCATION',
         record='stringin',
         read_only=True,
@@ -90,6 +99,7 @@ class BasicStatusHelper(PVGroup):
 
     hostname = pvproperty(
         value='',
+        max_length=255,
         name='HOSTNAME',
         record='stringin',
         read_only=True,
@@ -131,26 +141,16 @@ class BasicStatusHelper(PVGroup):
         await self.parent_pid.write(os.getppid())
         await self.location.write(os.environ.get('LOCATION', ''))
         await self.engineer.write(os.environ.get('ENGINEER', ''))
-        await self.kernel_version.write(platform.uname().version)
-
-        root_pvgroup_class = type(self._root_pvgroup)
-        import pathlib
 
         try:
-            root_source = pathlib.Path(
-                inspect.getsourcefile(root_pvgroup_class)
-            )
-            await self.source_filename.write(str(root_source.resolve()))
+            root_source = get_source_file(type(self._root_pvgroup))
+            await self.source_filename.write(str(root_source))
         except Exception:
             self.log.exception('Unable to determine source path')
 
         try:
-            main_path = pathlib.Path(
-                inspect.getsourcefile(sys.modules['__main__'])
-            )
-            await self.application_directory.write(
-                str(main_path.resolve().parent)
-            )
+            main_path = get_source_file(sys.modules['__main__'])
+            await self.application_directory.write(str(main_path.parent))
         except TypeError:
             # Built-in is OK
             ...
