@@ -19,7 +19,8 @@ Changed
   code that is used on the servers can not do this book keeping
   because we can not know what other servers are out there and if the
   SearchRequest actually got serviced (as that goes back uni-cast).
-
+- Removed curio and trio client implementations.  These may reappear
+  in the future, based on the new asyncio client.
 
 v0.6.0 (2020-07-31)
 ===================

@@ -2,24 +2,24 @@ import array
 import functools
 import logging
 import os
-import pytest
 import signal
 import subprocess
 import sys
 import threading
 import time
 import uuid
-
 from types import SimpleNamespace
 
+import pytest
+
 import caproto as ca
-import caproto.benchmarking  # noqa
-from caproto.sync.client import read
-import caproto.threading  # noqa
 import caproto.asyncio  # noqa
+import caproto.benchmarking  # noqa
+import caproto.threading  # noqa
+from caproto.sync.client import read
 
 # DBD parsing-related fixtures:
-from .dbd import test_dbd_file, record_type_to_fields  # noqa
+from .dbd import record_type_to_fields, test_dbd_file  # noqa
 
 _repeater_process = None
 
@@ -436,6 +436,7 @@ def curio_server(prefix):
     # Hide these imports so that the other fixtures are usable by other
     # libraries (e.g. ophyd) without the experimental dependencies.
     import curio
+
     import caproto.curio
 
     async def _server(pvdb):
@@ -461,46 +462,6 @@ def curio_server(prefix):
     return run_server, prefix, caget_pvdb
 
 
-async def get_curio_context():
-    logger.debug('New curio broadcaster')
-    # Hide this import so that the other fixtures are usable by other
-    # libraries (e.g. ophyd) without the experimental dependencies.
-    import caproto.curio
-    broadcaster = caproto.curio.client.SharedBroadcaster()
-    logger.debug('Registering...')
-    await broadcaster.register()
-    logger.debug('Registered! Returning new context.')
-    return caproto.curio.client.Context(broadcaster)
-
-
-def run_with_trio_context(func, **kwargs):
-    # Hide these imports so that the other fixtures are usable by other
-    # libraries (e.g. ophyd) without the experimental dependencies.
-    import caproto.trio
-    import trio
-
-    async def runner():
-        async with trio.open_nursery() as nursery:
-            logger.debug('New trio broadcaster')
-            broadcaster = caproto.trio.client.SharedBroadcaster(
-                nursery=nursery)
-
-            logger.debug('Registering...')
-            await broadcaster.register()
-            logger.debug('Registered! Returning new context.')
-            context = caproto.trio.client.Context(broadcaster, nursery=nursery)
-            ret = await func(context=context, **kwargs)
-
-            logger.debug('Shutting down the broadcaster')
-            await broadcaster.disconnect()
-            logger.debug('And the context')
-            # await context.stop()
-            nursery.cancel_scope.cancel()
-            return ret
-
-    return trio.run(runner)
-
-
 @pytest.fixture(scope='function',
                 params=['curio', 'trio', 'asyncio'])
 def server(request):
@@ -509,6 +470,7 @@ def server(request):
         # Hide these imports so that the other fixtures are usable by other
         # libraries (e.g. ophyd) without the experimental dependencies.
         import curio
+
         import caproto.curio
 
         async def server_main():
@@ -547,6 +509,7 @@ def server(request):
         # Hide these imports so that the other fixtures are usable by other
         # libraries (e.g. ophyd) without the experimental dependencies.
         import trio
+
         import caproto.trio
 
         async def trio_server_main(task_status):
@@ -682,7 +645,7 @@ def threaded_in_curio_wrapper(fcn):
 
 @pytest.fixture(scope='function', params=['array', 'numpy'])
 def backends(request):
-    from caproto import select_backend, backend
+    from caproto import backend, select_backend
 
     def switch_back():
         select_backend(initial_backend)
