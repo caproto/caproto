@@ -19,6 +19,13 @@ try:
 except ImportError:
     psutil = None
 
+try:
+    # This is part of the standard library, but I'm unsure if it's
+    # included on windows:
+    import resource
+except ImportError:
+    resource = None
+
 
 MODULE_LOGGER = logging.getLogger(__name__)
 
@@ -137,25 +144,28 @@ class BasicStatusHelper(PVGroup):
 
     @process_id.startup
     async def process_id(self, instance, async_lib):
-        await self.process_id.write(os.getpid())
-        await self.parent_pid.write(os.getppid())
-        await self.location.write(os.environ.get('LOCATION', ''))
-        await self.engineer.write(os.environ.get('ENGINEER', ''))
+        await self.process_id.write(value=os.getpid())
+        await self.parent_pid.write(value=os.getppid())
+        await self.location.write(value=os.environ.get('LOCATION', ''))
+        await self.engineer.write(value=os.environ.get('ENGINEER', ''))
 
         try:
             root_source = get_source_file(type(self._root_pvgroup))
-            await self.source_filename.write(str(root_source))
+            await self.source_filename.write(value=str(root_source))
         except Exception:
             self.log.exception('Unable to determine source path')
 
         try:
             main_path = get_source_file(sys.modules['__main__'])
-            await self.application_directory.write(str(main_path.parent))
+            await self.application_directory.write(value=str(main_path.parent))
         except TypeError:
             # Built-in is OK
             ...
         except Exception:
             self.log.exception('Unable to determine startup directory')
+
+        if psutil is not None:
+            await self.cpu_count.write(value=psutil.cpu_count())
 
 
 class PeriodicStatusHelper(PVGroup):
@@ -181,6 +191,7 @@ class PeriodicStatusHelper(PVGroup):
             self._process = psutil.Process()
 
     access = pvproperty(
+        # Not implemented:
         name='ACCESS',
         doc='CA Security access level to this IOC',
         enum_strings=['Running', 'Maintenance', 'Test', 'OFFLINE'],
@@ -276,7 +287,6 @@ class PeriodicStatusHelper(PVGroup):
     )
 
     fd_count = pvproperty(
-        # TODO: linux use /proc/self/fd
         value=0,
         doc='Allocated File Descriptors',
         name='FD_CNT',
@@ -285,7 +295,6 @@ class PeriodicStatusHelper(PVGroup):
     )
 
     fd_free = pvproperty(
-        # TODO: (fd_max - fd_count)
         name='FD_FREE',
         record='calc',
         read_only=True,
@@ -300,6 +309,7 @@ class PeriodicStatusHelper(PVGroup):
         upper_ctrl_limit=100.0,
         units='%',
         read_only=True,
+        doc='CPU load',
     )
 
     ioc_cpu_load = pvproperty(
@@ -317,7 +327,7 @@ class PeriodicStatusHelper(PVGroup):
         name='SUSP_TASK_CNT',
         record='longin',
         read_only=True,
-        doc='Number of Suspended Tasks',
+        doc='Number of Suspended Tasks [not implemented]',
     )
 
     mem_used = pvproperty(
@@ -335,7 +345,7 @@ class PeriodicStatusHelper(PVGroup):
         record='ai',
         units='byte',
         read_only=True,
-        doc='Memory free.',
+        doc='Memory free (including swap).',
     )
 
     mem_max = pvproperty(
@@ -349,7 +359,7 @@ class PeriodicStatusHelper(PVGroup):
     uptime = pvproperty(
         value=0,
         name='UPTIME',
-        record='stringin',
+        record='longin',
         units='s',
         doc='Elapsed time since start',
         read_only=True,
@@ -370,16 +380,44 @@ class PeriodicStatusHelper(PVGroup):
             return
 
         process = typing.cast(psutil.Process, self._process)
+
+        # Memory usage
         memory_info = process.memory_info()
         await self.mem_used.write(value=memory_info.rss)
+
+        # Memory available
+        vmem = psutil.virtual_memory()
+        swap = psutil.swap_memory()
+        await self.mem_free.write(value=vmem.available + swap.free)
+        await self.mem_max.write(value=vmem.total + swap.total)
+
+        # CPU usage
+        await self.ioc_cpu_load.write(value=process.cpu_percent())
+        await self.sys_cpu_load.write(value=psutil.cpu_percent())
+
+        # File descriptor information:
+        await self.fd_count.write(value=process.num_fds())
+        await self.fd_free.write(value=self.fd_max.value - self.fd_count.value)
 
     async def _update(self):
         """Periodic updates happen here."""
         await self.record_count.write(value=len(self._root_pvgroup.pvdb))
         await self._update_psutil_status()
 
+        # Uptime since our startup method was first called:
+        elapsed = datetime.datetime.now() - self._startup_time
+        await self.uptime.write(value=elapsed.total_seconds())
+
     @update_period.startup
     async def update_period(self, instance, async_lib):
+        self._startup_time = datetime.datetime.now()
+        if resource is not None:
+            try:
+                soft_limit, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+                await self.fd_max.write(value=soft_limit)
+            except Exception:
+                self.log.warning('Failed to get maximum file descriptors')
+
         while True:
             try:
                 await self._update()
@@ -454,8 +492,7 @@ class MemoryTracingHelper(PVGroup):
 
     enable_tracing = pvproperty(
         name='EnableTracing',
-        # value='Disable',  # TODO
-        value='Enable',
+        value='Disable',
         doc='Enable/disable in-depth memory analysis',
         record='bo',
         enum_strings=['Disable', 'Enable'],
@@ -496,7 +533,7 @@ class MemoryTracingHelper(PVGroup):
         top_lines, stats = get_top_allocation_info(snapshot)
 
         await self.top_allocations.write(
-            '\n'.join(top_lines)[:self.top_allocations.max_length]
+            value='\n'.join(top_lines)[:self.top_allocations.max_length]
         )
 
         if self._old_snapshot is not None:
@@ -508,7 +545,8 @@ class MemoryTracingHelper(PVGroup):
 
             status = '\n'.join(str(stat) for stat in comparison[:10])
             await self.diff_results.write(
-                status[:self.diff_results.max_length])
+                value=status[:self.diff_results.max_length]
+            )
 
         self._old_snapshot = snapshot
 
