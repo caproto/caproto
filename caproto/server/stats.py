@@ -14,36 +14,10 @@ from .autosave import autosaved
 MODULE_LOGGER = logging.getLogger(__name__)
 
 
-def get_top_allocation_info(snapshot: tracemalloc.Snapshot, *,
-                            key_type: str = 'lineno',
-                            limit: int = 10
-                            ) -> typing.List[str]:
-    snapshot = snapshot.filter_traces((
-        tracemalloc.Filter(False, "<frozen importlib._bootstrap>"),
-        tracemalloc.Filter(False, "<unknown>"),
-        tracemalloc.Filter(False, "<tracemalloc>"),
-    ))
-    top_stats = snapshot.statistics(key_type)
-
-    result = []
-    for index, stat in enumerate(top_stats[:limit], 1):
-        frame = stat.traceback[0]
-        kbytes = stat.size / 1024
-        result.append(
-            f"#{index}: {frame.filename}:{frame.lineno}: {kbytes:.1f} KiB"
-        )
-        line = linecache.getline(frame.filename, frame.lineno).strip()
-        if line:
-            result.append(f'    {line}')
-
-    return result, top_stats
-
-
 class StatusHelper(PVGroup):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._root_pvgroup = self._find_top_level_pvgroup()
-        self._old_snapshot = None
 
     def _find_top_level_pvgroup(self):
         ancestor = self.parent
@@ -330,9 +304,21 @@ class StatusHelper(PVGroup):
     )
 
     async def _update_status_periodic(self):
-        if self._root_pvgroup is None:
-            return
-        await self.record_count.write(value=len(self._root_pvgroup.pvdb))
+        import os
+        try:
+            import psutil
+        except ImportError:
+            self.log.warning(
+                "The Python library psutil is not installed, so MEM_USED will "
+                "not be reported by StatsHelper.")
+            process = psutil.Process(os.getpid())
+            skip_mem_used = True
+        else:
+            skip_mem_used = False
+        if self._root_pvgroup is not None:
+            await self.record_count.write(value=len(self._root_pvgroup.pvdb))
+        if not skip_mem_used:
+            await self.mem_used.write(value=process.memory_info().rss)
 
     @update_period.startup
     async def update_period(self, instance, async_lib):
@@ -343,6 +329,44 @@ class StatusHelper(PVGroup):
             except Exception as ex:
                 self.log.warning('Status update failure: %s', ex)
             await async_lib.library.sleep(self.update_period.value)
+
+
+def get_top_allocation_info(snapshot: tracemalloc.Snapshot, *,
+                            key_type: str = 'lineno',
+                            limit: int = 10
+                            ) -> typing.List[str]:
+    snapshot = snapshot.filter_traces((
+        tracemalloc.Filter(False, "<frozen importlib._bootstrap>"),
+        tracemalloc.Filter(False, "<unknown>"),
+        tracemalloc.Filter(False, "<tracemalloc>"),
+    ))
+    top_stats = snapshot.statistics(key_type)
+
+    result = []
+    for index, stat in enumerate(top_stats[:limit], 1):
+        frame = stat.traceback[0]
+        kbytes = stat.size / 1024
+        result.append(
+            f"#{index}: {frame.filename}:{frame.lineno}: {kbytes:.1f} KiB"
+        )
+        line = linecache.getline(frame.filename, frame.lineno).strip()
+        if line:
+            result.append(f'    {line}')
+
+    return result, top_stats
+
+
+class TracingHelper(PVGroup):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._root_pvgroup = self._find_top_level_pvgroup()
+        self._old_snapshot = None
+
+    def _find_top_level_pvgroup(self):
+        ancestor = self.parent
+        while ancestor.parent is not None:
+            ancestor = ancestor.parent
+        return ancestor
 
     enable_tracing = pvproperty(
         name='EnableTracing',
