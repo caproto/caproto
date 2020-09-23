@@ -2,15 +2,12 @@
 # one Channel Access UDP connection, intended to be used as a companion to a
 # UDP socket provided by a client or server implementation.
 import logging
-import random
 
-from ._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
-from ._utils import (CLIENT, SERVER, CaprotoValueError,
-                     RemoteProtocolError, ThreadsafeCounter)
-from ._commands import (Beacon, RepeaterConfirmResponse, RepeaterRegisterRequest,
-                        SearchRequest, SearchResponse, VersionRequest,
-                        read_datagram,
-                        )
+from ._commands import (Beacon, RepeaterConfirmResponse,
+                        RepeaterRegisterRequest, SearchRequest, SearchResponse,
+                        read_datagram)
+from ._constants import DEFAULT_PROTOCOL_VERSION
+from ._utils import CLIENT, SERVER, CaprotoValueError, RemoteProtocolError
 
 __all__ = ('Broadcaster',)
 
