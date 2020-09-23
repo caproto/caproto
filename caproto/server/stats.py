@@ -1,4 +1,5 @@
 import datetime
+import inspect
 import linecache
 import logging
 import os
@@ -12,11 +13,13 @@ from .. import ChannelType, __version__
 from . import PVGroup, SubGroup, pvproperty
 from .autosave import autosaved
 
+try:
+    import psutil
+except ImportError:
+    psutil = None
+
+
 MODULE_LOGGER = logging.getLogger(__name__)
-
-
-if typing.TYPE_CHECKING:
-    import psutil  # noqa
 
 
 def _find_top_level_pvgroup(group: PVGroup) -> PVGroup:
@@ -27,6 +30,12 @@ def _find_top_level_pvgroup(group: PVGroup) -> PVGroup:
 
 
 class BasicStatusHelper(PVGroup):
+    _root_pvgroup: PVGroup
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._root_pvgroup = _find_top_level_pvgroup(self)
+
     process_id = pvproperty(
         value=0,
         name='PROCESS_ID',
@@ -86,13 +95,22 @@ class BasicStatusHelper(PVGroup):
         read_only=True,
     )
 
-    app_dir = pvproperty(
+    application_directory = pvproperty(
         value='',
         name='APP_DIR',
         record='waveform',
         max_length=255,
         read_only=True,
-        doc='Script directory',
+        doc='Startup directory (__main__)',
+    )
+
+    source_filename = pvproperty(
+        value='',
+        name='SOURCE_FILE',
+        record='waveform',
+        max_length=255,
+        read_only=True,
+        doc='Top-level PVGroup source filename',
     )
 
     sysreset = pvproperty(
@@ -115,6 +133,30 @@ class BasicStatusHelper(PVGroup):
         await self.engineer.write(os.environ.get('ENGINEER', ''))
         await self.kernel_version.write(platform.uname().version)
 
+        root_pvgroup_class = type(self._root_pvgroup)
+        import pathlib
+
+        try:
+            root_source = pathlib.Path(
+                inspect.getsourcefile(root_pvgroup_class)
+            )
+            await self.source_filename.write(str(root_source.resolve()))
+        except Exception:
+            self.log.exception('Unable to determine source path')
+
+        try:
+            main_path = pathlib.Path(
+                inspect.getsourcefile(sys.modules['__main__'])
+            )
+            await self.application_directory.write(
+                str(main_path.resolve().parent)
+            )
+        except TypeError:
+            # Built-in is OK
+            ...
+        except Exception:
+            self.log.exception('Unable to determine startup directory')
+
 
 class PeriodicStatusHelper(PVGroup):
     """
@@ -128,16 +170,15 @@ class PeriodicStatusHelper(PVGroup):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._root_pvgroup = _find_top_level_pvgroup(self)
+        self._process = None
 
-        try:
-            import psutil
-        except ImportError:
+        if psutil is None:
             self.log.warning(
                 "The Python library psutil is not installed, so MEM_USED will "
-                "not be reported by StatsHelper.")
-            self._process = None
+                "not be reported by StatsHelper."
+            )
         else:
-            self._process = psutil.Process(os.getpid())
+            self._process = psutil.Process()
 
     access = pvproperty(
         name='ACCESS',
@@ -324,20 +365,24 @@ class PeriodicStatusHelper(PVGroup):
     )
 
     async def _update_psutil_status(self):
-        memory_info = self._process.memory_info()
+        """Update process information, if psutil is available."""
+        if self._process is None:
+            return
+
+        process = typing.cast(psutil.Process, self._process)
+        memory_info = process.memory_info()
         await self.mem_used.write(value=memory_info.rss)
 
-    async def _update_status_periodic(self):
+    async def _update(self):
+        """Periodic updates happen here."""
         await self.record_count.write(value=len(self._root_pvgroup.pvdb))
-
-        if self._process is not None:
-            await self._update_psutil_status()
+        await self._update_psutil_status()
 
     @update_period.startup
     async def update_period(self, instance, async_lib):
         while True:
             try:
-                await self._update_status_periodic()
+                await self._update()
             except Exception as ex:
                 self.log.warning('Status update failure: %s', ex)
             await async_lib.library.sleep(self.update_period.value)
