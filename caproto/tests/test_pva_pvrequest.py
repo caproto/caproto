@@ -1,4 +1,5 @@
 import binascii
+import textwrap
 
 import pytest
 
@@ -7,7 +8,6 @@ pytest.importorskip('caproto.pva')
 from caproto import pva
 
 try:
-    raise ImportError
     import parsimonious
 except ImportError:
     parsimonious = None
@@ -181,11 +181,51 @@ def test_pvrequest_test_two():
 
 @pytest.mark.parametrize(
     'pvrequest, expected', [
-        pytest.param("field(a,b,c)", 'TODO',
-                     id='verybasic'),
-        pytest.param("field(a)getField(b)putField(c)", 'TODO',
-                     id='all_categories'),
+        pytest.param(
+            "field()",
+            textwrap.dedent(
+                """\
+                 struct
+                     struct field
+                """.rstrip()
+            ),
+            id='everything'
+        ),
+        pytest.param(
+            "field(a,b,c)",
+            textwrap.dedent(
+                """\
+                 struct
+                     struct field
+                         struct a
+                         struct b
+                         struct c
+                """.rstrip()
+            ),
+            id='verybasic'
+        ),
+        pytest.param(
+            "field(a)getField(b)putField(c)",
+            textwrap.dedent("""\
+            struct
+                struct field
+                    struct a
+                struct getField
+                    struct b
+                struct putField
+                    struct c
+            """.rstrip()),
+            id='all_categories'
+        ),
     ],
 )
-def test_parse_by_regex_smoke(pvrequest, expected):
-    print(pva._pvrequest._parse_by_regex(pvrequest))
+def test_parse_by_regex(pvrequest, expected):
+    parsed = pva._pvrequest._parse_by_regex(pvrequest)
+    struct = pva._pvrequest.PVRequestStruct._from_parsed(parsed)
+    assert struct == pva.PVRequestStruct.from_string(pvrequest)
+
+    print('parsed:')
+    print(struct.summary())
+    print('expected:')
+    print(expected)
+    assert textwrap.dedent(struct.summary()) == expected

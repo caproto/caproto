@@ -386,8 +386,8 @@ def test_search():
     req = SearchRequestLE(
         sequence_id=1,
         flags=(pva.SearchFlags.reply_required | pva.SearchFlags.unicast),
-        response_address=addr,
-        response_port=8080, protocols=['tcp'],
+        response_address=(addr, 8080),
+        protocols=['tcp'],
         channels=[channel1],)
 
     # NOTE: cache needed here to give interface for channels

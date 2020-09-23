@@ -12,12 +12,13 @@ Python session, do not import this module; instead import caproto.sync.client.
 """
 import argparse
 from datetime import datetime
-from .. import ChannelType, set_handler, field_types, __version__
-from ..sync.client import read
+
+from .. import ChannelType, __version__, field_types, set_handler
 from .._log import _set_handler_with_logger
 from .._utils import ShowVersionAction
-from .cli_print_formats import (format_response_data, gen_data_format,
-                                clean_format_args, format_str_adjust)
+from ..sync.client import read
+from .cli_print_formats import (clean_format_args, format_response_data,
+                                format_str_adjust, gen_data_format)
 
 
 def main():
@@ -79,6 +80,10 @@ def main():
     parser.add_argument('-n', action='store_true',
                         help=("Retrieve enums as integers (default is "
                               "strings)."))
+    parser.add_argument('-S', dest="array_as_str", action='store_true',
+                        help=("Print array of char as a string (long string)"))
+    parser.add_argument('-#', dest="data_count", type=int, metavar="COUNT",
+                        help=("Print first COUNT elements of an array"))
     parser.add_argument('--no-color', action='store_true',
                         help="Suppress ANSI color codes in log messages.")
     parser.add_argument('--no-repeater', action='store_true',
@@ -164,6 +169,7 @@ def main():
 
             response = read(pv_name=pv_name,
                             data_type=data_type,
+                            data_count=args.data_count,
                             timeout=args.timeout,
                             priority=args.priority,
                             force_int_enums=args.n,
