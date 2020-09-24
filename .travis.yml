@@ -86,7 +86,7 @@ script:
   - rm -f `which caRepeater`
 
   - pip install git+https://github.com/klauer/catvs.git@py3k
-  # Work around pip bug that fails to respect trio's pin of attr
+  # Work around pip bug that fails to respect trio's pin of attrs.
   - pip install -U attrs
 
   - caproto-repeater &
