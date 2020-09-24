@@ -10,6 +10,8 @@ include requirements-doc.txt
 include requirements-test.txt
 include versioneer.py
 
+recursive-include caproto *.rst
+
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]
 

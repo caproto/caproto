@@ -151,6 +151,7 @@ learning exercises.
    servers
    shark
    loggers
+   own_docs
 
 .. toctree::
    :maxdepth: 2

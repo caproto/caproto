@@ -4,6 +4,6 @@ graphviz
 ipython<7
 matplotlib
 numpydoc
-sphinx
-sphinx_rtd_theme
+sphinx>=3.2.1
+sphinx_rtd_theme>=0.5.0
 tabulate

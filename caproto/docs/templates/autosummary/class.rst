@@ -1,0 +1,160 @@
+{{ fullname | escape | underline}}
+
+{% macro method_info(attr, obj) -%}
+
+    {% set docstring = inspect.getdoc(obj) or '' %}
+    {% set source_file = inspect.getsourcefile(obj) %}
+    {% set code, start_line = inspect.getsourcelines(obj) %}
+    {% set end_line = start_line + code|length  %}
+    {% if docstring %}
+    {{ docstring | indent(8) }}
+    {% else %}
+    No docstring
+    {% endif %}
+
+    .. raw:: html
+
+        <details>
+        <summary>Source code: {{ attr }}</summary>
+
+    {% if source_file %}
+    .. code-block:: python
+        :lineno-start: {{start_line}}
+        :linenos:
+
+        {{ code | join("") | indent(12) }}
+    {% endif %}
+
+    .. raw:: html
+
+        </details>
+
+{%- endmacro %}
+
+
+.. currentmodule:: {{ module }}
+
+.. autoclass:: {{ objname }}
+
+    .. if not using autodoc, add this here: automethod:: __init__
+
+    {% set pvgroup_info = get_pvgroup_info(module, objname) %}
+
+    {% if pvgroup_info.record_name %}
+    {% if pvgroup_info.record_name == 'base' %}
+        This is a PVGroup class used to represent the basic fields from any given
+        EPICS record.
+
+        .. note:: The classes shown here are not meant to be instantiated
+                  directly, but rather used as a ``record=`` keyword argument
+                  in a :class:`pvproperty`.
+    {% else %}
+        .. note:: To use this, specify
+                  ``record="{{pvgroup_info.record_name}}"`` in a
+                  :class:`pvproperty`.
+    {% endif %}
+    {% endif %}
+
+    {% block pvproperties %}
+    {% if pvgroup_info.pvproperty %}
+    .. list-table:: {{ objname }} pvproperties
+        :header-rows: 1
+        :widths: auto
+
+        *  - Attribute
+           - Suffix
+           - Docs
+           - Type
+           - Notes
+           - Alarm Group
+    {% for attr, prop in pvgroup_info.pvproperty.items() %}
+        *  - {{ attr }}
+           - {% if prop.name %}``{{ prop.name }}``{% endif %}
+           - {{ prop.doc }}
+           - {{ prop.dtype_name }} {% if prop.record_type -%}
+             ({{ prop.record_type.cls.link_as(prop.record_type.record_name) }})
+             {%- endif %}
+           - {% if prop.read_only %}
+                 **Read-only**
+             {%- endif -%}
+             {%- if prop.max_length and prop.max_length > 1 %}
+                 Length({{ prop.max_length }})
+             {%- endif %}
+             {%- if prop.inherited_from %}
+                 Inherited from {{ prop.inherited_from.link }}
+             {%- endif %}
+             {%- if prop.has_startup %}
+                 **Startup**
+             {%- endif %}
+             {%- if prop.has_get %}
+                 **Get**
+             {%- endif %}
+             {%- if prop.has_put %}
+                 **Put**
+             {%- endif %}
+           - {% if prop.alarm_group -%}
+                 {{ prop.alarm_group }}
+             {% endif %}
+    {% endfor %}
+    {% endif %}
+
+    {% if pvgroup_info.subgroup %}
+    .. list-table:: Sub-groups
+        :header-rows: 1
+        :widths: auto
+
+        *  - Attribute
+           - Suffix
+           - Class
+           - Docs
+    {% for attr, sub in pvgroup_info.subgroup.items() %}
+        *  -  {{ sub.attr }}
+           -  {% if sub.prefix %}``{{ sub.prefix }}``{% endif %}
+           -  {{ sub.cls.link }}
+           -  {{ sub.doc }}
+    {% endfor %}
+    {% endif %}
+    {% endblock %}
+
+    {% block methods %}
+    {% if methods %}
+    .. rubric:: {{ _('Methods') }}
+
+    .. autosummary::
+    {% for item in methods %}
+       ~{{ name }}.{{ item }}
+    {%- endfor %}
+    {% endif %}
+    {% endblock %}
+
+    {% block attributes %}
+    {% if attributes %}
+    .. rubric:: {{ _('Attributes') }}
+
+    .. autosummary::
+    {% for item in attributes %}
+       ~{{ name }}.{{ item }}
+    {%- endfor %}
+
+    {% endif %}
+    {% endblock %}
+
+    {% block pvprop_methods %}
+    {% if pvgroup_info.pvproperty %}
+    .. rubric:: pvproperty methods
+
+    {% for attr, prop in pvgroup_info.pvproperty.items() %}
+    {% if prop.has_startup %}
+
+    .. method:: {{ attr }}.startup(self, instance, async_lib)
+        {{ method_info(attr + '.startup', prop.pvspec.startup) }}
+
+    {% endif %}
+    {% if prop.has_put %}
+    .. method:: {{ attr }}.put(self, instance, value)
+        {{ method_info(attr + '.put', prop.pvspec.put) }}
+
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+    {% endblock %}
