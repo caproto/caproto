@@ -237,7 +237,8 @@ class PeriodicStatusHelper(PVGroup):
 
     @heartbeat.scan(period=1)
     async def heartbeat(self, instance, async_lib):
-        await self.heartbeat.write(value=1 - self.heartbeat.value)
+        next_beat = (self.heartbeat.value + 1) % (2 ** 31)
+        await self.heartbeat.write(value=next_beat)
 
     start_count = pvproperty(
         value=0,
