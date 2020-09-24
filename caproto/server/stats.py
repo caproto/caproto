@@ -93,7 +93,7 @@ class BasicStatusHelper(PVGroup):
         name='ENGINEER',
         record='stringin',
         read_only=True,
-        doc='Who is responsible this abomination',
+        doc='Who is responsible for this abomination',
     )
 
     location = pvproperty(
