@@ -2,6 +2,26 @@
 Release History
 ***************
 
+v0.7.0 (2020-09-??)
+===================
+
+Fixed
+-----
+
+- Eliminate memory leak on run-longing servers were we remembered
+  every search request we saw but did not service
+
+Changed
+-------
+
+- The search related API was removed from :class:`ca.Broadcaster`, all
+  of the search request accounting is handled in the client code.  The
+  code that is used on the servers can not do this book keeping
+  because we can not know what other servers are out there and if the
+  SearchRequest actually got serviced (as that goes back uni-cast).
+- Removed curio and trio client implementations.  These may reappear
+  in the future, based on the new asyncio client.
+
 v0.6.0 (2020-07-31)
 ===================
 

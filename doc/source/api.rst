@@ -257,8 +257,6 @@ The Broadcaster object
     .. automethod:: send
     .. automethod:: recv
     .. automethod:: process_commands
-    .. automethod:: new_search_id
-    .. automethod:: search
     .. automethod:: register
 
 Channel objects

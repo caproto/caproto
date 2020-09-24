@@ -34,7 +34,7 @@ class AsyncioAsyncLayer(AsyncLibraryLayer):
 
 
 class VirtualCircuit(_VirtualCircuit):
-    "Wraps a caproto.VirtualCircuit with a curio client."
+    "Wraps a caproto.VirtualCircuit with an asyncio client."
     TaskCancelled = asyncio.CancelledError
 
     def __init__(self, circuit, client, context, *, loop=None):
