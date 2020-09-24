@@ -6,6 +6,7 @@ import os
 import pathlib
 import platform
 import sys
+import threading
 import tracemalloc
 import typing
 from typing import List, Optional
@@ -335,7 +336,7 @@ class PeriodicStatusHelper(PVGroup):
         value=0,
         name='MEM_USED',
         record='ai',
-        units='byte',
+        units='KByte',
         read_only=True,
         doc='Memory used.',
     )
@@ -344,7 +345,7 @@ class PeriodicStatusHelper(PVGroup):
         value=0,
         name='MEM_FREE',
         record='ai',
-        units='byte',
+        units='KByte',
         read_only=True,
         doc='Memory free (including swap).',
     )
@@ -353,7 +354,7 @@ class PeriodicStatusHelper(PVGroup):
         value=0,
         name='MEM_MAX',
         record='ai',
-        units='byte',
+        units='KByte',
         read_only=True,
     )
 
@@ -364,6 +365,14 @@ class PeriodicStatusHelper(PVGroup):
         units='s',
         doc='Elapsed time since start',
         read_only=True,
+    )
+
+    num_threads = pvproperty(
+        value=0,
+        name='NumThreads',
+        record='longin',
+        read_only=True,
+        doc='Number of threads in use',
     )
 
     update_period = pvproperty(
@@ -384,13 +393,13 @@ class PeriodicStatusHelper(PVGroup):
 
         # Memory usage
         memory_info = process.memory_info()
-        await self.mem_used.write(value=memory_info.rss)
+        await self.mem_used.write(value=memory_info.rss // 1024)
 
         # Memory available
         vmem = psutil.virtual_memory()
         swap = psutil.swap_memory()
-        await self.mem_free.write(value=vmem.available + swap.free)
-        await self.mem_max.write(value=vmem.total + swap.total)
+        await self.mem_free.write(value=(vmem.available + swap.free) // 1024)
+        await self.mem_max.write(value=(vmem.total + swap.total) // 1024)
 
         # CPU usage
         await self.ioc_cpu_load.write(value=process.cpu_percent())
@@ -404,6 +413,8 @@ class PeriodicStatusHelper(PVGroup):
         """Periodic updates happen here."""
         await self.record_count.write(value=len(self._root_pvgroup.pvdb))
         await self._update_psutil_status()
+
+        await self.num_threads.write(value=threading.active_count())
 
         # Uptime since our startup method was first called:
         elapsed = datetime.datetime.now() - self._startup_time
