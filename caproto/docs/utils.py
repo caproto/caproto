@@ -1,4 +1,5 @@
 import inspect
+import os.path
 from typing import Any, Dict, List, Tuple, Type
 
 import caproto
@@ -274,6 +275,10 @@ autosummary_context = {
     'get_all_records': get_all_records,
     'get_record_info': get_record_info,
     'inspect': inspect,
+    'path': os.path,
+    'inline_code_threshold': 10,
+    # Where is your project root, relative to conf.py?
+    'project_root': '..',
 }
 
 autodoc_default_options = {

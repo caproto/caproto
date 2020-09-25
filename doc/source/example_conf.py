@@ -93,7 +93,10 @@ autoclass_content = 'init'
 # Tons of warnings will be emitted without this:
 numpydoc_show_class_members = False
 autosummary_context = {
-    **caproto.docs.autosummary_context
+    **caproto.docs.autosummary_context,
+    # The default assumes your repository root is one level up from conf.py.
+    # If that is not accurate, uncomment and modify the following line:
+    # 'project_root': '..',
 }
 html_context = {
     **autosummary_context,

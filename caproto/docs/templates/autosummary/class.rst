@@ -5,29 +5,38 @@
     {% set docstring = inspect.getdoc(obj) or '' %}
     {% set source_file = inspect.getsourcefile(obj) %}
     {% set code, start_line = inspect.getsourcelines(obj) %}
-    {% set end_line = start_line + code|length  %}
+    {% set end_line = start_line + code|length - 1 %}
+
+    {% set relative_filename = path.join('/', project_root, path.relpath(source_file, start='.')) %}
     {% if docstring %}
     {{ docstring | indent(8) }}
-    {% else %}
-    No docstring
     {% endif %}
 
+    {% if (code | length) > inline_code_threshold %}
     .. raw:: html
 
         <details>
         <summary>Source code: {{ attr }}</summary>
 
-    {% if source_file %}
-    .. code-block:: python
-        :lineno-start: {{start_line}}
-        :linenos:
-
-        {{ code | join("") | indent(12) }}
     {% endif %}
+
+    {% if source_file %}
+    .. literalinclude:: {{ relative_filename }}
+        :language: python
+        :linenos:
+        :lineno-start: {{start_line}}
+        :lines: {{start_line}}-{{end_line}}
+
+    {% endif %}
+
+    {% if (code | length) > inline_code_threshold %}
 
     .. raw:: html
 
         </details>
+        <br/>
+
+    {% endif %}
 
 {%- endmacro %}
 
