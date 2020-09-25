@@ -16,3 +16,4 @@ recursive-exclude * __pycache__
 recursive-exclude * *.py[co]
 
 recursive-include doc *.rst *.py Makefile make.bat
+recursive-exclude doc generated/*.rst
