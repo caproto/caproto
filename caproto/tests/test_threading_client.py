@@ -148,6 +148,7 @@ def context(request, shared_broadcaster):
     return context
 
 
+@pytest.mark.timeout(20)
 def test_server_crash(context, ioc_factory):
     first_ioc = ioc_factory()
     # The factory function does not return until readiness is confirmed.
@@ -159,6 +160,7 @@ def test_server_crash(context, ioc_factory):
         raise pytest.skip()
 
     pvs = context.get_pvs(*first_ioc.pvs.values())
+
     # Set up a subscription so that we can check that it re-subscribes later.
     some_pv, *_ = pvs
     assert not some_pv.subscriptions
@@ -173,8 +175,10 @@ def test_server_crash(context, ioc_factory):
     sub.add_callback(collect)
 
     # Wait for everything to connect.
-    for pv in pvs:
-        pv.wait_for_connection(timeout=2)
+    while not all(pv.connected for pv in pvs):
+        for pv in pvs:
+            pv.wait_for_connection(timeout=None)
+
     # Wait to confirm that the subscription produced a response.
     while not collector:
         time.sleep(0.05)
@@ -186,9 +190,9 @@ def test_server_crash(context, ioc_factory):
 
     # Start the ioc again (it has the same prefix).
     second_ioc = ioc_factory()
-    for pv in pvs:
-        pv.wait_for_connection(timeout=2)
-        assert pv.connected
+    while not all(pv.connected for pv in pvs):
+        for pv in pvs:
+            pv.wait_for_connection(timeout=None)
     # Wait to confirm that the subscription produced a new response.
     while not collector:
         time.sleep(0.05)
