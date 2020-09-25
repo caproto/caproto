@@ -18,9 +18,6 @@ import caproto.benchmarking  # noqa
 import caproto.threading  # noqa
 from caproto.sync.client import read
 
-# DBD parsing-related fixtures:
-from .dbd import record_type_to_fields, test_dbd_file  # noqa
-
 _repeater_process = None
 
 REPEATER_PORT = 5065

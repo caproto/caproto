@@ -10,10 +10,8 @@ import pathlib
 
 import caproto
 import pytest
-import pyPDB.dbd.ast
-import pyPDB.dbd.yacc as _yacc
-import pyPDB.dbdlint as _dbdlint
 
+pyPDB = pytest.importorskip('pyPDB')
 
 TEST_ROOT = pathlib.Path(__file__).parent
 
@@ -72,6 +70,8 @@ class DbdFile:
             self._walk_menu(node)
 
     def _walk_field(self, node):
+        import pyPDB.dbd.ast
+
         field_name, field_type = node.args
 
         def block_value(block):
@@ -171,6 +171,9 @@ class DbdFile:
         parsed : list
             pyPDB parsed dbd nodes
         '''
+        import pyPDB.dbd.yacc as _yacc
+        import pyPDB.dbdlint as _dbdlint
+
         if hasattr(fn, 'read'):
             contents = fn.read()
         else:

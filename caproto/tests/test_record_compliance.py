@@ -11,6 +11,8 @@ from epics import ca
 import pytest
 
 from . import conftest
+# DBD parsing-related fixtures:
+from .dbd import record_type_to_fields, test_dbd_file  # noqa
 
 
 # type equality between pyepics and "real" epics, **this is assumed **
