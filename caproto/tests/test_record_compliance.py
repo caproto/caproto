@@ -36,8 +36,10 @@ type_equal = {
 }
 
 
-def test_record_compliance(request, prefix, record_type_name,
-                           record_type_to_fields):
+def test_record_compliance(request,
+                           prefix,
+                           record_type_name,
+                           record_type_to_fields):  # noqa
     fields = record_type_to_fields[record_type_name]
 
     # host a caproto record to test(you could also try this test on a real record).
