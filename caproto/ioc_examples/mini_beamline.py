@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-from caproto.server import (pvproperty, PVGroup, SubGroup,
-                            ioc_arg_parser, run)
-import numpy as np
-import time
+import contextvars
 import functools
 import math
-import contextvars
+import time
+
+import numpy as np
+
+from caproto.server import PVGroup, SubGroup, ioc_arg_parser, pvproperty, run
 
 internal_process = contextvars.ContextVar('internal_process',
                                           default=False)
@@ -33,17 +34,19 @@ def _arrayify(func):
 
 
 class _JitterDetector(PVGroup):
-    det = pvproperty(value=0, dtype=float, read_only=True)
+    det = pvproperty(value=0, dtype=float, read_only=True,
+                     doc='Scalar detector value')
 
     @det.getter
     async def det(self, instance):
         return (await self._read(instance))
 
-    mtr = pvproperty(value=0, dtype=float, precision=3, record='ai')
-    exp = pvproperty(value=1, dtype=float)
-    vel = pvproperty(value=1, dtype=float)
+    mtr = pvproperty(value=0, dtype=float, precision=3, record='ai', doc='Motor')
+    exp = pvproperty(value=1, dtype=float, doc='Exponential value')
+    vel = pvproperty(value=1, dtype=float, doc='Velocity')
 
-    mtr_tick_rate = pvproperty(value=10, dtype=float, units='Hz')
+    mtr_tick_rate = pvproperty(value=10, dtype=float, units='Hz',
+                               doc='Update tick rate')
 
     @exp.putter
     async def exp(self, instance, value):
@@ -78,6 +81,8 @@ class _JitterDetector(PVGroup):
 
 
 class PinHole(_JitterDetector):
+    """A pinhole simulation device."""
+
     async def _read(self, instance):
         sigma = 5
         center = 0
@@ -95,6 +100,8 @@ class PinHole(_JitterDetector):
 
 
 class Edge(_JitterDetector):
+    """An edge simulation device."""
+
     async def _read(self, instance):
         sigma = 2.5
         center = 5
@@ -112,6 +119,8 @@ class Edge(_JitterDetector):
 
 
 class Slit(_JitterDetector):
+    """A slit simulation device."""
+
     async def _read(self, instance):
         sigma = 2.5
         center = 7.5
@@ -143,7 +152,9 @@ class MovingDot(PVGroup):
 
     det = pvproperty(value=[0] * N * M,
                      dtype=float,
-                     read_only=True)
+                     read_only=True,
+                     doc=f'Detector image ({N}x{M})'
+                     )
 
     @det.getter
     async def det(self, instance):
@@ -184,14 +195,14 @@ class MovingDot(PVGroup):
         value = np.clip(value, a_min=0, a_max=None)
         return value
 
-    shutter_open = pvproperty(value=1, dtype=int)
+    shutter_open = pvproperty(value=1, dtype=int, doc='Shutter open/close')
 
     ArraySizeY_RBV = pvproperty(value=N, dtype=int,
-                                read_only=True)
+                                read_only=True, doc='Image array size Y')
     ArraySizeX_RBV = pvproperty(value=M, dtype=int,
-                                read_only=True)
+                                read_only=True, doc='Image array size X')
     ArraySize_RBV = pvproperty(value=[N, M], dtype=int,
-                               read_only=True)
+                               read_only=True, doc='Image array size [Y, X]')
 
 
 class MiniBeamline(PVGroup):
@@ -208,11 +219,11 @@ class MiniBeamline(PVGroup):
         current = 500 + 25 * np.sin(time.monotonic() * (2 * np.pi) / 4)
         await instance.write(value=current)
 
-    ph = SubGroup(PinHole)
-    edge = SubGroup(Edge)
-    slit = SubGroup(Slit)
+    ph = SubGroup(PinHole, doc='Simulated pinhole')
+    edge = SubGroup(Edge, doc='Simulated edge')
+    slit = SubGroup(Slit, doc='Simulated slit')
 
-    dot = SubGroup(MovingDot)
+    dot = SubGroup(MovingDot, doc='The simulated detector')
 
 
 if __name__ == '__main__':
