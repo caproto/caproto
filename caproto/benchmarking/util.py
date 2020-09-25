@@ -5,11 +5,22 @@ import subprocess
 import shutil
 import logging
 from contextlib import contextmanager
+import functools
 
 from .._utils import named_temporary_file
 
 
 logger = logging.getLogger(__name__)
+
+
+@functools.lru_cache(1)
+def has_softioc():
+    try:
+        subprocess.run(['softIoc'])
+    except FileNotFoundError:
+        return False
+    else:
+        return True
 
 
 def find_dbd_path():

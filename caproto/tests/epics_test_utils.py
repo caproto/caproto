@@ -2,6 +2,8 @@
 Helper functions for dealing with EPICS base binaries (caget, caput, catest)
 '''
 
+import functools
+
 import os
 import sys
 import datetime
@@ -14,6 +16,26 @@ import curio.subprocess
 import trio
 
 import caproto as ca
+
+
+@functools.lru_cache(1)
+def has_caget():
+    try:
+        subprocess.run(['caget'])
+    except FileNotFoundError:
+        return False
+    else:
+        return True
+
+
+@functools.lru_cache(1)
+def has_caput():
+    try:
+        subprocess.run(['put'])
+    except FileNotFoundError:
+        return False
+    else:
+        return True
 
 
 async def run_epics_base_binary(backend, *args, max_attempts=3):

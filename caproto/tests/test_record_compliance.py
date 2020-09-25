@@ -6,12 +6,12 @@
 # - all the enums of the .* can be read
 import time
 
-import epics
-from epics import ca
 import pytest
 
 from . import conftest
-
+# DBD parsing-related fixtures:
+from .dbd import record_type_to_fields, test_dbd_file  # noqa
+epics = pytest.importorskip('epics')
 
 # type equality between pyepics and "real" epics, **this is assumed **
 type_equal = {
@@ -36,8 +36,10 @@ type_equal = {
 }
 
 
-def test_record_compliance(request, prefix, record_type_name,
-                           record_type_to_fields):
+def test_record_compliance(request,
+                           prefix,
+                           record_type_name,
+                           record_type_to_fields):  # noqa
     fields = record_type_to_fields[record_type_name]
 
     # host a caproto record to test(you could also try this test on a real record).
@@ -87,7 +89,7 @@ def test_record_compliance(request, prefix, record_type_name,
 
             try:
                 # normally it is time_char so we add time_
-                ca.get(pv_temp.chid, as_string=('$' in field))
+                epics.ca.get(pv_temp.chid, as_string=('$' in field))
             except Exception as ex:
                 issues[field] = f"can't be read ({ex})"
 

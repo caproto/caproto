@@ -947,6 +947,10 @@ def access_security_softioc(request, prefix, context):
     '''
 
     from .conftest import run_softioc, poll_readiness
+    from ..benchmarking.util import has_softioc
+
+    if not has_softioc():
+        pytest.skip("no softIoc")
 
     handler = run_softioc(request, db=access_rights_db,
                           access_rules_text=access_rights_asg_rules,
