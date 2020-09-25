@@ -12,9 +12,9 @@ sys.path.insert(0, str(module_path))
 
 
 project = 'YOUR_PROJECT'
-author = 'SLAC National Accelerator Laboratory'
+author = 'YOUR_NAME'
 
-copyright = f'{datetime.now().year}, YOUR_NAME'
+copyright = f'{datetime.now().year}, {author}'
 
 # The short X.Y version
 version = ''
