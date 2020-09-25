@@ -1,14 +1,16 @@
 import logging
+import pytest
 
 import curio
 
 import caproto as ca
-from .epics_test_utils import run_caget
+from .epics_test_utils import run_caget, has_caget
 
 
 REPEATER_PORT = 5065
 
 
+@pytest.mark.skipif(not has_caget(), reason='no caget')
 def test_sync_repeater(ioc):
     logging.getLogger('caproto').setLevel(logging.DEBUG)
     logging.basicConfig()

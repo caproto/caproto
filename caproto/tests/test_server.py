@@ -10,7 +10,7 @@ import pytest
 import caproto as ca
 
 from caproto import ChannelType
-from .epics_test_utils import (run_caget, run_caput)
+from .epics_test_utils import (run_caget, run_caput, has_caget, has_caput)
 from .conftest import array_types, run_example_ioc
 from caproto.sync.client import write, read, ErrorResponseReceived
 
@@ -40,7 +40,7 @@ caget_checks += [('char', ChannelType.CHAR),
                  ('str', ChannelType.CLASS_NAME),
                  ]
 
-
+@pytest.mark.skipif(not has_caget(), reason='No caget binary')
 @pytest.mark.parametrize('pv, dbr_type', caget_checks)
 def test_with_caget(backends, prefix, pvdb_from_server_example, server, pv,
                     dbr_type):
@@ -186,6 +186,7 @@ caput_checks = [('int', '1', 1),
                 ]
 
 
+@pytest.mark.skipif(not has_caput(), reason='No caput binary')
 @pytest.mark.parametrize('pv, put_value, check_value', caput_checks)
 def test_with_caput(backends, prefix, pvdb_from_server_example, server, pv,
                     put_value, check_value):
@@ -283,6 +284,7 @@ def test_empties_with_caproto_client(request, caproto_ioc):
     assert list(read(caproto_ioc.pvs['empty_float']).data) == []
 
 
+@pytest.mark.skipif(not has_caget(), reason='No caget binary')
 def test_empties_with_caget(request, caproto_ioc):
     async def test():
         info = await run_caget('asyncio', caproto_ioc.pvs['empty_string'])

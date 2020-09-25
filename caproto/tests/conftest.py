@@ -168,6 +168,8 @@ def prefix():
 
 
 def _epics_base_ioc(prefix, request):
+    if not ca.benchmarking.has_softioc():
+        pytest.skip('no softIoc')
     name = 'Waveform and standard record IOC'
     db = {
         ('{}waveform'.format(prefix), 'waveform'):
