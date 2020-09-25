@@ -1,14 +1,15 @@
 {{ fullname | escape | underline}}
 
-{% macro method_info(attr, obj) -%}
+{%- macro method_info(attr, obj) -%}
 
-    {% set docstring = inspect.getdoc(obj) or '' %}
-    {% set source_file = inspect.getsourcefile(obj) %}
-    {% set code, start_line = inspect.getsourcelines(obj) %}
-    {% set end_line = start_line + code|length - 1 %}
+    {%- set docstring = inspect.getdoc(obj) or '' %}
+    {%- set source_file = inspect.getsourcefile(obj) %}
+    {%- set code, start_line = inspect.getsourcelines(obj) %}
+    {%- set dedent = path.commonprefix(code)|length %}
+    {%- set end_line = start_line + code|length - 1 %}
 
-    {% set relative_filename = path.join('/', project_root, path.relpath(source_file, start='.')) %}
-    {% if docstring %}
+    {%- set relative_filename = path.join('/', project_root, path.relpath(source_file, start='.')) %}
+    {%- if docstring %}
     {{ docstring | indent(8) }}
     {% endif %}
 
@@ -20,16 +21,17 @@
 
     {% endif %}
 
-    {% if source_file %}
+    {%- if source_file %}
     .. literalinclude:: {{ relative_filename }}
         :language: python
         :linenos:
+        :dedent: {{dedent}}
         :lineno-start: {{start_line}}
         :lines: {{start_line}}-{{end_line}}
 
-    {% endif %}
+    {%- endif %}
 
-    {% if (code | length) > inline_code_threshold %}
+    {%- if (code | length) > inline_code_threshold %}
 
     .. raw:: html
 
@@ -141,29 +143,29 @@
     .. rubric:: {{ _('Attributes') }}
 
     .. autosummary::
+
     {% for item in attributes %}
        ~{{ name }}.{{ item }}
     {%- endfor %}
 
-    {% endif %}
+    {%- endif %}
     {% endblock %}
 
     {% block pvprop_methods %}
-    {% if pvgroup_info.pvproperty %}
+    {%- if pvgroup_info.pvproperty %}
     .. rubric:: pvproperty methods
 
-    {% for attr, prop in pvgroup_info.pvproperty.items() %}
-    {% if prop.has_startup %}
-
+    {%- for attr, prop in pvgroup_info.pvproperty.items() %}
+    {%- if prop.has_startup %}
     .. method:: {{ attr }}.startup(self, instance, async_lib)
         {{ method_info(attr + '.startup', prop.pvspec.startup) }}
 
-    {% endif %}
-    {% if prop.has_put %}
-    .. method:: {{ attr }}.put(self, instance, value)
-        {{ method_info(attr + '.put', prop.pvspec.put) }}
+    {%- endif %}
+    {%- if prop.has_put %}
+    .. method:: {{ attr }}.putter(self, instance, value)
+        {{ method_info(attr + '.putter', prop.pvspec.put) }}
 
-    {% endif %}
-    {% endfor %}
-    {% endif %}
-    {% endblock %}
+    {%- endif %}
+    {%- endfor %}
+    {%- endif %}
+    {%- endblock %}
