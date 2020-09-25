@@ -450,20 +450,27 @@ behavior.
     randstr.read()
 
 
+Mini-Beamline
+-------------
+
+Simulate your own mini beamline with this IOC.
+
+.. autosummary::
+    :toctree: generated
+
+    ~mini_beamline
+    ~mini_beamline.MiniBeamline
+    ~mini_beamline.PinHole
+    ~mini_beamline.Edge
+    ~mini_beamline.Slit
+    ~mini_beamline.MovingDot
+
+
 More...
 -------
 
 Take a look around
 `the ioc_examples subpackage <https://github.com/caproto/caproto/tree/master/caproto/ioc_examples>`_ for more examples not covered here.
-
-.. ipython:: python
-    :suppress:
-
-    # Clean up IOC processes.
-    for p in processes:
-        p.terminate()
-    for p in processes:
-        p.wait()
 
 
 .. autosummary::
@@ -473,7 +480,16 @@ Take a look around
     ~autosave.AutosavedSimpleIOC
     ~decay.Decay
     ~scan_rate.ScanRateIOC
-    ~mini_beamline.MiniBeamline
+
+
+.. ipython:: python
+    :suppress:
+
+    # Clean up IOC processes.
+    for p in processes:
+        p.terminate()
+    for p in processes:
+        p.wait()
 
 
 Helpers
