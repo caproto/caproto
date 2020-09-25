@@ -91,7 +91,7 @@ script:
 
   - caproto-repeater &
 
-  - coverage run --parallel-mode run_tests.py -v
+  - coverage run --parallel-mode run_tests.py -v -n 2
   - coverage combine --append
   - coverage report -m
   - codecov
