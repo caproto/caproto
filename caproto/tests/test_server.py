@@ -40,6 +40,7 @@ caget_checks += [('char', ChannelType.CHAR),
                  ('str', ChannelType.CLASS_NAME),
                  ]
 
+
 @pytest.mark.skipif(not has_caget(), reason='No caget binary')
 @pytest.mark.parametrize('pv, dbr_type', caget_checks)
 def test_with_caget(backends, prefix, pvdb_from_server_example, server, pv,
