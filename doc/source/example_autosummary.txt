@@ -1,0 +1,20 @@
+---------
+PV Groups
+---------
+
+.. currentmodule:: package
+
+.. autosummary::
+    :toctree: ioc
+
+   pkg.MyGroup
+
+
+--------
+Full API
+--------
+
+.. autosummary::
+    :toctree: ioc
+
+    pkg

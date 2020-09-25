@@ -15,21 +15,45 @@ Access all of the fields one would normally expect from that record.
 
 See the :ref:`records_example` example for usage.
 
-{% for item in records | sort(attribute='sort_index') %}
-{%- set cls = caproto.server.records.records[item.record_name] -%}
-.. class:: {{ item.class_name }}
+.. autosummary::
+    :toctree: generated
 
-{% if item.record_name == 'base' %}
-    This is a PVGroup class used to represent the basic fields from any given
-    EPICS record.
-
-    .. note:: The classes shown here are not meant to be instantiated directly, but
-               rather used as a ``record=`` keyword argument in a
-               :class:`pvproperty`.
-{% else %}
-    .. note:: To use this, specify ``record="{{item.record_name}}"`` in a
-              :class:`pvproperty`.
-{% endif %}
-    {{ item.pv_table |indent(4) }}
-
-{% endfor %}
+    register_record
+    RecordFieldGroup
+    AiFields
+    AsubFields
+    AaiFields
+    AaoFields
+    AoFields
+    AsynFields
+    BiFields
+    BoFields
+    CalcFields
+    CalcoutFields
+    CompressFields
+    DfanoutFields
+    EventFields
+    FanoutFields
+    HistogramFields
+    LonginFields
+    LongoutFields
+    MbbiFields
+    MbbidirectFields
+    MbboFields
+    MbbodirectFields
+    MotorFields
+    PermissiveFields
+    SelFields
+    SeqFields
+    StateFields
+    StringinFields
+    StringoutFields
+    SubFields
+    SubarrayFields
+    WaveformFields
+    Int64inFields
+    Int64outFields
+    LsiFields
+    LsoFields
+    PrintfFields
+    summarize

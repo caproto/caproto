@@ -1,13 +1,12 @@
+import datetime
 import json
 import logging
-import pathlib
-import datetime
 import operator
+import pathlib
 import tempfile
 import typing
 
 from . import PVGroup, pvproperty
-
 
 MODULE_LOGGER = logging.getLogger(__name__)
 
@@ -203,7 +202,11 @@ class AutosaveHelper(PVGroup):
     filename = 'autosave.json'
     period = 30
 
-    autosave_hook = pvproperty(read_only=True, name=':__autosave_hook__')
+    autosave_hook = pvproperty(
+        read_only=True,
+        name=':__autosave_hook__',
+        doc='Internal hook which handles autosave functionality',
+    )
 
     def __init__(self, *args, file_manager: RotatingFileManager = None,
                  **kwargs):
@@ -332,8 +335,8 @@ def autosaved(pvprop, fields=None):
     pvproperty
         The pvproperty passed in.
 
-    Example
-    -------
+    Examples
+    --------
 
     ::
         value = autosaved(pvproperty(1.0))

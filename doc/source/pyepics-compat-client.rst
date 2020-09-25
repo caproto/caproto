@@ -108,3 +108,13 @@ The underlying caproto PV and Context objects from caproto's main
 
 This brief demonstration has not exercised every aspect of the pyepics API, but
 caproto's test suite is more comprehensive.
+
+.. ipython:: python
+    :suppress:
+
+    # Clean up IOC processes.
+    for p in processes:
+        p.terminate()
+        p.kill()
+    for p in processes:
+        p.wait()

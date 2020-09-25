@@ -28,6 +28,8 @@ in just a couple lines of Python. This opens up some interesting possibilities:
 Using the IOC Examples
 ======================
 
+.. currentmodule:: caproto.ioc_examples
+
 They can be started like so:
 
 .. code-block:: bash
@@ -105,6 +107,12 @@ This IOC has two PVs that simply store a value.
 
 .. literalinclude:: ../../caproto/ioc_examples/simple.py
 
+.. autosummary::
+    :toctree: generated
+
+    ~simple.SimpleIOC
+
+
 .. ipython:: python
     :suppress:
 
@@ -175,6 +183,11 @@ Random Walk
 This example contains a PV ``random_walk:x`` that takes random steps at an
 update rate controlled by a second PV, ``random_walk:dt``.
 
+.. autosummary::
+    :toctree: generated
+
+    ~random_walk.RandomWalkIOC
+
 .. literalinclude:: ../../caproto/ioc_examples/random_walk.py
 
 .. note::
@@ -206,6 +219,13 @@ I/O Interrupt
 -------------
 
 This example listens for key presses.
+
+.. autosummary::
+    :toctree: generated
+
+    ~io_interrupt.start_io_interrupt_monitor
+    ~io_interrupt.IOInterruptIOC
+
 
 .. literalinclude:: ../../caproto/ioc_examples/io_interrupt.py
 
@@ -251,6 +271,12 @@ the client will receive the updates:
 
 Macros for PV names
 -------------------
+
+.. autosummary::
+    :toctree: generated
+
+    ~macros.MacroifiedNames
+
 
 .. literalinclude:: ../../caproto/ioc_examples/macros.py
 
@@ -332,6 +358,12 @@ Records
 -------
 
 See :doc:`records`.
+
+.. autosummary::
+    :toctree: generated
+
+    ~records.RecordMockingIOC
+
 
 .. literalinclude:: ../../caproto/ioc_examples/records.py
 
@@ -417,11 +449,38 @@ behavior.
     randstr.read()
     randstr.read()
 
+
+Mini-Beamline
+-------------
+
+Simulate your own mini beamline with this IOC.
+
+.. autosummary::
+    :toctree: generated
+
+    ~mini_beamline
+    ~mini_beamline.MiniBeamline
+    ~mini_beamline.PinHole
+    ~mini_beamline.Edge
+    ~mini_beamline.Slit
+    ~mini_beamline.MovingDot
+
+
 More...
 -------
 
 Take a look around
 `the ioc_examples subpackage <https://github.com/caproto/caproto/tree/master/caproto/ioc_examples>`_ for more examples not covered here.
+
+
+.. autosummary::
+    :toctree: generated
+
+    ~enums.EnumIOC
+    ~autosave.AutosavedSimpleIOC
+    ~decay.Decay
+    ~scan_rate.ScanRateIOC
+
 
 .. ipython:: python
     :suppress:
@@ -431,3 +490,36 @@ Take a look around
         p.terminate()
     for p in processes:
         p.wait()
+
+
+Helpers
+-------
+
+caproto offers several "helper" subgroups (:class:`~caproto.server.SubGroup`)
+that are of general use, and could be considered part of the "caproto server
+standard library", so to speak.
+
+Autosave
+^^^^^^^^
+
+.. currentmodule:: caproto.server.autosave
+
+.. autosummary::
+    :toctree: generated
+
+    AutosaveHelper
+    RotatingFileManager
+
+
+Status / Statistics
+^^^^^^^^^^^^^^^^^^^
+
+.. currentmodule:: caproto.server.stats
+
+.. autosummary::
+    :toctree: generated
+
+    StatusHelper
+    BasicStatusHelper
+    PeriodicStatusHelper
+    MemoryTracingHelper

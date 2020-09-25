@@ -4,6 +4,7 @@ import fnmatch
 import logging
 import sys
 import warnings
+
 try:
     import colorama
     colorama.init()
@@ -50,19 +51,43 @@ class ComposableLogAdapter(logging.LoggerAdapter):
 
 
 class LogFormatter(logging.Formatter):
-    """Log formatter for caproto records.
+    """
+    Log formatter for caproto records.
 
     Adapted from the log formatter used in Tornado.
-    Key features of this formatter are:
 
+    Key features of this formatter are:
     * Color support when logging to a terminal that supports it.
     * Timestamps on every log line.
-    * Includes extra record attributes (pv, our_address, their_address,
-      direction, role) when present.
+    * When present, includes extra record attributes:
+        - pv
+        - our_address
+        - their_address
+        - direction
+        - role
 
+    Parameters
+    ----------
+    color : bool, optional
+        Enables color support.
+
+    fmt : str, optional
+        Log message format.
+        It will be applied to the attributes dict of log records. The text
+        between ``%(color)s`` and ``%(end_color)s`` will be colored depending
+        on the level if color support is on.
+
+    colors : dict, optional
+        color mappings from logging level to terminal color code
+
+    datefmt : str, optional
+        Datetime format.  Used for formatting ``(asctime)`` placeholder in
+        ``prefix_fmt``.
     """
-    DEFAULT_FORMAT = \
-        '%(color)s[%(levelname)1.1s %(asctime)s %(module)12s:%(lineno)d]%(end_color)s %(message)s'
+    DEFAULT_FORMAT = (
+        '%(color)s[%(levelname)1.1s %(asctime)s '
+        '%(module)12s:%(lineno)d]%(end_color)s %(message)s'
+    )
     DEFAULT_DATE_FORMAT = '%y%m%d %H:%M:%S'
     DEFAULT_COLORS = {
         logging.DEBUG: 4,  # Blue
@@ -73,19 +98,6 @@ class LogFormatter(logging.Formatter):
 
     def __init__(self, fmt=DEFAULT_FORMAT, datefmt=DEFAULT_DATE_FORMAT,
                  style='%', color=True, colors=DEFAULT_COLORS):
-        r"""
-        :arg bool color: Enables color support.
-        :arg str fmt: Log message format.
-          It will be applied to the attributes dict of log records. The
-          text between ``%(color)s`` and ``%(end_color)s`` will be colored
-          depending on the level if color support is on.
-        :arg dict colors: color mappings from logging level to terminal color
-          code
-        :arg str datefmt: Datetime format.
-          Used for formatting ``(asctime)`` placeholder in ``prefix_fmt``.
-        .. versionchanged:: 3.2
-           Added ``fmt`` and ``datefmt`` arguments.
-        """
         super().__init__(datefmt=datefmt)
         self._fmt = fmt
 
