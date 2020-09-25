@@ -94,7 +94,7 @@ jobs:
 
   - bash: |
       source $HOME/azure_env.sh
-      coverage run --parallel-mode run_tests.py --timeout=100 -v --junitxml=junit/test-results.xml
+      coverage run --parallel-mode run_tests.py --timeout=100 -v --junitxml=junit/test-results.xml -n 2
     displayName: 'pytest'
 
   - bash: |
