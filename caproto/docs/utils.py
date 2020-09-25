@@ -1,6 +1,6 @@
 import inspect
 import os.path
-from typing import Any, Dict, List, Tuple, Type
+from typing import Any, Dict, List, Type
 
 import caproto
 
@@ -180,7 +180,7 @@ def get_record_info(record_type) -> Dict[str, Any]:
     return _get_pvgroup_info(cls)
 
 
-def get_all_records() -> List[Tuple[str, str]]:
+def get_all_records() -> List[Dict[str, Any]]:
     """Get all registered record types."""
     return [
         get_record_info(rec_name)
