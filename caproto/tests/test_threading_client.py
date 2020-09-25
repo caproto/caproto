@@ -26,7 +26,7 @@ THREAD_TIMEOUT_SCALE = 2
 
 def test_go_idle(context, ioc):
     pv, = context.get_pvs(ioc.pvs['str'])
-    pv.wait_for_connection(timeout=10)
+    pv.wait_for_connection(timeout=2)
     assert pv.connected
     print(pv.read())
 
@@ -41,7 +41,7 @@ def test_go_idle(context, ioc):
 
 def test_context_disconnect_is_terminal(context, ioc):
     pv, = context.get_pvs(ioc.pvs['str'])
-    pv.wait_for_connection(timeout=10)
+    pv.wait_for_connection(timeout=2)
     assert pv.connected
 
     pv.read()
@@ -54,7 +54,7 @@ def test_context_disconnect_is_terminal(context, ioc):
 
 def test_put_complete(backends, context, ioc):
     pv, = context.get_pvs(ioc.pvs['int'])
-    pv.wait_for_connection(timeout=10)
+    pv.wait_for_connection(timeout=2)
     assert pv.connected
 
     # start in a known initial state
@@ -89,7 +89,7 @@ def test_put_complete(backends, context, ioc):
 
 def test_specified_port(monkeypatch, context, ioc):
     pv, = context.get_pvs(ioc.pvs['float'])
-    pv.wait_for_connection(timeout=10)
+    pv.wait_for_connection(timeout=2)
 
     circuit = pv.circuit_manager.circuit
     address_list = list(caproto.get_address_list())
@@ -174,7 +174,7 @@ def test_server_crash(context, ioc_factory):
 
     # Wait for everything to connect.
     for pv in pvs:
-        pv.wait_for_connection(timeout=10)
+        pv.wait_for_connection(timeout=2)
     # Wait to confirm that the subscription produced a response.
     while not collector:
         time.sleep(0.05)
@@ -187,7 +187,7 @@ def test_server_crash(context, ioc_factory):
     # Start the ioc again (it has the same prefix).
     second_ioc = ioc_factory()
     for pv in pvs:
-        pv.wait_for_connection(timeout=10)
+        pv.wait_for_connection(timeout=2)
         assert pv.connected
     # Wait to confirm that the subscription produced a new response.
     while not collector:
@@ -202,7 +202,7 @@ def test_subscriptions(ioc, context):
     cntx = context
 
     pv, = cntx.get_pvs(ioc.pvs['int'])
-    pv.wait_for_connection(timeout=10)
+    pv.wait_for_connection(timeout=2)
 
     monitor_values = []
 
@@ -234,7 +234,7 @@ def test_deprecated_callback_signature(ioc, context):
     cntx = context
 
     pv, = cntx.get_pvs(ioc.pvs['int'])
-    pv.wait_for_connection(timeout=10)
+    pv.wait_for_connection(timeout=2)
 
     monitor_values = []
 
@@ -271,7 +271,7 @@ def test_another_deprecated_callback_signature(ioc, context):
     cntx = context
 
     pv, = cntx.get_pvs(ioc.pvs['int'])
-    pv.wait_for_connection(timeout=10)
+    pv.wait_for_connection(timeout=2)
 
     monitor_values = []
 
@@ -323,7 +323,7 @@ def test_many_priorities_same_name(ioc, context):
     for priority in range(0, 10, 9):
         pvs[priority], = context.get_pvs(pv_name, priority=priority)
     for pv in pvs.values():
-        pv.wait_for_connection(timeout=10)
+        pv.wait_for_connection(timeout=2)
 
 
 def test_two_iocs_one_pv(ioc_factory, context):
@@ -335,7 +335,7 @@ def test_two_iocs_one_pv(ioc_factory, context):
     assert first_ioc.pvs == second_ioc.pvs
     pv_name, *_others = first_ioc.pvs.values()
     pv, = context.get_pvs(pv_name)
-    pv.wait_for_connection(timeout=10)
+    pv.wait_for_connection(timeout=2)
     time.sleep(0.2)  # By now both IOC will have answered.
     # Exercise it a bit as a smoke test of sorts.
     pv.read()
@@ -349,7 +349,7 @@ def test_two_iocs_one_pv(ioc_factory, context):
 def test_multiple_subscriptions_one_server(ioc, context):
     pvs = context.get_pvs(*ioc.pvs.values())
     for pv in pvs:
-        pv.wait_for_connection(timeout=10)
+        pv.wait_for_connection(timeout=2)
     collector = collections.defaultdict(list)
 
     def collect(sub, response):
@@ -367,7 +367,7 @@ def test_multiple_subscriptions_one_server(ioc, context):
 def test_subscription_objects_are_reused(ioc, context):
     pv, = context.get_pvs(ioc.pvs['int'])
 
-    pv.wait_for_connection(timeout=10)
+    pv.wait_for_connection(timeout=2)
     sub = pv.subscribe(data_type=0)
     sub_redundant = pv.subscribe(data_type=0)  # should return `sub` again
     sub_different = pv.subscribe(data_type=1)  # different args -- new sub
@@ -391,7 +391,7 @@ def test_subscription_objects_are_reused(ioc, context):
 
 def test_unsubscribe_all(ioc, context):
     pv, = context.get_pvs(ioc.pvs['int'])
-    pv.wait_for_connection(timeout=10)
+    pv.wait_for_connection(timeout=2)
     sub0 = pv.subscribe(data_type=0)
     sub1 = pv.subscribe(data_type=1)
 
@@ -421,7 +421,7 @@ def test_unsubscribe_all(ioc, context):
 
 def test_timeout(ioc, context):
     pv, = context.get_pvs(ioc.pvs['int'])
-    pv.wait_for_connection(timeout=10)
+    pv.wait_for_connection(timeout=2)
 
     # Check that timeout=None is allowed.
     pv.write((1, ), timeout=None)
@@ -644,7 +644,7 @@ def test_multithreaded_many_subscribe(ioc, context, thread_count,
     sub_ended_barrier = threading.Barrier(parties=thread_count + 1)
 
     pv, = context.get_pvs(ioc.pvs['int'])
-    pv.wait_for_connection(timeout=10)
+    pv.wait_for_connection(timeout=2)
     initial_value = pv.read().data.tolist()[0]
 
     print()
@@ -667,7 +667,7 @@ def test_multithreaded_many_subscribe(ioc, context, thread_count,
 def test_batch_read(context, ioc):
     pvs = context.get_pvs(ioc.pvs['int'], ioc.pvs['int2'], ioc.pvs['int3'])
     for pv in pvs:
-        pv.wait_for_connection(timeout=10)
+        pv.wait_for_connection(timeout=2)
     results = {}
 
     def stash_result(name, response):
@@ -683,7 +683,7 @@ def test_batch_read(context, ioc):
 def test_batch_write(context, ioc):
     pvs = context.get_pvs(ioc.pvs['int'], ioc.pvs['int2'], ioc.pvs['int3'])
     for pv in pvs:
-        pv.wait_for_connection(timeout=10)
+        pv.wait_for_connection(timeout=2)
     results = {}
 
     def stash_result(name, response):
@@ -701,7 +701,7 @@ def test_batch_write(context, ioc):
 def test_batch_write_no_callback(context, ioc):
     pvs = context.get_pvs(ioc.pvs['int'], ioc.pvs['int2'], ioc.pvs['int3'])
     for pv in pvs:
-        pv.wait_for_connection(timeout=10)
+        pv.wait_for_connection(timeout=2)
     with Batch() as b:
         for pv in pvs:
             b.write(pv, [4407])
@@ -713,7 +713,7 @@ def test_batch_write_no_callback(context, ioc):
 def test_write_accepts_scalar(context, ioc):
     int_pv, str_pv = context.get_pvs(ioc.pvs['int'], ioc.pvs['str'])
     for pv in (int_pv, str_pv):
-        pv.wait_for_connection(timeout=10)
+        pv.wait_for_connection(timeout=2)
     int_pv.write(17, wait=True)
     assert list(int_pv.read().data) == [17]
     str_pv.write('caprotoss', wait=True)
@@ -722,7 +722,7 @@ def test_write_accepts_scalar(context, ioc):
 
 def test_events_off_and_on(ioc, context):
     pv, = context.get_pvs(ioc.pvs['int'])
-    pv.wait_for_connection(timeout=10)
+    pv.wait_for_connection(timeout=2)
 
     monitor_values = []
 
@@ -788,7 +788,7 @@ def test_registration_of_connection_state_callback(context, ioc):
 
 def test_time_since_last_heard(context, ioc):
     pv, = context.get_pvs(ioc.pvs['str'])
-    pv.wait_for_connection(timeout=10)
+    pv.wait_for_connection(timeout=2)
     time.sleep(1)
     (address, t), = context.broadcaster.time_since_last_heard().items()
     assert address == pv.circuit_manager.circuit.address

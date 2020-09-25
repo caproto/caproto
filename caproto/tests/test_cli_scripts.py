@@ -1,11 +1,30 @@
-import subprocess
 import sys
+import uuid
 
 import pytest
 
+import caproto.commandline.get
+import caproto.commandline.monitor
+import caproto.commandline.put
 from caproto.sync.client import block, read, subscribe, write
 
-from .conftest import dump_process_output
+from .conftest import _caproto_ioc, _epics_base_ioc, dump_process_output
+
+
+@pytest.fixture(scope='module')
+def prefix():
+    'Random PV prefix for a server'
+    return str(uuid.uuid4())[:8] + ':'
+
+
+@pytest.fixture(params=['caproto', 'epics-base'], scope='module')
+def ioc(prefix, request):
+    'A fixture that runs more than one IOC: caproto, epics'
+    # Get a new prefix for each IOC type:
+    if request.param == 'caproto':
+        return _caproto_ioc(prefix, request)
+    if request.param == 'epics-base':
+        return _epics_base_ioc(prefix, request)
 
 
 def escape(pv_name, response):
@@ -35,7 +54,7 @@ def test_subscribe_timeout():
         block(sub)
 
 
-def _subprocess_communicate(process, command, timeout=10.0):
+def _subprocess_communicate(process, command, timeout=2.0):
     stdout, stderr = process.communicate(timeout=timeout)
     dump_process_output(command, stdout, stderr)
     assert process.poll() == 0
@@ -75,7 +94,28 @@ fmt2 = '{timestamp:%%H:%%M}'
 fmt3 = '{response.data}'
 
 
+script_name_to_module = {
+    'caproto-get': caproto.commandline.get,
+    'caproto-put': caproto.commandline.put,
+    'caproto-monitor': caproto.commandline.monitor,
+}
+
+
+def call_script(monkeypatch, script, args):
+    module = script_name_to_module[script]
+    script_main = module.main
+
+    def no_op(*args, **kwargs):
+        ...
+
+    monkeypatch.setattr(module, '_set_handler_with_logger', no_op)
+    monkeypatch.setattr(module, 'set_handler', no_op)
+    monkeypatch.setattr(sys, 'argv', [script, *args])
+    return script_main()
+
+
 # Skip the long-running ones.
+@pytest.mark.timeout(10)
 @pytest.mark.parametrize('command,args',
                          [('caproto-get', ('-h',)),
                           ('caproto-put', ('-h',)),
@@ -151,15 +191,15 @@ fmt3 = '{response.data}'
                           # Test data_count limiter.
                           ('caproto-get', ('waveform', '-#', '1')),
                           ])
-def test_cli(command, args, ioc, ):
+def test_cli(command, args, ioc, monkeypatch):
     args = fix_arg_prefixes(ioc, args)
-    p = subprocess.Popen([sys.executable, '-um', 'caproto.tests.example_runner',
-                          '--script', command] + list(args),
-                         stdout=subprocess.PIPE, stderr=subprocess.PIPE
-                         )
-    _subprocess_communicate(p, command, timeout=10.0)
+    try:
+        call_script(monkeypatch, command, args)
+    except SystemExit as ex:
+        assert ex.code == 0
 
 
+@pytest.mark.timeout(5)
 @pytest.mark.parametrize('args',
                          [('float', '--format', fmt1),
                           ('float', '--format', fmt2),
@@ -205,23 +245,9 @@ def test_cli(command, args, ioc, ):
                           # Test data_count limiter.
                           ('waveform', '-#', '1'),
                           ])
-def test_monitor(args, ioc):
+def test_monitor(args, ioc, monkeypatch):
     args = fix_arg_prefixes(ioc, args)
-
-    if sys.platform == 'win32':
-        si = subprocess.STARTUPINFO()
-        si.dwFlags = (subprocess.STARTF_USESTDHANDLES |
-                      subprocess.CREATE_NEW_PROCESS_GROUP)
-        os_kwargs = dict(startupinfo=si)
-    else:
-        os_kwargs = {}
 
     # For the purposes of this test, one monitor output is sufficient
     args += ['--maximum', '1']
-
-    p = subprocess.Popen([sys.executable, '-um', 'caproto.tests.example_runner',
-                          '--script', 'caproto-monitor'] + list(args),
-                         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                         **os_kwargs)
-
-    _subprocess_communicate(p, 'camonitor', timeout=2.0)
+    call_script(monkeypatch, 'caproto-monitor', args)
