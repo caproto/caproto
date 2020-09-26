@@ -67,6 +67,14 @@ setup(name='caproto',
           ],
       },
       include_package_data=True,
+      package_data={
+          # NOTE: this is required in addition to MANIFEST.in, as that only
+          # applies to source distributions
+
+          # Include our documentation helpers and templates necessary to
+          # rebuild record fields:
+          '': ['*.rst', '*.jinja2'],
+      },
       python_requires='>=3.6',
       classifiers=classifiers,
       extras_require=extras_require
