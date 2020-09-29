@@ -110,7 +110,7 @@ script:
         DEPLOY_DIR="caproto/${TRAVIS_TAG:=master}"
         doctr deploy --command=doctr-versions-menu --build-tags --deploy-repo caproto/caproto.github.io --deploy-branch-name master ${DEPLOY_DIR}
 
-        # Avoid updating /index.html in the caproto/caproto.github.io repo.
+        # Avoid updating /index.html in the NSLS-II/NSLS-II.github.io repo.
         # See https://goerz.github.io/doctr_versions_menu/v0.3.0/command.html#customizing-index-html
         # for details.
         export DOCTR_VERSIONS_MENU_WRITE_INDEX_HTML=false
