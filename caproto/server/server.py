@@ -8,25 +8,24 @@ For an example server implementation, see caproto.curio.server
 '''
 import argparse
 import copy
+import enum
 import inspect
 import logging
 import sys
 import time
 import warnings
-
-from collections import (namedtuple, OrderedDict, defaultdict)
+from collections import OrderedDict, defaultdict, namedtuple
 from types import MethodType
 
-from .. import (ChannelDouble, ChannelFloat, ChannelShort, ChannelInteger,
-                ChannelString, ChannelEnum, ChannelType, ChannelChar,
-                ChannelByte, ChannelAlarm,
-                AccessRights, get_server_address_list,
-                AlarmStatus, AlarmSeverity, CaprotoRuntimeError,
-                CaprotoValueError, CaprotoTypeError, CaprotoAttributeError,
-                __version__)
-from .._backend import backend
-from caproto._log import set_handler, _set_handler_with_logger
+from caproto._log import _set_handler_with_logger, set_handler
 
+from .. import (AccessRights, AlarmSeverity, AlarmStatus,
+                CaprotoAttributeError, CaprotoRuntimeError, CaprotoTypeError,
+                CaprotoValueError, ChannelAlarm, ChannelByte, ChannelChar,
+                ChannelDouble, ChannelEnum, ChannelFloat, ChannelInteger,
+                ChannelShort, ChannelString, ChannelType, __version__,
+                get_server_address_list)
+from .._backend import backend
 
 module_logger = logging.getLogger(__name__)
 
@@ -48,6 +47,27 @@ __all__ = ['AsyncLibraryLayer',
 
            'ioc_arg_parser', 'template_arg_parser'
            ]
+
+
+def _enum_instance_to_enum_strings(enum_class):
+    """
+    Get enum strings list from an `enum.IntEnum`-based class.
+
+    Parameters
+    ----------
+    enum_class : subclass of enum.IntEnum
+    """
+
+    def get_enum_string(int_value):
+        try:
+            return enum_class(int_value).name
+        except ValueError:
+            return f'unset_{int_value}'
+
+    return [
+        get_enum_string(idx)
+        for idx in range(max(enum_class) + 1)
+    ]
 
 
 class AsyncLibraryLayer:
@@ -189,7 +209,17 @@ class PvpropertyString(PvpropertyData, ChannelString):
 
 
 class PvpropertyEnum(PvpropertyData, ChannelEnum):
-    ...
+    def __init__(self, *, enum_strings=None, value=None, **kwargs):
+        if isinstance(value, enum.IntEnum):
+            if enum_strings is not None:
+                raise CaprotoValueError(
+                    'Cannot specify both an enum `value` and `enum_strings`')
+
+            enum_strings = _enum_instance_to_enum_strings(type(value))
+            value = value.name
+
+        super().__init__(enum_strings=enum_strings, value=value,
+                         **kwargs)
 
 
 class PvpropertyBoolEnum(PvpropertyData, ChannelEnum):
@@ -233,7 +263,17 @@ class PvpropertyStringRO(PvpropertyReadOnlyData, ChannelString):
 
 
 class PvpropertyEnumRO(PvpropertyReadOnlyData, ChannelEnum):
-    ...
+    def __init__(self, *, enum_strings=None, value=None, **kwargs):
+        if isinstance(value, enum.IntEnum):
+            if enum_strings is not None:
+                raise CaprotoValueError(
+                    'Cannot specify both an enum `value` and `enum_strings`')
+
+            enum_strings = _enum_instance_to_enum_strings(type(value))
+            value = value.name
+
+        super().__init__(enum_strings=enum_strings, value=value,
+                         **kwargs)
 
 
 class PvpropertyBoolEnumRO(PvpropertyReadOnlyData, ChannelEnum):
@@ -1087,17 +1127,26 @@ class PVGroupMeta(type):
 
                 bad_kw = set(pvspec.cls_kwargs) - prop_cls._valid_init_kw
                 if bad_kw:
-                    raise CaprotoValueError(f'Bad kw for class {prop_cls}: {bad_kw}')
+                    raise CaprotoValueError(
+                        f'{cls.__name__}.{attr}: Bad kw for class {prop_cls}: '
+                        f'{bad_kw}'
+                    )
 
         return cls
 
 
 def data_class_from_pvspec(group, pvspec):
     'Return the data class for a given PVSpec in a group'
-    if pvspec.read_only:
-        return group.type_map_read_only[pvspec.dtype]
+    dtype = pvspec.dtype
 
-    return group.type_map[pvspec.dtype]
+    # A special case for integer enums:
+    if inspect.isclass(dtype) and issubclass(dtype, enum.IntEnum):
+        dtype = enum.IntEnum
+
+    if pvspec.read_only:
+        return group.type_map_read_only[dtype]
+
+    return group.type_map[dtype]
 
 
 def channeldata_from_pvspec(group, pvspec):
@@ -1144,6 +1193,7 @@ class PVGroup(metaclass=PVGroupMeta):
         int: PvpropertyInteger,
         float: PvpropertyDouble,
         bool: PvpropertyBoolEnum,
+        enum.IntEnum: PvpropertyEnum,
 
         ChannelType.STRING: PvpropertyString,
         ChannelType.INT: PvpropertyShort,
