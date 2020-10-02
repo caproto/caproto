@@ -1,7 +1,15 @@
 #!/usr/bin/env python3
-from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
-from caproto import ChannelType
+import enum
 from textwrap import dedent
+
+from caproto import ChannelType
+from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run
+
+
+class MyEnum(enum.IntEnum):
+    off = 0
+    on = 1
+    unknown = 2
 
 
 class EnumIOC(PVGroup):
@@ -46,6 +54,12 @@ class EnumIOC(PVGroup):
                       record='mbbi',
                       dtype=ChannelType.ENUM
                       )
+
+    # A new, easier syntax:
+    enum_class = pvproperty(
+        value=MyEnum.on,
+        record='mbbi',
+    )
 
 
 if __name__ == '__main__':
