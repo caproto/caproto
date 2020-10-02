@@ -2,7 +2,7 @@
 caproto: a pure-Python Channel Access protocol library
 ******************************************************
 
-Caproto is a implementation of the
+Caproto is an implementation of the
 `EPICS <http://www.aps.anl.gov/epics/>`_ Channel Access protocol for
 distributed hardware control in pure Python with a "sans-I/O" architecture.
 
@@ -56,10 +56,10 @@ In another, use the command-line client:
 
 .. code-block:: bash
 
-   caproto-put -c simple:A 42
+   caproto-put simple:A 42
 
-This sets the value to 42 and wait for it to "complete" (``-c``). Read more
-about the :doc:`command-line-client` and :doc:`iocs`.
+This sets the value to 42. Read more about the :doc:`command-line-client` and
+:doc:`iocs`.
 
 10 Reasons To Use Caproto and 1 Big Reason Not To
 =================================================
@@ -108,7 +108,7 @@ Why write something from scratch in Python instead of just wrapping those?
 All that said, some applications of EPICS --- such as running an accelerator
 --- rely on the battle-tested reliability of EPICS' reference implementation.
 We would advise those kinds of users to steer well clear of caproto. It is best
-suited to applications to reward convenience, fast iteration, and
+suited to applications that reward convenience, fast iteration, and
 accessibility.
 
 Vital Statistics
@@ -145,14 +145,13 @@ learning exercises.
    :maxdepth: 2
    :caption: EPICS Clients and Servers
 
-   command-line-client
-   sync-client
-   threading-client
-   pyepics-compat-client
-   async-clients
+   clients
    iocs
-   mock-records
+   records
    servers
+   shark
+   loggers
+   own_docs
 
 .. toctree::
    :maxdepth: 2
@@ -160,7 +159,6 @@ learning exercises.
 
    basics
    api
-   loggers
 
 .. toctree::
    :maxdepth: 2
@@ -170,3 +168,4 @@ learning exercises.
    protocol-compliance
    references
    release-notes
+   containers

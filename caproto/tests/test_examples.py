@@ -1,41 +1,21 @@
-import curio
-import functools
-import os
-import pytest
-import trio
-import time
 import sys
+import time
+
+import curio
+import pytest
 
 import caproto as ca
+from caproto.sync.client import read as sync_read
 
 from . import conftest
 from .conftest import default_setup_module as setup_module  # noqa
 from .conftest import default_teardown_module as teardown_module  # noqa
 
 
-@pytest.mark.skipif(os.environ.get("CAPROTO_SKIP_MOTORSIM_TESTS") is not None,
-                    reason='No motorsim IOC')
-# skip on windows - no motorsim ioc there just yet
-@pytest.mark.skipif(sys.platform == 'win32',
-                    reason='win32 motorsim IOC')
-def test_curio_client_example():
-    from caproto.examples.curio_client_simple import main
-    with curio.Kernel() as kernel:
-        kernel.run(main())
-
-
-@pytest.mark.skipif(os.environ.get("CAPROTO_SKIP_MOTORSIM_TESTS") is not None,
-                    reason='No motorsim IOC')
-# skip on windows - no motorsim ioc there just yet
-@pytest.mark.skipif(sys.platform == 'win32',
-                    reason='win32 motorsim IOC')
-def test_trio_client_example():
-    from caproto.examples.trio_client_simple import main
-    main_with_motorsim = functools.partial(
-        main,
-        pv1="XF:31IDA-OP{Tbl-Ax:X1}Mtr.VAL",
-        pv2="XF:31IDA-OP{Tbl-Ax:X2}Mtr.VAL")
-    trio.run(main_with_motorsim)
+def test_asyncio_client_example(ioc):
+    from caproto.examples.asyncio_client_simple import main as example_main
+    coro = example_main(pv1=ioc.pvs['int'], pv2=ioc.pvs['int2'])
+    ca.asyncio.utils.run(coro, debug=True)
 
 
 def test_thread_client_example(curio_server):
@@ -55,231 +35,15 @@ def test_thread_client_example(curio_server):
 # parameterized tests test_curio_server_example.
 
 
-async def simple_read(chan1, pvdb, ctx):
-    reading = await chan1.read()
-    print('reading:', reading)
-
-
-async def simple_subscription(chan1, pvdb, ctx):
-    commands = []
-
-    def user_callback(command):
-        print("Subscription has received data: {}".format(command))
-        commands.append(command)
-
-    chan1.register_user_callback(user_callback)
-    sub_id = await chan1.subscribe()
-    await curio.sleep(0.2)
-    await chan1.unsubscribe(sub_id)
-    assert commands
-
-
-async def write_and_read(chan1, pvdb, ctx):
-    await chan1.write((5,), notify=True)
-    reading = await chan1.read()
-    expected = 5
-    actual, = reading.data
-    assert actual == expected
-    print('reading:', reading)
-    await chan1.write((6,), notify=True)
-    reading = await chan1.read()
-    expected = 6
-    actual, = reading.data
-    assert actual == expected
-    print('reading:', reading)
-
-
-async def update_metadata(chan1, pvdb, ctx):
-    # Test updating metadata...
-    # _fields_ = [
-    #     ('status', short_t),
-    #     ('severity', short_t),
-    #     ('secondsSinceEpoch', ctypes.c_uint32),
-    #     ('nanoSeconds', ctypes.c_uint32),
-    #     ('RISC_Pad', long_t),
-    # ]
-    metadata = (0, 0, ca.TimeStamp(4, 0), 0)  # set timestamp to 4 seconds
-    await chan1.write((7,), notify=True,
-                      data_type=ca.ChannelType.TIME_DOUBLE,
-                      metadata=metadata)
-    reading = await chan1.read(data_type=20)
-    # check reading
-    expected = 7
-    actual, = reading.data
-    assert actual == expected
-    # check timestamp
-    expected = 4
-    actual = reading.metadata.secondsSinceEpoch
-    assert actual == expected
-    print('reading:', reading)
-
-
-async def update_alarm(chan1, pvdb, ctx):
-    status, severity = ca.AlarmStatus.SCAN, ca.AlarmSeverity.MAJOR_ALARM
-    server_alarm = pvdb[chan1.channel.name].alarm
-
-    await server_alarm.write(status=status, severity=severity)
-
-    # test acknowledge alarm status/severity
-    reading = await chan1.read(data_type=ca.ChannelType.TIME_DOUBLE)
-    assert reading.metadata.status == status
-    assert reading.metadata.severity == severity
-
-    # acknowledge the severity
-    metadata = (severity + 1, )
-    await chan1.write((),
-                      notify=True,
-                      data_type=ca.ChannelType.PUT_ACKS,
-                      metadata=metadata)
-
-    assert server_alarm.severity_to_acknowledge == 0
-
-    # now make a transient alarm and toggle the severity
-    # now require transients to be acknowledged
-    metadata = (1, )
-    await chan1.write((),
-                      notify=True,
-                      data_type=ca.ChannelType.PUT_ACKT,
-                      metadata=metadata)
-
-    assert server_alarm.must_acknowledge_transient
-
-    await server_alarm.write(severity=severity)
-    await server_alarm.write(severity=ca.AlarmSeverity.NO_ALARM)
-
-    assert server_alarm.severity_to_acknowledge == severity
-
-    # acknowledge the severity
-    metadata = (severity + 1, )
-    await chan1.write((),
-                      notify=True,
-                      data_type=ca.ChannelType.PUT_ACKS,
-                      metadata=metadata)
-
-    assert server_alarm.severity_to_acknowledge == 0
-
-    severity = ca.AlarmSeverity.NO_ALARM
-
-    reading = await chan1.read(data_type=ca.ChannelType.TIME_DOUBLE)
-    # check reading (unchanged since last time)
-    expected = 7
-    actual, = reading.data
-    assert actual == expected
-    # check status
-    actual = reading.metadata.status
-    assert actual == status
-    # check severity
-    actual = reading.metadata.severity
-    assert actual == severity
-
-
-async def strings_and_subscriptions(chan1, pvdb, ctx):
-    commands = []
-
-    def user_callback(command):
-        print("Subscription has received data: {}".format(command))
-        commands.append(command)
-
-    prefix, _ = chan1.channel.name.split(':')  # HACK
-    prefix = prefix + ':'
-    await ctx.search(prefix + 'str')
-    await ctx.search(prefix + 'str2')
-    print('done searching')
-    chan2 = await ctx.create_channel(prefix + 'str')
-    chan3 = await ctx.create_channel(prefix + 'str2')
-    print('done creating')
-    chan2.register_user_callback(user_callback)
-    chan3.register_user_callback(user_callback)
-    await chan2.wait_for_connection()
-    await chan3.wait_for_connection()
-    print('done waiting')
-    sub_id2 = await chan2.subscribe()
-    sub_id3 = await chan3.subscribe()
-    print('write...')
-    await chan2.write(b'hell', notify=True)
-    await chan3.write(b'good', notify=True)
-    print('done writing')
-
-    print('setting alarm status...')
-    await pvdb[prefix + 'str'].alarm.write(
-        severity=ca.AlarmSeverity.MAJOR_ALARM)
-
-    await curio.sleep(0.5)
-
-    await chan2.unsubscribe(sub_id2)
-    await chan3.unsubscribe(sub_id3)
-    # expecting that the subscription callback should get called:
-    #   1. on connection (2)
-    #   2. when chan2 is written to (1)
-    #   3. when chan3 is written to (1)
-    #   4. when alarm status is updated for both channels (2)
-    # for a total of 6
-    assert len(commands) == 2 + 2 + 2
-    print('CLIENT IS DONE')
-
-
-@pytest.mark.parametrize('run_client',
-                         [simple_read,
-                          simple_subscription,
-                          write_and_read,
-                          update_metadata,
-                          update_alarm,
-                          strings_and_subscriptions,
-                          ])
-def test_curio_server_example(prefix, run_client):
-    import caproto.curio.client as client
-    from caproto.ioc_examples.type_varieties import (
-        pvdb)
-    from caproto.curio.server import ServerExit, start_server as server_main
-
-    pvdb = {prefix + key: value
-            for key, value in pvdb.items()}
-    pi_pv = prefix + 'int'
-    broadcaster = client.SharedBroadcaster()
-    ctx = client.Context(broadcaster)
-
-    async def connect():
-        await broadcaster.register()
-        await ctx.search(pi_pv)
-        print('done searching')
-        chan1 = await ctx.create_channel(pi_pv)
-        # ...and then wait for all the responses.
-        await chan1.wait_for_connection()
-        return chan1
-
-    async def task():
-        async def server_wrapper():
-            try:
-                await server_main(pvdb)
-            except ServerExit:
-                print('Server exited normally')
-
-        try:
-            server_task = await curio.spawn(server_wrapper)
-            await curio.sleep(1)  # Give server some time to start up.
-            chan1 = await connect()
-            await run_client(chan1, pvdb, ctx)
-            await chan1.disconnect()
-            print('client is done')
-        finally:
-            try:
-                await server_task.cancel()
-                await server_task.join()
-            except curio.KernelExit:
-                print('Server exited normally')
-
-    with curio.Kernel() as kernel:
-        kernel.run(task)
-    print('done')
-
-
 # See test_ioc_example and test_flaky_ioc_examples, below.
 def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
                        prefix, async_lib='curio'):
-    from .conftest import run_example_ioc
-    from caproto.sync.client import read, write
-    from caproto.server import PvpropertyReadOnlyData
     import subprocess
+
+    from caproto.server import PvpropertyReadOnlyData
+    from caproto.sync.client import read, write
+
+    from .conftest import run_example_ioc
 
     module = __import__(module_name,
                         fromlist=(module_name.rsplit('.', 1)[-1], ))
@@ -291,7 +55,7 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
     pvs = list(pvdb.keys())
     pv_to_check = pvs[0]
 
-    print(f'PVs:', pvs)
+    print('PVs:', pvs)
     print(f'PV to check: {pv_to_check}')
 
     stdin = (subprocess.DEVNULL if 'io_interrupt' in module_name
@@ -309,14 +73,14 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
         (PvpropertyReadOnlyData, None),
         (ca.ChannelNumeric, [1]),
         (ca.ChannelString, ['USD']),
-        (ca.ChannelChar, ['USD']),
-        (ca.ChannelByte, [b'USD']),
+        (ca.ChannelChar, 'USD'),
+        (ca.ChannelByte, b'USD'),
         (ca.ChannelEnum, [b'no']),
     ]
 
     skip_pvs = [('ophyd', ':exit')]
 
-    def find_put_value(pv):
+    def find_put_value(pv, channeldata):
         'Determine value to write to pv'
         for skip_ioc, skip_suffix in skip_pvs:
             if skip_ioc in module_name:
@@ -331,7 +95,7 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
                             f'{channeldata.__class__}')
 
     for pv, channeldata in pvdb.items():
-        value = find_put_value(pv)
+        value = find_put_value(pv, channeldata)
         if value is None:
             print(f'Skipping write to {pv}')
             continue
@@ -350,6 +114,7 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
     [('caproto.ioc_examples.all_in_one', 'MyPVGroup',
       dict(macros={'macro': 'expanded'})),
      ('caproto.ioc_examples.chirp', 'Chirp', {'ramprate': 0.75}),
+     ('caproto.ioc_examples.decay', 'Decay', {}),
      ('caproto.ioc_examples.thermo_sim', 'Thermo', {}),
      ('caproto.ioc_examples.custom_write', 'CustomWrite', {}),
      ('caproto.ioc_examples.inline_style', 'InlineStyleIOC', {}),
@@ -361,11 +126,14 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
      ('caproto.ioc_examples.reading_counter', 'ReadingCounter', {}),
      ('caproto.ioc_examples.rpc_function', 'MyPVGroup', {}),
      ('caproto.ioc_examples.scalars_and_arrays', 'ArrayIOC', {}),
-     ('caproto.ioc_examples.scan_rate', 'MyPVGroup', {}),
+     ('caproto.ioc_examples.scan_rate', 'ScanRateIOC', {}),
      ('caproto.ioc_examples.setpoint_rbv_pair', 'Group', {}),
      ('caproto.ioc_examples.simple', 'SimpleIOC', {}),
      ('caproto.ioc_examples.startup_and_shutdown_hooks', 'StartupAndShutdown', {}),
      ('caproto.ioc_examples.subgroups', 'MyPVGroup', {}),
+     ('caproto.ioc_examples.trigger_with_pc', 'TriggeredIOC', {}),
+     ('caproto.ioc_examples.worker_thread', 'WorkerThreadIOC', {}),
+     ('caproto.ioc_examples.worker_thread_pc', 'WorkerThreadIOC', {}),
      ]
 )
 @pytest.mark.parametrize('async_lib', ['curio', 'trio', 'asyncio'])
@@ -378,7 +146,8 @@ def test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
         'caproto.ioc_examples.io_interrupt',
     )
 
-    skip_if_no_numpy = ('caproto.ioc_examples.mini_beamline',)
+    skip_if_no_numpy = ('caproto.ioc_examples.mini_beamline',
+                        'caproto.ioc_examples.thermo_sim')
 
     if sys.platform == 'win32' and module_name in skip_on_windows:
         raise pytest.skip('win32 TODO')
@@ -397,7 +166,9 @@ def test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
 @pytest.mark.parametrize(
     'module_name, pvdb_class_name, class_kwargs',
     [('caproto.ioc_examples.caproto_to_ophyd', 'Group', {}),
-     ('caproto.ioc_examples.areadetector_image', 'DetectorGroup', {}),
+     pytest.param(
+         'caproto.ioc_examples.areadetector_image', 'DetectorGroup', {},
+         marks=pytest.mark.xfail),
      ])
 def test_special_ioc_examples(request, module_name, pvdb_class_name,
                               class_kwargs, prefix):
@@ -409,6 +180,7 @@ def test_special_ioc_examples(request, module_name, pvdb_class_name,
 # skip on windows - no areadetector ioc there just yet
 @pytest.mark.skipif(sys.platform == 'win32',
                     reason='win32 AD IOC')
+@pytest.mark.xfail
 def test_areadetector_generate():
     pytest.importorskip('numpy')
     from caproto.ioc_examples import areadetector_image
@@ -429,9 +201,9 @@ def test_typhon_example(request, prefix):
     caproto_to_typhon.run_typhon(prefix=prefix)
 
 
-def test_mocking_records(request, prefix):
+def test_records(request, prefix):
     from .conftest import run_example_ioc
-    run_example_ioc('caproto.ioc_examples.mocking_records', request=request,
+    run_example_ioc('caproto.ioc_examples.records', request=request,
                     args=['--prefix', prefix], pv_to_check=f'{prefix}A')
 
     from caproto.sync.client import read, write
@@ -466,9 +238,9 @@ def test_mocking_records(request, prefix):
     assert data.metadata.precision == 4
 
 
-def test_mocking_records_subclass(request, prefix):
+def test_records_subclass(request, prefix):
     from .conftest import run_example_ioc
-    run_example_ioc('caproto.ioc_examples.mocking_records_subclass',
+    run_example_ioc('caproto.ioc_examples.records_subclass',
                     request=request,
                     args=['--prefix', prefix], pv_to_check=f'{prefix}motor1')
 
@@ -497,3 +269,74 @@ def test_pvproperty_string_array(request, prefix):
     write(array_string_pv, ['array', 'of', 'strings'], notify=True)
     time.sleep(0.5)
     assert read(array_string_pv).data == [b'array', b'of', b'strings']
+
+
+def test_enum_linking(request, prefix):
+    from .conftest import run_example_ioc
+    run_example_ioc('caproto.ioc_examples.enums',
+                    request=request,
+                    args=['--prefix', prefix], pv_to_check=f'{prefix}bi')
+
+    from caproto.sync.client import read, write
+
+    def string_read(pv):
+        return b''.join(read(pv, data_type=ca.ChannelType.STRING).data)
+
+    for pv, znam, onam in [(f'{prefix}bi', b'a', b'b'),
+                           (f'{prefix}bo', b'Zero Value', b'One Value')]:
+        assert string_read(f'{pv}.ZNAM') == znam
+        assert string_read(f'{pv}.ONAM') == onam
+
+        for value, expected in ([0, znam], [1, onam]):
+
+            write(pv, [value], notify=True)
+            assert string_read(pv) == expected
+
+
+@pytest.mark.parametrize('async_lib', ['curio', 'trio', 'asyncio'])
+def test_event_read_collision(request, prefix, async_lib):
+    # this is testing that monitors do not get pushed into
+    # the socket while a ReadResponse is being pushed in parts.
+    from .conftest import run_example_ioc
+    run_example_ioc('caproto.ioc_examples.big_image_noisy_neighbor',
+                    request=request,
+                    args=['--prefix', prefix, '--async-lib', async_lib],
+                    pv_to_check=f'{prefix}t1')
+    from caproto.threading.pyepics_compat import Context, get_pv
+    cntx = Context()
+    image = get_pv(pvname=f'{prefix}image', context=cntx)
+    t1 = get_pv(pvname=f'{prefix}t1', context=cntx)
+    t1.add_callback(lambda value, **kwargs: None)
+
+    for _ in range(4):
+        image.get(timeout=45)
+
+    image.disconnect()
+    t1.disconnect()
+
+    cntx.disconnect()
+
+
+def test_long_strings(request, prefix):
+    from .conftest import run_example_ioc
+    run_example_ioc('caproto.ioc_examples.records', request=request,
+                    args=['--prefix', prefix], pv_to_check=f'{prefix}E')
+
+    stringin = f'{prefix}E'
+    regular = sync_read(f'{stringin}.VAL', data_type='native')
+    assert regular.data_type == ca.ChannelType.STRING
+    data, = regular.data
+    length = len(data)
+    assert length > 1  # based on the default value in the test
+
+    for dtype in ('native', 'control', 'time', 'graphic'):
+        longstr = sync_read(f'{stringin}.VAL$', data_type=dtype)
+        longstr_data = b''.join(longstr.data)
+        expected_dtype = ca._dbr.field_types[dtype][ca.ChannelType.CHAR]
+        assert longstr.data_type == expected_dtype
+        assert len(longstr.data) == length
+        assert longstr_data == data
+
+    with pytest.raises(TimeoutError):
+        # an analog input .VAL has no long string option
+        sync_read(f'{prefix}A.VAL$', data_type='native')

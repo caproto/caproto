@@ -61,7 +61,7 @@ jobs:
 
   - bash: |
       python -m pip install --upgrade pip
-      pip install -r test-requirements.txt
+      pip install -r requirements-test.txt
       pip install git+https://github.com/klauer/catvs.git@py3k
       pip install pyepics numpy
       pip install --quiet --upgrade cython
@@ -87,12 +87,14 @@ jobs:
       ls ${EPICS_BIN_PATH}
       echo "Starting IOCs..."
       cp -f ${AREA_DETECTOR_PATH}/ADCore/iocBoot/EXAMPLE_commonPlugins.cmd ${AREA_DETECTOR_PATH}/ADCore/iocBoot/commonPlugins.cmd
+      echo "Patching epics-config.sh to increase EPICS_CA_MAX_ARRAY_BYTES"
+      sed -i -e "s/EPICS_CA_MAX_ARRAY_BYTES=10000000/EPICS_CA_MAX_ARRAY_BYTES=20000000/" ${CI_SCRIPTS}/epics-config.sh
       bash ${CI_SCRIPTS}/run-epics-iocs-on-tmux.sh
     displayName: 'Run IOCs on tmux'
 
   - bash: |
       source $HOME/azure_env.sh
-      coverage run --parallel-mode run_tests.py  -k 'not bench' --benchmark-disable --timeout=100 -v --junitxml=junit/test-results.xml
+      coverage run --parallel-mode run_tests.py --timeout=100 -v --junitxml=junit/test-results.xml
     displayName: 'pytest'
 
   - bash: |

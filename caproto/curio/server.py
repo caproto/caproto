@@ -1,5 +1,4 @@
 import functools
-import threading
 
 import caproto as ca
 import curio
@@ -11,8 +10,12 @@ from ..server.common import (VirtualCircuit as _VirtualCircuit,
                              Context as _Context)
 
 
-class ServerExit(curio.KernelExit):
-    ...
+if hasattr(curio, 'KernelExit'):
+    class ServerExit(curio.KernelExit):
+        ...
+else:
+    class ServerExit(SystemExit):
+        ...
 
 
 class Event(curio.Event):
@@ -56,6 +59,7 @@ class QueueWithFullError(curio.Queue):
 class CurioAsyncLayer(AsyncLibraryLayer):
     name = 'curio'
     ThreadsafeQueue = UniversalQueue
+    Event = curio.UniversalEvent
     library = curio
 
 
@@ -65,6 +69,7 @@ class VirtualCircuit(_VirtualCircuit):
 
     def __init__(self, circuit, client, context):
         super().__init__(circuit, client, context)
+        self._raw_lock = curio.Lock()
         self.QueueFull = QueueFull
         self.command_queue = QueueWithFullError(ca.MAX_COMMAND_BACKLOG)
         self.new_command_condition = curio.Condition()
@@ -85,7 +90,12 @@ class VirtualCircuit(_VirtualCircuit):
         # await self.pending_tasks.cancel_remaining()
 
     async def _start_write_task(self, handle_write):
-        await self.pending_tasks.spawn(handle_write, ignore_result=True)
+        async def handle_write_wrapper():
+            try:
+                await handle_write()
+            except Exception:
+                self.log.warning('Write failed', exc_info=True)
+        await self.pending_tasks.spawn(handle_write_wrapper)
 
     async def _wake_new_command(self):
         async with self.new_command_condition:
@@ -110,13 +120,16 @@ class Context(_Context):
     def __init__(self, pvdb, interfaces=None):
         super().__init__(pvdb, interfaces)
         self._task_group = None
-        self._stop_event = threading.Event()
+        # _stop_queue is used like a threading.Event, allowing a thread to stop
+        # the Context in :meth:`.stop`.
+        self._stop_queue = curio.UniversalQueue()
         self.command_bundle_queue = curio.Queue()
         self.subscription_queue = curio.UniversalQueue()
 
     async def broadcaster_udp_server_loop(self):
         for interface in self.interfaces:
             udp_sock = ca.bcast_socket(socket)
+            self.broadcaster.server_addresses.append(udp_sock.getsockname())
             try:
                 udp_sock.bind((interface, self.ca_server_port))
             except Exception:
@@ -132,6 +145,14 @@ class Context(_Context):
                 self.log.debug('Broadcasting on %s:%d', interface,
                                self.ca_server_port)
                 await g.spawn(self._core_broadcaster_loop, udp_sock)
+
+    def _log_task_group_exceptions(self, task_group):
+        """Log all exceptions raised in the given :class:`curio.TaskGroup`."""
+        for task in task_group.tasks:
+            if task.exception and not isinstance(task.exception,
+                                                 curio.TaskCancelled):
+                self.log.error('Exception in task %r', task.name,
+                               exc_info=task.exception)
 
     async def run(self, *, log_pv_names=False):
         'Start the server'
@@ -173,10 +194,7 @@ class Context(_Context):
                 self.log.info('Server startup complete.')
                 if log_pv_names:
                     self.log.info('PVs available:\n%s', '\n'.join(self.pvdb))
-        except curio.TaskGroupError as ex:
-            self.log.exception('Curio server failed')
-            for task in ex:
-                self.log.error('Task %s failed: %s', task, task.exception)
+            self._log_task_group_exceptions(self._task_group)
         except curio.TaskCancelled as ex:
             self.log.info('Server task cancelled. Must shut down.')
             raise ServerExit() from ex
@@ -187,20 +205,21 @@ class Context(_Context):
                 for name, method in self.shutdown_methods.items():
                     self.log.debug('Calling shutdown method %r', name)
                     await task_group.spawn(method, async_lib)
+            self._log_task_group_exceptions(task_group)
             for sock in self.tcp_sockets.values():
                 await sock.close()
             for sock in self.udp_socks.values():
                 await sock.close()
-            for interface, sock in self.beacon_socks.values():
+            for _interface, sock in self.beacon_socks.values():
                 await sock.close()
             self._task_group = None
 
     async def _await_stop(self):
-        await curio.abide(self._stop_event.wait)
+        await self._stop_queue.get()
         await self._task_group.cancel_remaining()
 
     def stop(self):
-        self._stop_event.set()
+        self._stop_queue.put(None)
 
 
 async def start_server(pvdb, *, interfaces=None, log_pv_names=False):

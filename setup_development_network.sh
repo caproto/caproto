@@ -18,7 +18,7 @@ fi
 bcast_addr=$(python3 -c "import ipaddress, sys; print(str(ipaddress.ip_interface(sys.argv[1]).network))" $net_addr)
 
 
-case "$add_or_remove" in 
+case "$add_or_remove" in
 add)
     echo "Adding '$dev_name' with network $net_addr..."
     set -x -e

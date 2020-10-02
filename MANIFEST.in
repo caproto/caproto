@@ -1,4 +1,19 @@
+include CONTRIBUTING.rst
+include LICENSE
+include MANIFEST.in
+include README.md
+include caproto/_version.py
+include caproto/server/*.jinja2
 include generate_headers.py
 include headers.tpl
+include requirements-doc.txt
+include requirements-test.txt
 include versioneer.py
-include caproto/_version.py
+
+recursive-include caproto *.rst
+
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]
+
+recursive-include doc *.rst *.py Makefile make.bat
+recursive-exclude doc generated/*.rst

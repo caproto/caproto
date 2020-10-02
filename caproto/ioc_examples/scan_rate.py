@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-import time
 import logging
-from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
+import time
 
+from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run
 
 logger = logging.getLogger('caproto')
 
 
-class MyPVGroup(PVGroup):
+class ScanRateIOC(PVGroup):
     # This pvproperty mocks an analog input (ai) record.
-    scanned = pvproperty(value=[0.0], mock_record='ai')
+    scanned = pvproperty(value=[0.0], record='ai')
 
     # The mocked record also happens to have the standard fields normally
     # associated with an EPICS record.  This is used here to tie in the
@@ -37,5 +37,5 @@ if __name__ == '__main__':
         desc='Use the .SCAN field of a record',
         macros=dict(macro='expanded'))
 
-    ioc = MyPVGroup(**ioc_options)
+    ioc = ScanRateIOC(**ioc_options)
     run(ioc.pvdb, **run_options)

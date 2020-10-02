@@ -1,11 +1,15 @@
-from ..server import AsyncLibraryLayer
-import caproto as ca
 import asyncio
+import functools
 import socket
 import sys
 
-from ..server.common import (VirtualCircuit as _VirtualCircuit,
-                             Context as _Context)
+import caproto as ca
+
+from ..server import AsyncLibraryLayer
+from ..server.common import Context as _Context
+from ..server.common import VirtualCircuit as _VirtualCircuit
+from .utils import (AsyncioQueue, _DatagramProtocol, _TaskHandler,
+                    _TransportWrapper)
 
 
 class ServerExit(Exception):
@@ -22,48 +26,15 @@ class Event(asyncio.Event):
         return self.is_set()
 
 
-def _get_asyncio_queue(loop):
-    class AsyncioQueue(asyncio.Queue):
-        '''
-        Asyncio queue modified for caproto server layer queue API compatibility
-
-        NOTE: This is bound to a single event loop for compatibility with
-        synchronous requests.
-        '''
-
-        async def async_get(self):
-            return await super().get()
-
-        async def async_put(self, value):
-            return await super().put(value)
-
-        def get(self):
-            future = asyncio.run_coroutine_threadsafe(self.async_get(), loop)
-            return future.result()
-
-        def put(self, value):
-            future = asyncio.run_coroutine_threadsafe(self.async_put(value), loop)
-            return future.result()
-
-    return AsyncioQueue
-
-
 class AsyncioAsyncLayer(AsyncLibraryLayer):
     name = 'asyncio'
-    ThreadsafeQueue = None
+    Event = asyncio.Event
     library = asyncio
-
-    def __init__(self, loop=None):
-        super().__init__()
-
-        if loop is None:
-            loop = asyncio.get_event_loop()
-
-        self.ThreadsafeQueue = _get_asyncio_queue(loop)
+    ThreadsafeQueue = AsyncioQueue
 
 
 class VirtualCircuit(_VirtualCircuit):
-    "Wraps a caproto.VirtualCircuit with a curio client."
+    "Wraps a caproto.VirtualCircuit with an asyncio client."
     TaskCancelled = asyncio.CancelledError
 
     def __init__(self, circuit, client, context, *, loop=None):
@@ -76,9 +47,13 @@ class VirtualCircuit(_VirtualCircuit):
                 self.loop = loop
                 self.client = client
 
-            async def recv(self, nbytes):
-                return (await self.loop.sock_recv(self.client, 4096))
+            def getsockname(self):
+                return self.client.getsockname()
 
+            async def recv(self, nbytes):
+                return (await self.loop.sock_recv(self.client, nbytes))
+
+        self._raw_lock = asyncio.Lock()
         self._raw_client = client
         super().__init__(circuit, SockWrapper(loop, client), context)
         self.QueueFull = asyncio.QueueFull
@@ -89,9 +64,8 @@ class VirtualCircuit(_VirtualCircuit):
         self.subscription_queue = asyncio.Queue(
             ca.MAX_TOTAL_SUBSCRIPTION_BACKLOG, loop=self.loop)
         self.write_event = Event(loop=self.loop)
-        self._cq_task = None
-        self._sq_task = None
-        self._write_tasks = ()
+        self.tasks = _TaskHandler()
+        self._sub_task = None
 
     async def get_from_sub_queue(self, timeout=None):
         # Timeouts work very differently between our server implementations,
@@ -105,17 +79,18 @@ class VirtualCircuit(_VirtualCircuit):
     async def send(self, *commands):
         if self.connected:
             buffers_to_send = self.circuit.send(*commands)
-            await self.loop.sock_sendall(self._raw_client,
-                                         b''.join(buffers_to_send))
+            # lock to make sure a AddEvent does not write bytes
+            # to the socket while we are sending
+            async with self._raw_lock:
+                await self.loop.sock_sendall(self._raw_client,
+                                             b''.join(buffers_to_send))
 
     async def run(self):
-        self._cq_task = self.loop.create_task(self.command_queue_loop())
-        self._sq_task = self.loop.create_task(self.subscription_queue_loop())
+        self.tasks.create(self.command_queue_loop())
+        self._sub_task = self.tasks.create(self.subscription_queue_loop())
 
     async def _start_write_task(self, handle_write):
-        tsk = self.loop.create_task(handle_write())
-        self._write_tasks = tuple(t for t in self._write_tasks + (tsk,)
-                                  if not t.done())
+        self.tasks.create(handle_write())
 
     async def _wake_new_command(self):
         async with self.new_command_condition:
@@ -124,8 +99,9 @@ class VirtualCircuit(_VirtualCircuit):
     async def _on_disconnect(self):
         await super()._on_disconnect()
         self._raw_client.close()
-        if self._sq_task is not None:
-            self._sq_task.cancel()
+        if self._sub_task is not None:
+            await self.tasks.cancel(self._sub_task)
+            self._sub_task = None
 
 
 class Context(_Context):
@@ -141,17 +117,16 @@ class Context(_Context):
         if loop is None:
             loop = asyncio.get_event_loop()
         self.loop = loop
-        self.async_layer = AsyncioAsyncLayer(self.loop)
-        self._server_tasks = []
+        self.async_layer = AsyncioAsyncLayer()
+        self.server_tasks = _TaskHandler()
+        self.tcp_sockets = dict()
 
     async def server_accept_loop(self, sock):
         sock.listen()
 
         while True:
             client_sock, addr = await self.loop.sock_accept(sock)
-            task = self.loop.create_task(
-                self.tcp_handler(client_sock, addr))
-            self._server_tasks.append(task)
+            self.server_tasks.create(self.tcp_handler(client_sock, addr))
 
     async def run(self, *, log_pv_names=False):
         'Start the server'
@@ -163,50 +138,14 @@ class Context(_Context):
             s.setblocking(False)
             s.bind((interface, port))
             return s
+
         self.port, self.tcp_sockets = await self._bind_tcp_sockets_with_consistent_port_number(
             make_socket)
-        tasks = []
+        tasks = _TaskHandler()
         for interface, sock in self.tcp_sockets.items():
             self.log.info("Listening on %s:%d", interface, self.port)
-            tasks.append(self.loop.create_task(self.server_accept_loop(sock)))
-
-        class BcastLoop(asyncio.Protocol):
-            parent = self
-            loop = self.loop
-
-            def __init__(self, *args, **kwargs):
-                self.transport = None
-                self._tasks = ()
-
-            def connection_made(self, transport):
-                self.transport = transport
-
-            def datagram_received(self, data, addr):
-                if data:
-                    tsk = self.loop.create_task(
-                        self.parent._broadcaster_recv_datagram(
-                            data, addr))
-
-                    self._tasks = tuple(t for t in self._tasks + (tsk,)
-                                        if not t.done())
-
-            def error_received(self, exc):
-                self.parent.log.error('BcastLoop received error', exc_info=exc)
-
-        class TransportWrapper:
-            """Make an asyncio transport something you can call sendto on."""
-            def __init__(self, transport):
-                self.transport = transport
-
-            async def sendto(self, bytes_to_send, addr_port):
-                try:
-                    self.transport.sendto(bytes_to_send, addr_port)
-                except OSError as exc:
-                    host, port = addr_port
-                    raise ca.CaprotoNetworkError(f"Failed to send to {host}:{port}") from exc
-
-            def close(self):
-                return self.transport.close()
+            self.broadcaster.server_addresses.append((interface, self.port))
+            tasks.create(self.server_accept_loop(sock))
 
         class ConnectedTransportWrapper:
             """Make an asyncio transport something you can call send on."""
@@ -228,44 +167,53 @@ class Context(_Context):
         reuse_port = sys.platform not in ('win32', ) and hasattr(socket, 'SO_REUSEPORT')
         for address in ca.get_beacon_address_list():
             transport, _ = await self.loop.create_datagram_endpoint(
-                BcastLoop, remote_addr=address, allow_broadcast=True,
-                reuse_address=True, reuse_port=reuse_port)
+                functools.partial(_DatagramProtocol, parent=self,
+                                  recv_func=self._datagram_received),
+                remote_addr=address, allow_broadcast=True,
+                reuse_port=reuse_port)
             wrapped_transport = ConnectedTransportWrapper(transport, address)
-            self.beacon_socks[address] = (interface, wrapped_transport)
+            self.beacon_socks[address] = (interface,   # TODO; this is incorrect
+                                          wrapped_transport)
 
         for interface in self.interfaces:
-            transport, self.p = await self.loop.create_datagram_endpoint(
-                BcastLoop, local_addr=(interface, self.ca_server_port),
-                allow_broadcast=True, reuse_address=True,
-                reuse_port=reuse_port)
-            self.udp_socks[interface] = TransportWrapper(transport)
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+            # Python says this is unsafe, but we need it to have
+            # multiple servers live on the same host.
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            if reuse_port:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            sock.setblocking(False)
+            sock.bind((interface, self.ca_server_port))
+
+            transport, _ = await self.loop.create_datagram_endpoint(
+                functools.partial(_DatagramProtocol, parent=self,
+                                  recv_func=self._datagram_received),
+                sock=sock)
+            self.udp_socks[interface] = _TransportWrapper(transport)
             self.log.debug('UDP socket bound on %s:%d', interface,
                            self.ca_server_port)
 
-        tasks.append(self.loop.create_task(self.broadcaster_queue_loop()))
-        tasks.append(self.loop.create_task(self.subscription_queue_loop()))
-        tasks.append(self.loop.create_task(self.broadcast_beacon_loop()))
+        tasks.create(self.broadcaster_queue_loop())
+        tasks.create(self.subscription_queue_loop())
+        tasks.create(self.broadcast_beacon_loop())
 
-        async_lib = AsyncioAsyncLayer(self.loop)
+        async_lib = AsyncioAsyncLayer()
         for name, method in self.startup_methods.items():
             self.log.debug('Calling startup method %r', name)
-            tasks.append(self.loop.create_task(method(async_lib)))
+            tasks.create(method(async_lib))
         self.log.info('Server startup complete.')
         if log_pv_names:
             self.log.info('PVs available:\n%s', '\n'.join(self.pvdb))
 
         try:
-            await asyncio.gather(*tasks)
+            await asyncio.gather(*tasks.tasks)
         except asyncio.CancelledError:
             self.log.info('Server task cancelled. Will shut down.')
-            all_tasks = (tasks + self._server_tasks +
-                         [c._cq_task for c in self.circuits if c._cq_task is not None] +
-                         [c._sq_task for c in self.circuits if c._sq_task is not None] +
-                         [t for c in self.circuits for t in c._write_tasks] +
-                         list(self.p._tasks))
-            for t in all_tasks:
-                t.cancel()
-            await asyncio.wait(all_tasks)
+            await tasks.cancel_all()
+            await self.server_tasks.cancel_all()
+            for circuit in self.circuits:
+                await circuit.tasks.cancel_all()
             return
         except Exception:
             self.log.exception('Server error. Will shut down')
@@ -273,7 +221,7 @@ class Context(_Context):
         finally:
             self.log.info('Server exiting....')
             shutdown_tasks = []
-            async_lib = AsyncioAsyncLayer(self.loop)
+            async_lib = AsyncioAsyncLayer()
             for name, method in self.shutdown_methods.items():
                 self.log.debug('Calling shutdown method %r', name)
                 task = self.loop.create_task(method(async_lib))
@@ -283,8 +231,17 @@ class Context(_Context):
                 sock.close()
             for sock in self.udp_socks.values():
                 sock.close()
-            for interface, sock in self.beacon_socks.values():
+            for _interface, sock in self.beacon_socks.values():
                 sock.close()
+
+    def _datagram_received(self, pair):
+        bytes_received, address = pair
+        try:
+            commands = self.broadcaster.recv(bytes_received, address)
+        except ca.RemoteProtocolError:
+            self.log.exception('Broadcaster received bad packet')
+        else:
+            self.command_bundle_queue.put_nowait((address, commands))
 
 
 async def start_server(pvdb, *, interfaces=None, log_pv_names=False):
@@ -304,5 +261,7 @@ def run(pvdb, *, interfaces=None, log_pv_names=False):
     try:
         loop.run_until_complete(task)
     except KeyboardInterrupt:
+        ...
+    finally:
         task.cancel()
         loop.run_until_complete(task)

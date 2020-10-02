@@ -6,7 +6,7 @@ import threading
 import types
 
 from math import log10
-from collections import Iterable
+from collections.abc import Iterable
 
 import caproto as ca
 from .client import (Context, SharedBroadcaster, AUTOMONITOR_MAXLENGTH,
@@ -219,10 +219,10 @@ class PV:
 
         if isinstance(callback, (tuple, list)):
             for i, thiscb in enumerate(callback):
-                if hasattr(thiscb, '__call__'):
+                if callable(thiscb):
                     self.callbacks[i] = (thiscb, {})
 
-        elif hasattr(callback, '__call__'):
+        elif callable(callback):
             self.callbacks[0] = (callback, {})
 
         self._caproto_pv, = self._context.get_pvs(
@@ -438,7 +438,8 @@ class PV:
                 (self._auto_monitor_sub is None) or
                 (cached_value is None) or
                 (count is not None and count > len(cached_value))):
-            command = self._caproto_pv.read(data_type=dt, data_count=count)
+            command = self._caproto_pv.read(data_type=dt, data_count=count,
+                                            timeout=timeout)
             response = _read_response_to_pyepics(self.typefull, command)
             self._args.update(**response)
             md.update(**response)
@@ -595,7 +596,7 @@ class PV:
             except Exception:
                 ...
 
-    def __on_changes(self, command):
+    def __on_changes(self, sub, command):
         """internal callback function: do not overwrite!!
         To have user-defined code run when the PV value changes,
         use add_callback()
@@ -634,7 +635,7 @@ class PV:
         kwd = copy.copy(self._args)
         kwd.update(kwargs)
         kwd['cb_info'] = (index, self)
-        if hasattr(fcn, '__call__'):
+        if callable(fcn):
             fcn(**kwd)
 
     def add_callback(self, callback, *, index=None, run_now=False,

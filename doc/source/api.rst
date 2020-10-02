@@ -201,10 +201,12 @@ Commands can be parsed.
 
 .. data:: NEED_DATA
 
-Similarly, one sentinel is re-used as a "Command" allowing for consistent
-handling of disconnection events through the command queues:
+Similarly, the sentinel :class:`DISCONNECTED` is re-used as a "Command"
+allowing for consistent handling of disconnection events through the command
+queues.
 
 .. data:: DISCONNECTED
+   :noindex:
 
 The VirtualCircuit object
 =========================
@@ -255,8 +257,6 @@ The Broadcaster object
     .. automethod:: send
     .. automethod:: recv
     .. automethod:: process_commands
-    .. automethod:: new_search_id
-    .. automethod:: search
     .. automethod:: register
 
 Channel objects

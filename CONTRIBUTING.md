@@ -7,7 +7,7 @@ The following have been tested on an Ubuntu 16.04 LTS VM.
 1. Clone the repository.
 
 ```bash
-git clone https://github.com/NSLS-II/caproto
+git clone https://github.com/caproto/caproto
 cd caproto
 ```
 
@@ -26,10 +26,10 @@ source setup_local_dev_env.sh
 4. Install EPICS dependencies.
 
 ```bash
-bash .ci/install-epics-base.sh 
-bash .ci/install-epics-modules.sh 
-bash .ci/install-epics-modules.sh 
-bash .ci/install-epics-iocs.sh 
+bash .ci/install-epics-base.sh
+bash .ci/install-epics-modules.sh
+bash .ci/install-epics-modules.sh
+bash .ci/install-epics-iocs.sh
 ```
 
 5. Run the IOCs that the tests will communicate with.
@@ -43,7 +43,7 @@ bash .ci/run-epics-iocs.sh
 ```bash
 conda create -n caproto python=3 numpy
 source activate caproto
-pip install -r test-requirements.txt
+pip install -r requirements-test.txt
 ```
 
 7. Run the pyepics 'simulator' and continually updates some test PVs to be

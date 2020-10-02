@@ -1,4 +1,5 @@
 import ast
+import asyncio
 import copy
 import datetime
 import sys
@@ -9,7 +10,7 @@ import pytest
 import caproto as ca
 
 from caproto import ChannelType
-from .epics_test_utils import (run_caget, run_caput)
+from .epics_test_utils import (run_caget, run_caput, has_caget, has_caput)
 from .conftest import array_types, run_example_ioc
 from caproto.sync.client import write, read, ErrorResponseReceived
 
@@ -40,6 +41,7 @@ caget_checks += [('char', ChannelType.CHAR),
                  ]
 
 
+@pytest.mark.skipif(not has_caget(), reason='No caget binary')
 @pytest.mark.parametrize('pv, dbr_type', caget_checks)
 def test_with_caget(backends, prefix, pvdb_from_server_example, server, pv,
                     dbr_type):
@@ -185,6 +187,7 @@ caput_checks = [('int', '1', 1),
                 ]
 
 
+@pytest.mark.skipif(not has_caput(), reason='No caput binary')
 @pytest.mark.parametrize('pv, put_value, check_value', caput_checks)
 def test_with_caput(backends, prefix, pvdb_from_server_example, server, pv,
                     put_value, check_value):
@@ -201,7 +204,7 @@ def test_with_caput(backends, prefix, pvdb_from_server_example, server, pv,
         # args are ignored for curio and trio servers.
         print('* client put test: {} put value: {} check value: {}'
               ''.format(pv, put_value, check_value))
-        print('(client args: %s)'.format(client_args))
+        print('(client args: {})'.format(client_args))
 
         db_entry = caget_pvdb[pv]
         db_old = db_entry.value
@@ -265,11 +268,8 @@ def test_with_caput(backends, prefix, pvdb_from_server_example, server, pv,
     print('done')
 
 
-def test_limits_enforced(request, prefix):
-    pv = f'{prefix}pi'
-    run_example_ioc('caproto.ioc_examples.type_varieties', request=request,
-                    args=['--prefix', prefix],
-                    pv_to_check=pv)
+def test_limits_enforced(request, caproto_ioc):
+    pv = caproto_ioc.pvs['float']
     write(pv, 3.101, notify=True)  # within limit
     write(pv, 3.179, notify=True)  # within limit
     with pytest.raises(ErrorResponseReceived):
@@ -278,11 +278,43 @@ def test_limits_enforced(request, prefix):
         write(pv, 3.181, notify=True)  # beyond limit
 
 
-def test_char_write(request, prefix):
-    pv = f'{prefix}chararray'
-    run_example_ioc('caproto.ioc_examples.type_varieties', request=request,
-                    args=['--prefix', prefix],
-                    pv_to_check=pv)
+def test_empties_with_caproto_client(request, caproto_ioc):
+    assert read(caproto_ioc.pvs['empty_string']).data == [b'']
+    assert list(read(caproto_ioc.pvs['empty_bytes']).data) == []
+    assert list(read(caproto_ioc.pvs['empty_char']).data) == []
+    assert list(read(caproto_ioc.pvs['empty_float']).data) == []
+
+
+@pytest.mark.skipif(not has_caget(), reason='No caget binary')
+def test_empties_with_caget(request, caproto_ioc):
+    async def test():
+        info = await run_caget('asyncio', caproto_ioc.pvs['empty_string'])
+        assert info['value'] == ''
+
+        info = await run_caget('asyncio', caproto_ioc.pvs['empty_bytes'])
+        # NOTE: this zero is not a value, it's actually the length:
+        # $ caget  type_varieties:empty_bytes
+        # type_varieties:empty_bytes     0
+        # $ caget -#0  type_varieties:empty_bytes
+        # type_varieties:empty_bytes     0
+        # $ caget -#1  type_varieties:empty_bytes
+        # type_varieties:empty_bytes     1 0
+        assert info['value'] == '0'
+
+        info = await run_caget('asyncio', caproto_ioc.pvs['empty_char'])
+        assert info['value'] == '0'
+
+        info = await run_caget('asyncio', caproto_ioc.pvs['empty_float'])
+        # NOTE: 2 below is length, with 2 elements of 0
+        assert info['value'] == ['2', '0', '0']
+        # TODO: somehow caget gets the max_length instead of the current
+        # length.  caproto-get does not have this issue.
+
+    asyncio.get_event_loop().run_until_complete(test())
+
+
+def test_char_write(request, caproto_ioc):
+    pv = caproto_ioc.pvs['chararray']
     write(pv, b'testtesttest', notify=True)
     response = read(pv)
     assert ''.join(chr(c) for c in response.data) == 'testtesttest'
@@ -296,7 +328,7 @@ def test_write_without_notify(request, prefix, async_lib):
                     pv_to_check=pv)
     write(pv, 3.179, notify=False)
     # We do not get notified so we have to poll for an update.
-    for attempt in range(20):
+    for _attempt in range(20):
         if read(pv).data[0] > 3.178:
             break
         time.sleep(0.1)
@@ -333,3 +365,14 @@ def test_data_copy(cls, kwargs):
     patch_alarm(args1)
     patch_alarm(args2)
     assert args1 == args2
+
+
+@pytest.mark.parametrize('async_lib', ['asyncio', 'curio', 'trio'])
+def test_process_field(request, prefix, async_lib):
+    run_example_ioc('caproto.tests.ioc_process', request=request,
+                    args=['--prefix', prefix, '--async-lib', async_lib],
+                    pv_to_check=f'{prefix}record.PROC')
+
+    write(f'{prefix}record.PROC', [1], notify=True)
+    write(f'{prefix}record.PROC', [1], notify=True)
+    assert read(f'{prefix}count').data[0] == 2

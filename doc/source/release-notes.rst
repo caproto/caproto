@@ -2,37 +2,339 @@
 Release History
 ***************
 
-Unreleased
-==========
+v0.7.0 (2020-09-??)
+===================
+
+Fixed
+-----
+
+- Eliminate memory leak on run-longing servers were we remembered
+  every search request we saw but did not service
+
+Changed
+-------
+
+- The search related API was removed from :class:`ca.Broadcaster`, all
+  of the search request accounting is handled in the client code.  The
+  code that is used on the servers can not do this book keeping
+  because we can not know what other servers are out there and if the
+  SearchRequest actually got serviced (as that goes back uni-cast).
+- Removed curio and trio client implementations.  These may reappear
+  in the future, based on the new asyncio client.
+
+v0.6.0 (2020-07-31)
+===================
+
+Fixed
+-----
+
+- Fixed server PVGroup logger names.  It was erroneously using the exact string
+  '{base}.{log_name}', and now will be correctly expanded to be based on either
+  the module name or the parent PVGroup's logger name.
+- Fields defined in the :class:`caproto.server.records.RecordFieldGroup` may
+  now be customized using, for example, ``@prop.fields.process_record.putter``.
+- :class:`caproto.ChannelByte` and :class:`caproto.ChannelChar` with
+  ``max_length=1`` now accept scalar integer values, whereas they were
+  previously failing due to expecting byte strings (or strings).  This arose
+  primarily in the case of record fields which attempt to reflect the actual
+  data types found in epics-base.
+
+Added
+-----
+
+- Added a new (experimental) asyncio client with features comparable to the
+  threading client.
+- Allow :class:`caproto.server.SubGroup` instances to accept keyword arguments.
+- Added autosave-like tools and an example.
+- Now using ``doctr-versions-menu`` for documentation.
+
+Changed
+-------
+
+- Significantly refactored task handling in the asyncio server.  This improves
+  the performance of write request handling and overall task cleanup.
+- Some asyncio server utilities were relocated such that the server and new
+  client can both utilize them.
+- Accessing a :class:`caproto.server.pvproperty` directly from the
+  :class:`caproto.server.PVGroup` class will no longer return a
+  :class:`caproto.server.PVSpec` instance, but the
+  :class:`caproto.server.pvproperty` itself.
+
+
+v0.5.2 (2020-06-18)
+===================
+
+Fixed
+-----
+
+- Fixed a packaging issue introduced in 0.5.1 where some files were missing
+  in the ``sdist`` source distribution package.
+- Prevent an error from occurring when trying to subscribe, with a callback,
+  to a PV that is not yet connected. The subscription will now succeed and
+  become active once the PV is fully connected.
+- Avoid duplicate registration of callbacks in ``Context.get_pvs()``.
+
+v0.5.1 (2020-06-12)
+===================
+
+Changed
+-------
+
+* Replaced usage of deprecated trio features with recommended approaches.
+* Updated curio-based server for compatibility with recent versions of curio.
+  It is now incompatible with curio < 1.2.
+
+Added
+-----
+
+* Added ``vel`` and ``mtr_tick_rate`` pvproperties to ``PinHole``, ``Edge``
+  and ``Slit`` motors on mini beamline example, to provide control over the
+  speed of the motors.
+* Added documentation on how to build and run caproto containers using
+  ``buildah`` and ``podman``.
+* Add a new ``test`` pip selector, as in ``pip install caproto[test]``, which
+  installs ``caproto[complete]`` plus the requirements for running the tests.
+
+v0.5.0 (2020-05-01)
+===================
+
+Changed
+-------
+
+* In the threading client, the expected signature of Subscription callbacks has
+  changed from ``f(response)`` to ``f(sub, response)`` where ``sub`` is the
+  pertinent :class:`caproto.threading.client.Subscription`.
+  This change has been made in a backward-compatible way. Callbacks with the
+  old signature, ``f(response)``, will still work but caproto will issue a
+  warning. Support for the old signature may be removed in the future.
+  By giving the callback ``f`` access to ``sub``, we enable usages like
+
+  .. code-block:: python
+
+     def f(sub, response):
+         # Print the name of the pertinent PV.
+         print('Received response from', sub.pv.name)
+
+     def f(sub, response):
+         if ...:
+             sub.remove_callback(f)
+
+* In the synchronous client, the expected signature of subscription callbacks
+  has changed from ``f(response)`` to ``f(pv_name, response)``. As with the
+  similar change to the threading client described above, this change was made
+  an a backward-compatible way: the old signature is still accepted but a
+  warning is issued.
+* The detail and formatting of the log messages has been improved.
+* The ``mock_record`` keyword argument to :class:`caproto.server.pvproperty`
+  has been deprecated, in favor of the simpler ``record``.
+* EPICS record field support has been regenerated with a new database
+  definition source.  This reference ``.dbd`` file can be found in a separate
+  repository `here <https://github.com/caproto/reference-dbd>`_. These fields
+  should now be more accurate than previous releases, including some initial
+  values and better enum values, and also with basic round-trip tests verifying
+  protocol compliance for each field.
+
+Added
+-----
+
+* Added IOC server support for long string PVs.
+    - Channel Access maximum string length is 40 characters
+    - However, appending ``$`` to ``DBF_STRING`` fields (e.g.,
+      ``MY:RECORD.DESC$``) changes the request to ``DBF_CHAR``, allowing for
+      effectively unlimited length of strings.
+    - This is supported for :class:`caproto.server.pvproperty` instances which
+      are initialized with a string value (or specify
+      ``caproto.ChannelType.STRING`` as the data type).
+    - This is supported internally by way of
+      :class:`caproto._data.ChannelString`, which adds an init keyword argument
+      ``long_string_max_length``.
+* Added documentation for fields of all supported record types.
+* Tools for automatically regenerating record fields and menus via a Jinja
+  template are now included. See
+  :func:`caproto.server.conversion.generate_all_records_jinja` and
+  :func:`caproto.server.conversion.generate_all_menus_jinja` and the related
+  jinja templates in ``caproto/server``.
+
+Fixed
+-----
+
+* On OSX, the creating a :class:`threading.client.Context` pinned a CPU due to
+  a busy socket selector loop.
+* When ``EPICS_CA_ADDR_LIST`` is set and nonempty and
+  ``EPICS_CA_AUTO_ADDR_LIST=YES``, the auto-detected addresses should be used
+  *in addition to* the manually specified one. They were being used *instead*
+  (with a warning issued).
+
+v0.4.4 (2020-03-26)
+===================
+
+Fixed
+-----
+
+* The fix for Python asyncio's servers released in 0.4.3 had the accidental
+  side-effect of preventing multiple servers from running on the same machine
+  (or, to be precise, on the same network interface). This release fixes that
+  regression.
+* Fix bug in ``caproto-put`` which made it impossible to set ENUM-type PVs.
+* Ensure that caproto servers respect the limits on the number of enum members
+  and the length of enum streams.
+
+v0.4.3 (2020-01-29)
+===================
+
+Python releases 3.6.10, 3.7.6, and 3.8.1 made a breaking change for security
+reasons that happens to break caproto's asyncio-based server (the default one)
+on all platforms. This release adjusts for that change. See
+:meth:`asyncio.loop.create_datagram_endpoint` for details about this change in
+Python.
+
+This release also fixes a bug introduced in v0.4.0 affecting Windows only that
+made caproto clients and servers unusuable on Windows.
+
+v0.4.2 (2019-11-13)
+===================
+
+This release contains some important bug fixes and some minor new features.
+
+Features
+--------
+* Make the default timeout for the threading client configurable via the
+  environment variable ``CAPROTO_DEFAULT_TIMEOUT``. It was previously
+  hard-coded to ``2`` (seconds).
+* Add ``--file`` argument to ``caproto-put``, which obtains the value to be put
+  from reading a file.
+* Link ZNAM and ONAM fields to the parent enum_strings.
+* Automatically populate ``pvproperty`` DESC using doc keyword argument.
+
+Bug Fixes
+---------
+* Fix a critical race condition wherein data could be written into a buffer as
+  it was being sent.
+* Propagate timeout specific to pyepics-compatible client to the next layer
+  down.
+* Correctly handle reconnection if the server dies.
+* Allow asyncio server to do cleanup in all cases. (Previously,
+  ``KeyboardInterrupt`` was erroneously exempted from cleanup.)
+* Let the server's ``write`` method provide the timestamp. This is significant
+  if the putter takes significant time to process or does any internal writes.
+
+v0.4.1 (2019-10-06)
+===================
+
+This release adds some small improvements and updates to address deprecations
+in Python and caproto's optional dependencies.
+
+Features
+--------
+* Added support for ``-S`` argument in the ``caproto-put`` commandline tool.
+* Added support for using ``Event`` synchronization primitives in servers, used
+  in the new example ``caproto.ioc_examples.worker_thread_pc``.
+
+v0.4.0 (2019-06-06)
+===================
+
+Features
+--------
+* Rewrite approach to logging. See :doc:`loggers` for details.
+* Add precision to motor_ph in mini_beamline example IOC.
+
+Bug Fixes
+---------
+* Fix bug in `scan_rate` that raised errors when it was written to
+* Respond correctly when channel filter is set but empty.
+
+v0.3.4 (2019-05-02)
+===================
+
+Fixes
+-----
+* Several fixes and documentation for the commandline utilities' formatting
+  parameters added in v0.3.3.
+* Put an upper limit on how quickly a given search result may be reissued.
+* Documentation fix in server help string.
+
+v0.3.3 (2019-04-11)
+===================
+
+This release improves the commandline utilities' parity to their counterparts
+in the reference implementation by supporting formatting parameters for
+integers and floats. It also includes some important fixes.
+
+Fixes
+-----
+
+* When optional dependency ``netifaces`` is installed, clients search on all
+  broadcast interfaces, not just ``255.255.255.255``. This reverts an erroneous
+  change made in v0.2.3.
+* ``caproto-shark`` does a better job ignoring non-CA packets (instead of
+  erroring out).
+
+v0.3.2 (2019-03-06)
+===================
+
+This release inclues just one minor fix to :doc:`caproto-shark <shark>`,
+enabling it to more reliably skip over irrelevant network traffic (i.e. traffic
+that is not Channel Access messages).
+
+v0.3.1 (2019-03-05)
+===================
+
+This is a bug-fix release addressing issues related to empty (zero-length)
+channel data.
+
+Fixes
+-----
+
+* Fix servers' support for empty (zero-length) data.
+* Assume the *maximum* length of a channel initialized with empty data is one
+  (i.e. assume it is scalar).
+* Address an ambiguity in the Channel Access protocol: a subscription update
+  (``EventAddResponse``) indicating empty data and a confirmation of a request
+  to cancel the subscription (``EventCancelResponse``) serialize identically,
+  and so the client must make a best effort to interpret based on context which
+  of the two is intended.
+
+v0.3.0 (2019-02-20)
+===================
+
+This release introduces :doc:`caproto-shark <shark>` and other convenient
+improvements. It also contains many bug-fixes, some critical.
 
 Features
 --------
 
-The threading client---and, thereby, the pyepics-compatible shim---have
-greater feature parity with epics-base.
+* Add :doc:`shark`.
+* Add server "healthcheck" methods to the threading client, which expose
+  information collected about how recently each server has communicated with
+  the client. See :ref:`server_health_check`.
+* Add a new example IOC who PVs are dynamic (change during runtime). Include a
+  "waveform" (array) PV in the simple example.
+* Make the default timeout configurable per Context and per PV, in addition to
+  per a given operation. This makes it possible to adjust all the timeouts in
+  one place during debugging.
+* Use a random starting ID for message identifiers as an extra layer of
+  protections against collisions, especially in the context of CI testing where
+  many clients and servers are started up in rapid succession.
 
-* In previous releases, the client resent any unanswered ``SearchRequests`` at
-  a fast regular rate forever. Now, it backs off from that initial rate and
-  rests at a slow interval to avoid creating too much wasteful network traffic.
-  There is a new method,
-  :meth:`~caproto.threading.client.SharedBroadcaster.cancel`, for manually
-  canceling some requests altogether if a response is never excepected (e.g. a
-  typo). There is also a new method for manually resending all unanswered
-  search requests,
-  :meth:`~caproto.threading.client.SharedBroadcaster.search_now`,
-  primarily for debugging. All unanswered search requests are automatically
-  resent when the user searches for a new PV or when a new server appears on
-  the network (see next point).
-* The client monitors server beacons to notice changes in the CA servers on the
-  network. When a new server appears, all standing unanswered search requests
-  are given a fresh start and immediately resent. If a server does not send a
-  beacon within the expected interval and has also not sent any TCP packets
-  related to user activity during that interval, the client silently initiates
-  an Echo. If the server still does not respond, it is deemed unresponsive. The
-  client logs a warning and disconnects all circuits from that server so that
-  their PVs can begin attempting to reconnect to a responsive server.
+Bug Fixes
+---------
 
-v0.2.3 (2018-01-02)
+* Only attempt to use ``SO_REUSEPORT`` socket option if support for it has been
+  compiled into Python.
+* A critical bug only affecting Windows had broken asyncio servers on Windows
+  in a previous release.
+* The threading client was wrongly issuing warnings if it received multiple
+  responses to a search for a PV from *the same server*.
+* Add missing user_offset pvproperty to MotorFields.
+* Fix several race conditions in the threading client.
+* Improve cleanup of resources: ensure sockets are explicitly closed and
+  threads explicitly joined. (More work is needed, but progress was made.)
+* Fix "leak" of ioids (IO message identifiers).
+* Handle setting empty lists as values through the pyepics-compat client.
+* In the trio-backed server, remove usage of deprecated ``trio.Queue``.
+* Many other small fixes and safeguards.
+
+v0.2.3 (2019-01-02)
 ===================
 
 Usability Improvements
@@ -86,7 +388,37 @@ v0.2.2 (2018-11-15)
 ===================
 
 The release improves the performance of the threading client and adds support
-for value-based alarms.
+for value-based alarms. Additionally, it provides more control over search and
+implements back-off in a way more consistent with (but not yet fully consistent
+with) EPICS' reference implementation.
+
+More Control Over Search
+------------------------
+
+The threading client---and, thereby, the pyepics-compatible shim---have
+greater feature parity with epics-base.
+
+* In previous releases, the client resent any unanswered ``SearchRequests`` at
+  a fast regular rate forever. Now, it backs off from that initial rate and
+  rests at a slow interval to avoid creating too much wasteful network traffic.
+  There is a new method,
+  :meth:`~caproto.threading.client.SharedBroadcaster.cancel`, for manually
+  canceling some requests altogether if a response is never expected (e.g. a
+  typo). There is also a new method for manually resending all unanswered
+  search requests,
+  :meth:`~caproto.threading.client.SharedBroadcaster.search_now`,
+  primarily for debugging. All unanswered search requests are automatically
+  resent when the user searches for a new PV or when a new server appears on
+  the network (see next point).
+* The client monitors server beacons to notice changes in the CA servers on the
+  network. When a new server appears, all standing unanswered search requests
+  are given a fresh start and immediately resent. If a server does not send a
+  beacon within the expected interval and has also not sent any TCP packets
+  related to user activity during that interval, the client silently initiates
+  an Echo. If the server still does not respond, it is deemed unresponsive. The
+  client logs a warning and disconnects all circuits from that server so that
+  their PVs can begin attempting to reconnect to a responsive server.
+
 
 Improved Alarm Support
 ----------------------
@@ -155,9 +487,9 @@ Server Performance Tuning
   in less than 0.001 seconds, the read will reflect the new value. This
   behavior is in the spirit of, but distinct from, EPICS' "synchronous writes."
   EPICS allows a device to block while writing if it promises to finish quickly
-  (< 0.1 miliseconds). We take a different approach, making all writes
+  (< 0.1 milliseconds). We take a different approach, making all writes
   asynchronous. This ensures that an accidentally-slow write cannot lock up the
-  server. It adds latency to some reads, up to a hard maximum of 1 milisecond,
+  server. It adds latency to some reads, up to a hard maximum of 1 millisecond,
   giving the effect of synchronous write whenever the write finishes fast.
 
 The release also includes one small new feature: in the threading client,
@@ -190,16 +522,16 @@ Features
   `catvs <https://github.com/mdavidsaver/catvs>`_. This has generated several
   fixes improving protocol compliance, list a section below. There are a small
   number of known failures wherein the best/correct behavior is arguable; see
-  `caproto#327 on GitHub <https://github.com/NSLS-II/caproto/pull/327>`_ for
+  `caproto#327 on GitHub <https://github.com/caproto/caproto/pull/327>`_ for
   discussion. There may be more progress on these in future releases of
   caproto.
 * Added ``pvproperty.scan``. See
-  the `mini_beamline example IOC <https://github.com/NSLS-II/caproto/blob/master/caproto/ioc_examples/mini_beamline.py>`_
+  the `mini_beamline example IOC <https://github.com/caproto/caproto/blob/master/caproto/ioc_examples/mini_beamline.py>`_
   for a usage example.
 * Add a server-side data source for ``ChannelType.INT`` (a.k.a SHORT) data.
 * The default printed output of the ``caproto-monitor`` CLI utility now
   includes microseconds.
-* There are several new `IOC examples <https://github.com/NSLS-II/caproto/tree/master/caproto/ioc_examples>`_.
+* There are several new `IOC examples <https://github.com/caproto/caproto/tree/master/caproto/ioc_examples>`_.
 
 Breaking Changes
 ----------------
@@ -251,7 +583,7 @@ v0.1.2 (2018-08-31)
 ===================
 
 This is a bug-fix release fixing some critical bugs. We recommend that all
-users ugprade.
+users upgrade.
 
 * Fix critical typo in threading client's search functionality that could cause
   it to conflate addresses from different search responses and then attempt to

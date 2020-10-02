@@ -17,6 +17,7 @@ from datetime import datetime
 import logging
 from .. import set_handler, __version__
 from ..sync.client import read_write_read
+from .._log import _set_handler_with_logger
 from .._utils import ShowVersionAction
 
 
@@ -65,8 +66,12 @@ def main():
     parser.add_argument('--array', '-a', action='store_true',
                         help=("Interprets `data` as an array, delimited by "
                               "space"))
+    parser.add_argument('--file', action='store_true',
+                        help=("Interprets `data` as a file"))
     parser.add_argument('--array-pad', type=int, default=0,
                         help=("Pad the array up to a specified length"))
+    parser.add_argument('-S', dest='as_string', action='store_true',
+                        help=("Interpret `data` as a string of characters."))
     parser.add_argument('--no-color', action='store_true',
                         help="Suppress ANSI color codes in log messages.")
     parser.add_argument('--no-repeater', action='store_true',
@@ -76,17 +81,25 @@ def main():
                         default=argparse.SUPPRESS,
                         help="Show caproto version and exit.")
     args = parser.parse_args()
-    if args.no_color:
-        set_handler(color=False)
     if args.verbose:
-        logging.getLogger(f'caproto.ch').setLevel('DEBUG')
-        logging.getLogger(f'caproto.ctx').setLevel('DEBUG')
-        if args.verbose > 2:
-            logging.getLogger('caproto').setLevel('DEBUG')
-    logger = logging.getLogger(f'caproto.ch.{args.pv_name}')
+        if args.verbose <= 2:
+            _set_handler_with_logger(color=not args.no_color, level='DEBUG', logger_name='caproto.ch')
+            _set_handler_with_logger(color=not args.no_color, level='DEBUG', logger_name='caproto.ctx')
+        else:
+            set_handler(color=not args.no_color, level='DEBUG')
+    logger = logging.LoggerAdapter(logging.getLogger('caproto.ch'), {'pv': args.pv_name})
 
-    if args.array:
-        data = [ast.literal_eval(val) for val in args.data.split(' ')]
+    if args.file:
+        with open(str(args.data), mode='r') as file:
+            raw_data = file.read()
+    else:
+        raw_data = args.data
+
+    if args.as_string:
+        # interpret as string
+        data = raw_data
+    elif args.array:
+        data = [ast.literal_eval(val) for val in raw_data.split(' ')]
         if args.array_pad > 0:
             if len(data) < args.array:
                 data.extend([0] * (args.array - len(data)))
@@ -95,10 +108,11 @@ def main():
                 sys.exit(1)
     else:
         try:
-            data = ast.literal_eval(args.data)
+            data = ast.literal_eval(raw_data)
         except ValueError:
             # interpret as string
-            data = args.data
+            data = raw_data
+
     if args.wide:
         read_data_type = 'time'
     else:

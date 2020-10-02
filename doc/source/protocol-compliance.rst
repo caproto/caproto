@@ -7,7 +7,7 @@ the feature parity of caproto's clients and servers with the reference
 implementations in epics-base. We aim for 100% compliance and feature parity.
 
 For more details, see our
-`issue tracker on GitHub <https://github.com/NSLS-II/caproto/issues>`_
+`issue tracker on GitHub <https://github.com/caproto/caproto/issues>`_
 
 Core protocol support
 =====================

@@ -1,10 +1,10 @@
+import logging
 import os
 import threading
-import logging
 import time
 
-import pytest
 import curio
+import pytest
 
 try:
     import catvs
@@ -23,8 +23,8 @@ def server_thread(context):
     async def server():
         return await context.run(log_pv_names=True)
 
-    kernel = curio.Kernel()
-    kernel.run(server)
+    with curio.Kernel() as kernel:
+        kernel.run(server)
 
 
 @pytest.fixture(params=['curio'],  # 'trio', 'asyncio', 'epics-base'],
@@ -89,7 +89,7 @@ else:
                     if attr.startswith('test_')]
 
         from catvs.server.test_chan import TestChannel
-        from catvs.server.test_ops import TestScalar, TestArray
+        from catvs.server.test_ops import TestArray, TestScalar
         from catvs.server.test_search import TestSearchTCP, TestSearchUDP
         return sum((get_tests(cls)
                     for cls in [TestChannel, TestScalar, TestArray,

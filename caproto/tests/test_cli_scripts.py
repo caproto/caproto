@@ -1,7 +1,9 @@
-import sys
-import pytest
 import subprocess
-from caproto.sync.client import read, write, subscribe, block
+import sys
+
+import pytest
+
+from caproto.sync.client import block, read, subscribe, write
 
 from .conftest import dump_process_output
 
@@ -70,6 +72,7 @@ def test_subscribe_options(more_kwargs, ioc):
 
 fmt1 = '{response.data[0]}'
 fmt2 = '{timestamp:%%H:%%M}'
+fmt3 = '{response.data}'
 
 
 # Skip the long-running ones.
@@ -84,10 +87,19 @@ fmt2 = '{timestamp:%%H:%%M}'
                           ('caproto-get', ('float', '-d', '0')),
                           ('caproto-get', ('float', '-d', 'STRING')),
                           ('caproto-get', ('float', '-d', 'string')),
+                          ('caproto-get', ('float', '-d', 'DBR_STRING')),
+                          ('caproto-get', ('float', '-d', 'dbr_string')),
                           ('caproto-get', ('float', '-d', 'CONTROL')),
                           ('caproto-get', ('float', '-d', 'control')),
+                          ('caproto-get', ('float', '-d', 'DBR_CONTROL')),
+                          ('caproto-get', ('float', '-d', 'dbr_control')),
                           ('caproto-get', ('float', '--format', fmt1)),
                           ('caproto-get', ('float', '--format', fmt2)),
+                          ('caproto-get', ('float', '--format', fmt3)),
+                          ('caproto-put', ('enum', '0')),
+                          ('caproto-put', ('enum', '1')),
+                          ('caproto-put', ('enum', 'a')),
+                          ('caproto-put', ('enum', 'b')),
                           ('caproto-get', ('enum',)),
                           ('caproto-get', ('enum', '-n')),
                           ('caproto-get', ('float', '-n')),  # no effect
@@ -108,14 +120,43 @@ fmt2 = '{timestamp:%%H:%%M}'
                           ('caproto-put', ('float', '3.16', '-l')),
                           ('caproto-put', ('float', '3.16', '-v')),
                           ('caproto-put', ('float', '3.16', '-vvv')),
+                          # Tests for output formatting arguments:
+                          #    floating point -e -f -g -s -lx -lo -lb
+                          ('caproto-get', ('float', '-e5')),
+                          ('caproto-get', ('float', '-e', '5')),
+                          ('caproto-get', ('float', '-f5')),
+                          ('caproto-get', ('float', '-f', '5')),
+                          ('caproto-get', ('float', '-g5')),
+                          ('caproto-get', ('float', '-g', '5')),
+                          ('caproto-get', ('float', '-s')),
+                          ('caproto-get', ('float', '-lx')),
+                          ('caproto-get', ('float', '-lo')),
+                          ('caproto-get', ('float', '-lb')),
+                          # All at once (the last one is used for output formatting)
+                          ('caproto-get', ('float', '-e5', '-f5', '-g5', '-s', '-lx', '-lo', '-lb')),
+                          #    integer -0x -0o -0b
+                          ('caproto-get', ('int', '-0x')),
+                          ('caproto-get', ('int', '-0o')),
+                          ('caproto-get', ('int', '-0b')),
+                          # All at once (the last one is used for output formatting)
+                          ('caproto-get', ('int', '-0x', '-0o', '-0b')),
+                          # Test separator (single character)
+                          ('caproto-get', ('float', '-F-')),
+                          ('caproto-get', ('float', "-F'-'")),
+                          ('caproto-get', ('float', '-F', '-')),
+                          ('caproto-get', ('float', '-F', "'='")),
+                          ('caproto-get', ('waveform', '-F', "'-'")),
+                          # Test separator (multiple characters, not supported by EPICS caget)
+                          ('caproto-get', ('float', '--wide', '-F', "' = '")),
+                          # Test data_count limiter.
+                          ('caproto-get', ('waveform', '-#', '1')),
                           ])
-def test_cli(command, args, ioc):
+def test_cli(command, args, ioc, ):
     args = fix_arg_prefixes(ioc, args)
     p = subprocess.Popen([sys.executable, '-um', 'caproto.tests.example_runner',
                           '--script', command] + list(args),
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE
                          )
-
     _subprocess_communicate(p, command, timeout=10.0)
 
 
@@ -133,6 +174,36 @@ def test_cli(command, args, ioc):
                           ('float', '-p', '0'),
                           ('float', '-p', '99'),
                           ('float', '-w', '2'),
+                          # Tests for output formatting arguments:
+                          #    floating point -e -f -g -s -lx -lo -lb
+                          ('float', '-e5'),
+                          ('float', '-e', '5'),
+                          ('float', '-f5'),
+                          ('float', '-f', '5'),
+                          ('float', '-g5'),
+                          ('float', '-g', '5'),
+                          ('float', '-s'),
+                          ('float', '-lx'),
+                          ('float', '-lo'),
+                          ('float', '-lb'),
+                          # All at once (the last one is used for output formatting)
+                          ('float', '-e5', '-f5', '-g5', '-s', '-lx', '-lo', '-lb'),
+                          #    integer -0x -0o -0b
+                          ('int', '-0x'),
+                          ('int', '-0o'),
+                          ('int', '-0b'),
+                          # All at once (the last one is used for output formatting)
+                          ('int', '-0x', '-0o', '-0b'),
+                          # Test separator (single character)
+                          ('float', '-F-'),
+                          ('float', "-F'-'"),
+                          ('float', '-F', '-'),
+                          ('float', '-F', "'='"),
+                          ('waveform', '-F', "'-'"),
+                          # Test separator (multiple characters, not supported by EPICS monitor)
+                          ('float', '-F', "' = '"),
+                          # Test data_count limiter.
+                          ('waveform', '-#', '1'),
                           ])
 def test_monitor(args, ioc):
     args = fix_arg_prefixes(ioc, args)

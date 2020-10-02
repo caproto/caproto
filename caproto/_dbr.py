@@ -8,6 +8,7 @@
 import ctypes
 import datetime
 import collections
+import logging
 from enum import IntEnum, IntFlag
 from ._constants import (EPICS2UNIX_EPOCH, EPICS_EPOCH, MAX_STRING_SIZE,
                          MAX_UNITS_SIZE, MAX_ENUM_STRING_SIZE, MAX_ENUM_STATES)
@@ -21,6 +22,9 @@ __all__ = ('AccessRights', 'AlarmSeverity', 'AlarmStatus', 'ConnStatus',
            'char_types', 'string_types', 'int_types', 'float_types',
            'enum_types', 'char_types', 'native_float_types',
            'native_int_types')
+
+
+logger = logging.getLogger('caproto')
 
 
 class AccessRights(IntFlag):
@@ -78,6 +82,16 @@ class ConnStatus(IntEnum):
 
 
 class ChannelType(IntEnum):
+    '''
+    All channel types supported by Channel Access
+
+    The ones that should be used in servers to specify the type of pvproperty
+    or ChannelData are only "native" types (STRING, INT, FLOAT, ENUM, CHAR,
+    LONG, DOUBLE)
+
+    The remaining channel data types are used for clients requesting additional
+    metadata from the server.
+    '''
     STRING = 0
     INT = 1
     FLOAT = 2
@@ -123,6 +137,26 @@ class ChannelType(IntEnum):
 
     STSACK_STRING = 37
     CLASS_NAME = 38
+
+
+class _LongStringChannelType(IntEnum):
+    '''
+    An internal data type enum which mirrors CHAR values from ChannelType.
+
+    The key difference for this enum is that the server performs a different
+    conversion for STRING -> CHAR and STRING -> LONG_STRING.
+    '''
+    LONG_STRING = 4
+    STS_LONG_STRING = 11
+    TIME_LONG_STRING = 18
+    GR_LONG_STRING = 25
+    CTRL_LONG_STRING = 32
+
+
+_channel_type_by_name = {
+    type_.name: type_
+    for type_ in list(ChannelType) + list(_LongStringChannelType)
+}
 
 
 class SubscriptionType(IntFlag):
@@ -187,7 +221,7 @@ class DbrStringArray(collections.UserList):
 
         buf = bytes(buf)
         strings = cls()
-        for i in range(data_count):
+        for _ in range(data_count):
             strings.append(buf[:safely_find_eos()])
             buf = buf[MAX_STRING_SIZE:]
 
@@ -207,10 +241,21 @@ class DbrTypeBase(ctypes.BigEndianStructure):
     def to_dict(self):
         d = {field: getattr(self, field)
              for field in self.info_fields}
+
         if 'status' in d:
-            d['status'] = AlarmStatus(d['status'])
+            try:
+                d['status'] = AlarmStatus(d['status'])
+            except ValueError:
+                logger.exception('Invalid alarm status: %s', d['status'])
+                d.pop('status')
+
         if 'severity' in d:
-            d['severity'] = AlarmSeverity(d['severity'])
+            try:
+                d['severity'] = AlarmSeverity(d['severity'])
+            except ValueError:
+                logger.exception('Invalid alarm severity: %s', d['severity'])
+                d.pop('severity')
+
         return d
 
     def __repr__(self):

@@ -4,18 +4,26 @@
 import argparse
 import array
 import collections
+import enum
+import functools
+import inspect
+import ipaddress
+import json
+import logging
 import os
 import random
 import socket
+import struct
 import sys
-import enum
-import json
 import threading
+import typing
+import weakref
 from collections import namedtuple
 from contextlib import contextmanager
 from warnings import warn
 
 from ._version import get_versions
+
 __version__ = get_versions()['version']
 
 try:
@@ -34,12 +42,15 @@ except ImportError:
 
 
 __all__ = (  # noqa F822
+    'adapt_old_callback_signature',
     'apply_arr_filter',
     'ChannelFilter',
     'get_environment_variables',
     'get_address_list',
-    'get_server_address_list',
+    'get_local_address',
     'get_beacon_address_list',
+    'get_client_address_list',
+    'get_server_address_list',
     'get_netifaces_addresses',
     'ensure_bytes',
     'random_ports',
@@ -52,6 +63,7 @@ __all__ = (  # noqa F822
     'parse_channel_filter',
     'batch_requests',
     'CaprotoError',
+    'Protocol',
     'ProtocolError',
     'LocalProtocolError',
     'RemoteProtocolError',
@@ -71,7 +83,7 @@ __all__ = (  # noqa F822
     'RecordAndField',
     'ThreadsafeCounter',
     '__version__',
-     # sentinels dynamically defined and added to globals() below
+    # sentinels dynamically defined and added to globals() below
     'CLIENT', 'SERVER', 'RESPONSE', 'REQUEST', 'NEED_DATA',
     'SEND_SEARCH_REQUEST', 'AWAIT_SEARCH_RESPONSE',
     'SEND_SEARCH_RESPONSE', 'SEND_VERSION_REQUEST',
@@ -79,6 +91,9 @@ __all__ = (  # noqa F822
     'SEND_CREATE_CHAN_REQUEST', 'AWAIT_CREATE_CHAN_RESPONSE',
     'SEND_CREATE_CHAN_RESPONSE', 'CONNECTED', 'MUST_CLOSE',
     'CLOSED', 'IDLE', 'FAILED', 'DISCONNECTED')
+
+
+logger = logging.getLogger(__name__)
 
 
 # This module defines sentinels used in the state machine and elsewhere, such
@@ -126,12 +141,46 @@ class ConversionDirection(_SimpleReprEnum):
     TO_WIRE = enum.auto()
 
 
-globals().update(
-    {token: getattr(_enum, token)
-     for _enum in [Role, Direction, States]
-     for token in dir(_enum)
-     if not token.startswith('_')
-     })
+class Protocol(str, _SimpleReprEnum):
+    PVAccess = 'PVA'
+    ChannelAccess = 'CA'
+
+    @property
+    def server_env_key(self) -> str:
+        """The environment variable key used for server settings."""
+        return {
+            Protocol.ChannelAccess: 'CAS',
+            Protocol.PVAccess: 'PVAS',
+        }[self]
+
+
+CLIENT = Role.CLIENT
+SERVER = Role.SERVER
+RESPONSE = Direction.RESPONSE
+REQUEST = Direction.REQUEST
+
+SEND_SEARCH_REQUEST = States.SEND_SEARCH_REQUEST
+AWAIT_SEARCH_RESPONSE = States.AWAIT_SEARCH_RESPONSE
+SEND_SEARCH_RESPONSE = States.SEND_SEARCH_RESPONSE
+SEND_VERSION_REQUEST = States.SEND_VERSION_REQUEST
+AWAIT_VERSION_RESPONSE = States.AWAIT_VERSION_RESPONSE
+SEND_VERSION_RESPONSE = States.SEND_VERSION_RESPONSE
+SEND_CREATE_CHAN_REQUEST = States.SEND_CREATE_CHAN_REQUEST
+AWAIT_CREATE_CHAN_RESPONSE = States.AWAIT_CREATE_CHAN_RESPONSE
+SEND_CREATE_CHAN_RESPONSE = States.SEND_CREATE_CHAN_RESPONSE
+CONNECTED = States.CONNECTED
+MUST_CLOSE = States.MUST_CLOSE
+CLOSED = States.CLOSED
+IDLE = States.IDLE
+FAILED = States.FAILED
+DISCONNECTED = States.DISCONNECTED
+NEED_DATA = States.NEED_DATA
+
+FROM_WIRE = ConversionDirection.FROM_WIRE
+TO_WIRE = ConversionDirection.TO_WIRE
+
+PVAccess = Protocol.PVAccess
+ChannelAccess = Protocol.ChannelAccess
 
 
 class CaprotoError(Exception):
@@ -155,6 +204,13 @@ class LocalProtocolError(ProtocolError):
 class RemoteProtocolError(ProtocolError):
     """
     Your remote peer tried to do something that caproto thinks is illegal.
+    """
+    ...
+
+
+class ValidationError(CaprotoError):
+    """
+    Could not parse into valid command.
     """
     ...
 
@@ -207,42 +263,51 @@ class ErrorResponseReceived(CaprotoError):
     ...
 
 
+_ENVIRONMENT_DEFAULTS = dict(
+    EPICS_CA_ADDR_LIST='',
+    EPICS_CA_AUTO_ADDR_LIST='YES',
+    EPICS_CA_CONN_TMO=30.0,
+    EPICS_CA_BEACON_PERIOD=15.0,
+    EPICS_CA_REPEATER_PORT=5065,
+    EPICS_CA_SERVER_PORT=5064,
+    EPICS_CA_MAX_ARRAY_BYTES=16384,
+    EPICS_CA_MAX_SEARCH_PERIOD=300,
+    EPICS_TS_MIN_WEST=360,
+    EPICS_CAS_SERVER_PORT=5064,
+    EPICS_CAS_AUTO_BEACON_ADDR_LIST='YES',
+    EPICS_CAS_BEACON_ADDR_LIST='',
+    EPICS_CAS_BEACON_PERIOD=15.0,
+    EPICS_CAS_BEACON_PORT=5065,
+    EPICS_CAS_INTF_ADDR_LIST='',
+    EPICS_CAS_IGNORE_ADDR_LIST='',
+
+    # pvAccess
+    EPICS_PVA_DEBUG=0,
+    EPICS_PVA_ADDR_LIST='',
+    EPICS_PVA_AUTO_ADDR_LIST='YES',
+    EPICS_PVA_CONN_TMO=30.0,
+    EPICS_PVA_BEACON_PERIOD=15.0,
+    EPICS_PVA_BROADCAST_PORT=5076,
+    EPICS_PVA_MAX_ARRAY_BYTES=16384,
+    EPICS_PVA_SERVER_PORT=5075,
+
+    # pvAccess server
+    EPICS_PVAS_BEACON_ADDR_LIST='',
+    EPICS_PVAS_AUTO_BEACON_ADDR_LIST='YES',
+    EPICS_PVAS_BEACON_PERIOD=15.0,
+    EPICS_PVAS_SERVER_PORT=5075,
+    EPICS_PVAS_BROADCAST_PORT=5076,
+    EPICS_PVAS_MAX_ARRAY_BYTES=16384,
+    EPICS_PVAS_PROVIDER_NAMES='local',
+    EPICS_PVAS_INTF_ADDR_LIST='',
+    EPICS_PVA_PROVIDER_NAMES='local',
+)
+
+
 def get_environment_variables():
     '''Get a dictionary of known EPICS environment variables'''
-    defaults = dict(EPICS_CA_ADDR_LIST='',
-                    EPICS_CA_AUTO_ADDR_LIST='YES',
-                    EPICS_CA_CONN_TMO=30.0,
-                    EPICS_CA_BEACON_PERIOD=15.0,
-                    EPICS_CA_REPEATER_PORT=5065,
-                    EPICS_CA_SERVER_PORT=5064,
-                    EPICS_CA_MAX_ARRAY_BYTES=16384,
-                    EPICS_CA_MAX_SEARCH_PERIOD=300,
-                    EPICS_TS_MIN_WEST=360,
-                    EPICS_CAS_SERVER_PORT=5064,
-                    EPICS_CAS_AUTO_BEACON_ADDR_LIST='YES',
-                    EPICS_CAS_BEACON_ADDR_LIST='',
-                    EPICS_CAS_BEACON_PERIOD=15.0,
-                    EPICS_CAS_BEACON_PORT=5065,
-                    EPICS_CAS_INTF_ADDR_LIST='',
-                    EPICS_CAS_IGNORE_ADDR_LIST='',
-                    )
-
     result = dict(os.environ)
-    # Handled coupled items.
-    if (result.get('EPICS_CA_ADDR_LIST') and
-            result.get('EPICS_CA_AUTO_ADDR_LIST', '').upper() != 'NO'):
-        warn("EPICS_CA_ADDR_LIST is set but will be ignored because "
-             "EPICS_CA_AUTO_ADDR_LIST is not set to 'no'. "
-             "EPICS_CA_ADDR_LIST={!r} EPICS_CA_AUTO_ADDR_LIST={!r}"
-             "".format(result.get('EPICS_CA_ADDR_LIST', ''),
-                       result.get('EPICS_CA_AUTO_ADDR_LIST', ''))
-             )
-    if (result.get('EPICS_CAS_BEACON_ADDR_LIST') and
-            result.get('EPICS_CAS_AUTO_BEACON_ADDR_LIST', '').upper() != 'NO'):
-        warn("EPICS_CAS_BEACON_ADDR_LIST is set but will be ignored because "
-             "EPICS_CAS_AUTO_BEACON_ADDR_LIST is not set to 'no'.")
-
-    for key, default_value in defaults.items():
+    for key, default_value in _ENVIRONMENT_DEFAULTS.items():
         type_of_env_var = type(default_value)
         try:
             result[key] = type_of_env_var(result[key])
@@ -255,30 +320,123 @@ def get_environment_variables():
     return result
 
 
-def get_address_list():
-    '''Get channel access client address list based on environment variables
+def _split_address_list(addr_list):
+    '''Split an address list string into individual items'''
+    return list(set(addr for addr in addr_list.split(' ') if addr.strip()))
+
+
+def get_manually_specified_beacon_addresses(
+        *, protocol=Protocol.ChannelAccess):
+    '''Get a list of addresses, as configured by EPICS_CA_ADDR_LIST'''
+    protocol_key = Protocol(protocol).server_env_key
+    return _split_address_list(
+        get_environment_variables()[f'EPICS_{protocol_key}_BEACON_ADDR_LIST'])
+
+
+def get_manually_specified_client_addresses(
+        *, protocol=Protocol.ChannelAccess):
+    '''Get a list of addresses, as configured by EPICS_CA_ADDR_LIST'''
+    return _split_address_list(
+        get_environment_variables()[f'EPICS_{protocol}_ADDR_LIST'])
+
+
+def get_address_list(*, protocol=Protocol.ChannelAccess):
+    '''
+    Get channel access client address list based on environment variables
 
     If the address list is set to be automatic, the network interfaces will be
     scanned and used to determine the broadcast addresses available.
     '''
+    protocol = Protocol(protocol)
+
     env = get_environment_variables()
-    auto_addr_list = env['EPICS_CA_AUTO_ADDR_LIST']
-    addr_list = env['EPICS_CA_ADDR_LIST']
+    addresses = get_manually_specified_client_addresses(protocol=protocol)
+    auto_addr_list = env[f'EPICS_{protocol}_AUTO_ADDR_LIST']
 
-    if not addr_list or auto_addr_list.lower() == 'yes':
-        return ['255.255.255.255']
+    if addresses and auto_addr_list.lower() != 'yes':
+        # Custom address list specified, and EPICS_CA_AUTO_ADDR_LIST=NO
+        auto_addr_list = []
+    else:
+        # No addresses configured or EPICS_CA_AUTO_ADDR_LIST=YES
+        if netifaces is not None:
+            auto_addr_list = [bcast for _, bcast in get_netifaces_addresses()]
+        else:
+            auto_addr_list = ['255.255.255.255']
 
-    return addr_list.split(' ')
+    return list(set(addresses + auto_addr_list))
 
 
-def get_server_address_list():
-    '''Get the server interfaces based on environment variables
+def get_client_address_list(*, protocol=Protocol.ChannelAccess):
+    '''
+    Get channel access client address list in the form of (host, port) based on
+    environment variables.
+
+    For CA, the default port is ``EPICS_CA_SERVER_PORT``.
+    For PVA, the default port is ``EPICS_PVA_BROADCAST_PORT``.
+
+    See Also
+    --------
+    :func:`get_address_list`
+    '''
+    protocol = Protocol(protocol)
+    env = get_environment_variables()
+    if protocol == Protocol.ChannelAccess:
+        default_port = env['EPICS_CA_SERVER_PORT']
+    else:
+        default_port = env['EPICS_PVA_BROADCAST_PORT']
+
+    return list(set(
+        get_address_and_port_from_string(addr, default_port)
+        for addr in get_address_list(protocol=protocol)
+    ))
+
+
+def get_address_and_port_from_string(
+        address: str, default_port: int) -> typing.Tuple[str, int]:
+    '''
+    Return (address, port) tuple given an IP address of the form ``ip:port``
+    or ``ip``.
+
+    If no port is specified, the default port is used.
+
+    Parameters
+    ----------
+    address : str
+        The address.
+
+    default_port : int
+        The port to return if none is specified.
+
+    Returns
+    -------
+    host : str
+        The host IP address.
+
+    port : int
+        The specified or default port.
+    '''
+    if address.count(':') > 1:
+        # May support [IPv6]:[port] in the future?
+        raise ValueError(f'IPv6 or invalid address specified: {address}')
+
+    if ':' in address:
+        address, specified_port = address.split(':')
+        return (address, int(specified_port))
+
+    return (address, default_port)
+
+
+def get_server_address_list(*, protocol=Protocol.ChannelAccess):
+    '''Get the server interface addresses based on environment variables
 
     Returns
     -------
     list of interfaces
     '''
-    intf_addrs = get_environment_variables()['EPICS_CAS_INTF_ADDR_LIST']
+    protocol_key = Protocol(protocol).server_env_key
+
+    key = f'EPICS_{protocol_key}_INTF_ADDR_LIST'
+    intf_addrs = get_environment_variables()[key]
 
     if not intf_addrs:
         return ['0.0.0.0']
@@ -289,10 +447,11 @@ def get_server_address_list():
             warn("Port specified in EPICS_CAS_INTF_ADDR_LIST was ignored.")
         return addr
 
-    return [strip_port(addr) for addr in intf_addrs.split(' ')]
+    return list(set(strip_port(addr)
+                    for addr in _split_address_list(intf_addrs)))
 
 
-def get_beacon_address_list():
+def get_beacon_address_list(*, protocol=Protocol.ChannelAccess):
     '''Get channel access beacon address list based on environment variables
 
     If the address list is set to be automatic, the network interfaces will be
@@ -302,21 +461,26 @@ def get_beacon_address_list():
     -------
     addr_list : list of (addr, beacon_port)
     '''
+    protocol_key = Protocol(protocol).server_env_key
+
     env = get_environment_variables()
-    auto_addr_list = env['EPICS_CAS_AUTO_BEACON_ADDR_LIST']
-    addr_list = env['EPICS_CAS_BEACON_ADDR_LIST']
-    beacon_port = env['EPICS_CAS_BEACON_PORT']
+    auto_addr_list = env[f'EPICS_{protocol_key}_AUTO_BEACON_ADDR_LIST']
+    addr_list = get_manually_specified_beacon_addresses(protocol=protocol)
+    if protocol == Protocol.ChannelAccess:
+        beacon_port = env['EPICS_CAS_BEACON_PORT']
+    else:
+        beacon_port = env['EPICS_PVAS_BROADCAST_PORT']
 
-    def get_addr_port(addr):
-        if ':' in addr:
-            addr, _, specified_port = addr.partition(':')
-            return (addr, int(specified_port))
-        return (addr, beacon_port)
+    if addr_list and auto_addr_list.lower() != 'yes':
+        # Custom address list and EPICS_CAS_AUTO_BEACON_ADDR_LIST=NO
+        auto_list = []
+    else:
+        auto_list = ['255.255.255.255']
 
-    if not addr_list or auto_addr_list.lower() == 'yes':
-        return [('255.255.255.255', beacon_port)]
-
-    return [get_addr_port(addr) for addr in addr_list.split(' ')]
+    return [
+        get_address_and_port_from_string(addr, beacon_port)
+        for addr in addr_list + auto_list
+    ]
 
 
 def get_netifaces_addresses():
@@ -343,6 +507,64 @@ def get_netifaces_addresses():
                     yield (addr, addr)
                 elif peer is not None:
                     yield (peer, peer)
+
+
+@functools.lru_cache(maxsize=1)
+def get_local_address() -> str:
+    """
+    Get the local IPv4 address.
+
+    Falls back to 127.0.0.1 if netifaces is unavailable.
+
+    Returns
+    -------
+    local_addr : str
+        The local address.
+
+    Notes
+    -----
+    The result from this function is cached by way of ``functools.lru_cache``
+    such that it is only checked once.  Changes to network topology will not be
+    accounted for after the first call.
+    """
+    fallback_address = socket.inet_ntoa(
+        struct.pack("!I", socket.INADDR_LOOPBACK)
+    )
+
+    if netifaces is None:
+        logger.debug('Netifaces unavailable; using %s as local address',
+                     fallback_address)
+        return fallback_address
+
+    loopback_address = None
+
+    for interface in netifaces.interfaces():
+        for addr in netifaces.ifaddresses(interface).get(netifaces.AF_INET, []):
+            try:
+                ipv4 = ipaddress.IPv4Address(addr['addr'])
+            except KeyError:
+                continue
+
+            if not ipv4.is_loopback:
+                logger.debug('Found the first local address %s', ipv4)
+                return str(ipv4)
+
+            if loopback_address is None:
+                loopback_address = str(ipv4)
+
+    if loopback_address is not None:
+        logger.debug(
+            'Netifaces failed to find any local address, falling back to '
+            'the loopback address %s', loopback_address
+        )
+        return loopback_address
+
+    logger.warning(
+        'Netifaces failed to find any local address, including a loopback '
+        'address.  This is probably a caproto bug.  Falling back to: %s',
+        fallback_address
+    )
+    return fallback_address
 
 
 def ensure_bytes(s):
@@ -400,12 +622,27 @@ def bcast_socket(socket_module=socket):
     return sock
 
 
+if 'pypy' in sys.implementation.name:
+    def _cast_buffers_to_byte(buffers):
+        def inner(b):
+            try:
+                return memoryview(b).cast('b')
+            except TypeError:
+                target_type = b.dtype.str.replace('>', '<')
+                return memoryview(b.astype(target_type)).cast('b')
+        return tuple(inner(b) for b in buffers)
+
+else:
+    def _cast_buffers_to_byte(buffers):
+        return tuple(memoryview(b).cast('b') for b in buffers)
+
+
 def buffer_list_slice(*buffers, offset):
     'Helper function for slicing a list of buffers'
     if offset < 0:
         raise CaprotoValueError('Negative offset')
 
-    buffers = tuple(memoryview(b).cast('b') for b in buffers)
+    buffers = _cast_buffers_to_byte(buffers)
 
     start = 0
     for bufidx, buf in enumerate(buffers):
@@ -422,7 +659,7 @@ def buffer_list_slice(*buffers, offset):
 
 def incremental_buffer_list_slice(*buffers):
     'Incrementally slice a list of buffers'
-    buffers = tuple(memoryview(b).cast('b') for b in buffers)
+    buffers = _cast_buffers_to_byte(buffers)
     total_size = sum(len(b) for b in buffers)
     total_sent = 0
 
@@ -567,7 +804,7 @@ def parse_record_field(pvname):
                 modifiers |= RecordModifiers.long_string
             else:
                 modifiers = RecordModifiers.long_string
-            field = field.rstrip('$')
+            field = field[:-1]
 
     # NOTE: VAL is equated to 'record' at a higher level than this.
     if field:
@@ -592,6 +829,9 @@ sync_modes = set(['before', 'first', 'while', 'last', 'after', 'unless'])
 def parse_channel_filter(filter_text):
     "Parse and validate filter_text into a ChannelFilter."
     # https://epics.anl.gov/base/R3-15/5-docs/filters.html
+
+    if not filter_text:
+        return ChannelFilter(ts=False, dbnd=None, sync=None, arr=None)
 
     # If there is a shorthand array filter, that is the only filter allowed, so
     # we parse that and return, shortcircuiting the rest.
@@ -848,3 +1088,76 @@ class ShowVersionAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         print(__version__)
         parser.exit()
+
+
+@functools.lru_cache(maxsize=128)
+def safe_getsockname(sock):
+    """
+    Call sock.getsockname() and, on Windows, return ('0.0.0.0', 0) if an error is raised.
+
+    This is a workaround to a critical issue affecting Windows. A better
+    solution should be found but requires more discussion. See
+    https://github.com/caproto/caproto/issues/514
+    and issues/PRs linked from there.
+    """
+    try:
+        return sock.getsockname()
+    except Exception:
+        if sys.platform != 'win32':
+            raise
+        # This is what the Linux OS returns for a unconnected socket that has
+        # not yet been sent from.
+        return ('0.0.0.0', 0)
+
+
+def adapt_old_callback_signature(func, weakref_set):
+    """
+    If func has signature func(response), wrap in signature func(sub, response)
+
+    Parameters
+    ----------
+    func: callable
+        Expected signature ``f(response)`` or ``f(sub, response)``
+    weakref_set: set
+        Will be used to store state.
+
+    Returns
+    -------
+    func: callable
+        Signature ``f(sub, response)``
+    """
+    # Handle func with signature func(respons) for back-compat.
+    sig = inspect.signature(func)
+    try:
+        # Does this function accept two positional arguments?
+        sig.bind(None, None)
+    except TypeError:
+        warn(
+            "The signature of a subscription callback is now expected to "
+            "be func(sub, response). The signature func(response) is "
+            "supported, but support will be removed in a future release "
+            "of caproto.")
+        raw_func = func
+        raw_func_weakref = weakref.ref(raw_func)
+
+        def func(sub, response):
+            # Avoid closing over raw_func itself here or it will never be
+            # garbage collected.
+            raw_func = raw_func_weakref()
+            if raw_func is not None:
+                # Do nothing with sub because the user-provided func cannot
+                # accept it.
+                raw_func(response)
+
+        # Ensure func does not get garbage collected until raw_func does.
+        def called_when_raw_func_is_released(w):
+            # The point of this function is to hold one hard ref to func
+            # until raw_func is garbage collected.
+            func
+            # Clean up after ourselves.
+            weakref_set.remove(w)
+
+        w = weakref.ref(raw_func, called_when_raw_func_is_released)
+        # Hold a hard reference to w. Its callback removes it from this set.
+        weakref_set.add(w)
+    return func

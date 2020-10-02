@@ -1,8 +1,10 @@
-from distutils.core import setup
-import setuptools  # noqa F401
 import sys
-import versioneer
+from distutils.core import setup
+from os import path
 
+import setuptools  # noqa F401
+
+import versioneer
 
 # NOTE: This file must remain Python 2 compatible for the foreseeable future,
 # to ensure that we error out properly for people with outdated setuptools
@@ -32,13 +34,19 @@ classifiers = [
     'License :: OSI Approved :: BSD License'
 ]
 
+here = path.abspath(path.dirname(__file__))
+
+with open(path.join(here, 'requirements-test.txt')) as requirements_file:
+    test_requirements = [line for line in requirements_file.read().splitlines()
+                         if not line.startswith('#')]
 
 extras_require = {
-    'standard': ['netifaces', 'numpy'],
-    'async': ['asks', 'curio', 'trio>=0.9.0'],
+    'standard': ['netifaces', 'numpy', 'dpkt'],
+    'async': ['curio>=1.2', 'trio>=0.12.1'],
 }
-extras_require['complete'] = sorted(set(sum(extras_require.values(), [])))
 
+extras_require['complete'] = sorted(set(sum(extras_require.values(), [])))
+extras_require['test'] = sorted(set(sum(extras_require.values(), test_requirements)))
 
 setup(name='caproto',
       version=versioneer.get_version(),
@@ -46,29 +54,19 @@ setup(name='caproto',
       author='Caproto Contributors',
       description='a sans-I/O implementation of the EPICS Channel Access '
                   'protocol',
-      packages=['caproto',
-                'caproto.asyncio',
-                'caproto.benchmarking',
-                'caproto.commandline',
-                'caproto.curio',
-                'caproto.examples',
-                'caproto.ioc_examples',
-                'caproto.server',
-                'caproto.sync',
-                'caproto.tests',
-                'caproto.threading',
-                'caproto.trio',
-                ],
+      packages=setuptools.find_packages(where='.', exclude=['doc', '.ci']),
       entry_points={
           'console_scripts': [
               'caproto-get = caproto.commandline.get:main',
               'caproto-put = caproto.commandline.put:main',
               'caproto-monitor = caproto.commandline.monitor:main',
               'caproto-repeater = caproto.commandline.repeater:main',
+              'caproto-shark = caproto.commandline.shark:main',
               'caproto-defaultdict-server = caproto.ioc_examples.defaultdict_server:main',
               'caproto-spoof-beamline = caproto.ioc_examples.spoof_beamline:main',
           ],
       },
+      include_package_data=True,
       python_requires='>=3.6',
       classifiers=classifiers,
       extras_require=extras_require

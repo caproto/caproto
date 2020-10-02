@@ -193,7 +193,10 @@ def pvnames(request, epics_base_ioc, context):
 def simulator_main(prefix, ready_event, exit_event):
     'simulator.py from pyepics testioc (same license as above)'
     import random
-    from epics import caput as _caput, PV as _PV
+    epics = pytest.importorskip('epics')
+
+    _caput = epics.caput
+    _PV = epics.PV
 
     class PV(_PV):
         def put(self, value, **kw):
@@ -517,6 +520,7 @@ def test_get1(pvnames):
 @pytest.mark.xfail(os.environ.get('BASE_VER') in ('R3.16.1', 'R7.0.1.1'),
                    reason='known issues with simulator on some BASE versions')
 def test_get_string_waveform(pvnames, simulator):
+    epics = pytest.importorskip('epics')
     print('String Array: \n')
     with no_simulator_updates(pvnames):
         pv = PV(pvnames.string_arr_pv)
@@ -629,6 +633,7 @@ def test_putwait(pvnames):
 @pytest.mark.xfail(os.environ.get('BASE_VER') in ('R3.16.1', 'R7.0.1.1'),
                    reason='known issues with simulator on some BASE versions')
 def test_get_callback(pvnames, simulator):
+    epics = pytest.importorskip('epics')
     print("Callback test:  changing PV must be updated\n")
     mypv = PV(pvnames.updating_pv1)
     NEWVALS = []
@@ -722,6 +727,7 @@ def test_waveform_get_with_count_arg(pvnames):
 @pytest.mark.xfail(os.environ.get('BASE_VER') in ('R3.16.1', 'R7.0.1.1'),
                    reason='known issues with simulator on some BASE versions')
 def test_waveform_callback_with_count_arg(pvnames, simulator):
+    epics = pytest.importorskip('epics')
     values = []
 
     wf = PV(pvnames.char_arr_pv, count=32)
@@ -806,6 +812,7 @@ def testEnumPut(pvnames):
 @pytest.mark.xfail(os.environ.get('BASE_VER') in ('R3.16.1', 'R7.0.1.1'),
                    reason='known issues with simulator on some BASE versions')
 def test_DoubleVal(pvnames, simulator):
+    epics = pytest.importorskip('epics')
     pvn = pvnames.double_pv
     pv = PV(pvn)
     print('pv', pv)
@@ -940,6 +947,10 @@ def access_security_softioc(request, prefix, context):
     '''
 
     from .conftest import run_softioc, poll_readiness
+    from ..benchmarking.util import has_softioc
+
+    if not has_softioc():
+        pytest.skip("no softIoc")
 
     handler = run_softioc(request, db=access_rights_db,
                           access_rules_text=access_rights_asg_rules,
@@ -954,7 +965,7 @@ def access_security_softioc(request, prefix, context):
            }
     pvs['ao.DRVH'] = PV(prefix + ':ao.DRVH')
 
-    poll_readiness(pvs['ao'].pvname)
+    poll_readiness(pvs['ao'].pvname, process=process)
 
     for pv in pvs.values():
         pv.wait_for_connection()

@@ -50,7 +50,7 @@ Development Installation
 
 .. code-block:: bash
 
-    git clone https://github.com/NSLS-II/caproto
+    git clone https://github.com/caproto/caproto
     cd caproto
     pip install -e .
 
@@ -68,8 +68,38 @@ building the documentation:
 
 .. code-block:: bash
 
-    pip install -Ur test-requirements.txt
-    pip install -Ur docs-requirements.txt
+    pip install -Ur requirements-test.txt
+    pip install -Ur requirements-doc.txt
+
+You may also want to use `pre-commit <https://pre-commit.com/>`_. This is
+optional. It streamlines compliance with code style requirements. If you are a
+first-time contributor or unfamiliar with "precommit" tools, feel free to
+ignore.
+
+.. code-block:: bash
+
+   pip install pre-commit
+   pre-commit install
+
+This uses git hooks to check the changed files every time code is committed.
+
+.. code-block:: bash
+
+   echo "blah" >> setup.py
+   git commit -am "test"   # fails due to linting
+
+Use the git option ``--no-verify`` or ``-n`` to skip the checks.
+
+.. code-block:: bash
+
+   git commit -nam "test"  # commits anyway
+
+You can run the checks manually on all files.
+
+.. code-block:: bash
+
+   # run on all files
+   pre-commit run --all-files
 
 To run the tests:
 
@@ -109,10 +139,10 @@ To get started on iOS:
 1. Purchase and install Pythonista from the app store.
 2. Install `StaSh <https://github.com/ywangd/stash>`_ in Pythonista by creating
    a new script and running:
-   
+
 .. code-block:: python
 
-   import requests as r; exec(r.get('https://bit.ly/get-stash').text) 
+   import requests as r; exec(r.get('https://bit.ly/get-stash').text)
 
 3. Restart Pythonista and launch a StaSh shell. Install caproto with pip:
 
@@ -120,7 +150,7 @@ To get started on iOS:
 
    $ pip install caproto
 
-4. Open an example IOC and give it a try. To find the caproto examples, navigate to 
+4. Open an example IOC and give it a try. To find the caproto examples, navigate to
    "Python Modules > site-packages-3 > caproto > ioc_examples > simple.py"
 
 5. Tap the play button to run it.  From another computer on the same WiFi

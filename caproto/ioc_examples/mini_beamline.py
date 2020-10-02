@@ -1,10 +1,29 @@
 #!/usr/bin/env python3
-from caproto.server import (pvproperty, PVGroup, SubGroup,
-                            ioc_arg_parser, run)
-import numpy as np
-import time
+import contextvars
 import functools
 import math
+import time
+
+import numpy as np
+
+from caproto.server import PVGroup, SubGroup, ioc_arg_parser, pvproperty, run
+
+internal_process = contextvars.ContextVar('internal_process',
+                                          default=False)
+
+
+def no_reentry(func):
+    @functools.wraps(func)
+    async def inner(*args, **kwargs):
+        if internal_process.get():
+            return
+        try:
+            internal_process.set(True)
+            return (await func(*args, **kwargs))
+        finally:
+            internal_process.set(False)
+
+    return inner
 
 
 def _arrayify(func):
@@ -15,30 +34,63 @@ def _arrayify(func):
 
 
 class _JitterDetector(PVGroup):
-    det = pvproperty(value=0, dtype=float, read_only=True)
+    det = pvproperty(value=0, dtype=float, read_only=True,
+                     doc='Scalar detector value')
 
     @det.getter
     async def det(self, instance):
         return (await self._read(instance))
 
-    mtr = pvproperty(value=0, dtype=float)
-    exp = pvproperty(value=1, dtype=float)
+    mtr = pvproperty(value=0, dtype=float, precision=3, record='ai', doc='Motor')
+    exp = pvproperty(value=1, dtype=float, doc='Exponential value')
+    vel = pvproperty(value=1, dtype=float, doc='Velocity')
+
+    mtr_tick_rate = pvproperty(value=10, dtype=float, units='Hz',
+                               doc='Update tick rate')
 
     @exp.putter
     async def exp(self, instance, value):
         value = np.clip(value, a_min=0, a_max=None)
         return value
 
+    @mtr.startup
+    async def mtr(self, instance, async_lib):
+        instance.ev = async_lib.library.Event()
+        instance.async_lib = async_lib
+
+    @mtr.putter
+    @no_reentry
+    async def mtr(self, instance, value):
+        # "tick" at 10Hz
+        dwell = 1 / self.mtr_tick_rate.value
+
+        disp = (value - instance.value)
+        # compute the total movement time based an velocity
+        total_time = abs(disp / self.vel.value)
+        # compute how many steps, should come up short as there will
+        # be a final write of the return value outside of this call
+        N = int(total_time // dwell)
+
+        for j in range(N):
+            # hide a possible divide by 0
+            step_size = disp / N
+            await instance.write(instance.value + step_size)
+            await instance.async_lib.library.sleep(dwell)
+
+        return value
+
 
 class PinHole(_JitterDetector):
+    """A pinhole simulation device."""
+
     async def _read(self, instance):
         sigma = 5
         center = 0
         c = - 1 / (2 * sigma * sigma)
 
         @_arrayify
-        def jitter_read(m, e, I):
-            N = (self.parent.N_per_I_per_s * I * e *
+        def jitter_read(m, e, intensity):
+            N = (self.parent.N_per_I_per_s * intensity * e *
                  np.exp(c * (m - center)**2))
             return np.random.poisson(N)
 
@@ -48,15 +100,17 @@ class PinHole(_JitterDetector):
 
 
 class Edge(_JitterDetector):
+    """An edge simulation device."""
+
     async def _read(self, instance):
         sigma = 2.5
         center = 5
         c = 1 / sigma
 
         @_arrayify
-        def jitter_read(m, e, I):
+        def jitter_read(m, e, intensity):
             s = math.erfc(c * (-m + center)) / 2
-            N = (self.parent.N_per_I_per_s * I * e * s)
+            N = (self.parent.N_per_I_per_s * intensity * e * s)
             return np.random.poisson(N)
 
         return jitter_read(self.mtr.value,
@@ -65,17 +119,19 @@ class Edge(_JitterDetector):
 
 
 class Slit(_JitterDetector):
+    """A slit simulation device."""
+
     async def _read(self, instance):
         sigma = 2.5
         center = 7.5
         c = 1 / sigma
 
         @_arrayify
-        def jitter_read(m, e, I):
+        def jitter_read(m, e, intensity):
             s = (math.erfc(c * (m - center)) -
                  math.erfc(c * (m + center))) / 2
 
-            N = (self.parent.N_per_I_per_s * I * e * s)
+            N = (self.parent.N_per_I_per_s * intensity * e * s)
             return np.random.poisson(N)
 
         return jitter_read(self.mtr.value,
@@ -96,7 +152,9 @@ class MovingDot(PVGroup):
 
     det = pvproperty(value=[0] * N * M,
                      dtype=float,
-                     read_only=True)
+                     read_only=True,
+                     doc=f'Detector image ({N}x{M})'
+                     )
 
     @det.getter
     async def det(self, instance):
@@ -137,14 +195,14 @@ class MovingDot(PVGroup):
         value = np.clip(value, a_min=0, a_max=None)
         return value
 
-    shutter_open = pvproperty(value=1, dtype=int)
+    shutter_open = pvproperty(value=1, dtype=int, doc='Shutter open/close')
 
     ArraySizeY_RBV = pvproperty(value=N, dtype=int,
-                                read_only=True)
+                                read_only=True, doc='Image array size Y')
     ArraySizeX_RBV = pvproperty(value=M, dtype=int,
-                                read_only=True)
+                                read_only=True, doc='Image array size X')
     ArraySize_RBV = pvproperty(value=[N, M], dtype=int,
-                               read_only=True)
+                               read_only=True, doc='Image array size [Y, X]')
 
 
 class MiniBeamline(PVGroup):
@@ -161,11 +219,11 @@ class MiniBeamline(PVGroup):
         current = 500 + 25 * np.sin(time.monotonic() * (2 * np.pi) / 4)
         await instance.write(value=current)
 
-    ph = SubGroup(PinHole)
-    edge = SubGroup(Edge)
-    slit = SubGroup(Slit)
+    ph = SubGroup(PinHole, doc='Simulated pinhole')
+    edge = SubGroup(Edge, doc='Simulated edge')
+    slit = SubGroup(Slit, doc='Simulated slit')
 
-    dot = SubGroup(MovingDot)
+    dot = SubGroup(MovingDot, doc='The simulated detector')
 
 
 if __name__ == '__main__':

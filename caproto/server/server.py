@@ -12,18 +12,20 @@ import inspect
 import logging
 import sys
 import time
+import warnings
 
 from collections import (namedtuple, OrderedDict, defaultdict)
 from types import MethodType
 
-from .. import (ChannelDouble, ChannelShort, ChannelInteger, ChannelString,
-                ChannelEnum, ChannelType, ChannelChar, ChannelByte,
-                ChannelAlarm,
+from .. import (ChannelDouble, ChannelFloat, ChannelShort, ChannelInteger,
+                ChannelString, ChannelEnum, ChannelType, ChannelChar,
+                ChannelByte, ChannelAlarm,
                 AccessRights, get_server_address_list,
                 AlarmStatus, AlarmSeverity, CaprotoRuntimeError,
                 CaprotoValueError, CaprotoTypeError, CaprotoAttributeError,
                 __version__)
 from .._backend import backend
+from caproto._log import set_handler, _set_handler_with_logger
 
 
 module_logger = logging.getLogger(__name__)
@@ -38,6 +40,7 @@ __all__ = ['AsyncLibraryLayer',
            'PvpropertyByte', 'PvpropertyByteRO',
            'PvpropertyChar', 'PvpropertyCharRO',
            'PvpropertyDouble', 'PvpropertyDoubleRO',
+           'PvpropertyFloat', 'PvpropertyFloatRO',
            'PvpropertyBoolEnum', 'PvpropertyBoolEnumRO',
            'PvpropertyEnum', 'PvpropertyEnumRO',
            'PvpropertyInteger', 'PvpropertyIntegerRO',
@@ -61,7 +64,7 @@ class AsyncLibraryLayer:
 
 class PvpropertyData:
     def __init__(self, *, pvname, group, pvspec, doc=None, mock_record=None,
-                 logger=None, **kwargs):
+                 record=None, logger=None, **kwargs):
         self.pvname = pvname  # the full, expanded PV name
         self.name = f'{group.name}.{pvspec.attr}'
         self.group = group
@@ -87,26 +90,43 @@ class PvpropertyData:
         if doc is not None:
             self.__doc__ = doc
 
-        self.record_type = mock_record
+        self.record_type = record or mock_record
 
         super().__init__(**kwargs)
 
         if mock_record is not None:
-            from .records import records
-            field_class = records[mock_record]
-            if self.pvspec.fields is not None:
-                new_dict = dict(field_class.__dict__)
-                for (field, field_attr), func in self.pvspec.fields:
-                    prop = new_dict[field]
-                    prop.pvspec = prop.pvspec._replace(**{field_attr: func})
+            if record is not None:
+                raise ValueError(
+                    'Cannot specify both `mock_record` and `record`; '
+                    'please use only `record`')
+            warnings.warn(
+                '`mock_record` is deprecated. Use `pvproperty(record=)`')
 
+        if self.record_type is not None:
+            from .records import records
+            field_class = records[self.record_type]
+            if self.pvspec.fields is not None:
+                clsdict = {}
+                # Update all fields with user-customized putters
+                for (prop_name, field_attr), func in self.pvspec.fields:
+                    try:
+                        prop = clsdict[prop_name]
+                    except KeyError:
+                        prop = copy.copy(getattr(field_class, prop_name))
+
+                    prop.pvspec = prop.pvspec._replace(**{field_attr: func})
+                    clsdict[prop_name] = prop
+
+                # Subclass the original record fields, patching in our new
+                # methods:
                 field_class = type(
                     field_class.__name__ + self.name.replace('.', '_'),
-                    (field_class, ), new_dict)
+                    (field_class, ), clsdict)
 
             self.field_inst = field_class(
                 prefix='', parent=self,
                 name=f'{self.name}.fields')
+
             self.fields = self.field_inst.pvdb
         else:
             self.field_inst = None
@@ -126,10 +146,6 @@ class PvpropertyData:
 
     async def verify_value(self, value):
         value = await super().verify_value(value)
-        if self.pvspec.put is None:
-            self.log.debug('group verify value for %s: %r', self.name, value)
-        else:
-            self.log.debug('verify value for %s: %r', self.name, value)
         return await self.putter(self, value)
 
     async def _server_startup(self, async_lib):
@@ -157,6 +173,10 @@ class PvpropertyShort(PvpropertyData, ChannelShort):
 
 
 class PvpropertyInteger(PvpropertyData, ChannelInteger):
+    ...
+
+
+class PvpropertyFloat(PvpropertyData, ChannelFloat):
     ...
 
 
@@ -201,6 +221,10 @@ class PvpropertyIntegerRO(PvpropertyReadOnlyData, ChannelInteger):
 
 
 class PvpropertyDoubleRO(PvpropertyReadOnlyData, ChannelDouble):
+    ...
+
+
+class PvpropertyFloatRO(PvpropertyReadOnlyData, ChannelFloat):
     ...
 
 
@@ -361,6 +385,10 @@ class FieldSpec:
         self._record_type = record_type
         self._fields = {}
 
+    @property
+    def record_type(self):
+        return self._record_type
+
     def __getattr__(self, attr):
         from .records import RecordFieldGroup, records
         rec_class = records.get(self._record_type, RecordFieldGroup)
@@ -433,31 +461,39 @@ class pvproperty:
         if doc is None and get is not None:
             doc = get.__doc__
 
-        if field_spec is None:
-            if name is None or '.' not in name:
-                field_spec = FieldSpec(
-                    self,
-                    record_type=cls_kwargs.get('mock_record'))
+        self.record_type = self._record_type_from_kwargs(cls_kwargs)
+
+        if field_spec is not None:
+            if name and '.' in name:
+                raise ValueError(f'Cannot specify field_spec if '
+                                 f'the PV name has a "." in it: {name!r}')
+            if self.record_type:
+                raise ValueError(
+                    'Cannot specify both field_spec and record; the record '
+                    'type from field_spec must be used')
+            self.record_type = field_spec.record_type
+        elif self.record_type:
+            if name and '.' in name:
+                raise ValueError(f'Cannot specify a record if '
+                                 f'the PV name has a "." in it: {name!r}')
+            field_spec = FieldSpec(self, record_type=self.record_type)
+
         self.field_spec = field_spec
-
-        fields = (None if field_spec is None
-                  else field_spec.fields)
-
-        self.pvspec = PVSpec(get=get, put=put, startup=startup,
-                             shutdown=shutdown, name=name, dtype=dtype,
-                             value=value, max_length=max_length,
-                             alarm_group=alarm_group, read_only=read_only,
-                             doc=doc, fields=fields, cls_kwargs=cls_kwargs)
+        self.pvspec = PVSpec(
+            get=get, put=put, startup=startup, shutdown=shutdown, name=name,
+            dtype=dtype, value=value, max_length=max_length,
+            alarm_group=alarm_group, read_only=read_only, doc=doc,
+            fields=getattr(self.field_spec, 'fields', None),
+            cls_kwargs=cls_kwargs)
         self.__doc__ = doc
 
-    @property
-    def record_type(self):
-        'Record type if mocking a record (or None)'
-        return self.pvspec.cls_kwargs.get('mock_record', None)
+    def _record_type_from_kwargs(self, cls_kwargs):
+        'Get the record type from the given class kwargs'
+        return cls_kwargs.get('record') or cls_kwargs.get('mock_record')
 
     def __get__(self, instance, owner):
         if instance is None:
-            return self.pvspec
+            return self
         return instance.attr_pvdb[self.attr_name]
 
     def __set__(self, instance, value):
@@ -667,7 +703,7 @@ class SubGroup:
     _class_dict = None
 
     def __init__(self, group=None, *, prefix=None, macros=None,
-                 attr_separator=None, doc=None, base=None):
+                 attr_separator=None, doc=None, base=None, **init_kwargs):
         self.attr_name = None  # to be set later
 
         # group_dict is passed in -> generate class_dict -> generate group_cls
@@ -680,6 +716,7 @@ class SubGroup:
             self.attr_separator = attr_separator
         self.base = (PVGroup, ) if base is None else base
         self.__doc__ = doc
+        self.init_kwargs = init_kwargs
         # Set last with setter
         self.group = group
 
@@ -938,7 +975,7 @@ class pvfunction(SubGroup):
                           }
                 value = await self.func(group, **kwargs)
                 await group.retval.write(value)
-                await group.status.write(f'Success')
+                await group.status.write('Success')
             except Exception as ex:
                 await group.status.write(f'{ex.__class__.__name__}: {ex}')
                 raise
@@ -1112,6 +1149,7 @@ class PVGroup(metaclass=PVGroupMeta):
         ChannelType.INT: PvpropertyShort,
         ChannelType.LONG: PvpropertyInteger,
         ChannelType.DOUBLE: PvpropertyDouble,
+        ChannelType.FLOAT: PvpropertyFloat,
         ChannelType.ENUM: PvpropertyEnum,
         ChannelType.CHAR: PvpropertyChar,
     }
@@ -1132,6 +1170,7 @@ class PVGroup(metaclass=PVGroupMeta):
         ChannelType.INT: 0,
         ChannelType.LONG: 0,
         ChannelType.DOUBLE: 0.0,
+        ChannelType.FLOAT: 0.0,
         ChannelType.ENUM: 0,
         ChannelType.CHAR: '',
     }
@@ -1213,7 +1252,8 @@ class PVGroup(metaclass=PVGroupMeta):
 
             # instantiate the subgroup
             inst = subgroup_cls(prefix=prefix, macros=macros, parent=self,
-                                name=f'{self.name}.{attr}')
+                                name=f'{self.name}.{attr}',
+                                **subgroup.init_kwargs)
             self.groups[attr] = inst
 
             # find all sub-subgroups, giving direct access to them
@@ -1251,11 +1291,10 @@ class PVGroup(metaclass=PVGroupMeta):
 
     async def group_read(self, instance):
         'Generic read called for channels without `get` defined'
-        self.log.debug('no-op group read of %s', instance.pvspec.attr)
 
     async def group_write(self, instance, value):
         'Generic write called for channels without `put` defined'
-        self.log.debug('group write of %s = %s', instance.pvspec.attr, value)
+        self.log.debug('group_write: %s = %s', instance.pvspec.attr, value)
         return value
 
 
@@ -1308,7 +1347,7 @@ def template_arg_parser(*, desc, default_prefix, argv=None, macros=None,
     parser.add_argument('--async-lib', default=choices[0],
                         choices=choices,
                         help=("Which asynchronous library to use. "
-                              "Default is curio."))
+                              "Default is asyncio."))
     default_intf = get_server_address_list()
     if default_intf == ['0.0.0.0']:
         default_msg = '0.0.0.0'
@@ -1343,14 +1382,14 @@ def template_arg_parser(*, desc, default_prefix, argv=None, macros=None,
         """
         if args.verbose:
             if args.verbose > 1:
-                logging.getLogger('caproto').setLevel('DEBUG')
+                set_handler(level='DEBUG')
             else:
-                logging.getLogger('caproto.ctx').setLevel('DEBUG')
-                logging.getLogger('caproto.circ').setLevel('INFO')
+                _set_handler_with_logger(logger_name='caproto.ctx', level='DEBUG')
+                _set_handler_with_logger(logger_name='caproto.circ', level='INFO')
         elif args.quiet:
-            logging.getLogger('caproto').setLevel('WARNING')
+            set_handler(level='WARNING')
         else:
-            logging.getLogger('caproto.ctx').setLevel('INFO')
+            _set_handler_with_logger(logger_name='caproto.ctx', level='INFO')
 
         return ({'prefix': args.prefix,
                  'macros': {key: getattr(args, key) for key in macros}},

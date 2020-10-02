@@ -2,6 +2,8 @@
 Helper functions for dealing with EPICS base binaries (caget, caput, catest)
 '''
 
+import functools
+
 import os
 import sys
 import datetime
@@ -14,6 +16,26 @@ import curio.subprocess
 import trio
 
 import caproto as ca
+
+
+@functools.lru_cache(1)
+def has_caget():
+    try:
+        subprocess.run(['caget'])
+    except FileNotFoundError:
+        return False
+    else:
+        return True
+
+
+@functools.lru_cache(1)
+def has_caput():
+    try:
+        subprocess.run(['put'])
+    except FileNotFoundError:
+        return False
+    else:
+        return True
 
 
 async def run_epics_base_binary(backend, *args, max_attempts=3):
@@ -55,7 +77,7 @@ async def run_epics_base_binary(backend, *args, max_attempts=3):
     if backend == 'curio':
         raw_stdout, raw_stderr = await curio.run_in_thread(runner)
     elif backend == 'trio':
-        raw_stdout, raw_stderr = await trio.run_sync_in_worker_thread(runner)
+        raw_stdout, raw_stderr = await trio.to_thread.run_sync(runner)
     elif backend == 'asyncio':
         loop = asyncio.get_event_loop()
         raw_stdout, raw_stderr = await loop.run_in_executor(None, runner)
@@ -129,13 +151,22 @@ async def run_caget(backend, pv, *, dbr_type=None):
 
     if wide_mode:
         print('lines')
-        print(lines[0].split(sep))
-        pv, timestamp, value, stat, sevr = lines[0].split(sep)
-        info = dict(pv=pv,
-                    timestamp=timestamp,
-                    value=value,
-                    status=stat,
-                    severity=sevr)
+        if '*** CA error' in lines[0]:
+            error_message = lines[0]
+            info = dict(pv=pv,
+                        value=error_message[error_message.index('*'):]
+                        )
+        else:
+            print(lines[0].split(sep))
+            pv, timestamp, *value, stat, sevr = lines[0].split(sep)
+            if len(value) == 1:
+                value = value[0]
+
+            info = dict(pv=pv,
+                        timestamp=timestamp,
+                        value=value,
+                        status=stat,
+                        severity=sevr)
     else:
         info = dict(pv=lines[0])
         in_enum_section = False

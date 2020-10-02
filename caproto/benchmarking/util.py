@@ -1,9 +1,11 @@
 import os
+import pathlib
 import sys
 import subprocess
 import shutil
 import logging
 from contextlib import contextmanager
+import functools
 
 from .._utils import named_temporary_file
 
@@ -11,13 +13,27 @@ from .._utils import named_temporary_file
 logger = logging.getLogger(__name__)
 
 
+@functools.lru_cache(1)
+def has_softioc():
+    try:
+        subprocess.run(['softIoc'])
+    except FileNotFoundError:
+        return False
+    else:
+        return True
+
+
 def find_dbd_path():
     '''Find the path to database definitions, based on the environment'''
     if 'EPICS_BASE' in os.environ:
-        return os.path.join(os.environ['EPICS_BASE'], 'dbd')
+        epics_top = pathlib.Path(os.environ['EPICS_BASE'])
     else:
-        softioc_path = shutil.which('softIoc')
-        return os.path.abspath(os.path.join(softioc_path, '..', '..', 'dbd'))
+        # Path : epics_top / bin / host_arch / softIoc
+        # Index: 2           1     0
+        softioc_path = pathlib.Path(shutil.which('softIoc')).resolve()
+        epics_top = softioc_path.parents[2]
+
+    return epics_top.expanduser().resolve() / 'dbd'
 
 
 @contextmanager
@@ -182,7 +198,7 @@ class IocHandler:
     def teardown(self):
         for i, cm in enumerate(self._cms[:]):
             self.logger.debug('Tearing down soft IOC context manager #%d', i)
-            cm.__exit__(StopIteration, None, None)
+            cm.__exit__(None, None, None)
             self._cms.remove(cm)
 
         for i, proc in enumerate(self._softioc_processes[:]):

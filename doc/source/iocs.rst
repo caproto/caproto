@@ -28,6 +28,8 @@ in just a couple lines of Python. This opens up some interesting possibilities:
 Using the IOC Examples
 ======================
 
+.. currentmodule:: caproto.ioc_examples
+
 They can be started like so:
 
 .. code-block:: bash
@@ -56,6 +58,7 @@ Use ``--list-pvs`` to display which PVs they serve:
     [I 16:52:36.089 server:123] PVs available:
         simple:A
         simple:B
+        simple:C
 
 and use ``--prefix`` to conveniently customize the PV prefix:
 
@@ -68,6 +71,7 @@ and use ``--prefix`` to conveniently customize the PV prefix:
     [I 16:54:14.530 server:123] PVs available:
         my_custom_prefix:A
         my_custom_prefix:B
+        my_custom_prefix:C
 
 Type ``python3 -m caproto.ioc_examples.simple -h`` for more options.
 
@@ -86,7 +90,7 @@ used.
 
 .. ipython:: python
     :suppress:
-    
+
     import sys
     import subprocess
     import time
@@ -103,6 +107,12 @@ This IOC has two PVs that simply store a value.
 
 .. literalinclude:: ../../caproto/ioc_examples/simple.py
 
+.. autosummary::
+    :toctree: generated
+
+    ~simple.SimpleIOC
+
+
 .. ipython:: python
     :suppress:
 
@@ -117,17 +127,21 @@ This IOC has two PVs that simply store a value.
     [I 18:08:47.630 server:123] PVs available:
         simple:A
         simple:B
+        simple:C
 
 Using the threading client context we created above, we can read these values
 and write to them.
 
 .. ipython:: python
 
-    a, b = ctx.get_pvs('simple:A', 'simple:B')
+    a, b, c = ctx.get_pvs('simple:A', 'simple:B', 'simple:C')
     a.read()
     b.read()
-    b.write([5], wait=True)
+    c.read()
+    b.write(5)
     b.read()
+    c.write([4, 5, 6])
+    c.read()
 
 Write to a File When a PV is Written To
 ---------------------------------------
@@ -149,15 +163,15 @@ Write to a File When a PV is Written To
 
     run_example('caproto.ioc_examples.custom_write')
 
-On the machine where the server redies, we will see files update whenever any
+On the machine where the server resides, we will see files update whenever any
 client writes.
 
 .. ipython:: python
 
     a, b = ctx.get_pvs('custom_write:A', 'custom_write:B')
-    a.write([5], wait=True)
+    a.write(5)
     print(open('/tmp/A').read())
-    a.write([10], wait=True)
+    a.write(10)
     print(open('/tmp/A').read())
 
 It is easy to imagine extending this example to write a socket or a serial
@@ -169,12 +183,49 @@ Random Walk
 This example contains a PV ``random_walk:x`` that takes random steps at an
 update rate controlled by a second PV, ``random_walk:dt``.
 
+.. autosummary::
+    :toctree: generated
+
+    ~random_walk.RandomWalkIOC
+
 .. literalinclude:: ../../caproto/ioc_examples/random_walk.py
+
+.. note::
+
+   **What is async_lib.library.sleep?**
+
+   As caproto supports three different async libraries, we have an "async
+   layer" class that gives compatible async versions of commonly-used
+   synchronization primitives. The attribute ``async_lib.library`` would be either
+   the Python module ``asyncio`` (default), ``trio``, or ``curio``, depending on how
+   the server is run.  It happens that all three of these modules have a ``sleep``
+   function at the top level, so ``async_lib.library.sleep`` accesses the
+   appropriate sleep function for each library.
+
+   **Why not use time.sleep?**
+
+   The gist is that ``asyncio.sleep`` doesn't hold up your entire thread /
+   event loop, but gives back control to the event loop to run other tasks while
+   sleeping. The function ``time.sleep``, on the other hand, would cause
+   noticeable delays and problems.
+
+   This is a fundamental consideration in concurrent programming generally,
+   not specific to caproto. See for example
+   `this StackOverflow post <https://stackoverflow.com/questions/46207991/what-does-yield-from-asyncio-sleepdelay-do>`_
+   for more information.
+
 
 I/O Interrupt
 -------------
 
 This example listens for key presses.
+
+.. autosummary::
+    :toctree: generated
+
+    ~io_interrupt.start_io_interrupt_monitor
+    ~io_interrupt.IOInterruptIOC
+
 
 .. literalinclude:: ../../caproto/ioc_examples/io_interrupt.py
 
@@ -220,6 +271,12 @@ the client will receive the updates:
 
 Macros for PV names
 -------------------
+
+.. autosummary::
+    :toctree: generated
+
+    ~macros.MacroifiedNames
+
 
 .. literalinclude:: ../../caproto/ioc_examples/macros.py
 
@@ -295,18 +352,24 @@ Access clients and decomposing into flat PVs for Channel Access clients.
         subgroups:group3_prefix:random
         subgroups:group4:subgroup4:random
 
-.. _mocking_records_example:
+.. _records_example:
 
-Mocking Records
----------------
+Records
+-------
 
-See :doc:`mock-records`.
+See :doc:`records`.
 
-.. literalinclude:: ../../caproto/ioc_examples/mocking_records.py
+.. autosummary::
+    :toctree: generated
+
+    ~records.RecordMockingIOC
+
+
+.. literalinclude:: ../../caproto/ioc_examples/records.py
 
 .. code-block:: bash
 
-    python -m caproto.ioc_examples.mocking_records --list-pvs
+    python -m caproto.ioc_examples.records --list-pvs
     PVs: ['mock:A', 'mock:B']
     Fields of B: ['ACKS', 'ACKT', 'ASG', 'DESC', 'DISA', 'DISP', 'DISS', 'DISV', 'DTYP', 'EVNT', 'FLNK', 'LCNT', 'NAME', 'NSEV', 'NSTA', 'PACT', 'PHAS', 'PINI', 'PRIO', 'PROC', 'PUTF', 'RPRO', 'SCAN', 'SDIS', 'SEVR', 'TPRO', 'TSE', 'TSEL', 'UDF', 'RTYP', 'STAT', 'RVAL', 'INIT', 'MLST', 'LALM', 'ALST', 'LBRK', 'ORAW', 'ROFF', 'SIMM', 'SVAL', 'HYST', 'HIGH', 'HSV', 'HIHI', 'HHSV', 'LOLO', 'LLSV', 'LOW', 'LSV', 'AOFF', 'ASLO', 'EGUF', 'EGUL', 'LINR', 'EOFF', 'ESLO', 'SMOO', 'ADEL', 'PREC', 'EGU', 'HOPR', 'LOPR', 'MDEL', 'INP', 'SIOL', 'SIML', 'SIMS']
     [I 11:07:48.635 server:132] Server starting up...
@@ -386,11 +449,38 @@ behavior.
     randstr.read()
     randstr.read()
 
+
+Mini-Beamline
+-------------
+
+Simulate your own mini beamline with this IOC.
+
+.. autosummary::
+    :toctree: generated
+
+    ~mini_beamline
+    ~mini_beamline.MiniBeamline
+    ~mini_beamline.PinHole
+    ~mini_beamline.Edge
+    ~mini_beamline.Slit
+    ~mini_beamline.MovingDot
+
+
 More...
 -------
 
 Take a look around
-`the ioc_examples subpackage <https://github.com/NSLS-II/caproto/tree/master/caproto/ioc_examples>`_ for more examples not covered here.
+`the ioc_examples subpackage <https://github.com/caproto/caproto/tree/master/caproto/ioc_examples>`_ for more examples not covered here.
+
+
+.. autosummary::
+    :toctree: generated
+
+    ~enums.EnumIOC
+    ~autosave.AutosavedSimpleIOC
+    ~decay.Decay
+    ~scan_rate.ScanRateIOC
+
 
 .. ipython:: python
     :suppress:
@@ -400,3 +490,36 @@ Take a look around
         p.terminate()
     for p in processes:
         p.wait()
+
+
+Helpers
+-------
+
+caproto offers several "helper" subgroups (:class:`~caproto.server.SubGroup`)
+that are of general use, and could be considered part of the "caproto server
+standard library", so to speak.
+
+Autosave
+^^^^^^^^
+
+.. currentmodule:: caproto.server.autosave
+
+.. autosummary::
+    :toctree: generated
+
+    AutosaveHelper
+    RotatingFileManager
+
+
+Status / Statistics
+^^^^^^^^^^^^^^^^^^^
+
+.. currentmodule:: caproto.server.stats
+
+.. autosummary::
+    :toctree: generated
+
+    StatusHelper
+    BasicStatusHelper
+    PeriodicStatusHelper
+    MemoryTracingHelper

@@ -9,38 +9,66 @@ from ..server.common import (VirtualCircuit as _VirtualCircuit,
                              Context as _Context, LoopExit,
                              DisconnectedCircuit)
 from .util import open_memory_channel
+from .._utils import safe_getsockname
 
 
 class ServerExit(Exception):
     ...
 
 
-class Event(trio.Event):
+class Event:
+    """
+    The class wraps `trio.Event` and implements `Event.clear()`
+    method that is used in the code, but deprecated in `trio`.
+    The event is cleared by creating the new event that if the
+    event is set. If the event is not set, then old event is left.
+    The class is not intended to be thread safe.
+    """
+    def __init__(self):
+        self._create_event()
+
+    def _create_event(self):
+        self._event = trio.Event()
+
+    def set(self):
+        self._event.set()
+
+    def clear(self):
+        """
+        Clearing of the event is implemented by creating a new
+        event if the event is set. It is assumed that if the event
+        is set, then it is not waited on.
+        """
+        if self._event.is_set():
+            self._create_event()
+
+    def is_set(self):
+        return self._event.is_set()
+
     async def wait(self, timeout=None):
         if timeout is not None:
             with trio.move_on_after(timeout):
-                await super().wait()
+                await self._event.wait()
                 return True
             return False
         else:
-            await super().wait()
+            await self._event.wait()
             return True
 
 
-def _universal_queue(portal, max_len=1000):
+def _universal_queue(max_len=1000):
     class UniversalQueue:
         def __init__(self):
             self._send, self._recv = open_memory_channel(max_len)
-            self.portal = portal
 
         def put(self, value):
-            self.portal.run(self._send.send, value)
+            trio.from_thread.run(self._send.send, value)
 
         async def async_put(self, value):
             await self._send.send(value)
 
         def get(self):
-            return self.portal.run(self._recv.receive)
+            return trio.from_thread.run(self._recv.receive)
 
         async def async_get(self):
             return await self._recv.receive()
@@ -50,11 +78,11 @@ def _universal_queue(portal, max_len=1000):
 
 class TrioAsyncLayer(AsyncLibraryLayer):
     def __init__(self):
-        self.portal = trio.BlockingTrioPortal()
-        self.ThreadsafeQueue = _universal_queue(self.portal)
+        self.ThreadsafeQueue = _universal_queue()
 
     name = 'trio'
     ThreadsafeQueue = None
+    Event = Event
     library = trio
 
 
@@ -64,6 +92,7 @@ class VirtualCircuit(_VirtualCircuit):
 
     def __init__(self, circuit, client, context):
         super().__init__(circuit, client, context)
+        self._raw_lock = trio.Lock()
         self.nursery = context.nursery
         self.QueueFull = trio.WouldBlock
 
@@ -153,6 +182,8 @@ class Context(_Context):
     async def broadcaster_udp_server_loop(self, task_status):
         for interface in self.interfaces:
             udp_sock = ca.bcast_socket(socket)
+            self.broadcaster.server_addresses.append(
+                safe_getsockname(udp_sock))
             try:
                 await udp_sock.bind((interface, self.ca_server_port))
             except Exception:
@@ -215,7 +246,7 @@ class Context(_Context):
                 for address in ca.get_beacon_address_list():
                     sock = ca.bcast_socket(socket)
                     await sock.connect(address)
-                    interface, _ = sock.getsockname()
+                    interface, _ = safe_getsockname(sock)
                     self.beacon_socks[address] = (interface, sock)
 
                 async def make_socket(interface, port):
@@ -268,7 +299,7 @@ class Context(_Context):
                 sock.close()
             for sock in self.udp_socks.values():
                 sock.close()
-            for interface, sock in self.beacon_socks.values():
+            for _interface, sock in self.beacon_socks.values():
                 sock.close()
 
     def stop(self):

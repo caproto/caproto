@@ -1,4 +1,5 @@
 import array
+import copy
 import ctypes
 import sys
 from ._backend import Backend, register_backend, convert_values
@@ -12,7 +13,7 @@ default_endian = ('>' if sys.byteorder == 'big'
 
 class Array(array.ArrayType):
     'Simple array.array subclass which tracks endianness'
-    __dict__ = {}
+    __slots__ = ('endian',)
 
     def __init__(self, type_code, values, *, endian=default_endian):
         self.endian = endian
@@ -31,6 +32,12 @@ class Array(array.ArrayType):
         self.endian = {'<': '>',
                        '>': '<'}[self.endian]
         super().byteswap()
+
+    if 'pypy' in sys.implementation.name:
+        def __deepcopy__(self, memo):
+            # this works around a bug in deepcopy on pypy
+            ret = copy.deepcopy(array.ArrayType(self.typecode, self))
+            return Array(self.typecode, ret, endian=self.endian)
 
 
 type_map = {

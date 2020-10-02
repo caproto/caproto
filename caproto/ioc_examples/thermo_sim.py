@@ -33,7 +33,7 @@ class Thermo(PVGroup):
 
     readback = pvproperty(value=0, dtype=float, read_only=True,
                           name='I',
-                          mock_record='ai')
+                          record='ai')
 
     setpoint = pvproperty(value=100, dtype=float, name='SP')
     K = pvproperty(value=10, dtype=float)

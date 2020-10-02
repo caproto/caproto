@@ -11,13 +11,15 @@ For access to the underlying functionality from a Python script or interactive
 Python session, do not import this module; instead import caproto.sync.client.
 """
 import argparse
-from datetime import datetime
-import functools
-import logging
 import time
-from ..sync.client import subscribe, block
-from .. import SubscriptionType, set_handler, __version__
+from datetime import datetime
+
+from .. import SubscriptionType, __version__, set_handler
+from .._log import _set_handler_with_logger
 from .._utils import ShowVersionAction
+from ..sync.client import block, subscribe
+from .cli_print_formats import (clean_format_args, format_response_data,
+                                format_str_adjust, gen_data_format)
 
 
 def main():
@@ -57,6 +59,10 @@ def main():
     parser.add_argument('-n', action='store_true',
                         help=("Retrieve enums as integers (default is "
                               "strings)."))
+    parser.add_argument('-S', dest="array_as_str", action='store_true',
+                        help=("Print array of char as a string (long string)"))
+    parser.add_argument('-#', dest="data_count", type=int, metavar="COUNT",
+                        help=("Print first COUNT elements of an array"))
     parser.add_argument('--no-color', action='store_true',
                         help="Suppress ANSI color codes in log messages.")
     parser.add_argument('--no-repeater', action='store_true',
@@ -65,14 +71,62 @@ def main():
     parser.add_argument('--version', '-V', action='show_version',
                         default=argparse.SUPPRESS,
                         help="Show caproto version and exit.")
+
+    fmt_group_float = parser.add_argument_group(
+        title="Floating point type format",
+        description=("If --format is set, the following arguments change formatting of the "
+                     "{response.data} field if floating point value is displayed. "
+                     "The default format is %g."))
+    fmt_group_float.add_argument(
+        '-e', dest="float_e", type=int, metavar="<nr>", action="store",
+        help=("Use %%e format with precision of <nr> digits (e.g. -e5 or -e 5)"))
+    fmt_group_float.add_argument(
+        '-f', dest="float_f", type=int, metavar="<nr>", action="store",
+        help=("Use %%f format with precision of <nr> digits (e.g. -f5 or -f 5)"))
+    fmt_group_float.add_argument(
+        '-g', dest="float_g", type=int, metavar="<nr>", action="store",
+        help=("Use %%g format with precision of <nr> digits (e.g. -g5 or -g 5)"))
+    fmt_group_float.add_argument(
+        '-s', dest="float_s", action="store_true",
+        help=("Get value as string (honors server-side precision)"))
+    fmt_group_float.add_argument(
+        '-lx', dest="float_lx", action="store_true",
+        help=("Round to long integer and print as hex number"))
+    fmt_group_float.add_argument(
+        '-lo', dest="float_lo", action="store_true",
+        help=("Round to long integer and print as octal number"))
+    fmt_group_float.add_argument(
+        '-lb', dest="float_lb", action="store_true",
+        help=("Round to long integer and print as binary number"))
+
+    fmt_group_int = parser.add_argument_group(
+        title="Integer number format",
+        description="If --format is set, the following arguments change formatting of the "
+                    "{response.data} field if integer value is displayed. "
+                    "Decimal number is displayed by default.")
+    fmt_group_int.add_argument('-0x', dest="int_0x", action="store_true",
+                               help=("Print as hex number"))
+    fmt_group_int.add_argument('-0o', dest="int_0o", action="store_true",
+                               help=("Print as octal number"))
+    fmt_group_int.add_argument('-0b', dest="int_0b", action="store_true",
+                               help=("Print as binary number"))
+
+    fmt_group_sep = parser.add_argument_group(title="Custom output field separator")
+    fmt_group_sep.add_argument(
+        '-F', type=str, metavar="<ofs>", action="store",
+        help=("Use <ofs> as an alternate output field separator (e.g. -F*, -F'*', -F '*', -F ' ** ')"))
+
     args = parser.parse_args()
-    if args.no_color:
-        set_handler(color=False)
+    # Remove contradicting format arguments. This function may be simply removed from code
+    #        if the functionality is not desired.
+    clean_format_args(args=args)
+
     if args.verbose:
-        logging.getLogger('caproto.ch').setLevel('DEBUG')
-        logging.getLogger(f'caproto.ctx').setLevel('DEBUG')
-        if args.verbose > 2:
-            logging.getLogger('caproto').setLevel('DEBUG')
+        if args.verbose <= 2:
+            _set_handler_with_logger(color=not args.no_color, level='DEBUG', logger_name='caproto.ch')
+            _set_handler_with_logger(color=not args.no_color, level='DEBUG', logger_name='caproto.ctx')
+        else:
+            set_handler(color=not args.no_color, level='DEBUG')
 
     mask = 0
     if 'v' in args.m:
@@ -87,17 +141,33 @@ def main():
     history = []
     tokens = {'callback_count': 0}
 
-    def callback(pv_name, response):
+    def callback(sub, response):
         tokens['callback_count'] += 1
+        pv_name = sub.pv_name
+
+        data_fmt = gen_data_format(args=args, data=response.data)
+
         if args.format is None:
-            format_str = ("{pv_name: <40}  {timestamp:%Y-%m-%d %H:%M:%S.%f} "
-                          "{response.data}")
+            if args.F is None:
+                format_str = ("{pv_name: <40}  {timestamp:%Y-%m-%d %H:%M:%S.%f} "
+                              "{response.data}")
+            else:
+                format_str = ("{pv_name}  {timestamp:%Y-%m-%d %H:%M:%S.%f} "
+                              "{response.data}")
         else:
             format_str = args.format
+
+        format_str = format_str_adjust(format_str=format_str, data_fmt=data_fmt)
+
+        response_data_str = format_response_data(data=response.data,
+                                                 data_fmt=data_fmt)
+
         tokens['pv_name'] = pv_name
         tokens['response'] = response
         dt = datetime.fromtimestamp(response.metadata.timestamp)
         tokens['timestamp'] = dt
+        tokens['response_data'] = response_data_str
+
         if history:
             # Add a {timedelta} token using the previous timestamp.
             td = dt - history.pop()
@@ -119,10 +189,10 @@ def main():
         for pv_name in args.pv_names:
             sub = subscribe(pv_name,
                             mask=mask,
+                            data_count=args.data_count,
                             priority=args.priority)
-            cb = functools.partial(callback, pv_name)
-            sub.add_callback(cb)
-            cbs.append(cb)  # Hold ref to keep cb from being garbage collected.
+            sub.add_callback(callback)
+            cbs.append(callback)  # Hold ref to keep it from being garbage collected.
             subs.append(sub)
         # Wait to be interrupted by KeyboardInterrupt.
         block(*subs, duration=args.duration, timeout=args.timeout,

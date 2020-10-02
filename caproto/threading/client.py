@@ -20,25 +20,25 @@ import os
 import random
 import selectors
 import socket
-import sys
 import threading
 import time
 import weakref
-
-from queue import Queue, Empty
-from inspect import Parameter, Signature
-from functools import partial
 from collections import defaultdict, deque
+from inspect import Parameter, Signature
+from queue import Empty, Queue
+
 import caproto as ca
-from .._constants import (MAX_ID, STALE_SEARCH_EXPIRATION,
-                          SEARCH_MAX_DATAGRAM_BYTES, RESPONSIVENESS_TIMEOUT)
-from .._utils import (batch_requests, CaprotoError, ThreadsafeCounter,
-                      socket_bytes_available, CaprotoTimeoutError,
-                      CaprotoTypeError, CaprotoRuntimeError, CaprotoValueError,
-                      CaprotoKeyError, CaprotoNetworkError)
 
+from .._constants import (MAX_ID, RESPONSIVENESS_TIMEOUT,
+                          SEARCH_MAX_DATAGRAM_BYTES, STALE_SEARCH_EXPIRATION)
+from .._utils import (CaprotoError, CaprotoKeyError, CaprotoNetworkError,
+                      CaprotoRuntimeError, CaprotoTimeoutError,
+                      CaprotoTypeError, CaprotoValueError, ThreadsafeCounter,
+                      adapt_old_callback_signature, batch_requests,
+                      safe_getsockname, socket_bytes_available)
 
-print = partial(print, flush=True)
+ch_logger = logging.getLogger('caproto.ch')
+search_logger = logging.getLogger('caproto.bcast.search')
 
 
 CIRCUIT_DEATH_ATTEMPTS = 3
@@ -46,6 +46,7 @@ CIRCUIT_DEATH_ATTEMPTS = 3
 # sentinels used as default values for arguments
 CONTEXT_DEFAULT_TIMEOUT = object()
 PV_DEFAULT_TIMEOUT = object()
+GLOBAL_DEFAULT_TIMEOUT = os.environ.get("CAPROTO_DEFAULT_TIMEOUT", 2)
 
 
 class DeadCircuitError(CaprotoError):
@@ -86,14 +87,14 @@ def ensure_connected(func):
                     chan = ca.ClientChannel(pv.name, cm.circuit, cid=cid)
                     cm.channels[cid] = chan
                     cm.pvs[cid] = pv
-                    pv.circuit_manager.send(chan.create())
+                    pv.circuit_manager.send(chan.create(), extra={'pv': pv.name})
                     self._idle = False
             # increment the usage at the very end in case anything
             # goes wrong in the block of code above this.
             pv._usages += 1
 
         try:
-            for i in range(CIRCUIT_DEATH_ATTEMPTS):
+            for _ in range(CIRCUIT_DEATH_ATTEMPTS):
                 # On each iteration, subtract the time we already spent on any
                 # previous attempts.
                 if timeout is not None:
@@ -169,19 +170,15 @@ class SelectorThread:
         self._close_event = threading.Event()
         self.selector = selectors.DefaultSelector()
 
-        if sys.platform == 'win32':
-            # Empty select() list is problematic for windows
-            dummy_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self.selector.register(dummy_socket, selectors.EVENT_READ)
-
+        self._register_event = threading.Event()
         self._socket_map_lock = threading.RLock()
         self.objects = weakref.WeakValueDictionary()
-        self.id_to_socket = {}
         self.socket_to_id = {}
 
-        self._register_sockets = set()
+        self._register_sockets = {}  # {socket: object_id}
         self._unregister_sockets = set()
         self._object_id = 0
+        self._socket_count = 0
 
         if parent is not None:
             # Stop the selector if the parent goes out of scope
@@ -194,6 +191,9 @@ class SelectorThread:
 
     def stop(self):
         self._close_event.set()
+
+        # In case we're waiting for the first socket to be added:
+        self._register_event.set()
 
     def start(self):
         if self._close_event.is_set():
@@ -212,12 +212,10 @@ class SelectorThread:
             # assumption: only one sock per object
             self._object_id += 1
             self.objects[self._object_id] = target_obj
-            self.id_to_socket[self._object_id] = sock
             self.socket_to_id[sock] = self._object_id
+            self._register_sockets[sock] = self._object_id
             weakref.finalize(target_obj,
-                             lambda obj_id=self._object_id:
-                             self._object_removed(obj_id))
-            self._register_sockets.add(sock)
+                             lambda sock=sock: self.remove_socket(sock))
             # self.log.debug('Socket %s was added (obj %s)', sock, target_obj)
 
     def remove_socket(self, sock):
@@ -225,42 +223,40 @@ class SelectorThread:
             if sock not in self.socket_to_id:
                 return
             obj_id = self.socket_to_id.pop(sock)
-            del self.id_to_socket[obj_id]
             obj = self.objects.pop(obj_id, None)
             if obj is not None:
                 obj.received(b'', None)
 
-            if sock in self._register_sockets:
+            try:
                 # removed before it was even added...
                 # self.log.debug('Socket %s was removed before it was added '
                 #              '(obj = %s)', sock, obj)
-                self._register_sockets.remove(sock)
-            else:
+                self._register_sockets.pop(sock)
+            except KeyError:
                 # self.log.debug('Socket %s was removed '
                 #              '(obj = %s)', sock, obj)
-                self._unregister_sockets.add(sock)
-
-    def _object_removed(self, obj_id):
-        with self._socket_map_lock:
-            if obj_id in self.id_to_socket:
-                sock = self.id_to_socket.pop(obj_id)
-                # self.log.debug('Object ID %s was destroyed: removing %s', obj_id,
-                #              sock)
-                del self.socket_to_id[sock]
                 self._unregister_sockets.add(sock)
 
     def __call__(self):
         '''Selector poll loop'''
         avail_buf = array.array('i', [0])
-        while not self._close_event.is_set():
+        while self.running:
             with self._socket_map_lock:
                 for sock in self._unregister_sockets:
                     self.selector.unregister(sock)
+                self._socket_count -= len(self._unregister_sockets)
                 self._unregister_sockets.clear()
 
-                for sock in self._register_sockets:
-                    self.selector.register(sock, selectors.EVENT_READ)
+                for sock, obj_id in self._register_sockets.items():
+                    self.selector.register(sock, selectors.EVENT_READ,
+                                           data=obj_id)
+                self._socket_count += len(self._register_sockets)
                 self._register_sockets.clear()
+
+            if self._socket_count == 0:
+                if self._register_event.wait(timeout=0.1):
+                    self._register_event.clear()
+                continue
 
             events = self.selector.select(timeout=0.1)
             with self._socket_map_lock:
@@ -268,12 +264,10 @@ class SelectorThread:
                     # some sockets may be affected here; try again
                     continue
 
-                ready_ids = [self.socket_to_id[key.fileobj]
-                             for key, mask in events]
-                ready_objs = [(self.objects[obj_id], self.id_to_socket[obj_id])
-                              for obj_id in ready_ids]
+                object_and_socket = [(self.objects[key.data], key.fileobj)
+                                     for key, mask in events]
 
-            for obj, sock in ready_objs:
+            for obj, sock in object_and_socket:
                 if sock in self._unregister_sockets:
                     continue
 
@@ -282,7 +276,6 @@ class SelectorThread:
                     bytes_available = socket_bytes_available(
                         sock, available_buffer=avail_buf)
                     bytes_recv, address = sock.recvfrom(bytes_available)
-                    obj.log.debug("got bytes for me")
                 except OSError as ex:
                     if ex.errno != errno.EAGAIN:
                         # register as a disconnection
@@ -291,14 +284,24 @@ class SelectorThread:
                         self.remove_socket(sock)
                     continue
 
-                # Let objects handle disconnection by returning a failure here
-                if obj.received(bytes_recv, address) is ca.DISCONNECTED:
-                    obj.log.debug('Removing %s = %s due to receive failure',
-                                  sock, obj)
-                    self.remove_socket(sock)
-
-                    # TODO: consider adding specific DISCONNECTED instead of b''
-                    # sent to disconnected sockets
+                try:
+                    # Let objects handle disconnection by return value
+                    if obj.received(bytes_recv, address) is ca.DISCONNECTED:
+                        obj.log.debug('Removing %s = %s after DISCONNECTED '
+                                      'return value', sock, obj)
+                        self.remove_socket(sock)
+                        # TODO: consider adding specific DISCONNECTED instead
+                        # of b'' sent to disconnected sockets
+                except Exception as ex:
+                    if sock.type == socket.SOCK_DGRAM:
+                        obj.log.exception(
+                            'UDP socket for %s failed on receipt of '
+                            'new data: %s', obj, ex)
+                    else:
+                        obj.log.exception(
+                            'Removing %s due to an internal error on receipt of '
+                            'new data: %s', obj, ex)
+                        self.remove_socket(sock)
 
 
 class SharedBroadcaster:
@@ -316,6 +319,9 @@ class SharedBroadcaster:
         self.ca_server_port = self.environ['EPICS_CA_SERVER_PORT']
 
         self.udp_sock = ca.bcast_socket()
+        # Must bind or getsocketname() will raise on Windows.
+        # See https://github.com/caproto/caproto/issues/514.
+        self.udp_sock.bind(('', 0))
 
         self._search_lock = threading.RLock()
         self._retry_unanswered_searches_thread = None
@@ -327,7 +333,8 @@ class SharedBroadcaster:
         self._search_now = threading.Event()
 
         self.search_results = {}  # map name to (time, address)
-        self.unanswered_searches = {}  # map search id (cid) to [name, queue, retirement_deadline]
+        # map search id (cid) to [name, queue, last_search_time, retirement_deadline]
+        self.unanswered_searches = {}
         self.server_protocol_versions = {}  # map address to protocol version
 
         self._id_counter = ThreadsafeCounter(
@@ -338,7 +345,11 @@ class SharedBroadcaster:
         self.listeners = weakref.WeakSet()
 
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
-        self.log = self.broadcaster.log
+        self.broadcaster.client_address = safe_getsockname(self.udp_sock)
+        self.log = logging.LoggerAdapter(
+            self.broadcaster.log, {'role': 'CLIENT'})
+        self.search_log = logging.LoggerAdapter(
+            logging.getLogger('caproto.bcast.search'), {'role': 'CLIENT'})
         self.command_bundle_queue = Queue()
         self.last_beacon = {}
         self.last_beacon_interval = {}
@@ -386,9 +397,24 @@ class SharedBroadcaster:
     def _register(self):
         'Send a registration request to the repeater'
         self._registration_last_sent = time.monotonic()
-        command = self.broadcaster.register()
+        commands = [self.broadcaster.register()]
+        bytes_to_send = self.broadcaster.send(*commands)
+        addr = (ca.get_local_address(), self.environ['EPICS_CA_REPEATER_PORT'])
+        tags = {
+            'role': 'CLIENT',
+            'our_address': self.broadcaster.client_address,
+            'direction': '--->>>',
+            'their_address': addr,
+        }
+        self.broadcaster.log.debug(
+            '%d commands %dB', len(commands), len(bytes_to_send), extra=tags)
 
-        self.send(ca.EPICS_CA2_PORT, command)
+        try:
+            self.udp_sock.sendto(bytes_to_send, addr)
+        except OSError as ex:
+            host, specified_port = addr
+            self.log.exception('%s while sending %d bytes to %s:%d',
+                               ex, len(bytes_to_send), host, specified_port)
         self._searching_enabled.set()
 
     def new_id(self):
@@ -419,7 +445,8 @@ class SharedBroadcaster:
             self.udp_sock = None
 
         self._close_event.set()
-        self.search_results.clear()
+        with self._search_lock:
+            self.search_results.clear()
         self._registration_last_sent = 0
         self._searching_enabled.clear()
         self.broadcaster.disconnect()
@@ -429,23 +456,23 @@ class SharedBroadcaster:
             self.selector.thread.join()
             self._retry_unanswered_searches_thread.join()
 
-    def send(self, port, *commands):
+    def send(self, *commands):
         """
         Process a command and transport it over the UDP socket.
         """
         bytes_to_send = self.broadcaster.send(*commands)
-        for host in ca.get_address_list():
-            if ':' in host:
-                host, _, port_as_str = host.partition(':')
-                specified_port = int(port_as_str)
-            else:
-                specified_port = port
+        tags = {'role': 'CLIENT',
+                'our_address': self.broadcaster.client_address,
+                'direction': '--->>>'}
+        for host_tuple in ca.get_client_address_list():
+            tags['their_address'] = host_tuple
+            self.broadcaster.log.debug(
+                '%d commands %dB',
+                len(commands), len(bytes_to_send), extra=tags)
             try:
-                self.broadcaster.log.debug(
-                    'Sending %d bytes to %s:%d',
-                    len(bytes_to_send), host, specified_port)
-                self.udp_sock.sendto(bytes_to_send, (host, specified_port))
+                self.udp_sock.sendto(bytes_to_send, host_tuple)
             except OSError as ex:
+                host, specified_port = host_tuple
                 raise CaprotoNetworkError(
                     f'{ex} while sending {len(bytes_to_send)} bytes to '
                     f'{host}:{specified_port}') from ex
@@ -453,7 +480,8 @@ class SharedBroadcaster:
     def get_cached_search_result(self, name, *,
                                  threshold=STALE_SEARCH_EXPIRATION):
         'Returns address if found, raises KeyError if missing or stale.'
-        address, timestamp = self.search_results[name]
+        with self._search_lock:
+            address, timestamp = self.search_results[name]
         # this block of code is only to re-fresh the time found on
         # any PVs.  If we can find any context which has any circuit which
         # has any channel talking to this PV name then it is not stale so
@@ -461,16 +489,18 @@ class SharedBroadcaster:
         if time.monotonic() - timestamp > threshold:
             # TODO this is very inefficient
             for context in self.listeners:
-                for addr, cm in context.circuit_managers.items():
+                for cm in context.circuit_managers.values():
                     if cm.connected and name in cm.all_created_pvnames:
                         # A valid connection exists in one of our clients, so
                         # ignore the stale result status
-                        self.search_results[name] = (address, time.monotonic())
+                        with self._search_lock:
+                            self.search_results[name] = (address, time.monotonic())
                         # TODO verify that addr matches address
                         return address
 
-            # Clean up expired result.
-            self.search_results.pop(name, None)
+            with self._search_lock:
+                # Clean up expired result.
+                self.search_results.pop(name, None)
             raise CaprotoKeyError(f'{name!r}: stale search result')
 
         return address
@@ -523,7 +553,8 @@ class SharedBroadcaster:
                 search_ids.append(search_id)
                 # The value is a list because we mutate it to update the
                 # retirement deadline sometimes.
-                unanswered_searches[search_id] = [name, results_queue, retirement_deadline]
+                unanswered_searches[search_id] = [name, results_queue,
+                                                  0, retirement_deadline]
         self._search_now.set()
 
     def cancel(self, *names):
@@ -592,23 +623,27 @@ class SharedBroadcaster:
 
             queues.clear()
             now = time.monotonic()
+            tags = {'role': 'CLIENT',
+                    'our_address': self.broadcaster.client_address,
+                    'direction': '<<<---'}
             for command in commands:
                 if isinstance(command, ca.Beacon):
                     now = time.monotonic()
                     address = (command.address, command.server_port)
+                    tags['their_address'] = address
                     if address not in self.last_beacon:
                         # We made a new friend!
-                        self.log.info("Watching Beacons from %s:%d",
-                                      *address)
+                        self.broadcaster.log.info("Watching Beacons from %s:%d",
+                                                  *address, extra=tags)
                         self._new_server_found()
                     else:
                         interval = now - self.last_beacon[address]
                         if interval < self.last_beacon_interval.get(address, 0) / 4:
                             # Beacons are arriving *faster*? The server at this
                             # address may have restarted.
-                            self.log.info(
+                            self.broadcaster.log.info(
                                 "Beacon anomaly: %s:%d may have restarted.",
-                                *address)
+                                *address, extra=tags)
                             self._new_server_found()
                         self.last_beacon_interval[address] = interval
                     self.last_beacon[address] = now
@@ -629,7 +664,7 @@ class SharedBroadcaster:
                     cid = command.cid
                     try:
                         with self._search_lock:
-                            name, queue, _ = unanswered_searches.pop(cid)
+                            name, queue, *_ = unanswered_searches.pop(cid)
                     except KeyError:
                         # This is a redundant response, which the EPICS
                         # spec tells us to ignore. (The first responder
@@ -639,23 +674,27 @@ class SharedBroadcaster:
                         except StopIteration:
                             continue
                         else:
-                            if name in self.search_results:
-                                accepted_address, _ = self.search_results[name]
-                                new_address = ca.extract_address(command)
-                                if new_address != accepted_address:
-                                    self.log.warning(
-                                        "PV %s with cid %d found on multiple "
-                                        "servers. Accepted address is %s:%d. "
-                                        "Also found on %s:%d",
-                                        name, cid, *accepted_address, *new_address)
+                            with self._search_lock:
+                                if name in search_results:
+                                    accepted_address, _ = search_results[name]
+                                    new_address = ca.extract_address(command)
+                                    if new_address != accepted_address:
+                                        search_logger.warning(
+                                            "PV %s with cid %d found on multiple "
+                                            "servers. Accepted address is %s:%d. "
+                                            "Also found on %s:%d",
+                                            name, cid, *accepted_address, *new_address,
+                                            extra={'pv': name,
+                                                   'their_address': accepted_address,
+                                                   'our_address': self.broadcaster.client_address})
                     else:
                         results_by_cid.append((cid, name))
                         address = ca.extract_address(command)
                         queues[queue].append(name)
                         # Cache this to save time on future searches.
                         # (Entries expire after STALE_SEARCH_EXPIRATION.)
-                        self.log.debug('Found %s at %s:%d', name, *address)
-                        search_results[name] = (address, now)
+                        with self._search_lock:
+                            search_results[name] = (address, now)
                         server_protocol_versions[address] = command.version
             # Send the search results to the Contexts that asked for
             # them. This is probably more general than is has to be but
@@ -672,7 +711,28 @@ class SharedBroadcaster:
         retirement_deadline = time.monotonic() + SEARCH_RETIREMENT_AGE
         with self._search_lock:
             for item in self.unanswered_searches.values():
+                # give new age-out deadline
                 item[-1] = retirement_deadline
+
+    def time_since_last_heard(self):
+        """
+        Map each known server address to seconds since its last message.
+
+        The time is reset to 0 whenever we receive a TCP message related to
+        user activity *or* a Beacon. Servers are expected to send Beacons at
+        regular intervals. If we do not receive either a Beacon or TCP message,
+        we initiate an Echo over TCP, to which the server is expected to
+        promptly respond.
+
+        Therefore, the time reported here should not much exceed
+        ``EPICS_CA_CONN_TMO`` (default 30 seconds unless overriden by that
+        environment variable) if the server is healthy.
+
+        If the server fails to send a Beacon on schedule *and* fails to reply to
+        an Echo, the server is assumed dead. A warning is issued, and all PVs
+        are disconnected to initiate a reconnection attempt.
+        """
+        return {address: time.monotonic() - t for address, t in self._last_heard.items()}
 
     def _check_for_unresponsive_servers(self):
         self.log.debug('Broadcaster check for unresponsive servers loop is running.')
@@ -681,6 +741,7 @@ class SharedBroadcaster:
         checking = dict()  # map address to deadline for check to resolve
         servers = defaultdict(weakref.WeakSet)  # map address to VirtualCircuitManagers
         last_heard = dict()  # map address to time of last response
+        self._last_heard = last_heard
 
         # Make locals to save getattr lookups in the loop.
         last_beacon = self.last_beacon
@@ -716,9 +777,14 @@ class SharedBroadcaster:
                     # Record that we are checking on this address and set a
                     # deadline for a response.
                     checking[address] = now + RESPONSIVENESS_TIMEOUT
-                    self.log.debug(
+                    tags = {'role': 'CLIENT',
+                            'their_address': address,
+                            'our_address': self.broadcaster.client_address,
+                            'direction': '--->>>'}
+
+                    self.broadcaster.log.debug(
                         "Missed Beacons from %s:%d. Sending EchoRequest to "
-                        "check that server is responsive.", *address)
+                        "check that server is responsive.", *address, extra=tags)
                     # Send on all circuits. One might be less backlogged
                     # with queued commands than the others and thus able to
                     # respond faster. In the majority of cases there will only
@@ -799,6 +865,8 @@ class SharedBroadcaster:
                 for search_id, it in items:
                     yield ca.SearchRequest(it[0], search_id,
                                            ca.DEFAULT_PROTOCOL_VERSION)
+                    # reset the last time this was sent
+                    it[-2] = t
 
             with self._search_lock:
                 if t >= time_to_check_on_retirees:
@@ -810,20 +878,22 @@ class SharedBroadcaster:
                     items = list((search_id, it)
                                  for search_id, it in self.unanswered_searches.items()
                                  if (it[-1] > t))
+
+            # only send requests who we last sent at least interval in the past
+            resend_deadline = t - interval
+            items = [(sid, it) for sid, it in items if it[-2] < resend_deadline]
             requests = _construct_search_requests(items)
 
             if not self._searching_enabled.is_set():
                 continue
 
             if items:
-                self.log.debug('Sending %d SearchRequests', len(items))
+                self.search_log.debug('Sending %d SearchRequests', len(items))
 
             version_req = ca.VersionRequest(0, ca.DEFAULT_PROTOCOL_VERSION)
             for batch in batch_requests(requests,
                                         SEARCH_MAX_DATAGRAM_BYTES - len(version_req)):
-                self.send(self.ca_server_port,
-                          version_req,
-                          *batch)
+                self.send(version_req, *batch)
 
             wait_time = max(0, interval - (time.monotonic() - t))
             # Double the interval for the next loop.
@@ -853,10 +923,11 @@ class Context:
     ----------
     broadcaster : SharedBroadcaster, optional
         If None is specified, a fresh one is instantiated.
-    timeout : float
+    timeout : number or None, optional
         Number of seconds before a CaprotoTimeoutError is raised. This default
-        can be overridden at the PV level or for any specific operation.  If
-        unset, the default is 2 seconds.
+        can be overridden at the PV level or for any given operation. If unset,
+        the default is 2 seconds. If None, never timeout. A global timeout can
+        be specified via an environment variable ``CAPROTO_DEFAULT_TIMEOUT``.
     host_name : string, optional
         uses value of ``socket.gethostname()`` by default
     client_name : string, optional
@@ -875,7 +946,7 @@ class Context:
         value from 1.
     """
     def __init__(self, broadcaster=None, *,
-                 timeout=2,
+                 timeout=GLOBAL_DEFAULT_TIMEOUT,
                  host_name=None, client_name=None, max_workers=1):
         if broadcaster is None:
             broadcaster = SharedBroadcaster()
@@ -888,7 +959,8 @@ class Context:
             client_name = getpass.getuser()
         self.max_workers = max_workers
         self.client_name = client_name
-        self.log = logging.getLogger(f'caproto.ctx.{id(self)}')
+        self.log = logging.LoggerAdapter(
+            logging.getLogger('caproto.ctx'), {'role': 'CLIENT'})
         self.pv_cache_lock = threading.RLock()
         self.circuit_managers = {}  # keyed on ((host, port), priority)
         self._lock_during_get_circuit_manager = threading.RLock()
@@ -958,10 +1030,11 @@ class Context:
             Expected signature: ``f(pv, access_rights)`` where ``pv`` is the
             instance of ``PV`` whose state has changed and ``access_rights`` is
             a member of the caproto ``AccessRights`` enum
-        timeout : float, optional
-            Number of seconds before a CaprotoTimeoutError is raised. This default
-            can be overridden for any specific operation.  If None, fall back
-            to the default timeout set by the Context.
+        timeout : number or None, optional
+            Number of seconds before a CaprotoTimeoutError is raised. This
+            default can be overridden for any specific operation. By default,
+            fall back to the default timeout set by the Context. If None, never
+            timeout.
         """
         if self._user_disconnected:
             raise ContextDisconnectedError("This Context is no longer usable.")
@@ -972,8 +1045,7 @@ class Context:
                 try:
                     pv = self.pvs[(name, priority)]
                 except KeyError:
-                    pv = PV(name, priority, self, connection_state_callback,
-                            access_rights_callback, timeout)
+                    pv = PV(name, priority, self, None, None, timeout)
                     names_to_search.append(name)
                     self.pvs[(name, priority)] = pv
                     self.pvs_needing_circuits[name].add(pv)
@@ -1011,7 +1083,8 @@ class Context:
             name, _ = key
             names.append(name)
             # If there is a cached search result for this name, expire it.
-            self.broadcaster.search_results.pop(name, None)
+            with self.broadcaster._search_lock:
+                self.broadcaster.search_results.pop(name, None)
             with self.pv_cache_lock:
                 self.pvs_needing_circuits[name].add(pv)
 
@@ -1036,6 +1109,12 @@ class Context:
             # and tracking circuit state, as well as a ClientChannel for
             # tracking channel state.
             for name in names:
+                search_logger.debug('Connecting %s on circuit with %s:%d', name, *address,
+                                    extra={'pv': name,
+                                           'their_address': address,
+                                           'our_address': self.broadcaster.broadcaster.client_address,
+                                           'direction': '--->>>',
+                                           'role': 'CLIENT'})
                 # There could be multiple PVs with the same name and
                 # different priority. That is what we are looping over
                 # here. There could also be NO PVs with this name that need
@@ -1165,6 +1244,7 @@ class Context:
 
             # disconnect the underlying state machine
             self.broadcaster.remove_listener(self)
+            # (TODO) double remove0
 
             self.log.debug("Stopping SelectorThread of the context")
             self.selector.stop()
@@ -1200,7 +1280,7 @@ class VirtualCircuitManager:
                  'socket', 'selector', 'pvs', 'all_created_pvnames',
                  'dead', 'process_queue', 'processing',
                  '_subscriptionid_counter', 'user_callback_executor',
-                 'last_tcp_receipt', '__weakref__')
+                 'last_tcp_receipt', '__weakref__', '_tags')
 
     def __init__(self, context, circuit, selector, timeout=TIMEOUT):
         self.context = context
@@ -1229,11 +1309,18 @@ class VirtualCircuitManager:
             self.socket = socket.create_connection(self.circuit.address)
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
             self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            self.circuit.our_address = self.socket.getsockname()
+            # This dict is passed to the loggers.
+            self._tags = {'their_address': self.circuit.address,
+                          'our_address': self.circuit.our_address,
+                          'direction': '<<<---',
+                          'role': repr(self.circuit.our_role)}
             self.selector.add_socket(self.socket, self)
             self.send(ca.VersionRequest(self.circuit.priority,
                                         ca.DEFAULT_PROTOCOL_VERSION),
                       ca.HostNameRequest(self.context.host_name),
-                      ca.ClientNameRequest(self.context.client_name))
+                      ca.ClientNameRequest(self.context.client_name),
+                      extra=self._tags)
         else:
             raise CaprotoRuntimeError("Cannot connect. States are {} "
                                       "".format(self.circuit.states))
@@ -1265,10 +1352,10 @@ class VirtualCircuitManager:
         except BlockingIOError:
             raise ca.SendAllRetry()
 
-    def send(self, *commands):
+    def send(self, *commands, extra=None):
         # Turn the crank: inform the VirtualCircuit that these commands will
         # be send, and convert them to buffers.
-        buffers_to_send = self.circuit.send(*commands)
+        buffers_to_send = self.circuit.send(*commands, extra=extra)
         # Send bytes over the wire using some caproto utilities.
         ca.send_all(buffers_to_send, self._socket_send)
 
@@ -1321,6 +1408,7 @@ class VirtualCircuitManager:
                 self.disconnect()
                 return
 
+        tags = self._tags
         if command is ca.DISCONNECTED:
             self._disconnected()
         elif isinstance(command, (ca.VersionResponse,)):
@@ -1332,6 +1420,8 @@ class VirtualCircuitManager:
             ioid_info = self.ioids.pop(command.ioid)
             deadline = ioid_info['deadline']
             pv = ioid_info['pv']
+            tags = tags.copy()
+            tags['pv'] = pv.name
             if deadline is not None and time.monotonic() > deadline:
                 self.log.warning("Ignoring late response with ioid=%d regarding "
                                  "PV named %s because "
@@ -1340,7 +1430,6 @@ class VirtualCircuitManager:
                                  pv.name, time.monotonic() - deadline)
                 return
 
-            pv.log.debug("%r: %r", pv.name, command)
             event = ioid_info.get('event')
             if event is not None:
                 # If PV.read() or PV.write() are waiting on this response,
@@ -1365,10 +1454,15 @@ class VirtualCircuitManager:
                 # This method submits jobs to the Contexts's
                 # ThreadPoolExecutor for user callbacks.
                 sub.process(command)
+                tags = tags.copy()
+                tags['pv'] = sub.pv.name
         elif isinstance(command, ca.AccessRightsResponse):
             pv = self.pvs[command.cid]
             pv.access_rights_changed(command.access_rights)
+            tags = tags.copy()
+            tags['pv'] = pv.name
         elif isinstance(command, ca.EventCancelResponse):
+            # TODO Any way to add the pv name to tags here?
             ...
         elif isinstance(command, ca.CreateChanResponse):
             pv = self.pvs[command.cid]
@@ -1378,25 +1472,31 @@ class VirtualCircuitManager:
                 pv.channel = chan
                 pv.channel_ready.set()
             pv.connection_state_changed('connected', chan)
+            tags = tags.copy()
+            tags['pv'] = pv.name
         elif isinstance(command, (ca.ServerDisconnResponse,
                                   ca.ClearChannelResponse)):
             pv = self.pvs[command.cid]
             pv.connection_state_changed('disconnected', None)
+            tags = tags.copy()
+            tags['pv'] = pv.name
             # NOTE: pv remains valid until server goes down
         elif isinstance(command, ca.EchoResponse):
             # The important effect here is that it will have updated
             # self.last_tcp_receipt when the bytes flowed through
             # self.received.
             ...
-        else:
-            self.log.debug('other command %s', command)
+        if isinstance(command, ca.Message):
+            tags['bytesize'] = len(command)
+            self.log.debug("%r", command, extra=tags)
 
     def _disconnected(self, *, reconnect=True):
         # Ensure that this method is idempotent.
         if self.dead.is_set():
             return
+        tags = {'their_address': self.circuit.address}
         self.log.debug('Virtual circuit with address %s:%d has disconnected.',
-                       *self.circuit.address)
+                       *self.circuit.address, extra=tags)
         # Update circuit state. This will be reflected on all PVs, which
         # continue to hold a reference to this disconnected circuit.
         self.circuit.disconnect()
@@ -1411,6 +1511,10 @@ class VirtualCircuitManager:
             event = ioid_info.get('event')
             if event is not None:
                 event.set()
+
+        with self.context.broadcaster._search_lock:
+            for n in self.all_created_pvnames:
+                self.context.broadcaster.search_results.pop(n, None)
 
         self.all_created_pvnames.clear()
         for pv in self.pvs.values():
@@ -1431,17 +1535,18 @@ class VirtualCircuitManager:
 
             sock.close()
 
+        tags = {'their_address': self.circuit.address}
         if reconnect:
             # Kick off attempt to reconnect all PVs via fresh circuit(s).
             self.log.debug('Kicking off reconnection attempts for %d PVs '
                            'disconnected from %s:%d....',
-                           len(self.channels), *self.circuit.address)
+                           len(self.channels), *self.circuit.address, extra=tags)
             self.context.reconnect(((chan.name, chan.circuit.priority)
                                     for chan in self.channels.values()))
         else:
-            self.log.debug('Not attempting reconnection')
+            self.log.debug('Not attempting reconnection', extra=tags)
 
-        self.log.debug("Shutting down ThreadPoolExecutor for user callbacks")
+        self.log.debug("Shutting down ThreadPoolExecutor for user callbacks", extra=tags)
         self.user_callback_executor.shutdown()
 
     def disconnect(self):
@@ -1486,7 +1591,7 @@ class PV:
         self.priority = priority
         self.context = context
         self.access_rights = None  # will be overwritten with AccessRights
-        self.log = logging.getLogger(f'caproto.ch.{name}.{priority}')
+        self.log = logging.LoggerAdapter(ch_logger, {'pv': self.name, 'role': 'CLIENT'})
         # Use this lock whenever we touch circuit_manager or channel.
         self.component_lock = threading.RLock()
         self.circuit_ready = threading.Event()
@@ -1552,7 +1657,7 @@ class PV:
         self.access_rights_callback.process(self, rights)
 
     def connection_state_changed(self, state, channel):
-        self.log.info('%s connection state changed to %s.', self.name, state)
+        self.log.info('connection state changed to %s.', state)
         self.connection_state_callback.process(self, state)
         if state == 'disconnected':
             for sub in self.subscriptions.values():
@@ -1600,8 +1705,10 @@ class PV:
 
         Parameters
         ----------
-        timeout : float
-            Seconds before a CaprotoTimeoutError is raised. Default is 2.
+        timeout : number or None, optional
+            Seconds to wait before a CaprotoTimeoutError is raised. Default is
+            ``PV.timeout``, which falls back to Context.timeout if not set. If
+            None, never timeout.
         """
         if timeout is PV_DEFAULT_TIMEOUT:
             timeout = self.timeout
@@ -1613,6 +1720,16 @@ class PV:
 
     @ensure_connected
     def wait_for_connection(self, *, timeout=PV_DEFAULT_TIMEOUT):
+        """
+        Wait for this PV to be connected.
+
+        Parameters
+        ----------
+        timeout : number or None, optional
+            Seconds to wait before a CaprotoTimeoutError is raised. Default is
+            ``PV.timeout``, which falls back to ``PV.context.timeout`` if not
+            set. If None, never timeout.
+        """
         pass
 
     def go_idle(self):
@@ -1643,7 +1760,8 @@ class PV:
             # after it acquires the lock.
             try:
                 self.channel_ready.clear()
-                self.circuit_manager.send(self.channel.clear())
+                self.circuit_manager.send(self.channel.clear(),
+                                          extra={'pv': self.name})
             except OSError:
                 # the socket is dead-dead, do nothing
                 ...
@@ -1668,10 +1786,10 @@ class PV:
             parameter.
         callback : callable or None
             Called with the response as its argument when received.
-        timeout : number or None
-            Number of seconds to wait before raising CaprotoTimeoutError.
-            Default is PV.timeout, which falls back to Context.timeout if not
-            set.
+        timeout : number or None, optional
+            Seconds to wait before a CaprotoTimeoutError is raised. Default is
+            ``PV.timeout``, which falls back to ``PV.context.timeout`` if not
+            set. If None, never timeout.
         data_type : {'native', 'status', 'time', 'graphic', 'control'} or ChannelType or int ID, optional
             Request specific data type or a class of data types, matched to the
             channel's native data type. Default is Channel's native data type.
@@ -1699,21 +1817,13 @@ class PV:
 
         deadline = time.monotonic() + timeout if timeout is not None else None
         ioid_info['deadline'] = deadline
-        cm.send(command)
-        self.log.debug("%r: %r", self.name, command)
+        cm.send(command, extra={'pv': self.name})
         if not wait:
             return
 
         # The circuit_manager will put a reference to the response into
         # ioid_info and then set event.
         if not event.wait(timeout=timeout):
-            if cm.dead.is_set():
-                # This circuit has died sometime during this function call.
-                # The exception raised here will be caught by
-                # @ensure_connected, which will retry the function call a
-                # in hopes of getting a working circuit until our `timeout` has
-                # been used up.
-                raise DeadCircuitError()
             host, port = cm.circuit.address
             raise CaprotoTimeoutError(
                 f"Server at {host}:{port} did "
@@ -1721,7 +1831,13 @@ class PV:
                 f"{self.name!r} within {float(timeout):.3}-second timeout. "
                 f"The ioid of the expected response is {ioid}."
             )
-
+        if cm.dead.is_set():
+            # This circuit has died sometime during this function call.
+            # The exception raised here will be caught by
+            # @ensure_connected, which will retry the function call a
+            # in hopes of getting a working circuit until our `timeout` has
+            # been used up.
+            raise DeadCircuitError()
         return ioid_info['response']
 
     @ensure_connected
@@ -1746,9 +1862,10 @@ class PV:
             parameter.
         callback : callable or None
             Called with the WriteNotifyResponse as its argument when received.
-        timeout : number or None
-            Number of seconds to wait before raising CaprotoTimeoutError.
-            Default is 2.
+        timeout : number or None, optional
+            Seconds to wait before a CaprotoTimeoutError is raised. Default is
+            ``PV.timeout``, which falls back to ``PV.context.timeout`` if not
+            set. If None, never timeout.
         notify : boolean or None
             If None (default), set to True if wait=True or callback is set.
             Can be manually set to True or False. Will raise ValueError if set
@@ -1779,8 +1896,6 @@ class PV:
             deadline = time.monotonic() + timeout if timeout is not None else None
             ioid_info['deadline'] = deadline
             # do not need to lock this, locking happens in circuit command
-            cm.send(command)
-            self.log.debug("%r: %r", self.name, command)
         else:
             if wait or callback is not None:
                 raise CaprotoValueError("Must set notify=True in order to use "
@@ -1788,8 +1903,7 @@ class PV:
                                         "notification of 'put-completion' from the "
                                         "server, there is nothing to wait on or to "
                                         "trigger a callback.")
-            cm.send(command)
-            self.log.debug("%r: %r", self.name, command)
+        cm.send(command, extra={'pv': self.name})
 
         if not wait:
             return
@@ -1873,6 +1987,35 @@ class PV:
         "Clear all subscriptions. (Remove all user callbacks from them.)"
         for sub in self.subscriptions.values():
             sub.clear()
+
+    @ensure_connected
+    def time_since_last_heard(self, timeout=PV_DEFAULT_TIMEOUT):
+        """
+        Seconds since last message from the server that provides this channel.
+
+        The time is reset to 0 whenever we receive a TCP message related to
+        user activity *or* a Beacon. Servers are expected to send Beacons at
+        regular intervals. If we do not receive either a Beacon or TCP message,
+        we initiate an Echo over TCP, to which the server is expected to
+        promptly respond.
+
+        Therefore, the time reported here should not much exceed
+        ``EPICS_CA_CONN_TMO`` (default 30 seconds unless overriden by that
+        environment variable) if the server is healthy.
+
+        If the server fails to send a Beacon on schedule *and* fails to reply to
+        an Echo, the server is assumed dead. A warning is issued, and all PVs
+        are disconnected to initiate a reconnection attempt.
+
+        Parameters
+        ----------
+        timeout : number or None, optional
+            Seconds to wait before a CaprotoTimeoutError is raised. Default is
+            ``PV.timeout``, which falls back to ``PV.context.timeout`` if not
+            set. If None, never timeout.
+        """
+        address = self.circuit_manager.circuit.address
+        return self.context.broadcaster.time_since_last_heard()[address]
 
     # def __hash__(self):
     #     return id((self.context, self.circuit_manager, self.name))
@@ -1960,6 +2103,9 @@ class Subscription(CallbackHandler):
         self.subscriptionid = None
         self.most_recent_response = None
         self.needs_reactivation = False
+        # This is related to back-compat for user callbacks that have the old
+        # signature, f(response).
+        self.__wrapper_weakrefs = set()
 
     @property
     def log(self):
@@ -1968,15 +2114,23 @@ class Subscription(CallbackHandler):
     def __repr__(self):
         return f"<Subscription to {self.pv.name!r}, id={self.subscriptionid}>"
 
-    @ensure_connected
     def _subscribe(self, timeout=PV_DEFAULT_TIMEOUT):
         """This is called automatically after the first callback is added.
         """
         cm = self.pv.circuit_manager
-        ctx = cm.context
-        with ctx.subscriptions_lock:
-            ctx.subscriptions_to_activate[cm].add(self)
-        ctx.activate_subscriptions_now.set()
+        if cm is None:
+            # We are currently disconnected (perhaps have not yet connected).
+            # When the PV connects, this subscription will be added.
+            with self.callback_lock:
+                self.needs_reactivation = True
+        else:
+            # We are (or very recently were) connected. In the rare event
+            # where cm goes dead in the interim, subscription will be retried
+            # by the activation loop.
+            ctx = cm.context
+            with ctx.subscriptions_lock:
+                ctx.subscriptions_to_activate[cm].add(self)
+            ctx.activate_subscriptions_now.set()
 
     @ensure_connected
     def compose_command(self, timeout=PV_DEFAULT_TIMEOUT):
@@ -2027,16 +2181,16 @@ class Subscription(CallbackHandler):
             except ca.CaprotoKeyError:
                 pass
             else:
-                self.pv.circuit_manager.send(command)
+                self.pv.circuit_manager.send(command, extra={'pv': self.pv.name})
 
     def process(self, command):
         # TODO here i think we can decouple PV update rates and callback
         # handling rates, if desirable, to not bog down performance.
         # As implemented below, updates are blocking further messages from
         # the CA servers from processing. (-> ThreadPool, etc.)
-
-        super().process(command)
-        self.log.debug("%r: %r", self.pv.name, command)
+        pv = self.pv
+        super().process(self, command)
+        self.log.debug("%r: %r", pv.name, command)
         self.most_recent_response = command
 
     def add_callback(self, func):
@@ -2046,13 +2200,25 @@ class Subscription(CallbackHandler):
         Parameters
         ----------
         func : callable
-            Expected signature: ``func(response)``
+            Expected signature: ``func(sub, response)``.
+
+            The signature ``func(response)`` is also supported for
+            backward-compatibility but will issue warnings. Support will be
+            removed in a future release of caproto.
 
         Returns
         -------
         token : int
             Integer token that can be passed to :meth:`remove_callback`.
+
+        .. versionchanged:: 0.5.0
+
+           Changed the expected signature of ``func`` from ``func(response)``
+           to ``func(sub, response)``.
         """
+        # Handle func with signature func(response) for back-compat.
+        func = adapt_old_callback_signature(func, self.__wrapper_weakrefs)
+
         with self.callback_lock:
             was_empty = not self.callbacks
             cb_id = super().add_callback(func)
@@ -2069,7 +2235,7 @@ class Subscription(CallbackHandler):
             # for that first response from the server.
             if most_recent_response is not None:
                 try:
-                    func(most_recent_response)
+                    func(self, most_recent_response)
                 except Exception:
                     self.log.exception(
                         "Exception raised during processing most recent "
@@ -2206,8 +2372,6 @@ class Batch:
         deadline = time.monotonic() + timeout if timeout is not None else None
         for ioid_info in self._ioid_infos:
             ioid_info['deadline'] = deadline
-            pv = ioid_info['pv']
-            pv.log.debug("%r: %r", pv.name, ioid_info['request'])
         for circuit_manager, commands in self._commands.items():
             circuit_manager.send(*commands)
 
