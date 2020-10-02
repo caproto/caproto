@@ -837,8 +837,8 @@ class SubGroup:
 
 
 def get_pv_pair_wrapper(setpoint_suffix='', readback_suffix='_RBV'):
-    '''
-    Generates a Subgroup class for a pair of PVs (setpoint and readback)
+    """
+    Generates a Subgroup class for a pair of PVs (setpoint and readback).
 
     If no put method is defined for the setter, a default will be specified
     which updates the readback value on write.
@@ -857,12 +857,12 @@ def get_pv_pair_wrapper(setpoint_suffix='', readback_suffix='_RBV'):
         PVSpec (or pvproperty).  Additionally, keywords meant only for the
         setpoint or readback classes may be specified using `setpoint_kw` or
         `readback_kw`, respectively.
-    '''
+    """
 
-    def wrapped(*, get=None, put=None, startup=None, shutdown=None,
-                name=None, dtype=None, value=None, max_length=None,
-                alarm_group=None, doc=None, fields=None,
-                setpoint_kw=None, readback_kw=None, **cls_kwargs):
+    def wrapped(*, get=None, put=None, startup=None, shutdown=None, name=None,
+                dtype=None, value=None, max_length=None, alarm_group=None,
+                doc=None, fields=None, setpoint_kw=None, readback_kw=None,
+                **cls_kwargs):
         if cls_kwargs.pop('read_only', None) not in (None, False):
             raise RuntimeError('Read-only settings for a setpoint/readback '
                                'pair should not be specified')
@@ -879,24 +879,27 @@ def get_pv_pair_wrapper(setpoint_suffix='', readback_suffix='_RBV'):
                 'Default putter - assign value to readback'
                 await obj.readback.write(value)
 
-        setpoint = dict(name=setpoint_suffix, put=put, read_only=False,
-                        cls_kwargs=dict(cls_kwargs),
-                        **pvspec_kwargs)
+        def get_kwargs(user_specified_kwargs, **init_kwargs):
+            for key, val in (user_specified_kwargs or {}).items():
+                if key in init_kwargs:
+                    init_kwargs[key] = val
+                else:
+                    init_kwargs['cls_kwargs'][key] = val
+            return init_kwargs
 
-        for key, val in (setpoint_kw or {}).items():
-            if key in setpoint:
-                setpoint[key] = val
-            else:
-                setpoint['cls_kwargs'][key] = val
+        setpoint = get_kwargs(
+            setpoint_kw,
+            name=setpoint_suffix, put=put, read_only=False,
+            cls_kwargs=dict(cls_kwargs),
+            **pvspec_kwargs,
+        )
 
-        readback = dict(name=readback_suffix, get=get, read_only=True,
-                        cls_kwargs=dict(cls_kwargs),
-                        **pvspec_kwargs)
-        for key, val in (readback_kw or {}).items():
-            if key in readback:
-                readback[key] = val
-            else:
-                readback['cls_kwargs'][key] = val
+        readback = get_kwargs(
+            readback_kw,
+            name=readback_suffix, get=get, read_only=True,
+            cls_kwargs=dict(cls_kwargs),
+            **pvspec_kwargs
+        )
 
         return SubGroup(
             dict(setpoint=setpoint, readback=readback),
