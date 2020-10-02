@@ -2,7 +2,6 @@
 from caproto import ChannelType
 from caproto.server import PVGroup, get_pv_pair_wrapper, ioc_arg_parser, run
 
-
 # Create _two_ PVs with a single pvproperty_with_rbv:
 pvproperty_with_rbv = get_pv_pair_wrapper(setpoint_suffix='',
                                           readback_suffix='_RBV')
@@ -17,8 +16,8 @@ class Group(PVGroup):
     # Creates {prefix}pair3 and {prefix}pair3_RBV
     pair3 = pvproperty_with_rbv(dtype=ChannelType.ENUM, doc='This is pair3',
                                 enum_strings=['No', 'Yes'],
-                                setpoint_kw=dict(mock_record='bo'),
-                                readback_kw=dict(mock_record='bi'),
+                                setpoint_kw=dict(record='bo'),
+                                readback_kw=dict(record='bi'),
                                 )
 
     # We can then directly decorate our functions with the putters from the
