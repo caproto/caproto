@@ -13,20 +13,18 @@ import logging
 import sys
 import time
 import warnings
-
-from collections import (namedtuple, OrderedDict, defaultdict)
+from collections import OrderedDict, defaultdict, namedtuple
 from types import MethodType
 
-from .. import (ChannelDouble, ChannelFloat, ChannelShort, ChannelInteger,
-                ChannelString, ChannelEnum, ChannelType, ChannelChar,
-                ChannelByte, ChannelAlarm,
-                AccessRights, get_server_address_list,
-                AlarmStatus, AlarmSeverity, CaprotoRuntimeError,
-                CaprotoValueError, CaprotoTypeError, CaprotoAttributeError,
-                __version__)
-from .._backend import backend
-from caproto._log import set_handler, _set_handler_with_logger
+from caproto._log import _set_handler_with_logger, set_handler
 
+from .. import (AccessRights, AlarmSeverity, AlarmStatus,
+                CaprotoAttributeError, CaprotoRuntimeError, CaprotoTypeError,
+                CaprotoValueError, ChannelAlarm, ChannelByte, ChannelChar,
+                ChannelDouble, ChannelEnum, ChannelFloat, ChannelInteger,
+                ChannelShort, ChannelString, ChannelType, __version__,
+                get_server_address_list)
+from .._backend import backend
 
 module_logger = logging.getLogger(__name__)
 
@@ -92,7 +90,8 @@ class PvpropertyData:
 
         self.record_type = record or mock_record
 
-        super().__init__(**kwargs)
+        super().__init__(reported_record_type=self.record_type or 'caproto',
+                         **kwargs)
 
         if mock_record is not None:
             if record is not None:
