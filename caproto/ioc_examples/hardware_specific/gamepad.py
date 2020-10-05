@@ -4,8 +4,9 @@ This example requires a gamepad and the Python library evdev.
 
 This only works on linux (as it uses the linux kernel input events).
 """
-from caproto.server import pvproperty, PVGroup, template_arg_parser, run
 from evdev import InputDevice
+
+from caproto.server import PVGroup, pvproperty, run, template_arg_parser
 
 
 class GampadIOC(PVGroup):
@@ -98,7 +99,6 @@ async def gp_driver(dev):
                 continue
 
             try:
-
                 # TODO also yield the event timestamp
                 if ev.type == 1:
                     key = digital_mapping[ev.code]
