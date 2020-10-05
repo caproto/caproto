@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 
-from caproto.server import ioc_arg_parser, run
 from collections import defaultdict
+
 from caproto import ChannelData
+from caproto.server import ioc_arg_parser, run
 
 
 class ReallyDefaultDict(defaultdict):

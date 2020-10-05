@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-from caproto.server import ioc_arg_parser, run
-
-from collections import defaultdict
-from caproto import (ChannelString, ChannelEnum, ChannelDouble,
-                     ChannelChar, ChannelData)
 import re
+from collections import defaultdict
 
+from caproto import (ChannelChar, ChannelData, ChannelDouble, ChannelEnum,
+                     ChannelString)
+from caproto.server import ioc_arg_parser, run
 
 PLUGIN_TYPE_PVS = [
     (re.compile('image\\d:'), 'NDPluginStdArrays'),

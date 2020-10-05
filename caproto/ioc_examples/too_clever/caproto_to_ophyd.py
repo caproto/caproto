@@ -4,12 +4,11 @@ import random
 import sys
 
 import ophyd
-from ophyd import Component as Cpt, EpicsSignal, EpicsSignalRO
+from ophyd import Component as Cpt
+from ophyd import EpicsSignal, EpicsSignalRO
 
-from caproto.server import (pvproperty, PVGroup, pvfunction, ioc_arg_parser,
-                            run)
+from caproto.server import PVGroup, ioc_arg_parser, pvfunction, pvproperty, run
 from caproto.server.conversion import group_to_device
-
 
 logger = logging.getLogger('caproto')
 
@@ -103,4 +102,4 @@ if __name__ == '__main__':
     run(ioc.pvdb, **run_options)
 
     # Step 3b:
-    # NOTE: run separately: caproto.ioc_examples.caproto_to_typhon
+    # NOTE: run separately: caproto.ioc_examples.too_clever.caproto_to_typhon
