@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
-import ctypes
 import collections
+import ctypes
 import multiprocessing
 import multiprocessing.managers
 import multiprocessing.shared_memory
@@ -11,8 +11,7 @@ import time
 
 import numpy as np
 
-from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
-
+from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run
 
 UPDATE_PERIOD_SEC = 0.001
 IMAGE_DTYPE = ctypes.c_uint8
