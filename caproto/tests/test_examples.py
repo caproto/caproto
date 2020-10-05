@@ -114,16 +114,15 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
     [('caproto.ioc_examples.all_in_one', 'MyPVGroup',
       dict(macros={'macro': 'expanded'})),
      ('caproto.ioc_examples.chirp', 'Chirp', {'ramprate': 0.75}),
-     ('caproto.ioc_examples.decay', 'Decay', {}),
-     ('caproto.ioc_examples.thermo_sim', 'Thermo', {}),
      ('caproto.ioc_examples.custom_write', 'CustomWrite', {}),
+     ('caproto.ioc_examples.decay', 'Decay', {}),
      ('caproto.ioc_examples.inline_style', 'InlineStyleIOC', {}),
      ('caproto.ioc_examples.io_interrupt', 'IOInterruptIOC', {}),
      ('caproto.ioc_examples.macros', 'MacroifiedNames',
       dict(macros={'beamline': 'my_beamline', 'thing': 'thing'})),
      ('caproto.ioc_examples.mini_beamline', 'MiniBeamline', {}),
      ('caproto.ioc_examples.random_walk', 'RandomWalkIOC', {}),
-     ('caproto.ioc_examples.reading_counter', 'ReadingCounter', {}),
+     ('caproto.ioc_examples.pathological.reading_counter', 'ReadingCounter', {}),
      ('caproto.ioc_examples.rpc_function', 'MyPVGroup', {}),
      ('caproto.ioc_examples.scalars_and_arrays', 'ArrayIOC', {}),
      ('caproto.ioc_examples.scan_rate', 'ScanRateIOC', {}),
@@ -131,7 +130,8 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
      ('caproto.ioc_examples.simple', 'SimpleIOC', {}),
      ('caproto.ioc_examples.startup_and_shutdown_hooks', 'StartupAndShutdown', {}),
      ('caproto.ioc_examples.subgroups', 'MyPVGroup', {}),
-     ('caproto.ioc_examples.trigger_with_pc', 'TriggeredIOC', {}),
+     ('caproto.ioc_examples.thermo_sim', 'Thermo', {}),
+     ('caproto.ioc_examples.too_clever.trigger_with_pc', 'TriggeredIOC', {}),
      ('caproto.ioc_examples.worker_thread', 'WorkerThreadIOC', {}),
      ('caproto.ioc_examples.worker_thread_pc', 'WorkerThreadIOC', {}),
      ]
@@ -165,9 +165,9 @@ def test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
                     reason='win32 AD IOC')
 @pytest.mark.parametrize(
     'module_name, pvdb_class_name, class_kwargs',
-    [('caproto.ioc_examples.caproto_to_ophyd', 'Group', {}),
+    [('caproto.ioc_examples.too_clever.caproto_to_ophyd', 'Group', {}),
      pytest.param(
-         'caproto.ioc_examples.areadetector_image', 'DetectorGroup', {},
+         'caproto.ioc_examples.too_clever.areadetector_image', 'DetectorGroup', {},
          marks=pytest.mark.xfail),
      ])
 def test_special_ioc_examples(request, module_name, pvdb_class_name,
@@ -192,10 +192,10 @@ def test_areadetector_generate():
 def test_typhon_example(request, prefix):
     pytest.importorskip('numpy')
     from .conftest import run_example_ioc
-    run_example_ioc('caproto.ioc_examples.caproto_to_ophyd', request=request,
+    run_example_ioc('caproto.ioc_examples.too_clever.caproto_to_ophyd', request=request,
                     args=['--prefix', prefix], pv_to_check=f'{prefix}random1')
 
-    from caproto.ioc_examples import caproto_to_typhon
+    from caproto.ioc_examples.too_clever import caproto_to_typhon
     caproto_to_typhon.pydm = None
 
     caproto_to_typhon.run_typhon(prefix=prefix)

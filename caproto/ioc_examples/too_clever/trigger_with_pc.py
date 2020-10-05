@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-from caproto.server import (pvproperty, PVGroup,
-                            ioc_arg_parser, run)
-from caproto import ChannelType
-import numpy as np
-from textwrap import dedent
 import contextvars
 import functools
 import random
 import sys
+from textwrap import dedent
+
+import numpy as np
+
+from caproto import ChannelType
+from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run
 
 internal_process = contextvars.ContextVar('internal_process',
                                           default=False)

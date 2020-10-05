@@ -2,8 +2,8 @@
 import numpy as np
 import ophyd
 
-from caproto.server import (PVGroup, pvproperty, SubGroup, get_pv_pair_wrapper,
-                            ioc_arg_parser, run)
+from caproto.server import (PVGroup, SubGroup, get_pv_pair_wrapper,
+                            ioc_arg_parser, pvproperty, run)
 from caproto.server.conversion import ophyd_device_to_caproto_ioc
 
 

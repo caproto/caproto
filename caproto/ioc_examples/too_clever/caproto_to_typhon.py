@@ -15,7 +15,7 @@ except ImportError as ex:
     print(f'pydm/typhon unavailable: {ex}')
     pydm = None
 
-from caproto.ioc_examples.caproto_to_ophyd import GroupDevice
+from caproto.ioc_examples.too_clever.caproto_to_ophyd import GroupDevice
 
 
 def run_typhon(prefix='integration:'):

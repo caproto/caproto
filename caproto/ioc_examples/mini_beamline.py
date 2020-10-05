@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+"""
+This example is quite large. It defines a range of simulated detectors and
+motors and is used for demos and tutorials.
+"""
 import contextvars
 import functools
 import math

@@ -13,7 +13,7 @@ except ImportError:
     catvs = None
 
 import caproto as ca
-from caproto.ioc_examples.verify_with_catvs import CatvsIOC
+from caproto.tests.verify_with_catvs import CatvsIOC
 
 logger = logging.getLogger(__name__)
 # logging.getLogger('caproto').setLevel('DEBUG')
