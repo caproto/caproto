@@ -1,9 +1,11 @@
-import dataclasses
 import logging
 
 import pytest
 
+pytest.importorskip('dataclasses')
 pytest.importorskip('caproto.pva')
+
+import dataclasses  # isort: noqa
 
 from caproto import pva
 from caproto.pva import BitSet
