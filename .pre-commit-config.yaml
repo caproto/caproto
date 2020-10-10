@@ -2,7 +2,7 @@
 # See https://pre-commit.com/hooks.html for more hooks
 repos:
 -   repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v2.5.0
+    rev: v3.2.0
     hooks:
     -   id: no-commit-to-branch
     -   id: trailing-whitespace
@@ -21,7 +21,7 @@ repos:
     -   id: flake8
 
 -   repo: https://github.com/timothycrosley/isort
-    rev: 5.5.3
+    rev: 5.6.1
     hooks:
     -   id: isort
 
