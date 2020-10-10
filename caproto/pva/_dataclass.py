@@ -6,6 +6,7 @@ vice-versa.
 import dataclasses
 import inspect
 import typing
+from typing import Dict, Optional
 
 from . import _typing_compat as typing_compat
 from ._annotations import (annotation_default_values, annotation_type_map,
@@ -19,9 +20,9 @@ def new_struct(fields: dict,
                struct_name: str = '',
                name: str = '',
                array_type: FieldArrayType = FieldArrayType.scalar,
-               size: typing.Optional[int] = 1,
+               size: Optional[int] = 1,
                field_type=FieldType.struct,
-               metadata: typing.Optional[dict] = None,
+               metadata: Optional[dict] = None,
                ) -> StructuredField:
     return StructuredField(
         field_type=field_type,
@@ -54,7 +55,7 @@ def _field_from_annotation(attr, annotation,
     if (hasattr(annotation, '_pva_struct_') or
             isinstance(annotation, StructuredField)):
         if hasattr(annotation, '_pva_struct_'):
-            struct = annotation._pva_struct_
+            struct = get_pv_structure(annotation)
         else:
             struct = annotation
 
@@ -130,7 +131,7 @@ def _get_pva_fields_from_annotations(cls: type) -> dict:
                 ) from None
         elif origin is typing.Union:
             union_cls = _get_union_from_annotation(attr, annotation)
-            pva_fields[attr] = union_cls._pva_struct_.as_new_name(attr)
+            pva_fields[attr] = get_pv_structure(union_cls).as_new_name(attr)
             continue
         else:
             array_type = FieldArrayType.scalar
@@ -175,7 +176,7 @@ def _get_default_by_field(attr: str,
     return dcls_field
 
 
-def _get_defaults_to_add(cls: type, pva_fields: typing.Dict[str, FieldDesc]):
+def _get_defaults_to_add(cls: type, pva_fields: Dict[str, FieldDesc]):
     defaults = {}
     for attr, annotation in typing.get_type_hints(cls).items():
         try:
@@ -191,10 +192,13 @@ def _get_defaults_to_add(cls: type, pva_fields: typing.Dict[str, FieldDesc]):
     return defaults
 
 
-def pva_dataclass(_cls: typing.Optional[type] = None, *,
+def pva_dataclass(_cls: Optional[type] = None, *,
                   add_defaults: bool = True,
                   union: bool = False,
                   name: str = None,
+                  repr: bool = True,
+                  eq: bool = True,
+                  order: bool = False,
                   ):
     """
     Create a new PVAccess-compatible dataclass given a type-annotated class.
@@ -213,6 +217,15 @@ def pva_dataclass(_cls: typing.Optional[type] = None, *,
 
     name : str, optional
         Optional custom name for the structure.  Defaults to the class name.
+
+    repr : bool, optional
+        Generate a ``__repr__`` method automatically.
+
+    eq : bool, optional
+        Generate an ``__eq__`` method automatically.
+
+    order : bool, optional
+        Generate comparison method automatically.
     """
 
     def wrap(cls: type) -> type:
@@ -220,12 +233,15 @@ def pva_dataclass(_cls: typing.Optional[type] = None, *,
         if add_defaults:
             for attr, default in _get_defaults_to_add(cls, pva_fields).items():
                 setattr(cls, attr, default)
-        dcls = dataclasses.dataclass(cls)
+        dcls = dataclasses.dataclass(cls, repr=repr, eq=eq, order=order)
         dcls._pva_struct_ = new_struct(
             pva_fields,
             struct_name=name or cls.__name__,
             field_type=FieldType.union if union else FieldType.struct,
         )
+
+        # Cache this so we can reuse it later
+        _dataclass_cache[dcls._pva_struct_] = dcls
         return dcls
 
     if _cls is None:
@@ -290,6 +306,9 @@ class PvaStruct(type):
         return pva_dataclass(type.__new__(cls, name, bases, dict(classdict)))
 
 
+_dataclass_cache: Dict[StructuredField, PvaStruct] = {}
+
+
 def dataclass_from_field_desc(field: StructuredField) -> type:
     """
     Take a field description, and make a pva_dataclass out of it.
@@ -304,11 +323,16 @@ def dataclass_from_field_desc(field: StructuredField) -> type:
     datacls : type
         The generated dataclass.
     """
+    try:
+        return _dataclass_cache[field]
+    except KeyError:
+        ...
+
     # Use a roundabout approach - create a class, add annotations, and
     # use `pva_dataclass` machinery to do the heavy lifting.
     cls = type(field.struct_name or field.name or '', (), {})
 
-    annotations: typing.Dict[str, typing.Any] = {}
+    annotations: Dict[str, typing.Any] = {}
     cls.__annotations__ = annotations
 
     for attr, child in field.children.items():
@@ -325,7 +349,10 @@ def dataclass_from_field_desc(field: StructuredField) -> type:
         annotations[attr] = annotation_type
 
     is_union = field.field_type == FieldType.union
-    return pva_dataclass(cls, union=is_union)
+
+    dcls = pva_dataclass(cls, union=is_union)
+    _dataclass_cache[field] = dcls
+    return dcls
 
 
 def is_pva_dataclass(obj) -> bool:
@@ -352,17 +379,21 @@ def fill_dataclass(instance: PvaStruct, value: dict) -> BitSet:
         raise ValueError(f'{instance} is not a pva dataclass')
 
     bitset = BitSet({})
-    pva_struct = instance._pva_struct_
-    children = list(pva_struct.children)
+    pva_struct = get_pv_structure(instance)
+    descendent_to_index = {
+        name: idx for idx, (name, _) in enumerate(pva_struct.descendents, 1)
+    }
 
     for key, v in value.items():
         try:
-            bitset_index = children.index(key) + 1
+            bitset_index: int = descendent_to_index[key]
+            child_info: FieldDesc = pva_struct.children[key]
         except KeyError:
-            raise KeyError(f'Key {key} not found in structure '
-                           f'{pva_struct.struct_name}')
+            raise KeyError(
+                f'Key {key!r} not found in structure {pva_struct.struct_name}'
+            ) from None
 
-        if isinstance(v, dict):
+        if child_info.field_type == FieldType.struct:
             child_bitset = fill_dataclass(getattr(instance, key), value=v)
             bitset |= child_bitset.offset_by(bitset_index)
         else:
@@ -370,3 +401,70 @@ def fill_dataclass(instance: PvaStruct, value: dict) -> BitSet:
             bitset.add(bitset_index)
 
     return bitset
+
+
+def fields_to_bitset(instance: PvaStruct, field_dict: dict) -> BitSet:
+    """
+    Returns a BitSet indicating the fields that are marked by the dictionary.
+
+    Returns
+    -------
+    bitset : BitSet
+        Special attribute `_options` will be tacked on to `bitset.options`.
+    """
+    if not is_pva_dataclass_instance(instance):
+        raise ValueError(f'{instance} is not a pva dataclass')
+
+    bitset = BitSet({})
+
+    # TODO: this API isn't, uh, great - refactor down the line
+    bitset.options = {}
+
+    pva_struct = get_pv_structure(instance)
+    descendent_to_index = {
+        name: idx for idx, (name, _) in enumerate(pva_struct.descendents, 1)
+    }
+
+    for key, value in field_dict.items():
+        try:
+            bitset_index: int = descendent_to_index[key]
+            child_info: FieldDesc = pva_struct.children[key]
+        except KeyError:
+            raise KeyError(
+                f'Key {key!r} not found in structure {pva_struct.struct_name}'
+            ) from None
+
+        if child_info.field_type == FieldType.struct:
+            child_bitset = fields_to_bitset(
+                getattr(instance, key), field_dict=value
+            )
+            bitset.options[key] = child_bitset.options
+            bitset |= child_bitset.offset_by(bitset_index)
+        else:
+            bitset.add(bitset_index)
+
+            if isinstance(value, dict) and '_options' in value:
+                bitset.options[key] = value['_options']
+
+    return bitset
+
+
+def get_pv_structure(obj: PvaStruct) -> StructuredField:
+    """
+    Get the descriptive structure from a pva dataclass.
+
+    Parameters
+    ----------
+    obj : pva dataclass or instance
+
+    Returns
+    -------
+    StructuredField
+        A pva-compatible description of the dataclass structure.
+    """
+    try:
+        return obj._pva_struct_
+    except AttributeError:
+        raise ValueError(
+            '`obj` must be a pva_dataclass class or instance'
+        ) from None

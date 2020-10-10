@@ -1,3 +1,4 @@
+import dataclasses
 import logging
 
 import pytest
@@ -5,6 +6,7 @@ import pytest
 pytest.importorskip('caproto.pva')
 
 from caproto import pva
+from caproto.pva import BitSet
 
 logger = logging.getLogger(__name__)
 
@@ -119,7 +121,7 @@ def test_channel_get(client: pva.ClientVirtualCircuit,
     send(client, server, request)
     send(server, client, response)
 
-    data_bs = pva.DataWithBitSet(data=server_value, bitset=pva.BitSet({0}))
+    data_bs = pva.DataWithBitSet(data=server_value, bitset=BitSet({0}))
 
     send(client, server, request.to_get())
     roundtrip = send(server, client, response.to_get(pv_data=data_bs))
@@ -146,8 +148,8 @@ def test_channel_put(client: pva.ClientVirtualCircuit,
 
     server_value = Data(a=4, b='string')
     client_value = Data(a=5, b='string')
-    server_data_bs = pva.DataWithBitSet(data=server_value, bitset=pva.BitSet({0}))
-    client_data_bs = pva.DataWithBitSet(data=client_value, bitset=pva.BitSet({0}))
+    server_data_bs = pva.DataWithBitSet(data=server_value, bitset=BitSet({0}))
+    client_data_bs = pva.DataWithBitSet(data=client_value, bitset=BitSet({0}))
 
     request = client_chan.write(pvrequest='field()')
     response = server_chan.write(ioid=request.ioid,
@@ -166,3 +168,84 @@ def test_channel_put(client: pva.ClientVirtualCircuit,
 
     assert hash(roundtrip[0].put_data.interface) == hash(Data._pva_struct_)
     assert roundtrip[0].put_data.data == {'a': 5, 'b': 'string'}
+
+
+def test_channel_monitor(client: pva.ClientVirtualCircuit,
+                         server: pva.ServerVirtualCircuit,
+                         ):
+    connect(client, server)
+
+    client_chan: pva.ClientChannel = client.create_channel('pvname')
+    send(client, server, client_chan.create())
+
+    server_chan: pva.ServerChannel = server.create_channel('pvname')
+    send(server, client, server_chan.create(sid=1))
+
+    @pva.pva_dataclass
+    class Data:
+        a: int
+        b: str
+
+    server_value = Data(a=4, b='string')
+    server_data_bs = pva.DataWithBitSet(data=server_value, bitset=BitSet({0}))
+
+    request = client_chan.subscribe(pvrequest='field(a,b)')
+    response = server_chan.subscribe(ioid=request.ioid,
+                                     interface=server_value)
+    send(client, server, request)
+    send(server, client, response)
+
+    send(client, server, request.to_start())
+    roundtrip = send(server, client, response.to_default(pv_data=server_data_bs,
+                                                         overrun_bitset=BitSet({})))
+
+    assert hash(roundtrip[0].pv_data.interface) == hash(Data._pva_struct_)
+    assert roundtrip[0].pv_data.data == {'a': 4, 'b': 'string'}
+
+    server_value.a = 5
+    server_value.b = 'string test'
+
+    roundtrip = send(server, client, response.to_default(pv_data=server_data_bs,
+                                                         overrun_bitset=BitSet({})))
+
+    assert hash(roundtrip[0].pv_data.interface) == hash(Data._pva_struct_)
+    assert roundtrip[0].pv_data.data == {'a': 5, 'b': 'string test'}
+
+    send(client, server, request.to_stop())
+
+
+def test_channel_rpc(client: pva.ClientVirtualCircuit,
+                     server: pva.ServerVirtualCircuit,
+                     ):
+    connect(client, server)
+
+    client_chan: pva.ClientChannel = client.create_channel('pvname')
+    send(client, server, client_chan.create())
+
+    server_chan: pva.ServerChannel = server.create_channel('pvname')
+    send(server, client, server_chan.create(sid=1))
+
+    @pva.pva_dataclass
+    class Data:
+        a: int
+        b: str
+
+    client_value = Data(a=3, b='two')
+    server_value = Data(a=4, b='string')
+    client_data = pva.FieldDescAndData(data=client_value)
+    server_data = pva.FieldDescAndData(data=server_value)
+
+    request = client_chan.rpc(pvrequest='field(a,b)')
+    response = server_chan.rpc(ioid=request.ioid)
+    send(client, server, request)
+    send(server, client, response)
+
+    send(client, server, request.to_default(pv_data=client_data))
+    roundtrip = send(server, client,
+                     response.to_default(pv_response=server_data,
+                                         status=pva.Status.create_success(),
+                                         )
+                     )
+
+    assert hash(roundtrip[0].pv_response.interface) == hash(Data._pva_struct_)
+    assert dataclasses.asdict(roundtrip[0].pv_response.data) == {'a': 4, 'b': 'string'}

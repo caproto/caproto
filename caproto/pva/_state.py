@@ -16,21 +16,17 @@ from ._messages import (ApplicationCommand, ChannelDestroyRequest,
                         CreateChannelRequest, CreateChannelResponse,
                         MessageFlags, MonitorSubcommand, SetByteOrder,
                         Subcommand)
-from ._utils import (CLIENT, CONNECTED, DISCONNECTED, INIT, NEVER_CONNECTED,
-                     RESPONSIVE, SERVER, UNRESPONSIVE, LocalProtocolError,
-                     RemoteProtocolError)
+from ._utils import (CLIENT, CONNECTED, DISCONNECTED, NEVER_CONNECTED,
+                     RESPONSIVE, SERVER, UNRESPONSIVE, ChannelRequest,
+                     LocalProtocolError, RemoteProtocolError)
 
 # TODO: SetMarker, AcknowledgeMarker, BeaconMessage, Echo, SearchRequest, SearchResponse,
 # TODO: DESTROYED, IN_PROGRESS, NEED_DATA, READY
 
-# Connection state; Channel life-cycle;
-# also: CONNECTED, DISCONNECTED; Channel
-# request; also: DISCONNECTED, DESTROYED
-
 
 COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
     CLIENT: {
-        INIT: {
+        NEVER_CONNECTED: {
             SetByteOrder: CONNECTED,
         },
         CONNECTED: {
@@ -67,7 +63,7 @@ COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS = {
         },
     },
     SERVER: {
-        INIT: {
+        NEVER_CONNECTED: {
             SetByteOrder: CONNECTED,
         },
         CONNECTED: {
@@ -167,18 +163,39 @@ COMMAND_TRIGGERED_CHANNEL_TRANSITIONS = {
 
 SUBCOMMAND_TRANSITIONS = {
     CLIENT: {
-        NEVER_CONNECTED: {
-            Subcommand.INIT: CONNECTED,
+        ChannelRequest.INIT: {
+            Subcommand.INIT: ChannelRequest.READY,
         },
-        CONNECTED: {
-            Subcommand.INIT: CONNECTED,
-            Subcommand.DEFAULT: CONNECTED,
-            Subcommand.GET: CONNECTED,
-            Subcommand.GET_PUT: CONNECTED,
-            Subcommand.PROCESS: CONNECTED,
-            Subcommand.DESTROY: DISCONNECTED,
+        ChannelRequest.READY: {
+            # TODO: the transitions should be
+            # READY -> IN_PROGRESS -> READY
+            Subcommand.INIT: ChannelRequest.READY,
+            Subcommand.DEFAULT: ChannelRequest.READY,
+            Subcommand.GET: ChannelRequest.READY,
+            Subcommand.GET_PUT: ChannelRequest.READY,
+            Subcommand.PROCESS: ChannelRequest.READY,
+
+            Subcommand.GET | Subcommand.DESTROY: ChannelRequest.DESTROY_AFTER,
+            Subcommand.GET_PUT | Subcommand.DESTROY: ChannelRequest.DESTROY_AFTER,
+            Subcommand.PROCESS | Subcommand.DESTROY: ChannelRequest.DESTROY_AFTER,
+
+            # TODO: This doesn't really make sense to me:
+            # * DEFAULT mask is 0x00, so DEFAULT|DESTROY = DESTROY
+            # * `pvput` relies on this behavior: INIT -> DESTROY (means do the put)
+            Subcommand.DEFAULT | Subcommand.DESTROY: ChannelRequest.DESTROY_AFTER,
         },
-        DISCONNECTED: {
+        ChannelRequest.DESTROY_AFTER: {
+            Subcommand.DEFAULT: ChannelRequest.DESTROYED,
+            Subcommand.GET: ChannelRequest.DESTROYED,
+            Subcommand.GET_PUT: ChannelRequest.DESTROYED,
+            Subcommand.PROCESS: ChannelRequest.DESTROYED,
+
+            Subcommand.GET | Subcommand.DESTROY: ChannelRequest.DESTROYED,
+            Subcommand.GET_PUT | Subcommand.DESTROY: ChannelRequest.DESTROYED,
+            Subcommand.PROCESS | Subcommand.DESTROY: ChannelRequest.DESTROYED,
+            Subcommand.DESTROY: ChannelRequest.DESTROYED,
+        },
+        ChannelRequest.DESTROYED: {
         },
     }
 }
@@ -187,22 +204,21 @@ SUBCOMMAND_TRANSITIONS[SERVER] = SUBCOMMAND_TRANSITIONS[CLIENT]
 
 MONITOR_TRANSITIONS = {
     CLIENT: {
-        NEVER_CONNECTED: {
-            MonitorSubcommand.INIT: CONNECTED,
+        ChannelRequest.INIT: {
+            MonitorSubcommand.INIT: ChannelRequest.READY,
         },
-        CONNECTED: {
-            MonitorSubcommand.INIT: CONNECTED,
-            MonitorSubcommand.DEFAULT: CONNECTED,
-            MonitorSubcommand.PIPELINE: CONNECTED,
-            MonitorSubcommand.START: CONNECTED,
-            MonitorSubcommand.STOP: CONNECTED,
-            MonitorSubcommand.DESTROY: DISCONNECTED,
+        ChannelRequest.READY: {
+            MonitorSubcommand.INIT: ChannelRequest.READY,
+            MonitorSubcommand.DEFAULT: ChannelRequest.READY,
+            MonitorSubcommand.PIPELINE: ChannelRequest.READY,
+            MonitorSubcommand.START: ChannelRequest.READY,
+            MonitorSubcommand.STOP: ChannelRequest.READY,
+            MonitorSubcommand.DESTROY: ChannelRequest.DESTROYED,
         },
-        DISCONNECTED: {
+        ChannelRequest.DESTROYED: {
         },
     }
 }
-
 
 MONITOR_TRANSITIONS[SERVER] = MONITOR_TRANSITIONS[CLIENT]
 
@@ -222,11 +238,12 @@ class ChannelState(_ChannelState):
     STT = STATE_TRIGGERED_TRANSITIONS
 
     def __init__(self, circuit_state):
-        self.states = {CLIENT: NEVER_CONNECTED,
-                       SERVER: NEVER_CONNECTED}
+        self.states = {
+            CLIENT: NEVER_CONNECTED,
+            SERVER: NEVER_CONNECTED,
+        }
         self.circuit_state = circuit_state
 
-    # MERGE
     def _fire_command_triggered_transitions(self, role, command):
         command_type = type(command)
         if command_type._ENDIAN is not None:
@@ -242,9 +259,10 @@ class ChannelState(_ChannelState):
             new_state = allowed_transitions[command_type]
         except KeyError:
             err_cls = get_exception(role, command)
-            err = err_cls(f"{self} cannot handle command type "
-                          f"{command_type.__name__} when role={role} and "
-                          f"state={self.states[role]}")
+            err = err_cls(
+                f"{self} cannot handle command type {command_type.__name__} "
+                f"when role={role} and state={self.states[role]}"
+            )
             raise err from None
         self.states[role] = new_state
 
@@ -253,10 +271,12 @@ class CircuitState(_CircuitState):
     TRANSITIONS = COMMAND_TRIGGERED_CIRCUIT_TRANSITIONS
 
     def __init__(self, channels):
-        self.states = {CLIENT: INIT, SERVER: INIT}
+        self.states = {
+            CLIENT: NEVER_CONNECTED,
+            SERVER: NEVER_CONNECTED,
+        }
         self.channels = channels
 
-    # MERGE
     def _fire_command_triggered_transitions(self, role, command):
         command_type = type(command)
         if command.ID in ControlCommand:
@@ -274,45 +294,76 @@ class CircuitState(_CircuitState):
             new_state = allowed_transitions[command_type]
         except KeyError:
             err_cls = get_exception(role, command)
-            err = err_cls(f"{self} cannot handle command type "
-                          f"{command_type.__name__} when role={role} and "
-                          f"state={self.states[role]}")
+            err = err_cls(
+                f"{self} cannot handle command type {command_type.__name__} "
+                f"when role={role} and state={self.states[role]}"
+            )
             raise err from None
         self.states[role] = new_state
 
 
 class RequestState(_BaseState):
-    def __init__(self, is_monitor):
-        self.monitor = is_monitor
-        self.TRANSITIONS = (MONITOR_TRANSITIONS if is_monitor
-                            else SUBCOMMAND_TRANSITIONS)
-        self.states = {CLIENT: NEVER_CONNECTED, SERVER: NEVER_CONNECTED}
+    """
+    Request state tracking for non-monitors.
+
+    Parameters
+    ----------
+    reference : str
+        A string reference for the request.
+    """
+
+    _subcommand_class = Subcommand
+    TRANSITIONS = SUBCOMMAND_TRANSITIONS
+
+    def __init__(self, reference: str):
+        self.states = {
+            CLIENT: ChannelRequest.INIT,
+            SERVER: ChannelRequest.INIT,
+        }
+        self.reference = reference
+
+    def __repr__(self):
+        return (
+            f"<{self.__class__.__name__} {self.reference} "
+            "states={self.states!r}>"
+        )
 
     def process_subcommand(self, subcommand):
+        subcommand = self._subcommand_class(subcommand)
         self._fire_command_triggered_transitions(CLIENT, subcommand)
         self._fire_command_triggered_transitions(SERVER, subcommand)
 
-    # MERGE
     def _fire_command_triggered_transitions(self, role, subcommand):
         current_state = self.states[role]
         allowed_transitions = self.TRANSITIONS[role][current_state]
-        if self.monitor:
-            subcommand = MonitorSubcommand(subcommand)
-        else:
-            subcommand = Subcommand(subcommand)
 
         try:
             new_state = allowed_transitions[subcommand]
         except KeyError:
-            err_cls = get_exception(role, subcommand)
-            err = err_cls(f"{self} cannot handle subcommand type "
-                          f"{subcommand!r} when role={role} and "
-                          f"state={self.states[role]}")
+            # err_cls = get_exception(role, subcommand)
+            # TODO: direction isn't clear here
+            err = RemoteProtocolError(
+                f"{self} cannot handle subcommand type {subcommand!r} when "
+                f"role={role} and state={self.states[role]}"
+            )
             raise err from None
         self.states[role] = new_state
 
 
-# MERGE
+class MonitorRequestState(RequestState):
+    """
+    Request state tracking for monitors.
+
+    Parameters
+    ----------
+    reference : str
+        A string reference for the request.
+    """
+
+    _subcommand_class = MonitorSubcommand
+    TRANSITIONS = MONITOR_TRANSITIONS
+
+
 def get_exception(our_role, command):
     """
     Return a (Local|Remote)ProtocolError depending on which command this is and

@@ -315,3 +315,66 @@ def test_roundtrip_data_with_bitset(endian, structure, args, bitset):
     assert helper.round_trip().data == helper.input_value.data
     print('Serialized:', helper.serialized)
     assert helper.from_wire().bitset == bitset
+
+
+def test_get_pv_structure():
+    assert pva.get_pv_structure(_Struct01) is _Struct01._pva_struct_
+
+    with pytest.raises(ValueError):
+        assert pva.get_pv_structure(None)
+
+
+def test_fields_to_bitset_bad_input():
+    with pytest.raises(ValueError):
+        pva.fields_to_bitset(None, {})
+
+
+@pytest.mark.parametrize(
+    'structure, fields, expected_bitset, expected_options',
+    [
+        pytest.param(
+            _Struct01(1, 2, 3),
+            {'a': {'_options': {'test': 'true'}}},
+
+            pva.BitSet({1}),
+            {'a': {'test': 'true'}},
+
+            id='Struct01_a_options'
+        ),
+
+        pytest.param(
+            _Struct01(1, 2, 3),
+            {'a': {}},
+
+            pva.BitSet({1}),
+            {},
+
+            id='Struct01_a_no_options'
+        ),
+
+        pytest.param(
+            _Struct07(a=[1, 2], b=_Struct01(1, 2, 3)),
+            {'b': {'a': {}, 'c': {}}},
+
+            pva.BitSet({3, 5}),
+            {'b': {}},
+
+            id='Struct07_b_no_options'
+        ),
+
+        pytest.param(
+            _Struct07(a=[1, 2], b=_Struct01(1, 2, 3)),
+            {'b': {'a': {'_options': {'q': '5'}}, 'b': {}}},
+
+            pva.BitSet({3, 4}),
+            {'b': {'a': {'q': '5'}}},
+
+            id='Struct07_b_options'
+        ),
+    ]
+)
+def test_fields_to_bitset(structure, fields, expected_bitset, expected_options):
+    print(pva.get_pv_structure(structure).summary())
+    bitset = pva.fields_to_bitset(structure, field_dict=fields)
+    assert bitset == expected_bitset
+    assert bitset.options == expected_options
