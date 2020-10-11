@@ -12,6 +12,7 @@ from typing import Dict, List, Optional
 
 from ... import pva
 from .._dataclass import get_pv_structure, pva_dataclass
+from .._normative import NTScalarInt64
 from .common import AuthOperation, DataWrapperBase
 
 module_logger = logging.getLogger(__name__)
@@ -657,13 +658,7 @@ class PVAGroup(metaclass=PVAGroupMeta):
     _wrapper_class_ = GroupDataWrapper
 
     type_map = {
-        # int: NormativeInt,
-    }
-
-    # Auto-generate the read-only class specification:
-    type_map_read_only = {
-        dtype: globals()[f'{cls.__name__}RO']
-        for dtype, cls in type_map.items()
+        int: NTScalarInt64,
     }
 
     def __init__(self, prefix, *, macros=None, parent=None, name=None):
@@ -696,7 +691,12 @@ class PVAGroup(metaclass=PVAGroupMeta):
         if pva.is_pva_dataclass_instance(prop.value):
             return copy.deepcopy(prop.value)
 
-        return prop.value(**prop.cls_kwargs)
+        if pva.is_pva_dataclass(prop.value):
+            # TODO: not sure i like this: may be removed
+            return prop.value(**prop.cls_kwargs)
+
+        dtype = self.type_map[type(prop.value)]
+        return dtype(value=prop.value, **prop.cls_kwargs)
 
     def _create_pv(self, attr: str, prop: pvaproperty):
         value = self._instantiate_value_from_pvproperty(attr, prop)
