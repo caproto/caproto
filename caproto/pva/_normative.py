@@ -115,7 +115,7 @@ def _create_nt(name: str,
     of FieldType.int64:
 
         @pva_dataclass(name='epics:nt/NTScalar:1.0')
-        class NTScalarInt64Base(NTScalarInt64Base):
+        class NTScalarInt64Base(NTScalarBase):
             value: int64
 
         @pva_dataclass(name='epics:nt/NTScalar:1.0')
