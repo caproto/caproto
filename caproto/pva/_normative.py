@@ -1,11 +1,8 @@
-# TODO: class-based definitions + usual introspection abilities as well?
-# TODO: NTValue class which helps handle a structured value of an NTType?
-
 import dataclasses
 import logging
-from typing import Tuple, Type
+from typing import List, Optional, Tuple, Type
 
-from ._annotations import Int32, Int64
+from ._annotations import Int32, Int64, type_to_annotation
 from ._dataclass import (get_pv_structure, is_pva_dataclass,
                          is_pva_dataclass_instance, pva_dataclass)
 from ._fields import FieldType
@@ -74,6 +71,11 @@ class NTScalarBase(metaclass=_NTMeta):
     _value_type_ = None
 
 
+class NTScalarArrayBase(metaclass=_NTMeta):
+    _base_type_name_ = 'NTScalarArray'
+    _value_type_ = None
+
+
 @pva_dataclass(name='time_t')
 class NTTimestamp:
     secondsPastEpoch: Int64
@@ -88,9 +90,10 @@ class NTAlarm:
     message: str
 
 
-def _create_nt_scalar(name: str,
-                      field_type: FieldType
-                      ) -> Tuple[Type[NTScalarBase], Type[NTScalarBase]]:
+def _create_nt(name: str,
+               field_type: FieldType,
+               array: Optional[bool] = False,
+               ) -> Tuple[Type[NTScalarBase], Type[NTScalarBase]]:
     """
     Creates two classes - a base normative scalar type and a "full" one.
 
@@ -101,6 +104,9 @@ def _create_nt_scalar(name: str,
 
     field_type : FieldType
         The primitive type for "value" to hold.
+
+    array : bool, optional
+        Create an array type?
 
     Example
     -------
@@ -161,16 +167,19 @@ def _create_nt_scalar(name: str,
     base_dict = {
         '_value_type_': field_type,
         '__annotations__': {
-            'value': field_type,
+            'value': List[type_to_annotation[field_type]] if array else field_type,
         }
     }
 
-    wrapper = pva_dataclass(name=NormativeTypeName('NTScalar').struct_name)
-    base_cls = wrapper(type(f'{name}Base', (NTScalarBase, ), base_dict))
+    wrapper = pva_dataclass(
+        name=NormativeTypeName('NTScalarArray' if array else 'NTScalar').struct_name
+    )
+    bases = (NTScalarBase if not array else NTScalarArrayBase, )
+    base_cls = wrapper(type(f'{name}Base', bases, base_dict))
 
     full_dict = {
         '__annotations__': {
-            # 'value': field_type,
+            **base_dict['__annotations__'],
             'descriptor': str,
             'alarm': NTAlarm,
             'timeStamp': NTTimestamp,
@@ -187,18 +196,50 @@ def _create_nt_scalar(name: str,
     return base_cls, full_cls
 
 
-NTScalarInt64Base, NTScalarInt64 = _create_nt_scalar('NTScalarInt64', FieldType.int64)
-NTScalarFloat16Base, NTScalarFloat16 = _create_nt_scalar('NTScalarFloat16', FieldType.float16)
-NTScalarFloat32Base, NTScalarFloat32 = _create_nt_scalar('NTScalarFloat32', FieldType.float32)
-NTScalarFloat64Base, NTScalarFloat64 = _create_nt_scalar('NTScalarFloat64', FieldType.float64)
-NTScalarFloat128Base, NTScalarFloat128 = _create_nt_scalar('NTScalarFloat128', FieldType.float128)
-NTScalarUInt64Base, NTScalarUInt64 = _create_nt_scalar('NTScalarUInt64', FieldType.uint64)
-NTScalarInt64Base, NTScalarInt64 = _create_nt_scalar('NTScalarInt64', FieldType.int64)
-NTScalarUInt32Base, NTScalarUInt32 = _create_nt_scalar('NTScalarUInt32', FieldType.uint32)
-NTScalarInt32Base, NTScalarInt32 = _create_nt_scalar('NTScalarInt32', FieldType.int32)
-NTScalarUInt16Base, NTScalarUInt16 = _create_nt_scalar('NTScalarUInt16', FieldType.uint16)
-NTScalarInt16Base, NTScalarInt16 = _create_nt_scalar('NTScalarInt16', FieldType.int16)
-NTScalarUInt8Base, NTScalarUInt8 = _create_nt_scalar('NTScalarUInt8', FieldType.uint8)
-NTScalarInt8Base, NTScalarInt8 = _create_nt_scalar('NTScalarInt8', FieldType.int8)
-NTScalarBooleanBase, NTScalarBoolean = _create_nt_scalar('NTScalarBoolean', FieldType.boolean)
-NTScalarStringBase, NTScalarString = _create_nt_scalar('NTScalarString', FieldType.string)
+# Create these explicitly for easy grepping:
+NTScalarBooleanBase, NTScalarBoolean = _create_nt('NTScalarBoolean', FieldType.boolean)
+NTScalarFloat128Base, NTScalarFloat128 = _create_nt('NTScalarFloat128', FieldType.float128)
+NTScalarFloat16Base, NTScalarFloat16 = _create_nt('NTScalarFloat16', FieldType.float16)
+NTScalarFloat32Base, NTScalarFloat32 = _create_nt('NTScalarFloat32', FieldType.float32)
+NTScalarFloat64Base, NTScalarFloat64 = _create_nt('NTScalarFloat64', FieldType.float64)
+NTScalarInt16Base, NTScalarInt16 = _create_nt('NTScalarInt16', FieldType.int16)
+NTScalarInt32Base, NTScalarInt32 = _create_nt('NTScalarInt32', FieldType.int32)
+NTScalarInt64Base, NTScalarInt64 = _create_nt('NTScalarInt64', FieldType.int64)
+NTScalarInt64Base, NTScalarInt64 = _create_nt('NTScalarInt64', FieldType.int64)
+NTScalarInt8Base, NTScalarInt8 = _create_nt('NTScalarInt8', FieldType.int8)
+NTScalarStringBase, NTScalarString = _create_nt('NTScalarString', FieldType.string)
+NTScalarUInt16Base, NTScalarUInt16 = _create_nt('NTScalarUInt16', FieldType.uint16)
+NTScalarUInt32Base, NTScalarUInt32 = _create_nt('NTScalarUInt32', FieldType.uint32)
+NTScalarUInt64Base, NTScalarUInt64 = _create_nt('NTScalarUInt64', FieldType.uint64)
+NTScalarUInt8Base, NTScalarUInt8 = _create_nt('NTScalarUInt8', FieldType.uint8)
+
+NTScalarArrayBooleanBase, NTScalarArrayBoolean = _create_nt(
+    'NTScalarArrayBoolean', FieldType.boolean, array=True)
+NTScalarArrayFloat128Base, NTScalarArrayFloat128 = _create_nt(
+    'NTScalarArrayFloat128', FieldType.float128, array=True)
+NTScalarArrayFloat16Base, NTScalarArrayFloat16 = _create_nt(
+    'NTScalarArrayFloat16', FieldType.float16, array=True)
+NTScalarArrayFloat32Base, NTScalarArrayFloat32 = _create_nt(
+    'NTScalarArrayFloat32', FieldType.float32, array=True)
+NTScalarArrayFloat64Base, NTScalarArrayFloat64 = _create_nt(
+    'NTScalarArrayFloat64', FieldType.float64, array=True)
+NTScalarArrayInt16Base, NTScalarArrayInt16 = _create_nt(
+    'NTScalarArrayInt16', FieldType.int16, array=True)
+NTScalarArrayInt32Base, NTScalarArrayInt32 = _create_nt(
+    'NTScalarArrayInt32', FieldType.int32, array=True)
+NTScalarArrayInt64Base, NTScalarArrayInt64 = _create_nt(
+    'NTScalarArrayInt64', FieldType.int64, array=True)
+NTScalarArrayInt64Base, NTScalarArrayInt64 = _create_nt(
+    'NTScalarArrayInt64', FieldType.int64, array=True)
+NTScalarArrayInt8Base, NTScalarArrayInt8 = _create_nt(
+    'NTScalarArrayInt8', FieldType.int8, array=True)
+NTScalarArrayStringBase, NTScalarArrayString = _create_nt(
+    'NTScalarArrayString', FieldType.string, array=True)
+NTScalarArrayUInt16Base, NTScalarArrayUInt16 = _create_nt(
+    'NTScalarArrayUInt16', FieldType.uint16, array=True)
+NTScalarArrayUInt32Base, NTScalarArrayUInt32 = _create_nt(
+    'NTScalarArrayUInt32', FieldType.uint32, array=True)
+NTScalarArrayUInt64Base, NTScalarArrayUInt64 = _create_nt(
+    'NTScalarArrayUInt64', FieldType.uint64, array=True)
+NTScalarArrayUInt8Base, NTScalarArrayUInt8 = _create_nt(
+    'NTScalarArrayUInt8', FieldType.uint8, array=True)

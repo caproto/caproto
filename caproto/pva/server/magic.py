@@ -8,11 +8,13 @@ import inspect
 import logging
 import types
 from contextvars import ContextVar
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Sequence
 
 from ... import pva
 from .._dataclass import get_pv_structure, pva_dataclass
-from .._normative import (NTScalarBoolean, NTScalarFloat64, NTScalarInt64,
+from .._normative import (NTScalarArrayBoolean, NTScalarArrayFloat64,
+                          NTScalarArrayInt64, NTScalarArrayString,
+                          NTScalarBoolean, NTScalarFloat64, NTScalarInt64,
                           NTScalarString)
 from .common import AuthOperation, DataWrapperBase
 
@@ -665,6 +667,13 @@ class PVAGroup(metaclass=PVAGroupMeta):
         bool: NTScalarBoolean,
     }
 
+    array_type_map = {
+        int: NTScalarArrayInt64,
+        float: NTScalarArrayFloat64,
+        str: NTScalarArrayString,
+        bool: NTScalarArrayBoolean,
+    }
+
     def __init__(self, prefix, *, macros=None, parent=None, name=None):
         self.parent = parent
         self.macros = macros if macros is not None else {}
@@ -698,6 +707,11 @@ class PVAGroup(metaclass=PVAGroupMeta):
         if pva.is_pva_dataclass(prop.value):
             # TODO: not sure i like this: may be removed
             return prop.value(**prop.cls_kwargs)
+
+        # Also preliminary array/scalar checks:
+        if isinstance(prop.value, Sequence) and not isinstance(prop.value, str):
+            dtype = self.array_type_map[type(prop.value[0])]
+            return dtype(value=copy.copy(prop.value), **prop.cls_kwargs)
 
         dtype = self.type_map[type(prop.value)]
         return dtype(value=prop.value, **prop.cls_kwargs)
