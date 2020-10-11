@@ -4,8 +4,6 @@ A basic caproto-pva test server.
 
 This is very much preliminary API.
 """
-import typing
-
 import caproto.pva as pva
 from caproto.pva.server import ioc_arg_parser, run
 
@@ -87,63 +85,6 @@ class MyIOC(pva.PVAGroup):
         await self.async_lib.library.sleep(10)
 
 
-class ServerRPC(pva.PVAGroup):
-    """
-    Helper group for supporting ``pvlist`` and other introspection tools.
-    """
-
-    @pva.pva_dataclass
-    class HelpInfo:
-        # TODO: technically epics:nt/NTScalar
-        value: str
-
-    @pva.pva_dataclass
-    class ChannelListing:
-        # TODO: technically epics:nt/NTScalarArray
-        value: typing.List[str]
-
-    @pva.pva_dataclass
-    class ServerInfo:
-        # responseHandlers.cpp
-        version: str
-        implLang: str
-        host: str
-        process: str
-        startTime: str
-
-    # This is the special
-    server = pva.pvaproperty(value=ServerInfo(), name='server')
-
-    def __init__(self, *args, server_instance, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.server_instance = server_instance
-
-    @server.call
-    async def server(self, instance, data):
-        # Some awf... nice normative type stuff comes through here (NTURI):
-        self.log.debug('RPC call data is: %s', data)
-        self.log.debug('Scheme: %s', data.scheme)
-        self.log.debug('Query: %s', data.query)
-        self.log.debug('Path: %s', data.path)
-
-        # Echo back the query value, if available:
-        try:
-            operation = data.query.op
-        except AttributeError:
-            raise ValueError('Malformed request (expected .query.op)')
-
-        if operation == 'help':
-            return self.HelpInfo(value='Me too')
-
-        if operation == 'info':
-            return self.ServerInfo()
-
-        if operation == 'channels':
-            pvnames = list(sorted(self.server_instance.pvdb))
-            pvnames.remove(self.server.name)
-            return self.ChannelListing(value=pvnames)
-
-
 def main():
     ioc_options, run_options = ioc_arg_parser(
         default_prefix='caproto:pva:',
@@ -151,7 +92,7 @@ def main():
     )
 
     ioc = MyIOC(**ioc_options)
-    server_info = ServerRPC(prefix='', server_instance=ioc)
+    server_info = pva.ServerRPC(prefix='', server_instance=ioc)
     ioc.pvdb.update(server_info.pvdb)
     run(ioc.pvdb, **run_options)
 

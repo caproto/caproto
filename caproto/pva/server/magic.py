@@ -8,10 +8,10 @@ import inspect
 import logging
 import types
 from contextvars import ContextVar
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from ... import pva
-from .._dataclass import get_pv_structure
+from .._dataclass import get_pv_structure, pva_dataclass
 from .common import AuthOperation, DataWrapperBase
 
 module_logger = logging.getLogger(__name__)
@@ -732,3 +732,60 @@ class PVAGroup(metaclass=PVAGroupMeta):
     async def group_write(self, instance, update: WriteUpdate):
         'Generic write called for channels without `put` defined'
         self.log.debug('group_write: %s = %s', instance, update)
+
+
+class ServerRPC(PVAGroup):
+    """
+    Helper group for supporting ``pvlist`` and other introspection tools.
+    """
+
+    @pva_dataclass
+    class HelpInfo:
+        # TODO: technically epics:nt/NTScalar
+        value: str
+
+    @pva_dataclass
+    class ChannelListing:
+        # TODO: technically epics:nt/NTScalarArray
+        value: List[str]
+
+    @pva_dataclass
+    class ServerInfo:
+        # responseHandlers.cpp
+        version: str
+        implLang: str
+        host: str
+        process: str
+        startTime: str
+
+    # This is the special
+    server = pvaproperty(value=ServerInfo(), name='server')
+
+    def __init__(self, *args, server_instance, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.server_instance = server_instance
+
+    @server.call
+    async def server(self, instance, data):
+        # Some awf... nice normative type stuff comes through here (NTURI):
+        self.log.debug('RPC call data is: %s', data)
+        self.log.debug('Scheme: %s', data.scheme)
+        self.log.debug('Query: %s', data.query)
+        self.log.debug('Path: %s', data.path)
+
+        # Echo back the query value, if available:
+        try:
+            operation = data.query.op
+        except AttributeError:
+            raise ValueError('Malformed request (expected .query.op)')
+
+        if operation == 'help':
+            return self.HelpInfo(value='Me too')
+
+        if operation == 'info':
+            return self.ServerInfo()
+
+        if operation == 'channels':
+            pvnames = list(sorted(self.server_instance.pvdb))
+            pvnames.remove(self.server.name)
+            return self.ChannelListing(value=pvnames)
