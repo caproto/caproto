@@ -44,44 +44,60 @@ pvdb = {
 }
 
 
-class AuthenticationError(RuntimeError):
-    ...
+class BasicDataWrapper(pva.DataWrapperBase):
+    """
+    A basic wrapper for dataclasses to support caproto-pva's server API.
 
+    Parameters
+    ----------
+    data : PvaStruct
+        The dataclass holding the data.
 
-class DataWrapper:
-    def __init__(self, pvname, data):
-        self.pvname = pvname
-        self.data = data
+    pvname : str
+        The associated name of the data.
+    """
 
-    def authenticate(self, authorization):
+    async def authorize(self,
+                        operation: pva.AuthOperation, *,
+                        authorization,
+                        request=None):
+        """
+        Authenticate `operation`, given `authorization` information.
+
+        In the event of successful authorization, a dataclass defining the data
+        contained here must be returned.
+
+        In the event of a failed authorization, `AuthenticationError` or
+        similar should be raised.
+
+        Returns
+        -------
+        data
+
+        Raises
+        ------
+        AuthenticationError
+        """
+        # TODO: add functionality here
         if authorization['method'] == 'ca':
             # user = authorization['data'].user
             # if user != 'klauer':
             #     raise AuthenticationError(f'No, {user}.')
-            return
-
-        if authorization['method'] in {'anonymous', ''}:
+            ...
+        elif authorization['method'] in {'anonymous', ''}:
             ...
 
-    async def auth_write(self, request, *, authorization):
-        self.authenticate(authorization)
         return self.data
-
-    async def auth_read_interface(self, *, authorization):
-        self.authenticate(authorization)
-        return self.data
-
-    async def auth_read(self, request, *, authorization):
-        self.authenticate(authorization)
-        return await self.read(request)
 
     async def read(self, request):
-        # self.data.value += 1
-        return self.data
+        # TODO: add functionality here
+        # print('Saw read', self.name, request)
+        return await super().read(request)
 
-    async def write(self, update):
-        print('saw a write!', update)
-        pva.fill_dataclass(self.data, update.data)
+    async def write(self, update: pva.DataWithBitSet):
+        # TODO: add functionality here
+        # print('Saw write', self.name, update)
+        return await super().write(update)
 
 
 def main():
@@ -92,7 +108,7 @@ def main():
 
     prefix = ioc_options['prefix']
     prefixed_pvdb = {
-        prefix + key: DataWrapper(prefix + key, value)
+        prefix + key: BasicDataWrapper(name=prefix + key, data=value)
         for key, value in pvdb.items()
     }
     warnings.warn("The parsed IOC options are ignored by this IOC for now.")

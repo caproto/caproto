@@ -5,7 +5,7 @@ import sys
 
 import caproto as ca
 
-from ...asyncio.server import AsyncioAsyncLayer, Event, ServerExit
+from ...asyncio.server import AsyncioAsyncLayer, ServerExit
 from ...asyncio.utils import _DatagramProtocol, _TaskHandler, _TransportWrapper
 from ..server.common import Context as _Context
 from ..server.common import VirtualCircuit as _VirtualCircuit
@@ -37,22 +37,26 @@ class VirtualCircuit(_VirtualCircuit):
         self.QueueFull = asyncio.QueueFull
         self.message_queue = asyncio.Queue(ca.MAX_COMMAND_BACKLOG,
                                            loop=self.loop)
-        self.new_message_condition = asyncio.Condition(loop=self.loop)
         self.events_on = asyncio.Event(loop=self.loop)
         self.subscription_queue = asyncio.Queue(
             ca.MAX_TOTAL_SUBSCRIPTION_BACKLOG, loop=self.loop)
-        self.write_event = Event(loop=self.loop)
         self.tasks = _TaskHandler()
         self._sub_task = None
 
-    # async def get_from_sub_queue(self, timeout=None):
-    #     # Timeouts work very differently between our server implementations,
-    #     # so we do this little stub in its own method.
-    #     fut = asyncio.ensure_future(self.subscription_queue.get())
-    #     try:
-    #         return await asyncio.wait_for(fut, timeout, loop=self.loop)
-    #     except asyncio.TimeoutError:
-    #         return None
+    async def get_from_sub_queue(self, timeout=None):
+        """
+        Get one item from the subscription queue.
+
+        Notes
+        -----
+        The superclass expects us to implement this in our own way due to
+        timeouts.
+        """
+        future = asyncio.ensure_future(self.subscription_queue.get())
+        try:
+            return await asyncio.wait_for(future, timeout, loop=self.loop)
+        except asyncio.TimeoutError:
+            return None
 
     async def send(self, *messages):
         if self.connected:
@@ -65,14 +69,13 @@ class VirtualCircuit(_VirtualCircuit):
 
     async def run(self):
         self.tasks.create(self.message_queue_loop())
-        # self._sub_task = self.tasks.create(self.subscription_queue_loop())
+        self._sub_task = self.tasks.create(self.subscription_queue_loop())
 
     async def _start_write_task(self, handle_write):
-        self.tasks.create(handle_write())
-
-    async def _wake_new_message(self):
-        async with self.new_message_condition:
-            self.new_message_condition.notify_all()
+        """
+        Start a write handler, and return the task.
+        """
+        return self.tasks.create(handle_write())
 
     async def _on_disconnect(self):
         await super()._on_disconnect()
@@ -106,9 +109,23 @@ class Context(_Context):
             client_sock, addr = await self.loop.sock_accept(sock)
             self.server_tasks.create(self.tcp_handler(client_sock, addr))
 
+    @property
+    def guid(self) -> str:
+        """The server GUID."""
+        raw_guid = self.broadcaster.guid
+        return ''.join(hex(ord(c))[2:] for c in raw_guid).upper()
+
     async def run(self, *, log_pv_names=False):
-        'Start the server'
+        """
+        Start the server.
+
+        Parameters
+        ----------
+        log_pv_names : bool, optional
+            Log all PV names to `self.log` after starting up.
+        """
         self.log.info('Asyncio server starting up...')
+        self.log.info('Server GUID is: 0x%s', self.guid)
 
         async def make_socket(interface, port):
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
@@ -176,14 +193,16 @@ class Context(_Context):
                            self.pva_broadcast_port)
 
         tasks.create(self.broadcaster_queue_loop())
-        # tasks.create(self.subscription_queue_loop())
+        tasks.create(self.subscription_queue_loop())
         tasks.create(self.broadcast_beacon_loop())
 
-        # async_lib = AsyncioAsyncLayer()
-        # for name, method in self.startup_methods.items():
-        #     self.log.debug('Calling startup method %r', name)
-        #     tasks.create(method(async_lib))
-        # self.log.info('Server startup complete.')
+        async_lib = AsyncioAsyncLayer()
+        for name, method in self.startup_methods.items():
+            self.log.debug('Calling startup method %r', name)
+            tasks.create(method(async_lib))
+
+        self.log.info('Server startup complete.')
+
         if log_pv_names:
             self.log.info('PVs available:\n%s', '\n'.join(self.pvdb))
 
@@ -202,10 +221,11 @@ class Context(_Context):
         finally:
             self.log.info('Server exiting....')
             shutdown_tasks = []
-            # for name, method in self.shutdown_methods.items():
-            #     self.log.debug('Calling shutdown method %r', name)
-            #     task = self.loop.create_task(method(async_lib))
-            #     shutdown_tasks.append(task)
+            for name, method in self.shutdown_methods.items():
+                self.log.debug('Calling shutdown method %r', name)
+                task = self.loop.create_task(method(async_lib))
+                shutdown_tasks.append(task)
+
             await asyncio.gather(*shutdown_tasks)
             for sock in self.tcp_sockets.values():
                 sock.close()

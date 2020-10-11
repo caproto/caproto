@@ -44,17 +44,17 @@ def main():
 
     try:
         for pv_name in args.pv_names:
-            response = read(pv_name=pv_name, pvrequest=args.pvrequest,
-                            verbose=args.verbose, timeout=args.timeout)
+            response, data = read(
+                pv_name=pv_name, pvrequest=args.pvrequest,
+                verbose=args.verbose, timeout=args.timeout
+            )
 
-            dcls = response.dataclass_instance
             if args.terse:
-                dcls = getattr(dcls, 'value', dcls)
-                print(dcls)
+                print(getattr(data, 'value', data))
             else:
-                print(dcls)
-                # TODO: make an option, somehow?
-                # pprint.pprint(dataclasses.asdict(dcls))
+                if (args.verbose or 0) > 1:
+                    print(response)
+                print(data)
 
     except BaseException as exc:
         if args.verbose:

@@ -15,7 +15,8 @@ from ._core import (BIG_ENDIAN, LITTLE_ENDIAN, AddressTuple, CoreSerializable,
                     UserFacingEndian)
 from ._data import (DataSerializer, DataWithBitSet, FieldDescAndData,
                     PVRequest, from_wire, to_wire)
-from ._dataclass import array_of, pva_dataclass
+from ._dataclass import (array_of, get_pv_structure, is_pva_dataclass,
+                         pva_dataclass)
 from ._fields import BitSet, CacheContext, FieldDesc, SimpleField, Status
 from ._utils import (SERVER, ChannelLifeCycle, Role, ip_to_ubyte_array,
                      ubyte_array_to_ip)
@@ -50,6 +51,9 @@ class ChannelAccessAuthentication:
     user: annotations.String
     host: annotations.String
 
+    def __str__(self):
+        return f'{self.user}@{self.host}'
+
 
 serialization_logger = logging.getLogger('caproto.pva.serialization')
 
@@ -63,9 +67,9 @@ class _MessageField:
                                     array_type=FieldArrayType.scalar,
                                     size=1,
                                     )
-        elif hasattr(self.type, '_pva_struct_'):
+        elif is_pva_dataclass(self.type):
             # Can use a pva_struct-wrapped dataclass
-            self.type = self.type._pva_struct_
+            self.type = get_pv_structure(self.type)
 
         # With the end result of `type` being a SimpleField or StructuredField
 
@@ -102,10 +106,6 @@ class OptionalField(_MessageField):
     type: MessageFieldType
     stop: OptionalStopMarker = OptionalStopMarker.stop
     condition: Optional[typing.Callable] = None
-
-
-def _not_ok_condition(msg, buf):
-    return msg.status.status != StatusType.OK
 
 
 def _success_condition(msg, buf):
@@ -220,7 +220,7 @@ class MessageFlags(enum.IntFlag):
                    )
 
 
-class Subcommand(enum.IntEnum):
+class Subcommand(enum.IntFlag):
     # Default behavior
     DEFAULT = 0x00
     # Require reply (acknowledgment for reliable operation)
@@ -485,7 +485,7 @@ class SubcommandMessage(AdditionalFieldsMessage):
     def _get_repr_items(self):
         yield from super()._get_repr_items()
         if self.subcommand is not None:
-            for field in self._subcommand_fields_[self.subcommand]:
+            for field in self._subcommand_fields_[self.subcommand & ~Subcommand.DESTROY]:
                 yield self._get_repr_for_attr(field.name)
 
     @classmethod
@@ -494,11 +494,16 @@ class SubcommandMessage(AdditionalFieldsMessage):
         if subcommand is None:
             return fields
 
+        # eget/pvget can mix in DESTROY with the commands:
+        subcommand = Subcommand(subcommand)
+        if Subcommand.DESTROY in subcommand:
+            subcommand = subcommand & ~Subcommand.DESTROY
+
         try:
             return fields + cls._subcommand_fields_[subcommand]
         except KeyError:
             raise ValueError(f'Invalid (or currently unhandled) subcommand'
-                             f' for class {cls}: {subcommand}') from None
+                             f' for class {cls}: {hex(subcommand)}') from None
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -1470,7 +1475,10 @@ class ChannelPutGetRequest(SubcommandMessage):
     Notes
     -----
     A "GET_PUT" request retrieves the remote put structure. This MAY be used by
-    user applications to show data that was set the last time by the application.
+    user applications to show data that was set the last time by the
+    application.
+
+    This is not yet implemented in caproto-pva.
     """
     ID = ApplicationCommand.PUT_GET
 
@@ -1503,6 +1511,10 @@ class ChannelPutGetRequest(SubcommandMessage):
 class ChannelPutGetResponse(SubcommandMessage):
     """
     A response to a :class:`ChannelPutGetRequest`.
+
+    Notes
+    -----
+    This is not yet implemented in caproto-pva.
     """
     ID = ApplicationCommand.PUT_GET
 
@@ -1658,9 +1670,15 @@ class ChannelMonitorRequest(SubcommandMessage):
         self.subcommand = MonitorSubcommand.STOP
         return self
 
-    @_handles(MonitorSubcommand.PIPELINE)
-    def to_pipeline(self):
+    @_handles(
+        MonitorSubcommand.PIPELINE,
+        [
+            RequiredField('nfree', FieldType.int32),
+        ]
+    )
+    def to_pipeline(self, nfree: int) -> 'ChannelMonitorRequest':
         self.subcommand = MonitorSubcommand.PIPELINE
+        self.nfree = nfree
         return self
 
 
@@ -1709,15 +1727,9 @@ class ChannelMonitorResponse(SubcommandMessage):
         self.overrun_bitset = overrun_bitset
         return self
 
-    @_handles(
-        MonitorSubcommand.PIPELINE,
-        [
-            RequiredField('nfree', FieldType.int32),
-        ]
-    )
+    @_handles(MonitorSubcommand.PIPELINE)
     def to_pipeline(self, nfree: int) -> 'ChannelMonitorResponse':
         self.subcommand = MonitorSubcommand.PIPELINE
-        self.nfree = nfree
         return self
 
 
@@ -1785,8 +1797,8 @@ class ChannelRpcRequest(SubcommandMessage):
     The "channel RPC" set of messages are used to provide remote procedure call
     (RPC) support over pvAccess. After a RPC request is successfully
     initialized, the client can issue actual RPC request(s).
-
     """
+
     ID = ApplicationCommand.RPC
 
     server_chid: int
@@ -1797,20 +1809,25 @@ class ChannelRpcRequest(SubcommandMessage):
         ('ioid', ctypes.c_int32),
         ('subcommand', ctypes.c_byte),
     ]
-    _additional_fields_: AdditionalFields = []
-    _subcommand_fields_: SubcommandFields = {
-        Subcommand.INIT: [
-            RequiredField('pv_request', PVRequest),
-        ],
-        Subcommand.DEFAULT: [
-            RequiredField('pv_data', FieldDescAndData),
-        ],
-        Subcommand.DESTROY: [],
-    }
+
+    @_handles(Subcommand.INIT,
+              [RequiredField('pv_request', PVRequest)])
+    def to_init(self, pv_request: PVRequest) -> 'ChannelRpcRequest':
+        self.subcommand = Subcommand.INIT
+        self.pv_request = pv_request
+        return self
+
+    @_handles(Subcommand.DEFAULT,
+              [RequiredField('pv_data', FieldDescAndData)])
+    def to_default(self, pv_data: FieldDescAndData) -> 'ChannelRpcRequest':
+        self.subcommand = Subcommand.DEFAULT
+        self.pv_data = pv_data
+        return self
 
 
 class ChannelRpcResponse(SubcommandMessage):
-    ID = ApplicationCommand.PROCESS
+    """A remote procedure call response."""
+    ID = ApplicationCommand.RPC
 
     ioid: int
 
@@ -1821,13 +1838,21 @@ class ChannelRpcResponse(SubcommandMessage):
     _additional_fields_: AdditionalFields = [
         RequiredField('status', Status),
     ]
-    _subcommand_fields_: SubcommandFields = {
-        Subcommand.INIT: [],
-        Subcommand.DEFAULT: [
-            SuccessField('pv_response', FieldDescAndData),
-        ],
-        Subcommand.DESTROY: [],
-    }
+
+    @_handles(Subcommand.INIT)
+    def to_init(self, status: Status) -> 'ChannelRpcResponse':
+        self.subcommand = Subcommand.INIT
+        self.status = status
+        return self
+
+    @_handles(Subcommand.DEFAULT,
+              [SuccessField('pv_response', FieldDescAndData)])
+    def to_default(self, status: Status,
+                   pv_response: FieldDescAndData) -> 'ChannelRpcResponse':
+        self.subcommand = Subcommand.DEFAULT
+        self.status = status
+        self.pv_response = pv_response
+        return self
 
 
 class OriginTagRequest(SubcommandMessage):

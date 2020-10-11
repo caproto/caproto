@@ -83,7 +83,6 @@ def main():
 
         print('Old:', initial)
 
-        final = final.dataclass_instance
         if args.terse:
             final = getattr(final, 'value', final)
         print('New:', final)

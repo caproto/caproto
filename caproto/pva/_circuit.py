@@ -19,14 +19,16 @@ from ._messages import (AcknowledgeMarker, ApplicationCommand,
                         ChannelPutGetRequest, ChannelPutGetResponse,
                         ChannelPutRequest, ChannelPutResponse,
                         ChannelRequestCancel, ChannelRequestDestroy,
+                        ChannelRpcRequest, ChannelRpcResponse,
                         ConnectionValidatedResponse,
                         ConnectionValidationRequest,
                         ConnectionValidationResponse, CreateChannelRequest,
                         CreateChannelResponse, EndianSetting, Message,
                         MessageFlags, MessageHeaderBE, MessageHeaderLE,
-                        SetByteOrder, SetMarker, Status, Subcommand, _StatusOK,
-                        messages, read_from_bytestream)
-from ._state import ChannelState, CircuitState, RequestState, get_exception
+                        MonitorSubcommand, SetByteOrder, SetMarker, Status,
+                        Subcommand, _StatusOK, messages, read_from_bytestream)
+from ._state import (ChannelState, CircuitState, MonitorRequestState,
+                     RequestState, get_exception)
 from ._utils import (CLEAR_SEGMENTS, CLIENT, DISCONNECTED, NEED_DATA, SERVER,
                      CaprotoError, CaprotoRuntimeError, ConnectionState, Role)
 
@@ -381,6 +383,8 @@ class VirtualCircuit:
     @_process_message.register(ChannelFieldInfoResponse)
     @_process_message.register(ChannelGetRequest)
     @_process_message.register(ChannelGetResponse)
+    @_process_message.register(ChannelRpcRequest)
+    @_process_message.register(ChannelRpcResponse)
     @_process_message.register(ChannelMonitorRequest)
     @_process_message.register(ChannelMonitorResponse)
     @_process_message.register(ChannelPutRequest)
@@ -497,8 +501,7 @@ class ClientVirtualCircuit(VirtualCircuit):
         ConnectionValidationResponse
         """
         cls = self.messages[ApplicationCommand.CONNECTION_VALIDATION]
-        if data is not None:
-            data = FieldDescAndData(data=data)
+        data = FieldDescAndData(data=data)
 
         return cls(client_buffer_size=buffer_size,
                    client_registry_size=registry_size,
@@ -594,7 +597,8 @@ class _BaseChannel:
 
         self._process_message(message, role, ioid_info)
 
-        if subcommand == Subcommand.DESTROY:
+        if (role == Role.SERVER and subcommand and Subcommand.DESTROY in Subcommand(subcommand)):
+            # Only destroy when the server acknowledges it
             self._destroy_ioid(ioid_info)
 
         transitions = []
@@ -619,8 +623,10 @@ class _BaseChannel:
 
     @singledispatchmethod
     def _process_message(self, message, role: Role, ioid_info: dict):
-        self.circuit.log.warning('Unhandled message %s role=%s ioid_info=%s',
-                                 message, role, ioid_info)
+        self.circuit.log.warning(
+            'Unhandled channel message %s role=%s ioid_info=%s',
+            message, role, ioid_info
+        )
 
     @_process_message.register
     def _(self, message: CreateChannelRequest, role: Role, ioid_info: dict):
@@ -643,13 +649,17 @@ class _BaseChannel:
         except KeyError:
             ...
 
-        monitor = isinstance(message, (ChannelMonitorRequest,
-                                       ChannelMonitorResponse))
+        if isinstance(message, (ChannelMonitorRequest, ChannelMonitorResponse)):
+            state_class = MonitorRequestState
+        else:
+            state_class = RequestState
+
         ioid_info = dict(
             channel=self,
-            state=RequestState(monitor),
+            state=state_class(message.__class__.__name__),
             ioid=ioid,
         )
+
         self.ioids[ioid] = ioid_info
         self.circuit.ioids[ioid] = ioid_info
         return ioid_info
@@ -659,6 +669,8 @@ class _BaseChannel:
     @_process_message.register(ChannelFieldInfoRequest)
     @_process_message.register(ChannelFieldInfoResponse)
     @_process_message.register(ChannelGetRequest)
+    @_process_message.register(ChannelRpcRequest)
+    @_process_message.register(ChannelRpcResponse)
     @_process_message.register(ChannelMonitorRequest)
     @_process_message.register(ChannelPutRequest)
     def _(self, message, role: Role, ioid_info: dict):
@@ -673,29 +685,26 @@ class _BaseChannel:
     @_process_message.register
     def _(self, message: ChannelPutResponse, role: Role, ioid_info: dict):
         if message.status.is_successful:
-            if message.subcommand == Subcommand.INIT:
+            subcommand = Subcommand(message.subcommand)
+            if Subcommand.INIT in subcommand:
                 interface = message.put_structure_if
                 self.circuit.cache.ioid_interfaces[message.ioid] = interface
-            elif message.subcommand == Subcommand.DEFAULT:
-                ...
 
     @_process_message.register
     def _(self, message: ChannelGetResponse, role: Role, ioid_info: dict):
         if message.status.is_successful:
-            if message.subcommand == Subcommand.INIT:
+            subcommand = Subcommand(message.subcommand)
+            if Subcommand.INIT in subcommand:
                 interface = message.pv_structure_if
                 self.circuit.cache.ioid_interfaces[message.ioid] = interface
-            elif message.subcommand == Subcommand.GET:
-                ...
 
     @_process_message.register
     def _(self, message: ChannelMonitorResponse, role: Role, ioid_info: dict):
-        if message.subcommand == Subcommand.INIT:
+        subcommand = MonitorSubcommand(message.subcommand)
+        if MonitorSubcommand.INIT in subcommand:
             if message.status.is_successful:
                 interface = message.pv_structure_if
                 self.circuit.cache.ioid_interfaces[message.ioid] = interface
-        elif message.subcommand == Subcommand.DEFAULT:
-            ...
 
     @_process_message.register
     def _(self, message: ChannelRequestCancel, role: Role, ioid_info: dict):
@@ -807,12 +816,36 @@ class ClientChannel(_BaseChannel):
         instance.to_init(pv_request=pvrequest)
         return instance
 
+    def rpc(self, *, ioid=None, pvrequest: str = 'field()') -> ChannelRpcRequest:
+        """
+        Generate a valid :class:`ChannelRpcRequest`.
+
+        Parameters
+        ----------
+        ioid
+        pvrequest
+
+        Returns
+        -------
+        ChannelRpcRequest
+        """
+        if ioid is None:
+            ioid = self.circuit.new_ioid()
+
+        if not isinstance(pvrequest, PVRequest):
+            pvrequest = PVRequest(data=pvrequest)
+
+        cls: Type[ChannelRpcRequest] = self.circuit.messages[ApplicationCommand.RPC]
+        instance = cls(server_chid=self.sid, ioid=ioid)
+        instance.to_init(pv_request=pvrequest)
+        return instance
+
     def subscribe(self, *,
                   ioid=None,
                   pvrequest: str = 'field(value)',
                   queue_size=None) -> ChannelMonitorRequest:
         """
-        Generate a valid :class:`...`.
+        Generate a valid :class:`ChannelMonitorRequest`.
 
         Parameters
         ----------
@@ -829,7 +862,7 @@ class ClientChannel(_BaseChannel):
         if not isinstance(pvrequest, PVRequest):
             pvrequest = PVRequest(data=pvrequest)
 
-        cls: ChannelMonitorRequest = self.circuit.messages[ApplicationCommand.MONITOR]
+        cls: Type[ChannelMonitorRequest] = self.circuit.messages[ApplicationCommand.MONITOR]
 
         return cls(server_chid=self.sid, ioid=ioid).to_init(
             pv_request=pvrequest,
@@ -857,6 +890,19 @@ class ClientChannel(_BaseChannel):
         cls = self.circuit.messages[ApplicationCommand.PUT]
         instance: ChannelPutRequest = cls(server_chid=self.sid, ioid=ioid)
         return instance.to_init(pv_request=pvrequest)
+
+    def cancel(self, ioid: int) -> ChannelRequestCancel:
+        """
+        Generate a valid :class:`ChannelRequestCancel`.
+
+        Parameters
+        ----------
+        ioid : int, optional
+            The I/O identifier.
+        """
+        cls = self.circuit.messages[ApplicationCommand.CANCEL_REQUEST]
+        instance: ChannelRequestCancel = cls(server_chid=self.sid, ioid=ioid)
+        return instance
 
 
 class ServerChannel(_BaseChannel):
@@ -966,3 +1012,46 @@ class ServerChannel(_BaseChannel):
         """
         cls = self.circuit.messages[ApplicationCommand.DESTROY_CHANNEL]
         return cls(client_chid=self.cid, server_chid=self.sid)
+
+    def subscribe(self, ioid, interface, *,
+                  status=_StatusOK,
+                  ) -> ChannelMonitorResponse:
+        """
+        Generate a valid :class:`ChannelMonitorResponse`.
+
+        Parameters
+        ----------
+        ioid : int
+            The operation ID.
+
+        status : Status
+            Status information.
+
+        interface : FieldDesc or dataclass
+            The interface or dataclass containing data.
+
+        Returns
+        -------
+        ChannelMonitorResponse
+        """
+        cls: Type[ChannelMonitorResponse] = self.circuit.messages[ApplicationCommand.MONITOR]
+        return cls(ioid=ioid).to_init(status=status, pv_structure_if=interface)
+
+    def rpc(self, ioid, *, status: Status = _StatusOK) -> ChannelRpcResponse:
+        """
+        Generate a valid :class:`ChannelRpcResponse`.
+
+        Parameters
+        ----------
+        ioid : int
+            The operation ID.
+
+        status : Status
+            Status information.
+
+        Returns
+        -------
+        ChannelRpcResponse
+        """
+        cls: Type[ChannelRpcResponse] = self.circuit.messages[ApplicationCommand.RPC]
+        return cls(ioid=ioid).to_init(status=status)

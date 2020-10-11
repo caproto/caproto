@@ -4,7 +4,7 @@ import logging
 
 from ... import __version__
 from ..._utils import ShowVersionAction
-from .._dataclass import fill_dataclass
+from .._dataclass import get_pv_structure
 from .._utils import timestamp_to_datetime
 from ..sync.client import monitor
 from ._shared import configure_logging
@@ -60,39 +60,34 @@ def main():
 
         timestamp = '(No timestamp)'
 
-        for idx, event in enumerate(monitor(pv_name=pv_name,
-                                            pvrequest=args.pvrequest,
-                                            verbose=args.verbose,
-                                            timeout=args.timeout,
-                                            maximum_events=args.maximum)):
-            if idx == 0:
-                print(event.dataclass_instance._pva_struct_.summary())
-            else:
-                data = event.dataclass_instance
-                event_data = event.pv_data.data  # and 'field'
-                fill_dataclass(data, event_data)
+        results = monitor(pv_name=pv_name, pvrequest=args.pvrequest,
+                          verbose=args.verbose, timeout=args.timeout,
+                          maximum_events=args.maximum)
+        for idx, (event, data) in enumerate(results):
+            if idx == 0 and (args.verbose or 0) > 0:
+                print(get_pv_structure(data).summary())
 
-                try:
-                    timestamp = timestamp_to_datetime(
-                        data.timeStamp.secondsPastEpoch,
-                        data.timeStamp.nanoseconds,
-                    )
-                except AttributeError:
-                    # May not have a timestamp
-                    timestamp = datetime.datetime.now()
+            try:
+                timestamp = timestamp_to_datetime(
+                    data.timeStamp.secondsPastEpoch,
+                    data.timeStamp.nanoseconds,
+                )
+            except AttributeError:
+                # May not have a timestamp
+                timestamp = datetime.datetime.now()
 
-                if args.full:
-                    print(format_str.format(pv_name=pv_name,
-                                            timestamp=timestamp,
-                                            value=data))
-                    continue
+            if args.full:
+                print(format_str.format(pv_name=pv_name,
+                                        timestamp=timestamp,
+                                        value=data))
+                continue
 
-                try:
-                    print(format_str.format(pv_name=pv_name,
-                                            timestamp=timestamp,
-                                            value=data))
-                except Exception as ex:
-                    print('(print format failed)', ex, data)
+            try:
+                print(format_str.format(pv_name=pv_name,
+                                        timestamp=timestamp,
+                                        value=data))
+            except Exception as ex:
+                print('(print format failed)', ex, data)
 
     except BaseException as exc:
         if args.verbose:

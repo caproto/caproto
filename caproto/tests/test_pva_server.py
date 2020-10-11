@@ -133,14 +133,39 @@ def poll_readiness(pv_to_check: str,
     )
 
 
-def test_basic(request, prefix):
+def test_example_ioc_basic(request, prefix):
     run_example_ioc('caproto.pva.ioc_examples.basic', request=request,
                     args=['--prefix', prefix], pv_to_check=f'{prefix}test')
 
-    value = pva.sync.client.read(f'{prefix}test')
-    inst = value.dataclass_instance
-    assert (inst.value, inst.info) == (5, 'a string')
+    initial, res, final = pva.sync.client.read_write_read(
+        f'{prefix}test', data={'value': 6, 'info': 'foobar'}
+    )
+    assert (initial.value, initial.info) == (5, 'a string')
+    assert (final.value, final.info) == (6, 'foobar')
 
-    value = pva.sync.client.read(f'{prefix}test2')
-    inst = value.dataclass_instance
-    assert (inst.value, inst.info) == (6, 'a different string')
+    _, value = pva.sync.client.read(f'{prefix}test2')
+    assert (value.value, value.info) == (6, 'a different string')
+
+    for _, data in pva.sync.client.monitor(f'{prefix}test2',
+                                           pvrequest='field()',
+                                           maximum_events=1):
+        assert (data.value, data.info) == (6, 'a different string')
+
+
+def test_example_ioc_group(request, prefix):
+    run_example_ioc('caproto.pva.ioc_examples.group', request=request,
+                    args=['--prefix', prefix], pv_to_check=f'{prefix}test')
+
+    results = [data for _, data in
+               pva.sync.client.monitor(f'{prefix}test', pvrequest='field()',
+                                       maximum_events=2)
+               ]
+
+    assert results[0].value + 1 == results[1].value
+    assert f'testing {results[0].value}' == results[0].info
+    assert f'testing {results[1].value}' == results[1].info
+
+    # Not sure if you should be able to do this - this _isn't_ an RPC call:
+    initial, res, final = pva.sync.client.read_write_read(
+        f'{prefix}rpc', data={'value': 6, 'info': 'foobar'}
+    )

@@ -441,3 +441,9 @@ def test_broadcaster_messages_smoke():
     request.serialize()
     response = bcast.search_response(pv_to_cid={'abc': 5, 'def': 6})
     response.serialize()
+
+
+def test_qos_flags_encode():
+    assert pva.QOSFlags.decode(
+        pva.QOSFlags.encode(priority=0, flags=pva.QOSFlags.low_latency)
+    ) == (0, pva.QOSFlags.low_latency)

@@ -440,12 +440,29 @@ class BitSet(set, CoreSerializable):
         """
         Add the given offset to this bitset, returning a new bitset.
         """
-        if 0 in self or offset in self:
+        if 0 in self:
+            # TODO: This isn't true in all cases, depends on what the caller is
+            # after
             return BitSet({0})
 
         return BitSet({idx + offset for idx in self
                        if idx + offset >= 0}
                       )
+
+    def __and__(self, other):
+        """And/intersection with other set, with special handling for {0}."""
+        if 0 in self:
+            return BitSet(other)
+        if 0 in other:
+            return self
+        return type(self)(super().__and__(other))
+
+    def __or__(self, other):
+        """Or/Union with other set, including special handling for {0}."""
+        result = super().__or__(other)
+        if 0 in result:
+            return type(self)({0})
+        return result
 
     def serialize(self, endian: Endian) -> List[bytes]:
         if not len(self):

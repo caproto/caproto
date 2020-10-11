@@ -102,12 +102,19 @@ def template_arg_parser(*, desc, default_prefix, argv=None, macros=None,
         else:
             ca._log._set_handler_with_logger(logger_name='caproto.pva.ctx', level='INFO')
 
-        return ({'prefix': args.prefix,
-                 'macros': {key: getattr(args, key) for key in macros}},
+        return (
+            # IOC options
+            dict(prefix=args.prefix,
+                 macros={key: getattr(args, key) for key in macros},
+                 ),
 
-                {'module_name': f'caproto.pva.{args.async_lib}.server',
-                 'log_pv_names': args.list_pvs,
-                 'interfaces': args.interfaces})
+            # Run options
+            dict(
+                module_name=f'caproto.pva.{args.async_lib}.server',
+                log_pv_names=args.list_pvs,
+                interfaces=args.interfaces,
+            ),
+        )
 
     return parser, split_args
 

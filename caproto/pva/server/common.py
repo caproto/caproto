@@ -1,7 +1,10 @@
+import collections
+import dataclasses
+import enum
 import logging
 import typing
 from collections import defaultdict, deque
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple, Type
 
 import caproto as ca
 import caproto.pva as pva
@@ -9,13 +12,10 @@ from caproto import (CaprotoNetworkError, CaprotoRuntimeError,
                      RemoteProtocolError, get_environment_variables)
 
 from .._data import DataWithBitSet
-from .._dataclass import pva_dataclass
+from .._dataclass import get_pv_structure, pva_dataclass
+from .._fields import BitSet
 from .._functools_compat import singledispatchmethod
-from .._messages import Message, Subcommand
-
-# If a Read[Notify]Request or EventAddRequest is received, wait for up to this
-# long for the currently-processing Write[Notify]Request to finish.
-WRITE_LOCK_TIMEOUT = 0.001
+from .._messages import Message, MonitorSubcommand, Subcommand
 
 
 class DisconnectedCircuit(Exception):
@@ -32,17 +32,96 @@ class ServerStatus:
     caproto_version: str = str(ca.__version__)
 
 
+class AuthOperation(enum.Enum):
+    """
+    Operations which allow for granular authorization on a per-PV basis.
+    """
+    read = enum.auto()
+    read_interface = enum.auto()
+    write = enum.auto()
+    call = enum.auto()
+
+
+@dataclasses.dataclass(frozen=True)
+class SubscriptionSpec:
+    '''
+    Subscription specification used to key all subscription updates.
+
+    Attributes
+    ----------
+    db_entry : DataWrapperInterface
+        The database entry.
+
+    bitset : BitSet
+        The bitset to monitor.
+
+    options : tuple
+        Options for the monitor (tuple(options_dict.items()))
+    '''
+    db_entry: object
+    bitset: BitSet
+    options: tuple
+
+
+@dataclasses.dataclass(frozen=True)
+class Subscription:
+    '''
+    An individual subscription from a client.
+
+    Attributes
+    ----------
+    spec : SubscriptionSpec
+        The subscription specification information.
+
+    circuit : VirtualCircuit
+        The associated virtual circuit.
+
+    channel : ServerChannel
+        The associated channel.
+
+    ioid : int
+        The I/O identifier / request ID.
+    '''
+    spec: SubscriptionSpec
+    circuit: 'VirtualCircuit'
+    channel: pva.ServerChannel
+    ioid: int
+
+
 class VirtualCircuit:
+    """
+    The base VirtualCircuit class.
+
+    Servers are expected to subclass from this, including additional
+    attributes, noted in the Attributes section.
+
+    Attributes
+    ----------
+    QueueFull : class
+        Must be implemented in the subclass.  (TODO details)
+
+    message_queue : QueueInterface
+        Must be implemented in the subclass.
+
+    subscription_queue : QueueInterface
+        Must be implemented in the subclass.
+
+    get_from_sub_queue : method
+        Must be implemented in the subclass.
+
+    _start_write_task : method
+        Must be implemented in the subclass.
+    """
+
     context: 'Context'
     connected: bool
     circuit: pva.ServerVirtualCircuit
     log: logging.Logger
     client: object  # socket or similar (TODO socket interface)
-    client_hostname: str
-    client_username: str
-    subscriptions: defaultdict
     most_recent_updates: Dict
     _tags: Dict[str, str]
+    subscriptions: typing.DefaultDict[SubscriptionSpec,
+                                      typing.Deque[Subscription]]
 
     def __init__(self,
                  circuit: pva.ServerVirtualCircuit,
@@ -55,11 +134,8 @@ class VirtualCircuit:
         self.log = circuit.log
         self.client = client
         self.context = context
-        self.client_hostname = None
-        self.client_username = None
-        # The structure of self.subscriptions is:
-        # {SubscriptionSpec: deque([Subscription, Subscription, ...]), ...}
         self.subscriptions = defaultdict(deque)
+
         self.most_recent_updates = {}
         # This dict is passed to the loggers.
         self._tags = {
@@ -69,14 +145,15 @@ class VirtualCircuit:
             'role': repr(self.circuit.our_role),
         }
         self.authorization_info = {}
-        # Subclasses are expected to define:
-        # self.QueueFull = ...
-        # self.message_queue = ...
-        # self.new_message_condition = ...
-        # self.subscription_queue = ...
-        # self.get_from_sub_queue = ...
-        # self.events_on = ...
-        # self.write_event = ...
+
+    async def _start_write_task(self, handle_write):
+        """
+        Start a write handler, and return the task.
+
+        Must be implemented by the subclass, and must return a cancellable task
+        instance (API like asyncio, currently).
+        """
+        raise NotImplementedError()
 
     async def _on_disconnect(self):
         """Executed when disconnection detected"""
@@ -84,15 +161,15 @@ class VirtualCircuit:
             return
 
         self.connected = False
-        # queue = self.context.subscription_queue
-        # for sub_spec, subs in self.subscriptions.items():
-        #     for sub in subs:
-        #         self.context.subscriptions[sub_spec].remove(sub)
-        #     # Does anything else on the Context still care about this sub_spec?
-        #     # If not unsubscribe the Context's queue from the db_entry.
-        #     if not self.context.subscriptions[sub_spec]:
-        #         await sub_spec.db_entry.unsubscribe(queue, sub_spec)
-        # self.subscriptions.clear()
+        queue = self.context.subscription_queue
+        for sub_spec, subs in self.subscriptions.items():
+            for sub in subs:
+                self.context.subscriptions[sub_spec].remove(sub)
+                await sub_spec.db_entry.unsubscribe(queue, sub)
+
+            if not self.context.subscriptions[sub_spec]:
+                self.context.subscriptions.pop(sub_spec)
+        self.subscriptions.clear()
 
     async def send(self, *messages):
         """
@@ -175,7 +252,6 @@ class VirtualCircuit:
                         "Disconnected channel client_chid=%d server_chid=%d but keeping the "
                         "circuit alive.", client_chid, server_chid)
 
-                await self._wake_new_message()
                 return
             else:
                 self.log.exception(
@@ -205,7 +281,8 @@ class VirtualCircuit:
             chan, _ = self._get_db_entry_from_message(message)
             self.log.exception(
                 'Server failed to process message (%r): %s',
-                chan.name, message)
+                chan.name, message
+            )
 
             # if client_chid is not None:
             #     error_message = f'Python exception: {type(ex).__name__} {ex}'
@@ -230,6 +307,45 @@ class VirtualCircuit:
         )
         await self.send(byte_order, req)
 
+    async def subscription_queue_loop(self):
+        """
+        Subscription queue loop.
+
+        This is the final spot where we ship updates off to the client.
+        """
+        def cull_messages(messages):
+            """
+            Ensure at the last possible moment that we don't send responses for
+            Subscriptions that have been canceled at some time after the
+            response was queued.
+            """
+            all_subscription_ids = set(
+                sub.ioid
+                for subs in self.subscriptions.values()
+                for sub in subs
+            )
+            return (
+                message for message in messages
+                if message.ioid in all_subscription_ids
+            )
+
+        while True:
+            try:
+                ref = await self.subscription_queue.get()
+                # ref = await self.get_from_sub_queue(timeout=ca.HIGH_LOAD_TIMEOUT)
+                # message = ref()  # TODO: weakref
+                await self.send(*cull_messages([ref]))
+            except self.TaskCancelled:
+                break
+            except DisconnectedCircuit:
+                await self._on_disconnect()
+                self.circuit.disconnect()
+                await self.context.circuit_disconnected(self)
+                break
+            except Exception:
+                self.log.exception('Subscription update send failure %s',
+                                   locals().get('message', '(no message)'))
+
     async def message_queue_loop(self):
         """Reference implementation of the message queue loop
 
@@ -242,13 +358,6 @@ class VirtualCircuit:
         Coroutine which evaluates one item from the circuit message queue.
         """
 
-        # The write_event will be cleared when a write is scheduled and set
-        # when one completes.
-        maybe_awaitable = self.write_event.set()
-        # The curio backend makes this an awaitable thing.
-        if maybe_awaitable is not None:
-            await maybe_awaitable
-
         await self._newly_connected()
 
         try:
@@ -257,7 +366,6 @@ class VirtualCircuit:
                 response = await self._message_queue_iteration(message)
                 if response is not None:
                     await self.send(*response)
-                await self._wake_new_message()
         except DisconnectedCircuit:
             await self._on_disconnect()
             self.circuit.disconnect()
@@ -324,24 +432,34 @@ class VirtualCircuit:
     @_process_message.register
     async def _(self, message: pva.ChannelFieldInfoRequest):
         chan, db_entry = self._get_db_entry_from_message(message)
-        data = await db_entry.auth_read_interface(
-            authorization=self.authorization_info)
+        data = await db_entry.authorize(
+            operation=AuthOperation.read_interface,
+            authorization=self.authorization_info,
+        )
 
         data = await db_entry.read(None)
         return [chan.read_interface(ioid=message.ioid, interface=data)]
 
     @_process_message.register
     async def _(self, message: pva.ChannelGetRequest):
+        subcommand = Subcommand(message.subcommand)
         chan, db_entry = self._get_db_entry_from_message(message)
         ioid_info = self.circuit.ioids[message.ioid]
-
         response: pva.ChannelGetResponse
 
-        if message.subcommand == Subcommand.INIT:
+        if Subcommand.INIT in subcommand:
             try:
-                data = await db_entry.auth_read(
-                    message.pv_request, authorization=self.authorization_info)
+                await db_entry.authorize(
+                    AuthOperation.read,
+                    authorization=self.authorization_info,
+                    request=message.pv_request,
+                )
+                data = await db_entry.read(
+                    request=message.pv_request,
+                )
             except Exception as ex:
+                self.log.exception('Message response failure %s (%s)',
+                                   message, subcommand)
                 response = chan.read(
                     ioid=message.ioid, interface=None,
                     status=pva.Status.create_error(
@@ -358,8 +476,7 @@ class VirtualCircuit:
                 ioid_info['response'] = response
             return [response]
 
-        if (message.subcommand == Subcommand.GET or
-                message.subcommand == Subcommand.DEFAULT):
+        if Subcommand.GET in subcommand or subcommand == Subcommand.DEFAULT:
             # NOTE: we'll only get here if INIT succeeded, where the
             # authentication happens
 
@@ -368,12 +485,12 @@ class VirtualCircuit:
             )
 
             pv_data = DataWithBitSet(data=data,
-                                     bitset=pva.BitSet({0}),  # TODO
+                                     bitset=BitSet({0}),  # TODO
                                      )
 
             # TODO: check if interface has changed
             response = ioid_info['response']
-            if message.subcommand == Subcommand.GET:
+            if subcommand == Subcommand.GET:
                 response.to_get(pv_data=pv_data)
             else:
                 response.to_default(pv_data=pv_data)
@@ -381,17 +498,21 @@ class VirtualCircuit:
 
     @_process_message.register
     async def _(self, message: pva.ChannelPutRequest):
+        subcommand = Subcommand(message.subcommand)
         chan, db_entry = self._get_db_entry_from_message(message)
         ioid_info = self.circuit.ioids[message.ioid]
         response: pva.ChannelPutResponse
 
-        if message.subcommand == Subcommand.INIT:
+        if Subcommand.INIT in subcommand:
             try:
-                interface = await db_entry.auth_write(
-                    message.pv_request,
-                    authorization=self.authorization_info
+                interface = await db_entry.authorize(
+                    AuthOperation.write,
+                    request=message.pv_request,
+                    authorization=self.authorization_info,
                 )
             except Exception as ex:
+                self.log.exception('Message response failure %s (%s)',
+                                   message, subcommand)
                 interface = None
                 status = pva.Status.create_error(
                     message=f'{ex.__class__.__name__}: {ex}',
@@ -408,9 +529,10 @@ class VirtualCircuit:
             ioid_info['pv_request'] = message.pv_request
             ioid_info['interface'] = interface
             ioid_info['response'] = response
+            ioid_info['write_task'] = None
             return [response.to_init(put_structure_if=interface)]
 
-        if message.subcommand == Subcommand.GET:
+        if Subcommand.GET in subcommand:
             # This is pretty much a pva-get, using the pvrequest from the
             # put_init
             response = ioid_info['response']
@@ -419,9 +541,11 @@ class VirtualCircuit:
                 read_data = await db_entry.read(pv_request)
                 data = DataWithBitSet(
                     data=read_data,
-                    bitset=pva.BitSet({0}),  # TODO
+                    bitset=BitSet({0}),  # TODO
                 )
             except Exception as ex:
+                self.log.exception('Message response failure %s (%s)',
+                                   message, subcommand)
                 response.status = pva.Status.create_error(
                     message=f'{ex.__class__.__name__}: {ex}',
                 )
@@ -431,19 +555,179 @@ class VirtualCircuit:
 
             return [response.to_get(data=data)]
 
-        if message.subcommand == Subcommand.DEFAULT:
-            # TODO: check if interface has changed
-            response = ioid_info['response']
+        if subcommand == Subcommand.DEFAULT or subcommand == Subcommand.DESTROY:
+            async def handle_write():
+                try:
+                    response = ioid_info['response']
+                    await db_entry.write(message.put_data)
+                except self.TaskCancelled:
+                    self.log.debug(
+                        'Write request by %s(%s) cancelled: %s => %r',
+                        self.authorization_info['method'],
+                        self.authorization_info['data'],
+                        chan.name,
+                        message.put_data.data,
+                    )
+                    response.status = pva.Status.create_error(
+                        message='Cancelled',
+                    )
+                except Exception as ex:
+                    self.log.exception(
+                        'Write request by %s(%s) failed: %r',
+                        self.authorization_info['method'],
+                        self.authorization_info['data'],
+                        message)
+                    response.status = pva.Status.create_error(
+                        message=f'{ex.__class__.__name__}: {ex}',
+                    )
+                else:
+                    response.status = pva.Status.create_success()
+                finally:
+                    ioid_info['write_task'] = None
+
+                await self.send(response.to_default())
+
+            ioid_info['write_task'] = await self._start_write_task(handle_write)
+
+    @_process_message.register
+    async def _(self, message: pva.ChannelMonitorRequest):
+        subcommand = MonitorSubcommand(message.subcommand)
+        chan, db_entry = self._get_db_entry_from_message(message)
+        ioid_info = self.circuit.ioids[message.ioid]
+        response: pva.ChannelMonitorResponse
+
+        if subcommand == MonitorSubcommand.INIT:
             try:
-                await db_entry.write(message.put_data)
+                data = await db_entry.authorize(
+                    AuthOperation.read,
+                    authorization=self.authorization_info,
+                    request=message.pv_request,
+                )
+                bitset, options = message.pv_request.to_bitset_and_options(
+                    data
+                )
+                spec = SubscriptionSpec(
+                    db_entry=db_entry, bitset=bitset, options=tuple(options.items())
+                )
+                sub = Subscription(
+                    circuit=self, channel=chan, spec=spec, ioid=message.ioid
+                )
             except Exception as ex:
-                response.status = pva.Status.create_error(
-                    message=f'{ex.__class__.__name__}: {ex}',
+                self.log.exception('Message response failure %s (%s)',
+                                   message, subcommand)
+                response = chan.subscribe(
+                    ioid=message.ioid, interface=None,
+                    status=pva.Status.create_error(
+                        message=f'{ex.__class__.__name__}: {ex}',
+                    ),
                 )
             else:
-                response.status = pva.Status.create_success()
+                response = chan.subscribe(ioid=message.ioid, interface=data)
+                ioid_info['pv_request'] = message.pv_request
+                ioid_info['interface'] = data
+                ioid_info['init_request'] = message
+                # Reusable response message for this ioid:
+                ioid_info['response'] = response
+                ioid_info['sub'] = sub
+                ioid_info['monitor_state'] = MonitorSubcommand.INIT
+                ioid_info['pipeline_count'] = None
 
-            return [response.to_default()]
+            return [response]
+
+        if MonitorSubcommand.START in subcommand:
+            if ioid_info['monitor_state'] in {MonitorSubcommand.INIT,
+                                              MonitorSubcommand.STOP}:
+                sub: Subscription = ioid_info['sub']
+                data = await db_entry.subscribe(
+                    queue=self.context.subscription_queue,
+                    sub=sub,
+                )
+                self.subscriptions[sub.spec].append(sub)
+                self.context.subscriptions[sub.spec].append(sub)
+                ioid_info['monitor_state'] = MonitorSubcommand.START
+
+                # It's not impossible this send could happen -after- an update
+                response = ioid_info['response']
+                response.to_default(
+                    pv_data=pva.DataWithBitSet(
+                        bitset=BitSet(sub.spec.bitset),
+                        interface=get_pv_structure(data),
+                        data=data
+                    ),
+                    overrun_bitset=BitSet({})
+                )
+                return [response]
+
+        if MonitorSubcommand.PIPELINE in subcommand:
+            # TODO: need to track the number of monitors that happen
+            ...
+
+        has_destroy = MonitorSubcommand.DESTROY in subcommand
+        if subcommand in {MonitorSubcommand.STOP} or has_destroy:
+            if ioid_info['monitor_state'] in {MonitorSubcommand.START}:
+                await db_entry.unsubscribe(
+                    queue=self.context.subscription_queue,
+                    sub=ioid_info['sub'],
+                )
+                ioid_info['monitor_state'] = MonitorSubcommand.STOP
+            self.subscriptions[sub.spec].remove(sub)
+            self.context.subscriptions[sub.spec].remove(sub)
+
+    @_process_message.register
+    async def _(self, message: pva.ChannelRpcRequest):
+        subcommand = Subcommand(message.subcommand)
+        chan, db_entry = self._get_db_entry_from_message(message)
+        ioid_info = self.circuit.ioids[message.ioid]
+
+        response: pva.ChannelRpcResponse
+
+        if subcommand == Subcommand.INIT:
+            try:
+                await db_entry.authorize(
+                    AuthOperation.call,
+                    authorization=self.authorization_info,
+                    request=message.pv_request,
+                )
+            except Exception as ex:
+                self.log.exception('Message response failure %s (%s)',
+                                   message, subcommand)
+                response = chan.rpc(
+                    ioid=message.ioid,
+                    status=pva.Status.create_error(
+                        message=f'{ex.__class__.__name__}: {ex}',
+                    ),
+                )
+            else:
+                ioid_info['pv_request'] = message.pv_request
+                response = chan.rpc(ioid=message.ioid)
+                ioid_info['init_request'] = message
+                # Reusable response message for this ioid:
+                ioid_info['response'] = response
+            return [response]
+
+        if subcommand == Subcommand.DEFAULT or subcommand == Subcommand.DESTROY:
+            response = ioid_info['response']
+            try:
+                pv_response = await db_entry.call(
+                    request=ioid_info['init_request'].pv_request,
+                    data=message.pv_data,
+                )
+            except Exception as ex:
+                self.log.exception('Message response failure %s (%s)',
+                                   message, subcommand)
+                response.to_default(
+                    pv_response=None,
+                    status=pva.Status.create_error(
+                        message=f'{ex.__class__.__name__}: {ex}',
+                    )
+                )
+            else:
+                response.to_default(
+                    pv_response=pva.FieldDescAndData(data=pv_response),
+                    status=pva.Status.create_success(),
+                )
+
+            return [response]
 
     @_process_message.register
     async def _(self, message: pva.ChannelDestroyRequest):
@@ -455,11 +739,25 @@ class VirtualCircuit:
     @_process_message.register
     async def _(self, message: pva.ChannelRequestDestroy):
         """This is a request to destroy a **request**."""
+        chan, db_entry = self._get_db_entry_from_message(message)
+        ioid_info = self.circuit.ioids[message.ioid]
+
+        task = ioid_info.pop('write_task', None)
+        if task is not None:
+            task.cancel()
+
         return []
 
     @_process_message.register
     async def _(self, message: pva.ChannelRequestCancel):
         # TODO: this layer should handle canceling the operation
+        chan, db_entry = self._get_db_entry_from_message(message)
+        ioid_info = self.circuit.ioids[message.ioid]
+
+        task = ioid_info.pop('write_task', None)
+        if task is not None:
+            task.cancel()
+
         return []
 
     @_process_message.register
@@ -468,6 +766,10 @@ class VirtualCircuit:
 
 
 class Context(typing.Mapping):
+    # subscription_queue: 'QueueInterface'
+    port: Optional[int]
+    # TODO
+
     def __init__(self, pvdb, interfaces=None):
         if interfaces is None:
             interfaces = ca.get_server_address_list(
@@ -482,12 +784,6 @@ class Context(typing.Mapping):
         self.circuits = set()
         self.authentication_methods = {'anonymous', 'ca'}
 
-        self.subscriptions = defaultdict(deque)
-        # Map Subscription to {'before': last_update, 'after': last_update}
-        # to silence duplicates for Subscriptions that use edge-triggered sync
-        # Channel Filter.
-        self.last_sync_edge_update = defaultdict(lambda: defaultdict(dict))
-        self.last_dead_band = {}
         self.environ = get_environment_variables()
 
         # pva_server_port: the default tcp/udp port from the environment
@@ -505,6 +801,9 @@ class Context(typing.Mapping):
             'EPICS_PVA_SERVER_PORT set to %d. This is the UDP port to be used'
             'for searches.'
         )
+
+        self.subscription_queue = None
+        self.subscriptions = defaultdict(deque)
 
     async def _core_broadcaster_loop(self, udp_sock):
         while True:
@@ -526,7 +825,7 @@ class Context(typing.Mapping):
             await self.message_bundle_queue.put((address, messages))
 
     async def broadcaster_queue_loop(self):
-        '''
+        """
         Reference broadcaster queue loop implementation
 
         Note
@@ -535,7 +834,7 @@ class Context(typing.Mapping):
         awaitable .get()
 
         Async library implementations can (and should) reimplement this.
-        '''
+        """
         while True:
             try:
                 addr, messages = await self.message_bundle_queue.get()
@@ -560,8 +859,14 @@ class Context(typing.Mapping):
     async def _broadcaster_queue_iteration(self, addr, messages):
         self.broadcaster.process_commands(messages)
         found_pv_to_cid = {}
+        saw_empty_channel_list = False
         for message in messages:
             if isinstance(message, pva.SearchRequest):
+                if len(message.channels) == 0:
+                    # This is apparently a special "I'm looking for servers"
+                    # message
+                    saw_empty_channel_list = True
+
                 for channel in message.channels:
                     try:
                         channel['id']
@@ -572,7 +877,7 @@ class Context(typing.Mapping):
                     else:
                         found_pv_to_cid[name] = channel['id']
 
-        if found_pv_to_cid:
+        if found_pv_to_cid or saw_empty_channel_list:
             search_replies = [
                 self.broadcaster.search_response(
                     pv_to_cid=found_pv_to_cid,
@@ -620,16 +925,17 @@ class Context(typing.Mapping):
             await self.async_layer.library.sleep(beacon_period)
 
     async def circuit_disconnected(self, circuit):
-        '''Notification from circuit that its connection has closed'''
+        """Notification from circuit that its connection has closed"""
         self.circuits.discard(circuit)
 
     async def _bind_tcp_sockets_with_consistent_port_number(self, make_socket):
-        # Find a random port number that is free on all self.interfaces,
-        # and get a bound TCP socket with that port number on each
-        # interface. The argument `make_socket` is expected to be a coroutine
-        # with the signature `make_socket(interface, port)` that does whatever
-        # library-specific incantation is necessary to return a bound socket or
-        # raise an IOError.
+        """
+        Find a random port number that is free on all `self.interfaces`, and
+        get a bound TCP socket with that port number on each interface. The
+        argument `make_socket` is expected to be a coroutine with the signature
+        `make_socket(interface, port)` that does whatever library-specific
+        incantation is necessary to return a bound socket or raise an IOError.
+        """
         tcp_sockets = {}  # maps interface to bound socket
         stashed_ex = None
         for port in ca.random_ports(100, try_first=self.pva_server_port):
@@ -645,11 +951,13 @@ class Context(typing.Mapping):
             else:
                 break
         else:
-            raise CaprotoRuntimeError('No available ports and/or bind failed') from stashed_ex
+            raise CaprotoRuntimeError(
+                'No available ports and/or bind failed'
+            ) from stashed_ex
         return port, tcp_sockets
 
     async def tcp_handler(self, client, addr):
-        '''Handler for each new TCP client to the server'''
+        """Handler for each new TCP client to the server"""
         cavc = pva.ServerVirtualCircuit(ca.SERVER, addr, None)
         circuit = self.CircuitClass(cavc, client, self)
         self.circuits.add(circuit)
@@ -673,3 +981,234 @@ class Context(typing.Mapping):
 
     def stop(self):
         ...
+
+    @property
+    def startup_methods(self):
+        """Notify all instances of the server startup."""
+        return {
+            name: instance.server_startup
+            for name, instance in self.pvdb.items()
+            if getattr(instance, 'server_startup', None) is not None
+        }
+
+    @property
+    def shutdown_methods(self):
+        """Notify all instances of the server shutdown."""
+        return {
+            name: instance.server_shutdown
+            for name, instance in self.pvdb.items()
+            if getattr(instance, 'server_shutdown', None) is not None
+        }
+
+    async def subscription_queue_loop(self):
+        """
+        Reference implementation of the subscription queue loop.
+
+        Note
+        ----
+        Assumes self.subscription-queue functions as an async queue with
+        awaitable .get()
+
+        Async library implementations can (and should) reimplement this
+        coroutine which evaluates one item from the circuit command queue.
+        """
+        while True:
+            # This queue receives updates that match the SubscriptionSpec of
+            # one or more subscriptions.
+            item = await self.subscription_queue.get()
+            try:
+                await self._subscription_queue_iteration(**item)
+            except Exception:
+                self.log.exception(
+                    'Subscription publishing failed for %s',
+                    item.get('sub', None)
+                )
+                raise  # TODO: remove
+
+    async def _subscription_queue_iteration(
+            self, sub: Subscription, interface, data, bitset: BitSet):
+        """
+        Called on every item from the Context subscription queue.
+        """
+        circuit = sub.circuit
+        cls: Type[pva.ChannelMonitorResponse] = circuit.circuit.messages[
+            pva.ApplicationCommand.MONITOR
+        ]
+
+        monitor_update = cls(ioid=sub.ioid).to_default(
+            pv_data=pva.DataWithBitSet(
+                bitset=bitset,
+                interface=get_pv_structure(interface),  # TODO
+                data=data
+            ),
+            overrun_bitset=BitSet({})
+        )
+        try:
+            await circuit.subscription_queue.put(monitor_update)
+        except circuit.QueueFull:
+            # We have hit the overall max for subscription backlog.
+            circuit.log.warning(
+                "Critically high EventAddResponse load. Dropping all "
+                "queued responses on this circuit."
+            )
+            circuit.subscription_queue.clear()
+            # TODO
+            # circuit.unexpired_updates.clear()
+
+
+class DataWrapperBase:
+    """
+    A base class to wrap dataclasses and support caproto-pva's server API.
+
+    Parameters
+    ----------
+    name : str
+        The associated name of the data.
+
+    data : PvaStruct
+        The dataclass holding the data.
+    """
+
+    _sub_queues: typing.DefaultDict[typing.FrozenSet[int], typing.Deque]
+
+    def __init__(self, name: str, data):
+        self.data = data
+        self.name = name
+
+        # This is a dict keyed on queues that will receive subscription
+        # updates, where each queue belongs to a Context.
+        self._sub_queues = collections.defaultdict(collections.deque)
+
+    def __repr__(self) -> str:
+        return f'<{self.__class__.__name__} name={self.name}>'
+
+    async def authorize(self,
+                        operation: AuthOperation, *,
+                        authorization,
+                        request=None):
+        """
+        Authenticate `operation`, given `authorization` information.
+
+        In the event of successful authorization, a dataclass defining the data
+        contained here must be returned.
+
+        In the event of a failed authorization, `AuthenticationError` or
+        similar should be raised.
+
+        Returns
+        -------
+        data
+
+        Raises
+        ------
+        AuthenticationError
+        """
+        return self.data
+
+    async def read(self, request):
+        """A bare ``read`` (``get``) implementation."""
+        return self.data
+
+    async def write(self, update: pva.DataWithBitSet):
+        """A bare ``write`` (``put``) implementation."""
+        await self.commit(update.data)
+
+    async def call(self, request: pva.PVRequest, data: pva.FieldDescAndData):
+        """A bare ``call`` (``RPC``) implementation."""
+
+    async def subscribe(self, queue, sub: Subscription):
+        """
+        Add a subscription from the server.
+
+        It is unlikely this would need customization in a subclass.
+
+        Parameters
+        ----------
+        queue : QueueInterface
+            The queue to send updates to.
+
+        sub : Subscription
+            Subscription information.
+
+        Returns
+        -------
+        data
+        """
+        self._sub_queues[sub.spec.bitset].append((sub, queue))
+        return self.data
+
+    async def unsubscribe(self, queue, sub: Subscription):
+        """
+        Remove an already-added subscription.
+
+        It is unlikely this would need customization in a subclass.
+
+        Parameters
+        ----------
+        queue : QueueInterface
+            The queue used for subscriptions.
+
+        sub : Subscription
+            Subscription information.
+        """
+        self._sub_queues[sub.spec.bitset].remove((sub, queue))
+        if not self._sub_queues[sub.spec.bitset]:
+            self._sub_queues.pop(sub.spec.bitset)
+
+    async def commit(self, changes: dict):
+        """
+        Commit `changes` to the local dataclass and publish monitors.
+
+        It is unlikely this would need customization in a subclass.
+
+        Parameters
+        ----------
+        changes : dict
+            A nested dictionary of key to value, indicating changes to be
+            made to the underlying data.
+        """
+        changed_bitset = pva.fill_dataclass(self.data, changes)
+        # And publish indicating which bits of information have changed:
+        await self._publish(changed_bitset)
+
+    async def _publish(self, changed_bitset: BitSet):
+        """
+        Publish already-committed changes.
+
+        It is unlikely this would need customization in a subclass.
+
+        Parameters
+        ----------
+        changed_bitset : BitSet
+            This indicates which fields have changed.
+        """
+        # A misplaced description regarding subscription flow:
+        # Data written and .commit() called ->
+        #   -> _publish
+        #      Based on what parts changed
+        #   -> Context.subscription_queue
+        #      Create monitor update message
+        #   -> VirtualCircuit.subscription_queue
+        #      Potentially batch messages, remove unsubscribed items
+        #   -> Ship remaining messages to client
+
+        data = None
+
+        for frozen_bitset, queues in self._sub_queues.items():
+            matched_bitset = changed_bitset & frozen_bitset
+            if matched_bitset:
+                if data is None:
+                    # Only create the dict if actually needed
+                    data = dataclasses.asdict(self.data)
+                    # TODO/FIXME/BUG: numpy arrays will be shallow copied
+
+                for sub, queue in queues:
+                    # if request matches change
+                    # TODO: respect options here?
+                    item = dict(
+                        sub=sub,
+                        bitset=matched_bitset,
+                        data=data,
+                        interface=self.data
+                    )
+                    await queue.put(item)

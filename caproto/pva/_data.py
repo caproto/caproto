@@ -1,15 +1,18 @@
 import array
 import ctypes
+import dataclasses
 import functools
 import typing
-from typing import Dict, Iterable, List, Optional, Sequence, Set, Type, Union
+from typing import (Dict, FrozenSet, Iterable, List, Optional, Sequence, Set,
+                    Tuple, Type, Union)
 
 from . import _core as core
 from ._core import (CoreSerializable, CoreSerializableWithCache,
                     CoreStatelessSerializable, Deserialized, Endian,
                     FieldArrayType, FieldType, TypeCode,
                     _ArrayBasedDataSerializer, _DataSerializer)
-from ._dataclass import (PvaStruct, dataclass_from_field_desc, fill_dataclass,
+from ._dataclass import (PvaStruct, dataclass_from_field_desc,
+                         fields_to_bitset, fill_dataclass, get_pv_structure,
                          is_pva_dataclass, is_pva_dataclass_instance)
 from ._fields import (BitSet, CacheContext, FieldDesc, SimpleField, Size,
                       String, StructuredField)
@@ -214,7 +217,7 @@ class VariantFieldData(DataSerializer, handles={FieldType.any}):
         assert value is not None
 
         if is_pva_dataclass_instance(value):
-            return value._pva_struct_.as_new_name(name)
+            return get_pv_structure(value).as_new_name(name)
 
         if is_pva_dataclass(value):
             raise ValueError(
@@ -465,9 +468,9 @@ class DataWithBitSet(CoreSerializableWithCache):
                  ):
         if is_pva_dataclass_instance(data):
             data = typing.cast(PvaStruct, data)
-            interface = data._pva_struct_
+            interface = get_pv_structure(data)
         elif is_pva_dataclass(data):
-            interface = data._pva_struct_
+            interface = get_pv_structure(data)
             data = None
         elif isinstance(data, StructuredField):
             # TODO it doesn't make sense to allow everything here
@@ -539,10 +542,10 @@ class FieldDescAndData(CoreSerializableWithCache):
                  data=None):
         if is_pva_dataclass_instance(data):
             data = typing.cast(PvaStruct, data)
-            interface = data._pva_struct_
+            interface = get_pv_structure(data)
         elif is_pva_dataclass(interface):
             interface = typing.cast(PvaStruct, interface)
-            interface = interface._pva_struct_
+            interface = get_pv_structure(interface)
 
         self.interface = interface
         self.data = data
@@ -610,6 +613,23 @@ class PVRequest(FieldDescAndData):
             data = interface.values
 
         super().__init__(interface=interface, data=data)
+
+    def to_bitset_and_options(self, data) -> Tuple[FrozenSet[int], dict]:
+        """
+        Convert to a bitset and options, given the data it refers to.
+        """
+        pvreq_info = dataclasses.asdict(self.data)
+        fields = pvreq_info.get('field', {})
+
+        if not fields:
+            # No fields? ... All fields!
+            bitset = BitSet({0})
+            options = {}
+        else:
+            bitset = fields_to_bitset(data, fields)
+            options = bitset.options
+
+        return frozenset(bitset), options
 
 
 def to_wire_field(field: FieldDesc,
@@ -712,7 +732,7 @@ def to_wire(category,
 
     if category is FieldDesc or isinstance(value, (FieldDesc, CoreSerializableWithCache)):
         if is_pva_dataclass(value) or is_pva_dataclass_instance(value):
-            value = typing.cast(PvaStruct, value)._pva_struct_
+            value = get_pv_structure(typing.cast(PvaStruct, value))
         return value.serialize(endian=endian, cache=cache)
 
     if not isinstance(category, FieldDesc):

@@ -51,7 +51,9 @@ class ChannelRequest(_SimpleReprEnum):
     INIT = enum.auto()
     READY = enum.auto()
     IN_PROGRESS = enum.auto()
-    # also: DISCONNECTED, DESTROYED
+    DESTROY_AFTER = enum.auto()
+    DISCONNECTED = enum.auto()
+    DESTROYED = enum.auto()
 
 
 CONNECTED = ConnectionState.CONNECTED

@@ -1,4 +1,5 @@
 import collections
+import copy
 import dataclasses
 import getpass
 import logging
@@ -257,8 +258,7 @@ def _read(chan, timeout, pvrequest):
                 dataclass = dataclass_from_field_desc(interface)
                 instance = dataclass()
                 fill_dataclass(instance, value)
-                response.dataclass_instance = instance
-                return response
+                return response, instance
 
 
 def read(pv_name, *, pvrequest='field()', verbose=False, timeout=1):
@@ -333,19 +333,18 @@ def _monitor(chan, timeout, pvrequest, maximum_events):
             field_desc = response.pv_structure_if
             dataclass = dataclass_from_field_desc(field_desc)
             instance = dataclass()
-            response.dataclass_instance = instance
-            yield response
         else:
-            event_count += 1
-            # fill_dataclass(instance, response.pv_data.data)
-            response.dataclass_instance = instance
-            yield response
+            event_data = response.pv_data.data  # and 'field'
+            fill_dataclass(instance, event_data)
+            yield response, copy.deepcopy(instance)
+
             if maximum_events is not None:
+                event_count += 1
                 if event_count >= maximum_events:
                     break
 
 
-def monitor(pv_name, *, pvrequest, verbose=False, timeout=1,
+def monitor(pv_name, *, pvrequest='field()', verbose=False, timeout=1,
             maximum_events=None):
     """
     Monitor a Channel.
@@ -390,7 +389,8 @@ def monitor(pv_name, *, pvrequest, verbose=False, timeout=1,
             del global_circuits[chan.circuit.address]
 
 
-def _read_and_write(chan, timeout, value, pvrequest='field()'):
+def _read_and_write(chan, timeout, value, pvrequest='field()',
+                    cancel_on_keyboardinterrupt=False):
     """
     Read then write structured data to the given channel.
     """
@@ -405,42 +405,52 @@ def _read_and_write(chan, timeout, value, pvrequest='field()'):
 
     dataclass = None
     old_value = None
+    ioid = None
 
-    for command in _receive_commands(chan.circuit, timeout):
-        if not isinstance(command, ChannelPutResponse):
-            continue
+    try:
+        for command in _receive_commands(chan.circuit, timeout):
+            if not isinstance(command, ChannelPutResponse):
+                continue
 
-        command = typing.cast(ChannelPutResponse, command)
-        if not command.status.is_successful:
-            raise ErrorResponseReceived(str(command.status))
-        if command.status.message:
-            logger.info('Message from server: %s', command.status)
-        if command.subcommand == Subcommand.INIT:
-            # Get the latest value with this request
-            send(chan.circuit, request.to_get())
+            command = typing.cast(ChannelPutResponse, command)
+            if not command.status.is_successful:
+                raise ErrorResponseReceived(str(command.status))
+            if command.status.message:
+                logger.info('Message from server: %s', command.status)
 
-            # Then perform the write request
-            dataclass = dataclass_from_field_desc(command.put_structure_if)
-            instance = dataclass()
+            if command.subcommand == Subcommand.INIT:
+                ioid = command.ioid
 
-            # TODO logic can move up to the circuit?
-            bitset = fill_dataclass(instance, value)
+                # Get the latest value with this request
+                send(chan.circuit, request.to_get())
 
-            request.to_default(
-                put_data=pva.DataWithBitSet(data=instance,
-                                            bitset=bitset)
-            )
-            send(chan.circuit, request)
-        elif command.subcommand == Subcommand.GET:
-            old_value = dataclass()
-            bitset = fill_dataclass(old_value, command.put_data.data)
-        elif command.subcommand == Subcommand.DEFAULT:
-            return old_value, command
+                # Then perform the write request
+                dataclass = dataclass_from_field_desc(command.put_structure_if)
+                instance = dataclass()
+
+                # TODO logic can move up to the circuit?
+                bitset = fill_dataclass(instance, value)
+
+                request.to_default(
+                    put_data=pva.DataWithBitSet(data=instance,
+                                                bitset=bitset)
+                )
+                send(chan.circuit, request)
+            elif command.subcommand == Subcommand.GET:
+                old_value = dataclass()
+                bitset = fill_dataclass(old_value, command.put_data.data)
+            elif command.subcommand == Subcommand.DEFAULT:
+                return old_value, command
+    except KeyboardInterrupt:
+        if ioid is not None and cancel_on_keyboardinterrupt:
+            send(chan.circuit, chan.cancel(ioid))
+        raise
 
 
 def read_write_read(pv_name: str, data: dict, *,
                     options: typing.Optional[dict] = None,
                     pvrequest: str = 'field()',
+                    cancel_on_keyboardinterrupt: bool = False,
                     timeout=1):
     """
     Write to a Channel, but sandwich the write between two reads.
@@ -453,8 +463,18 @@ def read_write_read(pv_name: str, data: dict, *,
     data : dict or Mapping
         The structured data to write.
 
+    pvrequest : str, optional
+        The PVRequest, such as 'field(value)'.  Defaults to 'field()' for
+        retrieving all data.
+
     options : dict, optional
-        Options to use in the pvRequest.
+        Options to use in the pvRequest. (TODO not yet implemented)
+
+    timeout : float, optional
+        Timeout for the operation.
+
+    cancel_on_keyboardinterrupt : bool, optional
+        Cancel the write in the event of a KeyboardInterrupt.
     """
     udp_sock, udp_port = make_broadcaster_socket()
     try:
@@ -464,9 +484,11 @@ def read_write_read(pv_name: str, data: dict, *,
         udp_sock.close()
 
     try:
-        initial, res = _read_and_write(chan, timeout, data,
-                                       pvrequest=pvrequest)
-        final = _read(chan, timeout, pvrequest=pvrequest)
+        initial, res = _read_and_write(
+            chan, timeout, data, pvrequest=pvrequest,
+            cancel_on_keyboardinterrupt=cancel_on_keyboardinterrupt
+        )
+        _, final = _read(chan, timeout, pvrequest=pvrequest)
     finally:
         try:
             if chan.states[CLIENT] is CONNECTED:
