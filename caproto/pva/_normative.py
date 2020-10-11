@@ -17,12 +17,12 @@ logger = logging.getLogger(__name__)
 class NormativeTypeName:
     type_name: str
     namespace: str = 'epics:nt'
-    version_number: str = '1.0'
+    version: str = '1.0'
 
     @property
     def struct_name(self):
         """The packed, single-string name."""
-        return f'{self.namespace}/{self.type_name}:{self.version_number}'
+        return f'{self.namespace}/{self.type_name}:{self.version}'
 
     @classmethod
     def from_struct_name(cls, struct_name) -> 'NormativeTypeName':
@@ -51,8 +51,8 @@ class _NTMeta(type):
         # 2. Ensure it's an epics:nt/...:1.0
         try:
             st = get_pv_structure(subclass)
-            type_name = NormativeTypeName.from_struct_name(st.struct_name)['type_name']
-            if type_name != cls._base_type_name_:
+            nt_name = NormativeTypeName.from_struct_name(st.struct_name)
+            if nt_name.type_name != cls._base_type_name_:
                 return False
         except Exception:
             return False
@@ -122,16 +122,6 @@ def _create_nt_scalar(name: str,
 
     """
 
-    base_dict = {
-        '_value_type_': field_type,
-        '__annotations__': {
-            'value': field_type,
-        }
-    }
-
-    wrapper = pva_dataclass(name=NormativeTypeName('NTScalar').struct_name)
-    base_cls = wrapper(type(f'{name}Base', (NTScalarBase, ), base_dict))
-
     if field_type.is_numeric:
         @pva_dataclass(name='display_t')
         class DisplayStruct:
@@ -168,25 +158,47 @@ def _create_nt_scalar(name: str,
         highAlarmSeverity: FieldType.int32
         hysteresis: FieldType.float64
 
-    annotations = {
-        # 'value': field_type,
-        'descriptor': str,
-        'alarm': NTAlarm,
-        'timeStamp': NTTimestamp,
-        'display': DisplayStruct,
-        'control': ControlStruct,
-        'valueAlarm': ValueAlarmStruct,
+    base_dict = {
+        '_value_type_': field_type,
+        '__annotations__': {
+            'value': field_type,
+        }
+    }
+
+    wrapper = pva_dataclass(name=NormativeTypeName('NTScalar').struct_name)
+    base_cls = wrapper(type(f'{name}Base', (NTScalarBase, ), base_dict))
+
+    full_dict = {
+        '__annotations__': {
+            # 'value': field_type,
+            'descriptor': str,
+            'alarm': NTAlarm,
+            'timeStamp': NTTimestamp,
+            'display': DisplayStruct,
+            'control': ControlStruct,
+            'valueAlarm': ValueAlarmStruct,
+        },
     }
 
     if not field_type.is_numeric:
-        annotations.pop('control')
-
-    full_dict = {
-        '__annotations__': annotations,
-    }
+        full_dict['__annotations__'].pop('control')
 
     full_cls = wrapper(type(name, (base_cls, ), full_dict))
     return base_cls, full_cls
 
 
 NTScalarInt64Base, NTScalarInt64 = _create_nt_scalar('NTScalarInt64', FieldType.int64)
+NTScalarFloat16Base, NTScalarFloat16 = _create_nt_scalar('NTScalarFloat16', FieldType.float16)
+NTScalarFloat32Base, NTScalarFloat32 = _create_nt_scalar('NTScalarFloat32', FieldType.float32)
+NTScalarFloat64Base, NTScalarFloat64 = _create_nt_scalar('NTScalarFloat64', FieldType.float64)
+NTScalarFloat128Base, NTScalarFloat128 = _create_nt_scalar('NTScalarFloat128', FieldType.float128)
+NTScalarUInt64Base, NTScalarUInt64 = _create_nt_scalar('NTScalarUInt64', FieldType.uint64)
+NTScalarInt64Base, NTScalarInt64 = _create_nt_scalar('NTScalarInt64', FieldType.int64)
+NTScalarUInt32Base, NTScalarUInt32 = _create_nt_scalar('NTScalarUInt32', FieldType.uint32)
+NTScalarInt32Base, NTScalarInt32 = _create_nt_scalar('NTScalarInt32', FieldType.int32)
+NTScalarUInt16Base, NTScalarUInt16 = _create_nt_scalar('NTScalarUInt16', FieldType.uint16)
+NTScalarInt16Base, NTScalarInt16 = _create_nt_scalar('NTScalarInt16', FieldType.int16)
+NTScalarUInt8Base, NTScalarUInt8 = _create_nt_scalar('NTScalarUInt8', FieldType.uint8)
+NTScalarInt8Base, NTScalarInt8 = _create_nt_scalar('NTScalarInt8', FieldType.int8)
+NTScalarBooleanBase, NTScalarBoolean = _create_nt_scalar('NTScalarBoolean', FieldType.boolean)
+NTScalarStringBase, NTScalarString = _create_nt_scalar('NTScalarString', FieldType.string)

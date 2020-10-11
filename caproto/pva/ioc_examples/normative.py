@@ -7,7 +7,9 @@ from caproto.pva.server import ioc_arg_parser, run
 
 
 class MyIOC(pva.PVAGroup):
-    int_nt = pva.pvaproperty(value=32, name='int')
+    int_nt = pva.pvaproperty(value=42, name='int')
+    float_nt = pva.pvaproperty(value=42.1, name='float')
+    string_nt = pva.pvaproperty(value='test', name='str')
 
 
 def main():

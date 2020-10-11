@@ -5,18 +5,16 @@ import pytest
 pytest.importorskip('caproto.pva')
 
 from caproto import pva  # isort: skip
-from caproto.pva._normative import NTScalarBase, alarm_t, nt_name, time_t
+from caproto.pva._normative import NormativeTypeName, NTScalarBase
 
 logger = logging.getLogger(__name__)
 
 
 def test_subclasscheck():
-    @pva.pva_dataclass(name=nt_name('NTScalar'))
+    @pva.pva_dataclass(name=NormativeTypeName('NTScalar').struct_name)
     class NTScalarInt64Test:
         value: pva.Int64
         descriptor: str
-        alarm: alarm_t
-        timeStamp: time_t
 
     # While these are not direct subclasses, they are normative type
     # equivalents:

@@ -12,7 +12,8 @@ from typing import Dict, List, Optional
 
 from ... import pva
 from .._dataclass import get_pv_structure, pva_dataclass
-from .._normative import NTScalarInt64
+from .._normative import (NTScalarBoolean, NTScalarFloat64, NTScalarInt64,
+                          NTScalarString)
 from .common import AuthOperation, DataWrapperBase
 
 module_logger = logging.getLogger(__name__)
@@ -659,6 +660,9 @@ class PVAGroup(metaclass=PVAGroupMeta):
 
     type_map = {
         int: NTScalarInt64,
+        float: NTScalarFloat64,
+        str: NTScalarString,
+        bool: NTScalarBoolean,
     }
 
     def __init__(self, prefix, *, macros=None, parent=None, name=None):
