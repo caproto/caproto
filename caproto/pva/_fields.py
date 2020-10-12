@@ -32,10 +32,6 @@ class FieldDesc(CoreSerializableWithCache):
     size: Optional[int] = 1
     metadata: Dict = field(default_factory=dict, hash=False, repr=False)
 
-    @property
-    def type_name(self) -> str:
-        return self.field_type.name
-
     def serialize(self, endian: Endian, cache=None) -> List[bytes]:
         raise NotImplementedError(
             "Implemented in SimpleField, StructuredField only."

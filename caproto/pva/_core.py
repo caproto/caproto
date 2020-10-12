@@ -198,7 +198,30 @@ class FieldType(enum.IntEnum):
 
     @property
     def is_complex(self) -> bool:
+        """Is the FieldType a union, struct, or any field?"""
         return self in {FieldType.union, FieldType.struct, FieldType.any}
+
+    @property
+    def is_numeric(self) -> bool:
+        """Is the FieldType integer or floating point?"""
+        return self.is_integral or self.is_floating
+
+    @property
+    def is_integral(self) -> bool:
+        """Is the FieldType integer-based?"""
+        return self in {
+            FieldType.uint64, FieldType.int64, FieldType.uint32,
+            FieldType.int32, FieldType.uint16, FieldType.int16,
+            FieldType.uint8, FieldType.int8,
+        }
+
+    @property
+    def is_floating(self) -> bool:
+        """Is the FieldType floating point?"""
+        return self in {
+            FieldType.float16, FieldType.float32, FieldType.float64,
+            FieldType.float128,
+        }
 
     @property
     def has_value(self) -> bool:

@@ -1,6 +1,6 @@
 """
-Create a new PVAccess-compatible dataclass given a type-annotated class, and
-vice-versa.
+Tools for taking type-annotated classes and creating PVAccess-compatible
+dataclasses.
 """
 
 import dataclasses
@@ -21,9 +21,40 @@ def new_struct(fields: dict,
                name: str = '',
                array_type: FieldArrayType = FieldArrayType.scalar,
                size: Optional[int] = 1,
-               field_type=FieldType.struct,
+               field_type: FieldType = FieldType.struct,
                metadata: Optional[dict] = None,
                ) -> StructuredField:
+    """
+    Create a new `StructuredField` structure description.
+
+    Parameters
+    ----------
+    fields : dict
+        Fields of the structure.
+
+    struct_name :
+        The name of the structure.
+
+    name : str
+        If in a class hierarchy, the attribute name of the structure instance.
+
+    array_type : FieldArrayType, optional
+        The array type of the structure, defaulting to scalar.
+
+    size : int, optional
+        The number of elements in the array (relating to array_type).
+
+    field_type : FieldType, optional
+        The field type - struct or union.
+
+    metadata : dict, optional
+        Non-hashed metadata to attach to the StructuredField instance.
+
+    Returns
+    -------
+    StructuredField
+    """
+
     return StructuredField(
         field_type=field_type,
         array_type=array_type,
@@ -36,9 +67,29 @@ def new_struct(fields: dict,
     )
 
 
-def _field_from_annotation(attr, annotation,
-                           array_type=FieldArrayType.scalar,
-                           ):
+def _field_from_annotation(attr: str,
+                           annotation,
+                           array_type: FieldArrayType = FieldArrayType.scalar,
+                           ) -> FieldDesc:
+    """
+    Create a SimpleField or a StruturedField, given annotation information.
+
+    Parameters
+    ----------
+    attr : str
+        The attribute name.
+
+    annotation : any
+        Annotation information, according to `__annotations__`
+
+    array_type : FieldArrayType, optional
+        The array type to generate.
+
+    Returns
+    -------
+    FieldDesc
+        Structured or simple field information, based on the annotation.
+    """
     annotation = annotation_type_map.get(annotation, annotation)
     if isinstance(annotation, SimpleField):
         annotation = typing.cast(SimpleField, annotation)
