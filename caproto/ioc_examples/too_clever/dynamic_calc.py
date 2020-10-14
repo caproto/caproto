@@ -25,25 +25,15 @@ def extract_names(code_string):
 
 
 class DynamicCalc(PVGroup):
-    core_attrs = ['formula', 'process', 'output', 'variables']
-
     formula = pvproperty(value='', report_as_string=True)
     process = pvproperty(value=0, name='formula.PROC')
     output = pvproperty(value=0.0)
     variables = pvproperty(value=['a'], max_length=100,
                            dtype=ChannelType.STRING)
 
-    def reset_pvdb(self):
-        """
-        Reset the pv database by in-place removing all non-essential entries.
-        """
-        core_pvs = [
-            getattr(self, attr).pvname
-            for attr in self.core_attrs
-        ]
-        for pv in list(self.pvdb):
-            if pv not in core_pvs:
-                self.pvdb.pop(pv)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._all_variables = {}
 
     @formula.startup
     async def formula(self, instance, async_lib):
@@ -60,28 +50,33 @@ class DynamicCalc(PVGroup):
         # Tell CA what variables we have:
         await self.variables.write(value=list(sorted(names)))
 
-        # Reset the process variable database to the bare essentials
-        self.reset_pvdb()
-
         # And dynamically create a new set of properties based on the names
         new_pvproperties = {
             name: pvproperty(value=0.0)
-            for name in names
+            for name in names if name not in self._all_variables
         }
 
         DynamicGroup = type('DynamicGroup', (PVGroup, ), new_pvproperties)
-        self.dynamic_group = DynamicGroup(prefix=self.prefix)
-        self.pvdb.update(self.dynamic_group.pvdb)
+        dynamic_group = DynamicGroup(prefix=self.prefix)
 
         print('New formula:', value)
-        print('pvdb now includes:', list(sorted(self.pvdb)))
+        print('New PVs:', list(sorted(dynamic_group.pvdb)))
+
+        self._all_variables.update(
+            {
+                attr: getattr(dynamic_group, attr)
+                for attr in new_pvproperties
+            }
+        )
+
+        self.pvdb.update(dynamic_group.pvdb)
         return value
 
     @process.putter
     async def process(self, instance, value):
         # Gather the current values in a `locals()` dictionary:
         formula_locals = {
-            name: getattr(self.dynamic_group, name).value
+            name: self._all_variables[name].value
             for name in self.variables.value
         }
 
