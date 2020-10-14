@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
-from caproto import ChannelDouble
-
 import ast
+
+from caproto import ChannelDouble
+from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run
 
 
 def extract_names(code_string):
@@ -41,8 +41,7 @@ class DynamicCalc(PVGroup):
 
     @proc.putter
     async def proc(self, instance, value):
-        locals_ = {n: self._pvdb[f'{self.prefix}{n}'].value
-                  for n in self.names}
+        locals_ = {n: self._pvdb[f'{self.prefix}{n}'].value for n in self.names}
 
         ret = eval(self.code_object, locals_)
         await self.output.write(ret)
