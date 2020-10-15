@@ -10,14 +10,14 @@ jobs:
       Python36_R314:
         python.version: '3.6'
         epics.on.travis.pkg: '0.8.2/epics-ci-0.8.2_R3.14.12.6_pva_areadetector3-2_motor6-9.tar.bz2'
-      Python37_R314:
-        python.version: '3.7'
-        epics.on.travis.pkg: '0.8.2/epics-ci-0.8.2_R3.14.12.6_pva_areadetector3-2_motor6-9.tar.bz2'
       Python36_R7:
         python.version: '3.6'
         epics.on.travis.pkg: '0.8.2/epics-ci-0.8.2_R7.0.1.1_pva_areadetector3-2_motor6-10.tar.bz2'
       Python37_R7:
         python.version: '3.7'
+        epics.on.travis.pkg: '0.8.2/epics-ci-0.8.2_R7.0.1.1_pva_areadetector3-2_motor6-10.tar.bz2'
+      Python38_R7:
+        python.version: '3.8'
         epics.on.travis.pkg: '0.8.2/epics-ci-0.8.2_R7.0.1.1_pva_areadetector3-2_motor6-10.tar.bz2'
 
   steps:
