@@ -75,9 +75,8 @@ install:
     fi
 
 script:
-  # Kill caRepeater if it's running - we want to test caproto-repeater later.
-  - pgrep -a caRepeater && killall caRepeater
-  - rm -f `which caRepeater`
+  # We want to test caproto-repeater later; don't use caRepeater
+  - rm -f `which caRepeater` || true
 
   - pip install git+https://github.com/klauer/catvs.git@py3k
   # Work around pip bug that fails to respect trio's pin of attrs.
