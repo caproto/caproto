@@ -17,21 +17,21 @@ env:
 
 jobs:
   include:
-      - python: 3.6
-        env: ID=FLAKE8
-        name: Flake8 style check
-      - python: 3.6
-        env: INSTALL_NUMPY=1 PUBLISH_DOCS=1
-        name: Python 3.6 with numpy + docs
-      - python: 3.6
-        env: INSTALL_NUMPY=0
-        name: Python 3.6
-      - python: 3.7
-        env: INSTALL_NUMPY=0
-        name: Python 3.7
-      - python: 3.8
-        env: INSTALL_NUMPY=0
-        name: Python 3.8
+    - python: 3.6
+      env: ID=FLAKE8
+      name: Flake8 style check
+    - python: 3.6
+      env: INSTALL_NUMPY=1 PUBLISH_DOCS=1
+      name: Python 3.6 with numpy + docs
+    - python: 3.6
+      env: INSTALL_NUMPY=0
+      name: Python 3.6
+    - python: 3.7
+      env: INSTALL_NUMPY=0
+      name: Python 3.7
+    - python: 3.8
+      env: INSTALL_NUMPY=0
+      name: Python 3.8
 
 addons:
   apt:
@@ -89,14 +89,18 @@ script:
   - coverage report -m
   - codecov
 
-  - set -e
   # Install deps for building the docs.
-  - pip install --quiet --upgrade -r requirements-doc.txt
-  # Build the docs.
-  - make -C doc html
+  - |
+    if [[ "$PUBLISH_DOCS" -eq 1 ]]; then
+        set -e
+        pip install --quiet --upgrade -r requirements-doc.txt
+        # Build the docs.
+        make -C doc html
+    fi
+
   # Upload the docs to gh-pages.
   - |
-    if [[ $PUBLISH_DOCS && ! -z "$DOCTR_DEPLOY_ENCRYPTION_KEY_NSLS_II_NSLS_II_GITHUB_IO" ]]; then
+    if [[ "$PUBLISH_DOCS" -eq 1 && ! -z "$DOCTR_DEPLOY_ENCRYPTION_KEY_NSLS_II_NSLS_II_GITHUB_IO" ]]; then
 
         # A fix for doctr-versions-menu:
         pip install pyparsing --upgrade
