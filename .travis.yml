@@ -75,8 +75,6 @@ install:
     fi
 
 script:
-  - caget Py:ao1 sim:mtr1 13SIM1:image1:PluginType_RBV
-
   # Kill caRepeater if it's running - we want to test caproto-repeater later.
   - pgrep -a caRepeater && killall caRepeater
   - rm -f `which caRepeater`
