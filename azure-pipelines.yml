@@ -83,28 +83,6 @@ jobs:
 
   - bash: |
       source $HOME/azure_env.sh
-      echo "EPICS bin contents:"
-      ls ${EPICS_BIN_PATH}
-      echo "Starting IOCs..."
-      cp -f ${AREA_DETECTOR_PATH}/ADCore/iocBoot/EXAMPLE_commonPlugins.cmd ${AREA_DETECTOR_PATH}/ADCore/iocBoot/commonPlugins.cmd
-      echo "Patching epics-config.sh to increase EPICS_CA_MAX_ARRAY_BYTES"
-      sed -i -e "s/EPICS_CA_MAX_ARRAY_BYTES=10000000/EPICS_CA_MAX_ARRAY_BYTES=20000000/" ${CI_SCRIPTS}/epics-config.sh
-
-      ran_iocs=0
-      for attempt in 1 2 3; do
-        if bash ${CI_SCRIPTS}/run-epics-iocs-on-tmux.sh; then
-          ran_iocs=1
-          break
-        fi
-      done
-
-      if [ "${ran_iocs}" -ne "1" ]; then
-        exit 1
-      fi
-    displayName: 'Run IOCs on tmux'
-
-  - bash: |
-      source $HOME/azure_env.sh
       coverage run --parallel-mode run_tests.py --timeout=100 -v --junitxml=junit/test-results.xml
     displayName: 'pytest'
 
