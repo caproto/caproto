@@ -10,6 +10,8 @@ export EPICS_CAS_BEACON_ADDR_LIST=$EPICS_CA_ADDR_LIST
 export EPICS_CA_AUTO_ADDR_LIST=YES
 export EPICS_CAS_AUTO_BEACON_ADDR_LIST=YES
 export EPICS_ON_TRAVIS_URL="https://github.com/klauer/epics-on-travis/releases/download/${EPICS_ON_TRAVIS_PKG}"
+
+export CAPROTO_SKIP_MOTORSIM_TESTS=1
 EOF
 
 if [ -f "$HOME/epics/versions.sh" ]; then

@@ -1,26 +1,13 @@
+os: linux
 language: python
-
 dist: xenial
 
-sudo:
-  - false
-  - true
-
-
-python:
-  - 3.7
-  - 3.6
-
 env:
-  matrix:
-    - ID=FLAKE8
-    - ID=R314_ARRAY INSTALL_NUMPY=0 PACKAGED_DEPS=0.8.2/epics-ci-0.8.2_R3.14.12.6_pva_areadetector3-2_motor6-9.tar.bz2
-    - ID=R314_NUMPY INSTALL_NUMPY=1 PACKAGED_DEPS=0.8.2/epics-ci-0.8.2_R3.14.12.6_pva_areadetector3-2_motor6-9.tar.bz2
-    - ID=R7_NUMPY INSTALL_NUMPY=1 PUBLISH_DOCS=1 PACKAGED_DEPS=0.8.2/epics-ci-0.8.2_R7.0.1.1_pva_areadetector3-2_motor6-10.tar.bz2
-    - ID=R7_ARRAY INSTALL_NUMPY=0 PACKAGED_DEPS=0.8.2/epics-ci-0.8.2_R7.0.1.1_pva_areadetector3-2_motor6-10.tar.bz2
-
   global:
     - EPICS_CA_MAX_ARRAY_BYTES=20000000
+    - PACKAGED_DEPS=0.8.2/epics-ci-0.8.2_R7.0.1.1_pva_areadetector3-2_motor6-10.tar.bz2
+    # We don't have the motorSim IOC installed or running:
+    - CAPROTO_SKIP_MOTORSIM_TESTS=1
     # Doctr deploy key for NSLS-II/caproto (not used)
     - secure: "Hnz9c6x13kaAc7IqH4/wJWNel2rzEC8/x0KhFoGLVLHjmiH1LMmpGh/P5CPADlmKS80WFz4vhJ0YtSjtHCPI+9Y2aBGn8z732WM86OyGHITviCMTxtyVZfRFCkOAVlU0qpIyWu4p0rEfxrXCztSKE4bBO/wWnFhGGw9CJROnFhJwoJlbI9i28zscyeGsdqHNUfXHkyUAN3c3LKoYZgnJco5HiHLwXVvsy3DMkvOizLgslf6lrHwnQOT1F49ShgPcGGWpkuRARXkGII7lB0LOn2TBoTzmhgjoC3OmC4nZGJfzitwH9+nHc+iJ3mTlshsXb366B/D5TNVIL/4rzYV8zw49DogQIWYtECK4/z7fOzG61yCU33b3aeXU2OI4k5eZ2qN3gp3KQ4+PWyCMTHsBVgs6o49K1HWtFuuFLuhUPT4FVs2Pzz6yTka9NUukPO1LoTeQAUvGxRbc/15CjIWXtqqzEGmlPi8AFEo2kw33EtTawMU9w8nzAfdk5DX28Qcuzh9XA9nVUD0j7Rum7nGY1f5+icXh0FsOuP1uHt82bXIYvw3rey3RkWcqVcniJXlkq0bAZM/ZSXWX5VHyQ2e7C4kxCdnzVqjgtlGT2ARSlD6o8FKKRKTAKD7kQ9ajTjZHRhO+xbvP+X4K9GlbGvPyU9bnDFa14fXBJS4dTMd8GgQ="
     # Doctr deploy key for NSLS-II/NSLS-II.github.io (for old URLs)
@@ -28,13 +15,23 @@ env:
     # Doctr deploy key for caproto/caproto.github.io
     - secure: "j6XZWU6sRp74RxbwDRf0vgTyp38xnyVsX+Upsh4D9DrltQ9evSskgYl94XOTN9LVawmJTXvwy8A2Tjcy/+4SMD/snhSP3y0WpwyunA4FQoG+jmS40QB0FlamnQkNgxPv8LjP6o0nl2ZN7QdTf1/ANy813cH6ZR9Vc3JRyyHew+z6qs2u2hDqUiDhqdVq6m+FOZQGzHEdiexowJOe2w6SOS2FfqDYWtrG0IEmykctUYiMFuDxHXbqaPuu68/GNjSqTXW3bdXX//LOE2H68XRDHvbW+lnidU4G6T3SqDyvJSAiwZfxKdjYQzjvQhTCrNCwNe99ORFlHmVU4rr19+VtL68Ta5ADfHHvkmM78zCb+OPV4N6Pv2mqbtpM1Qn9h920x3lH+5i0qoK8kVocrlmRokd4nY7jyGOTX0SyYKGnBL+KXrKsPSabLO2kyW6+eHc4p4eCopZDhEg5GyXw3g1dA5w3MhfCeEY/0N/7tRBGlooFbIK4rVj7KRJxS5if6B1TKlTgilRhFvMMGMxJG2fTVjAaqrbQqtiy6GwKfCWyNYfUcB6TUpyu7jgStrGJ9lsm5VrrJR7/atlJN4E1GA0HjBWoCUn1NgH+5upjvG9Z1s9FUdp4Kqohw/0gr0CQQwvjRxyZLGKLYDNgL1gY/eBYzTjxb8t3r5+ZKFjQmldg2qk="
 
-matrix:
-  exclude:
+jobs:
+  include:
     - python: 3.6
-      sudo: true
-
+      env: ID=FLAKE8
+      name: Flake8 style check
+    - python: 3.6
+      env: INSTALL_NUMPY=1 PUBLISH_DOCS=1
+      name: Python 3.6 with numpy + docs
+    - python: 3.6
+      env: INSTALL_NUMPY=0
+      name: Python 3.6
     - python: 3.7
-      sudo: false
+      env: INSTALL_NUMPY=0
+      name: Python 3.7
+    - python: 3.8
+      env: INSTALL_NUMPY=0
+      name: Python 3.8
 
 addons:
   apt:
@@ -48,10 +45,11 @@ cache:
     - $HOME/.ccache  # https://github.com/travis-ci/travis-ci/issues/5853
 
 before_install:
-  - if [ "$ID" == "FLAKE8" ]; then
-        pip install flake8;
-        flake8 .;
-        exit;
+  - |
+    if [ "$ID" == "FLAKE8" ]; then
+        pip install flake8
+        flake8 .
+        exit
     fi
 
   - export PATH=/usr/lib/ccache:$PATH
@@ -63,8 +61,6 @@ before_install:
   - source $HOME/epics/versions.sh
   - sed -i -e "s/EPICS_CA_MAX_ARRAY_BYTES=10000000/EPICS_CA_MAX_ARRAY_BYTES=20000000/" ${CI_SCRIPTS}/epics-config.sh
   - source ${CI_SCRIPTS}/epics-config.sh
-  - bash ${CI_SCRIPTS}/run-epics-iocs-on-procserv.sh
-  - pip install pyepics numpy
 
 install:
   - pip install .[test]
@@ -79,31 +75,30 @@ install:
     fi
 
 script:
-  - caget Py:ao1 sim:mtr1 13SIM1:image1:PluginType_RBV
+  # We want to test caproto-repeater later; don't use caRepeater
+  - rm -f `which caRepeater` || true
 
-  # Kill caRepeater if it's running - we want to test caproto-repeater later.
-  - pgrep -a caRepeater && killall caRepeater
-  - rm -f `which caRepeater`
-
-  - pip install git+https://github.com/klauer/catvs.git@py3k
   # Work around pip bug that fails to respect trio's pin of attrs.
   - pip install -U attrs
 
   - caproto-repeater &
-
-  - coverage run --parallel-mode run_tests.py -v -n 2
+  - coverage run --parallel-mode run_tests.py -v
   - coverage combine --append
   - coverage report -m
   - codecov
 
-  - set -e
   # Install deps for building the docs.
-  - pip install --quiet --upgrade -r requirements-doc.txt
-  # Build the docs.
-  - make -C doc html
+  - |
+    if [[ "$PUBLISH_DOCS" -eq 1 ]]; then
+        set -e
+        pip install --quiet --upgrade -r requirements-doc.txt
+        # Build the docs.
+        make -C doc html
+    fi
+
   # Upload the docs to gh-pages.
   - |
-    if [[ $PUBLISH_DOCS && ! -z "$DOCTR_DEPLOY_ENCRYPTION_KEY_NSLS_II_NSLS_II_GITHUB_IO" ]]; then
+    if [[ "$PUBLISH_DOCS" -eq 1 && ! -z "$DOCTR_DEPLOY_ENCRYPTION_KEY_NSLS_II_NSLS_II_GITHUB_IO" ]]; then
 
         # A fix for doctr-versions-menu:
         pip install pyparsing --upgrade
