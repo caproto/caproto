@@ -21,14 +21,14 @@ jobs:
       env: ID=FLAKE8
       name: Flake8 style check
     - python: 3.6
-      env: INSTALL_NUMPY=1 PUBLISH_DOCS=1
-      name: Python 3.6 with numpy + docs
-    - python: 3.6
       env: INSTALL_NUMPY=0
       name: Python 3.6
     - python: 3.7
       env: INSTALL_NUMPY=0
       name: Python 3.7
+    - python: 3.7
+      env: INSTALL_NUMPY=1 PUBLISH_DOCS=1
+      name: Python 3.7 with numpy + docs
     - python: 3.8
       env: INSTALL_NUMPY=0
       name: Python 3.8
