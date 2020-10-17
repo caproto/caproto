@@ -3,6 +3,7 @@ PVAGroup-based server code. It's a big magical - maybe not in a good way...
 """
 import contextlib
 import copy
+import dataclasses
 import functools
 import inspect
 import logging
@@ -457,6 +458,15 @@ class GroupDataWrapper(DataWrapperBase):
             return await self.user_call(overlay, data.data)
 
 
+@dataclasses.dataclass
+class PvapropertyHooks:
+    get: Optional[callable]
+    put: Optional[callable]
+    startup: Optional[callable]
+    shutdown: Optional[callable]
+    call: Optional[callable]
+
+
 class pvaproperty:
     """
     A property-like descriptor for specifying a PV in a `PVGroup`.
@@ -480,7 +490,7 @@ class pvaproperty:
         The initial value - either an instantiated pva dataclass.
 
     name : str, optional
-        The PV name (defaults to the attribute name of the pvproperty)
+        The PV name (defaults to the attribute name of the pvaproperty)
 
     alarm_group : str, optional
         The alarm group the PV should be attached to
@@ -497,7 +507,7 @@ class pvaproperty:
     Attributes
     ----------
     attr : str
-        The attribute name of the pvproperty.
+        The attribute name of the pvaproperty.
     """
 
     def __init__(self,
@@ -523,19 +533,19 @@ class pvaproperty:
         self._cls_kwargs = cls_kwargs
 
     def __get__(self, instance, owner):
-        """Descriptor method: get the pvproperty instance from a group."""
+        """Descriptor method: get the pvaproperty instance from a group."""
         if instance is None:
-            # `class.pvproperty`
+            # `class.pvaproperty`
             return self
 
         return instance.attr_pvdb[self.attr]
 
     def __set__(self, instance, value):
-        """Descriptor method: set the pvproperty instance in a group."""
+        """Descriptor method: set the pvaproperty instance in a group."""
         instance.attr_pvdb[self.attr] = value
 
     def __delete__(self, instance):
-        """Descriptor method: delete the pvproperty instance from a group."""
+        """Descriptor method: delete the pvaproperty instance from a group."""
         del instance.attr_pvdb[self.attr]
 
     def __set_name__(self, owner, name):
@@ -601,8 +611,19 @@ class pvaproperty:
             self.attr, call=call, read_only=self._read_only)
         return self
 
+    @property
+    def hooks(self):
+        """All user-defined hooks."""
+        return PvapropertyHooks(
+            get=self._get,
+            put=self._put,
+            startup=self._startup,
+            shutdown=self._shutdown,
+            call=self._call,
+        )
+
     def __call__(self, get, put=None, startup=None, shutdown=None):
-        # Handles use case: pvproperty(**info)(getter, putter, startup).
+        # Handles use case: pvaproperty(**info)(getter, putter, startup).
         raise NotImplementedError('TODO')
 
 
@@ -700,7 +721,7 @@ class PVAGroup(metaclass=PVAGroupMeta):
         self.log = logging.getLogger(f'{base}.{log_name}')
         self._create_pvdb()
 
-    def _instantiate_value_from_pvproperty(self, attr, prop):
+    def _instantiate_value_from_pvaproperty(self, attr, prop):
         if pva.is_pva_dataclass_instance(prop.value):
             return copy.deepcopy(prop.value)
 
@@ -717,7 +738,7 @@ class PVAGroup(metaclass=PVAGroupMeta):
         return dtype(value=prop.value, **prop.cls_kwargs)
 
     def _create_pv(self, attr: str, prop: pvaproperty):
-        value = self._instantiate_value_from_pvproperty(attr, prop)
+        value = self._instantiate_value_from_pvaproperty(attr, prop)
         pvname = expand_macros(self.prefix + prop.name, self.macros)
         wrapped_data = self._wrapper_class_(
             name=pvname, data=value, group=self, prop=prop)

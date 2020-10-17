@@ -94,14 +94,20 @@
              {%- if prop.inherited_from %}
                  Inherited from {{ prop.inherited_from.link }}
              {%- endif %}
-             {%- if prop.has_startup %}
+             {%- if prop.startup %}
                  **Startup**
              {%- endif %}
-             {%- if prop.has_get %}
+             {%- if prop.shutdown %}
+                 **Shutdown**
+             {%- endif %}
+             {%- if prop.getter %}
                  **Get**
              {%- endif %}
-             {%- if prop.has_put %}
+             {%- if prop.putter %}
                  **Put**
+             {%- endif %}
+             {%- if prop._call %}
+                 **RPC**
              {%- endif %}
            - {% if prop.alarm_group -%}
                  {{ prop.alarm_group }}
@@ -156,14 +162,29 @@
     .. rubric:: pvproperty methods
 
     {%- for attr, prop in pvgroup_info.pvproperty.items() %}
-    {%- if prop.has_startup %}
+    {%- if prop.startup %}
     .. method:: {{ attr }}.startup(self, instance, async_lib)
-        {{ method_info(attr + '.startup', prop.pvspec.startup) }}
+        {{ method_info(attr + '.startup', prop.startup) }}
 
     {%- endif %}
-    {%- if prop.has_put %}
+    {%- if prop.shutdown %}
+    .. method:: {{ attr }}.shutdown(self, instance, async_lib)
+        {{ method_info(attr + '.shutdown', prop.shutdown) }}
+
+    {%- endif %}
+    {%- if prop.getter %}
+    .. method:: {{ attr }}.getter(self, instance)
+        {{ method_info(attr + '.getter', prop.getter) }}
+
+    {%- endif %}
+    {%- if prop.put %}
     .. method:: {{ attr }}.putter(self, instance, value)
-        {{ method_info(attr + '.putter', prop.pvspec.put) }}
+        {{ method_info(attr + '.putter', prop.putter) }}
+
+    {%- endif %}
+    {%- if prop.rpc %}
+    .. method:: {{ attr }}.call(self, instance, value)
+        {{ method_info(attr + '.rpc', prop.rpc) }}
 
     {%- endif %}
     {%- endfor %}
