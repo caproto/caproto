@@ -119,8 +119,20 @@ Messages
 
 
 .. currentmodule:: caproto.pva._messages
+
 .. autoclass:: MessageHeader
     :members:
+
+.. autofunction:: bytes_needed_for_command
+
+.. autofunction:: header_from_wire
+
+.. autofunction:: read_datagram
+
+.. autofunction:: read_from_bytestream
+
+Control
+-------
 
 .. autoclass:: BeaconMessage
     :members:
@@ -145,6 +157,10 @@ Messages
 
 .. autoclass:: EchoResponse
     :members:
+
+
+Application
+-----------
 
 .. autoclass:: ConnectionValidationRequest
     :members:

@@ -157,6 +157,7 @@ learning exercises.
    servers
    shark
    loggers
+   cookiecutter
    own_docs
 
 .. toctree::
