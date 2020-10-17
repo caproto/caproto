@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-A basic caproto-pva test server.
+An advanced caproto-pva server that does not rely on the PVAGroup magic.
 
-This is very much preliminary API.
+This is **not** for the average user.
 """
 import warnings
 

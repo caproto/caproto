@@ -133,8 +133,8 @@ def poll_readiness(pv_to_check: str,
     )
 
 
-def test_example_ioc_basic(request, prefix):
-    run_example_ioc('caproto.pva.ioc_examples.basic', request=request,
+def test_example_ioc_advanced(request, prefix):
+    run_example_ioc('caproto.pva.ioc_examples.advanced', request=request,
                     args=['--prefix', prefix], pv_to_check=f'{prefix}test')
 
     initial, res, final = pva.sync.client.read_write_read(
@@ -169,3 +169,29 @@ def test_example_ioc_group(request, prefix):
     initial, res, final = pva.sync.client.read_write_read(
         f'{prefix}rpc', data={'value': 6, 'info': 'foobar'}
     )
+
+
+def test_example_ioc_normative(request, prefix):
+    run_example_ioc('caproto.pva.ioc_examples.normative', request=request,
+                    args=['--prefix', prefix], pv_to_check=f'{prefix}nt_bool')
+
+    def write_and_check(pv, to_write, start_value):
+        initial, _, final = pva.sync.client.read_write_read(
+            f'{prefix}{pv}', data={'value': to_write},
+        )
+
+        if isinstance(start_value, list):
+            assert list(initial.value) == start_value
+            assert list(final.value) == to_write
+        else:
+            assert initial.value == start_value
+            assert final.value == to_write
+
+    write_and_check('nt_bool', False, True)
+    write_and_check('nt_int', 0, 42)
+    write_and_check('nt_float', 12.0, 42.1)
+    write_and_check('nt_string', 'new value', 'test')
+
+    write_and_check('nt_int_array', [0, 1, 2], [42])
+    write_and_check('nt_float_array', [1.0, 2.0, 3.0], [42.1])
+    write_and_check('nt_string_array', ['new', 'value'], ['test'])
