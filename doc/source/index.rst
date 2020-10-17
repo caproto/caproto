@@ -111,6 +111,12 @@ We would advise those kinds of users to steer well clear of caproto. It is best
 suited to applications that reward convenience, fast iteration, and
 accessibility.
 
+What about pvAccess?
+====================
+
+Caproto offers *very* preliminary pvAccess support.  See more in the
+:doc:`pva/index` section.
+
 Vital Statistics
 ================
 
@@ -159,6 +165,15 @@ learning exercises.
 
    basics
    api
+
+.. toctree::
+   :maxdepth: 4
+   :caption: pvAccess
+
+   pva/index
+   pva/clients
+   pva/iocs
+   pva/api
 
 .. toctree::
    :maxdepth: 2
