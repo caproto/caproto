@@ -41,6 +41,7 @@ addons:
 cache:
   directories:
     - $HOME/miniconda
+    - $HOME/.condarc
     - $HOME/.cache/pip
     - $HOME/.ccache  # https://github.com/travis-ci/travis-ci/issues/5853
 
@@ -67,8 +68,8 @@ before_install:
         bash miniconda.sh -b -p $HOME/miniconda;
         source "$HOME/miniconda/etc/profile.d/conda.sh";
         hash -r;
-        conda update -q conda;
         conda config --set always_yes yes --set changeps1 no;
+        conda update -q conda;
         conda config --set channel_priority strict;
         conda config --add channels conda-forge;
         conda config --remove channels defaults;
