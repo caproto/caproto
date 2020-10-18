@@ -56,6 +56,7 @@ jobs:
     displayName: 'Configure conda'
 
   - bash: |
+      source $HOME/azure_env.sh
       conda info -a
       conda create -q -n test_env python=${python_version} epics-base
       conda activate test_env
