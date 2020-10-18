@@ -6,10 +6,18 @@ from typing import List
 
 import pytest
 
+import caproto
+import caproto.docs
+
 pytest.importorskip('caproto.pva')
 
 from dataclasses import asdict  # isort: skip
-from caproto import pva
+
+import caproto.pva.ioc_examples.group  # isort: skip
+import caproto.pva.ioc_examples.normative  # isort: skip
+
+from caproto import pva  # isort: skip
+
 
 logger = logging.getLogger(__name__)
 
@@ -378,3 +386,20 @@ def test_fields_to_bitset(structure, fields, expected_bitset, expected_options):
     bitset = pva.fields_to_bitset(structure, field_dict=fields)
     assert bitset == expected_bitset
     assert bitset.options == expected_options
+
+
+@pytest.fixture(
+    params=[
+        caproto.pva.ioc_examples.group.MyIOC,
+        caproto.pva.ioc_examples.normative.NormativeIOC,
+    ]
+)
+def pvagroup_cls(request):
+    return request.param
+
+
+def test_get_info_smoke(pvagroup_cls):
+    info = caproto.docs.utils.get_pvgroup_info(
+        pvagroup_cls.__module__, pvagroup_cls.__name__)
+    assert info is not None
+    assert len(info['pvproperty'])

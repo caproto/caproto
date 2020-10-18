@@ -6,6 +6,12 @@ import caproto
 
 from ..server import PVGroup, SubGroup, pvproperty
 
+try:
+    from ..pva.server import PVAGroup, pvaproperty
+except ImportError:
+    PVAGroup = None
+    pvaproperty = None
+
 
 def get_class_info(cls: type) -> Dict[str, str]:
     """
@@ -98,12 +104,57 @@ def get_pvproperty_info(cls: Type[PVGroup],
         attr=prop.attr_name,
         cls=get_class_info(type(prop)),
         doc=pvspec.doc or '',
-        has_get=pvspec.get is not None,
-        has_put=pvspec.put is not None,
-        has_startup=pvspec.startup is not None,
+        getter=pvspec.get,
+        putter=pvspec.put,
+        startup=pvspec.startup,
+        shutdown=pvspec.shutdown,
         record_type=get_record_info(prop.record_type),
         read_only=pvspec.read_only,
         max_length=pvspec.max_length,
+    )
+
+
+def get_pvaproperty_info(cls: Type[PVAGroup],
+                         prop: pvaproperty) -> Dict[str, Any]:
+    """
+    Get information from a pvaproperty into an easily-ingestible dictionary.
+
+    Parameters
+    ----------
+    cls : PVGroup class
+    prop : pvproperty
+
+    Returns
+    -------
+    info : dict
+    """
+    inherited_from = _follow_inheritance(cls, prop.attr)
+    if inherited_from is cls:
+        inherited_from = None
+
+    value = prop.value
+    dtype = type(value)
+    hooks = prop.hooks
+
+    return dict(
+        prop=prop,
+        name=prop.name,
+        dtype=dtype,
+        dtype_name=getattr(dtype, 'name',
+                           getattr(dtype, '__name__', str(dtype))
+                           ),
+        inherited_from=get_class_info(inherited_from),
+        attr=prop.attr,
+        cls=get_class_info(type(prop)),
+        doc=prop.__doc__ or '',
+        getter=hooks.get,
+        putter=hooks.put,
+        startup=hooks.startup,
+        shutdown=hooks.shutdown,
+        rpc=hooks.call,
+        record_type=None,
+        read_only=prop.read_only,
+        alarm_group=prop._alarm_group,
     )
 
 
@@ -125,6 +176,40 @@ def filter_by_attribute_name(attr) -> bool:
     return attr.startswith('_') or attr in SKIP_ATTRIBUTES
 
 
+def _get_pvagroup_info(cls: Type[PVAGroup]) -> dict:
+    """
+    Get PVAGroup information that can be rendered as a table.
+
+    Parameters
+    ----------
+    cls : PVAGroup subclass
+    """
+    if PVAGroup is None or not issubclass(cls, PVAGroup):
+        return dict(
+            pvproperty=None,
+            subgroup=None,
+            record_name=None,
+            cls=get_class_info(cls),
+        )
+
+    properties = {}
+    for attr, obj in inspect.getmembers(cls):
+        if filter_by_attribute_name(attr):
+            continue
+
+        if isinstance(obj, pvaproperty):
+            properties[attr] = get_pvaproperty_info(cls, obj)
+
+    record_name = None
+
+    return dict(
+        pvproperty=properties,
+        subgroup={},
+        record_name=record_name,
+        cls=get_class_info(cls),
+    )
+
+
 def _get_pvgroup_info(cls: Type[PVGroup]) -> dict:
     """
     Get PVGroup information that can be rendered as a table.
@@ -133,6 +218,9 @@ def _get_pvgroup_info(cls: Type[PVGroup]) -> dict:
     ----------
     cls : PVGroup subclass
     """
+    if PVAGroup is not None and issubclass(cls, PVAGroup):
+        return _get_pvagroup_info(cls)
+
     if not issubclass(cls, PVGroup):
         return dict(
             pvproperty=None,
@@ -240,6 +328,10 @@ def rst_with_jinja(app, docname, source):
 
 
 def skip_pvproperties(app, what, name, obj, skip, options):
+    if pvaproperty is not None:
+        if isinstance(obj, (pvaproperty, )):
+            return True
+
     if isinstance(obj, (pvproperty, SubGroup)):
         return True
 
@@ -282,7 +374,7 @@ autosummary_context = {
 }
 
 autodoc_default_options = {
-    'members': '',
+    # 'members': '',
     'member-order': 'bysource',
     'special-members': '',
     'undoc-members': False,

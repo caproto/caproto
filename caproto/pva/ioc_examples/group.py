@@ -1,31 +1,30 @@
 #!/usr/bin/env python3
 """
-A basic caproto-pva test server.
-
-This is very much preliminary API.
+A basic caproto-pva test server using PVAGroup.
 """
 import caproto.pva as pva
-from caproto.pva.server import ioc_arg_parser, run
+from caproto.pva.server import (PVAGroup, ioc_arg_parser, pva_dataclass,
+                                pvaproperty, run)
 
 
-@pva.pva_dataclass
+@pva_dataclass
 class MyData:
     value: int
     info: str
 
 
-@pva.pva_dataclass
+@pva_dataclass
 class NestedData:
     my_data: MyData
     value: float
 
 
-class MyIOC(pva.PVAGroup):
-    test = pva.pvaproperty(value=MyData(value=5, info='a string'))
-    test2 = pva.pvaproperty(value=MyData(value=6, info='a different string'))
-    test3 = pva.pvaproperty(value=NestedData)
-    long_write = pva.pvaproperty(value=MyData())
-    rpc = pva.pvaproperty(value=MyData())
+class MyIOC(PVAGroup):
+    test = pvaproperty(value=MyData(value=5, info='a string'))
+    test2 = pvaproperty(value=MyData(value=6, info='a different string'))
+    test3 = pvaproperty(value=NestedData)
+    long_write = pvaproperty(value=MyData())
+    rpc = pvaproperty(value=MyData())
 
     @test.putter  # (accepts=['value'])   (potential API?)
     async def test(self, instance, update: pva.WriteUpdate):
