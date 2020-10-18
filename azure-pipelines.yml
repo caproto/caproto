@@ -7,18 +7,14 @@ jobs:
     vmImage: 'Ubuntu 16.04'
   strategy:
     matrix:
-      Python36_R314:
+      Python 3.6:
         python.version: '3.6'
-        epics.on.travis.pkg: '0.8.2/epics-ci-0.8.2_R3.14.12.6_pva_areadetector3-2_motor6-9.tar.bz2'
-      Python36_R7:
-        python.version: '3.6'
-        epics.on.travis.pkg: '0.8.2/epics-ci-0.8.2_R7.0.1.1_pva_areadetector3-2_motor6-10.tar.bz2'
-      Python37_R7:
+      Python 3.7:
         python.version: '3.7'
-        epics.on.travis.pkg: '0.8.2/epics-ci-0.8.2_R7.0.1.1_pva_areadetector3-2_motor6-10.tar.bz2'
-      Python38_R7:
+      Python 3.8:
         python.version: '3.8'
-        epics.on.travis.pkg: '0.8.2/epics-ci-0.8.2_R7.0.1.1_pva_areadetector3-2_motor6-10.tar.bz2'
+      Python 3.9:
+        python.version: '3.9'
 
   steps:
   - task: UsePythonVersion@0
@@ -42,33 +38,37 @@ jobs:
       ip addr
       env
       pwd
-      cp azure_env.sh $HOME
+      cp .ci/azure_env.sh $HOME
     displayName: 'Configure the environment'
 
   - bash: |
-      export CI_TOP="${BUILD_REPOSITORY_LOCALPATH}/.ci"
-      export EPICS_ON_TRAVIS_PKG="$(epics.on.travis.pkg)"
-      source $HOME/azure_env.sh
-      bash ${CI_TOP}/install-from-release.sh "${EPICS_ON_TRAVIS_URL}"
-    displayName: 'Install EPICS dependencies'
+      wget -nv https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
+      bash miniconda.sh -b -p $HOME/miniconda
+    displayName: 'Install conda'
 
   - bash: |
-      echo "EPICS versions are as follows:"
-      source $HOME/azure_env.sh
-      echo "Base version: ${BASE_VER}"
-      cat $HOME/epics/versions.sh
-    displayName: 'Show EPICS versions'
+      source "$HOME/miniconda/etc/profile.d/conda.sh"
+      hash -r
+      conda config --set always_yes yes --set changeps1 no
+      conda config --set channel_priority strict
+      conda config --add channels conda-forge
+      conda config --remove channels defaults
+    displayName: 'Configure conda'
 
   - bash: |
+      source "$HOME/miniconda/etc/profile.d/conda.sh"
+      hash -r
+      conda info -a
+      conda create -q -n test_env python=${PYTHON_VERSION} epics-base
+    displayName: 'Create test environment'
+
+  - bash: |
+      source $HOME/azure_env.sh
       python -m pip install --upgrade pip
-      pip install -r requirements-test.txt
-      pip install git+https://github.com/klauer/catvs.git@py3k
-      pip install pyepics numpy
-      pip install --quiet --upgrade cython
-    displayName: 'Install Python dependencies'
 
-  - bash: |
-      pip install .
+      python -m pip install .[test]
+      python -m pip install -Ur requirements-test.txt
+      # python -m pip install --quiet --upgrade cython
     displayName: 'Install caproto'
 
   - bash: |
@@ -87,6 +87,7 @@ jobs:
     displayName: 'pytest'
 
   - bash: |
+      source $HOME/azure_env.sh
       coverage combine --append
       coverage report -m
     displayName: 'Report coverage'
