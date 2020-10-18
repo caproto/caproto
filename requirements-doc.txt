@@ -1,7 +1,7 @@
 doctr
 doctr-versions-menu
 graphviz
-ipython<7
+ipython>7
 matplotlib
 numpydoc
 sphinx>=3.2.1
