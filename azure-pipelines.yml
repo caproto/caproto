@@ -44,13 +44,16 @@ jobs:
   - bash: |
       wget -nv https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
       bash miniconda.sh -b -p $HOME/miniconda
+    displayName: 'Install conda'
+
+  - bash: |
       source "$HOME/miniconda/etc/profile.d/conda.sh"
       hash -r
       conda config --set always_yes yes --set changeps1 no
       conda config --set channel_priority strict
       conda config --add channels conda-forge
       conda config --remove channels defaults
-    displayName: 'Install conda / EPICS dependencies'
+    displayName: 'Configure conda'
 
   - bash: |
       conda info -a
