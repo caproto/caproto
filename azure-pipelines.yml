@@ -7,18 +7,14 @@ jobs:
     vmImage: 'Ubuntu 16.04'
   strategy:
     matrix:
-      Python36:
+      Python 3.6:
         python.version: '3.6'
-        displayName: 'Python 3.6'
-      Python37:
+      Python 3.7:
         python.version: '3.7'
-        displayName: 'Python 3.7'
-      Python38:
+      Python 3.8:
         python.version: '3.8'
-        displayName: 'Python 3.8'
-      Python39:
+      Python 3.9:
         python.version: '3.9'
-        displayName: 'Python 3.9'
 
   steps:
   - task: UsePythonVersion@0
