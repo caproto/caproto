@@ -42,7 +42,7 @@ jobs:
       ip addr
       env
       pwd
-      cp azure_env.sh $HOME
+      cp .ci/azure_env.sh $HOME
     displayName: 'Configure the environment'
 
   - bash: |
