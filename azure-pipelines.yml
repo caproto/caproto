@@ -9,12 +9,16 @@ jobs:
     matrix:
       Python36:
         python.version: '3.6'
+        displayName: 'Python 3.6'
       Python37:
         python.version: '3.7'
+        displayName: 'Python 3.7'
       Python38:
         python.version: '3.8'
+        displayName: 'Python 3.8'
       Python39:
         python.version: '3.9'
+        displayName: 'Python 3.9'
 
   steps:
   - task: UsePythonVersion@0
@@ -56,10 +60,10 @@ jobs:
     displayName: 'Configure conda'
 
   - bash: |
-      source $HOME/azure_env.sh
+      source "$HOME/miniconda/etc/profile.d/conda.sh"
+      hash -r
       conda info -a
       conda create -q -n test_env python=${python_version} epics-base
-      conda activate test_env
     displayName: 'Create test environment'
 
   - bash: |

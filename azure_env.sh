@@ -12,3 +12,5 @@ echo '--- azure environment ---'
 
 source "$HOME/miniconda/etc/profile.d/conda.sh"
 hash -r
+
+conda activate test_env
