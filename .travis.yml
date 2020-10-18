@@ -80,15 +80,13 @@ before_install:
   - conda create -q -n test_env python=$PYTHON epics-base
   - conda activate test_env
 
-  - which softIoc || true
-  - which softIocPVA || true
+  - which softIoc || which softIocPVA
 
 install:
   - pip install .[test]
   # This is necesary to actually upgrade the test requirements from the
   # Travis-CI defaults, which are old.
   - pip install --upgrade -r requirements-test.txt
-  - pip install --quiet --upgrade cython
   - |
     if [ ! $INSTALL_NUMPY ]
     then
