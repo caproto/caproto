@@ -10,7 +10,7 @@ def ingest_pv_dict(inp):
     for (i, (k, (dtype, rec_type))) in enumerate(inp.items()):
         body[str(i)] = pvproperty(name=k,
                                   dtype=type_map[dtype],
-                                  mock_record=rec_type)
+                                  record=rec_type)
 
     return type('BucketOPVs', (PVGroup,), body)
 
