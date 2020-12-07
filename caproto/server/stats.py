@@ -441,14 +441,14 @@ class PeriodicStatusHelper(PVGroup):
 TRACEMALLOC_FILTERS = (
     tracemalloc.Filter(False, "<frozen importlib._bootstrap>"),
     tracemalloc.Filter(False, "<unknown>"),
-    tracemalloc.Filter(False, "<tracemalloc>"),
+    tracemalloc.Filter(False, tracemalloc.__file__),
 )
 
 
 def get_top_allocation_info(snapshot: tracemalloc.Snapshot, *,
                             key_type: str = 'lineno',
                             cumulative: bool = False,
-                            limit: int = 10,
+                            limit: int = 20,
                             filters: Optional[List[tracemalloc.Filter]] = None,
                             ) -> List[str]:
     """
@@ -495,12 +495,34 @@ class MemoryTracingHelper(PVGroup):
     """
     A helper which quickly allows for tracing memory usage and allocations on a
     caproto server instance.
+
+    Parameters
+    ----------
+    prefix : str
+        Prefix for all PVs in the group
+    macros : dict, optional
+        Dictionary of macro name to value
+    parent : PVGroup, optional
+        Parent PVGroup
+    name : str, optional
+        Name for the group, defaults to the class name
+    states : dict, optional
+        A dictionary of states used for channel filtering. See
+        https://epics.anl.gov/base/R3-15/5-docs/filters.html
+    filters : list of tracemalloc.Filter, optional
+        Filters to apply to the snapshot.  Defaults to TRACEMALLOC_FILTERS.
     """
     _old_snapshot: tracemalloc.Snapshot
+    filters: List[tracemalloc.Filter]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args,
+                 filters: Optional[List[tracemalloc.Filter]] = None,
+                 **kwargs):
         super().__init__(*args, **kwargs)
         self._old_snapshot = None
+        if filters is None:
+            filters = TRACEMALLOC_FILTERS
+        self.filters = filters
 
     enable_tracing = pvproperty(
         name='EnableTracing',
@@ -529,6 +551,14 @@ class MemoryTracingHelper(PVGroup):
         record='waveform',
     )
 
+    trace_count = pvproperty(
+        name='TraceCount',
+        value=10,
+        read_only=False,
+        doc='Number of top allocations to view',
+        record='ao',
+    )
+
     @enable_tracing.scan(period=10)
     async def enable_tracing(self, instance, async_lib):
         if self.enable_tracing.value == 'Disable':
@@ -541,21 +571,23 @@ class MemoryTracingHelper(PVGroup):
             tracemalloc.start()
 
         snapshot = tracemalloc.take_snapshot()
-
-        top_lines, stats = get_top_allocation_info(snapshot)
+        count = self.trace_count.value
+        top_lines, stats = get_top_allocation_info(snapshot, limit=count)
 
         await self.top_allocations.write(
             value='\n'.join(top_lines)[:self.top_allocations.max_length]
         )
 
         if self._old_snapshot is not None:
-            comparison = snapshot.compare_to(self._old_snapshot, 'lineno')
+            comparison = snapshot.filter_traces(
+                self.filters
+            ).compare_to(self._old_snapshot, 'lineno')
 
             self.log.debug('** %s **', datetime.datetime.now())
-            for stat in comparison[:10]:
+            for stat in comparison[:count]:
                 self.log.debug(stat)
 
-            status = '\n'.join(str(stat) for stat in comparison[:10])
+            status = '\n'.join(str(stat) for stat in comparison[:count])
             await self.diff_results.write(
                 value=status[:self.diff_results.max_length]
             )
