@@ -33,6 +33,8 @@ Added
 - Added a shared memory IOC example.
 - Added a gamepad IOC example.
 - Added an IOC which generates PVs based on a formula string.
+- Added an escape hatch for pvproperty putters to skip further processing, the
+  ``SkipWrite`` exception.
 
 Changed
 -------
