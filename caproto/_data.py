@@ -3,22 +3,21 @@
 # metadata. They perform data type conversions in response to requests to read
 # data as a certain type, and they push updates into queues registered by a
 # higher-level server.
-from collections import defaultdict, namedtuple
-from collections.abc import Iterable
 import copy
 import time
 import weakref
+from collections import defaultdict, namedtuple
+from collections.abc import Iterable
 
-from ._dbr import (DBR_TYPES, _LongStringChannelType, ChannelType, native_type,
-                   native_types, timestamp_to_epics, time_types,
-                   DBR_STSACK_STRING, AccessRights, GraphicControlBase,
-                   AlarmStatus, AlarmSeverity, SubscriptionType,
-                   _channel_type_by_name)
-
-from ._utils import CaprotoError, CaprotoValueError, ConversionDirection
-from ._commands import parse_metadata
 from ._backend import backend
-from ._constants import MAX_ENUM_STRING_SIZE, MAX_ENUM_STATES
+from ._commands import parse_metadata
+from ._constants import MAX_ENUM_STATES, MAX_ENUM_STRING_SIZE
+from ._dbr import (DBR_STSACK_STRING, DBR_TYPES, AccessRights, AlarmSeverity,
+                   AlarmStatus, ChannelType, GraphicControlBase,
+                   SubscriptionType, _channel_type_by_name,
+                   _LongStringChannelType, native_type, native_types,
+                   time_types, timestamp_to_epics)
+from ._utils import CaprotoError, CaprotoValueError, ConversionDirection
 
 __all__ = ('Forbidden',
            'ChannelAlarm',
@@ -32,6 +31,7 @@ __all__ = ('Forbidden',
            'ChannelNumeric',
            'ChannelShort',
            'ChannelString',
+           'SkipWrite',
            )
 
 SubscriptionUpdate = namedtuple('SubscriptionUpdate',
@@ -45,6 +45,10 @@ class Forbidden(CaprotoError):
 
 class CannotExceedLimits(CaprotoValueError):
     ...
+
+
+class SkipWrite(Exception):
+    """Raise this exception to skip further processing of write()."""
 
 
 def dbr_metadata_to_dict(dbr_metadata, string_encoding):
@@ -495,6 +499,9 @@ class ChannelData:
                 modified_value = await self.verify_value(value)
             else:
                 modified_value = None
+        except SkipWrite:
+            # Handler raised SkipWrite to avoid the rest of this method.
+            return
         except GeneratorExit:
             raise
         except Exception:
@@ -506,6 +513,11 @@ class ChannelData:
             raise
         finally:
             alarm_md = self._collect_alarm()
+
+        if modified_value is SkipWrite:
+            # An alternative to raising SkipWrite: avoid the rest of this
+            # method.
+            return
 
         # issues of over-riding user passed in data here!
         metadata.update(alarm_md)
