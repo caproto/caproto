@@ -1440,7 +1440,18 @@ class VirtualCircuitManager:
                 event.set()
             callback = ioid_info.get('callback')
             if callback is not None:
-                self.user_callback_executor.submit(callback, command)
+                try:
+                    self.user_callback_executor.submit(callback, command)
+                except RuntimeError:
+                    if self.dead.is_set():
+                        # if we are trying to process updates while
+                        # shutting down the submit will fail.  In that
+                        # case we should drop the exception on the
+                        # floor and move on
+                        return
+                    # otherwise raise and let someone else deal with
+                    # the mess
+                    raise
 
         elif isinstance(command, ca.EventAddResponse):
             try:
@@ -2071,10 +2082,17 @@ class CallbackHandler:
             if callback is None:
                 to_remove.append(cb_id)
                 continue
-
-            self.pv.circuit_manager.user_callback_executor.submit(
-                callback, *args, **kwargs)
-
+            try:
+                self.pv.circuit_manager.user_callback_executor.submit(
+                    callback, *args, **kwargs)
+            except RuntimeError:
+                if self.pv.circuit_manager.dead.is_set():
+                    # if the circuit is dead, so is the executor forgive
+                    # and exit
+                    return
+                # otherwise raise and let someone else deal with the
+                # mess
+                raise
         with self.callback_lock:
             for remove_id in to_remove:
                 self.callbacks.pop(remove_id, None)
