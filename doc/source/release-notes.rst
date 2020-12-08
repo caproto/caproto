@@ -2,7 +2,7 @@
 Release History
 ***************
 
-v0.7.0 (2020-09-??)
+v0.7.0 (2020-12-??)
 ===================
 
 Fixed
@@ -10,6 +10,31 @@ Fixed
 
 - Eliminate memory leak on run-longing servers were we remembered
   every search request we saw but did not service
+- ``WaitForPlugins`` and additional PVs for compatibility were added in
+  the fancy ``spoof_beamline`` example.
+- Many more libraries are now entirely optional in the test suite.
+- ``get_pv_pair_wrapper`` now supports keyword arguments to the generated
+  ``pvproperty`` instances.
+
+Added
+-----
+
+- Added documentation notes on multi-tenant soft IOCs.
+- Added helper tools for easily auto-generating ``PVGroup``-based IOC
+  documentation with sphinx-autosummary.
+- A fake motor record IOC example, with the most common fields implemented.
+- Added iocStats-like helpers for caproto-based IOCs, which include CPU/memory
+  usage information, tools for finding memory leaks, and so on.
+- Add support for ``-#`` arguments in ``caproto-get`` and ``caproto-monitor``
+  command-line tools.
+- ``IntEnum`` values are now supported for ``pvproperty``, simplifying
+  declarations of enum PVs.
+- Added preliminary pvAccess support, including examples and documentation.
+- Added a shared memory IOC example.
+- Added a gamepad IOC example.
+- Added an IOC which generates PVs based on a formula string.
+- Added an escape hatch for pvproperty putters to skip further processing, the
+  ``SkipWrite`` exception.
 
 Changed
 -------
@@ -21,6 +46,16 @@ Changed
   SearchRequest actually got serviced (as that goes back uni-cast).
 - Removed curio and trio client implementations.  These may reappear
   in the future, based on the new asyncio client.
+- Removed unused dependency ``asks``, which was part of the full installation.
+- Documentation is now versioned on GitHub pages thanks to doctr-versions-menu.
+- Automated benchmarking code which was previously part of the test suite, has
+  been removed.
+- Unmaintained prototype-level clients based on ``trio`` and ``curio`` have
+  been removed.  The full-featured ``asyncio`` client from v0.6.0 is the
+  suggested migration path.
+- IOC examples have been reorganized.
+- Updated continuous integration to use conda-forge epics-base.
+
 
 v0.6.0 (2020-07-31)
 ===================

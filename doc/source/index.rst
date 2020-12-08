@@ -180,7 +180,6 @@ learning exercises.
    :maxdepth: 2
    :caption: Appendix
 
-   Performance Benchmarks <https://nsls-ii.github.io/caproto/bench/#/>
    protocol-compliance
    references
    release-notes
