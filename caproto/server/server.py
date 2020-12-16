@@ -705,6 +705,10 @@ class pvproperty:
         """
         Usually used as a decorator, this sets ``startup`` in the PVSpec.
         """
+        if self.pvspec.startup:
+            raise ValueError(f'A startup function had already been assigned '
+                             f'to {self.pvspec}.')
+
         self.pvspec = self.pvspec._replace(startup=startup)
         return self
 
