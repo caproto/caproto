@@ -1,16 +1,17 @@
-from collections import defaultdict, deque, namedtuple, ChainMap
-from collections.abc import Iterable
 import copy
 import logging
 import sys
 import time
 import weakref
-import caproto as ca
-from caproto import (apply_arr_filter, get_environment_variables,
-                     RemoteProtocolError, CaprotoKeyError, CaprotoRuntimeError,
-                     CaprotoNetworkError, ChannelType)
-from .._dbr import SubscriptionType, _LongStringChannelType
+from collections import ChainMap, defaultdict, deque, namedtuple
+from collections.abc import Iterable
 
+import caproto as ca
+from caproto import (CaprotoKeyError, CaprotoNetworkError, CaprotoRuntimeError,
+                     ChannelType, RemoteProtocolError, apply_arr_filter,
+                     get_environment_variables)
+
+from .._dbr import SubscriptionType, _LongStringChannelType
 
 # ** Tuning this parameters will affect the servers' performance **
 # ** under high load. **
@@ -157,7 +158,7 @@ class VirtualCircuit:
         """
         try:
             bytes_received = await self.client.recv(4096)
-        except (ConnectionResetError, ConnectionAbortedError):
+        except OSError:
             bytes_received = []
 
         commands, _ = self.circuit.recv(bytes_received)
@@ -732,8 +733,8 @@ class Context:
         while True:
             try:
                 bytes_received, address = await udp_sock.recvfrom(4096 * 16)
-            except ConnectionResetError:
-                self.log.exception('UDP server connection reset')
+            except OSError:
+                self.log.exception('UDP server recvfrom error')
                 await self.async_layer.library.sleep(0.1)
                 continue
             if bytes_received:
