@@ -1619,8 +1619,10 @@ def template_arg_parser(*, desc, default_prefix, argv=None, macros=None,
             parser.add_argument(f'--{name}', type=str, required=True,
                                 help="Macro substitution required by this IOC")
         else:
-            parser.add_argument(f'--{name}', type=str, default=default_value,
-                                help="Macro substitution, optional")
+            parser.add_argument(
+                f'--{name}', type=str, default=default_value,
+                help=f"Optional macro substitution, default: {default_value!r}"
+            )
 
     def split_args(args):
         """
