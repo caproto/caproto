@@ -187,7 +187,7 @@ class VirtualCircuit:
         """
         try:
             bytes_received = await self.client.recv(4096)
-        except (ConnectionResetError, ConnectionAbortedError):
+        except OSError:
             bytes_received = []
 
         for message, bytes_consumed in self.circuit.recv(bytes_received):
@@ -809,8 +809,8 @@ class Context(typing.Mapping):
         while True:
             try:
                 bytes_received, address = await udp_sock.recvfrom(4096 * 16)
-            except ConnectionResetError:
-                self.log.exception('UDP server connection reset')
+            except OSError:
+                self.log.exception('UDP server recvfrom error')
                 await self.async_layer.library.sleep(0.1)
                 continue
             if bytes_received:
