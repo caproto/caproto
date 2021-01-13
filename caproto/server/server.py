@@ -1356,7 +1356,7 @@ def data_class_from_pvspec(group, pvspec):
 
 def channeldata_from_pvspec(group, pvspec):
     'Create a ChannelData instance based on a PVSpec'
-    full_pvname = expand_macros(group.prefix + pvspec.name, group.macros)
+    full_pvname = group.prefix + expand_macros(pvspec.name, group.macros)
     value = (pvspec.value
              if pvspec.value is not None
              else group.default_values[pvspec.dtype]
