@@ -2,6 +2,30 @@
 Release History
 ***************
 
+v0.7.1 (2020-01-13)
+===================
+
+Fixed
+-----
+
+- For ``pvproperty``, avoid multiple passes of macro expansion, such that
+  ``{{`` is sufficient to escape an opening curly bracket.
+- The server implementation will now catch when `socket.recv` raises `OSError`.
+- Broken entrypoints have been fixed for the pathological examples,
+  ``defaultdict_server`` and ``spoof_beamline``.
+
+Added
+-----
+
+- Show default values for optional macro substitution for IOCs using the
+  template parser.
+
+Changed
+-------
+
+- Travis CI configuration has been removed from the repository.
+
+
 v0.7.0 (2020-12-08)
 ===================
 
