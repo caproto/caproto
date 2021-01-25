@@ -29,7 +29,7 @@ from ..client.search_results import (DuplicateSearchResponse, SearchResults,
                                      UnknownSearchResponse)
 from .utils import (AsyncioQueue, _CallbackExecutor, _DatagramProtocol,
                     _StreamProtocol, _TaskHandler, _TransportWrapper,
-                    get_running_loop)
+                    get_running_loop, is_proactor_event_loop)
 
 ch_logger = logging.getLogger('caproto.ch')
 search_logger = logging.getLogger('caproto.bcast.search')
@@ -1227,8 +1227,7 @@ class VirtualCircuitManager:
             sock.close()
 
         sock, self.socket = self.socket, None
-
-        if sock is not None:
+        if sock is not None and not is_proactor_event_loop():
             self._tasks.create(shutdown_old_socket(sock))
 
         tags = {'their_address': self.circuit.address}
