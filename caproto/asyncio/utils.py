@@ -1,6 +1,7 @@
 import asyncio
 import functools
 import inspect
+import socket
 import sys
 import threading
 
@@ -176,6 +177,19 @@ class _CallbackExecutor:
 
     def submit(self, callback, *args, **kwargs):
         self.callbacks.put((callback, args, kwargs))
+
+
+def _create_udp_socket():
+    """Create a UDP socket for usage with a datagram endpoint."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    # Python says this is unsafe, but we need it to have
+    # multiple servers live on the same host.
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    if sys.platform not in ('win32', ) and hasattr(socket, 'SO_REUSEPORT'):
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    sock.setblocking(False)
+    return sock
 
 
 if sys.version_info < (3, 7):

@@ -1,15 +1,14 @@
 import asyncio
 import functools
 import socket
-import sys
 
 import caproto as ca
 
 from ..server import AsyncLibraryLayer
 from ..server.common import Context as _Context
 from ..server.common import VirtualCircuit as _VirtualCircuit
-from .utils import (AsyncioQueue, _DatagramProtocol, _TaskHandler,
-                    _TransportWrapper)
+from .utils import (AsyncioQueue, _create_udp_socket, _DatagramProtocol,
+                    _TaskHandler, _TransportWrapper)
 
 
 class ServerExit(Exception):
@@ -164,26 +163,23 @@ class Context(_Context):
             def close(self):
                 return self.transport.close()
 
-        reuse_port = sys.platform not in ('win32', ) and hasattr(socket, 'SO_REUSEPORT')
-        for address in ca.get_beacon_address_list():
+        for address, port in ca.get_beacon_address_list():
+            sock = _create_udp_socket()
+            sock.connect((address, port))
             transport, _ = await self.loop.create_datagram_endpoint(
                 functools.partial(_DatagramProtocol, parent=self,
                                   recv_func=self._datagram_received),
-                remote_addr=address, allow_broadcast=True,
-                reuse_port=reuse_port)
-            wrapped_transport = ConnectedTransportWrapper(transport, address)
-            self.beacon_socks[address] = (interface,   # TODO; this is incorrect
-                                          wrapped_transport)
+                sock=sock,
+            )
+            wrapped_transport = ConnectedTransportWrapper(
+                transport, (address, port))
+            self.beacon_socks[(address, port)] = (
+                interface,   # TODO: interface does not match address
+                wrapped_transport
+            )
 
         for interface in self.interfaces:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-            # Python says this is unsafe, but we need it to have
-            # multiple servers live on the same host.
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            if reuse_port:
-                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-            sock.setblocking(False)
+            sock = _create_udp_socket()
             sock.bind((interface, self.ca_server_port))
 
             transport, _ = await self.loop.create_datagram_endpoint(
