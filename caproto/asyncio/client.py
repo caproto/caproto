@@ -135,6 +135,12 @@ class SharedBroadcaster:
         await self._tasks.cancel_all(wait=True)
         self.log.debug('Broadcaster: Closing the UDP socket')
         self.udp_sock = None
+        try:
+            if self.protocol is not None:
+                if self.protocol.transport is not None:
+                    self.protocol.transport.close()
+        except OSError:
+            self.log.debug('Broadcaster transport close error')
 
         self.log.debug('Broadcaster disconnect complete')
 
@@ -1225,6 +1231,12 @@ class VirtualCircuitManager:
                 pass
 
             sock.close()
+
+        try:
+            if self.transport is not None:
+                self.transport.close()
+        except OSError:
+            self.log.debug('VirtualCircuitManager transport close error')
 
         sock, self.socket = self.socket, None
         if sock is not None and not is_proactor_event_loop():
