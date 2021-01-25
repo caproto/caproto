@@ -157,6 +157,10 @@ class SharedBroadcaster:
         self.udp_sock = ca.bcast_socket(socket_module=socket)
 
         loop = get_running_loop()
+        # Must bind or getsocketname() will raise on Windows.
+        # See https://github.com/caproto/caproto/issues/514.
+        self.udp_sock.bind(('', 0))
+
         transport, self.protocol = await loop.create_datagram_endpoint(
             functools.partial(_DatagramProtocol, parent=self,
                               recv_func=self.receive_queue.put),
@@ -166,9 +170,6 @@ class SharedBroadcaster:
         # trio/asyncio/curio
         self.wrapped_transport = _TransportWrapper(transport)
 
-        # Must bind or getsocketname() will raise on Windows.
-        # See https://github.com/caproto/caproto/issues/514.
-        self.udp_sock.bind(('', 0))
         self.broadcaster.client_address = safe_getsockname(self.udp_sock)
 
     async def register(self):
