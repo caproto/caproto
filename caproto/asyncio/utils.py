@@ -178,17 +178,6 @@ class _CallbackExecutor:
         self.callbacks.put((callback, args, kwargs))
 
 
-ProactorEventLoop = getattr(asyncio, 'ProactorEventLoop', None)
-
-
-def is_proactor_event_loop() -> bool:
-    """Is the currently running event loop a ProactorEventLoop?"""
-    if ProactorEventLoop is None:
-        return False
-
-    return isinstance(get_running_loop(), ProactorEventLoop)
-
-
 if sys.version_info < (3, 7):
     # python <= 3.6 compatibility
     def get_running_loop():

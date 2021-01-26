@@ -29,7 +29,7 @@ from ..client.search_results import (DuplicateSearchResponse, SearchResults,
                                      UnknownSearchResponse)
 from .utils import (AsyncioQueue, _CallbackExecutor, _DatagramProtocol,
                     _StreamProtocol, _TaskHandler, _TransportWrapper,
-                    get_running_loop, is_proactor_event_loop)
+                    get_running_loop)
 
 ch_logger = logging.getLogger('caproto.ch')
 search_logger = logging.getLogger('caproto.bcast.search')
@@ -1223,24 +1223,13 @@ class VirtualCircuitManager:
         # to create a fresh VirtualCiruit and VirtualCircuitManager.
         self.context.circuit_managers.pop(self.circuit.address, None)
 
-        # Clean up the socket if it has not yet been cleared:
-        async def shutdown_old_socket(sock):
-            try:
-                sock.shutdown(socket.SHUT_WR)
-            except OSError:
-                pass
-
-            sock.close()
-
         try:
             if self.transport is not None:
                 self.transport.close()
         except OSError:
             self.log.debug('VirtualCircuitManager transport close error')
 
-        sock, self.socket = self.socket, None
-        if sock is not None and not is_proactor_event_loop():
-            self._tasks.create(shutdown_old_socket(sock))
+        self.socket = None
 
         tags = {'their_address': self.circuit.address}
         if reconnect:
