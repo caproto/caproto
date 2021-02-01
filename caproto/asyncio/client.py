@@ -135,6 +135,12 @@ class SharedBroadcaster:
         await self._tasks.cancel_all(wait=True)
         self.log.debug('Broadcaster: Closing the UDP socket')
         self.udp_sock = None
+        try:
+            if self.protocol is not None:
+                if self.protocol.transport is not None:
+                    self.protocol.transport.close()
+        except OSError:
+            self.log.exception('Broadcaster transport close error')
 
         self.log.debug('Broadcaster disconnect complete')
 
@@ -157,6 +163,10 @@ class SharedBroadcaster:
         self.udp_sock = ca.bcast_socket(socket_module=socket)
 
         loop = get_running_loop()
+        # Must bind or getsocketname() will raise on Windows.
+        # See https://github.com/caproto/caproto/issues/514.
+        self.udp_sock.bind(('', 0))
+
         transport, self.protocol = await loop.create_datagram_endpoint(
             functools.partial(_DatagramProtocol, parent=self,
                               recv_func=self.receive_queue.put),
@@ -166,9 +176,6 @@ class SharedBroadcaster:
         # trio/asyncio/curio
         self.wrapped_transport = _TransportWrapper(transport)
 
-        # Must bind or getsocketname() will raise on Windows.
-        # See https://github.com/caproto/caproto/issues/514.
-        self.udp_sock.bind(('', 0))
         self.broadcaster.client_address = safe_getsockname(self.udp_sock)
 
     async def register(self):
@@ -1216,19 +1223,13 @@ class VirtualCircuitManager:
         # to create a fresh VirtualCiruit and VirtualCircuitManager.
         self.context.circuit_managers.pop(self.circuit.address, None)
 
-        # Clean up the socket if it has not yet been cleared:
-        async def shutdown_old_socket(sock):
-            try:
-                sock.shutdown(socket.SHUT_WR)
-            except OSError:
-                pass
+        try:
+            if self.transport is not None:
+                self.transport.close()
+        except OSError:
+            self.log.debug('VirtualCircuitManager transport close error')
 
-            sock.close()
-
-        sock, self.socket = self.socket, None
-
-        if sock is not None:
-            self._tasks.create(shutdown_old_socket(sock))
+        self.socket = None
 
         tags = {'their_address': self.circuit.address}
         if reconnect:
