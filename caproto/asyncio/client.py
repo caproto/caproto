@@ -140,7 +140,7 @@ class SharedBroadcaster:
                 if self.protocol.transport is not None:
                     self.protocol.transport.close()
         except OSError:
-            self.log.debug('Broadcaster transport close error')
+            self.log.exception('Broadcaster transport close error')
 
         self.log.debug('Broadcaster disconnect complete')
 
