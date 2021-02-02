@@ -1227,7 +1227,7 @@ class VirtualCircuitManager:
             if self.transport is not None:
                 self.transport.close()
         except OSError:
-            self.log.debug('VirtualCircuitManager transport close error')
+            self.log.exception('VirtualCircuitManager transport close error')
 
         self.socket = None
 
