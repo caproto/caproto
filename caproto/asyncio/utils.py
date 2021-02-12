@@ -147,6 +147,14 @@ class _SocketWrapper:
     def close(self):
         return self.sock.close()
 
+    def __repr__(self):
+        try:
+            host, port = self.sock.getpeername()
+        except Exception:
+            return f'<{self.__class__.__name__}>'
+
+        return f'<{self.__class__.__name__} address="{host}:{port}">'
+
 
 class _TransportWrapper(_SocketWrapper):
     """Make an asyncio transport something you can call sendto on."""
@@ -163,6 +171,9 @@ class _ConnectedTransportWrapper(_TransportWrapper):
         super().__init__(transport, loop=loop)
         self.address = address
         self.loop = loop or get_running_loop()
+
+    def __repr__(self):
+        return f'<{self.__class__.__name__} address={self.address}>'
 
 
 class _TaskHandler:
