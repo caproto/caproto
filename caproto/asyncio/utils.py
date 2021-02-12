@@ -1,6 +1,7 @@
 import asyncio
 import functools
 import inspect
+import socket
 import sys
 import threading
 
@@ -85,25 +86,83 @@ class _StreamProtocol(asyncio.Protocol):
         self.parent.log.error('%s receive error', self, exc_info=ex)
 
 
-class _TransportWrapper:
-    """Make an asyncio transport something you can call sendto on."""
-    # NOTE: taken from the server - combine usage
-    def __init__(self, transport):
-        self.transport = transport
+class _SocketWrapper:
+    """
+    A wrapped socket with an awaitable sendto and recv.
+
+    Parameters
+    ----------
+    sock : socket.socket
+        The socket.
+
+    loop : asyncio.AbstractEventLoop, optional
+        The event loop.
+    """
+
+    sock: socket.socket
+    loop: asyncio.AbstractEventLoop
+
+    def __init__(self, sock, loop=None):
+        self.sock = sock
+        self.loop = loop or get_running_loop()
 
     def getsockname(self):
-        return self.transport.get_extra_info('sockname')
+        return self.sock.getsockname()
+
+    async def send(self, bytes_to_send):
+        """Sends data over a connected socket."""
+        try:
+            return await self.loop.sock_sendall(self.sock, bytes_to_send)
+        except OSError as exc:
+            try:
+                host, port = self.sock.getpeername()
+            except Exception:
+                destination = ''
+            else:
+                destination = f' to {host}:{port}'
+
+            raise ca.CaprotoNetworkError(
+                f"Failed to send{destination}"
+            ) from exc
 
     async def sendto(self, bytes_to_send, addr_port):
+        """Send `bytes_to_send` to `addr_port`."""
         try:
-            self.transport.sendto(bytes_to_send, addr_port)
+            self.sock.sendto(bytes_to_send, addr_port)
         except OSError as exc:
             host, port = addr_port
             raise ca.CaprotoNetworkError(
-                f"Failed to send to {host}:{port}") from exc
+                f"Failed to send to {host}:{port}"
+            ) from exc
+
+    async def recv(self, nbytes):
+        """Receive from the socket."""
+        try:
+            return await self.loop.sock_recv(self.sock, nbytes)
+        except OSError as exc:
+            raise ca.CaprotoNetworkError(
+                f"Failed to receive: {exc}"
+            ) from exc
 
     def close(self):
-        return self.transport.close()
+        return self.sock.close()
+
+
+class _TransportWrapper(_SocketWrapper):
+    """Make an asyncio transport something you can call sendto on."""
+
+    def __init__(self, transport, loop=None):
+        self.transport = transport
+        super().__init__(sock=self.transport.get_extra_info('socket'),
+                         loop=loop)
+
+
+class _ConnectedTransportWrapper(_TransportWrapper):
+    """Make an asyncio transport something you can call send on."""
+    def __init__(self, transport, address, loop=None):
+        super().__init__(transport, loop=loop)
+        self.address = address
+        self.loop = loop or get_running_loop()
 
 
 class _TaskHandler:
@@ -176,6 +235,28 @@ class _CallbackExecutor:
 
     def submit(self, callback, *args, **kwargs):
         self.callbacks.put((callback, args, kwargs))
+
+
+async def _create_bound_tcp_socket(addr, port):
+    """Create a TCP socket and bind it to (addr, port)."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.setblocking(False)
+    sock.bind((addr, port))
+    return sock
+
+
+def _create_udp_socket():
+    """Create a UDP socket for usage with a datagram endpoint."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    # Python says this is unsafe, but we need it to have
+    # multiple servers live on the same host.
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    if sys.platform not in ('win32', ) and hasattr(socket, 'SO_REUSEPORT'):
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    sock.setblocking(False)
+    return sock
 
 
 if sys.version_info < (3, 7):

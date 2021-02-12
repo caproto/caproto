@@ -1,14 +1,14 @@
 import asyncio
 import functools
-import socket
-import sys
 
 import caproto as ca
 
 from ..server import AsyncLibraryLayer
 from ..server.common import Context as _Context
 from ..server.common import VirtualCircuit as _VirtualCircuit
-from .utils import (AsyncioQueue, _DatagramProtocol, _TaskHandler,
+from .utils import (AsyncioQueue, _ConnectedTransportWrapper,
+                    _create_bound_tcp_socket, _create_udp_socket,
+                    _DatagramProtocol, _SocketWrapper, _TaskHandler,
                     _TransportWrapper)
 
 
@@ -42,20 +42,9 @@ class VirtualCircuit(_VirtualCircuit):
             loop = asyncio.get_event_loop()
         self.loop = loop
 
-        class SockWrapper:
-            def __init__(self, loop, client):
-                self.loop = loop
-                self.client = client
-
-            def getsockname(self):
-                return self.client.getsockname()
-
-            async def recv(self, nbytes):
-                return (await self.loop.sock_recv(self.client, nbytes))
-
         self._raw_lock = asyncio.Lock()
         self._raw_client = client
-        super().__init__(circuit, SockWrapper(loop, client), context)
+        super().__init__(circuit, _SocketWrapper(client, loop=loop), context)
         self.QueueFull = asyncio.QueueFull
         self.command_queue = asyncio.Queue(ca.MAX_COMMAND_BACKLOG,
                                            loop=self.loop)
@@ -132,65 +121,46 @@ class Context(_Context):
         'Start the server'
         self.log.info('Asyncio server starting up...')
 
-        async def make_socket(interface, port):
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            s.setblocking(False)
-            s.bind((interface, port))
-            return s
-
         self.port, self.tcp_sockets = await self._bind_tcp_sockets_with_consistent_port_number(
-            make_socket)
+            _create_bound_tcp_socket
+        )
         tasks = _TaskHandler()
         for interface, sock in self.tcp_sockets.items():
             self.log.info("Listening on %s:%d", interface, self.port)
             self.broadcaster.server_addresses.append((interface, self.port))
             tasks.create(self.server_accept_loop(sock))
 
-        class ConnectedTransportWrapper:
-            """Make an asyncio transport something you can call send on."""
-            def __init__(self, transport, address):
-                self.transport = transport
-                self.address = address
-
-            async def send(self, bytes_to_send):
-                try:
-                    self.transport.sendto(bytes_to_send, self.address)
-                except OSError as exc:
-                    host, port = self.address
-                    raise ca.CaprotoNetworkError(
-                        f"Failed to send to {host}:{port}") from exc
-
-            def close(self):
-                return self.transport.close()
-
-        reuse_port = sys.platform not in ('win32', ) and hasattr(socket, 'SO_REUSEPORT')
         for address in ca.get_beacon_address_list():
+            sock = _create_udp_socket()
+            try:
+                sock.connect(address)
+            except Exception as ex:
+                self.log.error(
+                    'Beacon (%s:%d) socket setup failed: %s', *address, ex,
+                )
+                continue
+
             transport, _ = await self.loop.create_datagram_endpoint(
                 functools.partial(_DatagramProtocol, parent=self,
                                   recv_func=self._datagram_received),
-                remote_addr=address, allow_broadcast=True,
-                reuse_port=reuse_port)
-            wrapped_transport = ConnectedTransportWrapper(transport, address)
+                sock=sock
+            )
+            wrapped_transport = _ConnectedTransportWrapper(transport, address,
+                                                           loop=self.loop)
             self.beacon_socks[address] = (interface,   # TODO; this is incorrect
                                           wrapped_transport)
 
         for interface in self.interfaces:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-            # Python says this is unsafe, but we need it to have
-            # multiple servers live on the same host.
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            if reuse_port:
-                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-            sock.setblocking(False)
+            sock = _create_udp_socket()
             sock.bind((interface, self.ca_server_port))
 
             transport, _ = await self.loop.create_datagram_endpoint(
                 functools.partial(_DatagramProtocol, parent=self,
                                   recv_func=self._datagram_received),
                 sock=sock)
-            self.udp_socks[interface] = _TransportWrapper(transport)
+            self.udp_socks[interface] = _TransportWrapper(
+                transport, loop=self.loop
+            )
             self.log.debug('UDP socket bound on %s:%d', interface,
                            self.ca_server_port)
 
