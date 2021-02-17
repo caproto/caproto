@@ -111,6 +111,19 @@ We would advise those kinds of users to steer well clear of caproto. It is best
 suited to applications that reward convenience, fast iteration, and
 accessibility.
 
+Some facilities do use caproto "in production" for these kinds of applications,
+and we are pleased to hear that it works well. Keep in mind that caproto is
+maintained primarily by two people as a hybrid work/hobby project, mostly on
+evenings and weekends. At present, no facilities or funding sources have
+formally committed resources to its continued support. If a facility makes a
+"bet" on caproto:
+
+1. Depending on the size of the bet and the scale of support it may require,
+   the facility should commit someone to becoming a caproto core developer.
+
+2. The facility should also maintain general EPICS (base) expertise, so that
+   they have a reasonable path to back out of caproto if they need to.
+
 What about pvAccess?
 ====================
 
