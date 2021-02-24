@@ -112,8 +112,9 @@ class Context(_Context):
         """Start a TCP server on `sock` and listen for new connections."""
         def _new_client(reader, writer):
             transport = _TransportWrapper(reader, writer)
-            peer_addr = transport.getpeername()
-            self.server_tasks.create(self.tcp_handler(transport, peer_addr))
+            self.server_tasks.create(
+                self.tcp_handler(transport, transport.getpeername())
+            )
 
         await asyncio.start_server(
             _new_client,
@@ -206,7 +207,7 @@ class Context(_Context):
                 sock.close()
             for sock in self.udp_socks.values():
                 sock.close()
-            for _interface, sock in self.beacon_socks.values():
+            for _, sock in self.beacon_socks.values():
                 sock.close()
 
     def _datagram_received(self, pair):

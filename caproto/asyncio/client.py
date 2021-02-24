@@ -28,7 +28,7 @@ from ..client import common
 from ..client.search_results import (DuplicateSearchResponse, SearchResults,
                                      UnknownSearchResponse)
 from .utils import (AsyncioQueue, _CallbackExecutor, _DatagramProtocol,
-                    _StreamProtocol, _TaskHandler, _TransportWrapper,
+                    _StreamProtocol, _TaskHandler, _UdpTransportWrapper,
                     get_running_loop)
 
 ch_logger = logging.getLogger('caproto.ch')
@@ -174,7 +174,7 @@ class SharedBroadcaster:
 
         # TODO: wrapped transport is a server concept for unifying
         # trio/asyncio/curio
-        self.wrapped_transport = _TransportWrapper(transport)
+        self.wrapped_transport = _UdpTransportWrapper(transport)
 
         self.broadcaster.client_address = safe_getsockname(self.udp_sock)
 
