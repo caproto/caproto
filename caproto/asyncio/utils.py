@@ -61,33 +61,6 @@ class _DatagramProtocol(asyncio.Protocol):
         self.parent.log.error('%s receive error', self, exc_info=ex)
 
 
-class _StreamProtocol(asyncio.Protocol):
-    def __init__(self, parent, connection_callback, recv_func):
-        self.connection_callback = connection_callback
-        self.parent = parent
-        self.recv_func = recv_func
-        self.transport = None
-
-    def connection_made(self, transport):
-        self.transport = transport
-        self.connection_callback(True, transport)
-
-    def eof_received(self):
-        self.connection_callback(False, None)
-        return False
-
-    def connection_lost(self, exc):
-        self.transport = None
-        self.connection_callback(False, exc)
-
-    def data_received(self, data):
-        self.recv_func(data)
-
-    def error_received(self, ex):
-        # TODO: add socket info
-        self.parent.log.error('%s receive error', self, exc_info=ex)
-
-
 class _TransportWrapper:
     """
     A wrapped transport with awaitable sendto and recv.
@@ -109,6 +82,7 @@ class _TransportWrapper:
         self.reader = reader
         self.writer = writer
         self.loop = loop or get_running_loop()
+        self.sock = self.writer.get_extra_info('socket')
 
     def getsockname(self):
         return self.writer.get_extra_info('sockname')
@@ -133,7 +107,7 @@ class _TransportWrapper:
                 f"Failed to send{destination}"
             ) from exc
 
-    async def recv(self, nbytes):
+    async def recv(self, nbytes=4096):
         """Receive from the socket."""
         try:
             return await self.reader.read(nbytes)
