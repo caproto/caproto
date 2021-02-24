@@ -57,6 +57,7 @@ class _DatagramProtocol(asyncio.Protocol):
         self.recv_func((data, addr))
 
     def error_received(self, ex):
+        # TODO: add socket info
         self.parent.log.error('%s receive error', self, exc_info=ex)
 
 
@@ -83,12 +84,13 @@ class _StreamProtocol(asyncio.Protocol):
         self.recv_func(data)
 
     def error_received(self, ex):
+        # TODO: add socket info
         self.parent.log.error('%s receive error', self, exc_info=ex)
 
 
-class _SocketWrapper:
+class _TransportWrapper:
     """
-    A wrapped socket with an awaitable sendto and recv.
+    A wrapped transport with awaitable sendto and recv.
 
     Parameters
     ----------
@@ -101,21 +103,27 @@ class _SocketWrapper:
 
     sock: socket.socket
     loop: asyncio.AbstractEventLoop
+    transport: asyncio.BaseTransport
 
-    def __init__(self, sock, loop=None):
-        self.sock = sock
+    def __init__(self, reader, writer, loop=None):
+        self.reader = reader
+        self.writer = writer
         self.loop = loop or get_running_loop()
 
     def getsockname(self):
-        return self.sock.getsockname()
+        return self.writer.get_extra_info('sockname')
+
+    def getpeername(self):
+        return self.writer.get_extra_info('peername')
 
     async def send(self, bytes_to_send):
         """Sends data over a connected socket."""
         try:
-            return await self.loop.sock_sendall(self.sock, bytes_to_send)
+            self.writer.write(bytes_to_send)
+            await self.writer.drain()
         except OSError as exc:
             try:
-                host, port = self.sock.getpeername()
+                host, port = self.getpeername()
             except Exception:
                 destination = ''
             else:
@@ -125,52 +133,58 @@ class _SocketWrapper:
                 f"Failed to send{destination}"
             ) from exc
 
-    async def sendto(self, bytes_to_send, addr_port):
-        """Send `bytes_to_send` to `addr_port`."""
-        try:
-            self.sock.sendto(bytes_to_send, addr_port)
-        except OSError as exc:
-            host, port = addr_port
-            raise ca.CaprotoNetworkError(
-                f"Failed to send to {host}:{port}"
-            ) from exc
-
     async def recv(self, nbytes):
         """Receive from the socket."""
         try:
-            return await self.loop.sock_recv(self.sock, nbytes)
+            return await self.reader.read(nbytes)
         except OSError as exc:
             raise ca.CaprotoNetworkError(
                 f"Failed to receive: {exc}"
             ) from exc
 
     def close(self):
-        return self.sock.close()
+        return self.writer.close()
 
     def __repr__(self):
         try:
-            host, port = self.sock.getpeername()
+            host, port = self.getpeername()
         except Exception:
             return f'<{self.__class__.__name__}>'
 
         return f'<{self.__class__.__name__} address="{host}:{port}">'
 
 
-class _TransportWrapper(_SocketWrapper):
-    """Make an asyncio transport something you can call sendto on."""
-
-    def __init__(self, transport, loop=None):
-        self.transport = transport
-        super().__init__(sock=self.transport.get_extra_info('socket'),
-                         loop=loop)
-
-
-class _ConnectedTransportWrapper(_TransportWrapper):
+class _UdpTransportWrapper:
     """Make an asyncio transport something you can call send on."""
-    def __init__(self, transport, address, loop=None):
-        super().__init__(transport, loop=loop)
+    def __init__(self, transport, address=None, loop=None):
+        self.transport = transport
         self.address = address
         self.loop = loop or get_running_loop()
+
+    async def send(self, bytes_to_send):
+        """Sends data."""
+        if self.address is None:
+            raise ca.CaprotoNetworkError(
+                "Cannot send on a disconnected UDP transport"
+            )
+        try:
+            self.transport.sendto(bytes_to_send, self.address)
+        except OSError as exc:
+            raise ca.CaprotoNetworkError(
+                f"Failed to send to {self.address[0]}:{self.address[1]}"
+            ) from exc
+
+    async def sendto(self, bytes_to_send, address):
+        """Sends data to address."""
+        try:
+            self.transport.sendto(bytes_to_send, address)
+        except OSError as exc:
+            raise ca.CaprotoNetworkError(
+                f"Failed to send to {self.address[0]}:{self.address[1]}"
+            ) from exc
+
+    def close(self):
+        self.transport.close()
 
     def __repr__(self):
         return f'<{self.__class__.__name__} address={self.address}>'

@@ -6,10 +6,9 @@ import caproto as ca
 from ..server import AsyncLibraryLayer
 from ..server.common import Context as _Context
 from ..server.common import VirtualCircuit as _VirtualCircuit
-from .utils import (AsyncioQueue, _ConnectedTransportWrapper,
-                    _create_bound_tcp_socket, _create_udp_socket,
-                    _DatagramProtocol, _SocketWrapper, _TaskHandler,
-                    _TransportWrapper)
+from .utils import (AsyncioQueue, _create_bound_tcp_socket, _create_udp_socket,
+                    _DatagramProtocol, _TaskHandler, _TransportWrapper,
+                    _UdpTransportWrapper)
 
 
 class ServerExit(Exception):
@@ -44,7 +43,7 @@ class VirtualCircuit(_VirtualCircuit):
 
         self._raw_lock = asyncio.Lock()
         self._raw_client = client
-        super().__init__(circuit, _SocketWrapper(client, loop=loop), context)
+        super().__init__(circuit, client, context)
         self.QueueFull = asyncio.QueueFull
         self.command_queue = asyncio.Queue(ca.MAX_COMMAND_BACKLOG,
                                            loop=self.loop)
@@ -71,8 +70,7 @@ class VirtualCircuit(_VirtualCircuit):
             # lock to make sure a AddEvent does not write bytes
             # to the socket while we are sending
             async with self._raw_lock:
-                await self.loop.sock_sendall(self._raw_client,
-                                             b''.join(buffers_to_send))
+                await self.client.send(b''.join(buffers_to_send))
 
     async def run(self):
         self.tasks.create(self.command_queue_loop())
@@ -111,11 +109,17 @@ class Context(_Context):
         self.tcp_sockets = dict()
 
     async def server_accept_loop(self, sock):
-        sock.listen()
+        """Start a TCP server on `sock` and listen for new connections."""
+        def _new_client(reader, writer):
+            transport = _TransportWrapper(reader, writer)
+            peer_addr = transport.getpeername()
+            self.server_tasks.create(self.tcp_handler(transport, peer_addr))
 
-        while True:
-            client_sock, addr = await self.loop.sock_accept(sock)
-            self.server_tasks.create(self.tcp_handler(client_sock, addr))
+        await asyncio.start_server(
+            _new_client,
+            sock=sock,
+            start_serving=True,
+        )
 
     async def run(self, *, log_pv_names=False):
         'Start the server'
@@ -145,8 +149,9 @@ class Context(_Context):
                                   recv_func=self._datagram_received),
                 sock=sock
             )
-            wrapped_transport = _ConnectedTransportWrapper(transport, address,
-                                                           loop=self.loop)
+            wrapped_transport = _UdpTransportWrapper(
+                transport, address, loop=self.loop
+            )
             self.beacon_socks[address] = (interface,   # TODO; this is incorrect
                                           wrapped_transport)
 
@@ -158,7 +163,7 @@ class Context(_Context):
                 functools.partial(_DatagramProtocol, parent=self,
                                   recv_func=self._datagram_received),
                 sock=sock)
-            self.udp_socks[interface] = _TransportWrapper(
+            self.udp_socks[interface] = _UdpTransportWrapper(
                 transport, loop=self.loop
             )
             self.log.debug('UDP socket bound on %s:%d', interface,
