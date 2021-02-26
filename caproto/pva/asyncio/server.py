@@ -1,12 +1,12 @@
 import asyncio
 import functools
-import socket
-import sys
 
 import caproto as ca
 
 from ...asyncio.server import AsyncioAsyncLayer, ServerExit
-from ...asyncio.utils import _DatagramProtocol, _TaskHandler, _TransportWrapper
+from ...asyncio.utils import (_create_bound_tcp_socket, _create_udp_socket,
+                              _DatagramProtocol, _TaskHandler,
+                              _TransportWrapper, _UdpTransportWrapper)
 from ..server.common import Context as _Context
 from ..server.common import VirtualCircuit as _VirtualCircuit
 
@@ -19,21 +19,7 @@ class VirtualCircuit(_VirtualCircuit):
         if loop is None:
             loop = asyncio.get_event_loop()
         self.loop = loop
-
-        class SockWrapper:
-            def __init__(self, loop, client):
-                self.loop = loop
-                self.client = client
-
-            def getsockname(self):
-                return self.client.getsockname()
-
-            async def recv(self, nbytes):
-                return (await self.loop.sock_recv(self.client, nbytes))
-
-        self._raw_lock = asyncio.Lock()
-        self._raw_client = client
-        super().__init__(circuit, SockWrapper(loop, client), context)
+        super().__init__(circuit, client, context)
         self.QueueFull = asyncio.QueueFull
         self.message_queue = asyncio.Queue(ca.MAX_COMMAND_BACKLOG,
                                            loop=self.loop)
@@ -63,9 +49,7 @@ class VirtualCircuit(_VirtualCircuit):
             buffers_to_send = self.circuit.send(*messages, extra=self._tags)
             # lock to make sure a AddEvent does not write bytes
             # to the socket while we are sending
-            async with self._raw_lock:
-                await self.loop.sock_sendall(self._raw_client,
-                                             b''.join(buffers_to_send))
+            await self.client.send(b''.join(buffers_to_send))
 
     async def run(self):
         self.tasks.create(self.message_queue_loop())
@@ -79,7 +63,7 @@ class VirtualCircuit(_VirtualCircuit):
 
     async def _on_disconnect(self):
         await super()._on_disconnect()
-        self._raw_client.close()
+        self.client.close()
         if self._sub_task is not None:
             await self.tasks.cancel(self._sub_task)
             self._sub_task = None
@@ -103,11 +87,18 @@ class Context(_Context):
         self.tcp_sockets = dict()
 
     async def server_accept_loop(self, sock):
-        sock.listen()
+        """Start a TCP server on `sock` and listen for new connections."""
+        def _new_client(reader, writer):
+            transport = _TransportWrapper(reader, writer)
+            self.server_tasks.create(
+                self.tcp_handler(transport, transport.getpeername())
+            )
 
-        while True:
-            client_sock, addr = await self.loop.sock_accept(sock)
-            self.server_tasks.create(self.tcp_handler(client_sock, addr))
+        await asyncio.start_server(
+            _new_client,
+            sock=sock,
+            start_serving=True,
+        )
 
     @property
     def guid(self) -> str:
@@ -127,15 +118,9 @@ class Context(_Context):
         self.log.info('Asyncio server starting up...')
         self.log.info('Server GUID is: 0x%s', self.guid)
 
-        async def make_socket(interface, port):
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            s.setblocking(False)
-            s.bind((interface, port))
-            return s
-
         self.port, self.tcp_sockets = await self._bind_tcp_sockets_with_consistent_port_number(
-            make_socket)
+            _create_bound_tcp_socket
+        )
         self.broadcaster.server_port = self.port
 
         tasks = _TaskHandler()
@@ -144,53 +129,42 @@ class Context(_Context):
             self.broadcaster.server_addresses.append((interface, self.port))
             tasks.create(self.server_accept_loop(sock))
 
-        class ConnectedTransportWrapper:
-            """Make an asyncio transport something you can call send on."""
-            def __init__(self, transport, address):
-                self.transport = transport
-                self.address = address
-
-            async def send(self, bytes_to_send):
-                try:
-                    self.transport.sendto(bytes_to_send, self.address)
-                except OSError as exc:
-                    host, port = self.address
-                    raise ca.CaprotoNetworkError(
-                        f"Failed to send to {host}:{port}") from exc
-
-            def close(self):
-                return self.transport.close()
-
-        reuse_port = sys.platform not in ('win32', ) and hasattr(socket, 'SO_REUSEPORT')
         for address in ca.get_beacon_address_list(protocol=ca.Protocol.PVAccess):
+            sock = _create_udp_socket()
+            try:
+                sock.connect(address)
+            except Exception as ex:
+                self.log.error(
+                    'Beacon (%s:%d) socket setup failed: %s', *address, ex,
+                )
+                continue
+
             transport, _ = await self.loop.create_datagram_endpoint(
                 functools.partial(_DatagramProtocol, parent=self,
                                   recv_func=self._datagram_received),
-                remote_addr=address, allow_broadcast=True,
-                reuse_port=reuse_port)
-            wrapped_transport = ConnectedTransportWrapper(transport, address)
+                sock=sock
+            )
+            wrapped_transport = _UdpTransportWrapper(
+                transport, address, loop=self.loop
+            )
             self.beacon_socks[address] = (interface,   # TODO; this is incorrect
                                           wrapped_transport)
 
         for interface in self.interfaces:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM,
-                                 socket.IPPROTO_UDP)
-            # Python says this is unsafe, but we need it to have
-            # multiple servers live on the same host.
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            if reuse_port:
-                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-            sock.setblocking(False)
+            sock = _create_udp_socket()
             sock.bind((interface, self.pva_broadcast_port))
 
             transport, _ = await self.loop.create_datagram_endpoint(
                 functools.partial(_DatagramProtocol, parent=self,
                                   recv_func=self._datagram_received),
                 sock=sock)
-            self.udp_socks[interface] = _TransportWrapper(transport)
-            self.log.debug('UDP socket bound on %s:%d', interface,
-                           self.pva_broadcast_port)
+            self.udp_socks[interface] = _UdpTransportWrapper(
+                transport, loop=self.loop
+            )
+            self.log.debug(
+                'UDP socket bound on %s:%d', interface,
+                self.pva_broadcast_port
+            )
 
         tasks.create(self.broadcaster_queue_loop())
         tasks.create(self.subscription_queue_loop())
@@ -231,7 +205,7 @@ class Context(_Context):
                 sock.close()
             for sock in self.udp_socks.values():
                 sock.close()
-            for _interface, sock in self.beacon_socks.values():
+            for _, sock in self.beacon_socks.values():
                 sock.close()
 
     def _datagram_received(self, pair):
