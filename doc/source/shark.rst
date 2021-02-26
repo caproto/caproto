@@ -30,6 +30,15 @@ Capture network traffic to a using ``tcpdump`` like so:
 
    sudo tcpdump -w some_network_traffic.pcap
 
+You may need to specify a particular network interface. For example, if the
+IOCs of interest are on the local machine, use ``lo`` for local loopback.
+
+.. code-block:: bash
+
+   sudo tcpdump -i lo -w some_network_traffic.pcap
+
+On Linux and Mac, use ``ifconfig`` to list the available interfaces.
+
 Extract the information in Python using caproto:
 
 .. code-block:: python
@@ -63,6 +72,11 @@ Example item:
        transport=UDP(sport=41600, dport=5064, ulen=56, sum=21249, data=b'\x00\x00\x00\x00\x00\x00\x00\r\x00\x00\x00\x00\x00\x00\x00\x00\x00\x06\x00\x10\x00\x05\x00\r\x00\x00\xe0\xdb\x00\x00\xe0\xdbrpi:color\x00\x00\x00\x00\x00\x00\x00'),
        ethernet=Ethernet(dst=b'\xff\xff\xff\xff\xff\xff', src=b'tp\xfd\xf2K?', data=IP(len=76, id=10227, off=16384, p=17, sum=64496, src=b'\xc0\xa8V\x15', dst=b'\xff\xff\xff\xff', opts=b'', data=UDP(sport=41600, dport=5064, ulen=56, sum=21249, data=b'\x00\x00\x00\x00\x00\x00\x00\r\x00\x00\x00\x00\x00\x00\x00\x00\x00\x06\x00\x10\x00\x05\x00\r\x00\x00\xe0\xdb\x00\x00\xe0\xdbrpi:color\x00\x00\x00\x00\x00\x00\x00'))),
        ip=IP(len=76, id=10227, off=16384, p=17, sum=64496, src=b'\xc0\xa8V\x15', dst=b'\xff\xff\xff\xff', opts=b'', data=UDP(sport=41600, dport=5064, ulen=56, sum=21249, data=b'\x00\x00\x00\x00\x00\x00\x00\r\x00\x00\x00\x00\x00\x00\x00\x00\x00\x06\x00\x10\x00\x05\x00\r\x00\x00\xe0\xdb\x00\x00\xe0\xdbrpi:color\x00\x00\x00\x00\x00\x00\x00')))
+
+This data can be used, for example, to perform statistical analysis of IOC
+connection performance.
+
+.. literalinclude:: ../../caproto/examples/benchmark_connections.py
 
 This feature is also accessible through a CLI:
 
