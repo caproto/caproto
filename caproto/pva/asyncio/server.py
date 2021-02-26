@@ -47,8 +47,6 @@ class VirtualCircuit(_VirtualCircuit):
     async def send(self, *messages):
         if self.connected:
             buffers_to_send = self.circuit.send(*messages, extra=self._tags)
-            # lock to make sure a AddEvent does not write bytes
-            # to the socket while we are sending
             await self.client.send(b''.join(buffers_to_send))
 
     async def run(self):
