@@ -41,8 +41,6 @@ class VirtualCircuit(_VirtualCircuit):
             loop = asyncio.get_event_loop()
         self.loop = loop
 
-        self._raw_lock = asyncio.Lock()
-        self._raw_client = client
         super().__init__(circuit, client, context)
         self.QueueFull = asyncio.QueueFull
         self.command_queue = asyncio.Queue(ca.MAX_COMMAND_BACKLOG,
@@ -67,10 +65,7 @@ class VirtualCircuit(_VirtualCircuit):
     async def send(self, *commands):
         if self.connected:
             buffers_to_send = self.circuit.send(*commands)
-            # lock to make sure a AddEvent does not write bytes
-            # to the socket while we are sending
-            async with self._raw_lock:
-                await self.client.send(b''.join(buffers_to_send))
+            await self.client.send(b''.join(buffers_to_send))
 
     async def run(self):
         self.tasks.create(self.command_queue_loop())
@@ -85,7 +80,7 @@ class VirtualCircuit(_VirtualCircuit):
 
     async def _on_disconnect(self):
         await super()._on_disconnect()
-        self._raw_client.close()
+        self.client.close()
         if self._sub_task is not None:
             await self.tasks.cancel(self._sub_task)
             self._sub_task = None
