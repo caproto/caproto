@@ -111,11 +111,11 @@ class Context(_Context):
                 self.tcp_handler(transport, transport.getpeername())
             )
 
-        await asyncio.start_server(
+        server = await asyncio.start_server(
             _new_client,
             sock=sock,
-            start_serving=True,
         )
+        await server.start_serving()
 
     async def run(self, *, log_pv_names=False):
         'Start the server'

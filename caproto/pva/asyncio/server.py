@@ -92,11 +92,11 @@ class Context(_Context):
                 self.tcp_handler(transport, transport.getpeername())
             )
 
-        await asyncio.start_server(
+        server = await asyncio.start_server(
             _new_client,
             sock=sock,
-            start_serving=True,
         )
+        await server.start_serving()
 
     @property
     def guid(self) -> str:
