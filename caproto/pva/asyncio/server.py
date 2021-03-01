@@ -4,9 +4,10 @@ import functools
 import caproto as ca
 
 from ...asyncio.server import AsyncioAsyncLayer, ServerExit
-from ...asyncio.utils import (_create_bound_tcp_socket, _create_udp_socket,
-                              _DatagramProtocol, _TaskHandler,
-                              _TransportWrapper, _UdpTransportWrapper)
+from ...asyncio.utils import (AsyncioQueue, _create_bound_tcp_socket,
+                              _create_udp_socket, _DatagramProtocol,
+                              _TaskHandler, _TransportWrapper,
+                              _UdpTransportWrapper)
 from ..server.common import Context as _Context
 from ..server.common import VirtualCircuit as _VirtualCircuit
 
@@ -75,6 +76,9 @@ class Context(_Context):
 
     def __init__(self, pvdb, interfaces=None, *, loop=None):
         super().__init__(pvdb, interfaces)
+        self.broadcaster_datagram_queue = AsyncioQueue(
+            ca.MAX_COMMAND_BACKLOG
+        )
         self.message_bundle_queue = asyncio.Queue()
         self.subscription_queue = asyncio.Queue()
         if loop is None:
@@ -137,13 +141,8 @@ class Context(_Context):
                 )
                 continue
 
-            transport, _ = await self.loop.create_datagram_endpoint(
-                functools.partial(_DatagramProtocol, parent=self,
-                                  recv_func=self._datagram_received),
-                sock=sock
-            )
             wrapped_transport = _UdpTransportWrapper(
-                transport, address, loop=self.loop
+                sock, address, loop=self.loop
             )
             self.beacon_socks[address] = (interface,   # TODO; this is incorrect
                                           wrapped_transport)
@@ -154,7 +153,8 @@ class Context(_Context):
 
             transport, _ = await self.loop.create_datagram_endpoint(
                 functools.partial(_DatagramProtocol, parent=self,
-                                  recv_func=self._datagram_received),
+                                  identifier=interface,
+                                  queue=self.broadcaster_datagram_queue),
                 sock=sock)
             self.udp_socks[interface] = _UdpTransportWrapper(
                 transport, loop=self.loop
@@ -164,6 +164,7 @@ class Context(_Context):
                 self.pva_broadcast_port
             )
 
+        tasks.create(self.broadcaster_receive_loop())
         tasks.create(self.broadcaster_queue_loop())
         tasks.create(self.subscription_queue_loop())
         tasks.create(self.broadcast_beacon_loop())
@@ -206,14 +207,16 @@ class Context(_Context):
             for _, sock in self.beacon_socks.values():
                 sock.close()
 
-    def _datagram_received(self, pair):
-        bytes_received, address = pair
-        try:
-            messages = self.broadcaster.recv(bytes_received, address)
-        except ca.RemoteProtocolError:
-            self.log.exception('Broadcaster received bad packet')
-        else:
-            self.message_bundle_queue.put_nowait((address, messages))
+    async def broadcaster_receive_loop(self):
+        # UdpTransport -> broadcaster_datagram_queue -> command_bundle_queue
+        queue = self.broadcaster_datagram_queue
+        while True:
+            identifier, data, address = await queue.async_get()
+            if isinstance(data, Exception):
+                self.log.exception('Broadcaster failed to receive on %s',
+                                   identifier)
+            else:
+                await self._broadcaster_recv_datagram(data, address)
 
 
 async def start_server(pvdb, *, interfaces=None, log_pv_names=False):
