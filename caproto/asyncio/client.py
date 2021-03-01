@@ -168,7 +168,8 @@ class SharedBroadcaster:
 
         transport, self.protocol = await loop.create_datagram_endpoint(
             functools.partial(_DatagramProtocol, parent=self,
-                              recv_func=self.receive_queue.put),
+                              identifier='client-search',
+                              queue=self.receive_queue),
             sock=self.udp_sock)
 
         # TODO: wrapped transport is a server concept for unifying
@@ -213,7 +214,12 @@ class SharedBroadcaster:
         'Loop which consumes receive_queue datagrams from _DatagramProtocol.'
         queues = collections.defaultdict(list)
         while True:
-            bytes_received, address = await self.receive_queue.async_get()
+            _, bytes_received, address = await self.receive_queue.async_get()
+            if isinstance(bytes_received, Exception):
+                self.log.exception('Broadcaster receive exception',
+                                   exc_info=bytes_received)
+                continue
+
             try:
                 commands = self.broadcaster.recv(bytes_received, address)
             except ca.RemoteProtocolError:
@@ -240,7 +246,6 @@ class SharedBroadcaster:
                     queue.put((address, names))
             except Exception:
                 self.log.exception('Broadcaster receive loop evaluation')
-                continue
 
     def _process_command(self, addr, command, queues):
         # if isinstance(command, ca.RepeaterConfirmResponse):

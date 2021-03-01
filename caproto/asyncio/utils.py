@@ -42,10 +42,11 @@ class AsyncioQueue:
 
 
 class _DatagramProtocol(asyncio.Protocol):
-    def __init__(self, parent, recv_func):
+    def __init__(self, parent, identifier, queue):
         self.transport = None
         self.parent = parent
-        self.recv_func = recv_func
+        self.identifier = identifier
+        self.queue = queue
 
     def connection_made(self, transport):
         self.transport = transport
@@ -54,11 +55,10 @@ class _DatagramProtocol(asyncio.Protocol):
         if not data:
             return
 
-        self.recv_func((data, addr))
+        self.queue.put((self.identifier, data, addr))
 
     def error_received(self, ex):
-        # TODO: add socket info
-        self.parent.log.error('%s receive error', self, exc_info=ex)
+        self.queue.put((self.identifier, ex, None))
 
 
 class _TransportWrapper:
@@ -142,7 +142,7 @@ class _UdpTransportWrapper:
                 "Cannot send on a disconnected UDP transport"
             )
         try:
-            self.transport.sendto(bytes_to_send, self.address)
+            self.transport.send(bytes_to_send)
         except OSError as exc:
             raise ca.CaprotoNetworkError(
                 f"Failed to send to {self.address[0]}:{self.address[1]}"
