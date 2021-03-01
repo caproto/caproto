@@ -921,12 +921,14 @@ class VirtualCircuitManager:
                 bytes_received = await transport.recv()
             except ca.CaprotoNetworkError:
                 bytes_received = ''
-                # self.command_queue.put(ca.DISCONNECTED)
 
             self.last_tcp_receipt = time.monotonic()
             commands, _ = self.circuit.recv(bytes_received)
             for c in commands:
                 self.command_queue.put(c)
+
+            if not len(bytes_received):
+                break
 
     async def _connect(self, timeout):
         """Start the connection and spawn tasks."""
