@@ -877,7 +877,8 @@ class VirtualCircuitManager:
     # this is rarely necessary.
     # """
 
-    def __init__(self, context, circuit, timeout=common.TIMEOUT):
+    def __init__(self, context, circuit,
+                 timeout=common.GLOBAL_DEFAULT_TIMEOUT):
         self.context = context
         self.circuit = circuit  # a caproto.VirtualCircuit
         self.log = circuit.log

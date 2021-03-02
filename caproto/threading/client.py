@@ -16,7 +16,6 @@ import functools
 import getpass
 import inspect
 import logging
-import os
 import random
 import selectors
 import socket
@@ -141,17 +140,6 @@ class DisconnectedError(ThreadingClientException):
 
 class ContextDisconnectedError(ThreadingClientException):
     ...
-
-
-AUTOMONITOR_MAXLENGTH = 65536
-TIMEOUT = 2
-EVENT_ADD_BATCH_MAX_BYTES = 2**16
-MIN_RETRY_SEARCHES_INTERVAL = 0.03
-MAX_RETRY_SEARCHES_INTERVAL = 5
-SEARCH_RETIREMENT_AGE = 8 * 60
-RETRY_RETIRED_SEARCHES_INTERVAL = 60
-RESTART_SUBS_PERIOD = 0.1
-STR_ENC = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
 
 
 class SelectorThread:
@@ -540,7 +528,7 @@ class SharedBroadcaster:
             search_ids = []
             # Search requests that are past their retirement deadline with no
             # results will be searched for less frequently.
-            retirement_deadline = time.monotonic() + SEARCH_RETIREMENT_AGE
+            retirement_deadline = time.monotonic() + common.SEARCH_RETIREMENT_AGE
             for name in needs_search:
                 search_id = new_id()
                 search_ids.append(search_id)
@@ -701,7 +689,7 @@ class SharedBroadcaster:
     def _new_server_found(self):
         # Bring all the unanswered seraches out of retirement
         # to see if we have a new match.
-        retirement_deadline = time.monotonic() + SEARCH_RETIREMENT_AGE
+        retirement_deadline = time.monotonic() + common.SEARCH_RETIREMENT_AGE
         with self._search_lock:
             for item in self.unanswered_searches.values():
                 # give new age-out deadline
@@ -842,8 +830,8 @@ class SharedBroadcaster:
         # RETRY_RETIRED_SEARCHES_INTERVAL or, again, whenever new searches
         # are added.
         self.log.debug('Broadcaster search-retry thread has started.')
-        time_to_check_on_retirees = time.monotonic() + RETRY_RETIRED_SEARCHES_INTERVAL
-        interval = MIN_RETRY_SEARCHES_INTERVAL
+        time_to_check_on_retirees = time.monotonic() + common.RETRY_RETIRED_SEARCHES_INTERVAL
+        interval = common.MIN_RETRY_SEARCHES_INTERVAL
         while not self._close_event.is_set():
             try:
                 self._searching_enabled.wait(0.5)
@@ -864,7 +852,7 @@ class SharedBroadcaster:
             with self._search_lock:
                 if t >= time_to_check_on_retirees:
                     items = list(self.unanswered_searches.items())
-                    time_to_check_on_retirees += RETRY_RETIRED_SEARCHES_INTERVAL
+                    time_to_check_on_retirees += common.RETRY_RETIRED_SEARCHES_INTERVAL
                 else:
                     # Skip over searches that haven't gotten any results in
                     # SEARCH_RETIREMENT_AGE.
@@ -890,12 +878,12 @@ class SharedBroadcaster:
 
             wait_time = max(0, interval - (time.monotonic() - t))
             # Double the interval for the next loop.
-            interval = min(2 * interval, MAX_RETRY_SEARCHES_INTERVAL)
+            interval = min(2 * interval, common.MAX_RETRY_SEARCHES_INTERVAL)
             if self._search_now.wait(wait_time):
                 # New searches have been requested. Reset the interval between
                 # subseqent searches and force a check on the "retirees".
                 time_to_check_on_retirees = t
-                interval = MIN_RETRY_SEARCHES_INTERVAL
+                interval = common.MIN_RETRY_SEARCHES_INTERVAL
             self._search_now.clear()
 
         self.log.debug('Broadcaster search-retry thread has exited.')
@@ -1190,7 +1178,7 @@ class Context:
                             yield command
 
                 for batch in batch_requests(requests(),
-                                            EVENT_ADD_BATCH_MAX_BYTES):
+                                            common.EVENT_ADD_BATCH_MAX_BYTES):
                     try:
                         cm.send(*batch)
                     except Exception:
@@ -1204,7 +1192,7 @@ class Context:
                         # end up here again. No big deal.
                         break
 
-            wait_time = max(0, (RESTART_SUBS_PERIOD -
+            wait_time = max(0, (common.RESTART_SUBS_PERIOD -
                                 (time.monotonic() - t)))
             self.activate_subscriptions_now.wait(wait_time)
             self.activate_subscriptions_now.clear()
@@ -1275,7 +1263,8 @@ class VirtualCircuitManager:
                  '_subscriptionid_counter', 'user_callback_executor',
                  'last_tcp_receipt', '__weakref__', '_tags')
 
-    def __init__(self, context, circuit, selector, timeout=TIMEOUT):
+    def __init__(self, context, circuit, selector,
+                 timeout=common.GLOBAL_DEFAULT_TIMEOUT):
         self.context = context
         self.circuit = circuit  # a caproto.VirtualCircuit
         self.log = circuit.log
