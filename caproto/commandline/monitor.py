@@ -17,6 +17,7 @@ from datetime import datetime
 from .. import SubscriptionType, __version__, set_handler
 from .._log import _set_handler_with_logger
 from .._utils import ShowVersionAction
+from ..client.common import GLOBAL_DEFAULT_TIMEOUT
 from ..sync.client import block, subscribe
 from .cli_print_formats import (clean_format_args, format_response_data,
                                 format_str_adjust, gen_data_format)
@@ -46,7 +47,8 @@ def main():
                             help=("Maximum number of monitor events to "
                                   "process exiting. Unlimited by "
                                   "default."))
-    parser.add_argument('--timeout', '-w', type=float, default=1,
+    parser.add_argument('--timeout', '-w', type=float,
+                        default=GLOBAL_DEFAULT_TIMEOUT,
                         help=("Timeout ('wait') in seconds for server "
                               "responses."))
     parser.add_argument('-m', type=str, metavar='MASK', default='va',

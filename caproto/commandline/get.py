@@ -16,6 +16,7 @@ from datetime import datetime
 from .. import ChannelType, __version__, field_types, set_handler
 from .._log import _set_handler_with_logger
 from .._utils import ShowVersionAction
+from ..client.common import GLOBAL_DEFAULT_TIMEOUT
 from ..sync.client import read
 from .cli_print_formats import (clean_format_args, format_response_data,
                                 format_str_adjust, gen_data_format)
@@ -43,7 +44,8 @@ def main():
                               "supported. If the format string is specified, "
                               "--terse and --wide options have no effect "
                               "on the output formatting."))
-    parser.add_argument('--timeout', '-w', type=float, default=1,
+    parser.add_argument('--timeout', '-w', type=float,
+                        default=GLOBAL_DEFAULT_TIMEOUT,
                         help=("Timeout ('wait') in seconds for server "
                               "responses."))
     parser.add_argument('--notify', '-c', action='store_true',

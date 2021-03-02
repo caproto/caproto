@@ -12,13 +12,15 @@ Python session, do not import this module; instead import caproto.sync.client.
 """
 import argparse
 import ast
+import logging
 import sys
 from datetime import datetime
-import logging
-from .. import set_handler, __version__
-from ..sync.client import read_write_read
+
+from .. import __version__, set_handler
 from .._log import _set_handler_with_logger
 from .._utils import ShowVersionAction
+from ..client.common import GLOBAL_DEFAULT_TIMEOUT
+from ..sync.client import read_write_read
 
 
 def main():
@@ -40,7 +42,8 @@ def main():
                                  "and usages like "
                                  "{timestamp:%%Y-%%m-%%d %%H:%%M:%%S} are "
                                  "supported."))
-    parser.add_argument('--timeout', '-w', type=float, default=1,
+    parser.add_argument('--timeout', '-w', type=float,
+                        default=GLOBAL_DEFAULT_TIMEOUT,
                         help=("Timeout ('wait') in seconds for server "
                               "responses."))
     parser.add_argument('--notify', '-c', action='store_true',
