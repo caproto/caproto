@@ -12,9 +12,6 @@ import inspect
 import os
 
 
-# TODO rely on these with the threading client
-
-
 def _sentinel(name):
     class Sentinel:
         def __repr__(self):
@@ -25,7 +22,7 @@ def _sentinel(name):
 CIRCUIT_DEATH_ATTEMPTS = 3
 
 # sentinels used as default values for arguments
-GLOBAL_DEFAULT_TIMEOUT = os.environ.get("CAPROTO_DEFAULT_TIMEOUT", 2)
+GLOBAL_DEFAULT_TIMEOUT = float(os.environ.get("CAPROTO_DEFAULT_TIMEOUT", 2.))
 
 CONTEXT_DEFAULT_TIMEOUT = _sentinel('CONTEXT_DEFAULT_TIMEOUT')
 PV_DEFAULT_TIMEOUT = _sentinel('PV_DEFAULT_TIMEOUT')
