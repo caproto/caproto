@@ -131,6 +131,11 @@ class PvpropertyData:
             self.server_startup = self._server_startup
             # bind the startup method to the group (used in server_startup)
             self.startup = MethodType(pvspec.startup, group)
+        if pvspec.scan is not None:
+            # enable the scan hook for this instance only:
+            self.server_scan = self._server_scan
+            # bind the startup method to the group (used in server_scan)
+            self.scan = MethodType(pvspec.scan, group)
         if pvspec.shutdown is not None:
             # enable the shutdown hook for this instance only:
             self.server_shutdown = self._server_shutdown
@@ -236,6 +241,10 @@ class PvpropertyData:
     async def _server_shutdown(self, async_lib):
         """A per-pvproperty shutdown hook; enabled at __init__ time."""
         return await self.shutdown(self, async_lib)
+
+    async def _server_scan(self, async_lib):
+        """A per-pvproperty 'scan' hook; enabled at __init__ time."""
+        return await self.scan(self, async_lib)
 
     def get_field(self, field):
         """
@@ -370,7 +379,7 @@ class PvpropertyBoolEnumRO(PvpropertyReadOnlyData, ChannelEnum):
 
 class PVSpec(namedtuple('PVSpec',
                         'get put startup shutdown attr name dtype value '
-                        'max_length alarm_group read_only doc fields '
+                        'max_length alarm_group read_only doc fields scan '
                         'cls_kwargs')):
     """
     PV information specification.
@@ -387,6 +396,8 @@ class PVSpec(namedtuple('PVSpec',
     startup : async callable, optional
         Called at start of server; a hook for initialization and background
         processing
+    scan : async callable, optional
+        Called at periodic rates.
     shutdown : async callable, optional
         Called at shutdown of server; a hook for cleanup
     attr : str, optional
@@ -408,6 +419,8 @@ class PVSpec(namedtuple('PVSpec',
         Docstring associated with PV
     fields : tuple, optional
         Specification for record fields
+    scan : async callable, optional
+        Called at periodic rates.
     cls_kwargs : dict, optional
         Keyword arguments for the ChannelData-based class
     """
@@ -417,7 +430,7 @@ class PVSpec(namedtuple('PVSpec',
     def __new__(cls, get=None, put=None, startup=None, shutdown=None,
                 attr=None, name=None, dtype=None, value=None, max_length=None,
                 alarm_group=None, read_only=None, doc=None, fields=None,
-                cls_kwargs=None):
+                scan=None, cls_kwargs=None):
         if dtype is None:
             if value is None:
                 dtype = cls.default_dtype
@@ -455,6 +468,16 @@ class PVSpec(namedtuple('PVSpec',
                 raise CaprotoRuntimeError('Invalid signature for startup {}: {}'
                                           ''.format(startup, sig))
 
+        if scan is not None:
+            assert inspect.iscoroutinefunction(scan), \
+                'required async def scan'
+            sig = inspect.signature(scan)
+            try:
+                sig.bind('group', 'instance', 'async_library')
+            except Exception:
+                raise CaprotoRuntimeError('Invalid signature for scan {}: {}'
+                                          ''.format(scan, sig))
+
         if shutdown is not None:
             assert inspect.iscoroutinefunction(shutdown), \
                 'required async def shutdown'
@@ -469,7 +492,8 @@ class PVSpec(namedtuple('PVSpec',
                                shutdown=shutdown, attr=attr, name=name,
                                dtype=dtype, value=value, max_length=max_length,
                                alarm_group=alarm_group, read_only=read_only,
-                               doc=doc, fields=fields, cls_kwargs=cls_kwargs)
+                               doc=doc, fields=fields, scan=scan,
+                               cls_kwargs=cls_kwargs)
 
     def new_names(self, attr=None, name=None):
         if attr is None:
@@ -477,6 +501,88 @@ class PVSpec(namedtuple('PVSpec',
         if name is None:
             name = self.name
         return self._replace(attr=attr, name=name)
+
+
+def scan_wrapper(
+    scan_function, period, *, subtract_elapsed=True, stop_on_error=False,
+    failure_severity=AlarmSeverity.MAJOR_ALARM, use_scan_field=False
+):
+    """
+    Wrap a function intended for `pvproperty.scan` with common logic to
+    periodically call it.
+
+    Parameters
+    ----------
+    scan_function : async callable
+        The scan function to wrap, with expected signature:
+            (group, instance, async_library)
+    period : float
+        Wait `period` seconds between calls to the scanned function
+    subtract_elapsed : bool, optional
+        Subtract the elapsed time of the previous call from the period for
+        the subsequent iteration
+    stop_on_error : bool, optional
+        Fail (and stop scanning) when unhandled exceptions occur
+    use_scan_field : bool, optional
+        Use the .SCAN field if this pvproperty is a mocked record.  Raises
+        ValueError if mock_record is not used.
+
+    Returns
+    -------
+    wrapped : callable
+        The wrapped ``scan`` function.
+    """
+    async def call_scan_function(group, prop, async_lib):
+        try:
+            await scan_function(group, prop, async_lib)
+        except Exception:
+            prop.log.exception('Scan exception')
+            await prop.alarm.write(
+                status=AlarmStatus.SCAN,
+                severity=failure_severity,
+            )
+            if stop_on_error:
+                raise
+        else:
+            if ((prop.alarm.severity, prop.alarm.status) ==
+                    (failure_severity, AlarmStatus.SCAN)):
+                await prop.alarm.write(
+                    status=AlarmStatus.NO_ALARM,
+                    severity=AlarmSeverity.NO_ALARM,
+                )
+
+    async def scanned_startup(group, prop, async_lib):
+        if use_scan_field and period is not None:
+            if prop.field_inst.scan_rate_sec is None:
+                # This is a hook to allow setting of the default scan rate
+                # through the 'period' argument of the decorator.
+                prop.field_inst._scan_rate_sec = period
+                # TODO: update .SCAN to reflect this number
+
+        sleep = async_lib.library.sleep
+        while True:
+            t0 = time.monotonic()
+            if use_scan_field:
+                iter_time = prop.field_inst.scan_rate_sec
+                if iter_time is None:
+                    iter_time = 0
+            else:
+                iter_time = period
+
+            if iter_time > 0:
+                await call_scan_function(group, prop, async_lib)
+            else:
+                iter_time = 0.1
+                # TODO: could the scan rate - or values in general - have
+                # events tied with them so busy loops are unnecessary?
+            elapsed = time.monotonic() - t0
+            sleep_time = (
+                max(0, iter_time - elapsed)
+                if subtract_elapsed else iter_time
+            )
+            await sleep(sleep_time)
+
+    return scanned_startup
 
 
 class FieldProxy:
@@ -506,6 +612,14 @@ class FieldProxy:
 
     def startup(self, startup):
         self.field_spec._update(self.field_name, 'startup', startup)
+        return self.field_spec.prop
+
+    def scan(self, scan):
+        self.field_spec._update(self.field_name, 'scan', scan)
+        return self.field_spec.prop
+
+    def shutdown(self, shutdown):
+        self.field_spec._update(self.field_name, 'shutdown', shutdown)
         return self.field_spec.prop
 
     def __repr__(self):
@@ -581,6 +695,9 @@ class pvproperty:
     shutdown : async callable, optional
         Called at shutdown of server; a hook for cleanup
 
+    scan : async callable, optional
+        Called periodically at a configured rate.
+
     name : str, optional
         The PV name (defaults to the attribute name of the pvproperty)
 
@@ -623,7 +740,7 @@ class pvproperty:
     """
 
     def __init__(self, get=None, put=None, startup=None, shutdown=None, *,
-                 name=None, dtype=None, value=None, max_length=None,
+                 scan=None, name=None, dtype=None, value=None, max_length=None,
                  alarm_group=None, doc=None, read_only=None, field_spec=None,
                  fields=None, **cls_kwargs):
         self.attr_name = None  # to be set later
@@ -743,68 +860,28 @@ class pvproperty:
             pvproperty startup function signature:
                 (group, instance, async_library)
         """
-        # TODO: maybe allow rate to be tied to a PV (e.g., a SCAN field?)
-        def wrapper(scan_function):
-            async def call_scan_function(group, prop, async_lib):
-                try:
-                    await scan_function(group, prop, async_lib)
-                except Exception:
-                    prop.log.exception('Scan exception')
-                    await prop.alarm.write(status=AlarmStatus.SCAN,
-                                           severity=failure_severity,
-                                           )
-                    if stop_on_error:
-                        raise
-                else:
-                    if ((prop.alarm.severity, prop.alarm.status) ==
-                            (failure_severity, AlarmStatus.SCAN)):
-                        await prop.alarm.write(
-                            status=AlarmStatus.NO_ALARM,
-                            severity=AlarmSeverity.NO_ALARM,
-                        )
-
-            async def scanned_startup(group, prop, async_lib):
-                if use_scan_field and period is not None:
-                    if prop.field_inst.scan_rate_sec is None:
-                        # This is a hook to allow setting of the default scan
-                        # rate through the 'period' argument of the decorator.
-                        prop.field_inst._scan_rate_sec = period
-                        # TODO: update .SCAN to reflect this number
-
-                sleep = async_lib.library.sleep
-                while True:
-                    t0 = time.monotonic()
-                    if use_scan_field:
-                        iter_time = prop.field_inst.scan_rate_sec
-                        if iter_time is None:
-                            iter_time = 0
-                    else:
-                        iter_time = period
-
-                    if iter_time > 0:
-                        await call_scan_function(group, prop, async_lib)
-                    else:
-                        iter_time = 0.1
-                        # TODO: could the scan rate - or values in general -
-                        # have events tied with them so busy loops are
-                        # unnecessary?
-                    elapsed = time.monotonic() - t0
-                    sleep_time = (max(0, iter_time - elapsed)
-                                  if subtract_elapsed
-                                  else iter_time)
-                    await sleep(sleep_time)
-            return self.startup(scanned_startup)
+        def wrapper(func):
+            wrapped = scan_wrapper(
+                func, period,
+                subtract_elapsed=subtract_elapsed,
+                stop_on_error=stop_on_error,
+                failure_severity=failure_severity,
+                use_scan_field=use_scan_field,
+            )
+            self.pvspec = self.pvspec._replace(scan=wrapped)
+            return self
 
         if use_scan_field:
             if not self.record_type:
-                raise CaprotoValueError('Must use mock_record in conjunction with '
-                                        'use_scan_field')
+                raise CaprotoValueError(
+                    '`use_scan_field=True` requires `record="..."` to be set'
+                )
         elif period <= 0:
             raise CaprotoValueError('Scan period must be > 0')
 
         return wrapper
 
-    def __call__(self, get, put=None, startup=None, shutdown=None):
+    def __call__(self, get, put=None, startup=None, shutdown=None, scan=None):
         # handles case where pvproperty(**spec_kw)(getter, putter, startup) is
         # used
         pvspec = self.pvspec
@@ -813,7 +890,9 @@ class pvproperty:
                        value=pvspec.value,
                        alarm_group=pvspec.alarm_group,
                        doc=pvspec.doc,
-                       cls_kwargs=pvspec.cls_kwargs)
+                       scan=scan,
+                       cls_kwargs=pvspec.cls_kwargs,
+                       )
 
         if get.__doc__:
             if self.__doc__ is None:
@@ -864,6 +943,10 @@ class NestedPvproperty(pvproperty):
 
     def shutdown(self, shutdown):
         super().shutdown(shutdown)
+        return self.parent
+
+    def scan(self, scan):
+        super().scan(scan)
         return self.parent
 
     @classmethod
@@ -1028,6 +1111,9 @@ def get_pv_pair_wrapper(setpoint_suffix='', readback_suffix='_RBV'):
     If no put method is defined for the setter, a default will be specified
     which updates the readback value on write.
 
+    Startup, shutdown, and scan hooks will be configured on the readback
+    instance.
+
     Parameters
     ----------
     setpoint_suffix : str, optional
@@ -1046,16 +1132,16 @@ def get_pv_pair_wrapper(setpoint_suffix='', readback_suffix='_RBV'):
 
     def wrapped(*, get=None, put=None, startup=None, shutdown=None, name=None,
                 dtype=None, value=None, max_length=None, alarm_group=None,
-                doc=None, fields=None, setpoint_kw=None, readback_kw=None,
+                doc=None, fields=None, scan=None, setpoint_kw=None,
+                readback_kw=None,
                 **cls_kwargs):
         if cls_kwargs.pop('read_only', None) not in (None, False):
             raise RuntimeError('Read-only settings for a setpoint/readback '
                                'pair should not be specified')
 
         pvspec_kwargs = dict(
-            startup=startup, shutdown=shutdown, dtype=dtype, value=value,
-            max_length=max_length, alarm_group=alarm_group, doc=doc,
-            fields=fields
+            dtype=dtype, value=value, max_length=max_length,
+            alarm_group=alarm_group, doc=doc, fields=fields
         )
 
         if put is None:
@@ -1082,6 +1168,7 @@ def get_pv_pair_wrapper(setpoint_suffix='', readback_suffix='_RBV'):
         readback = get_kwargs(
             readback_kw,
             name=readback_suffix, get=get, read_only=True,
+            scan=scan, startup=startup, shutdown=shutdown,
             cls_kwargs=dict(cls_kwargs),
             **pvspec_kwargs
         )
