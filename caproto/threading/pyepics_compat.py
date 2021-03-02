@@ -1,20 +1,20 @@
+import copy
 import functools
 import itertools
-import time
-import copy
 import threading
+import time
 import types
-
-from math import log10
 from collections.abc import Iterable
+from math import log10
 
 import caproto as ca
-from .client import (Context, SharedBroadcaster, AUTOMONITOR_MAXLENGTH,
-                     STR_ENC)
-from caproto import (AccessRights, field_types, ChannelType, SubscriptionType,
-                     CaprotoTimeoutError, CaprotoValueError,
-                     CaprotoRuntimeError, CaprotoNotImplementedError)
+from caproto import (AccessRights, CaprotoNotImplementedError,
+                     CaprotoRuntimeError, CaprotoTimeoutError,
+                     CaprotoValueError, ChannelType, SubscriptionType,
+                     field_types)
 
+from ..client.common import AUTOMONITOR_MAXLENGTH, STR_ENC
+from .client import Context, SharedBroadcaster
 
 __all__ = ('PV', 'get_pv', 'caget', 'caput')
 
