@@ -13,3 +13,5 @@
     _link_enum_strings({{ rec.field_to_attr['TTST'] }}, index=13)
     _link_enum_strings({{ rec.field_to_attr['FTST'] }}, index=14)
     _link_enum_strings({{ rec.field_to_attr['FFST'] }}, index=15)
+    _link_parent_attribute(raw_value, 'raw_value', read_only=True,
+                           use_setattr=True)
