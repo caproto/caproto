@@ -30,6 +30,12 @@ class ScanRateIOC(PVGroup):
     # close to this value, but not exact. To compare these, you can also try:
     #    $ camonitor -tsi periodic:scanned
 
+    # As of caproto v0.7.2, you may also include a "startup" method along
+    # with a "scan" method:
+    @scanned.startup
+    async def scanned(self, instance, async_lib):
+        print(f"{instance.name} startup called.")
+
 
 if __name__ == '__main__':
     ioc_options, run_options = ioc_arg_parser(

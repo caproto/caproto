@@ -134,7 +134,7 @@ class PvpropertyData:
         if pvspec.scan is not None:
             # enable the scan hook for this instance only:
             self.server_scan = self._server_scan
-            # bind the startup method to the group (used in server_scan)
+            # bind the scan method to the group (used in server_scan)
             self.scan = MethodType(pvspec.scan, group)
         if pvspec.shutdown is not None:
             # enable the shutdown hook for this instance only:

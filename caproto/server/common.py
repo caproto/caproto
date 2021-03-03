@@ -1033,7 +1033,7 @@ class Context:
     def _find_hook_methods(self, *attrs):
         """Return a dictionary of (not-None) methods given attribute names."""
         return {
-            name: getattr(instance, attr)
+            f"{name}.{attr}": getattr(instance, attr)
             for attr in attrs
             for name, instance in self.pvdb_with_fields.items()
             if getattr(instance, attr, None) is not None
