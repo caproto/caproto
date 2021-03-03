@@ -8,11 +8,11 @@ Contains PVGroups representing all fields of EPICS base records
 import logging
 import sys
 
-from .server import PVGroup, pvproperty
 from .._constants import MAX_ENUM_STRING_SIZE
 from .._data import ChannelType
 from .._dbr import AlarmSeverity
 from . import menus
+from .server import PVGroup, pvproperty
 
 logger = logging.getLogger(__name__)
 records = {}
@@ -2309,6 +2309,10 @@ class BiFields(RecordFieldGroup):
     # doc='Current Value')
     _link_enum_strings(zero_name, index=0)
     _link_enum_strings(one_name, index=1)
+    _link_parent_attribute(raw_value,
+                           'raw_value',
+                           read_only=True,
+                           use_setattr=True)
 
 
 @register_record
@@ -2430,6 +2434,10 @@ class BoFields(RecordFieldGroup):
     # doc='Current Value')
     _link_enum_strings(zero_name, index=0)
     _link_enum_strings(one_name, index=1)
+    _link_parent_attribute(raw_value,
+                           'raw_value',
+                           read_only=True,
+                           use_setattr=True)
 
 
 @register_record
@@ -3818,6 +3826,10 @@ class MbbiFields(RecordFieldGroup):
     _link_enum_strings(thirteen_string, index=13)
     _link_enum_strings(fourteen_string, index=14)
     _link_enum_strings(fifteen_string, index=15)
+    _link_parent_attribute(raw_value,
+                           'raw_value',
+                           read_only=True,
+                           use_setattr=True)
 
 
 @register_record
@@ -4255,6 +4267,10 @@ class MbboFields(RecordFieldGroup):
     _link_enum_strings(thirteen_string, index=13)
     _link_enum_strings(fourteen_string, index=14)
     _link_enum_strings(fifteen_string, index=15)
+    _link_parent_attribute(raw_value,
+                           'raw_value',
+                           read_only=True,
+                           use_setattr=True)
 
 
 @register_record
