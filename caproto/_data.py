@@ -180,6 +180,7 @@ class ChannelAlarm:
 
 class ChannelData:
     data_type = ChannelType.LONG
+    _compatible_array_types = {}
 
     def __init__(self, *, alarm=None, value=None, timestamp=None,
                  max_length=None, string_encoding='latin-1',
@@ -733,6 +734,28 @@ class ChannelData:
         """
         return AccessRights.READ | AccessRights.WRITE
 
+    def is_compatible_array(self, value) -> bool:
+        try:
+            interface = value.__array_interface__
+        except AttributeError:
+            return False
+
+        try:
+            dimensions = len(interface['shape'])
+            strides = interface['strides']
+            typestr = interface['typestr']
+        except KeyError:
+            return False
+
+        return (
+            # Ensure it's 1 dimensional:
+            dimensions == 1 and
+            # Not strided - which 1D data shouldn't be anyway...
+            strides is None and
+            # And a compatible array type, defined in the class body:
+            typestr in self._compatible_array_types  # compatible type
+        )
+
 
 class ChannelEnum(ChannelData):
     data_type = ChannelType.ENUM
@@ -968,6 +991,7 @@ class ChannelByte(ChannelNumeric):
     'CHAR data which has no encoding'
     # 'Limits' on chars do not make much sense and are rarely used.
     data_type = ChannelType.CHAR
+    _compatible_array_types = {'|u1', '|i1', '|b1'}
 
     def __init__(self, *, string_encoding=None, strip_null_terminator=True,
                  **kwargs):
@@ -985,6 +1009,8 @@ class ChannelByte(ChannelNumeric):
                 return b''
             elif len(value) == 1:
                 value = value[0]
+            elif self.is_compatible_array(value):
+                value = value.tobytes()
             else:
                 value = b''.join(map(bytes, ([v] for v in value)))
 
@@ -1009,6 +1035,7 @@ class ChannelByte(ChannelNumeric):
 class ChannelChar(ChannelData):
     'CHAR data which masquerades as a string'
     data_type = ChannelType.CHAR
+    _compatible_array_types = {'|u1', '|i1', '|b1'}
 
     def __init__(self, *, alarm=None, value=None, timestamp=None,
                  max_length=None, string_encoding='latin-1',
@@ -1041,6 +1068,8 @@ class ChannelChar(ChannelData):
                 value = b''
             elif len(value) == 1:
                 value = value[0]
+            elif self.is_compatible_array(value):
+                value = value.tobytes()
             else:
                 value = b''.join(map(bytes, ([v] for v in value)))
 

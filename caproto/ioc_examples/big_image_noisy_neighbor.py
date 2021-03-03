@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 
 import time
-from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
+
 import numpy as np
+
+from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run
 
 image_shape = (3960, 3960)
 
@@ -10,15 +12,17 @@ image_shape = (3960, 3960)
 class IOInterruptIOC(PVGroup):
     t1 = pvproperty(value=2.0)
     image = pvproperty(
-        value=np.random.randint(0, 256, image_shape).flatten(), dtype=float
+        value=np.random.randint(0, 256, image_shape, dtype=np.uint8).flatten(),
+        dtype=bytes,
     )
 
-    @t1.startup
+    @t1.scan(period=0.1)
     async def t1(self, instance, async_lib):
         # Loop and grab items from the queue one at a time
-        while True:
-            await self.t1.write(time.monotonic())
-            await async_lib.library.sleep(0.1)
+        await self.t1.write(time.monotonic())
+        await self.image.write(
+            value=np.random.randint(0, 256, image_shape, dtype=np.uint8).flatten()
+        )
 
 
 if __name__ == "__main__":
