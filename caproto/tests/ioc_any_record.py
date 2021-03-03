@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from caproto import ChannelType
-from caproto.server import pvproperty, PVGroup, template_arg_parser, run
+from caproto.server import PVGroup, pvproperty, run, template_arg_parser
 from caproto.server.records import records
 
 
@@ -42,6 +42,7 @@ def start_ioc(record_type, *, ioc_options, run_options):
         ', '.join(ioc.A.fields)
     )
     run(ioc.pvdb, **run_options)
+    return ioc
 
 
 if __name__ == '__main__':
@@ -60,5 +61,5 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     ioc_options, run_options = split_args(args)
-    start_ioc(args.record_type, ioc_options=ioc_options,
-              run_options=run_options)
+    ioc = start_ioc(args.record_type, ioc_options=ioc_options,
+                    run_options=run_options)
