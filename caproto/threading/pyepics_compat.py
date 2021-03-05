@@ -48,7 +48,7 @@ def _parse_dbr_metadata(dbr_data):
                'lower_alarm_limit': 'lower_alarm_limit',
                'upper_ctrl_limit': 'upper_ctrl_limit',
                'lower_ctrl_limit': 'lower_ctrl_limit',
-               'strs': 'enum_strs',
+               'enum_strings': 'enum_strs',
                # 'secondsSinceEpoch': 'posixseconds',
                # 'nanoSeconds': 'nanoseconds',
                }
@@ -58,8 +58,9 @@ def _parse_dbr_metadata(dbr_data):
             ret[arg] = getattr(dbr_data, attr)
 
     if ret.get('enum_strs', None):
-        ret['enum_strs'] = tuple(k.value.decode(STR_ENC) for
-                                 k in ret['enum_strs'] if k.value)
+        ret['enum_strs'] = tuple(
+            k.decode(STR_ENC) for k in ret['enum_strs']
+        )
 
     if hasattr(dbr_data, 'nanoSeconds'):
         ret['posixseconds'] = dbr_data.secondsSinceEpoch
