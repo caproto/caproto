@@ -572,6 +572,7 @@ class PV:
         info['raw_value'] = value
         info['value'] = _scalarify(value, command.data_type, command.data_count)
         self._args.update(**info)
+        return info
 
     @ensure_connection
     def force_read_access_rights(self):
