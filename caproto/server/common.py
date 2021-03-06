@@ -1030,21 +1030,24 @@ class Context:
         '''Notification from circuit that its connection has closed'''
         self.circuits.discard(circuit)
 
+    def _find_hook_methods(self, *attrs):
+        """Return a dictionary of (not-None) methods given attribute names."""
+        return {
+            f"{name}.{attr}": getattr(instance, attr)
+            for attr in attrs
+            for name, instance in self.pvdb_with_fields.items()
+            if getattr(instance, attr, None) is not None
+        }
+
     @property
     def startup_methods(self):
         'Notify all ChannelData instances of the server startup'
-        return {name: instance.server_startup
-                for name, instance in self.pvdb_with_fields.items()
-                if hasattr(instance, 'server_startup') and
-                instance.server_startup is not None}
+        return self._find_hook_methods("server_startup", "server_scan")
 
     @property
     def shutdown_methods(self):
         'Notify all ChannelData instances of the server shutdown'
-        return {name: instance.server_shutdown
-                for name, instance in self.pvdb.items()
-                if hasattr(instance, 'server_shutdown') and
-                instance.server_shutdown is not None}
+        return self._find_hook_methods("server_shutdown")
 
     async def _bind_tcp_sockets_with_consistent_port_number(self, make_socket):
         # Find a random port number that is free on all self.interfaces,
