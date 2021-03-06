@@ -17,6 +17,7 @@ from .._dbr import ChannelType, SubscriptionType, field_types, native_type
 from .._utils import (CaprotoError, CaprotoTimeoutError, ErrorResponseReceived,
                       adapt_old_callback_signature, get_environment_variables,
                       safe_getsockname)
+from ..client import common
 from .repeater import spawn_repeater
 
 __all__ = ('read', 'write', 'subscribe', 'block', 'interrupt',
@@ -234,8 +235,9 @@ def _read(chan, timeout, data_type, data_count, notify, force_int_enums):
                                    'read response')
 
 
-def read(pv_name, *, data_type=None, data_count=None, timeout=1, priority=0,
-         notify=True, force_int_enums=False, repeater=True):
+def read(pv_name, *, data_type=None, data_count=None,
+         timeout=common.GLOBAL_DEFAULT_TIMEOUT, priority=0, notify=True,
+         force_int_enums=False, repeater=True):
     """
     Read a Channel.
 
@@ -418,8 +420,8 @@ def interrupt():
     _permission_to_block.clear()
 
 
-def block(*subscriptions, duration=None, timeout=1, force_int_enums=False,
-          repeater=True):
+def block(*subscriptions, duration=None, timeout=common.GLOBAL_DEFAULT_TIMEOUT,
+          force_int_enums=False, repeater=True):
     """
     Activate one or more subscriptions and process incoming responses.
 
@@ -605,8 +607,7 @@ def _write(chan, data, metadata, timeout, data_type, notify):
 
 
 def write(pv_name, data, *, notify=False, data_type=None, metadata=None,
-          timeout=1, priority=0,
-          repeater=True):
+          timeout=common.GLOBAL_DEFAULT_TIMEOUT, priority=0, repeater=True):
     """
     Write to a Channel.
 
@@ -681,8 +682,8 @@ def write(pv_name, data, *, notify=False, data_type=None, metadata=None,
 
 def read_write_read(pv_name, data, *, notify=False,
                     read_data_type=None, write_data_type=None,
-                    metadata=None, timeout=1, priority=0,
-                    force_int_enums=False, repeater=True):
+                    metadata=None, timeout=common.GLOBAL_DEFAULT_TIMEOUT,
+                    priority=0, force_int_enums=False, repeater=True):
     """
     Write to a Channel, but sandwich the write between to reads.
 

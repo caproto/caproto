@@ -16,7 +16,6 @@ import functools
 import getpass
 import inspect
 import logging
-import os
 import random
 import selectors
 import socket
@@ -36,17 +35,10 @@ from .._utils import (CaprotoError, CaprotoKeyError, CaprotoNetworkError,
                       CaprotoTypeError, CaprotoValueError, ThreadsafeCounter,
                       adapt_old_callback_signature, batch_requests,
                       safe_getsockname, socket_bytes_available)
+from ..client import common
 
 ch_logger = logging.getLogger('caproto.ch')
 search_logger = logging.getLogger('caproto.bcast.search')
-
-
-CIRCUIT_DEATH_ATTEMPTS = 3
-
-# sentinels used as default values for arguments
-CONTEXT_DEFAULT_TIMEOUT = object()
-PV_DEFAULT_TIMEOUT = object()
-GLOBAL_DEFAULT_TIMEOUT = os.environ.get("CAPROTO_DEFAULT_TIMEOUT", 2)
 
 
 class DeadCircuitError(CaprotoError):
@@ -94,7 +86,7 @@ def ensure_connected(func):
             pv._usages += 1
 
         try:
-            for _ in range(CIRCUIT_DEATH_ATTEMPTS):
+            for _ in range(common.CIRCUIT_DEATH_ATTEMPTS):
                 # On each iteration, subtract the time we already spent on any
                 # previous attempts.
                 if timeout is not None:
@@ -148,17 +140,6 @@ class DisconnectedError(ThreadingClientException):
 
 class ContextDisconnectedError(ThreadingClientException):
     ...
-
-
-AUTOMONITOR_MAXLENGTH = 65536
-TIMEOUT = 2
-EVENT_ADD_BATCH_MAX_BYTES = 2**16
-MIN_RETRY_SEARCHES_INTERVAL = 0.03
-MAX_RETRY_SEARCHES_INTERVAL = 5
-SEARCH_RETIREMENT_AGE = 8 * 60
-RETRY_RETIRED_SEARCHES_INTERVAL = 60
-RESTART_SUBS_PERIOD = 0.1
-STR_ENC = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
 
 
 class SelectorThread:
@@ -547,7 +528,7 @@ class SharedBroadcaster:
             search_ids = []
             # Search requests that are past their retirement deadline with no
             # results will be searched for less frequently.
-            retirement_deadline = time.monotonic() + SEARCH_RETIREMENT_AGE
+            retirement_deadline = time.monotonic() + common.SEARCH_RETIREMENT_AGE
             for name in needs_search:
                 search_id = new_id()
                 search_ids.append(search_id)
@@ -708,7 +689,7 @@ class SharedBroadcaster:
     def _new_server_found(self):
         # Bring all the unanswered seraches out of retirement
         # to see if we have a new match.
-        retirement_deadline = time.monotonic() + SEARCH_RETIREMENT_AGE
+        retirement_deadline = time.monotonic() + common.SEARCH_RETIREMENT_AGE
         with self._search_lock:
             for item in self.unanswered_searches.values():
                 # give new age-out deadline
@@ -849,8 +830,8 @@ class SharedBroadcaster:
         # RETRY_RETIRED_SEARCHES_INTERVAL or, again, whenever new searches
         # are added.
         self.log.debug('Broadcaster search-retry thread has started.')
-        time_to_check_on_retirees = time.monotonic() + RETRY_RETIRED_SEARCHES_INTERVAL
-        interval = MIN_RETRY_SEARCHES_INTERVAL
+        time_to_check_on_retirees = time.monotonic() + common.RETRY_RETIRED_SEARCHES_INTERVAL
+        interval = common.MIN_RETRY_SEARCHES_INTERVAL
         while not self._close_event.is_set():
             try:
                 self._searching_enabled.wait(0.5)
@@ -871,7 +852,7 @@ class SharedBroadcaster:
             with self._search_lock:
                 if t >= time_to_check_on_retirees:
                     items = list(self.unanswered_searches.items())
-                    time_to_check_on_retirees += RETRY_RETIRED_SEARCHES_INTERVAL
+                    time_to_check_on_retirees += common.RETRY_RETIRED_SEARCHES_INTERVAL
                 else:
                     # Skip over searches that haven't gotten any results in
                     # SEARCH_RETIREMENT_AGE.
@@ -897,12 +878,12 @@ class SharedBroadcaster:
 
             wait_time = max(0, interval - (time.monotonic() - t))
             # Double the interval for the next loop.
-            interval = min(2 * interval, MAX_RETRY_SEARCHES_INTERVAL)
+            interval = min(2 * interval, common.MAX_RETRY_SEARCHES_INTERVAL)
             if self._search_now.wait(wait_time):
                 # New searches have been requested. Reset the interval between
                 # subseqent searches and force a check on the "retirees".
                 time_to_check_on_retirees = t
-                interval = MIN_RETRY_SEARCHES_INTERVAL
+                interval = common.MIN_RETRY_SEARCHES_INTERVAL
             self._search_now.clear()
 
         self.log.debug('Broadcaster search-retry thread has exited.')
@@ -946,7 +927,7 @@ class Context:
         value from 1.
     """
     def __init__(self, broadcaster=None, *,
-                 timeout=GLOBAL_DEFAULT_TIMEOUT,
+                 timeout=common.GLOBAL_DEFAULT_TIMEOUT,
                  host_name=None, client_name=None, max_workers=1):
         if broadcaster is None:
             broadcaster = SharedBroadcaster()
@@ -1004,7 +985,7 @@ class Context:
 
     def get_pvs(self, *names, priority=0, connection_state_callback=None,
                 access_rights_callback=None,
-                timeout=CONTEXT_DEFAULT_TIMEOUT):
+                timeout=common.CONTEXT_DEFAULT_TIMEOUT):
         """
         Return a list of PV objects.
 
@@ -1197,7 +1178,7 @@ class Context:
                             yield command
 
                 for batch in batch_requests(requests(),
-                                            EVENT_ADD_BATCH_MAX_BYTES):
+                                            common.EVENT_ADD_BATCH_MAX_BYTES):
                     try:
                         cm.send(*batch)
                     except Exception:
@@ -1211,7 +1192,7 @@ class Context:
                         # end up here again. No big deal.
                         break
 
-            wait_time = max(0, (RESTART_SUBS_PERIOD -
+            wait_time = max(0, (common.RESTART_SUBS_PERIOD -
                                 (time.monotonic() - t)))
             self.activate_subscriptions_now.wait(wait_time)
             self.activate_subscriptions_now.clear()
@@ -1282,7 +1263,8 @@ class VirtualCircuitManager:
                  '_subscriptionid_counter', 'user_callback_executor',
                  'last_tcp_receipt', '__weakref__', '_tags')
 
-    def __init__(self, context, circuit, selector, timeout=TIMEOUT):
+    def __init__(self, context, circuit, selector,
+                 timeout=common.GLOBAL_DEFAULT_TIMEOUT):
         self.context = context
         self.circuit = circuit  # a caproto.VirtualCircuit
         self.log = circuit.log
@@ -1636,7 +1618,7 @@ class PV:
         * a floating-point number
         * None (never timeout)
         """
-        if self._timeout is CONTEXT_DEFAULT_TIMEOUT:
+        if self._timeout is common.CONTEXT_DEFAULT_TIMEOUT:
             return self.context.timeout
         else:
             return self._timeout
@@ -1707,7 +1689,7 @@ class PV:
             return False
         return channel.states[ca.CLIENT] is ca.CONNECTED
 
-    def wait_for_search(self, *, timeout=PV_DEFAULT_TIMEOUT):
+    def wait_for_search(self, *, timeout=common.PV_DEFAULT_TIMEOUT):
         """
         Wait for this PV to be found.
 
@@ -1721,7 +1703,7 @@ class PV:
             ``PV.timeout``, which falls back to Context.timeout if not set. If
             None, never timeout.
         """
-        if timeout is PV_DEFAULT_TIMEOUT:
+        if timeout is common.PV_DEFAULT_TIMEOUT:
             timeout = self.timeout
         if not self.circuit_ready.wait(timeout=timeout):
             raise CaprotoTimeoutError("No servers responded to a search for a "
@@ -1730,7 +1712,7 @@ class PV:
                                       "".format(self.name, float(timeout)))
 
     @ensure_connected
-    def wait_for_connection(self, *, timeout=PV_DEFAULT_TIMEOUT):
+    def wait_for_connection(self, *, timeout=common.PV_DEFAULT_TIMEOUT):
         """
         Wait for this PV to be connected.
 
@@ -1780,7 +1762,7 @@ class PV:
 
     @ensure_connected
     def read(self, *, wait=True, callback=None,
-             timeout=PV_DEFAULT_TIMEOUT,
+             timeout=common.PV_DEFAULT_TIMEOUT,
              data_type=None, data_count=None, notify=True):
         """Request a fresh reading.
 
@@ -1811,7 +1793,7 @@ class PV:
             Send a ``ReadNotifyRequest`` instead of a ``ReadRequest``. True by
             default.
         """
-        if timeout is PV_DEFAULT_TIMEOUT:
+        if timeout is common.PV_DEFAULT_TIMEOUT:
             timeout = self.timeout
         cm, chan = self._circuit_manager, self._channel
         ioid = cm._ioid_counter()
@@ -1853,7 +1835,7 @@ class PV:
 
     @ensure_connected
     def write(self, data, *, wait=True, callback=None,
-              timeout=PV_DEFAULT_TIMEOUT,
+              timeout=common.PV_DEFAULT_TIMEOUT,
               notify=None, data_type=None, data_count=None):
         """
         Write a new value. Optionally, request confirmation from the server.
@@ -1888,7 +1870,7 @@ class PV:
             Requested number of values. Default is the channel's native data
             count.
         """
-        if timeout is PV_DEFAULT_TIMEOUT:
+        if timeout is common.PV_DEFAULT_TIMEOUT:
             timeout = self.timeout
         cm, chan = self._circuit_manager, self._channel
         if notify is None:
@@ -2000,7 +1982,7 @@ class PV:
             sub.clear()
 
     @ensure_connected
-    def time_since_last_heard(self, timeout=PV_DEFAULT_TIMEOUT):
+    def time_since_last_heard(self, timeout=common.PV_DEFAULT_TIMEOUT):
         """
         Seconds since last message from the server that provides this channel.
 
@@ -2132,7 +2114,7 @@ class Subscription(CallbackHandler):
     def __repr__(self):
         return f"<Subscription to {self.pv.name!r}, id={self.subscriptionid}>"
 
-    def _subscribe(self, timeout=PV_DEFAULT_TIMEOUT):
+    def _subscribe(self, timeout=common.PV_DEFAULT_TIMEOUT):
         """This is called automatically after the first callback is added.
         """
         cm = self.pv.circuit_manager
@@ -2151,7 +2133,7 @@ class Subscription(CallbackHandler):
             ctx.activate_subscriptions_now.set()
 
     @ensure_connected
-    def compose_command(self, timeout=PV_DEFAULT_TIMEOUT):
+    def compose_command(self, timeout=common.PV_DEFAULT_TIMEOUT):
         "This is used by the Context to re-subscribe in bulk after dropping."
         with self.callback_lock:
             if not self.callbacks:
@@ -2180,7 +2162,7 @@ class Subscription(CallbackHandler):
         # Once self.callbacks is empty, self.remove_callback calls
         # self._unsubscribe for us.
 
-    def _unsubscribe(self, timeout=PV_DEFAULT_TIMEOUT):
+    def _unsubscribe(self, timeout=common.PV_DEFAULT_TIMEOUT):
         """
         This is automatically called if the number of callbacks goes to 0.
         """
