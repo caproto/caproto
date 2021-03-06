@@ -387,6 +387,11 @@ class PVSpec(namedtuple('PVSpec',
     This is an immutable tuple that contains everything needed to generate
     a `ChannelData` instance from a `pvproperty`.
 
+    This additional layer was intended to allow for alternate APIs outside of
+    `pvproperty`, but still allowing for the ease of specification of values
+    and data types rather than `ChannelData` class instances.  There are no
+    current additional APIs; this remains a hook for potential future use.
+
     Parameters
     ----------
     get : async callable, optional
