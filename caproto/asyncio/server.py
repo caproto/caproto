@@ -215,7 +215,7 @@ class Context(_Context):
             identifier, data, address = await queue.async_get()
             if isinstance(data, Exception):
                 self.log.exception('Broadcaster failed to receive on %s',
-                                   identifier)
+                                   identifier, exc_info=data)
             else:
                 await self._broadcaster_recv_datagram(data, address)
 
