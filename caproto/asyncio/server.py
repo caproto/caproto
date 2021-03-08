@@ -116,11 +116,12 @@ class Context(_Context):
                 self.tcp_handler(transport, transport.getpeername())
             )
 
-        server = await asyncio.start_server(
+        # TODO: when Python 3.7 is the minimum version, the following server
+        # can be an async context manager:
+        await asyncio.start_server(
             _new_client,
             sock=sock,
         )
-        await server.start_serving()
 
     async def run(self, *, log_pv_names=False):
         'Start the server'
