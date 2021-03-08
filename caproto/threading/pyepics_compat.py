@@ -1040,25 +1040,33 @@ def caget_many(pvlist, as_string=False, count=None, as_numpy=True, timeout=5.0,
     while pending_pvs:
         for pv in list(pending_pvs):
             if pv.connected:
-                readings[pv] = pv.read()
+                readings[pv] = pv.read(data_type='control')
                 pending_pvs.remove(pv)
         time.sleep(0.01)
 
     get_kw = dict(as_string=as_string,
                   as_numpy=as_numpy,
                   requested_count=count,
-                  enum_strings=None,  # TODO?
                   )
 
     def final_get(pv):
-        full_type = pv.channel.native_data_type
-        info = _read_response_to_pyepics(full_type=full_type,
-                                         command=readings[pv],
-                                         enum_strings=self._args['enum_strs'])
+        # Use "DBR_CTRL_*" so that we can get enum strings, if necessary.
+        full_type = field_types['control'][pv.channel.native_data_type]
+        enum_strings = getattr(readings[pv].metadata, "enum_strings", None)
+        if enum_strings:
+            enum_strings = [
+                enum_str.decode(STR_ENC) for enum_str in enum_strings
+            ]
+        info = _read_response_to_pyepics(
+            full_type=full_type,
+            command=readings[pv],
+            enum_strings=enum_strings,
+        )
         return _pyepics_get_value(value=info['raw_value'],
                                   string_value=info['char_value'],
                                   full_type=pv.channel.native_data_type,
                                   native_count=pv.channel.native_data_count,
+                                  enum_strings=enum_strings,
                                   **get_kw)
     return [final_get(pv) for pv in pvs]
 
