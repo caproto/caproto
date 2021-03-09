@@ -410,10 +410,19 @@ def check_signature(type_: str, func: Optional[callable], expect_method: bool):
         bound = True
 
     if not bound or not inspect.iscoroutinefunction(func):
+        try:
+            source_file = inspect.getsourcefile(func)
+            _, source_line = inspect.getsourcelines(func)
+            source_info = f'{source_file}:{source_line}'
+        except Exception:
+            source_info = 'location unknown'
+
         raise CaprotoRuntimeError(
-            "{func.__name__} must be callable like the following: "
-            "async def {func.__name__}({', '.join(args)})"
-        )
+            f"""\
+The {type_} hook {func.__name__} ({source_info}) must be callable with a
+signature like the following:
+    async def {func.__name__}({', '.join(args)})
+""")
 
 
 class PVSpec(namedtuple('PVSpec',
@@ -904,6 +913,7 @@ class pvproperty:
         """
         Usually used as a decorator, this sets the ``getter`` in the PVSpec.
         """
+        check_signature('get', get, expect_method=True)
         self.pvspec = self.pvspec._replace(get=get)
         return self
 
@@ -911,6 +921,7 @@ class pvproperty:
         """
         Usually used as a decorator, this sets the ``putter`` in the PVSpec.
         """
+        check_signature('put', put, expect_method=True)
         self.pvspec = self.pvspec._replace(put=put)
         return self
 
@@ -918,6 +929,7 @@ class pvproperty:
         """
         Usually used as a decorator, this sets ``startup`` in the PVSpec.
         """
+        check_signature('startup', startup, expect_method=True)
         self.pvspec = self.pvspec._replace(startup=startup)
         return self
 
@@ -925,6 +937,7 @@ class pvproperty:
         """
         Usually used as a decorator, this sets ``shutdown`` in the PVSpec.
         """
+        check_signature('shutdown', shutdown, expect_method=True)
         self.pvspec = self.pvspec._replace(shutdown=shutdown)
         return self
 
@@ -957,6 +970,7 @@ class pvproperty:
                 (group, instance, async_library)
         """
         def wrapper(func):
+            check_signature('scan', func, expect_method=True)
             wrapped = scan_wrapper(
                 func, period,
                 subtract_elapsed=subtract_elapsed,
