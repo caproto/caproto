@@ -759,6 +759,14 @@ class ChannelEnum(ChannelData):
 
     enum_strings = _read_only_property('enum_strings')
 
+    @property
+    def raw_value(self) -> int:
+        """The raw integer value index of the enum string."""
+        try:
+            return self.enum_strings.index(self.value)
+        except ValueError:
+            return 0
+
     def __getnewargs_ex__(self):
         args, kwargs = super().__getnewargs_ex__()
         kwargs['enum_strings'] = self.enum_strings
