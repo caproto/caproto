@@ -82,7 +82,7 @@ class RecordFieldGroup(base.RecordFieldGroup):
 
 
 @register_record
-class AiFields(RecordFieldGroup, base.AiFields):
+class AiFields(base.AiFields, RecordFieldGroup):
     _base = base.AiFields
     link_parent_attribute(
         _base.display_precision,
@@ -93,7 +93,7 @@ class AiFields(RecordFieldGroup, base.AiFields):
 
 
 @register_record
-class AsubFields(RecordFieldGroup, base.AsubFields):
+class AsubFields(base.AsubFields, RecordFieldGroup):
     _base = base.AsubFields
     link_parent_attribute(
         _base.display_precision, "precision",
@@ -101,7 +101,7 @@ class AsubFields(RecordFieldGroup, base.AsubFields):
 
 
 @register_record
-class AaiFields(RecordFieldGroup, base.AaiFields):
+class AaiFields(base.AaiFields, RecordFieldGroup):
     _base = base.AaiFields
     link_parent_attribute(
         _base.display_precision, "precision",
@@ -118,7 +118,7 @@ class AaiFields(RecordFieldGroup, base.AaiFields):
 
 
 @register_record
-class AaoFields(RecordFieldGroup, base.AaoFields):
+class AaoFields(base.AaoFields, RecordFieldGroup):
     _base = base.AaoFields
     link_parent_attribute(
         _base.display_precision, "precision",
@@ -135,7 +135,7 @@ class AaoFields(RecordFieldGroup, base.AaoFields):
 
 
 @register_record
-class AoFields(RecordFieldGroup, base.AoFields):
+class AoFields(base.AoFields, RecordFieldGroup):
     _base = base.AoFields
     link_parent_attribute(
         _base.display_precision, "precision",
@@ -145,12 +145,12 @@ class AoFields(RecordFieldGroup, base.AoFields):
 
 
 @register_record
-class AsynFields(RecordFieldGroup, base.AsynFields):
+class AsynFields(base.AsynFields, RecordFieldGroup):
     _base = base.AsynFields
 
 
 @register_record
-class BiFields(RecordFieldGroup, base.BiFields):
+class BiFields(base.BiFields, RecordFieldGroup):
     _base = base.BiFields
     link_enum_strings(_base.zero_name, index=0)
     link_enum_strings(_base.one_name, index=1)
@@ -168,7 +168,7 @@ class BiFields(RecordFieldGroup, base.BiFields):
 
 
 @register_record
-class BoFields(RecordFieldGroup, base.BoFields):
+class BoFields(base.BoFields, RecordFieldGroup):
     _base = base.BoFields
     link_enum_strings(_base.zero_name, index=0)
     link_enum_strings(_base.one_name, index=1)
@@ -186,7 +186,7 @@ class BoFields(RecordFieldGroup, base.BoFields):
 
 
 @register_record
-class CalcFields(RecordFieldGroup, base.CalcFields):
+class CalcFields(base.CalcFields, RecordFieldGroup):
     _base = base.CalcFields
     link_parent_attribute(
         _base.display_precision, "precision",
@@ -196,7 +196,7 @@ class CalcFields(RecordFieldGroup, base.CalcFields):
 
 
 @register_record
-class CalcoutFields(RecordFieldGroup, base.CalcoutFields):
+class CalcoutFields(base.CalcoutFields, RecordFieldGroup):
     _base = base.CalcoutFields
     link_parent_attribute(
         _base.display_precision, "precision",
@@ -206,7 +206,7 @@ class CalcoutFields(RecordFieldGroup, base.CalcoutFields):
 
 
 @register_record
-class CompressFields(RecordFieldGroup, base.CompressFields):
+class CompressFields(base.CompressFields, RecordFieldGroup):
     _base = base.CompressFields
     link_parent_attribute(
         _base.high_operating_range, "upper_ctrl_limit",
@@ -220,7 +220,7 @@ class CompressFields(RecordFieldGroup, base.CompressFields):
 
 
 @register_record
-class DfanoutFields(RecordFieldGroup, base.DfanoutFields):
+class DfanoutFields(base.DfanoutFields, RecordFieldGroup):
     _base = base.DfanoutFields
     link_parent_attribute(
         _base.display_precision, "precision",
@@ -230,17 +230,17 @@ class DfanoutFields(RecordFieldGroup, base.DfanoutFields):
 
 
 @register_record
-class EventFields(RecordFieldGroup, base.EventFields):
+class EventFields(base.EventFields, RecordFieldGroup):
     _base = base.EventFields
 
 
 @register_record
-class FanoutFields(RecordFieldGroup, base.FanoutFields):
+class FanoutFields(base.FanoutFields, RecordFieldGroup):
     _base = base.FanoutFields
 
 
 @register_record
-class HistogramFields(RecordFieldGroup, base.HistogramFields):
+class HistogramFields(base.HistogramFields, RecordFieldGroup):
     _base = base.HistogramFields
     link_parent_attribute(
         _base.display_precision, "precision",
@@ -254,45 +254,45 @@ class HistogramFields(RecordFieldGroup, base.HistogramFields):
 
 
 @register_record
-class Int64inFields(RecordFieldGroup, base.Int64inFields):
+class Int64inFields(base.Int64inFields, RecordFieldGroup):
     _base = base.Int64inFields
     link_parent_attribute(_base.archive_deadband, "log_atol", use_setattr=True)
     link_parent_attribute(_base.monitor_deadband, "value_atol", use_setattr=True)
 
 
 @register_record
-class Int64outFields(RecordFieldGroup, base.Int64outFields):
+class Int64outFields(base.Int64outFields, RecordFieldGroup):
     _base = base.Int64outFields
     link_parent_attribute(_base.archive_deadband, "log_atol", use_setattr=True)
     link_parent_attribute(_base.monitor_deadband, "value_atol", use_setattr=True)
 
 
 @register_record
-class LonginFields(RecordFieldGroup, base.LonginFields):
+class LonginFields(base.LonginFields, RecordFieldGroup):
     _base = base.LonginFields
     link_parent_attribute(_base.archive_deadband, "log_atol", use_setattr=True)
     link_parent_attribute(_base.monitor_deadband, "value_atol", use_setattr=True)
 
 
 @register_record
-class LongoutFields(RecordFieldGroup, base.LongoutFields):
+class LongoutFields(base.LongoutFields, RecordFieldGroup):
     _base = base.LongoutFields
     link_parent_attribute(_base.archive_deadband, "log_atol", use_setattr=True)
     link_parent_attribute(_base.monitor_deadband, "value_atol", use_setattr=True)
 
 
 @register_record
-class LsiFields(RecordFieldGroup, base.LsiFields):
+class LsiFields(base.LsiFields, RecordFieldGroup):
     _base = base.LsiFields
 
 
 @register_record
-class LsoFields(RecordFieldGroup, base.LsoFields):
+class LsoFields(base.LsoFields, RecordFieldGroup):
     _base = base.LsoFields
 
 
 @register_record
-class MbbiFields(RecordFieldGroup, base.MbbiFields):
+class MbbiFields(base.MbbiFields, RecordFieldGroup):
     _base = base.MbbiFields
     link_enum_strings(_base.zero_string, index=0)
     link_enum_strings(_base.one_string, index=1)
@@ -324,12 +324,12 @@ class MbbiFields(RecordFieldGroup, base.MbbiFields):
 
 
 @register_record
-class MbbidirectFields(RecordFieldGroup, base.MbbidirectFields):
+class MbbidirectFields(base.MbbidirectFields, RecordFieldGroup):
     _base = base.MbbidirectFields
 
 
 @register_record
-class MbboFields(RecordFieldGroup, base.MbboFields):
+class MbboFields(base.MbboFields, RecordFieldGroup):
     _base = base.MbboFields
     link_enum_strings(_base.one_string, index=1)
     link_enum_strings(_base.two_string, index=2)
@@ -360,12 +360,12 @@ class MbboFields(RecordFieldGroup, base.MbboFields):
 
 
 @register_record
-class MbbodirectFields(RecordFieldGroup, base.MbbodirectFields):
+class MbbodirectFields(base.MbbodirectFields, RecordFieldGroup):
     _base = base.MbbodirectFields
 
 
 @register_record
-class MotorFields(RecordFieldGroup, base.MotorFields):
+class MotorFields(base.MotorFields, RecordFieldGroup):
     _base = base.MotorFields
     link_parent_attribute(
         _base.display_precision, "precision",
@@ -375,17 +375,17 @@ class MotorFields(RecordFieldGroup, base.MotorFields):
 
 
 @register_record
-class PermissiveFields(RecordFieldGroup, base.PermissiveFields):
+class PermissiveFields(base.PermissiveFields, RecordFieldGroup):
     _base = base.PermissiveFields
 
 
 @register_record
-class PrintfFields(RecordFieldGroup, base.PrintfFields):
+class PrintfFields(base.PrintfFields, RecordFieldGroup):
     _base = base.PrintfFields
 
 
 @register_record
-class SelFields(RecordFieldGroup, base.SelFields):
+class SelFields(base.SelFields, RecordFieldGroup):
     _base = base.SelFields
     link_parent_attribute(
         _base.display_precision, "precision",
@@ -395,7 +395,7 @@ class SelFields(RecordFieldGroup, base.SelFields):
 
 
 @register_record
-class SeqFields(RecordFieldGroup, base.SeqFields):
+class SeqFields(base.SeqFields, RecordFieldGroup):
     _base = base.SeqFields
     link_parent_attribute(
         _base.display_precision, "precision",
@@ -403,22 +403,22 @@ class SeqFields(RecordFieldGroup, base.SeqFields):
 
 
 @register_record
-class StateFields(RecordFieldGroup, base.StateFields):
+class StateFields(base.StateFields, RecordFieldGroup):
     _base = base.StateFields
 
 
 @register_record
-class StringinFields(RecordFieldGroup, base.StringinFields):
+class StringinFields(base.StringinFields, RecordFieldGroup):
     _base = base.StringinFields
 
 
 @register_record
-class StringoutFields(RecordFieldGroup, base.StringoutFields):
+class StringoutFields(base.StringoutFields, RecordFieldGroup):
     _base = base.StringoutFields
 
 
 @register_record
-class SubFields(RecordFieldGroup, base.SubFields):
+class SubFields(base.SubFields, RecordFieldGroup):
     _base = base.SubFields
     link_parent_attribute(
         _base.display_precision, "precision",
@@ -428,7 +428,7 @@ class SubFields(RecordFieldGroup, base.SubFields):
 
 
 @register_record
-class SubarrayFields(RecordFieldGroup, base.SubarrayFields):
+class SubarrayFields(base.SubarrayFields, RecordFieldGroup):
     _base = base.SubarrayFields
     link_parent_attribute(
         _base.display_precision, "precision",
@@ -448,7 +448,7 @@ class SubarrayFields(RecordFieldGroup, base.SubarrayFields):
 
 
 @register_record
-class WaveformFields(RecordFieldGroup, base.WaveformFields):
+class WaveformFields(base.WaveformFields, RecordFieldGroup):
     _base = base.WaveformFields
     link_parent_attribute(
         _base.display_precision, "precision",

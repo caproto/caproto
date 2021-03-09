@@ -121,7 +121,7 @@ def copy_pvproperties(locals_dict, *classes):
     """Copy pvproperties from the given classes into the locals() namespace."""
     locals_dict.update({
         attr: copy.copy(pvprop)
-        for cls in classes[::-1]
+        for cls in classes
         for attr, pvprop in cls._pvs_.items()
     })
 
