@@ -783,6 +783,17 @@ class pvproperty:
             cls_kwargs=cls_kwargs)
         self.__doc__ = doc
 
+    def __copy__(self):
+        return pvproperty.from_pvspec(
+            # pvspec is immutable
+            self.pvspec,
+            record=self.record_type,
+            # Allow subclasses to override field handlers without affecting
+            # the parent by performing a deep copy here:
+            field_spec=copy.deepcopy(self.field_spec),
+            doc=self.__doc__,
+        )
+
     def _record_type_from_kwargs(self, cls_kwargs):
         'Get the record type from the given class kwargs'
         return cls_kwargs.get('record') or cls_kwargs.get('mock_record')
@@ -913,8 +924,19 @@ class pvproperty:
         return self
 
     @classmethod
-    def from_pvspec(cls, pvspec):
-        prop = cls()
+    def from_pvspec(cls, pvspec, **kwargs):
+        """
+        Create a pvproperty from a PVSpec instance.
+
+        Parameters
+        ----------
+        pvspec : PVSpec
+            PVSpec instance for the new pvproperty.
+
+        **kwargs :
+            Keyword arguments are passed onto the pvproperty instance.
+        """
+        prop = cls(**kwargs)
         prop.pvspec = pvspec
         return prop
 
@@ -1459,12 +1481,10 @@ def channeldata_from_pvspec(group, pvspec):
              )
 
     cls = data_class_from_pvspec(group, pvspec)
-    kw = dict(pvspec.cls_kwargs) if pvspec.cls_kwargs is not None else {}
-
     inst = cls(group=group, pvspec=pvspec, value=value,
                max_length=pvspec.max_length,
                alarm=group.alarms[pvspec.alarm_group], pvname=full_pvname,
-               **kw)
+               **(pvspec.cls_kwargs or {}))
     inst.__doc__ = pvspec.doc
     return (full_pvname, inst)
 
