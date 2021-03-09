@@ -501,10 +501,12 @@ class ChannelData:
             else:
                 modified_value = None
 
-            if update_fields and self.field_inst:
-                await self.field_inst.value_write_hook(
-                    self, modified_value if verify_value else value
-                )
+            if update_fields:
+                field_inst = getattr(self, 'field_inst', None)
+                if field_inst is not None:
+                    await field_inst.value_write_hook(
+                        self, modified_value if verify_value else value
+                    )
         except SkipWrite:
             # Handler raised SkipWrite to avoid the rest of this method.
             return
