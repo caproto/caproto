@@ -491,7 +491,8 @@ class ChannelData:
 
         return (await self.write(value, flags=flags, **metadata_dict))
 
-    async def write(self, value, *, flags=0, verify_value=True, **metadata):
+    async def write(self, value, *, flags=0, verify_value=True,
+                    update_fields=True, **metadata):
         '''Set data from native Python types'''
         try:
             value = self.preprocess_value(value)
@@ -499,6 +500,11 @@ class ChannelData:
                 modified_value = await self.verify_value(value)
             else:
                 modified_value = None
+
+            if update_fields and self.field_inst:
+                await self.field_inst.value_write_hook(
+                    self, modified_value if verify_value else value
+                )
         except SkipWrite:
             # Handler raised SkipWrite to avoid the rest of this method.
             return
@@ -759,13 +765,17 @@ class ChannelEnum(ChannelData):
 
     enum_strings = _read_only_property('enum_strings')
 
+    def get_raw_value(self, value) -> int:
+        """The raw integer value index of the provided enum string."""
+        try:
+            return self.enum_strings.index(value)
+        except ValueError:
+            return None
+
     @property
     def raw_value(self) -> int:
         """The raw integer value index of the enum string."""
-        try:
-            return self.enum_strings.index(self.value)
-        except ValueError:
-            return 0
+        return self.get_raw_value(self.value)
 
     def __getnewargs_ex__(self):
         args, kwargs = super().__getnewargs_ex__()
