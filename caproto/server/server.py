@@ -13,7 +13,6 @@ import inspect
 import logging
 import sys
 import time
-import warnings
 from collections import OrderedDict, defaultdict, namedtuple
 from types import MethodType
 
@@ -113,8 +112,8 @@ class PvpropertyData:
         Passed to the superclass, along with reported_record_type.
     """
 
-    def __init__(self, *, pvname, group, pvspec, doc=None, mock_record=None,
-                 record=None, logger=None, **kwargs):
+    def __init__(self, *, pvname, group, pvspec, doc=None, record=None,
+                 logger=None, **kwargs):
         self.pvname = pvname  # the full, expanded PV name
         self.name = f'{group.name}.{pvspec.attr}'
         self.group = group
@@ -145,21 +144,13 @@ class PvpropertyData:
         if doc is not None:
             self.__doc__ = doc
 
-        self.record_type = record or mock_record
+        self.record_type = record
 
         # This should not be allowed to be different from record_type
         kwargs.pop('reported_record_type', None)
 
         super().__init__(reported_record_type=self.record_type or 'caproto',
                          **kwargs)
-
-        if mock_record is not None:
-            if record is not None:
-                raise ValueError(
-                    'Cannot specify both `mock_record` and `record`; '
-                    'please use only `record`')
-            warnings.warn(
-                '`mock_record` is deprecated. Use `pvproperty(record=)`')
 
         if self.record_type is not None:
             from .records import records
@@ -380,6 +371,7 @@ class PvpropertyBoolEnumRO(PvpropertyReadOnlyData, ChannelEnum):
 class PVSpec(namedtuple('PVSpec',
                         'get put startup shutdown attr name dtype value '
                         'max_length alarm_group read_only doc fields scan '
+                        'record '
                         'cls_kwargs')):
     """
     PV information specification.
@@ -426,6 +418,8 @@ class PVSpec(namedtuple('PVSpec',
         Specification for record fields
     scan : async callable, optional
         Called at periodic rates.
+    record : str, optional
+        The record type to report for the PV.
     cls_kwargs : dict, optional
         Keyword arguments for the ChannelData-based class
     """
@@ -435,7 +429,7 @@ class PVSpec(namedtuple('PVSpec',
     def __new__(cls, get=None, put=None, startup=None, shutdown=None,
                 attr=None, name=None, dtype=None, value=None, max_length=None,
                 alarm_group=None, read_only=None, doc=None, fields=None,
-                scan=None, cls_kwargs=None):
+                scan=None, record=None, cls_kwargs=None):
         if dtype is None:
             if value is None:
                 dtype = cls.default_dtype
@@ -493,11 +487,17 @@ class PVSpec(namedtuple('PVSpec',
                 raise CaprotoRuntimeError('Invalid signature for shutdown {}: {}'
                                           ''.format(shutdown, sig))
 
+        if name and '.' in name and record:
+            raise CaprotoValueError(
+                f'Cannot specify `record` on PV with a "." in it: {name!r}'
+            )
+
         return super().__new__(cls, get=get, put=put, startup=startup,
                                shutdown=shutdown, attr=attr, name=name,
                                dtype=dtype, value=value, max_length=max_length,
                                alarm_group=alarm_group, read_only=read_only,
                                doc=doc, fields=fields, scan=scan,
+                               record=record,
                                cls_kwargs=cls_kwargs)
 
     def new_names(self, attr=None, name=None):
@@ -530,7 +530,7 @@ def scan_wrapper(
         Fail (and stop scanning) when unhandled exceptions occur
     use_scan_field : bool, optional
         Use the .SCAN field if this pvproperty is a mocked record.  Raises
-        ValueError if mock_record is not used.
+        ValueError if ``record`` is not used.
 
     Returns
     -------
@@ -747,56 +747,61 @@ class pvproperty:
     def __init__(self, get=None, put=None, startup=None, shutdown=None, *,
                  scan=None, name=None, dtype=None, value=None, max_length=None,
                  alarm_group=None, doc=None, read_only=None, field_spec=None,
-                 fields=None, **cls_kwargs):
+                 fields=None, record=None, **cls_kwargs):
         self.attr_name = None  # to be set later
 
         if doc is None and get is not None:
             doc = get.__doc__
 
-        self.record_type = self._record_type_from_kwargs(cls_kwargs)
-
         if field_spec is not None:
-            if name and '.' in name:
-                raise ValueError(f'Cannot specify field_spec if '
-                                 f'the PV name has a "." in it: {name!r}')
-            if self.record_type:
-                raise ValueError(
+            if record and record != field_spec.record_type:
+                raise CaprotoValueError(
                     'Cannot specify both field_spec and record; the record '
-                    'type from field_spec must be used')
-            self.record_type = field_spec.record_type
-        elif self.record_type:
-            if name and '.' in name:
-                raise ValueError(f'Cannot specify a record if '
-                                 f'the PV name has a "." in it: {name!r}')
-            field_spec = FieldSpec(self, record_type=self.record_type)
-
-        if 'record' not in cls_kwargs and 'record_type' not in cls_kwargs:
-            if self.record_type is not None:
-                cls_kwargs['record'] = self.record_type
+                    'type from field_spec must be used'
+                )
+            record = field_spec.record_type
+        elif record:
+            field_spec = FieldSpec(self, record_type=record)
 
         self.field_spec = field_spec
         self.pvspec = PVSpec(
-            get=get, put=put, startup=startup, shutdown=shutdown, name=name,
-            dtype=dtype, value=value, max_length=max_length,
-            alarm_group=alarm_group, read_only=read_only, doc=doc,
+            get=get,
+            put=put,
+            startup=startup,
+            shutdown=shutdown,
+            name=name,
+            dtype=dtype,
+            value=value,
+            max_length=max_length,
+            alarm_group=alarm_group,
+            read_only=read_only,
+            doc=doc,
             fields=getattr(self.field_spec, 'fields', None),
-            cls_kwargs=cls_kwargs)
+            record=record,
+            cls_kwargs=cls_kwargs
+        )
         self.__doc__ = doc
 
+    @property
+    def record_type(self):
+        """The configured record type to report. [Backward-compatibility]"""
+        return self.pvspec.record
+
     def __copy__(self):
-        return pvproperty.from_pvspec(
+        field_spec = copy.deepcopy(self.field_spec)
+        copied = pvproperty.from_pvspec(
             # pvspec is immutable
             self.pvspec,
             record=self.record_type,
             # Allow subclasses to override field handlers without affecting
             # the parent by performing a deep copy here:
-            field_spec=copy.deepcopy(self.field_spec),
+            field_spec=field_spec,
             doc=self.__doc__,
         )
-
-    def _record_type_from_kwargs(self, cls_kwargs):
-        'Get the record type from the given class kwargs'
-        return cls_kwargs.get('record') or cls_kwargs.get('mock_record')
+        if copied.field_spec:
+            # Update the reference to the parent property:
+            copied.field_spec.prop = copied
+        return copied
 
     def __get__(self, instance, owner):
         """Descriptor method: get the pvproperty instance from a group."""
@@ -871,7 +876,7 @@ class pvproperty:
             Fail (and stop scanning) when unhandled exceptions occur
         use_scan_field : bool, optional
             Use the .SCAN field if this pvproperty is a mocked record.  Raises
-            ValueError if mock_record is not used.
+            ValueError if ``record`` is not used.
 
         Returns
         -------
@@ -1172,7 +1177,8 @@ def get_pv_pair_wrapper(setpoint_suffix='', readback_suffix='_RBV'):
 
         pvspec_kwargs = dict(
             dtype=dtype, value=value, max_length=max_length,
-            alarm_group=alarm_group, doc=doc, fields=fields
+            alarm_group=alarm_group, doc=doc, fields=fields,
+            record=None,
         )
 
         if put is None:
@@ -1481,10 +1487,16 @@ def channeldata_from_pvspec(group, pvspec):
              )
 
     cls = data_class_from_pvspec(group, pvspec)
-    inst = cls(group=group, pvspec=pvspec, value=value,
-               max_length=pvspec.max_length,
-               alarm=group.alarms[pvspec.alarm_group], pvname=full_pvname,
-               **(pvspec.cls_kwargs or {}))
+    inst = cls(
+        group=group,
+        pvspec=pvspec,
+        value=value,
+        max_length=pvspec.max_length,
+        alarm=group.alarms[pvspec.alarm_group],
+        pvname=full_pvname,
+        record=pvspec.record,
+        **(pvspec.cls_kwargs or {})
+    )
     inst.__doc__ = pvspec.doc
     return (full_pvname, inst)
 
