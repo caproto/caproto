@@ -770,7 +770,7 @@ class pvproperty:
                                  f'the PV name has a "." in it: {name!r}')
             field_spec = FieldSpec(self, record_type=self.record_type)
 
-        if 'record' not in cls_kwargs and 'record_type' not in cls_kwargs:
+        if 'record' not in cls_kwargs and 'mock_record' not in cls_kwargs:
             if self.record_type is not None:
                 cls_kwargs['record'] = self.record_type
 
