@@ -492,15 +492,94 @@ Take a look around
         p.wait()
 
 
+How do I...
+===========
+
+... make a string PV? All I see is an array of numbers!
+-------------------------------------------------------
+
+If you have a short string that can fit into the EPICS definition of
+``DBR_STRING`` - a maximum length of ``MAX_STRING_SIZE = 40`` - you can use
+the following and not worry about anything further:
+
+.. code:: python
+
+    my_property = pvproperty(
+        # The default value:
+        value="String value",
+        # Specify STRING as the data type - otherwise CHAR will be chosen:
+        dtype=ChannelType.STRING,
+        # Document what the property is for:
+        doc="Indicator as to what this does.",
+        # Optionally specify the encoding, if necessary:
+        string_encoding='latin-1',
+    )
+
+There is a convention you may not have heard about, what caproto refers to as
+long string support, in which ``DBR_STRING`` values can be longer than 40
+characters when **clients** append a special character to the PV name:
+
+.. code:: bash
+
+    $ caget -S my_property.$ my_property.VAL$
+    my_property.$ String value
+    my_property.VAL$ String value
+
+    $ caput -S my_property.VAL$ 1234567890123456789012345678901234567890123456789012345678901234567890
+    Old : my_property.VAL$ String value
+    New my_property.VAL$ 1234567890123456789012345678901234567890123456789012345678901234567890
+
+
+Note that the last string is 70 characters long.  What happens if we request it
+as a regular string without the long string modifier now?
+
+.. code:: bash
+
+    $ caget my_property
+    my_property       1234567890123456789012345678901234567890
+
+
+... it's truncated to only 40 characters! There's not much we can do about it,
+so clients should just be configured to use the custom modifier.
+
+As an alternative, `~caproto.server.pvproperty` supports arrays of ``DBR_CHAR``
+which are signed, 8-bit numbers, meaning its values fall in the inclusive range
+of [-127, 127].  These can also be used to represent arbitrarily long strings.
+
+.. code:: python
+
+    my_property = pvproperty(
+        # The default value:
+        value="String value",
+        # Document it!
+        doc="Indicator as to what this does.",
+        # Optionally configure the encoding:
+        string_encoding='utf-8',
+        # Ensure that this is marked as "report_as_string" (** optional)
+        report_as_string=True,
+        # Optionally specify how long the string can get - the default is
+        # the length of the provided value.
+        max_length=255,
+    )
+
+
+Please note that you will still have to use the special long string modifier
+``.$`` to have this work with ``caget`` and ``caput``.
+
+``report_as_string=True`` is optional here, but it makes it function more
+closely to the first example provided in this section.  You can access up
+to the first 40 characters of the string without any special modifiers to
+``caget`` and ``caput``, or ``caproto-get`` and ``caproto-put``.
+
 Helpers
--------
+=======
 
 caproto offers several "helper" subgroups (:class:`~caproto.server.SubGroup`)
 that are of general use, and could be considered part of the "caproto server
 standard library", so to speak.
 
 Autosave
-^^^^^^^^
+--------
 
 .. currentmodule:: caproto.server.autosave
 
@@ -512,7 +591,7 @@ Autosave
 
 
 Status / Statistics
-^^^^^^^^^^^^^^^^^^^
+-------------------
 
 .. currentmodule:: caproto.server.stats
 
