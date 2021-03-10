@@ -2,7 +2,6 @@
 import contextvars
 import functools
 import random
-import sys
 from textwrap import dedent
 
 import numpy as np
@@ -111,12 +110,6 @@ class TriggeredIOC(PVGroup):
         await self.wait_time.write(sleep_time)
         await instance.async_lib.library.sleep(sleep_time)
         return sleep_time
-
-    fatal = pvproperty(value=0)
-
-    @fatal.putter
-    async def fatal(self, instance, val):
-        sys.exit(0)
 
 
 if __name__ == '__main__':
