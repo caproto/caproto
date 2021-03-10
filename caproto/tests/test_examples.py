@@ -111,7 +111,7 @@ def _test_ioc_examples(request, module_name, pvdb_class_name, class_kwargs,
 @pytest.mark.flaky(reruns=2, reruns_delay=2)
 @pytest.mark.parametrize(
     'module_name, pvdb_class_name, class_kwargs',
-    [('caproto.ioc_examples.all_in_one', 'MyPVGroup',
+    [('caproto.tests.ioc_all_in_one', 'MyPVGroup',
       dict(macros={'macro': 'expanded'})),
      ('caproto.ioc_examples.chirp', 'Chirp', {'ramprate': 0.75}),
      ('caproto.ioc_examples.custom_write', 'CustomWrite', {}),
