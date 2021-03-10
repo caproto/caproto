@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 import argparse
 import itertools
-from caproto.server import pvproperty, PVGroup, template_arg_parser, run
+
+from caproto.server import PVGroup, pvproperty, run, template_arg_parser
 
 
 class Chirp(PVGroup):

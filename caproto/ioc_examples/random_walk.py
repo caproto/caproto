@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import random
-from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
+
+from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run
 
 
 class RandomWalkIOC(PVGroup):

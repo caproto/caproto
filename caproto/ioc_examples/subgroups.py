@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 import logging
 import random
-from caproto.server import (pvproperty, PVGroup, SubGroup, ioc_arg_parser, run)
 
+from caproto.server import PVGroup, SubGroup, ioc_arg_parser, pvproperty, run
 
 logger = logging.getLogger('caproto')
 

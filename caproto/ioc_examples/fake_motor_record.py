@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-from caproto.server import pvproperty, PVGroup, SubGroup, ioc_arg_parser, run
 from textwrap import dedent
 
+from caproto.server import PVGroup, SubGroup, ioc_arg_parser, pvproperty, run
 from caproto.server.records import MotorFields
 
 

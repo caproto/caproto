@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-import time
 import random
+import time
 
 from caproto import ChannelType
-from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
-from caproto.server.records import register_record, MotorFields
+from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run
+from caproto.server.records import MotorFields, register_record
 
 
 # Subclass the motor fields here. It's important to use this 'register_record'

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-import termios
-import fcntl
-import sys
-import os
-import threading
 import atexit
+import fcntl
+import os
+import sys
+import termios
+import threading
 
-from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
+from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run
 
 
 def start_io_interrupt_monitor(new_value_callback):

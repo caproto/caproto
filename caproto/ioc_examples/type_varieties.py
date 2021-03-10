@@ -6,10 +6,11 @@ This particular example predates the IOC class framework that makes IOC
 specification much more succinct.
 """
 import warnings
-import caproto as ca
-from caproto.server import ioc_arg_parser, run
+
 import numpy as np
 
+import caproto as ca
+from caproto.server import ioc_arg_parser, run
 
 alarm = ca.ChannelAlarm(
     status=ca.AlarmStatus.READ,

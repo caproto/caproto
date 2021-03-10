@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 import os
+import pathlib
 import sys
 
-from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
-import pathlib
-
+from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run
 
 temp_path = pathlib.Path('/tmp' if sys.platform != 'win32'
                          else os.environ.get('TEMP'))

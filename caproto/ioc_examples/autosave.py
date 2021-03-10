@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-from caproto.server import pvproperty, SubGroup, PVGroup, ioc_arg_parser, run
-from caproto.server.autosave import autosaved, AutosaveHelper
 from textwrap import dedent
+
+from caproto.server import PVGroup, SubGroup, ioc_arg_parser, pvproperty, run
+from caproto.server.autosave import AutosaveHelper, autosaved
 
 
 class AutosavedSubgroup(PVGroup):
