@@ -2,6 +2,59 @@
 Release History
 ***************
 
+v0.8.0 (2021-03-??)
+===================
+
+Fixed
+-----
+
+- pyepics compatibility layer ``char_value`` and ``enum_strs`` handling with
+  ``PV`` instances and ``caget_many`` should now behave better.  (#732)
+- Windows compatibility has been improved, especially with respect to
+  the more recent ProactorEventLoop (#720, #707)
+- The environment variable ``CAPROTO_DEFAULT_TIMEOUT`` is no longer erroneously
+  interpreted as a string.  All clients should now mostly respect this value.
+  (#727)
+- Previously only either ``scan`` or ``startup`` hooks were allowed
+  per-``pvproperty``.  Both may be used simultaneously now. (#729)
+- Threading client ``SharedBroadcaster`` should no longer attempt
+  re-registration after it is disconnected.  (#732)
+- RecordFieldGroup subclasses may now customize common fields without
+  intefering with other classes. (#736)
+
+
+Added
+-----
+
+- An example indicating how to analyze IOCs response times for channel creation
+  was added in #725.
+- A ``value_write_hook`` is now supported when updating a value in records.
+  This means that if the user updates ``.VAL``, other fields will have the
+  chance to update their state. (#734)
+- Added preliminary support of the ``raw_value`` (``.RVAL``) field for bi, bo,
+  mbbi, and mbbo records.  (#734)
+
+
+Changed
+-------
+
+- The ``mock_record=`` keyword argument for ``pvproperty``, deprecated in
+  v0.5.0, has been removed.  Please change any remaining references to
+  ``record=`` when upgrading to v0.8.0.
+- Efforts have been made to allow ``PVSpec`` to be used in a standalone
+  fashion - i.e., without ``pvproperty``.  See the ``no_pvproperty`` IOC
+  example for further details.
+- asyncio-based transports have mostly been removed in favor of using a
+  higher-level API provided by asyncio. This should allow for more precise
+  and informative exception tracebacks.  This is now used for all asyncio
+  servers and clients supported by caproto. (#720, )
+- The method for generating record field ``PVGroup`` classes has been changed
+  to better split auto-generated code with user-customizable field-handling
+  code. (#734)
+- Improved hook method signature checker to include source code filename,
+  line number, and suggested signature.  (#736)
+
+
 v0.7.1 (2020-01-13)
 ===================
 
