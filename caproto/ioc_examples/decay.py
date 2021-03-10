@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-from caproto.server import pvproperty, PVGroup, ioc_arg_parser, run
-import numpy as np
 import time
 from textwrap import dedent
+
+import numpy as np
+
+from caproto.server import PVGroup, ioc_arg_parser, pvproperty, run
 
 
 class Decay(PVGroup):
@@ -38,10 +40,10 @@ class Decay(PVGroup):
 
     readback = pvproperty(value=0, dtype=float, read_only=True,
                           name='I',
-                          mock_record='ai')
+                          record='ai')
 
     done = pvproperty(value=0, dtype=float, read_only=True,
-                      mock_record='ai')
+                      record='ai')
 
     setpoint = pvproperty(value=100, dtype=float, name='SP')
     K = pvproperty(value=10, dtype=float)
