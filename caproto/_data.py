@@ -735,25 +735,34 @@ class ChannelData:
         return AccessRights.READ | AccessRights.WRITE
 
     def is_compatible_array(self, value) -> bool:
-        try:
-            interface = value.__array_interface__
-        except AttributeError:
+        """
+        Check if the provided value is a compatible array.
+
+        This requires that ``value`` follow the "array interface", as defined by
+        `numpy <https://numpy.org/doc/stable/reference/arrays.interface.html>`_.
+
+        Parameters
+        ----------
+        value : any
+            The value to check.
+
+        Returns
+        -------
+        bool
+            True if ``value`` is compatible, False otherwise.
+        """
+        interface = getattr(value, "__array_interface__", None)
+        if interface is None:
             return False
 
-        try:
-            dimensions = len(interface['shape'])
-            strides = interface['strides']
-            typestr = interface['typestr']
-        except KeyError:
-            return False
-
+        dimensions = len(interface['shape'])
         return (
             # Ensure it's 1 dimensional:
             dimensions == 1 and
             # Not strided - which 1D data shouldn't be anyway...
-            strides is None and
+            interface['strides'] is None and
             # And a compatible array type, defined in the class body:
-            typestr in self._compatible_array_types  # compatible type
+            interface['typestr'] in self._compatible_array_types
         )
 
 
