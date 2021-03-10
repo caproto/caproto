@@ -17,7 +17,8 @@ from ._dbr import (DBR_STSACK_STRING, DBR_TYPES, AccessRights, AlarmSeverity,
                    SubscriptionType, _channel_type_by_name,
                    _LongStringChannelType, native_type, native_types,
                    time_types, timestamp_to_epics)
-from ._utils import CaprotoError, CaprotoValueError, ConversionDirection
+from ._utils import (CaprotoError, CaprotoValueError, ConversionDirection,
+                     is_array_read_only)
 
 __all__ = ('Forbidden',
            'ChannelAlarm',
@@ -1013,13 +1014,18 @@ class ChannelByte(ChannelNumeric):
     def preprocess_value(self, value):
         value = super().preprocess_value(value)
 
+        if self.is_compatible_array(value):
+            if not is_array_read_only(value):
+                value = copy.copy(value)
+            if self.max_length == 1:
+                return value[0]
+            return value
+
         if isinstance(value, (list, tuple) + backend.array_types):
             if not len(value):
                 return b''
             elif len(value) == 1:
                 value = value[0]
-            elif self.is_compatible_array(value):
-                value = value.tobytes()
             else:
                 value = b''.join(map(bytes, ([v] for v in value)))
 
@@ -1072,13 +1078,13 @@ class ChannelChar(ChannelData):
     def preprocess_value(self, value):
         value = super().preprocess_value(value)
 
-        if isinstance(value, (list, tuple) + backend.array_types):
+        if self.is_compatible_array(value):
+            value = value.tobytes()
+        elif isinstance(value, (list, tuple) + backend.array_types):
             if not len(value):
                 value = b''
             elif len(value) == 1:
                 value = value[0]
-            elif self.is_compatible_array(value):
-                value = value.tobytes()
             else:
                 value = b''.join(map(bytes, ([v] for v in value)))
 

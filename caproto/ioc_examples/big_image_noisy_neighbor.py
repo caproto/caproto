@@ -20,9 +20,12 @@ class IOInterruptIOC(PVGroup):
     async def t1(self, instance, async_lib):
         # Loop and grab items from the queue one at a time
         await self.t1.write(time.monotonic())
-        await self.image.write(
-            value=np.random.randint(0, 256, image_shape, dtype=np.uint8).flatten()
-        )
+
+        value = np.random.randint(0, 256, image_shape, dtype=np.uint8).flatten()
+        # caproto will not perform a copy in preprocess_value if you mark
+        # the array as read-only by way of flags:
+        value.flags.writeable = False
+        await self.image.write(value=value)
 
 
 if __name__ == "__main__":
