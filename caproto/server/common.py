@@ -286,7 +286,7 @@ class VirtualCircuit:
                 if response is not None:
                     await self.send(*response)
                 await self._wake_new_command()
-        except DisconnectedCircuit:
+        except (DisconnectedCircuit, CaprotoNetworkError):
             await self._on_disconnect()
             self.circuit.disconnect()
             await self.context.circuit_disconnected(self)
