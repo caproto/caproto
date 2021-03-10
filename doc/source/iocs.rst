@@ -492,6 +492,378 @@ Take a look around
         p.wait()
 
 
+.. currentmodule:: caproto.server.server
+
+PVGroup
+=======
+
+The `PVGroup` is a container for ``pvproperty`` instances which determine how
+to represent the group's contents as EPICS process variables (PVs).
+
+You are expected to subclass from ``PVGroup`` to implement your own IOCs.
+
+.. code:: python
+
+    from caproto.server import PVGroup, pvproperty
+
+    class BasicIOC(PVGroup):
+        my_pv = pvproperty(value=0, doc="My test PV")
+
+
+caproto uses your class definition and performs magic under the hood to create
+a simple PV name to `ChannelData` instances.  See what happens when you
+instantiate the above:
+
+.. code:: ipython
+
+    In [1]: ioc = BasicIOC(prefix='prefix:')
+
+    In [2]: dict(ioc.pvdb)
+    Out[2]: {'prefix:my_pv': <caproto.server.server.PvpropertyInteger at 0x7fe5c069f910>}
+
+
+This simple dictionary database is what will be used to start your server.
+Adding on some boilerplate to help you parse command-line arguments and pick
+an async library backend to use:
+
+.. code:: python
+
+    from caproto.server import ioc_arg_parser, run
+    ioc_options, run_options = ioc_arg_parser(
+        default_prefix='prefix:',
+        desc="Basic IOC",
+    )
+    ioc = BasicIOC(**ioc_options)
+    run(ioc.pvdb, **run_options)
+
+The above would allow you to access ``prefix:my_pv`` over Channel Access.
+
+API
+---
+
+.. autosummary::
+    :toctree: generated
+
+    PVGroup
+
+pvproperty
+==========
+
+``pvproperty`` combines information as to how to represent your information
+over EPICS Channel Access and provides easy-to-use hooks for reacting to
+certain events -- by hooking user-provided Python methods.
+
+Supported data types
+--------------------
+
+``value`` may be an instance of one of the following, or ``dtype`` may be
+one of the following types:
+
++--------------+--------------------+----------------+
+| Data   Type  | Data class         | Inherits from  |
++==============+====================+================+
+| str          | PvpropertyChar     | ChannelChar    |
++--------------+--------------------+----------------+
+| bytes        | PvpropertyByte     | ChannelByte    |
++--------------+--------------------+----------------+
+| int          | PvpropertyInteger  | ChannelInteger |
++--------------+--------------------+----------------+
+| float        | PvpropertyDouble   | ChannelDouble  |
++--------------+--------------------+----------------+
+| bool         | PvpropertyBoolEnum | ChannelEnum    |
++--------------+--------------------+----------------+
+| enum.IntEnum | PvpropertyEnum     | ChannelEnum    |
++--------------+--------------------+----------------+
+
+``dtype`` may be omitted when a value is specified.
+
+If you desire finer-grained control over the data type provided (e.g., you
+specifically want a 32-bit float instead of a 64-bit double), you may
+use `ChannelType` directly:
+
+
++--------------------+-------------------+----------------+
+| Data   Type        | Data class        | Inherits from  |
++====================+===================+================+
+| ChannelType.STRING | PvpropertyString  | ChannelString  |
++--------------------+-------------------+----------------+
+| ChannelType.INT    | PvpropertyShort   | ChannelShort   |
++--------------------+-------------------+----------------+
+| ChannelType.LONG   | PvpropertyInteger | ChannelInteger |
++--------------------+-------------------+----------------+
+| ChannelType.DOUBLE | PvpropertyDouble  | ChannelDouble  |
++--------------------+-------------------+----------------+
+| ChannelType.FLOAT  | PvpropertyFloat   | ChannelFloat   |
++--------------------+-------------------+----------------+
+| ChannelType.ENUM   | PvpropertyEnum    | ChannelEnum    |
++--------------------+-------------------+----------------+
+| ChannelType.CHAR   | PvpropertyChar    | ChannelChar    |
++--------------------+-------------------+----------------+
+
+Integers and floats
+^^^^^^^^^^^^^^^^^^^
+
+Integer and floating point values by default map to the largest containers
+in EPICS - 32-bit integers and 64-bit floats, respectively.
+
+Strings
+^^^^^^^
+
+Strings are a bit complicated when it comes to EPICS and caproto follows suit.
+See the "how to" section below for more information on long strings.
+
+
+Enums
+^^^^^
+
+A new syntax for specifying enums using built-in `enum.IntEnum` is recommended:
+
+.. code:: python
+
+
+    from caproto.server import PVGroup, pvproperty
+    import enum
+
+
+    class MyEnum(enum.IntEnum):
+        off = 0
+        on = 1
+        unknown = 2
+
+
+    class MyPVGroup(PVGroup):
+        my_enum = pvproperty(
+            value=MyEnum.on,
+            record='mbbi',
+            doc="An enum with off/on/unknown, and mbbi record fields.",
+        )
+
+Alternatively, you may specify the strings manually:
+
+.. code:: python
+
+    from caproto import ChannelType
+    from caproto.server import PVGroup, pvproperty
+
+    class MyPVGroup(PVGroup):
+        my_enum = pvproperty(
+            value='on',
+            enum_strings=("off", "on", "unknown"),
+            dtype=ChannelType.ENUM,
+            record='mbbi',
+            doc="An enum with off/on/unknown, and mbbi record fields.",
+        )
+
+For the above mbbi records, the ``ZRST`` (zero string) field, ``ONST`` (one
+string) field, and so on (up to 15), are similarly respected and mapped from
+the enum strings (keyword argument or ``IntEnum`` class).
+
+
+Booleans
+^^^^^^^^
+
+Boolean values map to an enum type, with "Off" and "On" as the default
+strings.
+
+When using either the ``bi`` or ``bo`` records, the ``ZNAM`` and ``ONAM``
+fields are automatically populated with the string equivalent values for 0 and
+1.  These are derived from the ``enum_strings`` keyword argument.
+
+Hooks
+-----
+
+Hooks allow you to react to certain events that happen during the life of
+the IOC by providing your own methods.
+
+Putter Hook
+^^^^^^^^^^^
+
+This is the most common hook you will need when writing a caproto-based IOC.
+
+The "putter" associated with a ``pvproperty`` is called whenever a user writes
+to the associated PV through any client (``caput``, ``caproto-put``, pyepics,
+caproto clients, and so on) and also when you write directly to it in code.
+
+An example of usage and the required method signature is as follows:
+
+.. code:: python
+
+    my_property = pvproperty(value=0)
+
+    @my_property.putter
+    async def my_property(self, instance, value):
+        """
+        Startup hook for ``my_property``.
+
+        Parameters
+        ----------
+        instance : ChannelData
+            This is the instance of ``my_property``.
+
+        value :
+            This is the value the client wrote to the PV.
+
+        Returns
+        -------
+        value :
+            You may optionally change the value before committing it into
+            the underlying ChannelData instance.
+
+        Raises
+        ------
+        SkipWrite
+            Raise this to skip further processing of the write.
+
+        Exception
+            When an unhandled error occurs.  Alarm will be set.
+        """
+        ...
+
+
+Note that in the above, ``self`` will refer to the ``PVGroup`` instance.
+It will allow you to access the values of other PVs in the group, or any
+other state held within.
+
+The ``value`` can be assumed to be consistent with the data type of
+``my_property``.  In the above case, this is ``int`` (as ``0`` is an integer).
+
+You may optionally change the value before committing it into the underlying
+ChannelData instance.  If this is needed, return the modified value here.
+Otherwise, the implicit value of ``None`` means to accept the value as-is.
+
+Additionally, you may completely reject the write entirely by raising the
+`.SkipWrite` exception.  This is a non-error exception which will leave the
+previously-stored value intact.
+
+
+Startup Hook
+^^^^^^^^^^^^
+
+This hook is executed when the IOC starts up.
+
+An example of usage and the required method signature is as follows:
+
+.. code:: python
+
+    @my_property.startup
+    async def my_property(self, instance, async_lib):
+        """
+        Startup hook for ``my_property``.
+
+        Parameters
+        ----------
+        instance : ChannelData
+            This is the instance of ``my_property``.
+
+        async_lib : AsyncLibraryLayer
+            This is a shim layer for {asyncio, curio, trio} that you can use
+            to make async library-agnostic IOCs.
+        """
+        ...
+
+
+Note that in the above, ``self`` will refer to the ``PVGroup`` instance.
+It will allow you to access the values of other PVs in the group, or any
+other state held within.
+
+Second, notice that ``my_property`` is repeated multiple times:  the decorator
+must use ``my_property.startup`` to define the startup method, and the
+method itself must be named ``my_property``.  This is due to how decorators
+function and mirrors what you would see with a standard Python ``property``.
+
+Finally, the ``async_lib`` can be used to abstract away the async library
+layer that is in use.  It is considered good practice to use, for example,
+``async_lib.sleep`` instead of ``asyncio.sleep`` -- or similarly
+``trio.sleep``, ``curio.sleep``.  This will allow your IOC to work no matter if
+you decide to use asyncio, curio, or trio as your async library.
+
+
+Shutdown Hook
+^^^^^^^^^^^^^
+
+This hook is executed when the IOC shuts down.
+
+An example of usage and the required method signature is as follows:
+
+.. code:: python
+
+    @my_property.shutdown
+    async def my_property(self, instance, async_lib):
+        """
+        Shutdown hook for ``my_property``.
+
+        Parameters
+        ----------
+        instance : ChannelData
+            This is the instance of ``my_property``.
+
+        async_lib : AsyncLibraryLayer
+            This is a shim layer for {asyncio, curio, trio} that you can use
+            to make async library-agnostic IOCs.
+        """
+        ...
+
+See the startup hook section above for more details on what these parameters
+mean.
+
+Scan Hook
+^^^^^^^^^
+
+This hook is executed periodically, with the exact rate depending on its
+configuration.
+
+.. code:: python
+
+    @my_property.scan(period=0.1)
+    async def my_property(self, instance):
+        """
+        Scan hook for ``my_property``.
+
+        Parameters
+        ----------
+        instance : ChannelData
+            This is the instance of ``my_property``.
+        """
+        ...
+
+See the startup hook section above for more details on what these parameters
+mean.
+
+`.scan_wrapper` arguments can be passed to ``my_property.scan(...)`` above
+to further customize how the routine is called.  For example, it is possible
+to stop the scan routine when an exception happens (``stop_on_error=True``)
+or let users put to the ``.SCAN`` field (when using ``record="..."``) to
+change the rate to common EPICS-defined ones.
+
+
+.. autosummary::
+    :toctree: generated
+
+    scan_wrapper
+
+
+Records
+-------
+
+``pvproperty`` allows you to pretend your value has common EPICS record fields.
+For example, it is possible to report a given property as an analog input
+(``ai``) record:
+
+.. code:: python
+
+    my_property = pvproperty(value=1.0, record='ai')
+
+More on this in a later section.
+
+API
+---
+
+.. autosummary::
+    :toctree: generated
+
+    pvproperty
+
+
 How do I...
 ===========
 
@@ -570,6 +942,11 @@ Please note that you will still have to use the special long string modifier
 closely to the first example provided in this section.  You can access up
 to the first 40 characters of the string without any special modifiers to
 ``caget`` and ``caput``, or ``caproto-get`` and ``caproto-put``.
+
+... structure an IOC when talking to a real piece of hardware?
+--------------------------------------------------------------
+
+
 
 Helpers
 =======
