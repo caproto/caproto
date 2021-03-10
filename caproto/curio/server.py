@@ -1,14 +1,14 @@
 import functools
 
-import caproto as ca
 import curio
 import curio.network
 from curio import socket
 
-from ..server import AsyncLibraryLayer
-from ..server.common import (VirtualCircuit as _VirtualCircuit,
-                             Context as _Context)
+import caproto as ca
 
+from ..server import AsyncLibraryLayer
+from ..server.common import Context as _Context
+from ..server.common import VirtualCircuit as _VirtualCircuit
 
 if hasattr(curio, 'KernelExit'):
     class ServerExit(curio.KernelExit):
@@ -61,6 +61,7 @@ class CurioAsyncLayer(AsyncLibraryLayer):
     ThreadsafeQueue = UniversalQueue
     Event = curio.UniversalEvent
     library = curio
+    sleep = staticmethod(curio.sleep)
 
 
 class VirtualCircuit(_VirtualCircuit):

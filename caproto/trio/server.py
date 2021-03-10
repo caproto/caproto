@@ -1,15 +1,16 @@
 import functools
 
-import caproto as ca
 import trio
 from trio import socket
 
-from ..server import AsyncLibraryLayer
-from ..server.common import (VirtualCircuit as _VirtualCircuit,
-                             Context as _Context, LoopExit,
-                             DisconnectedCircuit)
-from .util import open_memory_channel
+import caproto as ca
+
 from .._utils import safe_getsockname
+from ..server import AsyncLibraryLayer
+from ..server.common import Context as _Context
+from ..server.common import DisconnectedCircuit, LoopExit
+from ..server.common import VirtualCircuit as _VirtualCircuit
+from .util import open_memory_channel
 
 
 class ServerExit(Exception):
@@ -84,6 +85,7 @@ class TrioAsyncLayer(AsyncLibraryLayer):
     ThreadsafeQueue = None
     Event = Event
     library = trio
+    sleep = staticmethod(trio.sleep)
 
 
 class VirtualCircuit(_VirtualCircuit):

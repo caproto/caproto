@@ -30,6 +30,7 @@ class AsyncioAsyncLayer(AsyncLibraryLayer):
     name = 'asyncio'
     Event = asyncio.Event
     library = asyncio
+    sleep = staticmethod(asyncio.sleep)
     ThreadsafeQueue = AsyncioQueue
 
 
