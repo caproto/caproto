@@ -150,8 +150,13 @@ class VirtualCircuit:
         if self.connected:
             buffers_to_send = self.circuit.send(*commands)
             # send bytes over the wire using some caproto utilities
-            async with self._raw_lock:
-                await ca.async_send_all(buffers_to_send, self.client.sendmsg)
+            try:
+                async with self._raw_lock:
+                    await ca.async_send_all(buffers_to_send, self.client.sendmsg)
+            except (OSError, CaprotoNetworkError) as ex:
+                raise DisconnectedCircuit(
+                    f"Circuit disconnected: {ex}"
+                ) from ex
 
     async def recv(self):
         """
@@ -286,7 +291,7 @@ class VirtualCircuit:
                 if response is not None:
                     await self.send(*response)
                 await self._wake_new_command()
-        except (DisconnectedCircuit, CaprotoNetworkError):
+        except DisconnectedCircuit:
             await self._on_disconnect()
             self.circuit.disconnect()
             await self.context.circuit_disconnected(self)

@@ -3,8 +3,10 @@ import functools
 
 import caproto as ca
 
+from .._utils import CaprotoNetworkError
 from ..server import AsyncLibraryLayer
 from ..server.common import Context as _Context
+from ..server.common import DisconnectedCircuit
 from ..server.common import VirtualCircuit as _VirtualCircuit
 from .utils import (AsyncioQueue, _create_bound_tcp_socket, _create_udp_socket,
                     _DatagramProtocol, _TaskHandler, _TransportWrapper,
@@ -65,7 +67,12 @@ class VirtualCircuit(_VirtualCircuit):
     async def send(self, *commands):
         if self.connected:
             buffers_to_send = self.circuit.send(*commands)
-            await self.client.send(b''.join(buffers_to_send))
+            try:
+                await self.client.send(b''.join(buffers_to_send))
+            except CaprotoNetworkError as ex:
+                raise DisconnectedCircuit(
+                    f"Circuit disconnected: {ex}"
+                ) from ex
 
     async def run(self):
         self.tasks.create(self.command_queue_loop())
