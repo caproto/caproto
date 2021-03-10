@@ -21,6 +21,10 @@ Fixed
   re-registration after it is disconnected.  (#732)
 - RecordFieldGroup subclasses may now customize common fields without
   intefering with other classes. (#736)
+- Supports the numpy array interface to remove a significant ``O(n)``
+  bottleneck when pre-processing numpy arrays for ``ChannelByte`` instances.
+  To avoid an additional copy on immutable data, set ``value.flags.writeable``
+  to ``False`` when using compatible numpy arrays.  (#731)
 
 
 Added
