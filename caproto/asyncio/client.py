@@ -920,14 +920,14 @@ class VirtualCircuitManager:
             try:
                 bytes_received = await transport.recv()
             except ca.CaprotoNetworkError:
-                bytes_received = ''
+                bytes_received = b''
 
             self.last_tcp_receipt = time.monotonic()
             commands, _ = self.circuit.recv(bytes_received)
             for c in commands:
                 self.command_queue.put(c)
 
-            if not len(bytes_received):
+            if not bytes_received:
                 break
 
     async def _connect(self, timeout):
