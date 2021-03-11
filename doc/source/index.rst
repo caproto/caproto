@@ -172,6 +172,7 @@ learning exercises.
    loggers
    cookiecutter
    own_docs
+   environment_variables
 
 .. toctree::
    :maxdepth: 2
