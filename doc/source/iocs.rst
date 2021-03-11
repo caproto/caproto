@@ -25,6 +25,11 @@ in just a couple lines of Python. This opens up some interesting possibilities:
   of every message sent and received, which can be valuable for development,
   logging, and debugging.
 
+Take a look around
+`the ioc_examples subpackage
+<https://github.com/caproto/caproto/tree/master/caproto/ioc_examples>`_ for
+more examples not covered in this document.
+
 Using the IOC Examples
 ======================
 
@@ -74,7 +79,6 @@ and use ``--prefix`` to conveniently customize the PV prefix:
         my_custom_prefix:C
 
 Type ``python3 -m caproto.ioc_examples.simple -h`` for more options.
-
 
 PVGroup
 =======
