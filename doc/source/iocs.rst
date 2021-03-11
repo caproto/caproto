@@ -829,14 +829,12 @@ definition are positives - making it the easiest possible way to spin up an IOC
 Let's rephrase the above as "How do I use the alternative methods of building
 IOCs?"
 
-The first option is to try working with ``PVSpec`` instances directly:
-
-(TODO)
+The first option is to try working with ``PVSpec`` instances directly.
+Take a look at the ``no_pvproperty`` example.
 
 The second option is going down to the lowest level, working with
-``ChannelData`` instances directly:
-
-(TODO)
+``ChannelData`` instances directly. Take a look at the advanced
+``type_varieties`` example.
 
 
 ... represent both the setpoint and readback with one pvproperty?
@@ -950,7 +948,38 @@ asyncio-only:
 ... get custom arguments into my IOC?
 -------------------------------------
 
-(TODO)
+At the moment, the easiest way to get a custom argument into an IOC is by
+specifying a macro with a default value to
+:func:`caproto.server.ioc_arg_parser`.
+
+These macros would be accessible in your ``PVGroup`` ``__init__`` as the
+``macros`` keyword argument.
+
+Alternatively, you can add arguments directly to the parser, as seen
+in the ``chirp`` example:
+
+.. code:: python
+
+    parser, split_args = template_arg_parser(
+        default_prefix="prefix:",
+        desc="IOC description.",
+    )
+
+    parser.add_argument(
+        "--flag",
+        help="Set an arbitrary flag.",
+        action='store_true',
+    )
+
+    args = parser.parse_args()
+    ioc_options, run_options = split_args(args)
+    ioc = MyPVGroup(flag=args.flag, **ioc_options)
+    run(ioc.pvdb, **run_options)
+
+
+If your needs are more advanced, feel free to reimplement the above functions.
+So long as you can instantiate your PVGroup and pass its pvdb to ``run()``,
+caproto will not complain.
 
 ... use macros? And what are macros?
 ------------------------------------
